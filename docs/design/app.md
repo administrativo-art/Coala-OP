@@ -332,6 +332,7 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 - **Compra local** (quando liberada): cartão de largura total, com sombra, título, descrição, selo "N notas no aparelho" e ilustração grande à direita.
 - **Demais módulos:** grade de duas colunas com cartões de mesma altura; ícone num quadro de 44 dp, selo de estado no canto superior direito, título e uma linha de descrição.
 - **Selos:** "Em curso" (contagem aberta, cor de aviso), número de reposições a receber, horário do turno de hoje, percentual da meta.
+- **Ponto** e **Solicitações** entram na grade antes dos demais módulos e aparecem só com a liberação do grupo `app` do perfil (`app.timeRecording.mark`, `app.requests.create`) somada à permissão de colaborador do sistema.
 - Só aparecem os módulos que o perfil libera. Sem nenhum: "Nenhum módulo liberado".
 
 ## Comportamento de abertura das telas
@@ -342,6 +343,8 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 | Metas | Na última escolha da pessoa neste aparelho — unidade ou "Todas as unidades" —, guardada por conta. Sem escolha guardada, na primeira unidade | Como está hoje |
 | Início | Saudação e cartões dos módulos liberados; os selos carregam em seguida | Como está hoje |
 | Signage | Lista de unidades; depois o painel da unidade; depois o guia em passos | Como está hoje |
+| Ponto | Aba "Hoje", na unidade de trabalho principal do vínculo (a empregadora primeiro). Sem "Todas as unidades": a batida precisa de uma unidade | Etapa 7 (2026-10-19) |
+| Solicitações | Aba "Ausência", com a lista dos próprios pedidos; o botão do rodapé abre o pedido novo | Etapa 7 (2026-10-19) |
 | Aplicativo | Bloqueado com conta conhecida: pede a biometria sozinho, se a pessoa ativou. Sem conta: entrada | Como está hoje |
 
 A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `Rules.ALL_UNITS`) e no reinício a cada visita em `ScheduleScreen`; `coala-go-ui-contract.test.ts` e `ViewModelsTest` protegem as duas partes.
@@ -356,7 +359,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Voltar** da barra e do sistema fazem o mesmo. Dentro de fluxos em níveis (Signage, etapas), voltar recua um nível antes de sair da tela.
 - Voltar fica bloqueado enquanto a tela está ocupada.
 - Tarefas de conta ficam no **perfil**, fora do início: foto, versão do app, atualização e "Sair da conta".
-- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; solicitações continuam abrindo na web até existir operação nativa. Simulação não registra dispositivos.
+- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; as notificações de solicitações continuam abrindo na web. Pedir ausência e vale-transporte já é nativo (Solicitações); acompanhar a análise completa e anexar depois do envio seguem no Coala One. Simulação não registra dispositivos.
 
 ## Estados e mensagens
 
@@ -381,6 +384,8 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Signage:** guia em passos numerados (círculo `accentSoft` com o número), monitor com o endereço sendo digitado, escolha de orientação em cartões, leitor de QR em tela cheia.
 - **Recorte da foto:** tela cheia escura; a foto num quadrado de cantos de 20 dp com tudo fora do círculo escurecido a 72%. Arrastar posiciona, dois dedos ou a barra aproximam.
 - **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima.
+- **Ponto (`ui/TimeScreens.kt`):** cartão `dark` "HORA OFICIAL" com relógio de segundos em `CodeFont`, no fuso da unidade escolhida e com o rótulo `UTC−03:00`; o relógio soma a leitura oficial ao tempo do aparelho e nunca consulta a rede para andar. Batidas numeradas ("1ª", "2ª") com o tipo **sugerido pela ordem**; batida desconsiderada pelo DP fica riscada em `faint`, incluída leva "incluída pelo DP". O registro tem uma ação no rodapé e a confirmação acontece no próprio rodapé (`FooterPair` "Voltar" / "Confirmar registro"). Comprovante abre numa folha com "Abrir comprovante", "Compartilhar" (folha nativa) e "Salvar no aparelho" (seletor do sistema); comprovante pendente mostra só o aviso de indisponibilidade.
+- **Pedidos em duas etapas (ajuste de ponto, ausência, vale-transporte):** formulário → "Revisar …" → resumo em `SummaryLine` (rótulo `muted` sobre o valor) → `FooterPair` "Editar" / "Enviar …". O resumo do ajuste diz quem pede e que a batida original nunca é apagada. Textos longos usam `NoteInput` com contador do limite do servidor.
 
 ## Acessibilidade
 
@@ -411,6 +416,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 ## Lacunas
 
 - Nenhuma medida deste guia foi conferida em aparelho; tudo foi lido do código em 2026-10-14.
+- Ponto e Solicitações (Etapa 7, 2026-10-19) foram verificados só por testes de unidade, contrato e lint, sem emulador nem aparelho, a pedido do programador.
 - Os trechos marcados "Como está hoje" não passaram por decisão de design. Se um deles for contestado, o código atual não serve de argumento.
 - O protótipo `Coala One App - Prototipo` não foi reaberto para este levantamento; diferenças entre ele e o app não estão listadas aqui.
 - Os pontos fora do padrão de [Cores](#cores) (hex solto) e de [Ícones de interface](#ícones-de-interface) (caracteres como ícone) seguem abertas.

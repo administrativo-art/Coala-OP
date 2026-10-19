@@ -2,6 +2,7 @@ package com.coalaone.go.data
 
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.*
 
 interface ApiService {
@@ -28,4 +29,20 @@ interface ApiService {
     @GET("api/goals/mobile?scope=all") suspend fun goalsOverview(): GoalsOverview
     @GET("api/signage/mobile") suspend fun signage(): SignageUnits
     @POST("api/signage/mobile/screens") suspend fun pair(@Body request: PairScreen): PairResponse
+    // Ponto and Solicitações reuse the web routes; the punch goes out as channel "mobile" (AFD collector 01).
+    @GET("api/dp/time-recording/options") suspend fun timeOptions(@Query("workDate") workDate: String): TimeOptions
+    @POST("api/dp/time-recording/markings") suspend fun mark(@Body request: MarkingRequest): MarkingResponse
+    @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
+    @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
+    @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody
+    @GET("api/dp/time-recording/adjustments") suspend fun adjustments(@Query("month") month: String): OwnAdjustments
+    @POST("api/dp/time-recording/adjustments") suspend fun requestAdjustment(@Body request: AdjustmentRequest): AdjustmentCreated
+    @GET("api/collaborator/absence-requests/options") suspend fun absenceOptions(): AbsenceOptions
+    @POST("api/collaborator/absence-requests/preview") suspend fun absencePreview(@Body request: AbsencePeriod): AbsencePreviewResponse
+    @Multipart @POST("api/collaborator/absence-requests/preparations") suspend fun prepareAbsence(@Part("proposedRequestId") proposedRequestId: RequestBody, @Part files: List<MultipartBody.Part>): AbsencePreparation
+    @POST("api/collaborator/absence-requests") suspend fun createAbsence(@Body request: AbsenceDraftRequest): AbsenceRequestEnvelope
+    @PATCH("api/collaborator/absence-requests/{requestId}") suspend fun submitAbsence(@Path("requestId") requestId: String, @Body request: AbsenceSubmit): AbsenceRequestEnvelope
+    @GET("api/collaborator/absence-requests?scope=mine&limit=25") suspend fun absences(): AbsenceRequests
+    @GET("api/collaborator/requests?scope=own") suspend fun vouchers(): VoucherRequests
+    @POST("api/collaborator/requests") suspend fun requestVoucher(@Body request: VoucherRequestCreate): VoucherCreated
 }

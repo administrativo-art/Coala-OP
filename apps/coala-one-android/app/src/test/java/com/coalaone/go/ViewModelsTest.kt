@@ -8,6 +8,7 @@ import com.coalaone.go.push.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.*
 import org.junit.Assert.*
 import java.io.File
@@ -228,5 +229,24 @@ class ViewModelsTest {
         catch (_: kotlinx.coroutines.CancellationException) { }
         assertEquals("READY", queue.rows.value.single().state)
         assertTrue(queue.acks.isEmpty())
+    }
+    @Test fun punchRetriesTheSameAttemptAndDateUntilTheServerAnswersAndStartsOverAfterConflict() = runTest {
+        val sent = mutableListOf<MarkingRequest>(); var failures = mutableListOf<Throwable>(java.io.IOException("lost"))
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest): MarkingResponse { sent += request; failures.removeFirstOrNull()?.let { throw it }; return DemoApi().mark(request) }
+        }
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val vm = TimeViewModel(repository(auth, api), saved); vm.load(); advanceUntilIdle()
+        vm.record(); advanceUntilIdle()
+        assertNotNull(vm.feedback.value.error)
+        // A new view model over the same saved state (process killed) resends the same attempt and date.
+        val revived = TimeViewModel(repository(auth, api), saved); revived.load(); advanceUntilIdle()
+        revived.record(); advanceUntilIdle()
+        assertEquals(sent[0], sent[1]); assertEquals("mobile", sent[1].channel)
+        assertNotNull(revived.state.value.last); assertNull(saved.get<String>("attemptId"))
+        failures = mutableListOf(retrofit2.HttpException(retrofit2.Response.error<Any>(409, "{}".toResponseBody())))
+        revived.record(); advanceUntilIdle(); assertNull(saved.get<String>("attemptId"))
+        revived.record(); advanceUntilIdle()
+        assertNotEquals(sent[2].attemptId, sent[3].attemptId)
     }
 }

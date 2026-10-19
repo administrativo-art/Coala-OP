@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Segmented } from '@/components/patterns/segmented';
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox, Clock } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -561,6 +561,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   <AccordionContent className="space-y-2 p-1 pt-4">
                                     {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
                                     {renderPermissionSwitch("permissions.app.schedule.viewAllUnits" as any, "Ver escala de todas as unidades", "Para gestores: mostra também a escala publicada das outras unidades do acesso da pessoa, mesmo sem ela estar escalada nelas.", !appScheduleViewWatch, true)}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-time">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><Clock className="mr-2 h-5 w-5" /> Ponto e solicitações</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.timeRecording.mark" as any, "Ponto", "Mostra o Ponto no app: bater ponto com a hora oficial, ver e compartilhar comprovantes e pedir ajuste. Só bate ponto quem tem vínculo CLT ou de aprendiz no dia; também exige a permissão de colaborador do sistema.")}
+                                    {renderPermissionSwitch("permissions.app.requests.create" as any, "Solicitações", "Mostra Solicitações no app: pedir ausência (com atestado) e vale-transporte. Também exige a permissão de colaborador do sistema.")}
                                   </AccordionContent>
                                 </AccordionItem>
 

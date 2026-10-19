@@ -142,7 +142,7 @@ Piloto real produz dados pessoais e pode produzir prova. Divergência que indiqu
 
 ### 3.9. Experiência de ponto e documentos no aplicativo e na web
 
-Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada proposta **Ponto**, com as seguintes entregas; são requisitos a implementar, não funcionalidades já prontas:
+Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada **Ponto**, com as seguintes entregas. Estado em 19/10/2026 (Etapa 7, sem teste em aparelho): itens 1 e 2 implementados no app para o mês corrente e anteriores (sem origem app/web/terminal por linha nem jornada apurada); item 3 parcial (comprovante individual; sem seleção de período nem exportação); item 4 parcial (comprovante individual pela folha nativa ou salvar; espelho e conjuntos dependem das Fases 4 e 5); item 5 pendente (depois da Etapa 6). Solicitações (ausência e vale-transporte) também ficaram nativas:
 
 1. **Hoje / bater ponto:** identidade do colaborador, estabelecimento, data/hora e ação de registro; mostrar confirmação somente após persistência. Exibir marcação registrada e acesso ao respectivo comprovante. Distinguir falha de registro, registro persistido com comprovante pendente e comprovante disponível; recuperação não pode duplicar batida nem aguardar indefinidamente sem alerta/contingência.
 2. **Histórico:** linha do tempo de hoje, seleção de outro dia e intervalo de datas, com marcações originais, origem app/web/terminal e tratamentos identificados separadamente. Turno planejado, jornada de referência e trabalho apurado aparecem com rótulos distintos; dia em andamento é parcial, não fechamento definitivo. Considerar fuso do estabelecimento e jornadas que atravessam meia-noite.
@@ -334,6 +334,10 @@ Decisões do programador alteraram a ordem original: o piloto técnico (Fase 8) 
 6. **Fase 6** — simulação de uma competência completa com falhas.
 7. **Fase 7** — validação da assinatura no ITI, certificado do INPI e atestado assinado com e-CPF fora do sistema.
 8. **Fase 9** — lançamento total; Fase 10 reduzida, sem importação do Bizneo.
+
+**Etapa 7 — Coala Go: Ponto e Solicitações** (incluída em 19/10/2026 e executada antes da Etapa 6). Entradas nativas no app que reaproveitam as rotas web, sem rota nova: **Ponto** (hora oficial no fuso da unidade, batida como coletor móvel `01`, sequência de hoje, histórico do mês com tratamentos, comprovante para abrir, compartilhar pela folha nativa ou salvar, pedido de ajuste em duas etapas) e **Solicitações** (ausência com anexo, resumo e decurso de prazo; vale-transporte). Aparecem com as permissões `app.timeRecording.mark` e `app.requests.create` do perfil, mais a de colaborador. Banco de horas no app entra depois da Etapa 6. Exportação em lote, seleção por período e pasta do colaborador (3.9, itens 3 e 4) continuam pendentes.
+
+**Etapa 6 — fechamento do mês** (próxima): documento de fechamento da competência, bloqueado com pedido pendente; espelho em PDF com assinatura de concordância ou "pendente", registrado em `SYSTEM_DOCUMENT_TEMPLATES`; banco de horas com extrato; gerador do AEJ.
 
 ### Fase 0 — Base jurídica
 

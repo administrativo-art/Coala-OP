@@ -13,6 +13,7 @@ Centralizar pedidos recorrentes do colaborador com análise do Departamento Pess
 - `src/app/api/collaborator/requests/[requestId]/document/route.ts`: entrega DOCX ou PDF somente ao titular ou ao RH autorizado.
 - `src/app/api/collaborator/requests/[requestId]/signature/route.ts`: consulta ou inicia a assinatura independente.
 - `src/app/api/dev/transport-voucher-templates/[kind]/route.ts`: prévia fictícia local dos três modelos; indisponível em produção e fora de `localhost`.
+- Coala Go, entrada **Solicitações** (Etapa 7, 19/10/2026): lista os pedidos próprios (`scope=own`) e cria adesão, alteração, suspensão ou reativação pela mesma rota, depois de um resumo; termo e assinatura continuam na web. O schema do pedido fica em `src/features/hr/requests/schemas.ts`, reexportado pela segurança, para também validar o payload do app.
 
 ## Regra do vale-transporte
 

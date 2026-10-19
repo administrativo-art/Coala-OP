@@ -826,6 +826,15 @@ export type PermissionSet = {
       /** Adicionar telas do Coala Signage às unidades do usuário, lendo o QR code do monitor. */
       manage: boolean;
     };
+    /** Ausente em perfis anteriores à Etapa 7 do REP-P: vale como desligado. */
+    timeRecording?: {
+      /** Mostrar o Ponto no app: bater ponto, comprovantes e pedido de ajuste (as rotas continuam conferindo vínculo e permissão de colaborador). */
+      mark: boolean;
+    };
+    requests?: {
+      /** Mostrar Solicitações no app: ausência e vale-transporte do próprio colaborador. */
+      create: boolean;
+    };
   };
   // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
   hr: {
@@ -3021,7 +3030,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
-    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false } },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false }, timeRecording: { mark: false }, requests: { create: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3135,7 +3144,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
-    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true } },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true }, timeRecording: { mark: true }, requests: { create: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },
