@@ -1,3 +1,5 @@
+import { applyTreatments } from "@/features/dp/time-adjustments/effective";
+
 import { repPInstantMs } from "./time-zones";
 
 /**
@@ -30,7 +32,12 @@ export type DayShift = {
   breakMinPauseMinutes?: number | null;
 };
 
-export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending" };
+export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";
+  /** Tratamento aprovado (PTRP): original, desconsiderada (continua listada) ou incluída por ajuste. */
+  treatment?: "original" | "discarded" | "included"; adjustmentId?: string };
+
+export type DayTreatment = { type: "discard" | "inclusion"; workDate: string; adjustmentId: string;
+  originalReceiptId: string | null; markedAt: string | null; executionUnitId: string | null };
 
 export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string; approvedByInaction?: boolean };
 
@@ -42,6 +49,8 @@ export type DayView = {
   markings: DayMarking[];
   absence: DayAbsence | null;
   incidents: DayIncident[];
+  /** Todas as batidas do dia, inclusive desconsideradas e incluídas, para o painel. `markings` traz só as efetivas. */
+  allMarkings: DayMarking[];
   workedMinutes: number;
   breakMinutes: number | null;
   /** Diferença prévia entre o trabalhado e o previsto; null quando não dá para comparar. */
@@ -101,8 +110,12 @@ function shiftMinutes(shift: DayShift) {
   return Math.max(0, (span < 0 ? span + 1440 : span) - (shift.breakDurationMinutes ?? 0));
 }
 
-export function buildDayView(input: { date: string; today: string; shift: DayShift | null; markings: DayMarking[]; absences: DayAbsence[] }): DayView {
-  const markings = [...input.markings].sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
+export function buildDayView(input: { date: string; today: string; shift: DayShift | null; markings: DayMarking[]; absences: DayAbsence[]; treatments?: DayTreatment[] }): DayView {
+  const allMarkings = applyTreatments(input.markings, (input.treatments ?? []).filter((item) => item.workDate === input.date),
+    (item) => ({ receiptId: `ajuste-${item.adjustmentId}`, markedAt: item.markedAt, nsr: 0, executionUnitId: item.executionUnitId ?? "",
+      receiptStatus: "available" as const }))
+    .sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
+  const markings = allMarkings.filter((marking) => marking.treatment !== "discarded");
   const absence = input.absences.find((item) => ACTIVE_ABSENCE.has(item.status) && item.startDate <= input.date && item.endDate >= input.date) ?? null;
   const shift = input.shift && input.shift.type === "work" ? input.shift : null;
   const past = input.date < input.today;
@@ -113,7 +126,7 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
 
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
   if (shift?.overnight) {
-    return { date: input.date, shift: input.shift, markings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes: null, deviation };
+    return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes: null, deviation };
   }
   if (past && shift && !markings.length && !absence) incidents.push("missing");
   if (past && markings.length % 2 === 1) incidents.push("odd");
@@ -140,7 +153,7 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
     incidents.push("other_unit");
   }
   const balanceMinutes = past && shift && !absence && markings.length % 2 === 0 ? worked - shiftMinutes(shift) : null;
-  return { date: input.date, shift: input.shift, markings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes, deviation };
+  return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes, deviation };
 }
 
 export function monthDates(month: string) {
@@ -149,12 +162,13 @@ export function monthDates(month: string) {
   return Array.from({ length: last }, (_, index) => `${month}-${String(index + 1).padStart(2, "0")}`);
 }
 
-export function buildMonthView(input: { month: string; today: string; shifts: (DayShift & { date: string })[]; markings: (DayMarking & { workDate: string })[]; absences: DayAbsence[] }) {
+export function buildMonthView(input: { month: string; today: string; shifts: (DayShift & { date: string })[]; markings: (DayMarking & { workDate: string })[]; absences: DayAbsence[]; treatments?: DayTreatment[] }) {
   return monthDates(input.month).map((date) => {
     const shifts = input.shifts.filter((shift) => shift.date === date);
     // Com duas linhas no dia (troca ou cobertura), vale o turno de trabalho.
     const shift = shifts.find((item) => item.type === "work") ?? shifts[0] ?? null;
-    return buildDayView({ date, today: input.today, shift, markings: input.markings.filter((marking) => marking.workDate === date), absences: input.absences });
+    return buildDayView({ date, today: input.today, shift, markings: input.markings.filter((marking) => marking.workDate === date), absences: input.absences,
+      treatments: input.treatments });
   });
 }
 

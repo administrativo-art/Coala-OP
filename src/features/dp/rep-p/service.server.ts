@@ -579,3 +579,24 @@ export function getRepPSignerStatus(now = new Date()) {
 }
 
 export const repPIdentifiersForTest = Object.freeze({ establishmentKey, employeeKey, eventKey, receiptKey: eventKey });
+
+/**
+ * Leituras para o ajuste de ponto (PTRP), sem escrita na ARP: a batida do próprio titular no dia e o fuso do
+ * estabelecimento. Ficam aqui porque só o serviço do REP-P acessa as coleções `repP_*`.
+ */
+export async function readOwnRepPReceiptForAdjustment(context: ServerUserContext, receiptId: string, workDate: string,
+  injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const receipt = await deps.repDb.collection(RECEIPTS).doc(receiptId).get();
+  const snapshot = receipt.get('snapshot') as Partial<RepPReceiptSnapshot> | undefined;
+  if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid
+    || receipt.get('recordedDate') !== workDate || !snapshot?.nsr || !snapshot.markedAt || !snapshot.executionUnitId) return null;
+  return { receiptId: receipt.id, nsr: snapshot.nsr, markedAt: snapshot.markedAt, executionUnitId: snapshot.executionUnitId };
+}
+
+export async function repPEstablishmentForEmployer(workspaceId: string, employerCnpj: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const id = establishmentKey(workspaceId, employerCnpj);
+  const data = (await deps.repDb.collection(ESTABLISHMENTS).doc(id).get()).data();
+  return { establishmentId: id, timeZone: typeof data?.timeZone === 'string' ? data.timeZone : null };
+}

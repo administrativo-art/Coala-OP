@@ -9,6 +9,9 @@ import { errorMessageOf } from "@/components/patterns/panel-form";
 import { Segmented } from "@/components/patterns/segmented";
 import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
+import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
+import type { AdjustmentView, TreatmentView } from "@/features/dp/time-adjustments/types";
+import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +55,10 @@ export function MyTimeRecordingPage() {
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [absences, setAbsences] = useState<DayAbsence[]>([]);
   const [absencesUnavailable, setAbsencesUnavailable] = useState(false);
+  const [adjustments, setAdjustments] = useState<AdjustmentView[]>([]);
+  const [treatments, setTreatments] = useState<TreatmentView[]>([]);
+  const [adjustDate, setAdjustDate] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
@@ -80,7 +87,11 @@ export function MyTimeRecordingPage() {
         : Promise.resolve({ markings: [], truncated: false }),
       listAbsenceRequests(firebaseUser, "mine", undefined, { startDate: addDays(monthStart, -ABSENCE_LOOKBACK_DAYS), endDate: monthEnd })
         .then((result) => ({ ok: true as const, result }), () => ({ ok: false as const, result: null })),
-    ]).then(([monthPayload, historyPayload, absencePayload]) => {
+      request<{ adjustments: AdjustmentView[]; treatments: TreatmentView[] }>(`/api/dp/time-recording/adjustments?month=${month}`,
+        { fallbackError: "Não foi possível carregar os ajustes." }).catch(() => ({ adjustments: [], treatments: [] })),
+    ]).then(([monthPayload, historyPayload, absencePayload, adjustmentPayload]) => {
+      setAdjustments(adjustmentPayload.adjustments);
+      setTreatments(adjustmentPayload.treatments);
       if (cancelled) return;
       setSchedule(monthPayload);
       setHistory(historyPayload);
@@ -98,8 +109,8 @@ export function MyTimeRecordingPage() {
   }, [firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
 
   const days = useMemo(() => buildMonthView({
-    month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences,
-  }), [month, today, schedule, history, absences]);
+    month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences, treatments,
+  }), [month, today, schedule, history, absences, treatments]);
   // A faixa de registro mostra sempre o dia de hoje, mesmo navegando por outros meses.
   const [todaySnapshot, setTodaySnapshot] = useState<DayView | null>(null);
   useEffect(() => {
@@ -108,7 +119,7 @@ export function MyTimeRecordingPage() {
     if (found) setTodaySnapshot(found);
   }, [days, month, currentMonth, schedule, today]);
   const todayView = useMemo<DayView>(() => todaySnapshot
-    ?? { date: today, shift: null, markings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null, balanceMinutes: null, deviation: null },
+    ?? { date: today, shift: null, markings: [], allMarkings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null, balanceMinutes: null, deviation: null },
   [todaySnapshot, today]);
   const unitNames = useMemo(() => new Map(options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [options]);
 
@@ -299,7 +310,24 @@ export function MyTimeRecordingPage() {
       </div>
       <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
         today={today} unitNames={unitNames} receipts={receipts} onClose={() => setOpenDate(null)}
-        onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }} />
+        onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
+        adjustments={adjustments.filter((item) => item.workDate === openDate)}
+        onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
+        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} />
+      {adjustDate ? (
+        <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
+          originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
+          onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />
+      ) : null}
+      {reportId && adjustments.find((item) => item.id === reportId) ? (() => {
+        const adjustment = adjustments.find((item) => item.id === reportId)!;
+        return (
+          <SidePanel open onOpenChange={(next) => { if (!next) setReportId(null); }} kicker={`Pedido de ajuste · ${adjustment.workDate.split("-").reverse().join("/")}`}
+            title="Relatório do pedido" subtitle="Antigo × novo, justificativa e quem pediu e decidiu.">
+            <AdjustmentReport adjustment={adjustment} originals={days.find((day) => day.date === adjustment.workDate)?.allMarkings ?? []} />
+          </SidePanel>
+        );
+      })() : null}
       <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
         firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} />
     </PageContainer>

@@ -263,7 +263,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx), [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx).
 
-Arquivos locais percorridos: 50.
+Arquivos locais percorridos: 56.
 
 Chamadas candidatas encontradas:
 
@@ -281,6 +281,9 @@ Chamadas candidatas encontradas:
 - `/api/dp/responsibility-coverages` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-coverages/route.ts`](../../src/app/api/dp/responsibility-coverages/route.ts)
 - `/api/dp/responsibility-tasks` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/route.ts`](../../src/app/api/dp/responsibility-tasks/route.ts)
 - `/api/dp/responsibility-tasks/` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/[taskId]/route.ts`](../../src/app/api/dp/responsibility-tasks/%5BtaskId%5D/route.ts)
+- `/api/dp/time-recording/adjustments` — interface [`src/features/dp/time-adjustments/adjustment-panel.tsx`](../../src/features/dp/time-adjustments/adjustment-panel.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
+- `/api/dp/time-recording/adjustments/` — interface [`src/features/dp/time-adjustments/review-section.tsx`](../../src/features/dp/time-adjustments/review-section.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts`](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts)
+- `/api/dp/time-recording/adjustments/review` — interface [`src/features/dp/time-adjustments/review-section.tsx`](../../src/features/dp/time-adjustments/review-section.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/review/route.ts`](../../src/app/api/dp/time-recording/adjustments/review/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -454,7 +457,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx).
 
-Arquivos locais percorridos: 40.
+Arquivos locais percorridos: 43.
 
 Chamadas candidatas encontradas:
 
@@ -464,6 +467,7 @@ Chamadas candidatas encontradas:
 - `/api/collaborator/absence-requests/preparations` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preparations/route.ts`](../../src/app/api/collaborator/absence-requests/preparations/route.ts)
 - `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
 - `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
+- `/api/dp/time-recording/adjustments` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/month` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/month/route.ts`](../../src/app/api/dp/time-recording/month/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)

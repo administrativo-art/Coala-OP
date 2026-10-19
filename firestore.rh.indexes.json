@@ -1,5 +1,25 @@
 {
   "indexes": [
+    { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeUid", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeUid", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "ptrp_treatments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "originalReceiptId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "ptrp_treatments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeUid", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }

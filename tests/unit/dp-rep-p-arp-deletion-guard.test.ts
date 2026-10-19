@@ -32,6 +32,14 @@ describe('ARP do REP-P protegida contra exclusão no banco compartilhado', () =>
     }
   });
 
+  it('only the adjustment service references ptrp_ collections, and it never deletes (retenção de 20 anos)', () => {
+    const PTRP_WRITERS = ['src/features/dp/time-adjustments/service.server.ts'];
+    assert.deepEqual(files.filter((file) => file.text.includes('ptrp_')).map((file) => file.path).sort(), PTRP_WRITERS);
+    for (const path of PTRP_WRITERS) {
+      assert.doesNotMatch(readFileSync(path, 'utf8'), /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
+    }
+  });
+
   it('nobody enumerates collections, and recursive deletes on coala-rh only target a queried document', () => {
     for (const file of files) {
       assert.doesNotMatch(file.text, /listCollections\(/, file.path);

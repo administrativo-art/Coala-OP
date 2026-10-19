@@ -448,6 +448,7 @@ Esquecimento, falha, marcação indevida, intervalo/saída ausente e conflito co
 - Identificar inclusão, desconsideração e pré-assinalação nos documentos.
 - Lote exige compatibilidade, prévia e auditoria.
 - Estados: nova → análise → aguardando informação → tratada/desconsiderada → reaberta.
+- **Implementado em 19/10/2026 (etapa 5):** pedido, decisão com justificativa, tratamentos D/I e relatório; ver [fluxo do Registro de ponto](engineering/flows/dp-time-recording.md). Falta gerar o AEJ e o espelho a partir dos tratamentos (fases 4 e 5).
 - Pedido do colaborador (orientação Doc Brown, 19/10/2026): batida esquecida = inclusão; errada/duplicada = desconsideração; horário errado = desconsideração + inclusão na mesma transação; unidade errada = tratamento de local, sem tocar a ARP. Justificativa obrigatória; hora sempre informada pela pessoa; evidência opcional (sem dado de saúde). Cada pedido tem um histórico consultável com original × novo, justificativa, autor, decisor, instantes, estado e reversões; se virar PDF persistente, entra em `SYSTEM_DOCUMENT_TEMPLATES`. Detalhes e perguntas ao advogado na [seção 10-A do plano REP-P](plano-rep-p-controle-de-ponto.md).
 
 ## 9. Eventos de folha

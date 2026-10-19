@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { AdjustmentReviewSection } from "@/features/dp/time-adjustments/review-section";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
 import { ResponsibilityTaskSection } from "@/features/dp/responsibility-coverage/task-section";
@@ -209,6 +210,12 @@ export function HrRequestsPage() {
         {absenceTeamOpen ? <AbsenceWorkflowSection key={`team:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="team" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} initialFilters={absenceTeamFilters} /> : null}
         {absenceRetentionOpen ? <AbsenceRetentionSection firebaseUser={firebaseUser} /> : null}
         {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setAbsenceTeamOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
+      </section> : null}
+
+      {canReview ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Pedidos dos colaboradores para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
+        <AdjustmentReviewSection firebaseUser={firebaseUser} people={activeUsers} />
       </section> : null}
 
       {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}

@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **469**
-- Totalmente contratados: **120**
+- Arquivos de rota: **472**
+- Totalmente contratados: **123**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -101,6 +101,9 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | DELETE, PATCH, PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/[scheduleId]/vacations/route.ts) |
+| `/api/dp/time-recording/adjustments` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/route.ts](../../src/app/api/dp/time-recording/adjustments/route.ts) |
+| `/api/dp/time-recording/adjustments/[adjustmentId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts](../../src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts) |
+| `/api/dp/time-recording/adjustments/review` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/review/route.ts](../../src/app/api/dp/time-recording/adjustments/review/route.ts) |
 | `/api/dp/time-recording/afd` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
 | `/api/dp/time-recording/month` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) |

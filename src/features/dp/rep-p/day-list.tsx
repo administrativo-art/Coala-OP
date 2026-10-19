@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 import { fiscalClock, INCIDENT_SEVERITY, type DayAbsence, type DayIncident, type DayMarking, type DayView } from "./day-model";
 import { TACIT_APPROVAL_LABEL } from "@/features/dp/absences/requests/tacit-approval";
+import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "@/features/dp/time-adjustments/types";
 
 import { ReceiptPill } from "./marking-ui";
 import { hm, MarkingSequence, suggestedLabel, expectedPunchesOf } from "./record-strip";
@@ -120,9 +121,10 @@ export type ReceiptActions = {
   retry: (receiptId: string) => void;
 };
 
-export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence }: {
+export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment }: {
   day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions; onClose: () => void;
   onRequestAbsence: (date: string) => void;
+  adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void; onOpenAdjustment: (id: string) => void;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -167,9 +169,37 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
           </p>
         </PanelSection>
       ) : null}
+      {adjustments.length ? (
+        <PanelSection title="Pedidos de ajuste" aside={adjustments.length}>
+          {adjustments.map((adjustment) => (
+            <button key={adjustment.id} type="button" onClick={() => onOpenAdjustment(adjustment.id)}
+              className="flex w-full items-center justify-between gap-2 rounded-ds-sm py-1 text-left text-sm hover:bg-ds-warm/60">
+              <span><span className="block font-bold text-ds-ink">{ADJUSTMENT_KIND_LABELS[adjustment.kind].title}</span>
+                <span className="block text-xs text-ds-ink-muted">ver relatório</span></span>
+              <StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>{ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
+            </button>
+          ))}
+        </PanelSection>
+      ) : null}
       <PanelSection title="Batidas" aside={day.markings.length ? `${day.markings.length} no dia` : undefined}>
-        {day.markings.length === 0 ? <p className="text-sm text-ds-ink-muted">Nenhuma batida neste dia.</p> : day.markings.map((marking, index) => {
+        {day.allMarkings.length === 0 ? <p className="text-sm text-ds-ink-muted">Nenhuma batida neste dia.</p> : day.allMarkings.map((marking) => {
+          const index = day.markings.indexOf(marking);
           const busy = receipts.busyReceipt === marking.receiptId;
+          if (marking.treatment === "discarded" || marking.treatment === "included") {
+            return (
+              <div key={marking.receiptId} className="flex items-start gap-3 border-b border-ds-divider pb-3 last:border-0 last:pb-0">
+                <span className={cn("inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-extrabold",
+                  marking.treatment === "included" ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger")}>{marking.treatment === "included" ? `${index + 1}ª` : "—"}</span>
+                <div className="space-y-1">
+                  <p className={cn("text-sm text-ds-ink", marking.treatment === "discarded" && "line-through")}>
+                    <strong className="font-ds-mono text-base">{fiscalClock(marking.markedAt)}</strong>
+                    <span className="text-ds-ink-muted"> · {marking.treatment === "included" ? "incluída por ajuste aprovado" : `desconsiderada por ajuste · NSR ${marking.nsr}`}</span>
+                  </p>
+                  <p className="text-xs text-ds-ink-muted">{marking.treatment === "included" ? "Sem comprovante: não é batida do relógio." : "A batida original continua guardada no registro oficial."}</p>
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={marking.receiptId} className="flex items-start gap-3 border-b border-ds-divider pb-3 last:border-0 last:pb-0">
               <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-ds-ink px-2 text-sm font-extrabold text-white" aria-label={`${index + 1}ª batida do dia`}>{index + 1}ª</span>
@@ -206,6 +236,9 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
         <p className="flex items-start gap-1.5 text-xs text-ds-ink-muted">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Entrada, intervalo e saída são só uma leitura pela ordem das batidas; a batida guarda apenas o horário.
         </p>
+        {day.date <= today ? (
+          <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Pedir ajuste de ponto</Button>
+        ) : null}
       </PanelSection>
     </SidePanel>
   );
