@@ -76,6 +76,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
 
     const options = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
     assert.equal(options.eligible, true);
+    assert.equal(options.markingEnabled, true);
+    // Com a coleta desligada, o atalho da barra superior some: as opções avisam sem esconder o vínculo.
+    assert.equal((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies, markingEnabled: false })).markingEnabled, false);
     assert.deepEqual(options.officialClock, { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' });
     assert.deepEqual((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies,
       clock: { async read() { throw new Error('fonte fora do ar'); } } })).officialClock,

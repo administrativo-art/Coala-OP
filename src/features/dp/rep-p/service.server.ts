@@ -538,7 +538,7 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const deps = { ...defaults, ...injected };
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
-  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, executionUnits: [], officialClock: null };
+  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: deps.markingEnabled, executionUnits: [], officialClock: null };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
@@ -547,7 +547,7 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
     .map((unit) => ({ id: unit.id, name: String(unit.get('name') ?? unit.id),
       employer: unit.id === reference.period.employerUnitId }))
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, executionUnits: eligible ? executionUnits : [],
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: deps.markingEnabled, executionUnits: eligible ? executionUnits : [],
     officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };
 }
 
