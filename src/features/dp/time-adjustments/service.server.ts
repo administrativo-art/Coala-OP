@@ -22,7 +22,7 @@ import type { AdjustmentDecisionInput, AdjustmentMonthInput, CreateAdjustmentInp
 
 export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const TREATMENTS = 'ptrp_treatments';
-/** Documento da competência fechada; criado pelo fechamento (etapa 6). Período fechado não aceita pedido. */
+/** Documento da competência fechada, gravado por `closure.server.ts`. Período fechado não aceita pedido nem decisão. */
 export const CLOSURES = 'ptrp_competenceClosures';
 const REVIEW_LIMIT = 50;
 const MONTH_LIMIT = 200;
@@ -50,7 +50,7 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 
 /** Instante do ato pela Hora Legal; se a fonte estiver fora, usa o relógio do servidor e registra a origem. */
-async function actInstant(clock: Clock) {
+export async function actInstant(clock: Clock) {
   try {
     const reading = await clock.read();
     return { at: reading.instant.toISOString(), clockSource: 'hora_legal' as const };
@@ -59,7 +59,7 @@ async function actInstant(clock: Clock) {
   }
 }
 
-function closureKey(workspaceId: string, workDate: string) { return `${workspaceId}_${workDate.slice(0, 7)}`; }
+export function closureKey(workspaceId: string, workDate: string) { return `${workspaceId}_${workDate.slice(0, 7)}`; }
 
 async function assertOpenCompetence(hrDb: Firestore, workspaceId: string, workDate: string) {
   const closure = await hrDb.collection(CLOSURES).doc(closureKey(workspaceId, workDate)).get();

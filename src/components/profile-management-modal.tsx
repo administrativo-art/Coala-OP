@@ -1087,6 +1087,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </div>
                                 </div>
 
+                                {/* Fechamento do ponto */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Clock className="h-4 w-4" /> Fechamento do ponto</h4>
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.close" as any, "Fechar competência", "Congela o mês do ponto com a declaração de cada pessoa (ajustes e ausências). Só fecha sem pedido pendente; depois disso não se aceita pedido de ajuste no mês. O painel fica em Solicitações do DP.", !dpRequestsViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.reopen" as any, "Reabrir competência", "Reabre um mês fechado, com motivo. A versão anterior fica guardada e o novo fechamento declara o que mudou.", !dpRequestsViewWatch)}
+                                </div>
+
                                 {/* Cobertura de responsabilidades */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Users className="h-4 w-4" /> Cobertura de responsabilidades</h4>

@@ -1,5 +1,7 @@
 {
   "indexes": [
+    { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "startDate", "order": "DESCENDING"}]},
     { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeUid", "order": "ASCENDING" },
       { "fieldPath": "workDate", "order": "ASCENDING" }

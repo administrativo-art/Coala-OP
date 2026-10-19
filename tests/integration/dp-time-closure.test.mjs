@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import test from 'node:test';
+
+import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
+
+assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
+const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
+const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
+const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
+const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
+const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
+
+test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
+  const prefix = `closure-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const userId = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const competence = '2026-08';
+  const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
+  const closureDeps = { hrDb: hrDbAdmin, clock };
+  const actor = (uid, permissions, extra = {}) => ({ decoded: { uid }, userDoc: { id: uid, unitIds: [unitId], ...extra }, profileId: null,
+    permissions, isDefaultAdmin: false, workspace_id: workspaceId });
+  const admin = { ...actor(`${prefix}-admin`, structuredClone(defaultAdminPermissions)), isDefaultAdmin: true };
+  const titular = actor(userId, structuredClone(defaultGuestPermissions), { username: 'Maria' });
+  const reviewerPermissions = structuredClone(defaultGuestPermissions);
+  reviewerPermissions.dp.requests.review = true;
+  const reviewer = actor(`${prefix}-reviewer`, reviewerPermissions);
+  const closerPermissions = structuredClone(defaultGuestPermissions);
+  closerPermissions.dp.timeClosure = { close: true, reopen: false };
+  const closer = actor(`${prefix}-closer`, closerPermissions);
+  const absenceRef = hrDbAdmin.collection('dp_absenceRequests').doc(`${prefix}-absence`);
+
+  try {
+    await Promise.all([
+      dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Quiosque', address: 'Rua fiscal, 1', cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
+      dbAdmin.collection('users').doc(userId).set({ isActive: true, unitId, unitIds: [unitId] }),
+    ]);
+    await publishEmploymentReference(admin, { userId, expectedRevision: 0, requestId: `${prefix}-ref`, periods: [{
+      validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId],
+      jobFunctionIds: [], sourceDocumentId: 'admission', sourceReason: 'Admissão conferida para o ensaio' }] });
+
+    // Sem permissão não lê nem fecha; quem só fecha não reabre.
+    await assert.rejects(readCompetenceClosure(reviewer, competence, closureDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    await assert.rejects(closeCompetence(closer, { competence: '2026-10', expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_TOO_EARLY' });
+
+    const pending = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-12', kind: 'include', newTime: '08:00',
+      reason: 'Esqueci de bater a entrada.' }, deps);
+    await absenceRef.set({ id: absenceRef.id, workspaceId, beneficiaryUid: userId, beneficiaryName: 'Maria', status: 'in_review', startDate: '2026-07-30', endDate: '2026-08-02',
+      input: { startDate: '2026-07-30', endDate: '2026-08-02', unit: 'day' }, quantity: 4, unit: 'day', typeId: 'medical', typeSnapshot: { name: 'Atestado médico' },
+      attachments: [{ id: 'a' }], history: [], reason: 'dado de saúde que não entra na declaração' });
+
+    const before = await readCompetenceClosure(closer, competence, closureDeps);
+    assert.deepEqual(before.pending, { adjustments: 1, absences: 1 });
+    assert.equal(before.people.length, 1);
+    assert.equal(JSON.stringify(before.people).includes('dado de saúde'), false);
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_PENDING' });
+
+    await decideAdjustment(reviewer, pending.id, { action: 'approve', expectedVersion: 1, reason: 'Conferido com a gerente da unidade.' }, deps);
+    await absenceRef.update({ status: 'approved', approvalOrigin: 'tacit_timeout', decidedAt: '2026-08-05T12:00:00.000Z' });
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 3 }, closureDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
+    const first = await closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps);
+    assert.equal(first.status, 'closed');
+    assert.equal(first.version, 1);
+    assert.deepEqual(first.counts, { adjustments: 1, absences: 1 });
+    assert.equal(first.closedBy, closer.decoded.uid);
+    assert.equal(first.clockSource, 'hora_legal');
+    assert.match(first.manifestHash, /^[a-f0-9]{64}$/);
+    assert.equal(first.changes, null);
+
+    const frozen = await readCompetenceClosure(closer, competence, closureDeps);
+    assert.equal(frozen.people[0].adjustments[0].decidedBy, reviewer.decoded.uid);
+    assert.equal(frozen.people[0].absences[0].approval, 'tacit_timeout');
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps), { code: 'PTRP_CLOSURE_ALREADY_CLOSED' });
+    await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-20', kind: 'include', newTime: '08:00',
+      reason: 'Esqueci de bater a entrada.' }, deps), { code: 'PTRP_COMPETENCE_CLOSED' });
+
+    await assert.rejects(reopenCompetence(closer, competence, { action: 'reopen', expectedVersion: 1, reason: 'Atestado entregue depois.' }, closureDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    const reopened = await reopenCompetence(admin, competence, { action: 'reopen', expectedVersion: 1, reason: 'Atestado entregue depois do fechamento.' }, closureDeps);
+    assert.equal(reopened.status, 'open');
+    assert.equal(reopened.reopenings[0].fromVersion, 1);
+
+    const late = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-20', kind: 'include', newTime: '08:00',
+      reason: 'Esqueci de bater a entrada.' }, deps);
+    await decideAdjustment(reviewer, late.id, { action: 'reject', expectedVersion: 1, reason: 'Sem registro da presença neste dia.' }, deps);
+    const second = await closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps);
+    assert.equal(second.version, 2);
+    assert.deepEqual(second.changes, { added: [`adjustment:${late.id}`], changed: [], removed: [] });
+    // A versão anterior continua guardada.
+    const versions = await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').get();
+    assert.deepEqual(versions.docs.map((doc) => doc.id).sort(), ['1', '2']);
+  } finally {
+    await absenceRef.delete();
+  }
+});

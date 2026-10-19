@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
 import { AdjustmentReviewSection } from "@/features/dp/time-adjustments/review-section";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
@@ -56,6 +57,7 @@ export function HrRequestsPage() {
   const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({ status: 'in_review' });
   const canReview = isDefaultAdmin || permissions.dp?.requests?.review === true;
   const canViewAbsences = isDefaultAdmin || permissions.dp?.requests?.view === true;
+  const canSeeClosure = isDefaultAdmin || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
   const canViewResponsibilityTasks = isDefaultAdmin || permissions.dp?.schedules?.edit === true
     || permissions.dp?.responsibilities?.manage === true
     || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true;
@@ -216,6 +218,12 @@ export function HrRequestsPage() {
         <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
         <p className="text-xs text-ds-ink-muted">Pedidos dos colaboradores para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
         <AdjustmentReviewSection firebaseUser={firebaseUser} people={activeUsers} />
+      </section> : null}
+
+      {canSeeClosure ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Fechamento do ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Congela o mês com a declaração de cada pessoa: todos os ajustes de ponto e ausências, inclusive recusados e cancelados. Pedido sem decisão impede o fechamento.</p>
+        <CompetenceClosureSection firebaseUser={firebaseUser} people={activeUsers} />
       </section> : null}
 
       {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}
