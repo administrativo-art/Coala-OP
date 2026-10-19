@@ -109,6 +109,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/dp/schedules": "Escalas de trabalho",
   "/dashboard/dp/ferias": "Férias da equipe",
   "/dashboard/dp/requests": "Solicitações dos colaboradores",
+  "/dashboard/collaborator": "Painel do colaborador",
   "/dashboard/collaborator/requests": "Minhas solicitações",
   "/dashboard/collaborator/time-recording": "Meu ponto",
   "/dashboard/system-notices": "Avisos do sistema",
@@ -268,7 +269,8 @@ function Clock() {
       setClock(`${date} · ${time}`);
     }
     tick();
-    const id = setInterval(tick, 60_000);
+    // A cada segundo, para virar o minuto junto com os outros relógios; texto igual não redesenha.
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
   if (!clock) return null;
