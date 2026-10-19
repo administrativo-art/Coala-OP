@@ -11,6 +11,7 @@ const { defaultAdminPermissions, defaultGuestPermissions } = await import('../..
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
+const { agreeWithMirror, generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
 
 test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
@@ -91,6 +92,35 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     // A versão anterior continua guardada.
     const versions = await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').get();
     assert.deepEqual(versions.docs.map((doc) => doc.id).sort(), ['1', '2']);
+
+    // Espelho da versão 2: gerado uma vez, concordância uma vez e sobre o instantâneo aberto.
+    await hrDbAdmin.collection('repP_receipts').doc(`${prefix}-r1`).set({ workspaceId, employeeId: userId, recordedDate: '2026-08-12', status: 'issued',
+      snapshot: { nsr: 41, markedAt: '2026-08-12T12:00:00-0300', executionUnitId: unitId, collectorId: '01', employeeName: 'Maria Fiscal', employeeCpf: '52998224725',
+        employerLegalName: 'Empregador do ensaio LTDA', employerCnpj: '14276603000125' } });
+    const mirrorDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
+    assert.equal((await readMirrorStatus(titular, competence, undefined, mirrorDeps)).mirror, null);
+    await assert.rejects(generateMirror(titular, { action: 'generate', competence, expectedVersion: 1 }, mirrorDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
+    await assert.rejects(generateMirror(reviewer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, mirrorDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    const mirror = await generateMirror(titular, { action: 'generate', competence, expectedVersion: 2 }, mirrorDeps);
+    assert.equal(mirror.snapshot.employee.name, 'Maria Fiscal');
+    assert.equal(mirror.snapshot.employer.cnpj, '14276603000125');
+    const day = mirror.snapshot.days.find((item) => item.date === '2026-08-12');
+    assert.deepEqual(day.punches.map((item) => `${item.time}:${item.mark}`), ['08:00:included', '12:00:original']);
+    assert.equal(day.pairedMinutes, 240);
+    assert.equal(mirror.snapshot.adjustments.length, 2);
+    assert.equal(mirror.snapshot.actors[reviewer.decoded.uid], undefined);
+    assert.equal((await generateMirror(closer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, mirrorDeps)).snapshotHash, mirror.snapshotHash);
+    await assert.rejects(agreeWithMirror(closer, { action: 'agree', competence, expectedVersion: 2, employeeUid: userId, snapshotHash: mirror.snapshotHash }, 'web', mirrorDeps), { code: 'PTRP_MIRROR_AGREEMENT_OWNER' });
+    await assert.rejects(agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: 'f'.repeat(64) }, 'web', mirrorDeps), { code: 'PTRP_MIRROR_HASH_MISMATCH' });
+    const agreed = await agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: mirror.snapshotHash }, 'mobile', mirrorDeps);
+    assert.equal(agreed.agreement.channel, 'mobile');
+    assert.equal((await agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: mirror.snapshotHash }, 'web', mirrorDeps)).agreement.at, agreed.agreement.at);
+    const status = await readMirrorStatus(closer, competence, userId, mirrorDeps);
+    assert.equal(status.mirror.agreement.uid, userId);
+    const pdf = await mirrorPdf(titular, competence, undefined, mirrorDeps);
+    assert.equal(pdf.bytes.subarray(0, 4).toString(), '%PDF');
+    assert.equal(pdf.filename, 'espelho-ponto-2026-08-v2.pdf');
+    await assert.rejects(mirrorPdf(reviewer, competence, userId, mirrorDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
   } finally {
     await absenceRef.delete();
   }

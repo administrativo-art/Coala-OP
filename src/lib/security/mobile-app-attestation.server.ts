@@ -27,6 +27,11 @@ function secret() {
   return value;
 }
 
+/** Só informa: a chamada traz atestação válida do Coala Go para este uid? Sem segredo configurado, não. */
+export function hasValidMobileAttestation(request: NextRequest, uid: string) {
+  try { return verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), uid); } catch { return false; }
+}
+
 export function currentMobileAttestationMode() {
   return mobileAttestationMode(process.env.MOBILE_APP_ATTESTATION_MODE?.trim());
 }

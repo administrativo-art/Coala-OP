@@ -515,6 +515,27 @@ export async function listOwnRepPMarkings(context: ServerUserContext, raw: unkno
   return { startDate: input.startDate, endDate: input.endDate, markings, truncated: snapshot.size > MAX_HISTORY_MARKINGS };
 }
 
+/**
+ * Batidas de uma pessoa num período para o espelho do fechamento (Etapa 6): mesma consulta do histórico próprio,
+ * chamada só pelo serviço de espelho depois de conferir a permissão. Devolve também a identidade congelada no
+ * comprovante mais recente (nome, CPF e empregador), que o espelho usa em vez do cadastro atual.
+ */
+export async function readRepPMarkingsForMirror(workspaceId: string, employeeId: string, startDate: string, endDate: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const snapshot = await deps.repDb.collection(RECEIPTS)
+    .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeId)
+    .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate)
+    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
+  const receipts = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => ({ workDate: String(document.get('recordedDate')), receipt: document.get('snapshot') as RepPReceiptSnapshot }))
+    .sort((left, right) => repPInstantMs(left.receipt.markedAt) - repPInstantMs(right.receipt.markedAt) || left.receipt.nsr - right.receipt.nsr);
+  const latest = receipts.at(-1)?.receipt;
+  return {
+    markings: receipts.map(({ workDate, receipt }) => ({ workDate, nsr: receipt.nsr, markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId })),
+    identity: latest ? { employeeName: latest.employeeName, employeeCpf: latest.employeeCpf, employerLegalName: latest.employerLegalName, employerCnpj: latest.employerCnpj } : null,
+    truncated: snapshot.size > MAX_HISTORY_MARKINGS,
+  };
+}
+
 /** Monitoração do DP: comprovantes ainda pendentes no workspace, mais antigos primeiro, sem CPF nem bytes. */
 export async function listPendingRepPReceipts(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };

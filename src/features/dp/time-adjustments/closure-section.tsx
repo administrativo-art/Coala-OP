@@ -12,6 +12,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
 import type { ClosurePerson } from "./closure-core";
+import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
 
 type ClosureView = {
@@ -131,6 +132,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       {selected ? (
         <SidePanel open onOpenChange={(next) => { if (!next) setSelected(null); }} kicker={`Declaração do fechamento · ${dateBR(`${competence}-01`).slice(3)}`} title={selected.name ?? nameOf(selected.uid)}
           subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências`}>
+          {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
           <PanelSection title="Ajustes de ponto">
             {selected.adjustments.length ? selected.adjustments.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">

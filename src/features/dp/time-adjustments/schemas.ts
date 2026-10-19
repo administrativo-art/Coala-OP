@@ -53,3 +53,9 @@ export const closureActionSchema = z.object({ action: z.literal('reopen'), expec
 
 export type ClosureCloseInput = z.infer<typeof closureCloseSchema>;
 export type ClosureActionInput = z.infer<typeof closureActionSchema>;
+
+const uid = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+export const mirrorQuerySchema = z.object({ competence, employeeUid: uid.optional() }).strict();
+export const mirrorActionSchema = z.object({ action: z.enum(['generate', 'agree']), competence, expectedVersion: z.number().int().positive(),
+  employeeUid: uid.optional(), snapshotHash: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
+export type MirrorActionInput = z.infer<typeof mirrorActionSchema>;

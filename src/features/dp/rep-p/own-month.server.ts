@@ -55,12 +55,19 @@ function millis(value: unknown) {
 export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPOwnMonthSchema.safeParse(raw);
   if (!parsed.success) throw new AppError({ code: 'REP_P_MONTH_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Mês inválido.' });
+  return readRepPMonthOfPerson([context.decoded.uid, text(context.userDoc.id), text(context.userDoc.hrEmployeeId)], parsed.data.month, injected);
+}
+
+/**
+ * Escala do mês de uma pessoa pelos identificadores dela (uid e cadastro do RH). Usada pela tela própria e pelo
+ * espelho do fechamento, que confere a permissão antes de chamar.
+ */
+export async function readRepPMonthOfPerson(ids: Array<string | null | undefined>, competence: string, injected: Partial<Dependencies> = {}) {
   const { db } = { ...defaults, ...injected };
-  const [year, month] = parsed.data.month.split('-').map(Number);
-  const start = `${parsed.data.month}-01`;
-  const end = `${parsed.data.month}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
-  const ownIds = [...new Set([context.decoded.uid, text(context.userDoc.id), text(context.userDoc.hrEmployeeId)]
-    .filter((value): value is string => Boolean(value)))].slice(0, 10);
+  const [year, month] = competence.split('-').map(Number);
+  const start = `${competence}-01`;
+  const end = `${competence}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
+  const ownIds = [...new Set(ids.filter((value): value is string => Boolean(value)))].slice(0, 10);
 
   const [schedules, shifts] = await Promise.all([
     db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'locked', 'createdAt').get(),
@@ -127,5 +134,5 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
       breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
     };
   });
-  return { month: parsed.data.month, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };
+  return { month: competence, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };
 }

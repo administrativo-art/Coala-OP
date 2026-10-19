@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "time_mirror";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -446,6 +446,29 @@ const timeRecordingTemplates: SystemDocumentTemplate[] = [{
   isSystem: true,
   previewUrl: "/api/documents/templates/system-rep-p-marking-receipt/preview",
   updatedAt: "2026-10-18T00:00:00.000Z",
+}, {
+  id: "system-ptrp-time-mirror",
+  name: "Espelho de ponto",
+  documentTitle: "Espelho de ponto",
+  category: "Controle de ponto",
+  description: "Espelho do mês fechado por pessoa: escala, batidas originais com NSR, desconsideradas e incluídas por ajuste aprovado, ausências e a declaração do fechamento, com a concordância do trabalhador ou \"pendente\".",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "time_mirror",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/time-adjustments/mirror-pdf.ts",
+  variables: [],
+  letterheadVersion: "none",
+  // Concordância eletrônica simples do titular, registrada no próprio sistema; não passa pelo fluxo de assinaturas.
+  signatureScope: "none",
+  // Retenção de 20 anos decidida pelo programador (plano REP-P 10-B); descarte nunca é automático.
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-ptrp-time-mirror/preview",
+  updatedAt: "2026-10-19T00:00:00.000Z",
 }];
 
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [

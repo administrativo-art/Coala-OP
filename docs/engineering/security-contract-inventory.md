@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **474**
-- Totalmente contratados: **125**
+- Arquivos de rota: **476**
+- Totalmente contratados: **127**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -108,6 +108,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/closures` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closures/route.ts](../../src/app/api/dp/time-recording/closures/route.ts) |
 | `/api/dp/time-recording/closures/[competence]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/[competence]/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
+| `/api/dp/time-recording/mirrors` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) |
+| `/api/dp/time-recording/mirrors/pdf` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) |
 | `/api/dp/time-recording/month` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) |
 | `/api/dp/time-recording/options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) |
 | `/api/dp/time-recording/pending-receipts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) |

@@ -34,6 +34,7 @@ function generationLabel(template: SystemDocumentTemplate) {
 
 function signatureLabel(template: SystemDocumentTemplate) {
   if (template.renderer === "rep_p_receipt") return "Assinatura digital PAdES";
+  if (template.renderer === "time_mirror") return "Concordância eletrônica do trabalhador";
   if (template.signatureScope === "independent") return "Assinatura individual";
   if (template.signatureScope === "bundle") return "Assinatura do pacote";
   return "Sem assinatura";
@@ -42,6 +43,7 @@ function signatureLabel(template: SystemDocumentTemplate) {
 function collaboratorBindingLabel(template: SystemDocumentTemplate) {
   if (template.id.includes("transportation-voucher-reactivation")) return "Colaborador da solicitação";
   if (template.sourceModule === "uniforms") return "Colaborador do movimento de uniforme";
+  if (template.renderer === "time_mirror") return "Colaborador do mês fechado";
   if (template.sourceModule === "time_recording") return "Colaborador que registrou a batida";
   if (template.id.startsWith("system-admission-")) return "Colaborador da admissão";
   return "Definido no momento da geração";

@@ -10,6 +10,7 @@ import { Segmented } from "@/components/patterns/segmented";
 import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
+import { MirrorCard } from "@/features/dp/time-adjustments/mirror-card";
 import type { AdjustmentView, TreatmentView } from "@/features/dp/time-adjustments/types";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
@@ -217,6 +218,8 @@ export function MyTimeRecordingPage() {
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} />
           {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
+          {/* Só aparece com o mês fechado pelo DP. */}
+          <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} />
         </aside>
 
         <div className="min-w-0 space-y-3">

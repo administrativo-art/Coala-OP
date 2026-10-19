@@ -33,10 +33,10 @@ describe('ARP do REP-P protegida contra exclusão no banco compartilhado', () =>
   });
 
   it('only the adjustment and closure services reference ptrp_ collections, and it never deletes (retenção de 20 anos)', () => {
-    // The closure service reaches the collections only through the constants exported by the adjustment service.
-    const PTRP_WRITERS = ['src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/service.server.ts'];
+    // The closure and mirror services reach the collections only through the constants exported by the adjustment service.
+    const PTRP_WRITERS = ['src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-adjustments/service.server.ts'];
     assert.deepEqual(files.filter((file) => file.text.includes('ptrp_')).map((file) => file.path), ['src/features/dp/time-adjustments/service.server.ts']);
-    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES)\b[^;]*from '\.\/service\.server'/.test(file.text)).map((file) => file.path), ['src/features/dp/time-adjustments/closure.server.ts']);
+    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES)\b[^;]*from '\.\/service\.server'/.test(file.text)).map((file) => file.path).sort(), ['src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts']);
     for (const path of PTRP_WRITERS) {
       assert.doesNotMatch(readFileSync(path, 'utf8'), /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
     }
