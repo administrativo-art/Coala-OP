@@ -250,6 +250,7 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   configurationNotes: z.string().trim().max(2000).nullable().optional(),
   overnight: z.boolean().optional(),
   expectedPunches: z.number().int().min(2).max(12).nullable().optional(),
+  executionUnitPolicy: z.enum(['scheduled', 'free']).optional(),
 }).strict();
 
 function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObjectSchema>, context: z.RefinementCtx) {

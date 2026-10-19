@@ -91,6 +91,7 @@ const shiftDefSchema = z.object({
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed >= 2 && parsed <= 12;
   }, 'Informe um número inteiro entre 2 e 12.').optional(),
+  executionUnitPolicy: z.enum(['scheduled', 'free']),
 }).superRefine((value, context) => {
   if (value.breakType === 'fixed' && (!value.breakStart || !value.breakEnd)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe início e fim do intervalo.' });
@@ -130,6 +131,7 @@ function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
     configurationNotes: def?.configurationNotes ?? '',
     overnight: def?.overnight ?? false,
     expectedPunches: def?.expectedPunches == null ? '' : String(def.expectedPunches),
+    executionUnitPolicy: def?.executionUnitPolicy ?? 'scheduled',
   };
 }
 
@@ -237,6 +239,7 @@ export function DPSettingsShifts() {
         description: values.description || undefined,
         configurationNotes: values.configurationNotes || undefined,
         expectedPunches: values.expectedPunches ? Number(values.expectedPunches) : undefined,
+        executionUnitPolicy: values.executionUnitPolicy,
       };
       if (panel?.mode === 'edit') await updateShiftDefinition(panel.def.id, data);
       else await addShiftDefinition(data);
@@ -697,6 +700,13 @@ export function DPSettingsShifts() {
                 </div>
               </Field>
             </div>
+            <Field label="Unidade da batida de ponto" htmlFor="shift-unit-policy"
+              hint="Fixa: a batida já vem com a unidade da escala e a pessoa pode indicar outra, sem bloqueio; o DP confere a troca. Livre: a pessoa escolhe entre as unidades do vínculo (volante).">
+              <select id="shift-unit-policy" className={fieldInputClass} {...register('executionUnitPolicy')}>
+                <option value="scheduled">Fixa da escala</option>
+                <option value="free">Livre entre as unidades do vínculo</option>
+              </select>
+            </Field>
             <Field label="Observações da configuração" htmlFor="shift-notes" requirement="opcional">
               <textarea id="shift-notes" className={`${fieldInputClass} min-h-24 py-2`} {...register('configurationNotes')} />
             </Field>

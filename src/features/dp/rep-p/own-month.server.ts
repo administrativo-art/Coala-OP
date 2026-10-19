@@ -25,6 +25,7 @@ export type RepPOwnScheduledShift = {
   breakWindowStart: string | null;
   breakWindowEnd: string | null;
   expectedPunches: number | null;
+  executionUnitPolicy: 'scheduled' | 'free';
 };
 
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
@@ -103,6 +104,7 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
       breakWindowStart: breakType === 'staggered' ? text(definition?.get('breakWindowStart')) : null,
       breakWindowEnd: breakType === 'staggered' ? text(definition?.get('breakWindowEnd')) : null,
       expectedPunches: minutes(definition?.get('expectedPunches')),
+      executionUnitPolicy: definition?.get('executionUnitPolicy') === 'free' ? 'free' : 'scheduled',
     };
   });
   return { month: parsed.data.month, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };

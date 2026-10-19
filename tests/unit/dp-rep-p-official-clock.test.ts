@@ -18,7 +18,7 @@ describe('Relógio do coletor REP-P', () => {
     // "Registro de ponto" e a janela "Bater ponto" da barra superior são coletores: relógio visível e botão preso a canRecord.
     for (const file of ['record-strip.tsx', 'quick-marking-button.tsx']) {
       const screen = readFileSync(`src/features/dp/rep-p/${file}`, 'utf8');
-      assert.match(screen, /<OfficialClockDisplay clock=\{options\.officialClock\}/, file);
+      assert.match(screen, /<OfficialClockDisplay clock=\{unitClock\}/, file);
       assert.match(screen, /disabled=\{!canRecord\}/, file);
     }
     // A janela rápida não fecha com a batida em voo, senão a confirmação do servidor se perde e a pessoa bate de novo.

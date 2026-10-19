@@ -17,6 +17,7 @@ import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAf
   unconfiguredRepPClock, type RepPClock } from './clock';
 import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } from './icp-signer';
 import { configuredRepPClock } from './hlb-ntp-clock.server';
+import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zones';
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
@@ -237,9 +238,11 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   }
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
-  const fiscalTimestamp = formatRepPAfdTimestamp(reading.instant, establishmentData.timeZone);
+  // O instante é um só (Hora Legal); o fuso gravado é o da unidade de execução, ou o do estabelecimento sem cadastro.
+  // O fuso é lido antes da transação: troca concomitante no cadastro vale a partir da batida seguinte.
+  const fiscalTimestamp = formatRepPAfdTimestamp(reading.instant, repPMarkingTimeZone(executionUnit.get('timeZone'), establishmentData.timeZone));
   if (civilDateFromRepPTimestamp(fiscalTimestamp) !== input.workDate) {
-    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data da marcação não corresponde à hora oficial do estabelecimento.', 'VALIDATION');
+    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data da marcação não corresponde à hora oficial da unidade.', 'VALIDATION');
   }
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
@@ -508,7 +511,7 @@ export async function listOwnRepPMarkings(context: ServerUserContext, raw: unkno
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null };
-  }).sort((left, right) => left.markedAt.localeCompare(right.markedAt) || left.nsr - right.nsr);
+  }).sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
   return { startDate: input.startDate, endDate: input.endDate, markings, truncated: snapshot.size > MAX_HISTORY_MARKINGS };
 }
 
@@ -545,7 +548,8 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const units = unitIds.length ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
   const executionUnits = units.filter((unit) => unit.exists)
     .map((unit) => ({ id: unit.id, name: String(unit.get('name') ?? unit.id),
-      employer: unit.id === reference.period.employerUnitId }))
+      employer: unit.id === reference.period.employerUnitId,
+      timeZone: isBrazilTimeZone(unit.get('timeZone')) ? String(unit.get('timeZone')) : null }))
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
   return { workDate: parsed.data.workDate, eligible, markingEnabled: deps.markingEnabled, executionUnits: eligible ? executionUnits : [],
     officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };

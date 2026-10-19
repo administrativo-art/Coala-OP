@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **467**
-- Totalmente contratados: **118**
+- Arquivos de rota: **468**
+- Totalmente contratados: **119**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -122,6 +122,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/unit-organizations/[organizationId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/dp/unit-organizations/[organizationId]/route.ts](../../src/app/api/dp/unit-organizations/[organizationId]/route.ts) |
 | `/api/dp/units` | POST | `LEGACY_BASELINE` | [src/app/api/dp/units/route.ts](../../src/app/api/dp/units/route.ts) |
 | `/api/dp/units/[unitId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/dp/units/[unitId]/route.ts](../../src/app/api/dp/units/[unitId]/route.ts) |
+| `/api/dp/units/[unitId]/time-zone` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/units/[unitId]/time-zone/route.ts](../../src/app/api/dp/units/[unitId]/time-zone/route.ts) |
 | `/api/dp/vacations` | GET, POST | `LEGACY_BASELINE` | [src/app/api/dp/vacations/route.ts](../../src/app/api/dp/vacations/route.ts) |
 | `/api/dp/vacations/[vacationId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/route.ts](../../src/app/api/dp/vacations/[vacationId]/route.ts) |
 | `/api/dp/vacations/[vacationId]/assets/[kind]` | GET | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts](../../src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts) |

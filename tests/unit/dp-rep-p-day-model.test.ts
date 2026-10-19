@@ -61,6 +61,12 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.equal(night.balanceMinutes, null);
   });
 
+  it('batida fora da unidade fixa da escala fica a conferir; no turno livre, não', () => {
+    const marks = [mark('2026-10-16', '10:00', 1), mark('2026-10-16', '16:15', 2)].map((item) => ({ ...item, executionUnitId: 'outra' }));
+    assert.ok(buildDayView({ date: '2026-10-16', today: '2026-10-19', shift: { ...shift, unitId: 'doca' }, absences: [], markings: marks }).incidents.includes('other_unit'));
+    assert.ok(!buildDayView({ date: '2026-10-16', today: '2026-10-19', shift: { ...shift, unitId: 'doca', executionUnitPolicy: 'free' }, absences: [], markings: marks }).incidents.includes('other_unit'));
+  });
+
   it('dia em andamento soma até agora', () => {
     assert.equal(workedMinutes([{ markedAt: '2026-10-19T09:57:00-0300' }], 10 * 60 + 57), 60);
   });

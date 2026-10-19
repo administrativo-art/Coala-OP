@@ -3604,6 +3604,8 @@ export type DPUnit = {
   archivedAt?: Timestamp;
   cnpj?: string;
   address?: string;
+  /** Fuso IANA usado na batida de ponto nesta unidade; ausente = fuso do estabelecimento do empregador. */
+  timeZone?: string;
   unitType?: string;
   organizationId?: string;
   groupId?: string;
@@ -3906,6 +3908,8 @@ export type DPShiftDefinition = {
   configurationNotes?: string;
   overnight?: boolean;
   expectedPunches?: number;
+  /** Unidade da batida: fixa da escala (padrão) ou livre entre as do vínculo (volante). Nunca bloqueia a batida. */
+  executionUnitPolicy?: 'scheduled' | 'free';
   isArchived?: boolean;
   archivedAt?: Timestamp;
   archivedBy?: string;

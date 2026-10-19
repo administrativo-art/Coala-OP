@@ -24,7 +24,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
   const marking = useRepPMarking();
   const {
     options, optionsError, loadOptions, unitId, setUnitId, recording, recordError, record, lastMarking, setLastMarking, canRecord,
-    fetchReceiptFile,
+    fetchReceiptFile, unitClock,
   } = marking;
 
   if (!options?.markingEnabled || !options.eligible || options.executionUnits.length === 0) return null;
@@ -67,7 +67,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
           </DialogHeader>
           <div className="space-y-4">
             {optionsError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{optionsError}</p> : null}
-            <OfficialClockDisplay clock={options.officialClock} />
+            <OfficialClockDisplay clock={unitClock} />
             {lastMarking ? (
               <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-4" role="status">
                 <p className="text-sm text-ds-ink">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, FileText, MapPin } from "lucide-react";
 
 import { ControlPanel } from "@/components/patterns/control-panel";
@@ -68,13 +68,22 @@ export function MarkingSequence({ day, today, dark }: { day: DayView; today: str
 export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
   marking: Marking; day: DayView; today: string; onOpenDay: () => void; onRecorded: () => void;
 }) {
-  const { options, optionsError, unitId, setUnitId, canRecord } = marking;
+  const { options, optionsError, unitId, setUnitId, canRecord, unitClock } = marking;
   const [dialogOpen, setDialogOpen] = useState(false);
   const expected = expectedPunchesOf(day);
   const nextIndex = day.markings.length;
   const next = suggestedLabel(nextIndex, expected);
   const units = options?.executionUnits ?? [];
   const unitName = units.find((unit) => unit.id === unitId)?.name;
+  // Turno com unidade fixa: a unidade da escala vem escolhida; trocar é possível e não bloqueia a batida.
+  const work = day.shift?.type === "work" ? day.shift : null;
+  const freeUnit = work?.executionUnitPolicy === "free";
+  const scheduledUnitId = work && !freeUnit && work.unitId && units.some((unit) => unit.id === work.unitId) ? work.unitId : null;
+  const [otherUnit, setOtherUnit] = useState(false);
+  useEffect(() => {
+    if (scheduledUnitId && !otherUnit && unitId !== scheduledUnitId) setUnitId(scheduledUnitId);
+  }, [scheduledUnitId, otherUnit, unitId, setUnitId]);
+  const showSelect = units.length > 1 && (!scheduledUnitId || otherUnit);
   const nowMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
   const blocked = options && !options.markingEnabled;
   const ineligible = options && options.markingEnabled && units.length === 0;
@@ -84,7 +93,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
     <ControlPanel className="mx-auto w-full max-w-[1180px] p-0">
       <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:gap-6">
         <div className="shrink-0">
-          {options ? <OfficialClockDisplay clock={options.officialClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}
+          {options ? <OfficialClockDisplay clock={unitClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ds-on-dark-2">
@@ -96,12 +105,18 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
               <>
                 <span className="text-ds-on-dark-muted" aria-hidden>·</span>
                 <MapPin className="h-3.5 w-3.5" aria-hidden />
-                {units.length > 1 ? (
+                {showSelect ? (
                   <select aria-label="Unidade onde você está trabalhando" value={unitId} onChange={(event) => setUnitId(event.target.value)}
                     className="h-8 rounded-ds-sm border border-white/15 bg-white/[0.07] px-2 text-[13px] font-semibold text-white">
-                    {units.map((unit) => <option key={unit.id} value={unit.id} className="text-ds-ink">{unit.name}</option>)}
+                    {units.map((unit) => <option key={unit.id} value={unit.id} className="text-ds-ink">{unit.name}{unit.id === scheduledUnitId ? " (da escala)" : ""}</option>)}
                   </select>
-                ) : <strong className="text-white">{units[0].name}</strong>}
+                ) : <strong className="text-white">{unitName ?? units[0].name}</strong>}
+                {freeUnit ? <span className="text-[11px] text-ds-on-dark-muted">turno volante</span>
+                  : scheduledUnitId && units.length > 1 ? (otherUnit
+                    ? <button type="button" className="text-[11px] font-bold underline" onClick={() => { setOtherUnit(false); setUnitId(scheduledUnitId); }}>usar a da escala</button>
+                    : <><span className="text-[11px] text-ds-on-dark-muted">da sua escala</span>
+                      <button type="button" className="text-[11px] font-bold text-ds-on-dark-muted underline hover:text-white" onClick={() => setOtherUnit(true)}>outra unidade?</button></>)
+                    : null}
               </>
             ) : null}
           </p>
@@ -109,6 +124,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
             <MarkingSequence day={day} today={today} dark />
             <span className="text-[11px] text-ds-on-dark-muted">{hm(workedMinutes(day.markings, nowMinutes))} trabalhadas</span>
           </button>
+          {otherUnit && unitId !== scheduledUnitId ? <p className="text-[11px] text-ds-on-dark-muted">A batida é registrada normalmente; o DP confere a troca de unidade.</p> : null}
           {optionsError ? <p role="alert" className="text-[12px] font-semibold text-ds-caution-tile">{optionsError}</p> : null}
         </div>
         <div className="shrink-0 md:text-right">
@@ -130,7 +146,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
 function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onRecorded }: {
   open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; unitName: string; label: string; index: number; onRecorded: () => void;
 }) {
-  const { options, recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile } = marking;
+  const { recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile, unitClock } = marking;
   const [downloading, setDownloading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
 
@@ -186,7 +202,7 @@ function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onR
               <DialogDescription>Confira antes de registrar. A batida não pode ser apagada depois.</DialogDescription>
             </DialogHeader>
             <div className="rounded-ds-md border border-ds-border bg-ds-warm p-4 text-center">
-              <OfficialClockDisplay clock={options?.officialClock ?? null} />
+              <OfficialClockDisplay clock={unitClock} />
               <p className="mt-1 text-xs text-ds-ink-muted">A hora gravada é a do servidor, no momento da confirmação.</p>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">

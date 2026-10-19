@@ -57,7 +57,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     { code: 'REP_P_MARKING_DISABLED' });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
-      execution.set({ name: 'Execução excepcional', address: 'Rua operacional, 2', cnpj: '11222333000181', timeZone: 'America/Belem' }),
+      // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.
+      execution.set({ name: 'Execução excepcional', address: 'Rua operacional, 2', cnpj: '11222333000181', timeZone: 'America/Manaus' }),
       user.set({ isActive: true, unitId: employerUnitId, unitIds: [employerUnitId, executionUnitId] }),
       employee.set({ auth_uid: userId, name: 'Maria Teste', bizneo_employee_id: '99' }),
       cpfField.set({ value_text: cpf }),
@@ -83,8 +84,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.deepEqual((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies,
       clock: { async read() { throw new Error('fonte fora do ar'); } } })).officialClock,
     { available: false, issue: 'REP_P_TIME_UNAVAILABLE' });
-    assert.deepEqual(options.executionUnits.map((unit) => [unit.id, unit.employer]),
-      [[employerUnitId, true], [executionUnitId, false]]);
+    assert.deepEqual(options.executionUnits.map((unit) => [unit.id, unit.employer, unit.timeZone]),
+      [[employerUnitId, true, 'America/Belem'], [executionUnitId, false, 'America/Manaus']]);
     assert.deepEqual((await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
       { workDate: '2026-10-18' }, dependencies)).executionUnits, []);
 
@@ -93,6 +94,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       recordOwnRepPMarking(context, { attemptId: 'attempt-2', workDate: '2026-10-18', executionUnitId, channel: 'browser' }, dependencies),
     ]);
     assert.equal(first.status, 'recorded');
+    assert.equal(first.marking.markedAt, '2026-10-18T07:15:00-0400');
     assert.equal(second.status, 'recorded');
     assert.deepEqual([first.marking.nsr, second.marking.nsr].sort(), [3, 4]);
     assert.ok(first.marking.employerUnitId === employerUnitId && second.marking.employerUnitId === employerUnitId);

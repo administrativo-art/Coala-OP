@@ -1,3 +1,5 @@
+import { repPInstantMs } from "./time-zones";
+
 /**
  * Leitura do mês no Registro de ponto: junta escala, batidas originais e ausências por dia e calcula uma
  * prévia (total, intervalo, desvios e alertas). Nada aqui é apuração nem classifica marcação: o REP-P guarda
@@ -18,13 +20,15 @@ export type DayShift = {
   breakWindowEnd: string | null;
   expectedPunches: number | null;
   overnight?: boolean;
+  unitId?: string | null;
+  executionUnitPolicy?: "scheduled" | "free";
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending" };
 
 export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string };
 
-export type DayIncident = "missing" | "odd" | "late_exit" | "short_break" | "long_break";
+export type DayIncident = "missing" | "odd" | "late_exit" | "short_break" | "long_break" | "other_unit";
 
 export type DayView = {
   date: string;
@@ -84,7 +88,7 @@ function shiftMinutes(shift: DayShift) {
 }
 
 export function buildDayView(input: { date: string; today: string; shift: DayShift | null; markings: DayMarking[]; absences: DayAbsence[] }): DayView {
-  const markings = [...input.markings].sort((left, right) => left.markedAt.localeCompare(right.markedAt) || left.nsr - right.nsr);
+  const markings = [...input.markings].sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
   const absence = input.absences.find((item) => ACTIVE_ABSENCE.has(item.status) && item.startDate <= input.date && item.endDate >= input.date) ?? null;
   const shift = input.shift && input.shift.type === "work" ? input.shift : null;
   const past = input.date < input.today;
@@ -111,6 +115,10 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
     if (breakMinutes < expectedBreak - BREAK_TOLERANCE_MINUTES) incidents.push("short_break");
     if (breakMinutes > expectedBreak + BREAK_TOLERANCE_MINUTES) incidents.push("long_break");
   }
+  // Unidade fixa da escala: batida em outra unidade não é bloqueada, só fica a conferir pelo DP.
+  if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => marking.executionUnitId !== shift.unitId)) {
+    incidents.push("other_unit");
+  }
   const balanceMinutes = past && shift && !absence && markings.length % 2 === 0 ? worked - shiftMinutes(shift) : null;
   return { date: input.date, shift: input.shift, markings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes, deviation };
 }
@@ -131,5 +139,5 @@ export function buildMonthView(input: { month: string; today: string; shifts: (D
 }
 
 export const INCIDENT_SEVERITY: Record<DayIncident, "danger" | "warn"> = {
-  missing: "danger", odd: "danger", short_break: "danger", late_exit: "warn", long_break: "warn",
+  missing: "danger", odd: "danger", short_break: "danger", late_exit: "warn", long_break: "warn", other_unit: "warn",
 };

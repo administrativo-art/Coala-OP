@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **467 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **468 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **55 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -145,6 +145,7 @@ Inclui **55 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/unit-organizations/[organizationId]` | PATCH, DELETE | [src/app/api/dp/unit-organizations/[organizationId]/route.ts](../../src/app/api/dp/unit-organizations/%5BorganizationId%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/units` | POST | [src/app/api/dp/units/route.ts](../../src/app/api/dp/units/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/units/[unitId]` | PATCH, DELETE | [src/app/api/dp/units/[unitId]/route.ts](../../src/app/api/dp/units/%5BunitId%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/units/[unitId]/time-zone` | PATCH | [src/app/api/dp/units/[unitId]/time-zone/route.ts](../../src/app/api/dp/units/%5BunitId%5D/time-zone/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/vacations` | GET, POST | [src/app/api/dp/vacations/route.ts](../../src/app/api/dp/vacations/route.ts) | [vacation-payment-closure](flows/vacation-payment-closure.md) |
 | `/api/dp/vacations/[vacationId]` | PATCH, DELETE | [src/app/api/dp/vacations/[vacationId]/route.ts](../../src/app/api/dp/vacations/%5BvacationId%5D/route.ts) | [vacation-payment-closure](flows/vacation-payment-closure.md) |
 | `/api/dp/vacations/[vacationId]/assets/[kind]` | GET | [src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts](../../src/app/api/dp/vacations/%5BvacationId%5D/assets/%5Bkind%5D/route.ts) | [vacation-notice](flows/vacation-notice.md) |

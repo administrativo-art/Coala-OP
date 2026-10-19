@@ -104,6 +104,7 @@ api,src/app/api/dp/unit-groups/route.ts,,docs/engineering/flows/dp-configuration
 api,src/app/api/dp/unit-organizations/[organizationId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-organizations/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/units/[unitId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/units/[unitId]/time-zone/route.ts,,docs/engineering/flows/dp-configuration.md,PATCH do fuso da unidade usado na batida de ponto; permissao de gerir unidades; lista fechada de fusos brasileiros; historico na mesma transacao.
 api,src/app/api/dp/units/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts,,docs/engineering/flows/vacation-notice.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/vacations/[vacationId]/events/route.ts,,docs/engineering/flows/vacation-payment-closure.md,Destino de investigacao; conferir metodo e ramo no handler.

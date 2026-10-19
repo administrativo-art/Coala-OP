@@ -44,8 +44,24 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
   assert.deepEqual(result.shifts[0], {
     date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste',
     shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
-    breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4,
+    breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4, executionUnitPolicy: 'scheduled',
   });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-13' }), { code: 'REP_P_MONTH_INPUT_INVALID' });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-03', userId: otherId }), { code: 'REP_P_MONTH_INPUT_INVALID' });
+});
+
+test('fuso da unidade para o ponto: grava, registra histórico e volta ao do estabelecimento', async () => {
+  const { setUnitTimeZone } = await import('../../src/features/dp/rep-p/unit-time-zone.server.ts');
+  const unit = dbAdmin.collection('dp_units').doc('rep-p-tz-unit');
+  await unit.set({ name: 'Quiosque Manaus' });
+  const context = { decoded: { uid: 'rep-p-tz-admin' }, userDoc: { id: 'rep-p-tz-admin' }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: 'coala-one' };
+  assert.deepEqual(await setUnitTimeZone(context, unit.id, { timeZone: 'America/Manaus' }), { timeZone: 'America/Manaus', changed: true });
+  assert.deepEqual(await setUnitTimeZone(context, unit.id, { timeZone: 'America/Manaus' }), { timeZone: 'America/Manaus', changed: false });
+  assert.equal((await unit.get()).get('timeZone'), 'America/Manaus');
+  await setUnitTimeZone(context, unit.id, { timeZone: null });
+  assert.equal((await unit.get()).get('timeZone'), undefined);
+  const history = (await unit.collection('timeZoneHistory').get()).docs.map((doc) => [doc.get('previous'), doc.get('next'), doc.get('actorUid')]);
+  assert.deepEqual(history.sort((a, b) => String(a[0]).localeCompare(String(b[0]))), [['America/Manaus', null, 'rep-p-tz-admin'], [null, 'America/Manaus', 'rep-p-tz-admin']]);
+  await assert.rejects(setUnitTimeZone(context, 'rep-p-tz-missing', { timeZone: 'America/Manaus' }), { code: 'DP_UNIT_NOT_FOUND' });
 });
