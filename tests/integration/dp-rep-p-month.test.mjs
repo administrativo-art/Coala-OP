@@ -45,6 +45,8 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
     date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste',
     shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
     breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4, executionUnitPolicy: 'scheduled',
+    breakSegments: null, breakSplit: 'single', breakPauseCount: null, breakToleranceBelowMinutes: null, breakToleranceAboveMinutes: null,
+    breakMinPauseMinutes: null,
   });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-13' }), { code: 'REP_P_MONTH_INPUT_INVALID' });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-03', userId: otherId }), { code: 'REP_P_MONTH_INPUT_INVALID' });

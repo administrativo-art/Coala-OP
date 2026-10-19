@@ -26,6 +26,12 @@ export type RepPOwnScheduledShift = {
   breakWindowEnd: string | null;
   expectedPunches: number | null;
   executionUnitPolicy: 'scheduled' | 'free';
+  breakSegments: { start: string; end: string }[] | null;
+  breakSplit: 'single' | 'multiple';
+  breakPauseCount: number | null;
+  breakToleranceBelowMinutes: number | null;
+  breakToleranceAboveMinutes: number | null;
+  breakMinPauseMinutes: number | null;
 };
 
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
@@ -34,6 +40,7 @@ const MAX_OWN_SHIFTS = 62;
 type Dependencies = { db: Firestore };
 const defaults: Dependencies = { db: dbAdmin };
 
+function toMinutes(value: string) { return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)); }
 function text(value: unknown) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
 function minutes(value: unknown) { return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null; }
 function millis(value: unknown) {
@@ -86,6 +93,11 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
     const breakType = (['none', 'fixed', 'flexible', 'staggered'] as const).find((value) => value === declaredBreak)
       ?? (breakStart && breakEnd ? 'fixed' : 'none');
     const unitId = text(doc.get('unitId'));
+    const rawSegments = definition?.get('breakSegments');
+    const segments = breakType === 'fixed' && Array.isArray(rawSegments)
+      ? rawSegments.filter((segment) => typeof segment?.start === 'string' && typeof segment?.end === 'string')
+        .map((segment) => ({ start: String(segment.start), end: String(segment.end) }))
+      : null;
     return {
       date: String(doc.get('date')),
       type: doc.get('type') === 'day_off' ? 'day_off' : 'work',
@@ -98,13 +110,21 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
       breakType,
       breakStart: breakType === 'fixed' ? breakStart : null,
       breakEnd: breakType === 'fixed' ? breakEnd : null,
-      breakDurationMinutes: breakType === 'fixed' && breakStart && breakEnd
+      breakDurationMinutes: breakType === 'fixed' && segments
+        ? segments.reduce((sum, segment) => sum + Math.max(0, toMinutes(segment.end) - toMinutes(segment.start)), 0)
+        : breakType === 'fixed' && breakStart && breakEnd
         ? Math.max(0, Number(breakEnd.slice(0, 2)) * 60 + Number(breakEnd.slice(3)) - Number(breakStart.slice(0, 2)) * 60 - Number(breakStart.slice(3)))
         : minutes(definition?.get('breakDurationMinutes')),
       breakWindowStart: breakType === 'staggered' ? text(definition?.get('breakWindowStart')) : null,
       breakWindowEnd: breakType === 'staggered' ? text(definition?.get('breakWindowEnd')) : null,
       expectedPunches: minutes(definition?.get('expectedPunches')),
       executionUnitPolicy: definition?.get('executionUnitPolicy') === 'free' ? 'free' : 'scheduled',
+      breakSegments: segments?.length ? segments : null,
+      breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
+      breakPauseCount: minutes(definition?.get('breakPauseCount')),
+      breakToleranceBelowMinutes: minutes(definition?.get('breakToleranceBelowMinutes')),
+      breakToleranceAboveMinutes: minutes(definition?.get('breakToleranceAboveMinutes')),
+      breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
     };
   });
   return { month: parsed.data.month, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };

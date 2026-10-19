@@ -4,7 +4,8 @@ import { describe, it } from 'node:test';
 import { buildDayView, buildMonthView, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
 
 const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: 'Quiosque', breakType: 'fixed',
-  breakStart: '13:00', breakEnd: '13:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null, expectedPunches: 4 };
+  breakStart: '13:00', breakEnd: '13:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null, expectedPunches: 4,
+  breakToleranceBelowMinutes: 5, breakToleranceAboveMinutes: 5 };
 const mark = (date: string, time: string, nsr: number) => ({ receiptId: `r${nsr}`, markedAt: `${date}T${time}:00-0300`, nsr, executionUnitId: 'u', receiptStatus: 'available' as const });
 
 describe('Leitura do dia no Registro de ponto', () => {
@@ -65,6 +66,13 @@ describe('Leitura do dia no Registro de ponto', () => {
     const marks = [mark('2026-10-16', '10:00', 1), mark('2026-10-16', '16:15', 2)].map((item) => ({ ...item, executionUnitId: 'outra' }));
     assert.ok(buildDayView({ date: '2026-10-16', today: '2026-10-19', shift: { ...shift, unitId: 'doca' }, absences: [], markings: marks }).incidents.includes('other_unit'));
     assert.ok(!buildDayView({ date: '2026-10-16', today: '2026-10-19', shift: { ...shift, unitId: 'doca', executionUnitPolicy: 'free' }, absences: [], markings: marks }).incidents.includes('other_unit'));
+  });
+
+  it('sem tolerância cadastrada não há aviso de intervalo; pausa mínima vale no intercalado', () => {
+    const marks = [mark('2026-10-12', '10:00', 1), mark('2026-10-12', '13:00', 2), mark('2026-10-12', '13:40', 3), mark('2026-10-12', '16:15', 4)];
+    assert.deepEqual(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, breakToleranceBelowMinutes: null, breakToleranceAboveMinutes: null }, absences: [], markings: marks }).incidents, []);
+    const split = [mark('2026-10-12', '10:00', 1), mark('2026-10-12', '12:00', 2), mark('2026-10-12', '12:03', 3), mark('2026-10-12', '14:00', 4), mark('2026-10-12', '14:12', 5), mark('2026-10-12', '16:15', 6)];
+    assert.ok(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, breakType: 'flexible', breakSplit: 'multiple', breakMinPauseMinutes: 5 }, absences: [], markings: split }).incidents.includes('short_break'));
   });
 
   it('dia em andamento soma até agora', () => {

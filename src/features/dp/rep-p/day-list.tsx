@@ -20,9 +20,9 @@ export const INCIDENTS: Record<DayIncident, { label: string; detail: string; ico
   missing: { label: "Dia sem batidas", detail: "Nenhuma batida num dia de escala. Se houve motivo, justifique com uma ausência.", icon: TimerOff },
   odd: { label: "Número ímpar de batidas", detail: "O dia tem número ímpar de batidas: um período ficou sem fechamento.", icon: AlertTriangle },
   late_exit: { label: "Saída após o previsto", detail: "Última batida mais de 10 minutos depois do horário da escala.", icon: Clock3 },
-  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto em mais de 5 minutos (aviso de conferência, não é a tolerância legal).", icon: Coffee },
+  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto além da tolerância do turno, ou pausa menor que o mínimo (aviso de conferência).", icon: Coffee },
   other_unit: { label: "Batida em outra unidade", detail: "Batida feita numa unidade diferente da escala. Não foi bloqueada; o DP confere a troca.", icon: MapPin },
-  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto em mais de 5 minutos (aviso de conferência, não é a tolerância legal).", icon: Coffee },
+  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto além da tolerância do turno (aviso de conferência).", icon: Coffee },
 };
 
 function weekday(date: string) {

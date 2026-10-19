@@ -3899,6 +3899,17 @@ export type DPShiftDefinition = {
   breakDurationMinutes?: number; // usado em intervalos livres ou intercalados
   breakWindowStart?: string; // HH:mm — início da janela do intervalo intercalado
   breakWindowEnd?: string; // HH:mm — fim da janela do intervalo intercalado
+  /** Fixo intercalado: vários horários definidos (2 a 6), em ordem e sem sobreposição; substitui breakStart/breakEnd. */
+  breakSegments?: { start: string; end: string }[];
+  /** Livre ou janela: uma pausa (padrão) ou várias somando a duração. */
+  breakSplit?: 'single' | 'multiple';
+  /** Com várias pausas: quantidade definida (2 a 10); ausente = em aberto. */
+  breakPauseCount?: number;
+  /** Tolerância manual do intervalo, para menos e para mais (minutos); ausente = sem aviso de tolerância. */
+  breakToleranceBelowMinutes?: number;
+  breakToleranceAboveMinutes?: number;
+  /** Duração mínima de cada pausa nas modalidades com várias pausas (minutos). */
+  breakMinPauseMinutes?: number;
   unitId?: string;     // legado: primeira unidade vinculada
   unitName?: string;   // legado: nome da primeira unidade vinculada
   unitIds?: string[];

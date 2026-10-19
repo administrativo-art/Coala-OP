@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, FileText, MapPin } from "lucide-react";
+import { CheckCircle2, Clock3, Coffee, FileText, Info, MapPin } from "lucide-react";
 
 import { ControlPanel } from "@/components/patterns/control-panel";
 import { errorMessageOf } from "@/components/patterns/panel-form";
@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-import { fiscalClock, workedMinutes, type DayView } from "./day-model";
+import { breakStatus, plannedPausesOf, type BreakLevel } from "./break-status";
+import { fiscalClock, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import type { useRepPMarking } from "./use-rep-p-marking";
 
@@ -24,7 +25,65 @@ export function hm(minutes: number, signed = false) {
 /** Batidas esperadas no dia: a do turno; sem cadastro, uma a mais que as feitas (sem inventar pares). */
 export function expectedPunchesOf(day: DayView) {
   if (!day.shift || day.shift.type !== "work" || day.absence) return day.markings.length;
-  return day.shift.expectedPunches ?? null;
+  if (day.shift.expectedPunches) return day.shift.expectedPunches;
+  // Sem cadastro: 2 + 2 por pausa prevista; pausas em aberto deixam a conta aberta.
+  if (day.shift.breakType === "none") return 2;
+  const pauses = plannedPausesOf(day.shift);
+  return pauses === null ? null : 2 + 2 * pauses;
+}
+
+const BREAK_NOTES: Record<string, string> = {
+  fixed_single: "Fixo único: um horário definido de início e fim. A batida avisa a proximidade do início e do fim.",
+  fixed_multi: "Fixo intercalado: vários horários definidos. Cada pausa tem seu aviso.",
+  free: "Livre: só a duração; você escolhe quando. Aqui aparece até que horas o intervalo precisa começar para caber antes do fim do turno.",
+  free_multi: "Intercalado livre: a duração total pode ser dividida em pausas. Aqui aparecem o tempo usado, o que falta e o limite para iniciar.",
+  window: "Janela livre: uma pausa dentro de um período. Enquanto o intervalo não começa, aparece o limite para iniciar (fim da janela menos a duração).",
+  window_multi: "Janela intercalada livre: a duração total dentro do período, em várias pausas, com o limite calculado sobre o que falta.",
+};
+const BREAK_TONE: Record<BreakLevel, string> = {
+  neutral: "border-white/10 bg-white/[0.04] text-ds-on-dark-2",
+  info: "border-ds-info/40 bg-ds-info/15 text-white",
+  warn: "border-ds-caution-border/40 bg-ds-caution-tile/15 text-ds-caution-tile",
+  danger: "border-ds-trouble-border/50 bg-ds-danger/20 text-ds-trouble-bg",
+  ok: "border-ds-ok-bg/30 bg-ds-ok/15 text-ds-ok-bg",
+};
+
+function modalityKey(shift: DayShift) {
+  if (shift.breakType === "fixed") return shift.breakSegments?.length ? "fixed_multi" : "fixed_single";
+  const multiple = shift.breakSplit === "multiple";
+  return shift.breakType === "staggered" ? (multiple ? "window_multi" : "window") : (multiple ? "free_multi" : "free");
+}
+
+/** Minutos do dia agora, no fuso informado (o da unidade da batida). */
+function nowMinutesIn(timeZone: string | undefined) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+}
+
+/** Aviso "Intervalo de hoje" da faixa; recalcula a cada 30 s, sem ler o banco, e nunca bloqueia a batida. */
+function BreakNotice({ day, timeZone }: { day: DayView; timeZone?: string }) {
+  const [now, setNow] = useState(() => nowMinutesIn(timeZone));
+  const [showNote, setShowNote] = useState(false);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(nowMinutesIn(timeZone)), 30_000);
+    return () => window.clearInterval(timer);
+  }, [timeZone]);
+  const status = breakStatus(day.shift, day.markings, now);
+  if (!status || !day.shift) return null;
+  const key = modalityKey(day.shift);
+  return (
+    <div className={cn("rounded-ds-md border px-3 py-2", BREAK_TONE[status.level])} role="status">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Coffee className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="text-[13px] font-bold">{status.headline}</span>
+        <button type="button" onClick={() => setShowNote((current) => !current)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold opacity-80 hover:opacity-100">
+          <Info className="h-3 w-3" aria-hidden /> Como funciona
+        </button>
+      </div>
+      {status.detail ? <p className="mt-0.5 text-[11px] opacity-80">{status.detail}</p> : null}
+      {showNote ? <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[11px] opacity-90">{BREAK_NOTES[key]} São avisos para ajudar; nada impede a batida.</p> : null}
+    </div>
+  );
 }
 
 /** Leitura pela ordem das batidas, só visual: o REP-P guarda o instante, não o tipo. */
@@ -124,6 +183,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
             <MarkingSequence day={day} today={today} dark />
             <span className="text-[11px] text-ds-on-dark-muted">{hm(workedMinutes(day.markings, nowMinutes))} trabalhadas</span>
           </button>
+          <BreakNotice day={day} timeZone={unitClock?.available ? unitClock.timeZone : undefined} />
           {otherUnit && unitId !== scheduledUnitId ? <p className="text-[11px] text-ds-on-dark-muted">A batida é registrada normalmente; o DP confere a troca de unidade.</p> : null}
           {optionsError ? <p role="alert" className="text-[12px] font-semibold text-ds-caution-tile">{optionsError}</p> : null}
         </div>

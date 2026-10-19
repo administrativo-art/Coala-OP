@@ -239,6 +239,12 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   breakDurationMinutes: z.number().int().min(1).max(480).nullable().optional(),
   breakWindowStart: nullableOptionalString,
   breakWindowEnd: nullableOptionalString,
+  breakSegments: z.array(z.object({ start: timeSchema, end: timeSchema }).strict()).min(2).max(6).nullable().optional(),
+  breakSplit: z.enum(['single', 'multiple']).nullable().optional(),
+  breakPauseCount: z.number().int().min(2).max(10).nullable().optional(),
+  breakToleranceBelowMinutes: z.number().int().min(0).max(60).nullable().optional(),
+  breakToleranceAboveMinutes: z.number().int().min(0).max(60).nullable().optional(),
+  breakMinPauseMinutes: z.number().int().min(1).max(60).nullable().optional(),
   unitId: nullableOptionalString,
   unitName: nullableOptionalString,
   unitIds: z.array(idSchema).max(100).optional(),
@@ -257,10 +263,33 @@ function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObject
   const hasBreakStart = typeof value.breakStart === 'string';
   const hasBreakEnd = typeof value.breakEnd === 'string';
   const effectiveBreakType = value.breakType ?? (hasBreakStart && hasBreakEnd ? 'fixed' : 'none');
+  const segments = value.breakSegments ?? null;
+  if (segments) {
+    if (effectiveBreakType !== 'fixed') {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments'], message: 'Vários horários só existem no intervalo fixo intercalado.' });
+    }
+    if (hasBreakStart || hasBreakEnd) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments'], message: 'No fixo intercalado, informe só a lista de horários.' });
+    }
+    segments.forEach((segment, index) => {
+      if (segment.end <= segment.start) context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments', index, 'end'], message: 'O fim da pausa deve ser depois do início.' });
+      if (index > 0 && segment.start < segments[index - 1].end) context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments', index, 'start'], message: 'As pausas devem estar em ordem e sem sobreposição.' });
+    });
+  }
+  if ((value.breakSplit === 'multiple' || value.breakPauseCount) && !['flexible', 'staggered'].includes(String(value.breakType))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSplit'], message: 'Várias pausas só existem no intervalo livre ou de janela.' });
+  }
+  if (value.breakMinPauseMinutes && value.breakPauseCount && value.breakDurationMinutes
+    && value.breakMinPauseMinutes * value.breakPauseCount > value.breakDurationMinutes) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakMinPauseMinutes'], message: 'Pausa mínima × quantidade de pausas passa da duração total.' });
+  }
+  if (value.breakPauseCount && value.breakSplit !== 'multiple') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakPauseCount'], message: 'A quantidade de pausas exige a opção de várias pausas.' });
+  }
   if (hasBreakStart !== hasBreakEnd) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe início e fim do intervalo.' });
   }
-  if (effectiveBreakType === 'fixed' && (!hasBreakStart || !hasBreakEnd)) {
+  if (effectiveBreakType === 'fixed' && !segments && (!hasBreakStart || !hasBreakEnd)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe o início e o fim do intervalo pré-definido.' });
   }
   if (effectiveBreakType !== 'fixed' && (hasBreakStart || hasBreakEnd)) {

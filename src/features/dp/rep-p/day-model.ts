@@ -22,6 +22,12 @@ export type DayShift = {
   overnight?: boolean;
   unitId?: string | null;
   executionUnitPolicy?: "scheduled" | "free";
+  breakSegments?: { start: string; end: string }[] | null;
+  breakSplit?: "single" | "multiple";
+  breakPauseCount?: number | null;
+  breakToleranceBelowMinutes?: number | null;
+  breakToleranceAboveMinutes?: number | null;
+  breakMinPauseMinutes?: number | null;
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending" };
@@ -44,8 +50,7 @@ export type DayView = {
   deviation: { edge: "start" | "end"; minutes: number } | null;
 };
 
-// Valores provisórios até o cadastro do turno ter tolerância própria (plano mestre 3.6.1).
-export const BREAK_TOLERANCE_MINUTES = 5;
+// Limite de aviso de desvio de entrada/saída (conferência, não a tolerância do art. 58 §1º).
 export const DEVIATION_NOTICE_MINUTES = 10;
 
 /** Ausência que vale para o dia: aprovada ou em análise; rascunho, recusada e cancelada não contam. */
@@ -81,6 +86,15 @@ export function breakTaken(markings: Pick<DayMarking, "markedAt">[]) {
   return total;
 }
 
+/** Duração de cada pausa fechada (2ª→3ª, 4ª→5ª…). */
+export function pauseLengths(markings: Pick<DayMarking, "markedAt">[]) {
+  const lengths: number[] = [];
+  for (let index = 1; index + 1 < markings.length; index += 2) {
+    lengths.push(minutesOf(fiscalClock(markings[index + 1].markedAt)) - minutesOf(fiscalClock(markings[index].markedAt)));
+  }
+  return lengths;
+}
+
 function shiftMinutes(shift: DayShift) {
   if (!shift.startTime || !shift.endTime) return 0;
   const span = minutesOf(shift.endTime) - minutesOf(shift.startTime);
@@ -110,10 +124,16 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
     else if (Math.abs(startDiff) > DEVIATION_NOTICE_MINUTES) deviation = { edge: "start", minutes: startDiff };
     if (endDiff > DEVIATION_NOTICE_MINUTES) incidents.push("late_exit");
   }
+  // Tolerância do intervalo é a cadastrada no turno (decisão do programador): sem cadastro, não há aviso.
   const expectedBreak = shift?.breakDurationMinutes ?? null;
+  const below = shift?.breakToleranceBelowMinutes;
+  const above = shift?.breakToleranceAboveMinutes;
   if (breakMinutes !== null && expectedBreak) {
-    if (breakMinutes < expectedBreak - BREAK_TOLERANCE_MINUTES) incidents.push("short_break");
-    if (breakMinutes > expectedBreak + BREAK_TOLERANCE_MINUTES) incidents.push("long_break");
+    if (below != null && breakMinutes < expectedBreak - below) incidents.push("short_break");
+    if (above != null && breakMinutes > expectedBreak + above) incidents.push("long_break");
+  }
+  if (shift?.breakMinPauseMinutes && pauseLengths(markings).some((length) => length < shift.breakMinPauseMinutes!)) {
+    if (!incidents.includes("short_break")) incidents.push("short_break");
   }
   // Unidade fixa da escala: batida em outra unidade não é bloqueada, só fica a conferir pelo DP.
   if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => marking.executionUnitId !== shift.unitId)) {

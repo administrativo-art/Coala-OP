@@ -228,8 +228,14 @@ async function employmentContext(params: { onboarding: RecordValue; user: Record
   const overnightEnd = startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes
     ? endMinutes + 24 * 60
     : endMinutes;
-  const breakMinutes = breakStart !== null && breakEnd !== null
-    ? Math.max(0, breakEnd - breakStart)
+  // Fixo intercalado soma os horários; livre e janela seguem como antes (sem alterar documentos já gerados).
+  const segments = Array.isArray(shift.breakSegments) ? shift.breakSegments as Array<{ start?: unknown; end?: unknown }> : [];
+  const segmentMinutes = segments.reduce((sum, segment) => {
+    const segmentStart = minutes(segment.start); const segmentEnd = minutes(segment.end);
+    return sum + (segmentStart !== null && segmentEnd !== null ? Math.max(0, segmentEnd - segmentStart) : 0);
+  }, 0);
+  const breakMinutes = segments.length ? segmentMinutes
+    : breakStart !== null && breakEnd !== null ? Math.max(0, breakEnd - breakStart)
     : 0;
   const dailyMinutes = startMinutes !== null && overnightEnd !== null
     ? Math.max(0, overnightEnd - startMinutes - breakMinutes)

@@ -454,7 +454,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx).
 
-Arquivos locais percorridos: 39.
+Arquivos locais percorridos: 40.
 
 Chamadas candidatas encontradas:
 

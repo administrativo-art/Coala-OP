@@ -101,7 +101,7 @@ function parseComplete(collectionName: TimeConfigCollection, value: unknown) {
 
 const JOURNEY_FIELDS = ['name', 'description', 'weeklyMinutes', 'cycleLengthDays', 'days', 'regime', 'weeklyRest', 'scaleValidation', 'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'allowedShiftDefinitionIds', 'applicability', 'validFrom', 'validTo'] as const;
 const OVERTIME_FIELDS = ['name', 'description', 'collectiveAgreementReference', 'applicability', 'validFrom', 'validTo', 'dailyToleranceMinutes', 'dailyOvertimeLimitMinutes', 'weeklyOvertimeLimitMinutes', 'categories', 'timeBank', 'externalCoverageRule'] as const;
-const SHIFT_FIELDS = ['code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'unitId', 'unitName', 'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description', 'configurationNotes', 'overnight', 'expectedPunches', 'executionUnitPolicy', 'isArchived'] as const;
+const SHIFT_FIELDS = ['code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'breakSegments', 'breakSplit', 'breakPauseCount', 'breakToleranceBelowMinutes', 'breakToleranceAboveMinutes', 'breakMinPauseMinutes', 'unitId', 'unitName', 'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description', 'configurationNotes', 'overnight', 'expectedPunches', 'executionUnitPolicy', 'isArchived'] as const;
 
 function pickFields(source: Record<string, unknown>, fields: readonly string[]) {
   return Object.fromEntries(fields.flatMap((field) => field in source ? [[field, source[field]]] : []));

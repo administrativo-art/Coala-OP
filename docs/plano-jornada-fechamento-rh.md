@@ -83,7 +83,7 @@ O motor de ponto produz quantidades e natureza dos eventos; contador calcula sua
 
 Separar alerta operacional e apuração remuneratória. Respeitar limites aplicáveis por marcação e por dia, sem arredondar originais. Tempo à disposição e atividades particulares exigem regra validada; não são inferidos apenas da presença.
 
-### 3.6.1. Modalidades de intervalo e avisos na batida (proposta de 19/10/2026, não implementada)
+### 3.6.1. Modalidades de intervalo e avisos na batida (decidido e implementado em 19/10/2026)
 
 Decisão do programador sobre o cadastro do turno; implementação depende das decisões abertas abaixo e de revisão do Doc Brown, porque turno alimenta escala e PTRP.
 
@@ -119,7 +119,7 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 - **Janela intercalada livre:** a duração total dentro do período, em várias pausas (número definido ou em aberto), com o mesmo limite calculado sobre o que falta.
 - **Tolerância:** minutos aceitos para mais e para menos sem alerta; o mínimo legal continua valendo.
 
-**Decisões abertas:** duração mínima por pausa e teto quando a quantidade é aberta; tolerância por pausa ou sobre o total; horário mínimo para iniciar no livre; antecedência dos avisos; avisar o gestor. **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
+**Implementação (19/10/2026):** cadastro com as sete modalidades, tolerância manual para menos e para mais sobre o total do intervalo (sem usar o art. 58 §1º, decisão do programador), pausa mínima opcional e quantidade de pausas definida ou em aberto (até 10); avisos na faixa do Registro de ponto. **Limites conhecidos:** a prévia do Registro de ponto lê o cadastro vivo do turno (alterar tolerância ou horários muda o "a conferir" de dias passados); o PTRP/AEJ deve usar o turno congelado ou versionado com modalidade, horários, tolerâncias, quantidade e pausa mínima. Fixo intercalado não aceita pausa depois da meia-noite em turno noturno. O aviso de horário fixo existe sempre (proximidade e pausa não feita), independentemente de tolerância cadastrada. **Ainda em aberto:** horário mínimo para iniciar no livre, antecedência definitiva dos avisos (provisória 15/10 min) e aviso ao gestor (não implementado). **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
 
 ### 3.7. Coleta inicial
 
