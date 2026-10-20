@@ -46,7 +46,8 @@ class RulesTest {
     @Test fun uploadLimitsAndFundingAreValidatedBeforePersistence() {
         Rules.validateUpload(pending())
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(receipts = emptyList())) }
-        assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(fundingSource = "company_payment")) }
+        Rules.validateUpload(pending().copy(fundingSource = "company_payment"))
+        assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(paymentProofs = pending().receipts)) }
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(receipts = pending().receipts + pending().receipts)) }
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(note = "a".repeat(241))) }
     }
