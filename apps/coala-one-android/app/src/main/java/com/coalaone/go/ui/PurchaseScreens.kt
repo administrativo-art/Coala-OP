@@ -88,7 +88,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     val canAnalyze = selected != null && selected.receipts.isNotEmpty()
     val unitName = review?.let { input -> selected?.withdrawal?.unitName ?: state.context?.units?.firstOrNull { it.id == input.unitId }?.name }
     // The list filter is organization and group only; the cards are already split by unit. The last choice
-    // is kept per account on this phone, and a filter with a single option is not shown at all.
+    // is kept per account on this phone; a filter shows whenever there is more than one option to pick.
     val units = state.context?.units.orEmpty(); val pending = state.withdrawals?.withdrawals.orEmpty()
     val preferences = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("purchase", android.content.Context.MODE_PRIVATE)
     val owner = LocalOwner.current
@@ -98,8 +98,8 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     }
     fun saveFilter() { preferences.edit().putString("organization:$owner", vm.state.value.organizationFilter).putString("group:$owner", vm.state.value.groupFilter).apply() }
     val filtersEnabled = !feedback.busy && state.pendingLink == null
-    val organizations = Rules.purchaseOrganizationChoices(units, pending, state.organizationFilter)
-    val groups = Rules.purchaseGroupChoices(units, pending, state.organizationFilter, state.groupFilter)
+    val organizations = Rules.purchaseOrganizationChoices(units, pending)
+    val groups = Rules.purchaseGroupChoices(units, pending, state.organizationFilter)
     Page(if (review != null) "Revisão obrigatória" else "Compra local", feedback, back, footer = when {
         review != null -> ({
             if (confirmation) InlineConfirmation("Confirmar esta compra e os dados revisados?", feedback.busy, { confirmation = false }, "Confirmar compra") { vm.confirm(); confirmation = false }
