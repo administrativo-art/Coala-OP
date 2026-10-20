@@ -174,6 +174,20 @@ Após autorização para retirar o antigo e atualizar download, versão sem par�
 
 Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
 
+### Verificação da 0.3.10 (nota fiscal e tratamento dos itens)
+
+A compra normal pode seguir sem comprovante quando duas leituras independentes
+concordam que o documento é NF-e/DANFE ou NFC-e autorizada e há protocolo
+literal de autorização; recibo, cupom não fiscal e contingência pendente ainda
+exigem comprovante. A seleção de sangria pode ser cancelada antes do envio. A
+IA sugere por linha item existente, item não encontrado, possível patrimônio,
+uso imediato ou revisão, e o servidor valida a decisão antes de persistir o
+estado operacional da compra. `RulesTest`, `ViewModelsTest`, os contratos
+Android/TypeScript e a suíte do backend cobrem o fluxo; aparelho físico, OCR
+real e validação fiscal oficial continuam fora desta homologação. O APK
+0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
+`0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
+
 ### Verificação da 0.3.9 (Escala em "Todas as unidades", seta desenhada)
 
 A Escala abre em "Todas as unidades" a cada visita (com uma unidade só, abre
