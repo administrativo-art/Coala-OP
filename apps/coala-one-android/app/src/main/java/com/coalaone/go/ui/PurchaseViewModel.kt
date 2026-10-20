@@ -28,7 +28,6 @@ data class PurchaseState(
     val linkFocusRequest: Int = 0,
     val organizationFilter: String = Rules.ALL_UNITS,
     val groupFilter: String = Rules.ALL_UNITS,
-    val unitFilter: String = Rules.ALL_UNITS,
 )
 @HiltViewModel class PurchaseViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val sync: QueueSync, private val scheduler: WorkScheduler) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(PurchaseState())
@@ -104,13 +103,20 @@ data class PurchaseState(
             feedbackMutable.value = Feedback(notice = "Já existe uma vinculação em andamento. Retome ou cancele antes de escolher outra.")
             return
         }
-        mutable.update { it.copy(pendingLink = PendingWithdrawalLink(purchase, withdrawal), linkFocusRequest = it.linkFocusRequest + 1, organizationFilter = Rules.ALL_UNITS, groupFilter = Rules.ALL_UNITS, unitFilter = withdrawal.unitId) }
+        // Narrow the list to the withdrawal's group so the card being linked is in view.
+        val (organization, group) = Rules.purchaseScope(mutable.value.context?.units.orEmpty(), withdrawal.unitId) ?: (Rules.ALL_UNITS to Rules.ALL_UNITS)
+        mutable.update { it.copy(pendingLink = PendingWithdrawalLink(purchase, withdrawal), linkFocusRequest = it.linkFocusRequest + 1, organizationFilter = organization, groupFilter = group) }
     }
     fun resumeLink() { if (mutable.value.pendingLink != null) mutable.update { it.copy(linkFocusRequest = it.linkFocusRequest + 1) } }
     fun cancelLink() { mutable.update { it.copy(pendingLink = null) } }
-    fun filterOrganization(id: String) { mutable.update { it.copy(organizationFilter = id, groupFilter = Rules.ALL_UNITS, unitFilter = Rules.ALL_UNITS) } }
-    fun filterGroup(id: String) { mutable.update { it.copy(groupFilter = id, unitFilter = Rules.ALL_UNITS) } }
-    fun filterUnit(id: String) { mutable.update { it.copy(unitFilter = id) } }
+    fun filterOrganization(id: String) { mutable.update { it.copy(organizationFilter = id, groupFilter = Rules.ALL_UNITS) } }
+    fun filterGroup(id: String) { mutable.update { it.copy(groupFilter = id) } }
+    /** The choice saved on this phone, applied once the units are known; a stale one opens on everything. */
+    fun restoreFilter(organizationId: String, groupId: String) {
+        val units = mutable.value.context?.units ?: return
+        val (organization, group) = Rules.restorePurchaseScope(units, organizationId, groupId)
+        mutable.update { it.copy(organizationFilter = organization, groupFilter = group) }
+    }
     fun link() = run("Compra conciliada com a sangria.") {
         val selection = mutable.value.pendingLink ?: return@run
         require(selection.purchase.unitId == selection.withdrawal.unitId) { "A sangria deve ser da mesma unidade." }
