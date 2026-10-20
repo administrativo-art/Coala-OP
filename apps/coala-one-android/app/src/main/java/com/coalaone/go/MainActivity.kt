@@ -43,6 +43,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
 
+private val SCREEN_CAPTURE_ACCOUNTS = setOf("tiagobrasilll@gmail.com")
 @AndroidEntryPoint class MainActivity : FragmentActivity() {
     private val session: SessionViewModel by viewModels()
     @Inject lateinit var images: ImageLoader
@@ -51,6 +52,11 @@ import javax.inject.Inject
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { CoalaTheme {
             val identity by session.state.collectAsStateWithLifecycle()
+            // Screens stay out of screenshots and recents, except for the accounts that send captures for app review.
+            val captureAllowed = !identity.locked && identity.identity?.email?.lowercase() in SCREEN_CAPTURE_ACCOUNTS
+            LaunchedEffect(captureAllowed) {
+                if (captureAllowed) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
             SideEffect {
                 val lightSurface = !identity.loading && identity.identity != null && !identity.locked
                 WindowCompat.getInsetsController(window, window.decorView).apply {
