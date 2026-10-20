@@ -12,6 +12,8 @@ const { publishEmploymentReference } = await import('../../src/features/dp/emplo
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { agreeWithMirror, generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
+const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
+const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 
 test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
@@ -121,6 +123,38 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(pdf.bytes.subarray(0, 4).toString(), '%PDF');
     assert.equal(pdf.filename, 'espelho-ponto-2026-08-v2.pdf');
     await assert.rejects(mirrorPdf(reviewer, competence, userId, mirrorDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+
+    // AEJ do estabelecimento: só de competência fechada, com a inclusão aprovada e o motivo do AEJ.
+    const treatment = (await hrDbAdmin.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', userId).limit(1).get()).docs[0].data();
+    const readArp = async () => ({ profile: { establishmentId: treatment.establishmentId, employerCnpj: '14276603000125', employerLegalName: 'Empregador do ensaio LTDA',
+      inpiRegistration: '512026000001', developerCnpj: '14276603000125' }, timeZone: 'America/Fortaleza', generatedAt: '2026-10-17T09:00:00-0300',
+      markings: [{ receiptId: `${prefix}-r1`, nsr: 41, markedAt: '2026-08-12T12:00:00-0300', employeeCpf: '52998224725', workDate: '2026-08-12' }],
+      people: [{ cpf: '52998224725', uid: userId, name: 'Maria Fiscal' }] });
+    const sign = async () => ({ bytes: Buffer.from('p7s'), format: 'CAdES', detached: true, certificateCnpj: '14276603000125' });
+    const readIdentity = async () => ({ cpf: '52998224725', name: 'Maria Fiscal' });
+    const aejDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: 'dev@exemplo.com', readArp, readIdentity, sign };
+    const input = { establishmentId: treatment.establishmentId, startDate: '2026-08-01', endDate: '2026-08-31' };
+    await assert.rejects(exportAej(admin, { ...input, endDate: '2026-09-30' }, aejDeps), { code: 'PTRP_AEJ_COMPETENCE_OPEN' });
+    await assert.rejects(exportAej(admin, input, { ...aejDeps, developerEmail: undefined }), { code: 'PTRP_AEJ_DEVELOPER_EMAIL_MISSING' });
+    // Batida na ARP sem comprovante catalogado: o AEJ não pode divergir do AFD.
+    const orphan = async () => ({ ...(await readArp()), people: [] });
+    await assert.rejects(exportAej(admin, input, { ...aejDeps, readArp: orphan }), { code: 'PTRP_AEJ_MARKING_WITHOUT_CATALOG' });
+    // Quem só tem inclusão (esqueceu o dia todo) entra pelo cadastro do RH.
+    const onlyInclusion = async () => ({ ...(await readArp()), markings: [], people: [] });
+    const inclusionOnly = await exportAej(admin, input, { ...aejDeps, readArp: onlyInclusion });
+    assert.match(Buffer.from(inclusionOnly.aejBase64, 'base64').toString('latin1'), /03\|1\|52998224725\|Maria Fiscal/);
+    await assert.rejects(exportAej(admin, input, { ...aejDeps, readArp: onlyInclusion, readIdentity: async () => { throw new Error('x'); } }), { code: 'PTRP_AEJ_IDENTITY_UNRESOLVED' });
+    const aej = await exportAej(admin, input, aejDeps);
+    const lines = Buffer.from(aej.aejBase64, 'base64').toString('latin1').split('\r\n');
+    assert.deepEqual(lines.filter((line) => line.startsWith('05|')), [
+      '05|1|2026-08-12T08:00:00-0300||E|001|I||Esqueci de bater a entrada.',
+      '05|1|2026-08-12T12:00:00-0300|1|S|001|O||',
+    ]);
+    assert.equal(aej.counts['05'], 2);
+    assert.equal(aej.warnings[0].code, 'NO_SHIFT');
+    const audit = (await hrDbAdmin.collection(AEJ_EXPORTS).where('workspaceId', '==', workspaceId).where('sha256', '==', aej.sha256).get()).docs[0].data();
+    assert.equal(audit.sha256, aej.sha256);
+    assert.deepEqual(audit.closureVersions, { '2026-08': 2 });
   } finally {
     await absenceRef.delete();
   }

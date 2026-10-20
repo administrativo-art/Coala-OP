@@ -1,5 +1,7 @@
 {
   "indexes": [
+    { "collectionGroup": "ptrp_treatments", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "establishmentId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
+    { "collectionGroup": "repP_receipts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "establishmentId", "order": "ASCENDING"}, {"fieldPath": "recordedDate", "order": "ASCENDING"}]},
     { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
     { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "startDate", "order": "DESCENDING"}]},
     { "collectionGroup": "ptrp_adjustmentRequests", "queryScope": "COLLECTION", "fields": [

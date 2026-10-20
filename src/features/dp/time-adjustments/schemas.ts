@@ -59,3 +59,7 @@ export const mirrorQuerySchema = z.object({ competence, employeeUid: uid.optiona
 export const mirrorActionSchema = z.object({ action: z.enum(['generate', 'agree']), competence, expectedVersion: z.number().int().positive(),
   employeeUid: uid.optional(), snapshotHash: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 export type MirrorActionInput = z.infer<typeof mirrorActionSchema>;
+
+export const aejExportSchema = z.object({ establishmentId: id, startDate: civilDate, endDate: civilDate }).strict()
+  .refine((value) => value.startDate <= value.endDate, { message: 'Período inválido.' });
+export type AejExportInput = z.infer<typeof aejExportSchema>;

@@ -536,6 +536,52 @@ export async function readRepPMarkingsForMirror(workspaceId: string, employeeId:
   };
 }
 
+/**
+ * Insumos do AEJ (Etapa 6, parte 4) para um estabelecimento e período, chamados só pelo serviço do AEJ depois de
+ * conferir a permissão: perfil fiscal, batidas originais (eventos tipo 7, a fonte do AFD) e o vínculo uid → CPF e
+ * nome pelo catálogo de comprovantes, tudo na mesma fotografia somente leitura. Também carimba a geração pela
+ * Hora Legal no fuso do estabelecimento.
+ */
+export async function readRepPForAej(workspaceId: string, establishmentId: string, startDate: string, endDate: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const state = (await deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get()).data();
+  if (!validEstablishment(state) || state.workspaceId !== workspaceId) throw fail('REP_P_AFD_ESTABLISHMENT_MISSING', 'Estabelecimento REP-P não encontrado.', 'NOT_FOUND');
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  const maxEvents = deps.afdMaxEvents ?? MAX_AFD_EVENTS;
+  const { markings, receipts } = await deps.repDb.runTransaction(async (transaction) => {
+    const events = await transaction.get(deps.repDb.collection(EVENTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+      .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).orderBy('recordedDate').orderBy('nsr').limit(maxEvents + 1));
+    const catalog = await transaction.get(deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+      .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).limit(maxEvents + 1));
+    if (events.size > maxEvents || catalog.size > maxEvents) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
+    return {
+      markings: events.docs.map((doc) => doc.data()).filter((event) => event.recordType === '7').map((event) => ({
+        receiptId: eventKey(establishmentId, Number(event.nsr)), nsr: Number(event.nsr), markedAt: String(event.markedAt),
+        employeeCpf: String(event.employeeCpf), workDate: String(event.recordedDate) })),
+      receipts: catalog.docs.map((doc) => ({ employeeId: String(doc.get('employeeId')), snapshot: doc.get('snapshot') as RepPReceiptSnapshot })),
+    };
+  }, { readOnly: true });
+  const people = new Map<string, { uid: string; name: string }>();
+  for (const receipt of receipts) people.set(receipt.snapshot.employeeCpf, { uid: receipt.employeeId, name: receipt.snapshot.employeeName });
+  return { profile: state.profile, timeZone: state.timeZone, generatedAt: formatRepPAfdTimestamp(reading.instant, state.timeZone), markings,
+    people: [...people.entries()].map(([cpf, person]) => ({ cpf, ...person })) };
+}
+
+/** CPF e nome oficiais pelo cadastro do RH, para o AEJ de quem só tem inclusão aprovada no período. */
+export async function readRepPEmployeeIdentity(userId: string, injected: Partial<Dependencies> = {}) {
+  const { cpf, name } = await loadStrictIdentity(({ ...defaults, ...injected }).hrDb, userId);
+  return { cpf, name };
+}
+
+/** CNPJ da desenvolvedora do REP-P e do PTRP, titular do certificado que assina AFD e AEJ. */
+export const REP_P_DEVELOPER_CNPJ = CT_SORVETES_CNPJ;
+
+/** Assinatura CAdES destacada da desenvolvedora (a mesma do AFD), para o AEJ gerado pelo PTRP. */
+export async function signPtrpDetached(content: Buffer, injected: Partial<Dependencies> = {}) {
+  return ({ ...defaults, ...injected }).signer.signDetached(content);
+}
+
 /** Monitoração do DP: comprovantes ainda pendentes no workspace, mais antigos primeiro, sem CPF nem bytes. */
 export async function listPendingRepPReceipts(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };

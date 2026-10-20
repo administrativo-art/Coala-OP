@@ -24,6 +24,8 @@ export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const TREATMENTS = 'ptrp_treatments';
 /** Documento da competência fechada, gravado por `closure.server.ts`. Período fechado não aceita pedido nem decisão. */
 export const CLOSURES = 'ptrp_competenceClosures';
+/** Auditoria de cada AEJ gerado (quem, quando, período, carimbo e versões dos fechamentos usados). */
+export const AEJ_EXPORTS = 'ptrp_aejExports';
 const REVIEW_LIMIT = 50;
 const MONTH_LIMIT = 200;
 
