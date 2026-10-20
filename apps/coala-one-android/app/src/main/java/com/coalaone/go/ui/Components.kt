@@ -371,5 +371,8 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, label: String, onConfirm: () -> Unit) {
-    CardBlock { Text(message); Action("Voltar", busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
+    InlineConfirmation(message, busy, onCancel, "Voltar", label, onConfirm)
+}
+@Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, cancelLabel: String, label: String, onConfirm: () -> Unit) {
+    CardBlock { Text(message); Action(cancelLabel, busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
 }
