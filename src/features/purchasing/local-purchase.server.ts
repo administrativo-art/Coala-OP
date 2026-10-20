@@ -113,6 +113,9 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
   if (!actor.isDefaultAdmin && sourceMessage.get("submittedBy.userId") !== actor.userDoc.id) {
     failure("DOCUMENT_FORBIDDEN", "O envio pertence a outro usuário.", "AUTHORIZATION");
   }
+  if (sourceMessage.get("status") === "ignored" && !sourceMessage.get("localPurchaseId")) {
+    failure("DOCUMENT_CANCELLED", "Este envio foi cancelado. Anexe a nota de novo.", "CONFLICT");
+  }
   const uploadedFundingSource = sourceMessage.get("mobilePurchaseFundingSource");
   if (uploadedFundingSource !== input.fundingSource) {
     failure("FUNDING_SOURCE_MISMATCH", "A origem do pagamento não corresponde aos documentos enviados.", "CONFLICT");
