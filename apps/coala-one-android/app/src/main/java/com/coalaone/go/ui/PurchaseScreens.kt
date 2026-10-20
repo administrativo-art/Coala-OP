@@ -9,6 +9,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
@@ -85,6 +87,19 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     val needsProof = selected?.fundingSource == "company_payment"
     val canAnalyze = selected != null && selected.receipts.isNotEmpty()
     val unitName = review?.let { input -> selected?.withdrawal?.unitName ?: state.context?.units?.firstOrNull { it.id == input.unitId }?.name }
+    // The list filter is organization and group only; the cards are already split by unit. The last choice
+    // is kept per account on this phone, and a filter with a single option is not shown at all.
+    val units = state.context?.units.orEmpty(); val pending = state.withdrawals?.withdrawals.orEmpty()
+    val preferences = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("purchase", android.content.Context.MODE_PRIVATE)
+    val owner = LocalOwner.current
+    var restored by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.context) {
+        if (!restored && state.context != null) { restored = true; vm.restoreFilter(preferences.getString("organization:$owner", null) ?: Rules.ALL_UNITS, preferences.getString("group:$owner", null) ?: Rules.ALL_UNITS) }
+    }
+    fun saveFilter() { preferences.edit().putString("organization:$owner", vm.state.value.organizationFilter).putString("group:$owner", vm.state.value.groupFilter).apply() }
+    val filtersEnabled = !feedback.busy && state.pendingLink == null
+    val organizations = Rules.purchaseOrganizationChoices(units, pending, state.organizationFilter)
+    val groups = Rules.purchaseGroupChoices(units, pending, state.organizationFilter, state.groupFilter)
     Page(if (review != null) "Revisão obrigatória" else "Compra local", feedback, back, footer = when {
         review != null -> ({
             if (confirmation) InlineConfirmation("Confirmar esta compra e os dados revisados?", feedback.busy, { confirmation = false }, "Confirmar compra") { vm.confirm(); confirmation = false }
@@ -109,7 +124,10 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             Text("Total da nota", color = Tokens.onDark4, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp))
             Text(money(review.totalCents), color = Tokens.onDark, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp))
             Text(listOfNotNull(fullDate(review.purchaseDate).takeIf(String::isNotBlank), unitName).joinToString(" · "), color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
-        } else StepHeader("Compra local", "", if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"))
+        } else {
+            StepHeader("Compra local", "", if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"))
+            if (selected == null && organizations.size > 2) UnitPickerHeader(organizations, state.organizationFilter, !filtersEnabled, "Organização", "Trocar") { vm.filterOrganization(it); saveFilter() }
+        }
     }) {
         if (review != null) {
             Text("A leitura da nota é uma sugestão. Confira Compra, Pagamento e Itens antes de confirmar.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
@@ -150,19 +168,17 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 }
                 Text("Atualizar", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Tokens.surface).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)).clickable(enabled = !feedback.busy, role = Role.Button) { vm.refresh() }.padding(horizontal = 12.dp, vertical = 9.dp))
             }
+            if (groups.size > 2) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                groups.forEach { (id, name) -> FilterChip(state.groupFilter == id, onClick = { vm.filterGroup(id); saveFilter() }, enabled = filtersEnabled, label = { Text(name, maxLines = 1) }) }
+            }
+            if (state.pendingLink != null && (organizations.size > 2 || groups.size > 2)) Text("Conclua ou cancele a vinculação antes de trocar o filtro.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             if (list?.partial == true) Text("Lista parcial. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             if (list != null && list.withdrawals.isEmpty()) Text("Nenhuma sangria aguardando nota.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
-            val units = state.context?.units.orEmpty()
-            if (units.size > 1) CardBlock {
-                Text("Filtrar sangrias", style = MaterialTheme.typography.titleMedium)
-                val filtersEnabled = !feedback.busy && state.pendingLink == null
-                Choices("Organização", Rules.purchaseOrganizationChoices(units), state.organizationFilter, filtersEnabled, vm::filterOrganization)
-                Choices("Grupo", Rules.purchaseGroupChoices(units, state.organizationFilter), state.groupFilter, filtersEnabled, vm::filterGroup)
-                Choices("Unidade", Rules.purchaseUnitChoices(units, state.organizationFilter, state.groupFilter), state.unitFilter, filtersEnabled, vm::filterUnit)
-                if (!filtersEnabled && state.pendingLink != null) Text("Conclua ou cancele a vinculação antes de trocar os filtros.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            val shownWithdrawals = Rules.filterWithdrawals(pending, units, state.organizationFilter, state.groupFilter)
+            if (pending.isNotEmpty() && shownWithdrawals.isEmpty()) Row(Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Nenhuma sangria neste filtro.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.weight(1f))
+                Text("Ver todas", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = filtersEnabled, role = Role.Button) { vm.filterOrganization(Rules.ALL_UNITS); saveFilter() }.padding(14.dp))
             }
-            val shownWithdrawals = Rules.filterWithdrawals(list?.withdrawals.orEmpty(), units, state.organizationFilter, state.groupFilter, state.unitFilter)
-            if (list?.withdrawals?.isNotEmpty() == true && shownWithdrawals.isEmpty()) Text("Nenhuma sangria nestes filtros.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
             shownWithdrawals.groupBy { it.unitId }.entries.sortedBy { entry -> entry.value.firstOrNull()?.unitName.orEmpty() }.forEach { (_, unitWithdrawals) ->
                 Text(unitWithdrawals.first().unitName.uppercase(), color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.padding(top = 4.dp))
                 unitWithdrawals.forEach { withdrawal ->
@@ -195,8 +211,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 ChoiceCard("SANGRIA", "Dinheiro do caixa", "Sangria fora da lista. Só a nota da compra.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("cash_withdrawal") }
                 ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Documento fiscal autorizado pode seguir sem comprovante.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
             }
-            val visibleUnitIds = shownWithdrawals.map { it.unitId }.toSet()
-            val shownPurchases = list?.awaitingPurchases.orEmpty().filter { it.unitId in visibleUnitIds }
+            val shownPurchases = list?.awaitingPurchases.orEmpty().filter { Rules.inPurchaseScope(units, it.unitId, state.organizationFilter, state.groupFilter) }
             if (shownPurchases.isNotEmpty()) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             shownPurchases.forEach { purchase -> CardBlock {
                 Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)

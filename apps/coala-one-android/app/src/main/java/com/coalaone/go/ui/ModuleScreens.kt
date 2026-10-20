@@ -178,7 +178,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val open: (String) -> Unit = { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); if (id == Rules.ALL_UNITS) vm.goalsOverview() else vm.goals(id) }
     Page("Metas", feedback, onBack, header = {
         TopBar("Metas", busy = feedback.busy, onBack = onBack)
-        UnitPickerHeader(Rules.unitChoices(state.goalUnits.map { it.id to it.name }), if (overview != null) Rules.ALL_UNITS else state.goals?.kioskId.orEmpty(), feedback.busy, open)
+        UnitPickerHeader(Rules.unitChoices(state.goalUnits.map { it.id to it.name }), if (overview != null) Rules.ALL_UNITS else state.goals?.kioskId.orEmpty(), feedback.busy, onSelect = open)
         overview?.total?.let { total ->
             Spacer(Modifier.height(12.dp))
             Text("FATURAMENTO · ${total.unitCount} ${if (total.unitCount == 1) "UNIDADE" else "UNIDADES"}", color = Tokens.pink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black))

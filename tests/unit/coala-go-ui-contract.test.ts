@@ -13,8 +13,8 @@ const goals = screens.split('@Composable fun GoalsScreen')[1]?.split('@Composabl
 const home = activity.split('@Composable private fun HomeScreen')[1]?.split('@Composable private fun ProfileScreen')[0] ?? '';
 
 test('Escala e Metas usam o mesmo seletor de unidade acessível no cabeçalho', () => {
-  assert.match(components, /fun UnitPickerHeader\([\s\S]*?PickerSheet\("Unidade", values, selected, onSelect\)/);
-  assert.match(components, /clickable\(enabled = several && !busy, role = Role\.Button, onClickLabel = "Trocar unidade"\)/);
+  assert.match(components, /fun UnitPickerHeader\([\s\S]*?label: String = "Unidade", action: String = "Trocar unidade"[\s\S]*?PickerSheet\(label, values, selected, onSelect\)/);
+  assert.match(components, /clickable\(enabled = several && !busy, role = Role\.Button, onClickLabel = action\)/);
   // Every dropdown or unfolding arrow is the one drawn chevron, never a font glyph (docs/design/app.md).
   assert.match(components, /fun DropdownChevron\(open: Boolean, color: Color/);
   assert.match(components, /DropdownChevron\(choosingUnit, Tokens\.pink\)/);
@@ -37,7 +37,7 @@ test('Barra do início não tem resumo deslizante: só os dados da própria barr
   assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
 });
 
-test('Compra local retoma a vinculação dentro da própria sangria e agrupa por unidade', () => {
+test('Compra local retoma a vinculação dentro da própria sangria e filtra só por organização e grupo', () => {
   const withdrawalCards = purchase.split('shownWithdrawals.groupBy')[1]?.split('Text("Outra compra"')[0] ?? '';
   const awaitingPurchases = purchase.split('shownPurchases.forEach')[1]?.split('if (state.queue.isNotEmpty())')[0] ?? '';
   assert.match(withdrawalCards, /Retomar vinculação/);
@@ -45,7 +45,9 @@ test('Compra local retoma a vinculação dentro da própria sangria e agrupa por
   assert.match(withdrawalCards, /Cancelar vinculação/);
   assert.match(withdrawalCards, /bringIntoViewRequester/);
   assert.doesNotMatch(awaitingPurchases, /InlineConfirmation/);
-  assert.match(purchase, /Choices\("Organização"/);
-  assert.match(purchase, /Choices\("Grupo"/);
-  assert.match(purchase, /Choices\("Unidade"/);
+  // Organization in the dark header, groups as chips with counts; the cards are already split by unit.
+  assert.match(purchase, /header = \{[\s\S]*?UnitPickerHeader\(organizations, state\.organizationFilter, !filtersEnabled, "Organização", "Trocar"\)/);
+  assert.match(purchase, /groups\.forEach \{ \(id, name\) -> FilterChip\(state\.groupFilter == id/);
+  assert.doesNotMatch(purchase, /Choices\("(Organização|Grupo)"/);
+  assert.doesNotMatch(purchase, /unitFilter/);
 });
