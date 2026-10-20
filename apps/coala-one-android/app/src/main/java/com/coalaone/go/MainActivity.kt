@@ -43,7 +43,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
 
-private val SCREEN_CAPTURE_ACCOUNTS = setOf("tiagobrasilll@gmail.com")
+private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
 @AndroidEntryPoint class MainActivity : FragmentActivity() {
     private val session: SessionViewModel by viewModels()
     @Inject lateinit var images: ImageLoader
