@@ -84,5 +84,4 @@ test('prazo de 24 horas da assinatura do pacote: recusado ou enviado há mais de
   assert.equal(isOverdue({ status: 'sent', sentAt: '2026-10-19T12:01:00.000Z' }, now), false);
   assert.equal(isOverdue({ status: 'refused', sentAt: '2026-10-20T11:00:00.000Z' }, now), true);
   assert.equal(isOverdue({ status: 'signed', sentAt: '2026-10-01T00:00:00.000Z' }, now), false);
-  assert.equal(isOverdue({ status: 'treated', sentAt: '2026-10-01T00:00:00.000Z' }, now), false);
 });

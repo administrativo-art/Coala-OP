@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, itemDigests, overlapsCompetence, pendingOf, sha256 } from '../../src/features/dp/time-adjustments/closure-core';
+import { absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, includeClosureRoster, itemDigests, overlapsCompetence, pendingOf, sha256 } from '../../src/features/dp/time-adjustments/closure-core';
 
 const adjustment = (id: string, employeeUid: string, status: 'in_review' | 'approved' | 'rejected' | 'cancelled', workDate = '2026-09-10') => ({
   id, employeeUid, employeeName: employeeUid === 'u1' ? 'Bia' : 'Ana', workDate, kind: 'include' as const, status, original: null,
@@ -32,6 +32,16 @@ test('declaração agrupa por pessoa, ordena de forma estável e conta pendênci
     [absence('y', 'u1', 'approved'), absence('x', 'u2', 'in_review')]);
   assert.equal(sha256(again), sha256(people));
   assert.equal(sha256({ b: 1, a: 2 }), sha256({ a: 2, b: 1 }));
+});
+
+test('fechamento inclui toda a equipe e preserva quem teve ocorrência', () => {
+  const declaration = buildDeclaration([adjustment('a', 'u1', 'approved')], []);
+  const people = includeClosureRoster(declaration, [{ uid: 'u2', name: 'Ana' }, { uid: 'u1', name: 'Nome atual' }]);
+  assert.deepEqual(people.map((person) => [person.uid, person.name, person.adjustments.length]), [
+    ['u2', 'Ana', 0],
+    ['u1', 'Bia', 1],
+  ]);
+  assert.deepEqual(includeClosureRoster(declaration, [{ uid: 'u2', name: 'Ana' }]).map((person) => person.uid), ['u2', 'u1']);
 });
 
 test('versão reaberta declara o que entrou, mudou e saiu', () => {

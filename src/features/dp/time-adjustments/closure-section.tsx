@@ -22,7 +22,12 @@ type ClosureView = {
   changes: { added: string[]; changed: string[]; removed: string[] } | null;
   reopenings: Array<{ at: string; by: string; reason: string; fromVersion: number }>;
 };
-type ClosingSummary = { counts: Record<string, number>; overdue: Array<{ uid: string; status: string; sentAt: string | null }>; finalization: { at: string; by: string } | null };
+type ClosingSummary = {
+  counts: { total: number; closed: number; pending: number; overdue: number };
+  people: Array<{ uid: string; name: string | null; status: "closed" | "pending"; packageStatus: string; sentAt: string | null; closedAt: string | null; overdue: boolean }>;
+  overdue: Array<{ uid: string; name: string | null; status: string; sentAt: string | null }>;
+  finalization: { at: string; by: string; people?: number; signed?: number } | null;
+};
 type ClosurePayload = {
   competence: string; closure: ClosureView | null; people: ClosurePerson[]; pending: { adjustments: number; absences: number };
   counts: { adjustments: number; absences: number }; truncated: boolean; can: { close: boolean; reopen: boolean };
@@ -56,9 +61,14 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [packagesKey, setPackagesKey] = useState(0);
   const [summary, setSummary] = useState<ClosingSummary | null>(null);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
-  // Pacote do fechamento vai para toda a equipe operacional do mês, não só para quem teve pedido.
-  const team = people.filter((person) => person.operacional !== false).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
-  const names = new Map(people.map((person) => [person.id, person.username ?? "Responsável"]));
+  // Aberto: prévia da equipe atual. Fechado: usa exatamente a equipe congelada naquela versão.
+  const activeTeam = people.filter((person) => person.operacional !== false).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
+  const team = data?.closure?.status === "closed"
+    ? data.people.map((person) => ({ id: person.uid, username: person.name ?? undefined, operacional: true }))
+    : activeTeam;
+  const names = new Map([...people.map((person) => [person.id, person.username ?? "Responsável"] as const),
+    ...(data?.people ?? []).map((person) => [person.uid, person.name ?? "Responsável"] as const)]);
+  const individualByUid = new Map((summary?.people ?? []).map((person) => [person.uid, person]));
   const nameOf = (uid: string | null) => uid ? names.get(uid) ?? "Responsável" : "—";
   const request = useCallback(<T,>(input: string, init: { method?: string; json?: unknown; fallbackError: string }) =>
     authenticatedApiRequest<T>(input, { ...init, getIdToken: () => firebaseUser?.getIdToken() ?? Promise.resolve(null) }), [firebaseUser]);
@@ -152,13 +162,13 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       {error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
       {!data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
       {data ? <>
-        <p className="text-sm text-ds-ink">{data.people.length} {data.people.length === 1 ? "pessoa" : "pessoas"} com pedidos no mês · {data.counts.adjustments} ajustes de ponto · {data.counts.absences} ausências.</p>
+        <p className="text-sm text-ds-ink">{data.people.length} {data.people.length === 1 ? "pessoa" : "pessoas"} no fechamento · {data.counts.adjustments} ajustes de ponto · {data.counts.absences} ausências.</p>
         {closed ? <p className="text-xs text-ds-ink-muted">Fechada em {whenBR(data.closure!.closedAt)} por {nameOf(data.closure!.closedBy)}. Carimbo da declaração: <span className="font-mono">{data.closure!.manifestHash?.slice(0, 16)}…</span></p> : null}
         {closed && data.closure!.changes ? <p className="text-xs text-ds-ink-muted">Em relação à versão anterior: {data.closure!.changes.added.length} itens novos, {data.closure!.changes.changed.length} alterados, {data.closure!.changes.removed.length} retirados.</p> : null}
         {!closed && (data.pending.adjustments || data.pending.absences) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
           Há pedidos sem decisão: {data.pending.adjustments} de ajuste e {data.pending.absences} de ausência. Decida-os nas filas acima antes de fechar.</p> : null}
         {!closed && data.truncated ? <p role="alert" className="text-xs font-semibold text-ds-danger">O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.</p> : null}
-        {data.people.map((person) => {
+        {data.people.filter((person) => person.adjustments.length || person.absences.length).map((person) => {
           const pending = person.adjustments.filter((item) => item.status === "in_review").length + person.absences.filter((item) => ["submitted", "in_review", "adjustments_requested"].includes(item.status)).length;
           return (
             <LiftRow key={person.uid} table onClick={() => setSelected(person)} className="flex items-center justify-between gap-3">
@@ -171,31 +181,34 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
           );
         })}
         {closed ? <div className="space-y-2 border-t border-ds-divider pt-3">
-          <p className="text-sm font-extrabold text-ds-ink">Espelho e contracheque para assinatura</p>
-          <p className="text-xs text-ds-ink-muted">Cada pessoa recebe na Autentique um documento só, com o espelho de ponto assinado pela empresa e o contracheque do mês. Quem não assinar em 24 horas, ou recusar, precisa ser tratado antes de finalizar o fechamento.</p>
+          <p className="text-sm font-extrabold text-ds-ink">Fechamentos individuais e fechamento geral</p>
+          <p className="text-xs text-ds-ink-muted">Cada pessoa conclui seu fechamento individual ao assinar na Autentique o documento com o espelho e o contracheque. O fechamento geral só pode ser concluído depois da assinatura de todos.</p>
           {summary ? <div className="flex flex-wrap items-center gap-2">
-            {summary.finalization ? <StatusPill variant="ok">Fechamento finalizado em {whenBR(summary.finalization.at)}</StatusPill> : <StatusPill variant="warn">Fechamento não finalizado</StatusPill>}
-            <span className="text-xs text-ds-ink-muted">{summary.counts.signed ?? 0} assinados · {summary.counts.treated ?? 0} tratados · {(summary.counts.sent ?? 0) + (summary.counts.sending ?? 0)} aguardando · {summary.overdue.length} atrasados</span>
+            {summary.finalization ? <StatusPill variant="ok">Fechamento geral concluído em {whenBR(summary.finalization.at)}</StatusPill> : <StatusPill variant="warn">Fechamento geral pendente</StatusPill>}
+            <span className="text-xs text-ds-ink-muted">{summary.counts.closed} individuais fechados · {summary.counts.pending} pendentes · {summary.counts.overdue} atrasados</span>
           </div> : null}
           {summary?.overdue.length ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
-            {summary.overdue.length} {summary.overdue.length === 1 ? "pessoa não assinou" : "pessoas não assinaram"} em 24 horas ou recusou: {summary.overdue.map((item) => nameOf(item.uid)).join(", ")}. Reenvie ou dê como tratado.</p> : null}
+            {summary.overdue.length} {summary.overdue.length === 1 ? "pessoa não assinou" : "pessoas não assinaram"} em 24 horas ou recusou: {summary.overdue.map((item) => item.name ?? nameOf(item.uid)).join(", ")}. O fechamento geral continua pendente; reenvie para assinatura.</p> : null}
           {summary && !summary.finalization && data.can.close ? (confirmFinalize
-            ? <InlineConfirm message="Finalizar o fechamento do mês? Todos os pacotes enviados estão assinados ou tratados." confirmLabel="Finalizar fechamento" loadingLabel="Finalizando…"
+            ? <InlineConfirm message="Concluir o fechamento geral? Todos os colaboradores desta versão assinaram seus documentos." confirmLabel="Concluir fechamento geral" loadingLabel="Finalizando…"
                 loading={busy} onConfirm={() => void finalize()} onCancel={() => setConfirmFinalize(false)} />
-            : <Button variant="primary-page" size="sm" disabled={busy || summary.overdue.length > 0 || !Object.keys(summary.counts).length
-                || Object.entries(summary.counts).some(([status, count]) => count > 0 && !["signed", "treated"].includes(status))} onClick={() => setConfirmFinalize(true)}>Finalizar fechamento do mês</Button>) : null}
+            : <Button variant="primary-page" size="sm" disabled={busy || summary.counts.total === 0 || summary.counts.pending > 0}
+                onClick={() => setConfirmFinalize(true)}>Concluir fechamento geral</Button>) : null}
           {data.can.close ? (confirmBulk
             ? <InlineConfirm message={`Enviar os pacotes de ${team.length} pessoas? Quem ainda não tem contracheque ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
                 loadingLabel="Enviando…" loading={bulk?.running ?? false} onConfirm={() => void sendAll()} onCancel={() => setConfirmBulk(false)} />
             : <Button variant="ds-secondary" size="sm" disabled={bulk?.running} onClick={() => setConfirmBulk(true)}>Enviar todos os prontos</Button>) : null}
           {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
-          {team.map((person) => (
-            <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [] })}
+          {team.map((person) => {
+            const individual = individualByUid.get(person.id);
+            return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [] })}
               className="flex items-center justify-between gap-3">
               <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
-              <span className="text-xs text-ds-ink-muted">Ver e enviar</span>
-            </LiftRow>
-          ))}
+              {individual?.status === "closed" ? <StatusPill variant="ok">Individual fechado</StatusPill>
+                : individual?.overdue ? <StatusPill variant="danger">Individual atrasado</StatusPill>
+                  : <StatusPill variant="warn">Individual pendente</StatusPill>}
+            </LiftRow>;
+          })}
         </div> : null}
         {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
         {!closed && data.can.close ? (confirming === "close"

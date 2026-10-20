@@ -17,6 +17,7 @@ export type ClosureAbsence = {
   decidedAt: string | null; attachmentCount: number;
 };
 export type ClosurePerson = { uid: string; name: string | null; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[] };
+export type ClosureRosterPerson = { uid: string; name: string | null };
 export type ClosureChanges = { added: string[]; changed: string[]; removed: string[] };
 
 /** Pedido ainda sem decisão: impede o fechamento. Rascunho de ausência não foi enviado e não conta. */
@@ -72,6 +73,23 @@ export function buildDeclaration(adjustments: Array<ClosureAdjustment & { employ
     entry.absences.sort((left, right) => left.startDate.localeCompare(right.startDate) || left.id.localeCompare(right.id));
   }
   return [...people.values()].sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));
+}
+
+/**
+ * O fechamento individual existe para toda pessoa da equipe congelada na versão, mesmo quando ela não teve ajuste ou
+ * ausência no mês. Pessoas com ocorrência continuam incluídas ainda que tenham saído da equipe antes do fechamento.
+ */
+export function includeClosureRoster(people: ClosurePerson[], roster: ClosureRosterPerson[]): ClosurePerson[] {
+  const merged = new Map(people.map((person) => [person.uid, { ...person, adjustments: [...person.adjustments], absences: [...person.absences] }]));
+  for (const subject of roster) {
+    const current = merged.get(subject.uid);
+    if (current) {
+      if (!current.name && subject.name) current.name = subject.name;
+    } else {
+      merged.set(subject.uid, { uid: subject.uid, name: subject.name, adjustments: [], absences: [] });
+    }
+  }
+  return [...merged.values()].sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));
 }
 
 export function pendingOf(people: ClosurePerson[]) {

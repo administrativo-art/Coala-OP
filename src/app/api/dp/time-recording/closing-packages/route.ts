@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, treatClosingPackage } from '@/features/dp/time-adjustments/closing-package.server';
+import { finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage } from '@/features/dp/time-adjustments/closing-package.server';
 import { closingPackageActionSchema, closingPackageQuerySchema, type ClosingPackageActionInput } from '@/features/dp/time-adjustments/schemas';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
@@ -59,7 +59,7 @@ export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer },
 export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
   const input = security.input;
   if (input.action === 'finalize') return NextResponse.json({ finalization: await finalizeClosingMonth(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
-  const record = input.action === 'treat' ? await treatClosingPackage(security.actor, input) : await sendClosingPackage(security.actor, input);
+  const record = await sendClosingPackage(security.actor, input);
   return NextResponse.json({ package: { status: record.status, sentAt: record.sentAt, signedAt: record.signedAt, lastError: record.lastError } },
     { headers: { 'Cache-Control': 'private, no-store' } });
 });

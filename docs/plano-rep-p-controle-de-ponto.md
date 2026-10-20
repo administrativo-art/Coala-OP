@@ -298,7 +298,7 @@ Decisões de produto registradas a partir da lista consolidada de perguntas; nã
 | Ajuste de ponto: quem decide | O ajuste sempre precisa de aprovação; o fluxo de aprovação exige justificativa | Colaborador solicita; gestor/DP aprova com justificativa obrigatória; solicitante nunca aprova o próprio pedido |
 | Ajuste no AEJ | O arquivo do fechamento identifica quem pediu e quem decidiu | Autor e decisor por ato, além de tipo e motivo |
 | Pedido depois do fechamento | Não existe: período fechado não aceita pedido | Pedido de ajuste ou ausência para competência fechada é recusado no servidor |
-| Ciência do espelho | Assinatura de concordância do colaborador; sem assinatura, fica "pendente" e a divergência é tratada com o DP fora do sistema | Espelho com estado de assinatura pendente/assinado |
+| Ciência do espelho | Assinatura do pacote individual na Autentique; sem assinatura, o individual e o fechamento geral ficam pendentes, inclusive depois de 24 horas | Lista da versão congelada, individual pendente/fechado e geral somente depois da assinatura de todos |
 | Inclusão sem evidência | Vale como prova: a cadeia de autoria comprova que foi o titular quem pediu | Evidência opcional; justificativa, aprovação e trilha de autoria obrigatórias |
 | Ausência abona ou justifica | Depende do efeito cadastrado no tipo (`workdayEffect`) | Fechamento aplica o efeito do tipo; a tela mostra a prévia conforme o efeito |
 | Reversão de ausência aprovada por decurso | Só com fraude comprovada; implementação futura | Sem reversão comum; pendência de fluxo de fraude |

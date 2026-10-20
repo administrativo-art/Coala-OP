@@ -5,12 +5,13 @@ import type { DocumentData, Firestore, Query, Transaction } from 'firebase-admin
 import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import type { ServerUserContext } from '@/lib/auth-server';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import {
-  absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, itemDigests, overlapsCompetence, pendingOf, sha256,
-  type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson,
+  absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, includeClosureRoster, itemDigests, overlapsCompetence, pendingOf, sha256,
+  type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson, type ClosureRosterPerson,
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
 import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from './service.server';
@@ -22,9 +23,16 @@ const ITEM_LIMIT = 2000;
 const PEOPLE_LIMIT = 450;
 
 type Clock = { read(): Promise<{ instant: Date }> };
-type Dependencies = { hrDb: Firestore; clock: Clock };
+type Dependencies = { hrDb: Firestore; clock: Clock; readRoster(): Promise<ClosureRosterPerson[]> };
 const unavailableClock: Clock = { async read() { throw new Error('Hora Legal não configurada.'); } };
-const defaults: Dependencies = { hrDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock };
+async function readActiveOperationalRoster() {
+  const snapshot = await dbAdmin.collection('users').limit(PEOPLE_LIMIT + 1).get();
+  if (snapshot.size > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'Há pessoas demais para congelar o fechamento numa única versão.', 'CONFLICT');
+  return snapshot.docs
+    .filter((doc) => doc.get('isActive') !== false && doc.get('operacional') !== false)
+    .map((doc) => ({ uid: doc.id, name: typeof doc.get('username') === 'string' && doc.get('username').trim() ? doc.get('username').trim() : null }));
+}
+const defaults: Dependencies = { hrDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock, readRoster: readActiveOperationalRoster };
 
 export type ClosureReopening = { at: string; by: string; reason: string; fromVersion: number; clockSource: 'hora_legal' | 'server' };
 export type ClosureRecord = {
@@ -101,7 +109,10 @@ export async function readCompetenceClosure(context: ServerUserContext, competen
   const closure = snapshot.exists ? snapshot.data() as ClosureRecord : null;
   const { people, truncated } = closure?.status === 'closed'
     ? { people: (await ref.collection('versions').doc(String(closure.version)).collection('people').limit(PEOPLE_LIMIT + 1).get()).docs.map((doc) => doc.data() as ClosurePerson), truncated: false }
-    : await readDeclaration((query) => query.get(), deps.hrDb, context.workspace_id, competence);
+    : await readDeclaration((query) => query.get(), deps.hrDb, context.workspace_id, competence).then(async (declaration) => ({
+      ...declaration,
+      people: includeClosureRoster(declaration.people, await deps.readRoster()),
+    }));
   return { competence, closure, people, pending: pendingOf(people), counts: counts(people), truncated, can: permissions(context) };
 }
 
@@ -114,13 +125,16 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
   const deps = { ...defaults, ...injected };
   const { at, clockSource } = await actInstant(deps.clock);
   if (!competenceEnded(input.competence, at)) throw fail('PTRP_CLOSURE_TOO_EARLY', 'Só é possível fechar um mês encerrado há pelo menos um dia em todos os fusos.');
+  const roster = await deps.readRoster();
   const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
   return deps.hrDb.runTransaction(async (tx: Transaction) => {
     const snapshot = await tx.get(ref);
     const current = snapshot.exists ? snapshot.data() as ClosureRecord : null;
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
     if ((current?.version ?? 0) !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
-    const { people, truncated } = await readDeclaration((query) => tx.get(query), deps.hrDb, context.workspace_id, input.competence);
+    const declaration = await readDeclaration((query) => tx.get(query), deps.hrDb, context.workspace_id, input.competence);
+    const people = includeClosureRoster(declaration.people, roster);
+    const { truncated } = declaration;
     if (truncated || people.length > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.', 'CONFLICT');
     const pending = pendingOf(people);
     if (pending.adjustments || pending.absences) {

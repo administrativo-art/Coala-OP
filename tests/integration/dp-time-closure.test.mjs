@@ -12,7 +12,7 @@ const { publishEmploymentReference } = await import('../../src/features/dp/emplo
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
-const { checkOverdueClosingPackages, finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, syncClosingPackageSignature, treatClosingPackage } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
+const { checkOverdueClosingPackages, finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, syncClosingPackageSignature } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
 const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
@@ -22,11 +22,13 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
   const workspaceId = `${prefix}-ws`;
   const userId = `${prefix}-employee`;
+  const otherUserId = `${prefix}-other`;
   const unitId = `${prefix}-unit`;
   const competence = '2026-08';
   const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
   const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
-  const closureDeps = { hrDb: hrDbAdmin, clock };
+  const roster = [{ uid: userId, name: 'Maria' }];
+  const closureDeps = { hrDb: hrDbAdmin, clock, readRoster: async () => [...roster] };
   const actor = (uid, permissions, extra = {}) => ({ decoded: { uid }, userDoc: { id: uid, unitIds: [unitId], ...extra }, profileId: null,
     permissions, isDefaultAdmin: false, workspace_id: workspaceId });
   const admin = { ...actor(`${prefix}-admin`, structuredClone(defaultAdminPermissions)), isDefaultAdmin: true };
@@ -91,8 +93,10 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const late = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-20', kind: 'include', newTime: '08:00',
       reason: 'Esqueci de bater a entrada.' }, deps);
     await decideAdjustment(reviewer, late.id, { action: 'reject', expectedVersion: 1, reason: 'Sem registro da presença neste dia.' }, deps);
+    roster.push({ uid: otherUserId, name: 'Outra pessoa' });
     const second = await closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps);
     assert.equal(second.version, 2);
+    assert.equal(second.peopleCount, 2);
     assert.deepEqual(second.changes, { added: [`adjustment:${late.id}`], changed: [], removed: [] });
     // A versão anterior continua guardada.
     const versions = await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').get();
@@ -170,24 +174,25 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     // Política do tipo: automática ao assinar; o pacote assinado entra na pasta do colaborador.
     assert.equal(archived.publication?.status, 'published');
     assert.equal((await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'signature.rejected' }, packageDeps)).status, 'signed');
-    // Prazo de 24 horas: pacote sem assinatura bloqueia a finalização e abre aviso no sino de quem fecha o mês.
-    const otherPack = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('2').collection('packages').doc(`${prefix}-other`);
-    await otherPack.set({ schemaVersion: 1, status: 'sent', uid: `${prefix}-other`, employeeId: `${prefix}-other`, competence, closureVersion: 2,
+    // A equipe congelada tem duas pessoas: a ausência de pacote da segunda já impede o fechamento geral.
+    await assert.rejects(finalizeClosingMonth(closer, { competence, expectedVersion: 2 }, packageDeps), { code: 'PTRP_FINALIZE_PENDING' });
+    assert.deepEqual((await readClosingSummary(closer, competence, packageDeps)).counts, { total: 2, closed: 1, pending: 1, overdue: 0 });
+    // Prazo de 24 horas: fechamento individual sem assinatura mantém o geral pendente e abre aviso no sino.
+    const otherPack = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('2').collection('packages').doc(otherUserId);
+    await otherPack.set({ schemaVersion: 1, status: 'sent', uid: otherUserId, employeeId: otherUserId, competence, closureVersion: 2,
       signatureRequestId: `${prefix}-other-request`, providerDocumentId: 'x', sentAt: '2026-10-15T00:00:00.000Z', attempts: [] });
     await assert.rejects(finalizeClosingMonth(closer, { competence, expectedVersion: 2 }, packageDeps), { code: 'PTRP_FINALIZE_PENDING' });
-    assert.deepEqual((await readClosingSummary(closer, competence, packageDeps)).overdue.map((item) => item.uid), [`${prefix}-other`]);
+    assert.deepEqual((await readClosingSummary(closer, competence, packageDeps)).overdue.map((item) => item.uid), [otherUserId]);
     await checkOverdueClosingPackages(workspaceId, packageDeps);
     assert.equal(notices.opened.length, 1);
     assert.deepEqual([notices.opened[0].audience, notices.opened[0].category, notices.opened[0].path], ['dp.time-closure', 'dp.time-closing', '/dashboard/dp/requests']);
-    await assert.rejects(treatClosingPackage(closer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'curto' }, packageDeps), { code: 'PTRP_PACKAGE_TREAT_REASON' });
-    await assert.rejects(treatClosingPackage(reviewer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'Conversei com a pessoa e o espelho foi mantido.' }, packageDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
-    const treated = await treatClosingPackage(closer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'Conversei com a pessoa e o espelho foi mantido.' }, packageDeps);
-    assert.equal(treated.status, 'treated');
+    // Só a assinatura fecha a pessoa; não existe mais liberação administrativa sem assinatura.
+    await otherPack.update({ status: 'signed', signedAt: '2026-10-20T13:00:00.000Z' });
     await checkOverdueClosingPackages(workspaceId, packageDeps);
     assert.equal(notices.opened.length, 1);
     assert.deepEqual(notices.resolved.at(-1), { keys: [], onlyThese: false });
     const finalization = await finalizeClosingMonth(closer, { competence, expectedVersion: 2 }, packageDeps);
-    assert.deepEqual([finalization.signed, finalization.treated], [1, 1]);
+    assert.deepEqual([finalization.people, finalization.signed], [2, 2]);
     assert.equal(notices.resolved.at(-1).onlyThese, true);
     assert.equal((await readClosingSummary(closer, competence, packageDeps)).finalization.at, finalization.at);
     await payslipRef.delete();

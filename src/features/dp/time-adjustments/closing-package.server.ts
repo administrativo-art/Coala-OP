@@ -77,7 +77,7 @@ const attemptEntry = (pack: ClosingPackageRecord, endedStatus: string): AttemptE
   employerSignaturePath: pack.employerSignature?.storagePath ?? null });
 
 export type ClosingPackageRecord = {
-  schemaVersion: 1; status: 'sending' | 'sent' | 'signed' | 'refused' | 'failed' | 'treated'; uid: string; employeeId: string; competence: string; closureVersion: number;
+  schemaVersion: 1; status: 'sending' | 'sent' | 'signed' | 'refused' | 'failed'; uid: string; employeeId: string; competence: string; closureVersion: number;
   mirrorHash: string; payslip: { documentId: string; sha256: string }; bundle: { storagePath: string; sha256: string; pageCount: number };
   employerSignature: { storagePath: string; certificateCnpj: string }; signatureRequestId: string; providerDocumentId: string | null;
   createdBy: string; createdAt: string; sentAt: string | null; signedAt: string | null; signedStoragePath: string | null; signedSha256: string | null;
@@ -85,8 +85,6 @@ export type ClosingPackageRecord = {
   /** Tentativa atual (1 na primeira) e as anteriores, que nunca são apagadas. */
   attempt?: number;
   attempts?: AttemptEntry[];
-  /** Tratado pelo DP sem assinatura (ex.: recusa mantida), com justificativa. */
-  treatment?: { at: string; by: string; reason: string } | null;
 };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'TRANSIENT_EXTERNAL' | 'DATA_INTEGRITY' = 'CONFLICT') {
@@ -139,10 +137,11 @@ async function readiness(deps: Dependencies, workspaceId: string, competence: st
   const user = await deps.mainDb.collection('users').doc(uid).get();
   if (!user.exists) throw fail('PTRP_PACKAGE_SUBJECT_INVALID', 'Pessoa não encontrada.', 'NOT_FOUND');
   const employeeId = getHrEmployeeId({ id: uid, hrEmployeeId: text(user.get('hrEmployeeId')), registrationIdBizneo: text(user.get('registrationIdBizneo')) })!;
-  const [payslip, pack] = await Promise.all([findPayslip(deps, employeeId, competence),
-    closure?.status === 'closed' ? packageRef(deps, workspaceId, competence, closure.version, uid).get() : Promise.resolve(null)]);
+  const [payslip, pack, subject] = await Promise.all([findPayslip(deps, employeeId, competence),
+    closure?.status === 'closed' ? packageRef(deps, workspaceId, competence, closure.version, uid).get() : Promise.resolve(null),
+    closure?.status === 'closed' ? deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection('versions').doc(String(closure.version)).collection('people').doc(uid).get() : Promise.resolve(null)]);
   const record = (pack?.data() as ClosingPackageRecord | undefined) ?? null;
-  return { closure, user, employeeId, payslip, pack: record ? await withRefusal(deps, record) : null };
+  return { closure, user, employeeId, payslip, subject: Boolean(subject?.exists), pack: record ? await withRefusal(deps, record) : null };
 }
 
 /** GET: o que falta para enviar o pacote da pessoa (mês fechado, contracheque, e-mail) e a situação do envio. Sem escrita. */
@@ -166,9 +165,10 @@ export async function readClosingPackage(context: ServerUserContext, query: { co
 export async function sendClosingPackage(context: ServerUserContext, input: Extract<ClosingPackageActionInput, { action: 'send' }>, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertClosureAccess(context, 'close');
-  const { closure, user, employeeId, payslip, pack } = await readiness(deps, context.workspace_id, input.competence, input.employeeUid);
+  const { closure, user, employeeId, payslip, subject, pack } = await readiness(deps, context.workspace_id, input.competence, input.employeeUid);
   if (closure?.status !== 'closed') throw fail('PTRP_PACKAGE_NOT_CLOSED', 'O pacote sai depois do fechamento do mês.');
   if (closure.version !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.');
+  if (!subject) throw fail('PTRP_PACKAGE_SUBJECT_OUTSIDE_CLOSURE', 'A pessoa não faz parte desta versão do fechamento.', 'CONFLICT');
   const resend = Boolean(pack && isOverdue(pack, deps.now()));
   // Reenvio depois de recusa ou de 24 horas sem assinatura: nova tentativa, com a anterior guardada no histórico.
   const attempt = resend ? (pack?.attempt ?? 1) + 1 : pack?.attempt ?? 1;
@@ -206,7 +206,6 @@ export async function sendClosingPackage(context: ServerUserContext, input: Extr
     employerSignature: { storagePath: `${base}/pacote.pdf.p7s`, certificateCnpj: signed.certificateCnpj }, signatureRequestId, providerDocumentId: null,
     createdBy: context.decoded.uid, createdAt: now, sentAt: null, signedAt: null, signedStoragePath: null, signedSha256: null, archivedDocumentId: null, lastError: null,
     attempt, attempts: resend && pack ? [...(pack.attempts ?? []), attemptEntry(pack, pack.status)] : pack?.attempts ?? [],
-    treatment: null,
   };
   const started = await deps.hrDb.runTransaction(async (tx) => {
     const [again, current] = await Promise.all([tx.get(target), tx.get(closureRef)]);
@@ -331,46 +330,38 @@ async function closedOrFail(deps: Dependencies, workspaceId: string, competence:
   return closure;
 }
 
-/**
- * DP dá como tratado o pacote atrasado (recusado ou sem assinatura em 24 horas), com justificativa: a entrega já está
- * comprovada pela visualização na Autentique e o pagamento pelo depósito. Libera a finalização do fechamento.
- */
-export async function treatClosingPackage(context: ServerUserContext, input: { competence: string; expectedVersion: number; employeeUid: string; reason: string },
-  injected: Partial<Dependencies> = {}) {
-  const deps = { ...defaults, ...injected };
-  assertClosureAccess(context, 'close');
-  await closedOrFail(deps, context.workspace_id, input.competence, input.expectedVersion);
-  const reason = input.reason.trim();
-  if (reason.length < 10) throw fail('PTRP_PACKAGE_TREAT_REASON', 'Informe a justificativa (mínimo de 10 caracteres).', 'VALIDATION');
-  const target = packageRef(deps, context.workspace_id, input.competence, input.expectedVersion, input.employeeUid);
-  const current = (await target.get()).data() as ClosingPackageRecord | undefined;
-  if (!current) throw fail('PTRP_PACKAGE_NOT_FOUND', 'Pacote não enviado.', 'NOT_FOUND');
-  const effective = await withRefusal(deps, current);
-  if (effective.status === 'treated') return effective;
-  if (!isOverdue(effective, deps.now()) && effective.status !== 'failed') throw fail('PTRP_PACKAGE_NOT_OVERDUE', 'Só pacote recusado, com falha ou sem assinatura há mais de 24 horas pode ser dado como tratado.');
-  const treatment = { at: deps.now().toISOString(), by: context.decoded.uid, reason };
-  await target.update({ status: 'treated', treatment, attempts: [...(current.attempts ?? []), attemptEntry(current, effective.status)] });
-  return { ...current, status: 'treated' as const, treatment };
-}
-
-/** Situação dos pacotes do mês fechado: quantos por situação, quem está atrasado e se o fechamento foi finalizado. */
+/** Situação dos fechamentos individuais e do fechamento geral da competência. */
 export async function readClosingSummary(context: ServerUserContext, competence: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertClosureAccess(context, 'read');
   const closure = (await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).get()).data() as (ClosureRecord & { finalization?: { at: string; by: string } | null }) | undefined;
-  if (closure?.status !== 'closed') return { closure: closure ? { status: closure.status, version: closure.version } : null, counts: {} as Record<string, number>, overdue: [] as Array<{ uid: string; status: string; sentAt: string | null }>, finalization: null };
-  const packs = await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).collection('versions').doc(String(closure.version)).collection('packages').limit(500).get();
+  if (closure?.status !== 'closed') return { closure: closure ? { status: closure.status, version: closure.version } : null,
+    counts: { total: 0, closed: 0, pending: 0, overdue: 0 }, people: [] as Array<{ uid: string; name: string | null; status: 'closed' | 'pending'; packageStatus: string; sentAt: string | null; closedAt: string | null; overdue: boolean }>,
+    overdue: [] as Array<{ uid: string; name: string | null; status: string; sentAt: string | null }>, finalization: null };
+  const versionRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).collection('versions').doc(String(closure.version));
+  const [packs, subjects] = await Promise.all([versionRef.collection('packages').limit(501).get(), versionRef.collection('people').limit(501).get()]);
+  if (packs.size > 500 || subjects.size > 500) throw fail('PTRP_FINALIZE_TOO_LARGE', 'O fechamento ultrapassa o limite de 500 pessoas.', 'DATA_INTEGRITY');
   const records = await Promise.all(packs.docs.map((doc) => withRefusal(deps, doc.data() as ClosingPackageRecord)));
-  const counts: Record<string, number> = {};
-  for (const record of records) counts[record.status] = (counts[record.status] ?? 0) + 1;
-  return { closure: { status: closure.status, version: closure.version }, counts,
-    overdue: records.filter((record) => isOverdue(record, deps.now())).map((record) => ({ uid: record.uid, status: record.status, sentAt: record.sentAt })),
+  const byUid = new Map(records.map((record) => [record.uid, record]));
+  const expected = new Set(subjects.docs.map((doc) => doc.id));
+  if (records.some((record) => !expected.has(record.uid))) throw fail('PTRP_FINALIZE_SUBJECT_MISMATCH', 'Há pacote fora da lista congelada do fechamento.', 'DATA_INTEGRITY');
+  const people = subjects.docs.map((doc) => {
+    const person = doc.data() as { uid?: string; name?: string | null };
+    const uid = person.uid ?? doc.id;
+    const record = byUid.get(uid);
+    const overdue = record ? isOverdue(record, deps.now()) : false;
+    return { uid, name: person.name ?? null, status: record?.status === 'signed' ? 'closed' as const : 'pending' as const,
+      packageStatus: record?.status ?? 'not_sent', sentAt: record?.sentAt ?? null, closedAt: record?.signedAt ?? null, overdue };
+  }).sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));
+  const closed = people.filter((person) => person.status === 'closed').length;
+  const overdue = people.filter((person) => person.overdue).map((person) => ({ uid: person.uid, name: person.name, status: person.packageStatus, sentAt: person.sentAt }));
+  return { closure: { status: closure.status, version: closure.version }, counts: { total: people.length, closed, pending: people.length - closed, overdue: overdue.length }, people, overdue,
     finalization: closure.finalization ?? null };
 }
 
 /**
- * Finaliza o fechamento do mês: só com todos os pacotes enviados assinados ou tratados pelo DP. Resolve o aviso de
- * atraso desta versão. Uma vez por versão; reabrir o mês cria outra versão, que precisa ser finalizada de novo.
+ * Finaliza o fechamento geral: somente depois que cada pessoa da versão congelada concluiu seu fechamento individual
+ * pela assinatura do pacote. Tratamento administrativo, recusa ou decurso de 24 horas não substituem a assinatura.
  */
 export async function finalizeClosingMonth(context: ServerUserContext, input: { competence: string; expectedVersion: number }, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
@@ -378,12 +369,10 @@ export async function finalizeClosingMonth(context: ServerUserContext, input: { 
   const closure = await closedOrFail(deps, context.workspace_id, input.competence, input.expectedVersion);
   if (closure.finalization) return closure.finalization;
   const summary = await readClosingSummary(context, input.competence, deps);
-  const total = Object.values(summary.counts).reduce((sum, value) => sum + value, 0);
-  const pending = total - (summary.counts.signed ?? 0) - (summary.counts.treated ?? 0);
-  if (!total) throw fail('PTRP_FINALIZE_NO_PACKAGES', 'Envie os pacotes de assinatura antes de finalizar o fechamento.');
-  if (pending) throw fail('PTRP_FINALIZE_PENDING', `Há ${pending} ${pending === 1 ? 'pacote sem assinatura' : 'pacotes sem assinatura'} ou sem tratamento. Trate antes de finalizar.`);
+  if (!summary.counts.total) throw fail('PTRP_FINALIZE_NO_PEOPLE', 'A versão do fechamento não tem colaboradores.');
+  if (summary.counts.pending) throw fail('PTRP_FINALIZE_PENDING', `Há ${summary.counts.pending} ${summary.counts.pending === 1 ? 'fechamento individual pendente' : 'fechamentos individuais pendentes'}. O fechamento geral exige a assinatura de todos.`);
   const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
-  const finalization = { at: deps.now().toISOString(), by: context.decoded.uid, signed: summary.counts.signed ?? 0, treated: summary.counts.treated ?? 0 };
+  const finalization = { at: deps.now().toISOString(), by: context.decoded.uid, people: summary.counts.total, signed: summary.counts.closed };
   await deps.hrDb.runTransaction(async (tx) => {
     const current = await tx.get(closureRef);
     if (current.get('status') !== 'closed' || current.get('version') !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou. Atualize e confira.');
@@ -396,8 +385,8 @@ export async function finalizeClosingMonth(context: ServerUserContext, input: { 
 export const closureNoticeKey = (workspaceId: string, competence: string, version: number) => `time-closing:${workspaceId}:${competence}:v${version}`;
 
 /**
- * Rotina de hora em hora: para cada mês fechado com pacote recusado ou sem assinatura há mais de 24 horas, mantém aberto
- * um aviso no sino dos responsáveis pelo fechamento; resolve os avisos dos meses que deixaram de ter atraso.
+ * Rotina de hora em hora: para cada fechamento geral com pacote recusado ou sem assinatura há mais de 24 horas, mantém
+ * aberto um aviso no sino dos responsáveis; o atraso nunca encerra o fechamento individual.
  */
 export async function checkOverdueClosingPackages(workspaceId: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
@@ -419,7 +408,7 @@ export async function checkOverdueClosingPackages(workspaceId: string, injected:
   for (const [key, entry] of overdueByClosure) {
     await deps.notices.open({ workspaceId, category: 'dp.time-closing', dedupeKey: key, severity: 'warning', audience: 'dp.time-closure',
       title: `Fechamento de ${monthLabel(entry.competence)} não finalizado`,
-      body: `${entry.count} ${entry.count === 1 ? 'pacote precisa' : 'pacotes precisam'} de tratamento: sem assinatura em 24 horas, recusado ou com falha no envio. Trate no fechamento do mês.`,
+      body: `${entry.count} ${entry.count === 1 ? 'fechamento individual está' : 'fechamentos individuais estão'} pendente${entry.count === 1 ? '' : 's'}: sem assinatura em 24 horas, recusado ou com falha no envio. O fechamento geral aguarda a assinatura de todos.`,
       path: '/dashboard/dp/requests' });
   }
   await deps.notices.resolve(workspaceId, [...overdueByClosure.keys()], false);
