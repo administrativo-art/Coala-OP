@@ -15,7 +15,8 @@ import java.time.LocalDate
 import java.util.UUID
 import javax.inject.Inject
 
-data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: Withdrawals? = null, val selected: PendingUpload? = null, val analysis: ReceiptAnalysis? = null, val review: ConfirmPurchase? = null, val queue: List<QueueRow> = emptyList(), val result: PurchaseResult? = null)
+data class PendingWithdrawalLink(val purchase: AwaitingPurchase, val withdrawal: Withdrawal)
+data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: Withdrawals? = null, val selected: PendingUpload? = null, val analysis: ReceiptAnalysis? = null, val review: ConfirmPurchase? = null, val queue: List<QueueRow> = emptyList(), val result: PurchaseResult? = null, val pendingLink: PendingWithdrawalLink? = null)
 @HiltViewModel class PurchaseViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val sync: QueueSync, private val scheduler: WorkScheduler) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(PurchaseState())
     val state = mutable.asStateFlow()
@@ -25,7 +26,7 @@ data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: 
     }
     fun refresh() = run { mutable.update { it.copy(context = repository.api.purchaseContext(), withdrawals = repository.api.withdrawals()) } }
     fun select(source: String, withdrawal: Withdrawal? = null) {
-        mutable.update { it.copy(selected = PendingUpload(UUID.randomUUID().toString(), Instant.now().toString(), "", source, emptyList(), emptyList(), withdrawal), analysis = null, review = null, result = null) }
+        mutable.update { it.copy(selected = PendingUpload(UUID.randomUUID().toString(), Instant.now().toString(), "", source, emptyList(), emptyList(), withdrawal), analysis = null, review = null, result = null, pendingLink = null) }
     }
     fun note(value: String) { mutable.update { it.copy(selected = it.selected?.copy(note = value.take(240))) } }
     fun attach(document: Document, proof: Boolean) {
@@ -46,8 +47,9 @@ data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: 
         sync.sync(uid)
         val response = queue.acknowledged(uid, input.submissionId)
         if (response == null) {
+            val blocked = queue.list(uid).any { it.id == input.submissionId && it.state == "BLOCKED" }
             mutable.update { it.copy(selected = null) }
-            feedbackMutable.value = Feedback(notice = "Nota protegida na fila. Volte quando houver conexão para revisar os dados.")
+            feedbackMutable.value = Feedback(notice = if (blocked) "Envio protegido na fila. Abra os documentos pendentes para revisar o erro e corrigir o envio." else "Nota protegida na fila. Volte quando houver conexão para revisar os dados.")
         } else showReview(input, response)
     }
     fun sync() = run("Sincronização concluída; abra os envios recebidos para revisar.") { if (!mode.simulation) { scheduler.schedule(mode.identity().uid); sync.sync(mode.identity().uid) } }
@@ -62,7 +64,7 @@ data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: 
         val context = mutable.value.context ?: error("Contexto indisponível")
         val unit = input.withdrawal?.unitId ?: context.units.singleOrNull()?.id.orEmpty()
         val center = context.resultCenters.firstOrNull { it.unitId == unit }?.id.orEmpty()
-        val review = ConfirmPurchase(input.submissionId, unit, analysis.supplierName.orEmpty(), analysis.supplierTaxId, analysis.purchaseDate ?: LocalDate.now().toString(), analysis.amountCents ?: 0, input.fundingSource, analysis.payment?.method?.takeIf { it != "unknown" && input.fundingSource == "company_payment" }, analysis.suggestedAccountId.orEmpty(), center, input.note, analysis.items.map { item -> PurchaseItem(item.description, item.quantity ?: 0.0, item.unit ?: "un", item.unitPriceCents ?: 0, item.totalCents ?: 0, stock = item.productId?.let { StockEntry(it, item.packages ?: 0.0) }) }, input.withdrawal?.let { WithdrawalLink(it.sourceId, it.date) })
+        val review = ConfirmPurchase(input.submissionId, unit, analysis.supplierName.orEmpty(), analysis.supplierTaxId, analysis.purchaseDate ?: LocalDate.now().toString(), analysis.amountCents ?: 0, input.fundingSource, analysis.payment?.method?.takeIf { it != "unknown" && input.fundingSource == "company_payment" }, analysis.suggestedAccountId.orEmpty(), center, input.note, analysis.items.map { item -> PurchaseItem(item.description, item.quantity ?: 0.0, item.unit ?: "un", item.unitPriceCents ?: 0, item.totalCents ?: 0, stock = item.productId?.let { StockEntry(it, item.packages ?: 0.0) }, aiTreatment = item.aiTreatment, aiConfidence = item.aiConfidence, aiReason = item.aiReason) }, input.withdrawal?.let { WithdrawalLink(it.sourceId, it.date) })
         mutable.update { it.copy(selected = input, analysis = analysis, review = review) }
     }
     fun review(value: ConfirmPurchase) { mutable.update { it.copy(review = value) } }
@@ -76,9 +78,14 @@ data class PurchaseState(val context: PurchaseContext? = null, val withdrawals: 
         if (!mode.simulation) queue.confirmed(mode.identity().uid, input.submissionId, result)
         mutable.update { it.copy(selected = null, review = null, analysis = null, result = result.purchase) }
     }
-    fun link(purchase: AwaitingPurchase, withdrawal: Withdrawal) = run("Compra conciliada com a sangria.") {
-        require(purchase.unitId == withdrawal.unitId) { "A sangria deve ser da mesma unidade." }
-        repository.api.link(LinkWithdrawal(purchase.id, WithdrawalLink(withdrawal.sourceId, withdrawal.date)))
-        mutable.update { it.copy(withdrawals = repository.api.withdrawals()) }
+    fun prepareLink(purchase: AwaitingPurchase, withdrawal: Withdrawal) {
+        mutable.update { it.copy(pendingLink = PendingWithdrawalLink(purchase, withdrawal)) }
+    }
+    fun cancelLink() { mutable.update { it.copy(pendingLink = null) } }
+    fun link() = run("Compra conciliada com a sangria.") {
+        val selection = mutable.value.pendingLink ?: return@run
+        require(selection.purchase.unitId == selection.withdrawal.unitId) { "A sangria deve ser da mesma unidade." }
+        repository.api.link(LinkWithdrawal(selection.purchase.id, WithdrawalLink(selection.withdrawal.sourceId, selection.withdrawal.date)))
+        mutable.update { it.copy(withdrawals = repository.api.withdrawals(), pendingLink = null) }
     }
 }

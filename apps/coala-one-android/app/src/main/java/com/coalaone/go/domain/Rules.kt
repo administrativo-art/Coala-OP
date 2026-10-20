@@ -52,7 +52,7 @@ object Rules {
         Instant.parse(upload.capturedAt)
         require(upload.receipts.size in 1..2 && upload.paymentProofs.size <= 2) { "Escolha até duas imagens por documento." }
         require(upload.fundingSource in listOf("cash_withdrawal", "company_payment"))
-        require((upload.fundingSource == "company_payment") == upload.paymentProofs.isNotEmpty()) { "Compra empresarial exige comprovante; compra por sangria não usa comprovante." }
+        require(upload.fundingSource != "cash_withdrawal" || upload.paymentProofs.isEmpty()) { "Compra por sangria não usa comprovante." }
         require(upload.note.length <= 240) { "Observação: máximo de 240 caracteres." }
         val documents = upload.receipts + upload.paymentProofs
         require(documents.all { it.bytes.isNotEmpty() && it.bytes.size <= 15 * 1024 * 1024 && it.mimeType in listOf("image/jpeg", "image/png", "image/webp", "application/pdf") }) { "Documento inválido ou maior que 15 MB." }

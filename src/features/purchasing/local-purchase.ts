@@ -19,7 +19,38 @@ export const localPurchaseItemSchema = z.object({
     quantity: z.number().positive().max(100_000),
     expiryDate: isoDate.nullable(),
   }).strict().nullable().optional(),
+  /** Sugestão operacional produzida pela IA; o servidor deriva o estado efetivo da linha. */
+  aiTreatment: z.enum(["existing_item", "item_not_found", "asset_candidate", "immediate_use", "needs_review"]).optional(),
+  aiConfidence: z.enum(["high", "medium", "low"]).optional(),
+  aiReason: z.string().trim().max(240).nullable().optional(),
 }).strict();
+
+export type LocalPurchaseItemTreatment = "existing_item" | "item_not_found" | "asset_candidate" | "immediate_use" | "needs_review";
+export type LocalPurchaseItemResolutionStatus = "resolved" | "pending";
+export type LocalPurchaseOperationalStatus = "resolved" | "partially_resolved" | "pending_review";
+
+export function effectiveLocalPurchaseItemTreatment(item: {
+  stock?: { productId: string } | null;
+  aiTreatment?: LocalPurchaseItemTreatment;
+}): LocalPurchaseItemTreatment {
+  if (item.stock?.productId) return "existing_item";
+  // A IA só pode afirmar que encontrou um item quando o vínculo de catálogo também chegou na confirmação.
+  if (item.aiTreatment === "existing_item") return "item_not_found";
+  return item.aiTreatment ?? "needs_review";
+}
+
+export function localPurchaseItemResolutionStatus(treatment: LocalPurchaseItemTreatment): LocalPurchaseItemResolutionStatus {
+  return treatment === "existing_item" || treatment === "immediate_use" ? "resolved" : "pending";
+}
+
+export function summarizeLocalPurchaseItems(items: Array<{ resolutionStatus: LocalPurchaseItemResolutionStatus }>) {
+  const resolvedItemCount = items.filter((item) => item.resolutionStatus === "resolved").length;
+  const itemCount = items.length;
+  const operationalStatus: LocalPurchaseOperationalStatus = resolvedItemCount === itemCount
+    ? "resolved"
+    : resolvedItemCount > 0 ? "partially_resolved" : "pending_review";
+  return { operationalStatus, resolvedItemCount, itemCount };
+}
 
 export const confirmLocalPurchaseSchema = z.object({
   submissionId: z.string().uuid(),

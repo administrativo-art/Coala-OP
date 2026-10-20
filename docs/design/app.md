@@ -380,7 +380,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Metas:** número grande, selo de ritmo, barra de 12 dp em degradê `accent` → `pink` com marcas brancas nos níveis. Abas Dias, Equipe e Prêmio. Gráfico de barras por dia: verde bateu, `accent` abaixo, `pink` hoje, linha tracejada na meta do dia, com legenda.
 - **Signage:** guia em passos numerados (círculo `accentSoft` com o número), monitor com o endereço sendo digitado, escolha de orientação em cartões, leitor de QR em tela cheia.
 - **Recorte da foto:** tela cheia escura; a foto num quadrado de cantos de 20 dp com tudo fora do círculo escurecido a 72%. Arrastar posiciona, dois dedos ou a barra aproximam.
-- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima.
+- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima. Na captura, comprovante é opcional somente quando o servidor identifica NF-e/DANFE ou NFC-e autorizada; cupom comum, recibo ou contingência pendente exige o anexo. A IA mostra em cada item uma destinação sugerida: item existente, item não encontrado, possível patrimônio, uso imediato ou revisão necessária. Essas opções não viram um seletor manual adicional no app; produto, quantidade e validade continuam revisáveis. A seleção de sangria pode ser cancelada antes do envio. O vínculo posterior de compra aguardando sangria usa confirmação inline com opção de voltar à lista sem chamar a API.
 
 ## Acessibilidade
 

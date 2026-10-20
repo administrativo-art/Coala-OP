@@ -143,6 +143,8 @@ function publicClassification(row: WithdrawalClassification) {
     accountPlanId: row.accountPlanId, accountPlanName: row.accountPlanName,
     resultCenterId: row.resultCenterId, resultCenterName: row.resultCenterName,
     description: row.description, active: row.active, createdExpense: row.createdExpense,
+    localPurchaseId: row.localPurchaseId ?? null,
+    localPurchaseSupplierName: row.localPurchaseSupplierName ?? null,
     changeReturnedCents: row.changeReturnedCents ?? 0,
     revision: row.revision, updatedAt: row.updatedAt };
 }
@@ -173,7 +175,7 @@ export async function listWithdrawalClassifications(id: string, context: ServerU
       limits: { withdrawals: MAX_WITHDRAWALS, candidatesPerPage: 25 },
     };
   }, { readOnly: true });
-  return listed;
+  return { ...listed, preLinks: await listWithdrawalPreLinks(listed.sources) };
 }
 
 export async function classifyCashWithdrawal(id: string, raw: unknown, context: ServerUserContext, authorization: WithdrawalAuthorization = "user") {
@@ -302,8 +304,11 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
       paymentMethod: "single", isApportioned: false, hasAccountAllocations: false, hasPersonAllocations: false,
       originModule: "cash_closure", supplier: "", createdBy: context.decoded.uid, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     };
+    const localPurchaseId = input.action === "link" && oldExpense.originModule === "local_purchase"
+      && typeof oldExpense.localPurchaseId === "string" ? oldExpense.localPurchaseId : undefined;
     const classification: WithdrawalClassification = { source, expenseId, ...catalog,
       description: String(expense.description), createdExpense: input.action === "create", changeReturnedCents, active: true, revision,
+      ...(localPurchaseId ? { localPurchaseId, localPurchaseSupplierName: String(oldExpense.supplier || oldExpense.description || "Compra local") } : {}),
       updatedAt: now, updatedBy: context.decoded.uid, expenseGuard: sourceExpenseGuard(expense),
       previousFields: Object.fromEntries(MUTATED_FIELDS.filter(key => key in oldExpense).map(key => [key, oldExpense[key]])),
       previousMissingFields: MUTATED_FIELDS.filter(key => !(key in oldExpense)) };
