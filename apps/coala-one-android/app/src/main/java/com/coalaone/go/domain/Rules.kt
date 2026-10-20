@@ -22,23 +22,18 @@ object Rules {
     fun purchaseScope(units: List<UnitRef>, unitId: String) = units.firstOrNull { it.id == unitId }?.let { organizationKey(it) to groupKey(it) }
     private fun inScope(unit: UnitRef, organizationId: String, groupId: String) =
         (organizationId == ALL_UNITS || organizationKey(unit) == organizationId) && (groupId == ALL_UNITS || groupKey(unit) == groupId)
-    /**
-     * Only scopes with a withdrawal waiting for its note are offered, each with how many it has: a filter
-     * that leads to an empty list is noise. The current choice stays listed even after it empties out.
-     */
-    private fun scopeChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, all: String, fallbackName: String, fallback: String, selected: String, key: (UnitRef) -> String, name: (UnitRef) -> String?): List<Pair<String, String>> {
+    /** Every organization or group of the accessible units, each with how many withdrawals wait for a note. */
+    private fun scopeChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, all: String, fallbackName: String, fallback: String, key: (UnitRef) -> String, name: (UnitRef) -> String?): List<Pair<String, String>> {
         val unitsById = units.associateBy { it.id }
-        val known = withdrawals.mapNotNull { unitsById[it.unitId] }
-        val counts = known.groupingBy(key).eachCount()
-        val names = units.associate { key(it) to (name(it) ?: fallbackName) }
-        val values = names.filterKeys { it in counts || it == selected }.mapValues { (id, label) -> "$label · ${counts[id] ?: 0}" }
+        val counts = withdrawals.mapNotNull { unitsById[it.unitId] }.groupingBy(key).eachCount()
+        val values = units.associate { key(it) to (name(it) ?: fallbackName) }.mapValues { (id, label) -> "$label · ${counts[id] ?: 0}" }
         return listOf(ALL_UNITS to "$all · ${withdrawals.size}") + sortedScope(values, fallback)
     }
-    fun purchaseOrganizationChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, selected: String = ALL_UNITS) =
-        scopeChoices(units, withdrawals, "Todas as organizações", "Sem organização", NO_ORGANIZATION, selected, ::organizationKey) { it.organizationName }
-    fun purchaseGroupChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, organizationId: String, selected: String = ALL_UNITS): List<Pair<String, String>> {
+    fun purchaseOrganizationChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>) =
+        scopeChoices(units, withdrawals, "Todas as organizações", "Sem organização", NO_ORGANIZATION, ::organizationKey) { it.organizationName }
+    fun purchaseGroupChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, organizationId: String): List<Pair<String, String>> {
         val scoped = units.filter { inScope(it, organizationId, ALL_UNITS) }
-        return scopeChoices(scoped, filterWithdrawals(withdrawals, units, organizationId, ALL_UNITS), "Todos", "Sem grupo", NO_GROUP, selected, ::groupKey) { it.groupName }
+        return scopeChoices(scoped, filterWithdrawals(withdrawals, units, organizationId, ALL_UNITS), "Todos", "Sem grupo", NO_GROUP, ::groupKey) { it.groupName }
     }
     /** A unit the context does not know only shows with no filter, so a withdrawal is never hidden for good. */
     fun inPurchaseScope(units: List<UnitRef>, unitId: String, organizationId: String, groupId: String): Boolean {
