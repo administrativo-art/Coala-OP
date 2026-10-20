@@ -1,6 +1,6 @@
 # Avisos do sistema
 
-**Estado:** implementado localmente e validado no emulador com dados sintéticos; publicação depende do segredo `SYSTEM_NOTICES_JOB_SECRET` e do deploy da função agendada.
+**Estado:** publicado em produção em 18/10/2026. O segredo `SYSTEM_NOTICES_JOB_SECRET`, a rota e a função agendada estão ativos; a execução manual publicada concluiu com HTTP 200 e não abriu aviso indevido.
 
 ## Superfícies
 
@@ -33,4 +33,4 @@ Custo: uma execução por dia; leituras ≈ 4 consultas de avisos abertos + 1 co
 
 ## Evidência e lacunas
 
-Unitários cobrem acesso, públicos, marcos (inclusive virada de dia no fuso) e gravidade. O emulador cobre abertura única por marco, troca 60→45, vencido, renovação, pendências, filtro por público e entrega no sino apenas ao gestor de Tempo. Regras confirmam `deny` a clientes. Não verificados: rota HTTP do job e a função agendada publicadas, tela no navegador (sem E2E) e entrega a administradores definidos só por claim.
+Unitários cobrem acesso, públicos, marcos (inclusive virada de dia no fuso) e gravidade. O emulador cobre abertura única por marco, troca 60→45, vencido, renovação, pendências, filtro por público e entrega no sino apenas ao gestor de Tempo. Regras confirmam `deny` a clientes. Em 18/10/2026, a raiz publicada respondeu HTTP 200, a rota do job recusou chamada sem segredo com HTTP 401 e a função agendada executou a rota real com sucesso; a resposta autenticada informou certificado válido, `clockState: ok`, zero comprovantes pendentes e nenhum aviso novo. Ainda não verificados: tela no navegador (sem E2E) e entrega a administradores definidos só por claim.
