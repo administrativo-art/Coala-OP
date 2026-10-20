@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **482 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **483 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -401,6 +401,7 @@ Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/cash-deposits/reconcile` | POST | [src/app/api/jobs/cash-deposits/reconcile/route.ts](../../src/app/api/jobs/cash-deposits/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/documents/retention-reconcile` | POST | [src/app/api/jobs/documents/retention-reconcile/route.ts](../../src/app/api/jobs/documents/retention-reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/dp/absences/tacit-approval` | POST | [src/app/api/jobs/dp/absences/tacit-approval/route.ts](../../src/app/api/jobs/dp/absences/tacit-approval/route.ts) | [dp-absences](flows/dp-absences.md) |
+| `/api/jobs/dp/time-closing/overdue` | POST | [src/app/api/jobs/dp/time-closing/overdue/route.ts](../../src/app/api/jobs/dp/time-closing/overdue/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/financial-budgets/generate` | POST | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/jobs/financial-inbox/maintenance` | POST | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/cobrancas/reconcile` | POST | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -574,6 +575,7 @@ Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `syncRhAccessCache` | `onDocumentWritten` | [functions/src/rh/sync.ts](../../functions/src/rh/sync.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `systemNoticesDailyMonitor` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [system-notices](flows/system-notices.md) |
 | `terminateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `timeClosingOverdueJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `uberExpenseCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberSftpDailySync` | `onSchedule` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberTransactionCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |

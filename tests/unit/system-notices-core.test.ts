@@ -2,17 +2,17 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  canViewSystemNotices, repPCertificateMilestone, repPCertificateMilestoneSeverity, systemNoticeAudiencesFor,
+  BELL_WITHOUT_CENTRAL, belongsToSystemNoticeAudience, canViewSystemNotices, repPCertificateMilestone, repPCertificateMilestoneSeverity, systemNoticeAudiencesFor,
   type SystemNoticeActor,
 } from '../../src/features/system-notices/core';
 
-function actor(overrides: { admin?: boolean; view?: boolean; notices?: boolean; manageTime?: boolean; allUnits?: boolean } = {}): SystemNoticeActor {
+function actor(overrides: { admin?: boolean; view?: boolean; notices?: boolean; manageTime?: boolean; allUnits?: boolean; close?: boolean } = {}): SystemNoticeActor {
   return {
     isDefaultAdmin: overrides.admin ?? false,
     allUnits: overrides.allUnits ?? true,
     permissions: {
       settings: { view: overrides.view ?? true, viewSystemNotices: overrides.notices ?? true } as SystemNoticeActor['permissions']['settings'],
-      dp: { settings: { manageTime: overrides.manageTime ?? false } },
+      dp: { settings: { manageTime: overrides.manageTime ?? false }, timeClosure: { close: overrides.close ?? false } },
     },
   };
 }
@@ -26,11 +26,17 @@ describe('Avisos do sistema — acesso', () => {
   });
 
   it('shows each notice only to its audience, on top of the center permission', () => {
-    assert.deepEqual(systemNoticeAudiencesFor(actor({ admin: true })), ['system.admin', 'dp.time-manager-global']);
+    assert.deepEqual(systemNoticeAudiencesFor(actor({ admin: true })), ['system.admin', 'dp.time-manager-global', 'dp.time-closure']);
     assert.deepEqual(systemNoticeAudiencesFor(actor()), []);
     assert.deepEqual(systemNoticeAudiencesFor(actor({ manageTime: true })), ['dp.time-manager-global']);
     assert.deepEqual(systemNoticeAudiencesFor(actor({ manageTime: true, allUnits: false })), []);
     assert.deepEqual(systemNoticeAudiencesFor(actor({ manageTime: true, notices: false })), []);
+  });
+
+  it('closure responsibles get the overdue-signature notice in the bell even without the notice center', () => {
+    assert.equal(belongsToSystemNoticeAudience(actor({ close: true, notices: false }), 'dp.time-closure'), true);
+    assert.equal(belongsToSystemNoticeAudience(actor({ close: false }), 'dp.time-closure'), false);
+    assert.deepEqual([...BELL_WITHOUT_CENTRAL], ['dp.time-closure']);
   });
 });
 

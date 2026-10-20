@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { readClosingPackage, sendClosingPackage } from '@/features/dp/time-adjustments/closing-package.server';
+import { finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, treatClosingPackage } from '@/features/dp/time-adjustments/closing-package.server';
 import { closingPackageActionSchema, closingPackageQuerySchema, type ClosingPackageActionInput } from '@/features/dp/time-adjustments/schemas';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
@@ -22,7 +22,7 @@ const getContract = defineSecurityContract({
   input: { kind: 'schema', schema: 'dp.time-closing-package.query', unknownFields: 'reject' },
   effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized',
 });
-const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; employeeUid: string }, Resource>({
+const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; employeeUid?: string }, Resource>({
   id: 'dp-time-closing-package-status-v1',
   guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
@@ -33,14 +33,14 @@ const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Server
   },
 });
 const postContract = defineSecurityContract({
-  schemaVersion: 1, id: 'dp.time-recording.closing-packages.send', version: 1,
+  schemaVersion: 1, id: 'dp.time-recording.closing-packages.act', version: 1,
   surface: { method: 'POST', path }, exposure: 'authenticated', identity: { kind: 'active-user' },
   authorization: { kind: 'custom', strategy: 'time-closure' }, resourceScope: { kind: 'workspace' },
   input: { kind: 'schema', schema: 'dp.time-closing-package.action', unknownFields: 'reject' },
   effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
 const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, ClosingPackageActionInput, Resource>({
-  id: 'dp-time-closing-package-send-v1',
+  id: 'dp-time-closing-package-act-v1',
   guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
@@ -51,10 +51,15 @@ const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Serve
   },
 });
 
-export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) =>
-  NextResponse.json(await readClosingPackage(security.actor, security.input), { headers: { 'Cache-Control': 'private, no-store' } }));
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
+  const { competence, employeeUid } = security.input;
+  const body = employeeUid ? await readClosingPackage(security.actor, { competence, employeeUid }) : await readClosingSummary(security.actor, competence);
+  return NextResponse.json(body, { headers: { 'Cache-Control': 'private, no-store' } });
+});
 export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
-  const record = await sendClosingPackage(security.actor, security.input);
+  const input = security.input;
+  if (input.action === 'finalize') return NextResponse.json({ finalization: await finalizeClosingMonth(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const record = input.action === 'treat' ? await treatClosingPackage(security.actor, input) : await sendClosingPackage(security.actor, input);
   return NextResponse.json({ package: { status: record.status, sentAt: record.sentAt, signedAt: record.signedAt, lastError: record.lastError } },
     { headers: { 'Cache-Control': 'private, no-store' } });
 });

@@ -59,8 +59,14 @@ export const mirrorQuerySchema = z.object({ competence, employeeUid: uid.optiona
 // A concordância do trabalhador passou a ser a assinatura do pacote do fechamento na Autentique (20/10/2026).
 export const mirrorActionSchema = z.object({ action: z.literal('generate'), competence, expectedVersion: z.number().int().positive(),
   employeeUid: uid.optional() }).strict();
-export const closingPackageQuerySchema = z.object({ competence, employeeUid: uid }).strict();
-export const closingPackageActionSchema = z.object({ action: z.literal('send'), competence, expectedVersion: z.number().int().positive(), employeeUid: uid }).strict();
+// Sem pessoa: resumo do mês (situação dos pacotes, atrasados e finalização).
+export const closingPackageQuerySchema = z.object({ competence, employeeUid: uid.optional() }).strict();
+const packageVersion = z.number().int().positive();
+export const closingPackageActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('send'), competence, expectedVersion: packageVersion, employeeUid: uid }).strict(),
+  z.object({ action: z.literal('treat'), competence, expectedVersion: packageVersion, employeeUid: uid, reason: z.string().trim().min(10, 'Informe a justificativa (mínimo de 10 caracteres).').max(1000) }).strict(),
+  z.object({ action: z.literal('finalize'), competence, expectedVersion: packageVersion }).strict(),
+]);
 export type ClosingPackageActionInput = z.infer<typeof closingPackageActionSchema>;
 export type MirrorActionInput = z.infer<typeof mirrorActionSchema>;
 

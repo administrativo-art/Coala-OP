@@ -76,3 +76,13 @@ test('pacote do fechamento junta espelho e contracheque sem alterar as páginas'
   await assert.rejects(composeClosingPackage({ mirror, payslip: Buffer.from('não é pdf'), title: 'x', name: 'M', month: 'm' }));
   assert.equal(closingPackagePath('ws', '2026-08', 2, 'u'), 'time-closing-packages/ws/2026-08/v2/u');
 });
+
+test('prazo de 24 horas da assinatura do pacote: recusado ou enviado há mais de 24 horas está atrasado', async () => {
+  const { isOverdue } = await import('../../src/features/dp/time-adjustments/closing-package');
+  const now = new Date('2026-10-20T12:00:00.000Z');
+  assert.equal(isOverdue({ status: 'sent', sentAt: '2026-10-19T11:59:00.000Z' }, now), true);
+  assert.equal(isOverdue({ status: 'sent', sentAt: '2026-10-19T12:01:00.000Z' }, now), false);
+  assert.equal(isOverdue({ status: 'refused', sentAt: '2026-10-20T11:00:00.000Z' }, now), true);
+  assert.equal(isOverdue({ status: 'signed', sentAt: '2026-10-01T00:00:00.000Z' }, now), false);
+  assert.equal(isOverdue({ status: 'treated', sentAt: '2026-10-01T00:00:00.000Z' }, now), false);
+});

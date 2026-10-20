@@ -52,3 +52,10 @@ export async function composeClosingPackage(input: { mirror: Uint8Array; payslip
 
 export const closingPackagePath = (workspaceId: string, competence: string, version: number, uid: string) =>
   `time-closing-packages/${workspaceId}/${competence}/v${version}/${uid}`;
+
+/** Prazo da assinatura (decisão do programador, 20/10/2026): 24 horas depois do envio. */
+export const SIGNATURE_DEADLINE_MS = 24 * 60 * 60_000;
+/** Atrasado: recusado, ou enviado há mais de 24 horas sem assinatura. Bloqueia a finalização do fechamento. */
+export function isOverdue(pack: { status: string; sentAt: string | null }, now: Date) {
+  return pack.status === 'refused' || (pack.status === 'sent' && Boolean(pack.sentAt) && now.getTime() - Date.parse(pack.sentAt!) > SIGNATURE_DEADLINE_MS);
+}

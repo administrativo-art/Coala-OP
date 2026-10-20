@@ -81,3 +81,29 @@ export const absenceTacitApprovalJob = onSchedule({
   const result = await response.json() as { checked?: number; approved?: number; skipped?: number; skippedCodes?: Record<string, number> };
   if (result.approved || result.skipped) console.log('[absenceTacitApprovalJob] Concluída.', result);
 });
+
+/**
+ * Pacotes do fechamento do mês (espelho e contracheque) sem assinatura em 24 horas ou recusados, de hora em hora:
+ * mantém aberto o aviso no sino dos responsáveis pelo fechamento até o DP tratar e finalizar o mês.
+ */
+export const timeClosingOverdueJob = onSchedule({
+  schedule: '20 * * * *',
+  timeZone: 'America/Belem',
+  retryCount: 0,
+  timeoutSeconds: 300,
+  memory: '256MiB',
+  maxInstances: 1,
+  secrets: [jobSecret],
+}, async () => {
+  const response = await fetch(new URL('/api/jobs/dp/time-closing/overdue', jobUrl.value()), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Atraso do fechamento respondeu HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const result = await response.json() as { checked?: number; overdueClosures?: number };
+  if (result.overdueClosures) console.log('[timeClosingOverdueJob] Concluída.', result);
+});

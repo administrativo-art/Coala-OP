@@ -12,7 +12,7 @@ const { publishEmploymentReference } = await import('../../src/features/dp/emplo
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
-const { readClosingPackage, sendClosingPackage, syncClosingPackageSignature } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
+const { checkOverdueClosingPackages, finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, syncClosingPackageSignature, treatClosingPackage } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
 const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
@@ -126,7 +126,9 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     payslipDoc.addPage([595, 842]);
     files.set('payslips/agosto.pdf', Buffer.from(await payslipDoc.save()));
     const sent = [];
+    const notices = { opened: [], resolved: [] };
     const packageDeps = {
+      notices: { open: async (input) => { notices.opened.push(input); }, resolve: async (_ws, keys, onlyThese) => { notices.resolved.push({ keys, onlyThese }); } },
       mainDb: dbAdmin, hrDb: hrDbAdmin, now: () => new Date('2026-10-17T12:00:00.000Z'), mirror: mirrorDeps,
       storage: { async save(path, bytes) { files.set(path, Buffer.from(bytes)); }, async download(path) { if (!files.has(path)) throw new Error('missing'); return files.get(path); } },
       sign: async () => ({ bytes: Buffer.from('p7s'), certificateCnpj: '14276603000125' }),
@@ -168,6 +170,26 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     // Política do tipo: automática ao assinar; o pacote assinado entra na pasta do colaborador.
     assert.equal(archived.publication?.status, 'published');
     assert.equal((await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'signature.rejected' }, packageDeps)).status, 'signed');
+    // Prazo de 24 horas: pacote sem assinatura bloqueia a finalização e abre aviso no sino de quem fecha o mês.
+    const otherPack = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('2').collection('packages').doc(`${prefix}-other`);
+    await otherPack.set({ schemaVersion: 1, status: 'sent', uid: `${prefix}-other`, employeeId: `${prefix}-other`, competence, closureVersion: 2,
+      signatureRequestId: `${prefix}-other-request`, providerDocumentId: 'x', sentAt: '2026-10-15T00:00:00.000Z', attempts: [] });
+    await assert.rejects(finalizeClosingMonth(closer, { competence, expectedVersion: 2 }, packageDeps), { code: 'PTRP_FINALIZE_PENDING' });
+    assert.deepEqual((await readClosingSummary(closer, competence, packageDeps)).overdue.map((item) => item.uid), [`${prefix}-other`]);
+    await checkOverdueClosingPackages(workspaceId, packageDeps);
+    assert.equal(notices.opened.length, 1);
+    assert.deepEqual([notices.opened[0].audience, notices.opened[0].category, notices.opened[0].path], ['dp.time-closure', 'dp.time-closing', '/dashboard/dp/requests']);
+    await assert.rejects(treatClosingPackage(closer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'curto' }, packageDeps), { code: 'PTRP_PACKAGE_TREAT_REASON' });
+    await assert.rejects(treatClosingPackage(reviewer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'Conversei com a pessoa e o espelho foi mantido.' }, packageDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    const treated = await treatClosingPackage(closer, { competence, expectedVersion: 2, employeeUid: `${prefix}-other`, reason: 'Conversei com a pessoa e o espelho foi mantido.' }, packageDeps);
+    assert.equal(treated.status, 'treated');
+    await checkOverdueClosingPackages(workspaceId, packageDeps);
+    assert.equal(notices.opened.length, 1);
+    assert.deepEqual(notices.resolved.at(-1), { keys: [], onlyThese: false });
+    const finalization = await finalizeClosingMonth(closer, { competence, expectedVersion: 2 }, packageDeps);
+    assert.deepEqual([finalization.signed, finalization.treated], [1, 1]);
+    assert.equal(notices.resolved.at(-1).onlyThese, true);
+    assert.equal((await readClosingSummary(closer, competence, packageDeps)).finalization.at, finalization.at);
     await payslipRef.delete();
 
     // Banco de horas do mês fechado: jornada de 7h20, turno de 4h com batida incluída, dia escalado sem batida e folga.
