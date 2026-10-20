@@ -90,18 +90,28 @@ class RulesTest {
         assertEquals(one, Rules.unitChoices(one)); assertEquals(emptyList<Pair<String, String>>(), Rules.unitChoices(emptyList()))
         assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades") + two, Rules.unitChoices(two))
     }
-    @Test fun purchaseFiltersFollowOrganizationGroupAndUnitHierarchy() {
+    @Test fun purchaseFiltersFollowOrganizationAndGroup() {
         val units = listOf(
             UnitRef("a", "Centro", "g1", "Quiosques", "o1", "Coala"),
             UnitRef("b", "Orla", "g1", "Quiosques", "o1", "Coala"),
             UnitRef("c", "CD", "g2", "Abastecimento", "o2", "Logística"),
             UnitRef("d", "Legada"),
+            UnitRef("e", "Shopping", "g3", "Shoppings", "o1", "Coala"),
         )
-        val withdrawals = units.mapIndexed { index, unit -> Withdrawal(index.toString().repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 100L + index) }
-        assertEquals(listOf("a", "b"), Rules.filterWithdrawals(withdrawals, units, "o1", "g1", Rules.ALL_UNITS).map { it.unitId })
-        assertEquals(listOf("c"), Rules.filterWithdrawals(withdrawals, units, "o2", Rules.ALL_UNITS, "c").map { it.unitId })
-        assertEquals(listOf("d"), Rules.filterWithdrawals(withdrawals, units, Rules.NO_ORGANIZATION, Rules.NO_GROUP, Rules.ALL_UNITS).map { it.unitId })
-        assertTrue(Rules.purchaseOrganizationChoices(units).contains(Rules.NO_ORGANIZATION to "Sem organização"))
-        assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades", "c" to "CD"), Rules.purchaseUnitChoices(units, "o2", "g2"))
+        val withdrawals = units.take(4).mapIndexed { index, unit -> Withdrawal(index.toString().repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 100L + index) } +
+            Withdrawal("9".repeat(64), "z", "Fora do contexto", "2026-10-01", amountCents = 1)
+        assertEquals(listOf("a", "b"), Rules.filterWithdrawals(withdrawals, units, "o1", "g1").map { it.unitId })
+        assertEquals(listOf("d"), Rules.filterWithdrawals(withdrawals, units, Rules.NO_ORGANIZATION, Rules.NO_GROUP).map { it.unitId })
+        // A unit the context does not know only shows with no filter.
+        assertEquals(5, Rules.filterWithdrawals(withdrawals, units, Rules.ALL_UNITS, Rules.ALL_UNITS).size)
+        assertEquals(listOf(Rules.ALL_UNITS to "Todas as organizações · 5", "o1" to "Coala · 2", "o2" to "Logística · 1", Rules.NO_ORGANIZATION to "Sem organização · 1"), Rules.purchaseOrganizationChoices(units, withdrawals))
+        // Shoppings has nothing pending: offered only while it is the current choice.
+        assertEquals(listOf(Rules.ALL_UNITS to "Todos · 2", "g1" to "Quiosques · 2"), Rules.purchaseGroupChoices(units, withdrawals, "o1"))
+        assertEquals(listOf(Rules.ALL_UNITS to "Todos · 2", "g1" to "Quiosques · 2", "g3" to "Shoppings · 0"), Rules.purchaseGroupChoices(units, withdrawals, "o1", "g3"))
+        assertEquals("o2" to "g2", Rules.purchaseScope(units, "c")); assertNull(Rules.purchaseScope(units, "z"))
+        assertTrue(Rules.inPurchaseScope(units, "e", "o1", Rules.ALL_UNITS))
+        assertEquals("o1" to "g3", Rules.restorePurchaseScope(units, "o1", "g3"))
+        assertEquals("o1" to Rules.ALL_UNITS, Rules.restorePurchaseScope(units, "o1", "g2"))
+        assertEquals(Rules.ALL_UNITS to Rules.ALL_UNITS, Rules.restorePurchaseScope(units, "gone", "g1"))
     }
 }
