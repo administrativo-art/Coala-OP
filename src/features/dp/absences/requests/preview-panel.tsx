@@ -237,7 +237,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     <span className="block text-[11px] font-semibold text-ds-ink-muted">Atestado ou outro documento: até cinco arquivos PDF, JPEG ou PNG, com 10 MB cada. No celular, dá para fotografar. Só você e os responsáveis autorizados acessam.</span>
   </label>;
 
-  return <SidePanel open={open} onOpenChange={(value) => { if (!saving) onOpenChange(value); }} kicker="Minhas solicitações" title={editingRequest ? 'Editar rascunho de ausência' : 'Solicitar ausência'} subtitle={step === 'summary' ? 'Confira o resumo antes de enviar.' : 'Preencha o pedido e anexe o documento.'}>
+  return <SidePanel open={open} onOpenChange={(value) => { if (!saving) onOpenChange(value); }} kicker={beneficiaryUid ? "Solicitação para a equipe" : "Minhas solicitações"} title={editingRequest ? 'Editar rascunho de ausência' : 'Solicitar ausência'} subtitle={step === 'summary' ? 'Confira o resumo antes de enviar.' : 'Preencha o pedido e anexe o documento.'}>
     {beneficiaryName ? <p className="text-xs font-bold text-ds-ink">Solicitação para {beneficiaryName}</p> : null}
     {canCreate ? <ol className="flex items-center gap-2 text-xs font-bold" aria-label="Etapas do pedido">
       {([['form', '1 · Dados e comprovante'], ['summary', '2 · Resumo e envio']] as const).map(([key, label], index) => <li key={key} className="flex items-center gap-2">
