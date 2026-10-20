@@ -52,6 +52,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { useEntities } from "@/hooks/use-entities";
+import { useKiosks } from "@/hooks/use-kiosks";
 import { useProducts } from "@/hooks/use-products";
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
@@ -76,8 +77,10 @@ import {
 } from "@/types";
 import {
   getPurchaseOrderConfirmationIssues,
+  purchaseOrderRequiresKioskDestination,
   purchaseOrderDisplayCode,
 } from "@/lib/purchasing-order-readiness";
+import { canAccessUnit } from "@/lib/unit-access";
 import { cn } from "@/lib/utils";
 import {
   PurchasingPageFrame,
@@ -159,6 +162,7 @@ const FINANCIAL_STATUS_LABELS: Record<PurchaseFinancialStatus, string> = {
 };
 
 type EditForm = {
+  destinationKioskId: string;
   paymentMethod: PaymentMethod;
   paymentCondition: PurchasePaymentCondition;
   installmentsCount: number;
@@ -256,7 +260,7 @@ export default function PurchaseOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
-  const { permissions, firebaseUser, isDefaultAdmin } = useAuth();
+  const { permissions, firebaseUser, isDefaultAdmin, user } = useAuth();
   const {
     orders,
     loading,
@@ -270,6 +274,7 @@ export default function PurchaseOrderPage() {
   const { financials, markAsPaid } = usePurchaseFinancials();
   const { receipts } = usePurchaseReceipts();
   const { entities } = useEntities();
+  const { kiosks } = useKiosks();
   const { baseProducts } = useBaseProducts();
   const { products, getProductFullName } = useProducts();
   const { purchasingDefaults } = useCompanySettings();
@@ -286,6 +291,15 @@ export default function PurchaseOrderPage() {
   const canReceive = canReceivePurchase(permissions);
   const canRevertStage = isDefaultAdmin || canRevertPurchaseStage(permissions);
   const canManageFinancials = canManagePurchaseFinancials(permissions);
+  const accessibleKiosks = useMemo(
+    () =>
+      kiosks.filter(
+        (kiosk) =>
+          user &&
+          canAccessUnit(user, kiosk.id, { isDefaultAdmin }),
+      ),
+    [isDefaultAdmin, kiosks, user],
+  );
 
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -583,6 +597,7 @@ export default function PurchaseOrderPage() {
           ? buildMonthlyInstallmentDates(fallbackPaymentDate, installmentsCount)
           : [];
     setEditForm({
+      destinationKioskId: order.destinationKioskId ?? "",
       paymentMethod: order.paymentMethod,
       paymentCondition: order.paymentCondition ?? "cash",
       installmentsCount,
@@ -617,6 +632,13 @@ export default function PurchaseOrderPage() {
   const editPendingFields = useMemo(() => {
     if (!editForm) return [];
     const pending: string[] = [];
+    if (
+      isCreated &&
+      purchaseOrderRequiresKioskDestination(displayItems) &&
+      !editForm.destinationKioskId
+    ) {
+      pending.push("Destino operacional");
+    }
     if (!editForm.paymentDueDate)
       pending.push(getPaymentDateLabel(editForm.paymentMethod));
     if (
@@ -645,7 +667,7 @@ export default function PurchaseOrderPage() {
       pending.push("Favorecido do frete");
     }
     return pending;
-  }, [editForm, order?.receiptMode]);
+  }, [displayItems, editForm, isCreated, order?.receiptMode]);
 
   const handleSave = async () => {
     if (!order || !editForm) return;
@@ -667,6 +689,9 @@ export default function PurchaseOrderPage() {
     setSaving(true);
     try {
       await updateOrder(order.id, {
+        destinationKioskId: isCreated
+          ? editForm.destinationKioskId || undefined
+          : undefined,
         paymentMethod: editForm.paymentMethod,
         paymentAccountId: isCardPayment(editForm.paymentMethod)
           ? (selectedPaymentCard?.accountId ?? null)
@@ -2494,6 +2519,56 @@ export default function PurchaseOrderPage() {
                     description="Previsão e referências para acompanhar o recebimento."
                   >
                     <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label className="text-[12px] font-bold text-zinc-700">
+                          Destino operacional
+                          {isCreated &&
+                            purchaseOrderRequiresKioskDestination(displayItems) && (
+                            <RequiredMark />
+                          )}
+                        </Label>
+                        <Select
+                          value={editForm.destinationKioskId || "__none__"}
+                          onValueChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    destinationKioskId:
+                                      value === "__none__" ? "" : value,
+                                  }
+                                : current,
+                            )
+                          }
+                          disabled={!isCreated}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "h-10 rounded-[9px] border-zinc-200 bg-zinc-50 shadow-none",
+                              isCreated &&
+                                purchaseOrderRequiresKioskDestination(displayItems) &&
+                                !editForm.destinationKioskId &&
+                                PENDING_FIELD_CLASS,
+                            )}
+                          >
+                            <SelectValue placeholder="Selecione a unidade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Não definido</SelectItem>
+                            {accessibleKiosks.map((kiosk) => (
+                              <SelectItem key={kiosk.id} value={kiosk.id}>
+                                {kiosk.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] leading-relaxed text-zinc-500">
+                          {isCreated
+                            ? "Itens operacionais só podem ser confirmados quando a unidade de destino estiver definida."
+                            : "Após a confirmação, o destino precisa ser corrigido junto com o recebimento vinculado."}
+                        </p>
+                      </div>
+
                       {order.receiptMode === "future_delivery" && (
                         <div className="space-y-1.5">
                           <Label className="text-[12px] font-bold text-zinc-700">
