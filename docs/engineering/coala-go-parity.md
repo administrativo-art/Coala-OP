@@ -21,7 +21,7 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 | Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar | Foto/câmera física, permissões reais e gesto em aparelho físico |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
-| Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm` | `ViewModelsTest`: UUID estável, upload offline, retry de estoque; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod | OCR real, câmera e conciliação financeira integrada |
+| Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm`; NF-e/DANFE e NFC-e autorizada com classificação alta dispensam comprovante na compra normal; contingência pendente não dispensa; sangria não aceita comprovante; a IA sugere por item vínculo existente, cadastro pendente, possível patrimônio, uso imediato ou revisão | `ViewModelsTest`: UUID estável, upload offline, preservação da classificação dos itens, retry de estoque e cancelamento da escolha de sangria; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod e política de classificação | OCR real, câmera e conciliação financeira integrada |
 | Pendências offline | Room + arquivos AES-GCM/Keystore por UID + WorkManager | `OfflineQueueInstrumentedTest`: persistência, cifra, tamper, conta errada, WorkManager, recuperação atômica, tombstone; `ViewModelsTest`: falha mantém fila | Reinício forçado/bateria/rede em aparelhos reais |
 | Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária, Equipe/Só minha e Todas as unidades | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
 | Metas | `/api/goals/mobile`, filtro `kioskId` ou `scope=all` (Todas as unidades); abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
@@ -173,6 +173,20 @@ O usuário confirmou `coalaone.go` como identificador novo, lado a lado e sem at
 Após autorização para retirar o antigo e atualizar download, versão sem parâmetro seleciona Go; query explícita antiga tem instalador nulo. Atestação mantém compatibilidade de formato/allowlist, exigindo reconhecimento Play e integridade. APK/metadados/link preparados localmente não atualizam produção sem deploy autorizado.
 
 Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
+
+### Verificação da 0.3.10 (nota fiscal e tratamento dos itens)
+
+A compra normal pode seguir sem comprovante quando duas leituras independentes
+concordam que o documento é NF-e/DANFE ou NFC-e autorizada e há protocolo
+literal de autorização; recibo, cupom não fiscal e contingência pendente ainda
+exigem comprovante. A seleção de sangria pode ser cancelada antes do envio. A
+IA sugere por linha item existente, item não encontrado, possível patrimônio,
+uso imediato ou revisão, e o servidor valida a decisão antes de persistir o
+estado operacional da compra. `RulesTest`, `ViewModelsTest`, os contratos
+Android/TypeScript e a suíte do backend cobrem o fluxo; aparelho físico, OCR
+real e validação fiscal oficial continuam fora desta homologação. O APK
+0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
+`0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
 
 ### Verificação da 0.3.9 (Escala em "Todas as unidades", seta desenhada)
 

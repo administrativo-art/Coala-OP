@@ -76,10 +76,10 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val review = state.review; val selected = state.selected
     var confirmation by rememberSaveable { mutableStateOf(false) }
-    val back = { if (selected != null || review != null) vm.leaveReview() else onBack() }
+    val back = { if (state.pendingLink != null) vm.cancelLink() else if (selected != null || review != null) vm.leaveReview() else onBack() }
     BackHandler { if (!feedback.busy) back() }
     val needsProof = selected?.fundingSource == "company_payment"
-    val canAnalyze = selected != null && selected.receipts.isNotEmpty() && (!needsProof || selected.paymentProofs.isNotEmpty())
+    val canAnalyze = selected != null && selected.receipts.isNotEmpty()
     val unitName = review?.let { input -> selected?.withdrawal?.unitName ?: state.context?.units?.firstOrNull { it.id == input.unitId }?.name }
     Page(if (review != null) "Revisão obrigatória" else "Compra local", feedback, back, footer = when {
         review != null -> ({
@@ -95,7 +95,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
         })
         selected != null -> ({
             Action("Analisar e continuar", feedback.busy, enabled = canAnalyze) { vm.upload() }
-            if (needsProof && selected.receipts.isNotEmpty() && selected.paymentProofs.isEmpty()) Text("Anexe o comprovante para continuar.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            if (needsProof && selected.receipts.isNotEmpty() && selected.paymentProofs.isEmpty()) Text("Sem comprovante, somente documento fiscal autorizado pode prosseguir.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         })
         else -> null
     }, header = {
@@ -125,15 +125,17 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 }
                 Text("Alterar", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button, onClick = back).padding(8.dp))
             }
-            Text(if (needsProof) "Anexe a nota e o comprovante. Os dois são analisados juntos e cruzados antes da revisão." else "Anexe a nota da compra. A sangria já comprova o pagamento.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+            if (selected.withdrawal != null) Action("Cancelar seleção da sangria", feedback.busy, secondary = true) { vm.leaveReview() }
+            Text(if (needsProof) "Anexe a nota da compra. NF-e, DANFE ou NFC-e autorizada pode seguir sem comprovante; cupom comum, recibo ou contingência pendente exige comprovante." else "Anexe a nota da compra. A sangria já comprova o pagamento.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
             DocumentCard("Nota da compra", "Cupom, nota fiscal ou recibo", selected.receipts, !feedback.busy, { vm.attach(it, false) }) { vm.remove(it, false) }
-            if (needsProof) DocumentCard("Comprovante de pagamento", "Pix, cartão, boleto ou outro comprovante", selected.paymentProofs, !feedback.busy, { vm.attach(it, true) }) { vm.remove(it, true) }
+            if (needsProof) DocumentCard("Comprovante de pagamento", "Obrigatório sem documento fiscal autorizado", selected.paymentProofs, !feedback.busy, { vm.attach(it, true) }) { vm.remove(it, true) }
             LabeledInput("", selected.note, !feedback.busy, placeholder = "Observação (opcional, até 240 caracteres)", onChange = vm::note)
             Text("Até 2 arquivos por documento; 15 MB por arquivo e 25 MB no total.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         } else {
             state.result?.let { result -> Column(Modifier.fillMaxWidth().background(Tokens.okBg, RoundedCornerShape(14.dp)).border(1.dp, Tokens.okBorder, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(when (result.status) { "confirmed" -> "Compra registrada"; "linked" -> "Compra conciliada com a sangria"; else -> "Compra registrada" }, color = Tokens.okInk, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
                 when (result.stockEntry) { "done" -> "Entrada no estoque: ${result.stockItemCount ?: 0} itens."; "pending" -> "Entrada no estoque pendente."; "reversed" -> "Entrada no estoque estornada."; else -> null }?.let { Text(it, color = Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp)) }
+                if (result.itemCount != null && result.resolvedItemCount != null) Text(if (result.operationalStatus == "resolved") "Todos os itens foram tratados." else "${result.resolvedItemCount} de ${result.itemCount} itens tratados; os demais seguiram para Compras.", color = Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp))
                 result.changeCents?.takeIf { it > 0 }?.let { Text("Troco de ${money(it)}: devolva esse valor ao caixa.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp)) }
             } }
             val list = state.withdrawals
@@ -164,13 +166,17 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             Text("Se a sangria ainda não apareceu na lista, ou a compra não foi paga com o caixa, informe como ela foi paga.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChoiceCard("SANGRIA", "Dinheiro do caixa", "Sangria fora da lista. Só a nota da compra.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("cash_withdrawal") }
-                ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Nota e comprovante de pagamento.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
+                ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Documento fiscal autorizado pode seguir sem comprovante.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
             }
             if (list?.awaitingPurchases?.isNotEmpty() == true) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             list?.awaitingPurchases.orEmpty().forEach { purchase -> CardBlock {
                 Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)
                 Text("Compra de ${fullDate(purchase.purchaseDate)} sem sangria vinculada", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                list?.withdrawals.orEmpty().filter { it.unitId == purchase.unitId }.forEach { withdrawal -> Action("Vincular sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.link(purchase, withdrawal) } }
+                list?.withdrawals.orEmpty().filter { it.unitId == purchase.unitId }.forEach { withdrawal ->
+                    val selectedLink = state.pendingLink?.takeIf { it.purchase.id == purchase.id && it.withdrawal.sourceId == withdrawal.sourceId }
+                    if (selectedLink != null) InlineConfirmation("Vincular esta compra à sangria de ${money(withdrawal.amountCents)}?", feedback.busy, vm::cancelLink, "Confirmar vínculo", vm::link)
+                    else Action("Selecionar sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.prepareLink(purchase, withdrawal) }
+                }
             } }
             if (state.queue.isNotEmpty()) {
                 Text("Notas guardadas no aparelho", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -234,6 +240,8 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 Field("Unidade", item.unit, enabled) { edit(item.copy(unit = it)) }
                 ReviewDecimal("Preço unitário (R$)", centsText(item.unitPriceCents), enabled) { edit(item.copy(unitPriceCents = Rules.cents(it) ?: 0)) }
                 ReviewDecimal("Total do item (R$)", centsText(item.totalCents), enabled) { edit(item.copy(totalCents = Rules.cents(it) ?: 0)) }
+                Text("IA · " + when (item.aiTreatment) { "existing_item" -> "item existente encontrado"; "item_not_found" -> "item não encontrado"; "asset_candidate" -> "possível patrimônio"; "immediate_use" -> "uso imediato, sem estoque"; else -> "destinação precisa de revisão" }, color = if (item.aiTreatment == "existing_item" || item.aiTreatment == "immediate_use") Tokens.okInk else Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp))
+                item.aiReason?.takeIf(String::isNotBlank)?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
                 if (context?.products?.isNotEmpty() == true) Choices("Entrada no estoque", listOf("" to "Sem entrada") + context.products.map { it.id to "${it.name} (${it.packageLabel})" }, item.stock?.productId.orEmpty(), enabled) { productId -> edit(item.copy(stock = productId.takeIf(String::isNotEmpty)?.let { StockEntry(it, item.quantity) })) }
                 item.stock?.let { stock ->
                     ReviewDecimal("Quantidade no estoque", Rules.quantityText(stock.quantity), enabled) { edit(item.copy(stock = stock.copy(quantity = Rules.quantity(it)))) }

@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { CreateDirectPurchaseModal } from '@/components/purchasing/create-direct-purchase-modal';
 import { PurchasingModuleNavigation } from '@/components/purchasing/purchasing-module-navigation';
 import { PurchasingItemsPreview } from '@/components/purchasing/purchasing-items-preview';
-import { LocalPurchasePanel, localPurchaseCode, localPurchaseFinancialLabel } from '@/components/purchasing/local-purchase-panel';
+import { LocalPurchasePanel, localPurchaseCode, localPurchaseFinancialLabel, localPurchaseItemsLabel } from '@/components/purchasing/local-purchase-panel';
 import type { LocalPurchaseSummary } from '@/features/purchasing/local-purchase-admin';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { canCreatePurchase, canCreateQuotation, canRevertPurchaseStage, canViewPurchasing } from '@/lib/purchasing-permissions';
@@ -111,7 +111,7 @@ export default function PurchaseOrdersPage() {
   const { entities } = useEntities();
   const [directOpen, setDirectOpen] = useState(false);
   const [requestedDestination, setRequestedDestination] = useState('');
-  const [filter, setFilter] = useState<'all' | OrderStage>('all');
+  const [filter, setFilter] = useState<'all' | OrderStage | 'item_pending'>('all');
   const period: PurchasingPeriodFilter = useMemo(() => {
     const now = new Date();
     return { mode: 'recent', month: now.getMonth(), year: now.getFullYear() };
@@ -125,6 +125,8 @@ export default function PurchaseOrdersPage() {
       setRequestedDestination(query.get('destinationKioskId') ?? '');
       setDirectOpen(true);
     }
+    const localPurchaseId = query.get('localPurchase');
+    if (localPurchaseId && /^[^/]{1,200}$/.test(localPurchaseId)) setOpenLocalPurchaseId(localPurchaseId);
   }, [canOpenDirectPurchase]);
 
   // Compras feitas pelo aplicativo: uma leitura limitada ao abrir a tela, sem listener nem polling.
@@ -181,9 +183,12 @@ export default function PurchaseOrdersPage() {
     receiving: rows.filter((row) => row.stage === 'receiving').length,
     received: rows.filter((row) => row.stage === 'received').length + localRows.filter((row) => row.stage === 'received').length,
     cancelled: rows.filter((row) => row.stage === 'cancelled').length + localRows.filter((row) => row.stage === 'cancelled').length,
+    itemPending: localRows.filter((row) => row.purchase.status !== 'cancelled' && row.purchase.operationalStatus !== 'resolved').length,
   }), [localRows, rows]);
-  const visibleRows = rows.filter((row) => filter === 'all' || row.stage === filter);
-  const visibleLocalRows = localRows.filter((row) => filter === 'all' || row.stage === filter);
+  const visibleRows = rows.filter((row) => filter !== 'item_pending' && (filter === 'all' || row.stage === filter));
+  const visibleLocalRows = localRows.filter((row) => filter === 'item_pending'
+    ? row.purchase.status !== 'cancelled' && row.purchase.operationalStatus !== 'resolved'
+    : filter === 'all' || row.stage === filter);
   const totalRows = rows.length + localRows.length;
   // Pedidos e compras locais na mesma lista, do mais recente para o mais antigo.
   const listRows = [
@@ -224,6 +229,7 @@ export default function PurchaseOrdersPage() {
               <HeroChip value={counts.receiving} label="Em recebimento" tone="warning" active={filter === 'receiving'} onClick={() => setFilter('receiving')} />
               <HeroChip value={counts.received} label="Recebida" active={filter === 'received'} onClick={() => setFilter('received')} />
               <HeroChip value={counts.cancelled} label="Cancelada" tone="danger" active={filter === 'cancelled'} onClick={() => setFilter('cancelled')} />
+              <HeroChip value={counts.itemPending} label="Itens pendentes" tone="warning" active={filter === 'item_pending'} onClick={() => setFilter('item_pending')} />
               <span className="ml-auto text-xs text-ds-on-dark-sub">{listRows.length} de {totalRows} compras</span>
             </>
           )}
@@ -263,6 +269,7 @@ export default function PurchaseOrdersPage() {
                             <span className="shrink-0 rounded-[5px] bg-violet-50 px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wide text-violet-700">Compra local · app</span>
                           </div>
                           <div className="mt-1 truncate text-xs text-zinc-500">{purchase.unitName} · {purchase.items.map((item) => item.description).join(', ')}</div>
+                          <div className={`mt-1 text-[11px] font-bold ${purchase.operationalStatus === 'resolved' ? 'text-emerald-700' : 'text-amber-700'}`}>{localPurchaseItemsLabel(purchase)}</div>
                         </div>
                         <div>
                           <PurchasingStatusBadge label={presentation.label} tone={presentation.tone} />
