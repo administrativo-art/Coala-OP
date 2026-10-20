@@ -202,7 +202,8 @@ aparelho grava a lápide na fila. A confirmação recusa um envio cancelado.
 `ViewModelsTest` (cancelamento offline preservado e online removido), `RulesTest`,
 contrato de fonte e o teste de integração
 `financial-mobile-upload-cancel.test.mjs` cobrem o comportamento; aparelho
-físico permanece fora desta homologação.
+físico permanece fora desta homologação. O APK 0.3.14/code19 foi assinado pelo
+certificado público esperado e tem SHA-256 `f42accb321e92b3bffb55cd7b0f879d159b319e641953ec5fee27599051a37ce`.
 
 ### Verificação da 0.3.13 (filtro sempre visível, captura da conta administrativa)
 
