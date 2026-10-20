@@ -188,6 +188,22 @@ real e validação fiscal oficial continuam fora desta homologação. O APK
 0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
 `0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
 
+### Verificação da 0.3.14 (etapas por unidade e cancelamento da nota)
+
+A Compra local abre em cartões por unidade com sangria aguardando nota (com a
+quantidade); tocar abre as sangrias da unidade. O filtro de organização e grupo
+fica na primeira etapa, sem números. A nota enviada e não confirmada passa a
+aparecer no cartão da própria sangria, com "Retomar revisão" e "Cancelar nota";
+a revisão também oferece "Cancelar esta nota". O cancelamento chama
+`/api/financial/inbox/mobile-upload/cancel` sob a mesma trava da sincronização
+(`QueueSync.discard`): o servidor descarta a entrada da Caixa de entrada
+(`status: ignored`, só quem enviou, nunca com compra confirmada) e só então o
+aparelho grava a lápide na fila. A confirmação recusa um envio cancelado.
+`ViewModelsTest` (cancelamento offline preservado e online removido), `RulesTest`,
+contrato de fonte e o teste de integração
+`financial-mobile-upload-cancel.test.mjs` cobrem o comportamento; aparelho
+físico permanece fora desta homologação.
+
 ### Verificação da 0.3.13 (filtro sempre visível, captura da conta administrativa)
 
 O 0.3.12 escondia organizações e grupos sem sangria pendente; com uma opção só,

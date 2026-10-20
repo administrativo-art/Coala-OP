@@ -22,19 +22,16 @@ object Rules {
     fun purchaseScope(units: List<UnitRef>, unitId: String) = units.firstOrNull { it.id == unitId }?.let { organizationKey(it) to groupKey(it) }
     private fun inScope(unit: UnitRef, organizationId: String, groupId: String) =
         (organizationId == ALL_UNITS || organizationKey(unit) == organizationId) && (groupId == ALL_UNITS || groupKey(unit) == groupId)
-    /** Every organization or group of the accessible units, each with how many withdrawals wait for a note. */
-    private fun scopeChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, all: String, fallbackName: String, fallback: String, key: (UnitRef) -> String, name: (UnitRef) -> String?): List<Pair<String, String>> {
-        val unitsById = units.associateBy { it.id }
-        val counts = withdrawals.mapNotNull { unitsById[it.unitId] }.groupingBy(key).eachCount()
-        val values = units.associate { key(it) to (name(it) ?: fallbackName) }.mapValues { (id, label) -> "$label · ${counts[id] ?: 0}" }
-        return listOf(ALL_UNITS to "$all · ${withdrawals.size}") + sortedScope(values, fallback)
-    }
-    fun purchaseOrganizationChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>) =
-        scopeChoices(units, withdrawals, "Todas as organizações", "Sem organização", NO_ORGANIZATION, ::organizationKey) { it.organizationName }
-    fun purchaseGroupChoices(units: List<UnitRef>, withdrawals: List<Withdrawal>, organizationId: String): List<Pair<String, String>> {
-        val scoped = units.filter { inScope(it, organizationId, ALL_UNITS) }
-        return scopeChoices(scoped, filterWithdrawals(withdrawals, units, organizationId, ALL_UNITS), "Todos", "Sem grupo", NO_GROUP, ::groupKey) { it.groupName }
-    }
+    /** Every organization or group of the accessible units; the counts live on the unit cards, not here. */
+    private fun scopeChoices(units: List<UnitRef>, all: String, fallbackName: String, fallback: String, key: (UnitRef) -> String, name: (UnitRef) -> String?) =
+        listOf(ALL_UNITS to all) + sortedScope(units.associate { key(it) to (name(it) ?: fallbackName) }, fallback)
+    fun purchaseOrganizationChoices(units: List<UnitRef>) =
+        scopeChoices(units, "Todas as organizações", "Sem organização", NO_ORGANIZATION, ::organizationKey) { it.organizationName }
+    fun purchaseGroupChoices(units: List<UnitRef>, organizationId: String) =
+        scopeChoices(units.filter { inScope(it, organizationId, ALL_UNITS) }, "Todos", "Sem grupo", NO_GROUP, ::groupKey) { it.groupName }
+    /** First step of Compra local: one card per unit that has withdrawals waiting, with how many, by name. */
+    fun purchaseUnitCards(withdrawals: List<Withdrawal>): List<Triple<String, String, Int>> =
+        withdrawals.groupBy { it.unitId }.map { (id, rows) -> Triple(id, rows.first().unitName, rows.size) }.sortedBy { it.second }
     /** A unit the context does not know only shows with no filter, so a withdrawal is never hidden for good. */
     fun inPurchaseScope(units: List<UnitRef>, unitId: String, organizationId: String, groupId: String): Boolean {
         val unit = units.firstOrNull { it.id == unitId } ?: return organizationId == ALL_UNITS && groupId == ALL_UNITS

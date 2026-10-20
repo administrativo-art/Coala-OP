@@ -114,6 +114,7 @@ class OfflineQueueInstrumentedTest {
             override suspend fun repositions(): Repositions = error("unused")
             override suspend fun receive(input: ReceiveRequest): Received = error("unused")
             override suspend fun upload(input: PendingUpload, expectedUid: String?): UploadResponse { sent = input.submissionId; assertEquals(uid, expectedUid); return UploadResponse(Submission("server", true, "pending_review")) }
+            override suspend fun cancelUpload(submissionId: String) = error("unused")
         }
         val sync = QueueSync(auth, store, repo)
         val factory = object : WorkerFactory() { override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker = UploadWorker(appContext, workerParameters, sync, auth, vault) }

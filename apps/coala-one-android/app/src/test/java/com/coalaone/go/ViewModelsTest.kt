@@ -48,8 +48,7 @@ class ViewModelsTest {
             ?: AwaitingPurchase("purchase-1", withdrawal.unitId, "Mercado", withdrawal.date, withdrawal.amountCents)
         vm.prepareLink(purchase, withdrawal)
         assertNotNull(vm.state.value.pendingLink)
-        val scope = com.coalaone.go.domain.Rules.purchaseScope(vm.state.value.context!!.units, withdrawal.unitId) ?: (com.coalaone.go.domain.Rules.ALL_UNITS to com.coalaone.go.domain.Rules.ALL_UNITS)
-        assertEquals(scope, vm.state.value.organizationFilter to vm.state.value.groupFilter)
+        assertEquals(withdrawal.unitId, vm.state.value.unitView)
         assertEquals(0, links)
         val focus = vm.state.value.linkFocusRequest
         vm.select("cash_withdrawal", withdrawal)
@@ -190,6 +189,26 @@ class ViewModelsTest {
         // The simulation has several units, so a purchase without a withdrawal needs the unit chosen in the review.
         vm.review(vm.state.value.review!!.copy(unitId = "simulation-unit", accountPlanId = "account", resultCenterId = "center")); vm.confirm(); advanceUntilIdle()
         assertEquals(2, confirms); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)
+    }
+    @Test fun noteKeptForWithdrawalShowsOnItsCardAndCancelsOnServerThenPhone() = runTest {
+        val cancelled = mutableListOf<String>(); var failCancel = true
+        val api = object : ApiService by DemoApi() {
+            override suspend fun cancelUpload(request: CancelUpload): CancelUploadResponse { if (failCancel) throw IOException(); cancelled += request.submissionId; return CancelUploadResponse(CancelledUpload("cancelled")) }
+        }
+        val repo = repository(auth, api); val vm = PurchaseViewModel(repo, mode, queue, QueueSync(auth, queue, repo), scheduler)
+        runCurrent()
+        val withdrawal = vm.state.value.withdrawals!!.withdrawals.first()
+        vm.openUnit(withdrawal.unitId); assertEquals(withdrawal.unitId, vm.state.value.unitView)
+        vm.select("cash_withdrawal", withdrawal); vm.attach(pending().receipts.single(), false); val id = vm.state.value.selected!!.submissionId
+        vm.upload(); advanceUntilIdle()
+        assertEquals(withdrawal.sourceId, vm.state.value.queueWithdrawals[id]); assertNotNull(vm.state.value.review)
+        // Offline: nothing is dropped, so the server copy is never orphaned.
+        vm.discard(id); advanceUntilIdle()
+        assertEquals(id, queue.rows.value.single().id); assertNotNull(vm.feedback.value.error)
+        failCancel = false; vm.discard(id); advanceUntilIdle()
+        assertEquals(listOf(id), cancelled); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)
+        assertEquals(withdrawal.unitId, vm.state.value.unitView)
+        vm.closeUnit(); assertNull(vm.state.value.unitView)
     }
     @Test fun failedUploadIsRetainedAndResumesWithSameId() = runTest {
         val api = object : ApiService by DemoApi() { override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse = throw IOException() }

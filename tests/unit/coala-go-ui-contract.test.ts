@@ -37,15 +37,19 @@ test('Barra do início não tem resumo deslizante: só os dados da própria barr
   assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
 });
 
-test('Compra local retoma a vinculação dentro da própria sangria e filtra só por organização e grupo', () => {
-  const withdrawalCards = purchase.split('shownWithdrawals.groupBy')[1]?.split('Text("Outra compra"')[0] ?? '';
-  const awaitingPurchases = purchase.split('shownPurchases.forEach')[1]?.split('if (state.queue.isNotEmpty())')[0] ?? '';
-  assert.match(withdrawalCards, /Retomar vinculação/);
-  assert.match(withdrawalCards, /InlineConfirmation\("Vincular esta compra a esta sangria\?"/);
-  assert.match(withdrawalCards, /Cancelar vinculação/);
-  assert.match(withdrawalCards, /bringIntoViewRequester/);
+test('Compra local abre por unidade, retoma vínculo e nota no cartão da sangria e filtra só por organização e grupo', () => {
+  const unitStep = purchase.split('// Step 2: the withdrawals of one unit')[1]?.split('val unitPurchases')[0] ?? '';
+  const awaitingPurchases = purchase.split('unitPurchases.forEach')[1]?.split('/** A note kept on the phone')[0] ?? '';
+  assert.match(unitStep, /Retomar vinculação/);
+  assert.match(unitStep, /InlineConfirmation\("Vincular esta compra a esta sangria\?"/);
+  assert.match(unitStep, /Cancelar vinculação/);
+  assert.match(unitStep, /bringIntoViewRequester/);
+  // A note in review sits on its withdrawal's card, with a way to give it up.
+  assert.match(unitStep, /QueuedNote\(note,/);
+  assert.match(purchase, /Action\("Cancelar nota", busy, secondary = true/);
   assert.doesNotMatch(awaitingPurchases, /InlineConfirmation/);
-  // Organization in the dark header, groups as chips with counts; the cards are already split by unit.
+  // Step 1: unit cards only for units with withdrawals, organization in the header, groups as chips without counts.
+  assert.match(purchase, /Rules\.purchaseUnitCards\(shownWithdrawals\)\.forEach[\s\S]*?vm\.openUnit\(unitId\)/);
   assert.match(purchase, /header = \{[\s\S]*?UnitPickerHeader\(organizations, state\.organizationFilter, !filtersEnabled, "Organização", "Trocar"\)/);
   assert.match(purchase, /groups\.forEach \{ \(id, name\) -> FilterChip\(state\.groupFilter == id/);
   assert.doesNotMatch(purchase, /Choices\("(Organização|Grupo)"/);
