@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { confirmLocalPurchaseSchema, localPurchaseExpenseId } from "../../src/features/purchasing/local-purchase";
+import { confirmLocalPurchaseSchema, effectiveLocalPurchaseItemTreatment, localPurchaseExpenseId, localPurchaseItemResolutionStatus, summarizeLocalPurchaseItems } from "../../src/features/purchasing/local-purchase";
 import { mobilePurchaseExtractionPrompt } from "../../src/ai/prompts/financial/mobile-purchase-extraction";
+import { fiscalAuthorizationFromPdfText, mobileFiscalAuthorizationWarnings, mobilePurchaseMayOmitPaymentProof, normalizeMobileFiscalDocument, storedMobilePurchaseAttachmentState, verifyMobileFiscalReadings } from "../../src/features/financial/inbox/mobile-upload";
 import { localPurchaseWithdrawalDates, LOCAL_PURCHASE_WITHDRAWAL_MAX_DAYS } from "../../src/features/purchasing/local-purchase-withdrawals";
 import { assertEligibleWithdrawalExpense, changeReturnIsProven, preLinkedChangeCents, withdrawalSourceId, withdrawalSources, type WithdrawalSource } from "../../src/features/financial/cash-closures/withdrawal-classification";
 import type { CashClosure, CashClosureLine } from "../../src/features/financial/cash-closures/types";
@@ -28,6 +29,21 @@ test("local purchase confirmation requires exact item total and sangria classifi
   assert.equal(confirmLocalPurchaseSchema.safeParse({ ...valid, accountPlanId: null }).success, false);
   assert.equal(confirmLocalPurchaseSchema.safeParse({ ...valid, fundingSource: "company_payment", companyPaymentMethod: "card_credit" }).success, true);
   assert.equal(confirmLocalPurchaseSchema.safeParse({ ...valid, fundingSource: "company_payment", companyPaymentMethod: null }).success, false);
+});
+
+test("AI item treatment is stored separately from the financial status", () => {
+  assert.equal(effectiveLocalPurchaseItemTreatment({ aiTreatment: "asset_candidate" }), "asset_candidate");
+  assert.equal(effectiveLocalPurchaseItemTreatment({ aiTreatment: "immediate_use" }), "immediate_use");
+  assert.equal(effectiveLocalPurchaseItemTreatment({ aiTreatment: "existing_item" }), "item_not_found");
+  assert.equal(effectiveLocalPurchaseItemTreatment({ aiTreatment: "asset_candidate", stock: { productId: "product-a" } }), "existing_item");
+  assert.equal(localPurchaseItemResolutionStatus("existing_item"), "resolved");
+  assert.equal(localPurchaseItemResolutionStatus("immediate_use"), "resolved");
+  assert.equal(localPurchaseItemResolutionStatus("item_not_found"), "pending");
+  assert.deepEqual(summarizeLocalPurchaseItems([{ resolutionStatus: "resolved" }, { resolutionStatus: "pending" }]), {
+    operationalStatus: "partially_resolved", resolvedItemCount: 1, itemCount: 2,
+  });
+  const classified = { ...valid, items: [{ ...valid.items[0], aiTreatment: "asset_candidate", aiConfidence: "high", aiReason: "Bem durável e reutilizável." }] };
+  assert.equal(confirmLocalPurchaseSchema.safeParse(classified).success, true);
 });
 
 test("local purchase identity is deterministic and workspace-bound", () => {
@@ -66,6 +82,79 @@ test("confirmation binds the purchase to the uploaded funding source and payment
   assert.match(server, /FUNDING_SOURCE_MISMATCH/);
   assert.match(server, /PAYMENT_PROOF_REQUIRED/);
   assert.match(server, /PAYMENT_PROOF_UNEXPECTED/);
+  assert.match(server, /mobileFiscalVerification/);
+  assert.match(server, /storedMobilePurchaseAttachmentState/);
+  assert.match(server, /sourceMessage\.get\("mobilePurchaseAnalysis"\)/);
+  assert.match(server, /A linha foi alterada ou não recebeu classificação automática/);
+});
+
+test("dual readings and stored matching document hashes are required for the proof waiver", () => {
+  const hash = "a".repeat(64);
+  const fiscal = { purchaseDocumentKindConfidence: "high" as const, fiscalAuthorizationStatus: "authorized" as const,
+    fiscalAuthorizationEvidence: "Protocolo de Autorização de Uso 135260000000000", purchaseDocumentKind: "nfce" as const };
+  const independent = { ...fiscal, authorizationProtocol: "135260000000000" };
+  const verified = verifyMobileFiscalReadings(fiscal, independent, [], [hash]);
+  assert.ok(verified);
+  const stored = [{ filename: "receipt-nota.jpg", archiveStatus: "stored", sha256: hash }];
+  assert.equal(mobilePurchaseMayOmitPaymentProof(fiscal, verified, stored), true);
+  assert.equal(mobilePurchaseMayOmitPaymentProof(fiscal, verified, [{ ...stored[0], archiveStatus: "failed" }]), false);
+  assert.equal(mobilePurchaseMayOmitPaymentProof(fiscal, verified, [{ ...stored[0], sha256: "b".repeat(64) }]), false);
+  assert.equal(mobilePurchaseMayOmitPaymentProof(fiscal, verified, [{ ...stored[0], contentType: "application/pdf" }]), false);
+  assert.equal(mobilePurchaseMayOmitPaymentProof(fiscal, null, stored), false);
+  assert.equal(mobilePurchaseMayOmitPaymentProof(null, verified, stored), false);
+  assert.equal(verifyMobileFiscalReadings(fiscal, { ...independent, authorizationProtocol: "135260000000001" }, [], [hash]), null);
+  assert.equal(verifyMobileFiscalReadings(fiscal, { ...independent, purchaseDocumentKind: "coupon_or_receipt" }, [], [hash]), null);
+  assert.equal(verifyMobileFiscalReadings(fiscal, { ...independent, fiscalAuthorizationStatus: "pending" }, [], [hash]), null);
+  assert.equal(verifyMobileFiscalReadings({ ...fiscal, purchaseDocumentKindConfidence: "medium" }, independent, [], [hash]), null);
+  assert.equal(verifyMobileFiscalReadings({ ...fiscal, fiscalAuthorizationEvidence: "Chave de acesso e QR Code" }, independent, [], [hash]), null);
+  assert.equal(verifyMobileFiscalReadings({ ...fiscal, fiscalAuthorizationEvidence: "NFC-e em contingência pendente de autorização. Protocolo de Autorização 135260000000000" }, independent, [], [hash]), null);
+  const prompt = mobilePurchaseExtractionPrompt.render({ fundingSource: "company_payment" });
+  assert.match(prompt, /DANFE NFC-e/);
+  assert.match(prompt, /contingência pendente de autorização/);
+  assert.match(prompt, /Item não encontrado nunca é sinônimo de uso imediato/);
+  assert.match(prompt, /asset_candidate/);
+  const upload = readFileSync("src/features/financial/inbox/mobile-upload.server.ts", "utf8");
+  assert.match(upload, /verifyMobileFiscalDocuments/);
+  assert.match(upload, /mobilePurchaseAnalysis: analysis/);
+});
+
+test("fiscal extraction normalization preserves authorization evidence and fails closed", () => {
+  const authorized = normalizeMobileFiscalDocument({ purchaseDocumentKind: "nfce", purchaseDocumentKindConfidence: "high",
+    fiscalAuthorizationStatus: "authorized", fiscalAuthorizationEvidence: "Protocolo de autorização 135..." });
+  assert.equal(verifyMobileFiscalReadings(authorized, null, [], ["a".repeat(64)]), null);
+  const contingency = normalizeMobileFiscalDocument({ purchaseDocumentKind: "nfce", purchaseDocumentKindConfidence: "high",
+    fiscalAuthorizationStatus: "pending", fiscalAuthorizationEvidence: "NFC-e emitida em contingência pendente de autorização" });
+  assert.equal(verifyMobileFiscalReadings(contingency, null, [], ["a".repeat(64)]), null);
+  assert.match(mobileFiscalAuthorizationWarnings([], contingency.fiscalAuthorizationStatus)[0]!, /pendente de autorização/);
+  assert.equal(normalizeMobileFiscalDocument({ purchaseDocumentKind: "nfce", purchaseDocumentKindConfidence: "high",
+    fiscalAuthorizationStatus: "authorized", fiscalAuthorizationEvidence: "NFC-e emitida em contingência pendente de autorização" }).fiscalAuthorizationStatus, "pending");
+  assert.deepEqual(normalizeMobileFiscalDocument({ purchaseDocumentKind: "invented", purchaseDocumentKindConfidence: "certain",
+    fiscalAuthorizationStatus: "authorized" }), {
+    purchaseDocumentKind: "unknown", purchaseDocumentKindConfidence: "low", fiscalAuthorizationStatus: "authorized", fiscalAuthorizationEvidence: null,
+  });
+});
+
+test("PDF text check requires fiscal kind and 15-digit authorization protocol, without pending text", () => {
+  assert.deepEqual(fiscalAuthorizationFromPdfText("DANFE NF-e Protocolo de Autorização de Uso: 135260000000000"),
+    { purchaseDocumentKind: "nfe_or_danfe", authorizationProtocol: "135260000000000" });
+  assert.deepEqual(fiscalAuthorizationFromPdfText("DANFE NFC-e Protocolo de Autorização: 135260000000000"),
+    { purchaseDocumentKind: "nfce", authorizationProtocol: "135260000000000" });
+  assert.equal(fiscalAuthorizationFromPdfText("DANFE NFC-e Chave de acesso 12345678901234567890123456789012345678901234"), null);
+  assert.equal(fiscalAuthorizationFromPdfText("DANFE NFC-e Protocolo de Autorização: 135260000000000 EMITIDA EM CONTINGÊNCIA PENDENTE DE AUTORIZAÇÃO"), null);
+  const fiscal = { purchaseDocumentKind: "nfce" as const, purchaseDocumentKindConfidence: "high" as const,
+    fiscalAuthorizationStatus: "authorized" as const, fiscalAuthorizationEvidence: "Protocolo de Autorização 135260000000000" };
+  assert.equal(verifyMobileFiscalReadings(fiscal, { ...fiscal, authorizationProtocol: "135260000000000" },
+    [{ purchaseDocumentKind: "nfce", authorizationProtocol: "135260000000001" }], ["a".repeat(64)]), null);
+});
+
+test("payment proof exists only when its attachment is stored", () => {
+  const receipt = { filename: "receipt-nota.jpg", archiveStatus: "stored" };
+  for (const archiveStatus of ["failed", "skipped_inline", "skipped_unsafe", "skipped_size"]) {
+    assert.deepEqual(storedMobilePurchaseAttachmentState([receipt, { filename: "payment-proof-pix.jpg", archiveStatus }]),
+      { hasPurchaseDocument: true, hasPaymentProof: false });
+  }
+  assert.deepEqual(storedMobilePurchaseAttachmentState([receipt, { filename: "payment-proof-pix.jpg", archiveStatus: "stored" }]),
+    { hasPurchaseDocument: true, hasPaymentProof: true });
 });
 
 test("a chosen sangria is only accepted for cash purchases and with a well-formed identity", () => {
@@ -176,6 +265,8 @@ test("automatic reconciliation can only confirm the link the operator made in th
   assert.match(server, /authorization === "app-pre-link" && oldExpense\.localPurchaseWithdrawalSourceId !== source\.sourceId/);
   assert.match(server, /CHANGE_NOT_RETURNED/);
   assert.match(server, /withdrawal_expense_linked_by_app/);
+  assert.match(server, /preLinks: await listWithdrawalPreLinks/);
+  assert.match(server, /localPurchaseId/);
   assert.match(server, /sourceSettlementSummary\(source\.amountCents - changeReturnedCents\)/);
   assert.match(readFileSync("src/features/financial/cash-closures/service.server.ts", "utf8"), /autoLinkAppPreLinks\(result\.closure\.id, input\.context\)/);
   const purchase = readFileSync("src/features/purchasing/local-purchase.server.ts", "utf8");

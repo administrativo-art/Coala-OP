@@ -1,4 +1,4 @@
-import type { MobilePurchaseAnalysis } from "./mobile-upload";
+import type { MobileFiscalVerification, MobilePurchaseAnalysis } from "./mobile-upload";
 
 export type FinancialInboxStatus =
   | "pending_review"
@@ -348,6 +348,7 @@ export type FinancialInboxMessage = {
   attachments: FinancialInboxAttachment[];
   mobilePurchaseFundingSource?: "cash_withdrawal" | "company_payment";
   mobilePurchaseAnalysis?: MobilePurchaseAnalysis | null;
+  mobileFiscalVerification?: MobileFiscalVerification | null;
   rawStoragePath: string | null;
   rawSha256: string | null;
   archiveWarnings: string[];

@@ -35,6 +35,34 @@ class ViewModelsTest {
     private val queue = MemoryQueue()
     private val scheduler = WorkScheduler { }
 
+    @Test fun pendingWithdrawalLinkCanBeCancelledWithoutCallingServer() = runTest {
+        var links = 0; var uploads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse { uploads++; return DemoApi().upload(fields, documents, expectedOwner) }
+            override suspend fun link(request: LinkWithdrawal): PurchaseResponse { links++; return DemoApi().link(request) }
+        }
+        val vm = PurchaseViewModel(repository(auth, api), mode, queue, QueueSync(auth, queue, repository(auth, api)), scheduler)
+        runCurrent()
+        val withdrawal = vm.state.value.withdrawals!!.withdrawals.first()
+        val purchase = vm.state.value.withdrawals!!.awaitingPurchases.firstOrNull()
+            ?: AwaitingPurchase("purchase-1", withdrawal.unitId, "Mercado", withdrawal.date, withdrawal.amountCents)
+        vm.prepareLink(purchase, withdrawal)
+        assertNotNull(vm.state.value.pendingLink)
+        assertEquals(0, links)
+        vm.cancelLink()
+        assertNull(vm.state.value.pendingLink)
+        assertEquals(0, links)
+        vm.select("cash_withdrawal", withdrawal)
+        assertNotNull(vm.state.value.selected)
+        vm.leaveReview()
+        assertNull(vm.state.value.selected)
+        assertEquals(0, uploads)
+        vm.prepareLink(purchase, withdrawal)
+        vm.link(); advanceUntilIdle()
+        assertEquals(1, links)
+        assertNull(vm.state.value.pendingLink)
+    }
+
     @Test fun restoredSessionStartsLockedAndPasswordFailureDoesNotUnlock() = runTest {
         val biometric = object : BiometricPreferences {
             override fun enabled(uid: String) = false; override fun ready(uid: String) = false
@@ -140,13 +168,15 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() {
             override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse {
                 val buffer = okio.Buffer(); fields.getValue("submissionId").writeTo(buffer); sentId = buffer.readUtf8(); assertEquals("test-owner", expectedOwner)
-                return UploadResponse(Submission("server", false, "pending_review", ReceiptAnalysis("Fornecedor", purchaseDate = "2026-10-01", amountCents = 5000, items = listOf(AnalysisItem("Leite", 10.0, "un", 500, 5000)))))
+                return UploadResponse(Submission("server", false, "pending_review", ReceiptAnalysis("Fornecedor", purchaseDate = "2026-10-01", amountCents = 5000, items = listOf(AnalysisItem("Leite", 10.0, "un", 500, 5000, aiTreatment = "item_not_found", aiConfidence = "high", aiReason = "Não há produto compatível.")))))
             }
             override suspend fun confirm(request: ConfirmPurchase): PurchaseResponse { confirms++; assertEquals(sentId, request.submissionId); return PurchaseResponse(PurchaseResult("p", "confirmed", stockEntry = if (confirms == 1) "pending" else "done")) }
         }
         val repo = repository(auth, api); val vm = PurchaseViewModel(repo, mode, queue, QueueSync(auth, queue, repo), scheduler)
         runCurrent(); vm.select("cash_withdrawal"); val id = vm.state.value.selected!!.submissionId; vm.attach(pending().receipts.single(), false); vm.upload(); advanceUntilIdle()
         assertEquals(id, sentId); assertEquals("UPLOADED", queue.rows.value.single().state); assertNotNull(vm.state.value.review)
+        assertEquals("item_not_found", vm.state.value.review!!.items.single().aiTreatment)
+        assertEquals("Não há produto compatível.", vm.state.value.review!!.items.single().aiReason)
         // The simulation has several units, so a purchase without a withdrawal needs the unit chosen in the review.
         vm.review(vm.state.value.review!!.copy(unitId = "simulation-unit", accountPlanId = "account", resultCenterId = "center")); vm.confirm(); advanceUntilIdle()
         assertEquals(2, confirms); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)

@@ -1,13 +1,13 @@
 import "server-only";
 
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
-import { mobileInboxDocumentId } from "@/features/financial/inbox/mobile-upload";
+import { mobileInboxDocumentId, mobilePurchaseMayOmitPaymentProof, storedMobilePurchaseAttachmentState } from "@/features/financial/inbox/mobile-upload";
 import { cashClosureId } from "@/features/financial/cash-closures/persistence";
 import { autoLinkAppPreLinks, LOCAL_PURCHASE_WITHDRAWAL_LINKS, readClassificationCatalog } from "@/features/financial/cash-closures/withdrawal-classification.server";
 import { FINANCIAL_COLLECTIONS } from "@/features/financial/lib/constants";
@@ -15,7 +15,14 @@ import type { BaseProduct, Product } from "@/types";
 import { buildLocalPurchaseStockLine, type LocalPurchaseStockLine } from "./local-purchase-stock";
 import { applyLocalPurchaseStockEntry, rememberLocalPurchaseItemLinks } from "./local-purchase-stock.server";
 import { resolveLocalPurchaseWithdrawal } from "./local-purchase-withdrawals.server";
-import { confirmLocalPurchaseSchema, linkLocalPurchaseWithdrawalSchema, localPurchaseExpenseId } from "./local-purchase";
+import {
+  confirmLocalPurchaseSchema,
+  effectiveLocalPurchaseItemTreatment,
+  linkLocalPurchaseWithdrawalSchema,
+  localPurchaseExpenseId,
+  localPurchaseItemResolutionStatus,
+  summarizeLocalPurchaseItems,
+} from "./local-purchase";
 
 function failure(code: string, safeMessage: string, kind: "VALIDATION" | "AUTHORIZATION" | "NOT_FOUND" | "CONFLICT" = "VALIDATION"): never {
   throw new AppError({ code: `LOCAL_PURCHASE_${code}`, kind, safeMessage });
@@ -111,10 +118,12 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
     failure("FUNDING_SOURCE_MISMATCH", "A origem do pagamento não corresponde aos documentos enviados.", "CONFLICT");
   }
   const uploadedAttachments = sourceMessage.get("attachments");
-  const hasPaymentProof = Array.isArray(uploadedAttachments)
-    && uploadedAttachments.some((attachment) => String(attachment?.filename ?? "").startsWith("payment-proof-"));
-  if (input.fundingSource === "company_payment" && !hasPaymentProof) {
-    failure("PAYMENT_PROOF_REQUIRED", "A compra normal exige comprovante de pagamento.", "CONFLICT");
+  const attachments = Array.isArray(uploadedAttachments) ? uploadedAttachments : [];
+  const { hasPurchaseDocument, hasPaymentProof } = storedMobilePurchaseAttachmentState(attachments);
+  if (!hasPurchaseDocument) failure("DOCUMENT_MISSING", "A nota de compra enviada não está disponível.", "CONFLICT");
+  if (input.fundingSource === "company_payment" && !hasPaymentProof
+    && !mobilePurchaseMayOmitPaymentProof(sourceMessage.get("mobilePurchaseAnalysis"), sourceMessage.get("mobileFiscalVerification"), attachments)) {
+    failure("PAYMENT_PROOF_REQUIRED", "Compra normal sem documento fiscal autorizado e identificado exige comprovante de pagamento.", "CONFLICT");
   }
   if (input.fundingSource === "cash_withdrawal" && hasPaymentProof) {
     failure("PAYMENT_PROOF_UNEXPECTED", "Compra por sangria não aceita comprovante de pagamento.", "CONFLICT");
@@ -141,6 +150,31 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
     if (!built.ok) failure("STOCK_LINE_INVALID", `${item.description}: ${built.error}`);
     else stockLines.push(built.line);
   }
+  const storedAnalysis = sourceMessage.get("mobilePurchaseAnalysis") as { items?: Array<Record<string, unknown>> } | null | undefined;
+  const storedAnalysisItems = Array.isArray(storedAnalysis?.items) ? storedAnalysis.items : [];
+  const classifiedItems = input.items.map((item, itemIndex) => {
+    const sourceItem = storedAnalysisItems[itemIndex];
+    const sourceDescription = typeof sourceItem?.description === "string" ? sourceItem.description.trim() : "";
+    const sameDescription = sourceDescription.localeCompare(item.description.trim(), "pt-BR", { sensitivity: "base" }) === 0;
+    const sourceTreatment = sourceItem?.aiTreatment;
+    const aiTreatment = sameDescription && (sourceTreatment === "existing_item" || sourceTreatment === "item_not_found"
+      || sourceTreatment === "asset_candidate" || sourceTreatment === "immediate_use" || sourceTreatment === "needs_review")
+      ? sourceTreatment : "needs_review";
+    const treatment = effectiveLocalPurchaseItemTreatment({ stock: item.stock, aiTreatment });
+    return {
+      ...item,
+      aiTreatment,
+      aiConfidence: sameDescription && (sourceItem?.aiConfidence === "high" || sourceItem?.aiConfidence === "medium" || sourceItem?.aiConfidence === "low")
+        ? sourceItem.aiConfidence : "low",
+      aiReason: sameDescription && typeof sourceItem?.aiReason === "string" && sourceItem.aiReason.trim()
+        ? sourceItem.aiReason.trim().slice(0, 240)
+        : "A linha foi alterada ou não recebeu classificação automática; revise sua destinação.",
+      itemId: `item-${itemIndex + 1}`,
+      treatment,
+      resolutionStatus: localPurchaseItemResolutionStatus(treatment),
+    };
+  });
+  const itemSummary = summarizeLocalPurchaseItems(classifiedItems);
   const applyStockEntry = (lines: LocalPurchaseStockLine[]) => applyLocalPurchaseStockEntry({
     purchaseId, unitId: input.unitId, unitName, supplierName: input.supplierName, lines, actorId: actor.userDoc.id, actorName,
   }).then(() => financialDbAdmin.collection("localPurchases").doc(purchaseId).set({ stockEntryStatus: "done", updatedAt: new Date().toISOString() }, { merge: true }));
@@ -164,8 +198,11 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
       if (existing.get("submissionId") !== input.submissionId) failure("ID_COLLISION", "Identificador de compra em conflito.", "CONFLICT");
       // A retry finishes the stock entry of the purchase as it was confirmed, never of the new payload.
       const pending = existing.get("stockEntryStatus") === "pending" ? existing.get("stockLines") as LocalPurchaseStockLine[] : [];
+      const storedItems = Array.isArray(existing.get("items")) ? existing.get("items") as Array<{ resolutionStatus?: string }> : [];
+      const storedSummary = summarizeLocalPurchaseItems(storedItems.map((item) => ({ resolutionStatus: item.resolutionStatus === "resolved" ? "resolved" : "pending" })));
       return { id: purchaseId, status: String(existing.get("status")), duplicate: true, pendingStockLines: pending,
-        storedStockEntry: existing.get("stockEntryStatus") === "done" ? "done" as const : "not_needed" as const };
+        storedStockEntry: existing.get("stockEntryStatus") === "done" ? "done" as const : "not_needed" as const,
+        itemSummary: storedSummary };
     }
 
     if (withdrawal && withdrawalLinkRef) {
@@ -206,7 +243,8 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
       accountPlanName: catalog.accountPlanName,
       resultCenterId: catalog.resultCenterId,
       resultCenterName: catalog.resultCenterName,
-      items: input.items,
+      items: classifiedItems,
+      ...itemSummary,
       note: input.note ?? "",
       ...(withdrawal ? { withdrawalPreLink: {
         ...withdrawal,
@@ -287,7 +325,7 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
       fundingSource: input.fundingSource,
       withdrawalSourceId: withdrawal?.sourceId ?? null,
     });
-    return { id: purchaseId, status, duplicate: false, pendingStockLines: stockLines, storedStockEntry: "not_needed" as const };
+    return { id: purchaseId, status, duplicate: false, pendingStockLines: stockLines, storedStockEntry: "not_needed" as const, itemSummary };
   });
 
   const { pendingStockLines, storedStockEntry, ...purchase } = result;
@@ -304,5 +342,5 @@ export async function confirmLocalPurchase(raw: unknown, actor: ServerUserContex
   const status = withdrawal && purchase.status === "awaiting_cash_withdrawal"
     ? await reconcileNow(purchaseId, input.unitId, withdrawal.date, actor)
     : purchase.status;
-  return { ...purchase, status, stockEntry, stockItemCount: pendingStockLines.length };
+  return { ...purchase, status, stockEntry, stockItemCount: pendingStockLines.length, ...result.itemSummary };
 }

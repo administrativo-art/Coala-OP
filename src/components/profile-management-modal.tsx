@@ -531,7 +531,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </AccordionTrigger>
                                   <AccordionContent className="space-y-2 p-1 pt-4">
                                     {renderPermissionSwitch("permissions.app.localPurchase.register" as any, "Registrar compra local", "Permite fotografar a nota e o comprovante, revisar e registrar uma compra recebida na unidade, e vinculá-la à sangria do caixa.")}
-                                    {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, os itens ficam como consumo direto.", !appLocalPurchaseWatch, true)}
+                                    {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, a IA ainda classifica os itens, mas não vincula produto nem movimenta estoque.", !appLocalPurchaseWatch, true)}
                                   </AccordionContent>
                                 </AccordionItem>
 
