@@ -48,7 +48,8 @@ class ViewModelsTest {
             ?: AwaitingPurchase("purchase-1", withdrawal.unitId, "Mercado", withdrawal.date, withdrawal.amountCents)
         vm.prepareLink(purchase, withdrawal)
         assertNotNull(vm.state.value.pendingLink)
-        assertEquals(withdrawal.unitId, vm.state.value.unitFilter)
+        val scope = com.coalaone.go.domain.Rules.purchaseScope(vm.state.value.context!!.units, withdrawal.unitId) ?: (com.coalaone.go.domain.Rules.ALL_UNITS to com.coalaone.go.domain.Rules.ALL_UNITS)
+        assertEquals(scope, vm.state.value.organizationFilter to vm.state.value.groupFilter)
         assertEquals(0, links)
         val focus = vm.state.value.linkFocusRequest
         vm.select("cash_withdrawal", withdrawal)

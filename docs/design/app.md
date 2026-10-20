@@ -264,7 +264,7 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 
 ### Seletor de unidade no cabeçalho (`UnitPickerHeader`)
 
-**Decidido.** Escala e Metas usam o mesmo componente, dentro da barra escura, logo abaixo do título.
+**Decidido.** Escala e Metas usam o mesmo componente, dentro da barra escura, logo abaixo do título. A Compra local reaproveita o mesmo componente para a **organização** (`label = "Organização"`, `action = "Trocar"`); o texto abaixo descreve o uso padrão, de unidade.
 
 - Caixa de largura total, borda de 1 dp (`onDark` a 14%), raio de 14 dp, 14 dp de margem lateral e 10 dp vertical.
 - À esquerda: "UNIDADE" em caixa alta e, embaixo, o nome da unidade escolhida (uma linha, com reticências) ou "Escolher unidade".
@@ -273,6 +273,15 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 - Toque abre a folha de seleção "Unidade"; a seta vira para cima enquanto ela está aberta.
 - Desabilitado enquanto a tela carrega.
 - As opções vêm de `Rules.unitChoices`: com mais de uma unidade, a primeira é **"Todas as unidades"**.
+
+### Filtro da lista de sangrias (Compra local)
+
+**Decidido (2026-10-20).** Só organização e grupo; os cartões já vêm separados por unidade, então não há filtro de unidade.
+
+- Organização no cabeçalho escuro com `UnitPickerHeader`; grupos em `FilterChip`s numa faixa com rolagem horizontal, logo abaixo de "Sangrias aguardando nota".
+- Cada opção mostra quantas sangrias tem (`Quiosques · 5`). Só aparecem organizações e grupos com sangria pendente; a escolha atual continua listada mesmo se esvaziar.
+- Filtro com uma opção só não aparece. A última escolha fica salva no aparelho por conta; escolha que deixou de existir abre em "Todas".
+- Enquanto uma vinculação está aberta, o filtro vai para o grupo da sangria e fica travado. Filtro sem resultado mostra "Ver todas".
 
 ### Folha de seleção (`PickerSheet`)
 
