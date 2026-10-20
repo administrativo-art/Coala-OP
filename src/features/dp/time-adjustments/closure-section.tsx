@@ -9,6 +9,7 @@ import { errorMessageOf } from "@/components/patterns/panel-form";
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
 import type { ClosurePerson } from "./closure-core";
@@ -36,6 +37,9 @@ function previousCompetence() {
 }
 
 /** Fechamento do ponto por competência: declaração por pessoa, bloqueio com pedido pendente, versão e reabertura. */
+// Último dia da competência (o banco do DP olha o ciclo que contém o fim do mês fechado).
+const lastDayOf = (competence: string) => new Date(Date.UTC(Number(competence.slice(0, 4)), Number(competence.slice(5, 7)), 0)).toISOString().slice(0, 10);
+
 export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string }> }) {
   const [competence, setCompetence] = useState(previousCompetence);
   const [data, setData] = useState<ClosurePayload | null>(null);
@@ -133,6 +137,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
         <SidePanel open onOpenChange={(next) => { if (!next) setSelected(null); }} kicker={`Declaração do fechamento · ${dateBR(`${competence}-01`).slice(3)}`} title={selected.name ?? nameOf(selected.uid)}
           subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências`}>
           {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
+          {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} /> : null}
           <PanelSection title="Ajustes de ponto">
             {selected.adjustments.length ? selected.adjustments.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">

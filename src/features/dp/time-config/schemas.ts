@@ -198,6 +198,14 @@ const overtimeFieldsObjectSchema = z.object({
     negativeLimitMinutes: z.number().int().positive().max(100000).optional(),
     expirationDays: z.number().int().positive().max(3650).optional(),
     expiredBalanceDestination: z.enum(['payroll', 'forfeit', 'review']),
+    cycle: z.object({
+      unit: z.enum(['month', 'day']),
+      length: z.number().int().min(1, 'O ciclo precisa ter ao menos 1 período.').max(366, 'O ciclo vai até 366.'),
+      anchorDate: dateSchema,
+      residualDestination: z.enum(['carry', 'payroll', 'review', 'forfeit']),
+    }).strict().refine((cycle) => cycle.unit === 'day' || cycle.length <= 12, { message: 'O ciclo em meses vai até 12 meses.', path: ['length'] })
+      .refine((cycle) => cycle.unit !== 'month' || Number(cycle.anchorDate.slice(8, 10)) <= 28, { message: 'No ciclo em meses, use marco entre os dias 1 e 28.', path: ['anchorDate'] })
+      .optional(),
   }).strict(),
   externalCoverageRule: z.enum(['origin', 'execution_unit', 'manual_review']),
 }).strict();

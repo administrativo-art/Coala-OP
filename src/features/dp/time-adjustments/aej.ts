@@ -21,7 +21,10 @@ export type AejEmployee = {
   markings: Array<{ workDate: string; markedAt: string; nsr: number; discardReason: string | null }>;
   inclusions: Array<{ workDate: string; markedAt: string; reason: string }>;
   shifts: AejShift[];
+  /** Registro 07: "1" DSR, "2" falta não justificada, "3" movimento do banco ("1" inclusão, "2" compensação), "4" folga compensatória de feriado. */
+  absences?: AejAbsence[];
 };
+export type AejAbsence = { date: string; kind: '1' | '2' | '3' | '4'; minutes?: number; movement?: '1' | '2' };
 export type AejInput = {
   employer: { cnpj: string; legalName: string; caepf?: string | null; cno?: string | null };
   startDate: string; endDate: string; generatedAt: string;
@@ -93,6 +96,14 @@ export function generateAej(input: AejInput) {
         if ((kind === 'D' || row.source === 'I') && !motivo) throw new Error(`AEJ_MOTIVO_MISSING:${employee.cpf}:${date}`);
         push('05', ['05', vinculo, row.at, row.source === 'O' ? '1' : '', kind, seq, row.source, code, motivo].join('|'));
       }
+    }
+  });
+  // Registro 07 depois de todas as marcações: ausências e banco de horas por vínculo, em ordem de data.
+  employees.forEach((employee, index) => {
+    for (const item of [...(employee.absences ?? [])].filter((entry) => entry.date >= input.startDate && entry.date <= input.endDate)
+      .sort((left, right) => left.date.localeCompare(right.date) || left.kind.localeCompare(right.kind) || (left.movement ?? '').localeCompare(right.movement ?? ''))) {
+      if (item.kind === '3' && (!item.minutes || !item.movement)) throw new Error(`AEJ_BANK_MOVEMENT_INVALID:${employee.cpf}:${item.date}`);
+      push('07', ['07', String(index + 1), item.kind, item.date, item.kind === '3' ? String(item.minutes) : '', item.kind === '3' ? item.movement! : ''].join('|'));
     }
   });
   push('08', ['08', aejText(input.ptrp.name, 150), aejText(input.ptrp.version, 8), '1', digits(input.ptrp.developerCnpj), aejText(input.ptrp.developerName, 150),

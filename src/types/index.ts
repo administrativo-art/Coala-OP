@@ -3768,6 +3768,15 @@ export type DPOvertimeCategory = {
   requiresApproval: boolean;
 };
 
+export type DPTimeBankCycle = {
+  unit: 'month' | 'day';
+  length: number;
+  /** Marco inicial (AAAA-MM-DD); no ciclo em meses, o dia do marco abre cada período. */
+  anchorDate: string;
+  /** Saldo ao fim do ciclo: transportado ao próximo, pago/descontado na folha, para revisão do DP ou zerado. */
+  residualDestination: 'carry' | 'payroll' | 'review' | 'forfeit';
+};
+
 export type DPOvertimePolicy = {
   id: string;
   lineageId: string;
@@ -3789,6 +3798,8 @@ export type DPOvertimePolicy = {
     negativeLimitMinutes?: number;
     expirationDays?: number;
     expiredBalanceDestination: 'payroll' | 'forfeit' | 'review';
+    /** Ciclo do banco: períodos seguidos de `length` meses ou dias a partir do marco; o residual segue o destino no fim de cada ciclo. */
+    cycle?: DPTimeBankCycle;
   };
   externalCoverageRule: 'origin' | 'execution_unit' | 'manual_review';
   supersedesId?: string;

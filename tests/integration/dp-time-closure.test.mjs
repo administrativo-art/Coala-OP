@@ -14,6 +14,7 @@ const { closeCompetence, readCompetenceClosure, reopenCompetence } = await impor
 const { agreeWithMirror, generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
+const { generateBankMonth, readBankStatement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
 
 test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
@@ -124,6 +125,44 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(pdf.filename, 'espelho-ponto-2026-08-v2.pdf');
     await assert.rejects(mirrorPdf(reviewer, competence, userId, mirrorDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
 
+    // Banco de horas do mês fechado: jornada de 7h20, turno de 4h com batida incluída, dia escalado sem batida e folga.
+    const journeyId = `${prefix}-journey`;
+    const scheduleRef = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+    await Promise.all([
+      dbAdmin.collection('dp_journeys').doc(journeyId).set({ lineageId: journeyId, version: 1, status: 'published', validFrom: '2026-08-10', cycleLengthDays: 7,
+        days: [1, 2, 3, 4, 5, 6, 7].map((dayIndex) => ({ dayIndex, plannedMinutes: dayIndex === 7 ? 0 : 440, isRestDay: dayIndex === 7 })), toleranceMinutes: 5 }),
+      dbAdmin.collection('dp_overtimePolicies').doc(`${prefix}-policy`).set({ lineageId: `${prefix}-policy`, version: 1, status: 'published', name: 'Banco do ensaio',
+        applicability: { scope: { kind: 'company' }, collaboratorIds: [userId] }, validFrom: '2026-01-01', externalCoverageRule: 'origin',
+        categories: [{ id: 'banco', name: 'Banco', trigger: 'workday', ratePercent: 50, destination: 'time_bank', bankCreditFactor: 1, requiresApproval: false }],
+        timeBank: { enabled: true, allowNegativeBalance: true, expiredBalanceDestination: 'review', cycle: { unit: 'month', length: 1, anchorDate: '2026-01-01', residualDestination: 'review' } } }),
+      scheduleRef.set({ year: 2026, month: 8, unitId, locked: true, createdAt: new Date('2026-07-20T00:00:00Z') }),
+    ]);
+    const plannedShift = (id, data) => scheduleRef.collection('shifts').doc(id).set({ scheduleId: scheduleRef.id, unitId, userId, type: 'work', startTime: '08:00', endTime: '12:00',
+      journeyResolution: { journeyId, lineageId: journeyId, version: 1 }, ...data });
+    await Promise.all([plannedShift('a', { date: '2026-08-12' }), plannedShift('b', { date: '2026-08-13' }), plannedShift('c', { date: '2026-08-16', type: 'day_off', startTime: '00:00', endTime: '00:00' })]);
+    const bankDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date('2026-10-17T12:00:00.000Z') };
+    await assert.rejects(generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 1 }, bankDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
+    await assert.rejects(readBankStatement(reviewer, { employeeUid: userId }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    const pendingStatement = await readBankStatement(titular, { date: '2026-08-20' }, bankDeps);
+    assert.deepEqual([pendingStatement.statement.missing, pendingStatement.closures], [['2026-08'], { '2026-08': 2 }]);
+    const bankMonth = await generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 2 }, bankDeps);
+    assert.deepEqual(bankMonth.days.filter((item) => item.lines.length).map((item) => [item.date, item.lines.map((line) => `${line.nature}:${line.minutes}:${line.reason}`)]),
+      [['2026-08-12', ['bank_debit:200:worked_less']], ['2026-08-13', ['bank_debit:440:missing_day']]]);
+    assert.equal(bankMonth.totals.balance, -640);
+    assert.deepEqual(bankMonth.policies, [{ id: `${prefix}-policy`, version: 1 }]);
+    assert.equal((await generateBankMonth(closer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, bankDeps)).generatedAt, bankMonth.generatedAt);
+    const statement = (await readBankStatement(closer, { employeeUid: userId, date: '2026-08-20' }, bankDeps)).statement;
+    assert.deepEqual([statement.balanceMinutes, statement.debit, statement.missing, statement.ended], [-640, 640, [], true]);
+    assert.deepEqual(statement.residual, { minutes: -640, destination: 'review' });
+    assert.equal(statement.settlement, null);
+    // Encerramento do ciclo: só quem fecha, com o residual conferido; uma vez, sem apagar nada.
+    await assert.rejects(settleBankCycle(titular, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    await assert.rejects(settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -600 }, bankDeps), { code: 'PTRP_BANK_RESIDUAL_CHANGED' });
+    const settled = await settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps);
+    assert.deepEqual([settled.minutes, settled.destination, settled.settledBy, settled.closureVersions], [-640, 'review', closer.decoded.uid, { '2026-08': 2 }]);
+    assert.equal((await settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps)).settledAt, settled.settledAt);
+    assert.equal((await readBankStatement(titular, { date: '2026-08-20' }, bankDeps)).statement.settlement.minutes, -640);
+
     // AEJ do estabelecimento: só de competência fechada, com a inclusão aprovada e o motivo do AEJ.
     const treatment = (await hrDbAdmin.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', userId).limit(1).get()).docs[0].data();
     const readArp = async () => ({ profile: { establishmentId: treatment.establishmentId, employerCnpj: '14276603000125', employerLegalName: 'Empregador do ensaio LTDA',
@@ -147,11 +186,13 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const aej = await exportAej(admin, input, aejDeps);
     const lines = Buffer.from(aej.aejBase64, 'base64').toString('latin1').split('\r\n');
     assert.deepEqual(lines.filter((line) => line.startsWith('05|')), [
-      '05|1|2026-08-12T08:00:00-0300||E|001|I||Esqueci de bater a entrada.',
+      '05|1|2026-08-12T08:00:00-0300||E|001|I|HC001|Esqueci de bater a entrada.',
       '05|1|2026-08-12T12:00:00-0300|1|S|001|O||',
     ]);
     assert.equal(aej.counts['05'], 2);
-    assert.equal(aej.warnings[0].code, 'NO_SHIFT');
+    assert.deepEqual(aej.warnings, []);
+    // Registro 07: débitos do banco por dia, falta não justificada como "2" e folga sem trabalho como DSR.
+    assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|2|2026-08-13||', '07|1|3|2026-08-13|440|2', '07|1|1|2026-08-16||']);
     const audit = (await hrDbAdmin.collection(AEJ_EXPORTS).where('workspaceId', '==', workspaceId).where('sha256', '==', aej.sha256).get()).docs[0].data();
     assert.equal(audit.sha256, aej.sha256);
     assert.deepEqual(audit.closureVersions, { '2026-08': 2 });

@@ -4,12 +4,13 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPEmployeeIdentity, readRepPForAej, REP_P_DEVELOPER_CNPJ, signPtrpDetached } from '@/features/dp/rep-p/service.server';
+import { bankMonthForAej } from '@/features/dp/time-bank/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 
-import { aejShiftOf, generateAej, type AejEmployee, type AejShift } from './aej';
+import { aejShiftOf, generateAej, type AejAbsence, type AejEmployee, type AejShift } from './aej';
 import type { AejExportInput } from './schemas';
 import { AEJ_EXPORTS, CLOSURES, closureKey, TREATMENTS } from './service.server';
 
@@ -19,7 +20,8 @@ export const PTRP_VERSION = '1.0.0';
 const DEVELOPER_NAME = 'CT SORVETES LTDA';
 const MAX_DAYS = 62;
 
-type Dependencies = { mainDb: Firestore; hrDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached };
+type Dependencies = { mainDb: Firestore; hrDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached;
+  readBank?: (workspaceId: string, competence: string, uid: string, actorUid: string) => ReturnType<typeof bankMonthForAej> };
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(), readArp: readRepPForAej, readIdentity: readRepPEmployeeIdentity, sign: signPtrpDetached };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' = 'VALIDATION') {
@@ -46,6 +48,9 @@ function generateAejSafely(input: Parameters<typeof generateAej>[0]) {
  */
 export async function exportAej(context: ServerUserContext, input: AejExportInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
+  // Banco apurado nos mesmos bancos de dados do AEJ (o REP-P e o PTRP moram no coala-rh).
+  const readBank = deps.readBank ?? ((workspaceId: string, competence: string, uid: string, actorUid: string) =>
+    bankMonthForAej(workspaceId, competence, uid, actorUid, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.hrDb }));
   const days = (Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`)) / 86_400_000 + 1;
   if (days < 1 || days > MAX_DAYS) throw fail('PTRP_AEJ_RANGE_INVALID', `Escolha um período de 1 a ${MAX_DAYS} dias.`);
   if (!deps.developerEmail) throw fail('PTRP_AEJ_DEVELOPER_EMAIL_MISSING', 'Configure o e-mail da desenvolvedora do PTRP (PTRP_DEVELOPER_EMAIL) antes de gerar o AEJ.', 'CONFLICT');
@@ -77,10 +82,23 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
   const users = persons.length ? await deps.mainDb.getAll(...persons.map((person) => deps.mainDb.collection('users').doc(person.uid))) : [];
   const employees: AejEmployee[] = await Promise.all(persons.map(async (person, index) => {
     const ids = [person.uid, typeof users[index]?.get('hrEmployeeId') === 'string' ? String(users[index].get('hrEmployeeId')) : null];
-    const shifts = (await Promise.all(competences.map((competence) => readRepPMonthOfPerson(ids, competence, { db: deps.mainDb })))).flatMap((month) => month.shifts)
+    const months = await Promise.all(competences.map((competence) => readRepPMonthOfPerson(ids, competence, { db: deps.mainDb })));
+    const shifts = months.flatMap((month) => month.shifts)
       .map(aejShiftOf).filter((shift): shift is AejShift => shift !== null && shift.date >= input.startDate && shift.date <= input.endDate);
+    // Registro 07: folga sem trabalho como DSR, falta não justificada como "2" e, por dia, a soma dos créditos (inclusão) e dos
+    // débitos (compensação) do banco apurado. Qual folga é o DSR da semana e a natureza do débito são pendências do plano.
+    const bank = await Promise.all(competences.map((competence) => readBank(context.workspace_id, competence, person.uid, context.decoded.uid)));
+    const bankDays = bank.flatMap((month) => month.days);
+    const absences: AejAbsence[] = [
+      ...bankDays.filter((day) => day.kind === 'rest_day' && !day.workedMinutes).map((day) => ({ date: day.date, kind: '1' as const })),
+      ...bankDays.filter((day) => day.unjustifiedAbsence).map((day) => ({ date: day.date, kind: '2' as const })),
+      ...bankDays.flatMap((day) => (['bank_credit', 'bank_debit'] as const).flatMap((nature) => {
+        const minutes = day.lines.filter((line) => line.nature === nature).reduce((total, line) => total + line.minutes, 0);
+        return minutes ? [{ date: day.date, kind: '3' as const, minutes, movement: nature === 'bank_credit' ? '1' as const : '2' as const }] : [];
+      })),
+    ];
     return {
-      cpf: person.cpf, name: person.name, shifts,
+      cpf: person.cpf, name: person.name, shifts, absences,
       markings: arp.markings.filter((item) => item.employeeCpf === person.cpf)
         .map((item) => ({ workDate: item.workDate, markedAt: item.markedAt, nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
       inclusions: active.filter((item) => item.type === 'inclusion' && item.employeeUid === person.uid && item.markedAt)

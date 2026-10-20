@@ -6,6 +6,8 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 
+import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
+
 import { repPOwnMonthSchema } from './schemas';
 
 /** Turno escalado da própria pessoa num dia, com o intervalo do cadastro do turno e a tolerância da jornada; nunca dado fiscal. */
@@ -32,6 +34,9 @@ export type RepPOwnScheduledShift = {
   breakMinPauseMinutes: number | null;
   /** Tolerância da versão da jornada resolvida na escrita do turno; null = sem jornada ou sem tolerância. */
   toleranceMinutes: number | null;
+  /** Versão da jornada do turno e a carga dela no dia (referência do banco de horas); null sem jornada resolvida. */
+  journeyId: string | null;
+  referenceMinutes: number | null;
 };
 
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
@@ -43,6 +48,19 @@ const defaults: Dependencies = { db: dbAdmin };
 function toMinutes(value: string) { return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)); }
 function text(value: unknown) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
 function minutes(value: unknown) { return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null; }
+function civilDateOf(value: unknown) {
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') return (value.toDate() as Date).toISOString().slice(0, 10);
+  return null;
+}
+function journeyOf(doc: { get(field: string): unknown } | undefined): BankJourney | null {
+  if (!doc) return null;
+  const days = doc.get('days');
+  const weeklyRest = doc.get('weeklyRest') as BankJourney['weeklyRest'];
+  return Array.isArray(days) && typeof doc.get('validFrom') === 'string' && Number.isInteger(doc.get('cycleLengthDays'))
+    ? { days: days as BankJourney['days'], validFrom: String(doc.get('validFrom')), cycleLengthDays: Number(doc.get('cycleLengthDays')), weeklyRest: weeklyRest ?? null }
+    : null;
+}
 function millis(value: unknown) {
   return value && typeof value === 'object' && 'toMillis' in value && typeof value.toMillis === 'function' ? Number(value.toMillis()) : 0;
 }
@@ -62,7 +80,7 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
  * Escala do mês de uma pessoa pelos identificadores dela (uid e cadastro do RH). Usada pela tela própria e pelo
  * espelho do fechamento, que confere a permissão antes de chamar.
  */
-export async function readRepPMonthOfPerson(ids: Array<string | null | undefined>, competence: string, injected: Partial<Dependencies> = {}) {
+export async function readRepPMonthOfPerson(ids: Array<string | null | undefined>, competence: string, injected: Partial<Dependencies> = {}, options: { holidays?: boolean } = {}) {
   const { db } = { ...defaults, ...injected };
   const [year, month] = competence.split('-').map(Number);
   const start = `${competence}-01`;
@@ -70,7 +88,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
   const ownIds = [...new Set(ids.filter((value): value is string => Boolean(value)))].slice(0, 10);
 
   const [schedules, shifts] = await Promise.all([
-    db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'locked', 'createdAt').get(),
+    db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'locked', 'createdAt', 'calendarId').get(),
     db.collectionGroup('shifts').where('userId', 'in', ownIds).where('date', '>=', start).where('date', '<=', end)
       .orderBy('date', 'asc').limit(MAX_OWN_SHIFTS).get(),
   ]);
@@ -92,7 +110,13 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     unitIds.length ? db.getAll(...unitIds.map((id) => db.collection('dp_units').doc(id))) : [],
     journeyIds.length ? db.getAll(...journeyIds.map((id) => db.collection('dp_journeys').doc(id))) : [],
   ]);
-  const toleranceByJourney = new Map(journeys.filter((doc) => doc.exists).map((doc) => [doc.id, minutes(doc.get('toleranceMinutes'))]));
+  const journeyById = new Map(journeys.filter((doc) => doc.exists).map((doc) => [doc.id, doc]));
+  const toleranceByJourney = new Map([...journeyById].map(([id, doc]) => [id, minutes(doc.get('toleranceMinutes'))]));
+  // Feriados do calendário das escalas oficiais do mês, só para o banco de horas (um calendário por ano, até 200 datas).
+  const calendarIds = !options.holidays ? [] : [...new Set(schedules.docs.filter((doc) => official.has(doc.id)).map((doc) => text(doc.get('calendarId'))).filter((value): value is string => Boolean(value)))].slice(0, 10);
+  const holidaySnapshots = await Promise.all(calendarIds.map((id) => db.collection('dp_calendars').doc(id).collection('holidays').limit(200).get()));
+  // Ponto facultativo (`optional`) não é feriado para o banco.
+  const holidays = [...new Set(holidaySnapshots.flatMap((snapshot) => snapshot.docs.filter((doc) => doc.get('type') !== 'optional').map((doc) => civilDateOf(doc.get('date')))).filter((date): date is string => Boolean(date) && date! >= start && date! <= end))].sort();
   const definitionById = new Map(definitions.filter((doc) => doc.exists).map((doc) => [doc.id, doc]));
   const unitNameById = new Map(units.filter((doc) => doc.exists).map((doc) => [doc.id, text(doc.get('name'))]));
 
@@ -135,7 +159,9 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakPauseCount: minutes(definition?.get('breakPauseCount')),
       breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
       toleranceMinutes: toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
+      journeyId: journeyById.has(text(doc.get('journeyResolution.journeyId')) ?? '') ? text(doc.get('journeyResolution.journeyId')) : null,
+      referenceMinutes: journeyReferenceMinutes(journeyOf(journeyById.get(text(doc.get('journeyResolution.journeyId')) ?? '')), String(doc.get('date'))),
     };
   });
-  return { month: competence, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };
+  return { month: competence, shifts: result, holidays, truncated: shifts.size >= MAX_OWN_SHIFTS };
 }

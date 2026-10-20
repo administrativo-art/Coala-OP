@@ -57,7 +57,7 @@ test('AEJ avisa dia sem escala, turno noturno e batidas ímpares, sem inventar h
 test('horário contratual do dia vem da escala: fixo vira pares; intervalo livre fica só início e fim', () => {
   const base = { date: '2026-08-12', type: 'work' as const, startTime: '08:00', endTime: '16:00', overnight: false, unitId: 'u', unitName: 'U', shiftName: 'Manhã',
     breakStart: null, breakEnd: null, breakDurationMinutes: 60, breakWindowStart: null, breakWindowEnd: null, expectedPunches: null, executionUnitPolicy: 'scheduled' as const,
-    breakSegments: null, breakSplit: 'single' as const, breakPauseCount: null, breakMinPauseMinutes: null, toleranceMinutes: null };
+    breakSegments: null, breakSplit: 'single' as const, breakPauseCount: null, breakMinPauseMinutes: null, toleranceMinutes: null, journeyId: null, referenceMinutes: null };
   assert.deepEqual(aejShiftOf({ ...base, breakType: 'fixed', breakStart: '12:00', breakEnd: '13:00' })!.breaks, [{ start: '12:00', end: '13:00' }]);
   const flexible = aejShiftOf({ ...base, breakType: 'flexible' })!;
   assert.deepEqual(flexible.breaks, []);
@@ -75,4 +75,20 @@ test('turnos com os mesmos horários e duração diferente ganham códigos disti
   const bad = input();
   bad.employees[0].inclusions[0].reason = '   ';
   assert.throws(() => generateAej(bad), /AEJ_MOTIVO_MISSING/);
+});
+
+test('registro 07: DSR e movimentos do banco depois das marcações, contados no trailer; movimento sem minutos é recusado', () => {
+  const data = input();
+  data.employees[0].absences = [
+    { date: '2026-08-13', kind: '3', minutes: 80, movement: '2' },
+    { date: '2026-08-12', kind: '3', minutes: 15, movement: '1' },
+    { date: '2026-08-10', kind: '1' },
+    { date: '2026-09-01', kind: '1' },
+  ];
+  const lines = generateAej(data).bytes.toString('latin1').split('\r\n');
+  assert.deepEqual(lines.slice(9, 12), ['07|1|1|2026-08-10||', '07|1|3|2026-08-12|15|1', '07|1|3|2026-08-13|80|2']);
+  assert.match(lines[12], /^08\|/);
+  assert.equal(lines[13], '99|1|1|1|1|5|0|3|1');
+  data.employees[0].absences = [{ date: '2026-08-12', kind: '3', movement: '1' }];
+  assert.throws(() => generateAej(data), /AEJ_BANK_MOVEMENT_INVALID/);
 });

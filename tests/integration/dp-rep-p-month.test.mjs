@@ -7,7 +7,7 @@ assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
 const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
-const { readOwnRepPMonth } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+const { readOwnRepPMonth, readRepPMonthOfPerson } = await import('../../src/features/dp/rep-p/own-month.server.ts');
 
 test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala oficial de cada unidade', async () => {
   const prefix = 'rep-p-month';
@@ -26,7 +26,10 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
   const shift = (schedule, id, data) => schedule.collection('shifts').doc(id).set({ scheduleId: schedule.id, unitId, type: 'work', ...data });
 
   await Promise.all([
-    official.set({ year: 2027, month: 3, unitId, locked: true, createdAt: Timestamp.fromMillis(1_000) }),
+    official.set({ year: 2027, month: 3, unitId, locked: true, createdAt: Timestamp.fromMillis(1_000), calendarId: `${prefix}-calendar` }),
+    // Feriado do calendário da escala oficial; ponto facultativo não conta para o banco.
+    dbAdmin.collection('dp_calendars').doc(`${prefix}-calendar`).collection('holidays').doc('a').set({ name: 'Feriado', type: 'municipal', date: Timestamp.fromDate(new Date('2027-03-19T03:00:00Z')) }),
+    dbAdmin.collection('dp_calendars').doc(`${prefix}-calendar`).collection('holidays').doc('b').set({ name: 'Facultativo', type: 'optional', date: Timestamp.fromDate(new Date('2027-03-20T03:00:00Z')) }),
     stale.set({ year: 2027, month: 3, unitId, locked: false, createdAt: Timestamp.fromMillis(9_000) }),
     definition.set({ name: 'Manhã', breakType: 'staggered', breakDurationMinutes: 15, breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4 }),
     unit.set({ name: 'Quiosque Teste' }),
@@ -52,9 +55,11 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
     shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
     breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4, executionUnitPolicy: 'scheduled',
     breakSegments: null, breakSplit: 'single', breakPauseCount: null,
-    breakMinPauseMinutes: null, toleranceMinutes: 5,
+    breakMinPauseMinutes: null, toleranceMinutes: 5, journeyId: `${prefix}-journey-v1`, referenceMinutes: null,
   });
   assert.equal(result.shifts[1].toleranceMinutes, null);
+  assert.equal(result.holidays.length, 0);
+  assert.deepEqual((await readRepPMonthOfPerson([userId], '2027-03', {}, { holidays: true })).holidays, ['2027-03-19']);
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-13' }), { code: 'REP_P_MONTH_INPUT_INVALID' });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-03', userId: otherId }), { code: 'REP_P_MONTH_INPUT_INVALID' });
 });

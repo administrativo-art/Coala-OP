@@ -11,6 +11,7 @@ import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
 import { MirrorCard } from "@/features/dp/time-adjustments/mirror-card";
+import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
 import type { AdjustmentView, TreatmentView } from "@/features/dp/time-adjustments/types";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
@@ -220,6 +221,8 @@ export function MyTimeRecordingPage() {
           {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
           {/* Só aparece com o mês fechado pelo DP. */}
           <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} />
+          {/* Só aparece com o banco ligado na política; soma os meses já fechados do ciclo. */}
+          <TimeBankCard firebaseUser={firebaseUser} />
         </aside>
 
         <div className="min-w-0 space-y-3">

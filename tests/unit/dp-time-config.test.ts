@@ -143,6 +143,13 @@ test('política de hora extra persiste regras sem aceitar banco desativado como 
   assert.equal(createOvertimePolicySchema.safeParse(policy).success, true);
   // A tolerância é única e fica na jornada; a política não a aceita mais.
   assert.equal(createOvertimePolicySchema.safeParse({ ...policy, dailyToleranceMinutes: 10 }).success, false);
+  // Ciclo do banco: unidade e tamanho guardados; em meses vai até 12 e o marco até o dia 28.
+  const withCycle = (cycle: Record<string, unknown>) => createOvertimePolicySchema.safeParse({ ...policy, timeBank: { ...policy.timeBank, enabled: true, cycle } }).success;
+  assert.equal(withCycle({ unit: 'day', length: 15, anchorDate: '2026-01-01', residualDestination: 'carry' }), true);
+  assert.equal(withCycle({ unit: 'month', length: 6, anchorDate: '2026-01-10', residualDestination: 'payroll' }), true);
+  assert.equal(withCycle({ unit: 'month', length: 13, anchorDate: '2026-01-10', residualDestination: 'payroll' }), false);
+  assert.equal(withCycle({ unit: 'month', length: 1, anchorDate: '2026-01-31', residualDestination: 'review' }), false);
+  assert.equal(withCycle({ unit: 'day', length: 0, anchorDate: '2026-01-01', residualDestination: 'forfeit' }), false);
   assert.equal(createOvertimePolicySchema.safeParse({
     ...policy,
     categories: [{ ...policy.categories[0], destination: 'time_bank', bankCreditFactor: 1 }],
