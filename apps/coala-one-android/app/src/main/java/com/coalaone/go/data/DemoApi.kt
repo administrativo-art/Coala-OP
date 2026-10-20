@@ -8,8 +8,16 @@ import javax.inject.Inject
 class DemoApi @Inject constructor() : ApiService {
     private val simulatedUserName = "Heucilene Oliveira Ribeiro"
     // Eight units, so lists, pickers and the goals header can be judged with a realistic amount of data.
-    private val units = listOf(UnitRef("simulation-unit", "Unidade de simulação"), UnitRef("sim-tirirical", "Quiosque Tirirical"), UnitRef("sim-joao-paulo", "Quiosque João Paulo"), UnitRef("sim-matriz", "Matriz"),
-        UnitRef("sim-centro", "Quiosque Centro"), UnitRef("sim-orla", "Quiosque Orla"), UnitRef("sim-shopping", "Quiosque Shopping"), UnitRef("sim-cd", "Centro de distribuição"))
+    private val units = listOf(
+        UnitRef("simulation-unit", "Unidade de simulação", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-tirirical", "Quiosque Tirirical", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-joao-paulo", "Quiosque João Paulo", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-matriz", "Matriz", "group-admin", "Administrativo", "org-coala", "Coala Shakes"),
+        UnitRef("sim-centro", "Quiosque Centro", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-orla", "Quiosque Orla", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-shopping", "Quiosque Shopping", "group-kiosks", "Quiosques", "org-coala", "Coala Shakes"),
+        UnitRef("sim-cd", "Centro de distribuição", "group-supply", "Abastecimento", "org-logistics", "Operação logística"),
+    )
     private val unit = units.first()
     private fun unitOf(id: String) = units.firstOrNull { it.id == id } ?: unit
     override suspend fun release() = Release(4, "0.2.0", 0, "/app/CoalaGo.apk")
@@ -27,7 +35,8 @@ class DemoApi @Inject constructor() : ApiService {
         Reposition("simulation-reposition-3", "Centro de distribuição", units[4].id, units[4].name, "2026-10-03T12:00:00Z", dispatchedAt = "2026-10-03T09:15:00Z", rows = listOf(RepositionRow("b4", "l6", "Copo 500 ml", "SIM-006", 20.0), RepositionRow("b5", "l7", "Granola", "SIM-007", 6.0)))), false)
     override suspend fun receive(request: ReceiveRequest) = Received("received", request.rows.any { it.notes.isNotBlank() }, false)
     override suspend fun withdrawals() = Withdrawals(listOf(Withdrawal("a".repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 5000, reason = "Compra de gelo"),
-        Withdrawal("b".repeat(64), units[1].id, units[1].name, "2026-10-07", "14:20", 20000, "Caio Martins"), Withdrawal("c".repeat(64), units[4].id, units[4].name, "2026-10-06", "10:05", 8000, simulatedUserName)), emptyList(), DateWindow("2026-10-01", "2026-10-31"), false)
+        Withdrawal("b".repeat(64), units[1].id, units[1].name, "2026-10-07", "14:20", 20000, "Caio Martins"), Withdrawal("c".repeat(64), units[4].id, units[4].name, "2026-10-06", "10:05", 8000, simulatedUserName)),
+        listOf(AwaitingPurchase("simulation-awaiting", unit.id, "Mercado de simulação", "2026-10-01", 5000)), DateWindow("2026-10-01", "2026-10-31"), false)
     override suspend fun purchaseContext() = PurchaseContext(units, listOf(UnitRef("account", "Insumos")), units.mapIndexed { index, row -> ResultCenter(if (index == 0) "center" else "center-${row.id}", row.name, row.id) }, listOf(StockProduct("milk", "Leite integral", "1 L")))
     override suspend fun upload(fields: Map<String, RequestBody>, documents: List<MultipartBody.Part>, expectedOwner: String?) = UploadResponse(Submission("simulation-submission", false, "pending_review", ReceiptAnalysis("Fornecedor de simulação", null, "2026-10-01", 5000, listOf(AnalysisItem("Leite integral", 10.0, "un", 500, 5000)), "high")))
     override suspend fun confirm(request: ConfirmPurchase) = PurchaseResponse(PurchaseResult("simulation-purchase", "confirmed", stockEntry = "done", stockItemCount = request.items.count { it.stock != null }))

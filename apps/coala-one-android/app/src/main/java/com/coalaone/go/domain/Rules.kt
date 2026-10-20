@@ -13,6 +13,36 @@ object Rules {
     const val ALL_UNITS = "*"
     /** "Todas as unidades" is offered only when there is more than one unit to put side by side. */
     fun unitChoices(units: List<Pair<String, String>>) = if (units.size > 1) listOf(ALL_UNITS to "Todas as unidades") + units else units
+    const val NO_ORGANIZATION = "__no_organization__"
+    const val NO_GROUP = "__no_group__"
+    private fun organizationKey(unit: UnitRef) = unit.organizationId ?: NO_ORGANIZATION
+    private fun groupKey(unit: UnitRef) = unit.groupId ?: NO_GROUP
+    private fun sortedScope(values: Map<String, String>, fallback: String) = values.entries.sortedWith(compareBy<Map.Entry<String, String>> { it.key == fallback }.thenBy { it.value }).map { it.key to it.value }
+    fun purchaseOrganizationChoices(units: List<UnitRef>): List<Pair<String, String>> {
+        val values = units.associate { organizationKey(it) to (it.organizationName ?: "Sem organização") }
+        return listOf(ALL_UNITS to "Todas as organizações") + sortedScope(values, NO_ORGANIZATION)
+    }
+    fun purchaseGroupChoices(units: List<UnitRef>, organizationId: String): List<Pair<String, String>> {
+        val scoped = units.filter { organizationId == ALL_UNITS || organizationKey(it) == organizationId }
+        val values = scoped.associate { groupKey(it) to (it.groupName ?: "Sem grupo") }
+        return listOf(ALL_UNITS to "Todos os grupos") + sortedScope(values, NO_GROUP)
+    }
+    fun purchaseUnitChoices(units: List<UnitRef>, organizationId: String, groupId: String): List<Pair<String, String>> {
+        val values = units.filter { unit ->
+            (organizationId == ALL_UNITS || organizationKey(unit) == organizationId) &&
+                (groupId == ALL_UNITS || groupKey(unit) == groupId)
+        }.map { it.id to it.name }
+        return listOf(ALL_UNITS to "Todas as unidades") + values
+    }
+    fun filterWithdrawals(withdrawals: List<Withdrawal>, units: List<UnitRef>, organizationId: String, groupId: String, unitId: String): List<Withdrawal> {
+        val unitsById = units.associateBy { it.id }
+        return withdrawals.filter { withdrawal ->
+            val unit = unitsById[withdrawal.unitId] ?: return@filter organizationId == ALL_UNITS && groupId == ALL_UNITS && unitId == ALL_UNITS
+            (organizationId == ALL_UNITS || organizationKey(unit) == organizationId) &&
+                (groupId == ALL_UNITS || groupKey(unit) == groupId) &&
+                (unitId == ALL_UNITS || unit.id == unitId)
+        }
+    }
     fun quantity(value: String): Double = value.trim().replace(".", "").replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: 0.0
     fun quantityText(value: Double): String = BigDecimal.valueOf(value).setScale(3, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
     fun cents(value: String): Long? = runCatching { BigDecimal(value.trim().replace(".", "").replace(',', '.')).movePointRight(2).longValueExact() }.getOrNull()

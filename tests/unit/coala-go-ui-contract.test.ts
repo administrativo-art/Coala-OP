@@ -6,6 +6,7 @@ const native = 'apps/coala-one-android/app/src/main/java/com/coalaone/go/';
 const screens = readFileSync(`${native}ui/ModuleScreens.kt`, 'utf8');
 const components = readFileSync(`${native}ui/Components.kt`, 'utf8');
 const modulesViewModel = readFileSync(`${native}ui/ModulesViewModel.kt`, 'utf8');
+const purchase = readFileSync(`${native}ui/PurchaseScreens.kt`, 'utf8');
 const activity = readFileSync(`${native}MainActivity.kt`, 'utf8');
 const schedule = screens.split('@Composable fun ScheduleScreen')[1]?.split('@Composable fun GoalsScreen')[0] ?? '';
 const goals = screens.split('@Composable fun GoalsScreen')[1]?.split('@Composable fun SignageScreen')[0] ?? '';
@@ -34,4 +35,17 @@ test('Subtítulo inicial usa a função ou cargo do perfil sem mostrar e-mail', 
 
 test('Barra do início não tem resumo deslizante: só os dados da própria barra', () => {
   assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
+});
+
+test('Compra local retoma a vinculação dentro da própria sangria e agrupa por unidade', () => {
+  const withdrawalCards = purchase.split('shownWithdrawals.groupBy')[1]?.split('Text("Outra compra"')[0] ?? '';
+  const awaitingPurchases = purchase.split('shownPurchases.forEach')[1]?.split('if (state.queue.isNotEmpty())')[0] ?? '';
+  assert.match(withdrawalCards, /Retomar vinculação/);
+  assert.match(withdrawalCards, /InlineConfirmation\("Vincular esta compra a esta sangria\?"/);
+  assert.match(withdrawalCards, /Cancelar vinculação/);
+  assert.match(withdrawalCards, /bringIntoViewRequester/);
+  assert.doesNotMatch(awaitingPurchases, /InlineConfirmation/);
+  assert.match(purchase, /Choices\("Organização"/);
+  assert.match(purchase, /Choices\("Grupo"/);
+  assert.match(purchase, /Choices\("Unidade"/);
 });
