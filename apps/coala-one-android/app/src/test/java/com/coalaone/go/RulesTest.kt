@@ -105,9 +105,8 @@ class RulesTest {
         // A unit the context does not know only shows with no filter.
         assertEquals(5, Rules.filterWithdrawals(withdrawals, units, Rules.ALL_UNITS, Rules.ALL_UNITS).size)
         assertEquals(listOf(Rules.ALL_UNITS to "Todas as organizações · 5", "o1" to "Coala · 2", "o2" to "Logística · 1", Rules.NO_ORGANIZATION to "Sem organização · 1"), Rules.purchaseOrganizationChoices(units, withdrawals))
-        // Shoppings has nothing pending: offered only while it is the current choice.
-        assertEquals(listOf(Rules.ALL_UNITS to "Todos · 2", "g1" to "Quiosques · 2"), Rules.purchaseGroupChoices(units, withdrawals, "o1"))
-        assertEquals(listOf(Rules.ALL_UNITS to "Todos · 2", "g1" to "Quiosques · 2", "g3" to "Shoppings · 0"), Rules.purchaseGroupChoices(units, withdrawals, "o1", "g3"))
+        // A group with nothing pending is still offered, with zero.
+        assertEquals(listOf(Rules.ALL_UNITS to "Todos · 2", "g1" to "Quiosques · 2", "g3" to "Shoppings · 0"), Rules.purchaseGroupChoices(units, withdrawals, "o1"))
         assertEquals("o2" to "g2", Rules.purchaseScope(units, "c")); assertNull(Rules.purchaseScope(units, "z"))
         assertTrue(Rules.inPurchaseScope(units, "e", "o1", Rules.ALL_UNITS))
         assertEquals("o1" to "g3", Rules.restorePurchaseScope(units, "o1", "g3"))

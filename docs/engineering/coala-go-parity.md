@@ -188,6 +188,14 @@ real e validação fiscal oficial continuam fora desta homologação. O APK
 0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
 `0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
 
+### Verificação da 0.3.13 (filtro sempre visível, captura da conta administrativa)
+
+O 0.3.12 escondia organizações e grupos sem sangria pendente; com uma opção só,
+o filtro inteiro sumia. Agora aparecem todos os escopos das unidades acessíveis,
+com a contagem (inclusive zero). A captura de tela fica liberada para a conta de
+login do app `administrativo@coalashakes.com` (o 0.3.12 usava um e-mail que não
+é o do login).
+
 ### Verificação da 0.3.12 (filtro por organização e grupo, captura de tela)
 
 A lista de sangrias da Compra local filtra só por organização (no cabeçalho

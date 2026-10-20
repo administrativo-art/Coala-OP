@@ -279,8 +279,8 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 **Decidido (2026-10-20).** Só organização e grupo; os cartões já vêm separados por unidade, então não há filtro de unidade.
 
 - Organização no cabeçalho escuro com `UnitPickerHeader`; grupos em `FilterChip`s numa faixa com rolagem horizontal, logo abaixo de "Sangrias aguardando nota".
-- Cada opção mostra quantas sangrias tem (`Quiosques · 5`). Só aparecem organizações e grupos com sangria pendente; a escolha atual continua listada mesmo se esvaziar.
-- Filtro com uma opção só não aparece. A última escolha fica salva no aparelho por conta; escolha que deixou de existir abre em "Todas".
+- Cada opção mostra quantas sangrias tem (`Quiosques · 5`), inclusive zero: aparecem todas as organizações e grupos das unidades acessíveis (0.3.13; no 0.3.12 só os com sangria pendente, o que escondia o filtro).
+- O filtro aparece sempre que há mais de uma organização ou grupo para escolher. A última escolha fica salva no aparelho por conta; escolha que deixou de existir abre em "Todas".
 - Enquanto uma vinculação está aberta, o filtro vai para o grupo da sangria e fica travado. Filtro sem resultado mostra "Ver todas".
 
 ### Folha de seleção (`PickerSheet`)
