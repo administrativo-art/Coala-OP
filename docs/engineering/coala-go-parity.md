@@ -194,7 +194,8 @@ O 0.3.12 escondia organizações e grupos sem sangria pendente; com uma opção 
 o filtro inteiro sumia. Agora aparecem todos os escopos das unidades acessíveis,
 com a contagem (inclusive zero). A captura de tela fica liberada para a conta de
 login do app `administrativo@coalashakes.com` (o 0.3.12 usava um e-mail que não
-é o do login).
+é o do login). O APK 0.3.13/code18 foi assinado pelo certificado público
+esperado e tem SHA-256 `ae9d6aff8a3d21d64450a7eb21845f9691a4f4280955be9eb9894f84098c7ecf`.
 
 ### Verificação da 0.3.12 (filtro por organização e grupo, captura de tela)
 
