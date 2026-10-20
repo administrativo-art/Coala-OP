@@ -20,10 +20,10 @@ const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 export const INCIDENTS: Record<DayIncident, { label: string; detail: string; icon: typeof AlertTriangle }> = {
   missing: { label: "Dia sem batidas", detail: "Nenhuma batida num dia de escala. Se houve motivo, justifique com uma ausência.", icon: TimerOff },
   odd: { label: "Número ímpar de batidas", detail: "O dia tem número ímpar de batidas: um período ficou sem fechamento.", icon: AlertTriangle },
-  late_exit: { label: "Saída após o previsto", detail: "Última batida mais de 10 minutos depois do horário da escala.", icon: Clock3 },
-  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto além da tolerância do turno, ou pausa menor que o mínimo (aviso de conferência).", icon: Coffee },
+  late_exit: { label: "Saída após o previsto", detail: "Última batida depois do horário da escala além da tolerância da jornada.", icon: Clock3 },
+  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto além da tolerância da jornada, ou pausa menor que o mínimo (aviso de conferência).", icon: Coffee },
   other_unit: { label: "Batida em outra unidade", detail: "Batida feita numa unidade diferente da escala. Não foi bloqueada; o DP confere a troca.", icon: MapPin },
-  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto além da tolerância do turno (aviso de conferência).", icon: Coffee },
+  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto além da tolerância da jornada (aviso de conferência).", icon: Coffee },
 };
 
 function weekday(date: string) {
@@ -49,7 +49,7 @@ function balanceOf(day: DayView, today: string): { label: string; variant: Statu
   if (day.date === today && day.markings.length) return { label: "Em curso", variant: "info" };
   if (day.absence) return day.absence.status === "approved" ? { label: "Ausência aprovada", variant: "neutral" } : { label: "Ausência em análise", variant: "info" };
   if (day.balanceMinutes === null) return null;
-  return { label: hm(day.balanceMinutes, true), variant: day.balanceMinutes < -10 ? "danger" : day.balanceMinutes > 10 ? "warn" : "neutral" };
+  return { label: hm(day.balanceMinutes, true), variant: day.balanceMinutes < 0 ? "danger" : day.balanceMinutes > 0 ? "warn" : "neutral" };
 }
 
 export const DAY_GRID = "grid grid-cols-[56px_1fr_auto] items-center gap-x-4 gap-y-2 md:grid-cols-[56px_minmax(110px,0.8fr)_minmax(240px,2fr)_96px_110px_minmax(120px,1fr)]";

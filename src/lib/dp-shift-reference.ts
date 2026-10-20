@@ -99,6 +99,7 @@ export function buildDPShiftReference(params: {
       scaleValidation: journey.scaleValidation ? { ...journey.scaleValidation } : null,
       expectedBreakMinutes: journey.expectedBreakMinutes ?? null,
       useDefinedShiftWhenShorter: journey.useDefinedShiftWhenShorter ?? null,
+      toleranceMinutes: journey.toleranceMinutes ?? null,
       allowedShiftDefinitionIds: [...(journey.allowedShiftDefinitionIds ?? [])],
     },
     shiftDefinition: buildShiftDefinitionReference(definition),

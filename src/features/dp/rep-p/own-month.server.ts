@@ -8,7 +8,7 @@ import { AppError } from '@/lib/observability/app-error';
 
 import { repPOwnMonthSchema } from './schemas';
 
-/** Turno escalado da própria pessoa num dia, com o intervalo do cadastro do turno; nunca dado fiscal. */
+/** Turno escalado da própria pessoa num dia, com o intervalo do cadastro do turno e a tolerância da jornada; nunca dado fiscal. */
 export type RepPOwnScheduledShift = {
   date: string;
   type: 'work' | 'day_off';
@@ -29,9 +29,9 @@ export type RepPOwnScheduledShift = {
   breakSegments: { start: string; end: string }[] | null;
   breakSplit: 'single' | 'multiple';
   breakPauseCount: number | null;
-  breakToleranceBelowMinutes: number | null;
-  breakToleranceAboveMinutes: number | null;
   breakMinPauseMinutes: number | null;
+  /** Tolerância da versão da jornada resolvida na escrita do turno; null = sem jornada ou sem tolerância. */
+  toleranceMinutes: number | null;
 };
 
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
@@ -50,7 +50,7 @@ function millis(value: unknown) {
 /**
  * Escala do mês da própria pessoa para o Registro de ponto: lê as escalas do mês (uma por unidade, a trancada
  * e mais recente primeiro, como em Minha escala), só os turnos da pessoa pelo índice userId+date e os cadastros
- * de turno e unidade citados. Custo por abertura: escalas do mês + turnos da pessoa (≤62) + cadastros citados.
+ * de turno, unidade e versão de jornada citados. Custo por abertura: escalas do mês + turnos da pessoa (≤62) + cadastros citados.
  */
 export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPOwnMonthSchema.safeParse(raw);
@@ -85,10 +85,14 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
 
   const definitionIds = [...new Set(ownShifts.map((doc) => text(doc.get('shiftDefinitionId'))).filter((value): value is string => Boolean(value)))];
   const unitIds = [...new Set(ownShifts.map((doc) => text(doc.get('unitId'))).filter((value): value is string => Boolean(value)))];
-  const [definitions, units] = await Promise.all([
+  // Cada versão publicada da jornada é imutável: ler pelo id resolvido na escrita dá a tolerância daquele dia.
+  const journeyIds = [...new Set(ownShifts.map((doc) => text(doc.get('journeyResolution.journeyId'))).filter((value): value is string => Boolean(value)))];
+  const [definitions, units, journeys] = await Promise.all([
     definitionIds.length ? db.getAll(...definitionIds.map((id) => db.collection('dp_shiftDefinitions').doc(id))) : [],
     unitIds.length ? db.getAll(...unitIds.map((id) => db.collection('dp_units').doc(id))) : [],
+    journeyIds.length ? db.getAll(...journeyIds.map((id) => db.collection('dp_journeys').doc(id))) : [],
   ]);
+  const toleranceByJourney = new Map(journeys.filter((doc) => doc.exists).map((doc) => [doc.id, minutes(doc.get('toleranceMinutes'))]));
   const definitionById = new Map(definitions.filter((doc) => doc.exists).map((doc) => [doc.id, doc]));
   const unitNameById = new Map(units.filter((doc) => doc.exists).map((doc) => [doc.id, text(doc.get('name'))]));
 
@@ -129,9 +133,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakSegments: segments?.length ? segments : null,
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),
-      breakToleranceBelowMinutes: minutes(definition?.get('breakToleranceBelowMinutes')),
-      breakToleranceAboveMinutes: minutes(definition?.get('breakToleranceAboveMinutes')),
       breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
+      toleranceMinutes: toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
     };
   });
   return { month: competence, shifts: result, truncated: shifts.size >= MAX_OWN_SHIFTS };

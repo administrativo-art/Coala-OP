@@ -20,6 +20,9 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
   const stale = dbAdmin.collection('dp_schedules').doc(`${prefix}-stale`);
   const definition = dbAdmin.collection('dp_shiftDefinitions').doc(`${prefix}-manha`);
   const unit = dbAdmin.collection('dp_units').doc(unitId);
+  // Versão publicada da jornada citada pelo turno: a tolerância vem dela, não do cadastro vivo.
+  const journeyV1 = dbAdmin.collection('dp_journeys').doc(`${prefix}-journey-v1`);
+  const journeyV2 = dbAdmin.collection('dp_journeys').doc(`${prefix}-journey-v2`);
   const shift = (schedule, id, data) => schedule.collection('shifts').doc(id).set({ scheduleId: schedule.id, unitId, type: 'work', ...data });
 
   await Promise.all([
@@ -27,9 +30,12 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
     stale.set({ year: 2027, month: 3, unitId, locked: false, createdAt: Timestamp.fromMillis(9_000) }),
     definition.set({ name: 'Manhã', breakType: 'staggered', breakDurationMinutes: 15, breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4 }),
     unit.set({ name: 'Quiosque Teste' }),
+    journeyV1.set({ lineageId: `${prefix}-journey`, version: 1, status: 'archived', toleranceMinutes: 5 }),
+    journeyV2.set({ lineageId: `${prefix}-journey`, version: 2, status: 'published', toleranceMinutes: 8 }),
   ]);
   await Promise.all([
-    shift(official, 'a', { userId, date: '2027-03-02', startTime: '10:00', endTime: '16:15', shiftDefinitionId: definition.id }),
+    shift(official, 'a', { userId, date: '2027-03-02', startTime: '10:00', endTime: '16:15', shiftDefinitionId: definition.id,
+      journeyResolution: { journeyId: journeyV1.id, lineageId: `${prefix}-journey`, version: 1 } }),
     shift(official, 'b', { userId, date: '2027-03-03', type: 'day_off', startTime: '00:00', endTime: '00:00' }),
     shift(official, 'c', { userId: otherId, date: '2027-03-02', startTime: '08:00', endTime: '14:00' }),
     shift(official, 'd', { userId, date: '2027-04-01', startTime: '10:00', endTime: '16:15' }),
@@ -45,9 +51,10 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
     date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste',
     shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
     breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4, executionUnitPolicy: 'scheduled',
-    breakSegments: null, breakSplit: 'single', breakPauseCount: null, breakToleranceBelowMinutes: null, breakToleranceAboveMinutes: null,
-    breakMinPauseMinutes: null,
+    breakSegments: null, breakSplit: 'single', breakPauseCount: null,
+    breakMinPauseMinutes: null, toleranceMinutes: 5,
   });
+  assert.equal(result.shifts[1].toleranceMinutes, null);
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-13' }), { code: 'REP_P_MONTH_INPUT_INVALID' });
   await assert.rejects(readOwnRepPMonth(context, { month: '2027-03', userId: otherId }), { code: 'REP_P_MONTH_INPUT_INVALID' });
 });

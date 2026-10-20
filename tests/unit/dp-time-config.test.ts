@@ -32,6 +32,14 @@ test('jornada exige distribuição coerente com a carga semanal e vigência vál
   assert.equal(createJourneySchema.safeParse({ ...journey, validFrom: '2028-02-29' }).success, true);
 });
 
+test('tolerância única da jornada vai de 0 a 10 minutos e é opcional', () => {
+  assert.equal(createJourneySchema.safeParse({ ...journey, toleranceMinutes: 5 }).success, true);
+  assert.equal(createJourneySchema.safeParse({ ...journey, toleranceMinutes: 0 }).success, true);
+  assert.equal(createJourneySchema.safeParse({ ...journey, toleranceMinutes: 11 }).success, false);
+  assert.equal(createJourneySchema.safeParse({ ...journey, toleranceMinutes: -1 }).success, false);
+  assert.equal(createJourneySchema.safeParse({ ...journey, toleranceMinutes: 2.5 }).success, false);
+});
+
 test('12x36 permanece cadastrável sem fingir validação automática', () => {
   const twelveByThirtySix = {
     ...journey,
@@ -128,12 +136,13 @@ test('política de hora extra persiste regras sem aceitar banco desativado como 
     name: 'CCT Belém 2026',
     applicability: { scope: { kind: 'unit_group' as const, id: 'belem' } },
     validFrom: '2026-01-01',
-    dailyToleranceMinutes: 10,
     categories: [{ id: 'he60', name: 'Hora extra 60%', trigger: 'workday' as const, ratePercent: 60, destination: 'payroll' as const, requiresApproval: true }],
     timeBank: { enabled: false, allowNegativeBalance: false, expiredBalanceDestination: 'review' as const },
     externalCoverageRule: 'origin' as const,
   };
   assert.equal(createOvertimePolicySchema.safeParse(policy).success, true);
+  // A tolerância é única e fica na jornada; a política não a aceita mais.
+  assert.equal(createOvertimePolicySchema.safeParse({ ...policy, dailyToleranceMinutes: 10 }).success, false);
   assert.equal(createOvertimePolicySchema.safeParse({
     ...policy,
     categories: [{ ...policy.categories[0], destination: 'time_bank', bankCreditFactor: 1 }],

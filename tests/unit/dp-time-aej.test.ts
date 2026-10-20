@@ -57,7 +57,7 @@ test('AEJ avisa dia sem escala, turno noturno e batidas ímpares, sem inventar h
 test('horário contratual do dia vem da escala: fixo vira pares; intervalo livre fica só início e fim', () => {
   const base = { date: '2026-08-12', type: 'work' as const, startTime: '08:00', endTime: '16:00', overnight: false, unitId: 'u', unitName: 'U', shiftName: 'Manhã',
     breakStart: null, breakEnd: null, breakDurationMinutes: 60, breakWindowStart: null, breakWindowEnd: null, expectedPunches: null, executionUnitPolicy: 'scheduled' as const,
-    breakSegments: null, breakSplit: 'single' as const, breakPauseCount: null, breakToleranceBelowMinutes: null, breakToleranceAboveMinutes: null, breakMinPauseMinutes: null };
+    breakSegments: null, breakSplit: 'single' as const, breakPauseCount: null, breakMinPauseMinutes: null, toleranceMinutes: null };
   assert.deepEqual(aejShiftOf({ ...base, breakType: 'fixed', breakStart: '12:00', breakEnd: '13:00' })!.breaks, [{ start: '12:00', end: '13:00' }]);
   const flexible = aejShiftOf({ ...base, breakType: 'flexible' })!;
   assert.deepEqual(flexible.breaks, []);

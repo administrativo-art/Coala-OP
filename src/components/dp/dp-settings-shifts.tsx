@@ -82,14 +82,12 @@ function breakModalityOf(def?: Partial<DPShiftDefinition> | null): BreakModality
 function breakDescription(def: DPShiftDefinition) {
   const modality = breakModalityOf(def);
   const pauses = def.breakSplit === 'multiple' ? ` · ${def.breakPauseCount ? `${def.breakPauseCount} pausas` : 'pausas em aberto'}` : '';
-  const tolerance = def.breakToleranceBelowMinutes != null || def.breakToleranceAboveMinutes != null
-    ? ` · tolerância −${def.breakToleranceBelowMinutes ?? 0}/+${def.breakToleranceAboveMinutes ?? 0} min` : '';
-  if (modality === 'fixed_single' && def.breakStart && def.breakEnd) return `Fixo único · ${def.breakStart}–${def.breakEnd}${tolerance}`;
-  if (modality === 'fixed_multi') return `Fixo intercalado · ${(def.breakSegments ?? []).map((segment) => `${segment.start}–${segment.end}`).join(', ')}${tolerance}`;
-  if (modality === 'free' || modality === 'free_multi') return `${BREAK_MODALITY_LABELS[modality]} · ${def.breakDurationMinutes ?? 0} min${pauses}${tolerance}`;
+  if (modality === 'fixed_single' && def.breakStart && def.breakEnd) return `Fixo único · ${def.breakStart}–${def.breakEnd}`;
+  if (modality === 'fixed_multi') return `Fixo intercalado · ${(def.breakSegments ?? []).map((segment) => `${segment.start}–${segment.end}`).join(', ')}`;
+  if (modality === 'free' || modality === 'free_multi') return `${BREAK_MODALITY_LABELS[modality]} · ${def.breakDurationMinutes ?? 0} min${pauses}`;
   if (modality === 'window' || modality === 'window_multi') {
     const window = def.breakWindowStart && def.breakWindowEnd ? ` · janela ${def.breakWindowStart}–${def.breakWindowEnd}` : '';
-    return `${BREAK_MODALITY_LABELS[modality]} · ${def.breakDurationMinutes ?? 0} min${window}${pauses}${tolerance}`;
+    return `${BREAK_MODALITY_LABELS[modality]} · ${def.breakDurationMinutes ?? 0} min${window}${pauses}`;
   }
   return 'Sem intervalo';
 }
@@ -110,8 +108,6 @@ const shiftDefSchema = z.object({
   breakModality: z.enum(['none', 'fixed_single', 'fixed_multi', 'free', 'free_multi', 'window', 'window_multi']),
   breakSegments: z.array(z.object({ start: z.string(), end: z.string() })),
   breakPauseCount: optionalMinutes(2, 10, 'Informe de 2 a 10 pausas ou deixe em branco para em aberto.'),
-  breakToleranceBelowMinutes: optionalMinutes(0, 60, 'Use de 0 a 60 minutos.'),
-  breakToleranceAboveMinutes: optionalMinutes(0, 60, 'Use de 0 a 60 minutos.'),
   breakMinPauseMinutes: optionalMinutes(1, 60, 'Use de 1 a 60 minutos.'),
   breakDurationMinutes: z.string().optional(),
   breakWindowStart: z.string().optional(),
@@ -170,8 +166,6 @@ function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
     breakModality: breakModalityOf(def),
     breakSegments: def?.breakSegments?.map((segment) => ({ ...segment })) ?? [{ start: '', end: '' }, { start: '', end: '' }],
     breakPauseCount: minutesText(def?.breakPauseCount),
-    breakToleranceBelowMinutes: minutesText(def?.breakToleranceBelowMinutes),
-    breakToleranceAboveMinutes: minutesText(def?.breakToleranceAboveMinutes),
     breakMinPauseMinutes: minutesText(def?.breakMinPauseMinutes),
     breakDurationMinutes: def?.breakDurationMinutes == null ? '' : String(def.breakDurationMinutes),
     breakWindowStart: def?.breakWindowStart ?? '',
@@ -207,8 +201,6 @@ function breakFields(values: ShiftDefForm) {
     breakWindowEnd: isWindow ? (rest.breakWindowEnd || undefined) : undefined,
     breakSplit: !isFixed && modality !== 'none' ? (multiple ? 'multiple' as const : 'single' as const) : undefined,
     breakPauseCount: multiple ? number(rest.breakPauseCount) : undefined,
-    breakToleranceBelowMinutes: modality !== 'none' ? number(rest.breakToleranceBelowMinutes) : undefined,
-    breakToleranceAboveMinutes: modality !== 'none' ? number(rest.breakToleranceAboveMinutes) : undefined,
     breakMinPauseMinutes: multiple || modality === 'fixed_multi' ? number(rest.breakMinPauseMinutes) : undefined,
   };
 }
@@ -647,7 +639,7 @@ export function DPSettingsShifts() {
                   <p><strong>Intercalado livre:</strong> a duração total pode ser dividida em duas ou mais pausas, em número definido ou em aberto. A batida mostra o tempo usado, o que falta e o limite para iniciar.</p>
                   <p><strong>Janela livre:</strong> uma pausa dentro de um período (ex.: entre 14:00 e 16:00). Enquanto o intervalo não começa, a batida mostra o limite para iniciar dentro da janela (fim da janela menos a duração).</p>
                   <p><strong>Janela intercalada livre:</strong> a duração total dentro do período, em várias pausas (número definido ou em aberto), com o mesmo limite calculado sobre o que falta.</p>
-                  <p><strong>Tolerância:</strong> minutos aceitos para mais e para menos sem aviso, definidos aqui. O mínimo legal continua valendo.</p>
+                  <p><strong>Tolerância:</strong> não fica no turno; vale a tolerância da jornada da pessoa. O mínimo legal continua valendo.</p>
                 </InfoTooltip>
               </div>
               <Field label="Modalidade" htmlFor="shift-break-modality">
@@ -706,12 +698,6 @@ export function DPSettingsShifts() {
               ) : null}
               {selectedModality !== 'none' ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <Field label="Tolerância para menos" htmlFor="shift-break-tol-below" requirement="opcional" hint="Minutos. Em branco: sem tolerância." error={errors.breakToleranceBelowMinutes?.message}>
-                    <Input id="shift-break-tol-below" type="number" min={0} max={60} className={fieldInputClass} {...register('breakToleranceBelowMinutes')} />
-                  </Field>
-                  <Field label="Tolerância para mais" htmlFor="shift-break-tol-above" requirement="opcional" hint="Minutos. Em branco: sem tolerância." error={errors.breakToleranceAboveMinutes?.message}>
-                    <Input id="shift-break-tol-above" type="number" min={0} max={60} className={fieldInputClass} {...register('breakToleranceAboveMinutes')} />
-                  </Field>
                   {selectedModality === 'free_multi' || selectedModality === 'window_multi' || selectedModality === 'fixed_multi' ? (
                     <Field label="Pausa mínima" htmlFor="shift-break-min-pause" requirement="opcional" hint="Minutos por pausa." error={errors.breakMinPauseMinutes?.message}>
                       <Input id="shift-break-min-pause" type="number" min={1} max={60} className={fieldInputClass} {...register('breakMinPauseMinutes')} />

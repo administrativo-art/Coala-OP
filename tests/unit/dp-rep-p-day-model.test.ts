@@ -5,7 +5,7 @@ import { buildDayView, buildMonthView, workedMinutes, type DayShift } from '../.
 
 const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: 'Quiosque', breakType: 'fixed',
   breakStart: '13:00', breakEnd: '13:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null, expectedPunches: 4,
-  breakToleranceBelowMinutes: 5, breakToleranceAboveMinutes: 5 };
+  toleranceMinutes: 5 };
 const mark = (date: string, time: string, nsr: number) => ({ receiptId: `r${nsr}`, markedAt: `${date}T${time}:00-0300`, nsr, executionUnitId: 'u', receiptStatus: 'available' as const });
 
 describe('Leitura do dia no Registro de ponto', () => {
@@ -16,7 +16,7 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.equal(day.workedMinutes, 365);
     assert.equal(day.breakMinutes, 13);
     assert.deepEqual(day.incidents, []);
-    assert.equal(day.balanceMinutes, 5);
+    assert.equal(day.balanceMinutes, 0);
   });
 
   it('acusa dia sem batida, batida ímpar, saída tardia e intervalo fora da tolerância', () => {
@@ -68,9 +68,21 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.ok(!buildDayView({ date: '2026-10-16', today: '2026-10-19', shift: { ...shift, unitId: 'doca', executionUnitPolicy: 'free' }, absences: [], markings: marks }).incidents.includes('other_unit'));
   });
 
-  it('sem tolerância cadastrada não há aviso de intervalo; pausa mínima vale no intercalado', () => {
+  it('tolerância única da jornada: zera o saldo dentro dela, conta inteira acima; sem jornada, sem tolerância', () => {
+    const inside = [mark('2026-10-12', '10:03', 1), mark('2026-10-12', '13:00', 2), mark('2026-10-12', '13:15', 3), mark('2026-10-12', '16:15', 4)];
+    const day = buildDayView({ date: '2026-10-12', today: '2026-10-19', shift, absences: [], markings: inside });
+    assert.equal(day.balanceMinutes, 0);
+    assert.equal(day.deviation, null);
+    const above = [mark('2026-10-12', '10:06', 1), mark('2026-10-12', '13:00', 2), mark('2026-10-12', '13:15', 3), mark('2026-10-12', '16:15', 4)];
+    assert.equal(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift, absences: [], markings: above }).balanceMinutes, -6);
+    const withoutTolerance = buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, toleranceMinutes: null }, absences: [], markings: inside });
+    assert.equal(withoutTolerance.balanceMinutes, -3);
+    assert.deepEqual(withoutTolerance.deviation, { edge: 'start', minutes: 3 });
+  });
+
+  it('intervalo fora da tolerância da jornada vira aviso; pausa mínima vale no intercalado', () => {
     const marks = [mark('2026-10-12', '10:00', 1), mark('2026-10-12', '13:00', 2), mark('2026-10-12', '13:40', 3), mark('2026-10-12', '16:15', 4)];
-    assert.deepEqual(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, breakToleranceBelowMinutes: null, breakToleranceAboveMinutes: null }, absences: [], markings: marks }).incidents, []);
+    assert.ok(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift, absences: [], markings: marks }).incidents.includes('long_break'));
     const split = [mark('2026-10-12', '10:00', 1), mark('2026-10-12', '12:00', 2), mark('2026-10-12', '12:03', 3), mark('2026-10-12', '14:00', 4), mark('2026-10-12', '14:12', 5), mark('2026-10-12', '16:15', 6)];
     assert.ok(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, breakType: 'flexible', breakSplit: 'multiple', breakMinPauseMinutes: 5 }, absences: [], markings: split }).incidents.includes('short_break'));
   });

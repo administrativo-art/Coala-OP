@@ -32,9 +32,9 @@ describe('Aviso de intervalo na faixa de registro', () => {
     assert.equal(breakStatus(fixed, marks('09:57'), at('11:40'))?.level, 'danger');
   });
 
-  it('intercalado livre: progresso e tolerância do turno', () => {
+  it('intercalado livre: progresso e tolerância da jornada', () => {
     const split = { ...base, breakType: 'flexible' as const, breakWindowStart: null, breakWindowEnd: null, breakSplit: 'multiple' as const,
-      breakToleranceAboveMinutes: 5 };
+      toleranceMinutes: 5 };
     assert.match(breakStatus(split, marks('09:57', '12:00', '12:05'), at('13:00'))?.detail ?? '', /Usados 5 de 15 min · 1 pausa/);
     assert.equal(breakStatus(split, marks('09:57', '12:00', '12:30'), at('13:00'))?.level, 'danger');
   });

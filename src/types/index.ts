@@ -3737,6 +3737,11 @@ export type DPJourney = {
   expectedBreakMinutes?: number;
   /** Quando ativo, um turno menor que a carga diária prevalece como expediente efetivo. */
   useDefinedShiftWhenShorter?: boolean;
+  /**
+   * Tolerância única da jornada, em minutos (art. 58 §1º da CLT: até 10 por dia): diferença do dia dentro dela não vira
+   * débito nem crédito, e é a mesma margem dos avisos de intervalo. Ausente em jornadas anteriores = sem tolerância.
+   */
+  toleranceMinutes?: number;
   allowedShiftDefinitionIds?: string[];
   applicability: DPTimeApplicability;
   validFrom: string;
@@ -3774,7 +3779,6 @@ export type DPOvertimePolicy = {
   applicability: DPTimeApplicability;
   validFrom: string;
   validTo?: string;
-  dailyToleranceMinutes: number;
   dailyOvertimeLimitMinutes?: number;
   weeklyOvertimeLimitMinutes?: number;
   categories: DPOvertimeCategory[];
@@ -3918,9 +3922,6 @@ export type DPShiftDefinition = {
   breakSplit?: 'single' | 'multiple';
   /** Com várias pausas: quantidade definida (2 a 10); ausente = em aberto. */
   breakPauseCount?: number;
-  /** Tolerância manual do intervalo, para menos e para mais (minutos); ausente = sem aviso de tolerância. */
-  breakToleranceBelowMinutes?: number;
-  breakToleranceAboveMinutes?: number;
   /** Duração mínima de cada pausa nas modalidades com várias pausas (minutos). */
   breakMinPauseMinutes?: number;
   unitId?: string;     // legado: primeira unidade vinculada

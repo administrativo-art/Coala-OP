@@ -3,7 +3,7 @@
  * escalado de hoje, pela ordem das batidas: 1ª entrada; depois pares saída/volta; ímpar = trabalhando, par = em pausa.
  * Só orienta: nunca bloqueia a batida (art. 74) e não é apuração.
  */
-import { fiscalClock, minutesOf, type DayMarking, type DayShift } from "./day-model";
+import { fiscalClock, minutesOf, toleranceOf, type DayMarking, type DayShift } from "./day-model";
 
 // Antecedência dos avisos: provisória até decisão do programador.
 export const BREAK_INFO_AHEAD_MINUTES = 15;
@@ -48,9 +48,9 @@ export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "
   const base = { usedMinutes: used, totalMinutes: total, pausesDone: closed.length, plannedPauses: planned, inPause };
   const progress = planned === 1 ? null
     : `Usados ${used} de ${total} min · ${closed.length}${planned ? ` de ${planned}` : ""} ${closed.length === 1 && !planned ? "pausa" : "pausas"}`;
-  const above = shift.breakToleranceAboveMinutes;
-  if (above != null && used > total + above) {
-    return { ...base, level: "danger", headline: `Intervalo passou de ${total} min (${used} min)`, detail: `Tolerância de ${above} min do turno excedida.` };
+  const above = toleranceOf(shift);
+  if (used > total + above) {
+    return { ...base, level: "danger", headline: `Intervalo passou de ${total} min (${used} min)`, detail: above ? `Tolerância de ${above} min da jornada excedida.` : "A jornada não tem tolerância." };
   }
 
   // Fixo (único ou intercalado): proximidade do início e do fim de cada horário.
@@ -66,7 +66,7 @@ export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "
     const label = segments.length > 1 ? `${index + 1}ª pausa ` : "Intervalo ";
     if (inPause) {
       const back = end - now;
-      return { ...base, level: back < -(above ?? 0) ? "danger" : back <= 2 ? "warn" : "info",
+      return { ...base, level: back < -above ? "danger" : back <= 2 ? "warn" : "info",
         headline: back < 0 ? `Passou do fim do intervalo há ${-back} min` : `Em intervalo · volte às ${segment.end} (${left(back)})`, detail: progress };
     }
     if (now > end) return { ...base, level: "danger", headline: `${label}${segment.start}–${segment.end} não foi feita`, detail: "Registre a saída para o intervalo assim que puder." };

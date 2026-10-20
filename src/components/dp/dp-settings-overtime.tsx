@@ -57,7 +57,6 @@ type OvertimeForm = {
   applicability: DPTimeApplicability;
   validFrom: string;
   validTo: string;
-  dailyToleranceMinutes: string;
   dailyOvertimeLimit: string;
   weeklyOvertimeLimit: string;
   categories: CategoryForm[];
@@ -97,7 +96,6 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
     applicability: item?.applicability ?? { scope: { kind: 'company' } },
     validFrom: item?.validFrom ?? new Date().toISOString().slice(0, 10),
     validTo: item?.validTo ?? '',
-    dailyToleranceMinutes: String(item?.dailyToleranceMinutes ?? 10),
     dailyOvertimeLimit: item?.dailyOvertimeLimitMinutes ? formatDuration(item.dailyOvertimeLimitMinutes) : '',
     weeklyOvertimeLimit: item?.weeklyOvertimeLimitMinutes ? formatDuration(item.weeklyOvertimeLimitMinutes) : '',
     categories: item?.categories.map((category) => ({
@@ -135,8 +133,6 @@ function buildPayload(form: OvertimeForm) {
   if (!form.validFrom) throw new Error('Informe o início da vigência.');
   if (form.validTo && form.validTo < form.validFrom) throw new Error('O fim da vigência deve ser posterior ao início.');
   if (form.applicability.scope.kind !== 'company' && !form.applicability.scope.id) throw new Error('Selecione a abrangência da política.');
-  const dailyToleranceMinutes = Number(form.dailyToleranceMinutes);
-  if (!Number.isInteger(dailyToleranceMinutes) || dailyToleranceMinutes < 0 || dailyToleranceMinutes > 180) throw new Error('A tolerância diária deve ficar entre 0 e 180 minutos.');
   if (form.categories.length === 0) throw new Error('Cadastre ao menos uma faixa de hora extra.');
   if (new Set(form.categories.map((category) => category.id.trim())).size !== form.categories.length) throw new Error('Os códigos das faixas precisam ser únicos.');
 
@@ -172,7 +168,6 @@ function buildPayload(form: OvertimeForm) {
     applicability: form.applicability,
     validFrom: form.validFrom,
     ...(form.validTo ? { validTo: form.validTo } : {}),
-    dailyToleranceMinutes,
     ...(optionalDuration(form.dailyOvertimeLimit, 'O limite de hora extra por dia') ? { dailyOvertimeLimitMinutes: optionalDuration(form.dailyOvertimeLimit, 'O limite de hora extra por dia') } : {}),
     ...(optionalDuration(form.weeklyOvertimeLimit, 'O limite de hora extra por semana') ? { weeklyOvertimeLimitMinutes: optionalDuration(form.weeklyOvertimeLimit, 'O limite de hora extra por semana') } : {}),
     categories,
@@ -339,7 +334,7 @@ export function DPSettingsOvertime() {
         <ListHead template={ROW_TEMPLATE}><span>Política</span><span>Abrangência</span><span>Faixas</span><span>Situação</span><span /></ListHead>
         {visibleItems.map((entry) => (
           <ListRow key={entry.id} template={ROW_TEMPLATE} isOpen={item?.id === entry.id} isSelected={false} isMuted={entry.status === 'archived'} onOpen={() => setPanel({ mode: 'view', item: entry })} label={`Abrir política ${entry.name}`}>
-            <div className="min-w-0"><p className="truncate text-[13.5px] font-bold">{entry.name}</p><p className="truncate text-xs text-ds-ink-muted">Versão {entry.version} · tolerância {entry.dailyToleranceMinutes} min</p></div>
+            <div className="min-w-0"><p className="truncate text-[13.5px] font-bold">{entry.name}</p><p className="truncate text-xs text-ds-ink-muted">Versão {entry.version}</p></div>
             <span className="truncate text-xs text-ds-ink-muted">{applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}</span>
             <span className="font-ds-mono text-[13px] font-semibold">{entry.categories.length}</span>
             <StatusPill variant={statusVariant(entry.status)}>{timeConfigStatusLabel(entry.status)}</StatusPill>
@@ -360,7 +355,6 @@ export function DPSettingsOvertime() {
             </PanelSection>
             <PanelSection title="Limites">
               <div className="grid grid-cols-2 gap-4">
-                <PanelField label="Tolerância geral">{item.dailyToleranceMinutes} min</PanelField>
                 <PanelField label="Limite de hora extra por dia">{formatDuration(item.dailyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Limite de hora extra por semana">{formatDuration(item.weeklyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Banco de horas">{item.timeBank.enabled ? 'Ativo' : 'Desativado'}</PanelField>
@@ -407,18 +401,17 @@ export function DPSettingsOvertime() {
             <Field label="Descrição" htmlFor="overtime-description" requirement="opcional"><textarea id="overtime-description" className={`${fieldInputClass} min-h-20 py-2`} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
             <Field label="Referência da CCT ou acordo" htmlFor="overtime-agreement" requirement="opcional" hint="Referência informativa. O sistema não interpreta o documento automaticamente."><Input id="overtime-agreement" className={fieldInputClass} value={form.collectiveAgreementReference} onChange={(event) => setForm((current) => ({ ...current, collectiveAgreementReference: event.target.value }))} placeholder="Ex.: CCT 2026 · cláusula 12" /></Field>
             <PanelSection title="Abrangência"><DPTimeApplicabilityFields value={form.applicability} onChange={(applicability) => setForm((current) => ({ ...current, applicability }))} units={activeOperationalUnits(units)} unitOrganizations={activeOperationalUnits(unitOrganizations)} unitGroups={unitGroups} roles={roles} functions={functions} people={activeUsers} /></PanelSection>
-            <PanelSection title="Vigência e tolerância geral">
+            <PanelSection title="Vigência e limites">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Início" htmlFor="overtime-valid-from"><Input id="overtime-valid-from" type="date" className={fieldInputClass} value={form.validFrom} onChange={(event) => setForm((current) => ({ ...current, validFrom: event.target.value }))} /></Field>
                 <Field label="Fim" htmlFor="overtime-valid-to" requirement="opcional"><Input id="overtime-valid-to" type="date" className={fieldInputClass} value={form.validTo} onChange={(event) => setForm((current) => ({ ...current, validTo: event.target.value }))} /></Field>
-                <Field label="Tolerância geral de hora extra" htmlFor="overtime-tolerance" hint="Margem diária única, em minutos, aplicada a todas as faixas desta política antes de começar a apurar hora extra. A regra só será aplicada quando o motor de ponto for ativado."><Input id="overtime-tolerance" type="number" min={0} max={180} className={fieldInputClass} value={form.dailyToleranceMinutes} onChange={(event) => setForm((current) => ({ ...current, dailyToleranceMinutes: event.target.value }))} /></Field>
                 <Field label="Limite de hora extra por dia" htmlFor="overtime-daily-limit" requirement="opcional" hint="Máximo de horas extras reconhecidas automaticamente no dia. Não é o total da jornada. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-daily-limit" className={`${fieldInputClass} font-ds-mono`} value={form.dailyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, dailyOvertimeLimit: event.target.value }))} placeholder="02:00" /></Field>
                 <Field label="Limite de hora extra por semana" htmlFor="overtime-weekly-limit" requirement="opcional" hint="Máximo acumulado de horas extras reconhecidas automaticamente na semana. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-weekly-limit" className={`${fieldInputClass} font-ds-mono`} value={form.weeklyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, weeklyOvertimeLimit: event.target.value }))} placeholder="10:00" /></Field>
               </div>
             </PanelSection>
             <PanelSection title="Faixas de hora extra" aside={`${form.categories.length}`}>
               <TimeConfigurationNotice>
-                Todas as faixas usam a tolerância geral definida acima. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
+                A tolerância fica na jornada de cada pessoa, não aqui. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
               </TimeConfigurationNotice>
               <div className="space-y-3">
                 {form.categories.map((category, index) => (

@@ -95,6 +95,7 @@ const journeyFieldsObjectSchema = z.object({
   scaleValidation: journeyScaleValidationSchema.default({ mode: 'consecutive_days' }),
   expectedBreakMinutes: z.number().int().min(0).max(480).optional(),
   useDefinedShiftWhenShorter: z.boolean().optional(),
+  toleranceMinutes: z.number().int().min(0, 'A tolerância não pode ser negativa.').max(10, 'A tolerância vai até 10 minutos por dia (art. 58 §1º da CLT).').optional(),
   allowedShiftDefinitionIds: z.array(idSchema).max(100).optional(),
   applicability: applicabilitySchema,
   validFrom: dateSchema,
@@ -138,6 +139,7 @@ export const createJourneySchema = journeyFieldsObjectSchema.extend({ supersedes
 const journeyUpdateDataSchema = journeyFieldsObjectSchema.partial().extend({
   description: journeyFieldsObjectSchema.shape.description.nullable(),
   allowedShiftDefinitionIds: journeyFieldsObjectSchema.shape.allowedShiftDefinitionIds.nullable(),
+  toleranceMinutes: journeyFieldsObjectSchema.shape.toleranceMinutes.nullable(),
   validTo: journeyFieldsObjectSchema.shape.validTo.nullable(),
 }).refine((value) => Object.keys(value).length > 0);
 export const updateJourneySchema = z.discriminatedUnion('action', [
@@ -186,7 +188,6 @@ const overtimeFieldsObjectSchema = z.object({
   applicability: applicabilitySchema,
   validFrom: dateSchema,
   validTo: dateSchema.optional(),
-  dailyToleranceMinutes: z.number().int().min(0).max(180),
   dailyOvertimeLimitMinutes: z.number().int().positive().max(24 * 60).optional(),
   weeklyOvertimeLimitMinutes: z.number().int().positive().max(7 * 24 * 60).optional(),
   categories: z.array(overtimeCategorySchema).min(1).max(30),
@@ -242,8 +243,6 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   breakSegments: z.array(z.object({ start: timeSchema, end: timeSchema }).strict()).min(2).max(6).nullable().optional(),
   breakSplit: z.enum(['single', 'multiple']).nullable().optional(),
   breakPauseCount: z.number().int().min(2).max(10).nullable().optional(),
-  breakToleranceBelowMinutes: z.number().int().min(0).max(60).nullable().optional(),
-  breakToleranceAboveMinutes: z.number().int().min(0).max(60).nullable().optional(),
   breakMinPauseMinutes: z.number().int().min(1).max(60).nullable().optional(),
   unitId: nullableOptionalString,
   unitName: nullableOptionalString,

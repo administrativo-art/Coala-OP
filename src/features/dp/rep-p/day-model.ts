@@ -27,9 +27,9 @@ export type DayShift = {
   breakSegments?: { start: string; end: string }[] | null;
   breakSplit?: "single" | "multiple";
   breakPauseCount?: number | null;
-  breakToleranceBelowMinutes?: number | null;
-  breakToleranceAboveMinutes?: number | null;
   breakMinPauseMinutes?: number | null;
+  /** Tolerância única da jornada do dia (minutos); ausente = sem tolerância. */
+  toleranceMinutes?: number | null;
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";
@@ -53,14 +53,16 @@ export type DayView = {
   allMarkings: DayMarking[];
   workedMinutes: number;
   breakMinutes: number | null;
-  /** Diferença prévia entre o trabalhado e o previsto; null quando não dá para comparar. */
+  /** Diferença prévia entre o trabalhado e o previsto, zerada dentro da tolerância da jornada; null quando não dá para comparar. */
   balanceMinutes: number | null;
-  /** Desvio da saída (ou da entrada) acima do limite de aviso, em minutos com sinal. */
+  /** Desvio da saída (ou da entrada) acima da tolerância da jornada, em minutos com sinal. */
   deviation: { edge: "start" | "end"; minutes: number } | null;
 };
 
-// Limite de aviso de desvio de entrada/saída (conferência, não a tolerância do art. 58 §1º).
-export const DEVIATION_NOTICE_MINUTES = 10;
+/** Tolerância única do dia, cadastrada na jornada (decisão do programador): vale para desvios, intervalo e saldo. */
+export function toleranceOf(shift: DayShift | null) {
+  return shift?.toleranceMinutes ?? 0;
+}
 
 /** Ausência que vale para o dia: aprovada ou em análise; rascunho, recusada e cancelada não contam. */
 const ACTIVE_ABSENCE = new Set(["approved", "in_review", "submitted"]);
@@ -121,6 +123,7 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const past = input.date < input.today;
   const worked = workedMinutes(markings);
   const breakMinutes = breakTaken(markings);
+  const tolerance = toleranceOf(shift);
   const incidents: DayIncident[] = [];
   let deviation: DayView["deviation"] = null;
 
@@ -133,17 +136,14 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (shift && markings.length >= 2 && markings.length % 2 === 0 && shift.startTime && shift.endTime) {
     const endDiff = minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - minutesOf(shift.endTime);
     const startDiff = minutesOf(fiscalClock(markings[0].markedAt)) - minutesOf(shift.startTime);
-    if (Math.abs(endDiff) > DEVIATION_NOTICE_MINUTES) deviation = { edge: "end", minutes: endDiff };
-    else if (Math.abs(startDiff) > DEVIATION_NOTICE_MINUTES) deviation = { edge: "start", minutes: startDiff };
-    if (endDiff > DEVIATION_NOTICE_MINUTES) incidents.push("late_exit");
+    if (Math.abs(endDiff) > tolerance) deviation = { edge: "end", minutes: endDiff };
+    else if (Math.abs(startDiff) > tolerance) deviation = { edge: "start", minutes: startDiff };
+    if (endDiff > tolerance) incidents.push("late_exit");
   }
-  // Tolerância do intervalo é a cadastrada no turno (decisão do programador): sem cadastro, não há aviso.
   const expectedBreak = shift?.breakDurationMinutes ?? null;
-  const below = shift?.breakToleranceBelowMinutes;
-  const above = shift?.breakToleranceAboveMinutes;
   if (breakMinutes !== null && expectedBreak) {
-    if (below != null && breakMinutes < expectedBreak - below) incidents.push("short_break");
-    if (above != null && breakMinutes > expectedBreak + above) incidents.push("long_break");
+    if (breakMinutes < expectedBreak - tolerance) incidents.push("short_break");
+    if (breakMinutes > expectedBreak + tolerance) incidents.push("long_break");
   }
   if (shift?.breakMinPauseMinutes && pauseLengths(markings).some((length) => length < shift.breakMinPauseMinutes!)) {
     if (!incidents.includes("short_break")) incidents.push("short_break");
@@ -152,7 +152,8 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => marking.executionUnitId !== shift.unitId)) {
     incidents.push("other_unit");
   }
-  const balanceMinutes = past && shift && !absence && markings.length % 2 === 0 ? worked - shiftMinutes(shift) : null;
+  const difference = past && shift && !absence && markings.length % 2 === 0 ? worked - shiftMinutes(shift) : null;
+  const balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
   return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes, deviation };
 }
 
