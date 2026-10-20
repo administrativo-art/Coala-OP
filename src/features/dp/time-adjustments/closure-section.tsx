@@ -13,6 +13,7 @@ import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
 import type { ClosurePerson } from "./closure-core";
+import { ClosingPackageCard } from "./closing-package-card";
 import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
 
@@ -40,7 +41,7 @@ function previousCompetence() {
 // Último dia da competência (o banco do DP olha o ciclo que contém o fim do mês fechado).
 const lastDayOf = (competence: string) => new Date(Date.UTC(Number(competence.slice(0, 4)), Number(competence.slice(5, 7)), 0)).toISOString().slice(0, 10);
 
-export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string }> }) {
+export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; operacional?: boolean }> }) {
   const [competence, setCompetence] = useState(previousCompetence);
   const [data, setData] = useState<ClosurePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,11 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<ClosurePerson | null>(null);
+  const [bulk, setBulk] = useState<{ running: boolean; sent: number; skipped: string[] } | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const [packagesKey, setPackagesKey] = useState(0);
+  // Pacote do fechamento vai para toda a equipe operacional do mês, não só para quem teve pedido.
+  const team = people.filter((person) => person.operacional !== false).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
   const names = new Map(people.map((person) => [person.id, person.username ?? "Responsável"]));
   const nameOf = (uid: string | null) => uid ? names.get(uid) ?? "Responsável" : "—";
   const request = useCallback(<T,>(input: string, init: { method?: string; json?: unknown; fallbackError: string }) =>
@@ -64,6 +70,27 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     }
   }, [competence, request]);
   useEffect(() => { void load(); }, [load]);
+
+  /** Envia, uma pessoa por vez, os pacotes prontos; quem não está pronto (contracheque, e-mail) fica listado. */
+  async function sendAll() {
+    if (!data?.closure) return;
+    setConfirmBulk(false);
+    setBulk({ running: true, sent: 0, skipped: [] });
+    let sent = 0;
+    const skipped: string[] = [];
+    for (const person of team) {
+      try {
+        await request("/api/dp/time-recording/closing-packages", { method: "POST", json: { action: "send", competence, expectedVersion: data.closure.version, employeeUid: person.id },
+          fallbackError: "Não foi possível enviar." });
+        sent += 1;
+      } catch (cause) {
+        skipped.push(`${person.username ?? "Sem nome"}: ${errorMessageOf(cause, "não enviado")}`);
+      }
+      setBulk({ running: true, sent, skipped: [...skipped] });
+    }
+    setBulk({ running: false, sent, skipped });
+    setPackagesKey((value) => value + 1);
+  }
 
   async function act(kind: "close" | "reopen") {
     if (!data) return;
@@ -117,6 +144,22 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
             </LiftRow>
           );
         })}
+        {closed ? <div className="space-y-2 border-t border-ds-divider pt-3">
+          <p className="text-sm font-extrabold text-ds-ink">Espelho e contracheque para assinatura</p>
+          <p className="text-xs text-ds-ink-muted">Cada pessoa recebe na Autentique um documento só, com o espelho de ponto assinado pela empresa e o contracheque do mês. Abra a pessoa para ver o que falta.</p>
+          {data.can.close ? (confirmBulk
+            ? <InlineConfirm message={`Enviar os pacotes de ${team.length} pessoas? Quem ainda não tem contracheque ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
+                loadingLabel="Enviando…" loading={bulk?.running ?? false} onConfirm={() => void sendAll()} onCancel={() => setConfirmBulk(false)} />
+            : <Button variant="ds-secondary" size="sm" disabled={bulk?.running} onClick={() => setConfirmBulk(true)}>Enviar todos os prontos</Button>) : null}
+          {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
+          {team.map((person) => (
+            <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [] })}
+              className="flex items-center justify-between gap-3">
+              <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
+              <span className="text-xs text-ds-ink-muted">Ver e enviar</span>
+            </LiftRow>
+          ))}
+        </div> : null}
         {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
         {!closed && data.can.close ? (confirming === "close"
           ? <InlineConfirm message={`Fechar ${dateBR(`${competence}-01`).slice(3)}? A declaração fica congelada e o mês deixa de aceitar pedido de ajuste.`} confirmLabel="Fechar competência" loadingLabel="Fechando…"
@@ -137,6 +180,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
         <SidePanel open onOpenChange={(next) => { if (!next) setSelected(null); }} kicker={`Declaração do fechamento · ${dateBR(`${competence}-01`).slice(3)}`} title={selected.name ?? nameOf(selected.uid)}
           subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências`}>
           {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
+          {closed ? <ClosingPackageCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
           {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} /> : null}
           <PanelSection title="Ajustes de ponto">
             {selected.adjustments.length ? selected.adjustments.map((item) => (

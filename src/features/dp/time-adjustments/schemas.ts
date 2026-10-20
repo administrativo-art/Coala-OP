@@ -56,8 +56,12 @@ export type ClosureActionInput = z.infer<typeof closureActionSchema>;
 
 const uid = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 export const mirrorQuerySchema = z.object({ competence, employeeUid: uid.optional() }).strict();
-export const mirrorActionSchema = z.object({ action: z.enum(['generate', 'agree']), competence, expectedVersion: z.number().int().positive(),
-  employeeUid: uid.optional(), snapshotHash: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
+// A concordância do trabalhador passou a ser a assinatura do pacote do fechamento na Autentique (20/10/2026).
+export const mirrorActionSchema = z.object({ action: z.literal('generate'), competence, expectedVersion: z.number().int().positive(),
+  employeeUid: uid.optional() }).strict();
+export const closingPackageQuerySchema = z.object({ competence, employeeUid: uid }).strict();
+export const closingPackageActionSchema = z.object({ action: z.literal('send'), competence, expectedVersion: z.number().int().positive(), employeeUid: uid }).strict();
+export type ClosingPackageActionInput = z.infer<typeof closingPackageActionSchema>;
 export type MirrorActionInput = z.infer<typeof mirrorActionSchema>;
 
 export const aejExportSchema = z.object({ establishmentId: id, startDate: civilDate, endDate: civilDate }).strict()

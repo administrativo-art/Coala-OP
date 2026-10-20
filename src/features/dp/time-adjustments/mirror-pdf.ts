@@ -16,8 +16,9 @@ export const pdfSafe = (value: string) => value.normalize('NFC').replace(/[^\x20
 export const mirrorFileName = (snapshot: MirrorSnapshot) => `espelho-ponto-${snapshot.competence}-v${snapshot.closureVersion}.pdf`;
 
 /**
- * Espelho de ponto do mês fechado, derivado só do instantâneo gravado. O bloco final diz se a pessoa concordou
- * (com instante e carimbo do instantâneo) ou se a concordância está pendente; divergência é tratada com o DP.
+ * Espelho de ponto do mês fechado, derivado só do instantâneo gravado. A assinatura do trabalhador é feita na Autentique,
+ * no pacote do fechamento com o contracheque; a empresa assina o pacote com o e-CNPJ. Concordância antiga (até 20/10/2026)
+ * continua impressa quando existir.
  */
 export async function renderMirrorPdf(snapshot: MirrorSnapshot, snapshotHash: string, agreement: MirrorAgreement | null, options: { preview?: boolean } = {}): Promise<Buffer> {
   const document = await PDFDocument.create({ updateMetadata: false });
@@ -107,10 +108,10 @@ export async function renderMirrorPdf(snapshot: MirrorSnapshot, snapshotHash: st
   }
 
   y -= 8;
-  paragraph('Concordância do trabalhador', 11, bold);
+  paragraph(agreement ? 'Concordância do trabalhador' : 'Assinaturas', 11, bold);
   paragraph(agreement
     ? `Concordo com este espelho. Registrado eletronicamente por ${snapshot.employee.name} em ${whenBR(agreement.at)} (${agreement.clockSource === 'hora_legal' ? 'Hora Legal' : 'relógio do servidor'}, ${agreement.channel === 'mobile' ? 'pelo Coala Go com atestação do aplicativo' : 'pelo sistema web'}), sobre o instantâneo ${agreement.snapshotHash}.`
-    : 'Pendente. Sem a concordância registrada, eventual divergência é tratada diretamente com o Departamento Pessoal.', 9, agreement ? regular : bold);
+    : 'Este espelho é enviado ao trabalhador para assinatura na Autentique, junto com o contracheque do mês, no pacote do fechamento; a assinatura da empresa com o certificado digital (e-CNPJ) acompanha o pacote em arquivo separado. Este arquivo avulso não é assinado. Divergência pode ser apresentada ao Departamento Pessoal a qualquer tempo.', 9, regular);
 
   const footer = options.preview ? 'Prévia do modelo com dados fictícios - sem validade.'
     : `Fechamento v${snapshot.closureVersion} · declaração ${snapshot.manifestHash.slice(0, 16)} · instantâneo ${snapshotHash.slice(0, 16)} · gerado em ${whenBR(snapshot.generatedAt)} (${snapshot.clockSource === 'hora_legal' ? 'Hora Legal' : 'relógio do servidor'}) · ${MIRROR_RENDERER_VERSION}`;

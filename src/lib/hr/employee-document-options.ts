@@ -485,6 +485,16 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
     classificationHints: ["Demonstra proventos, descontos, líquido e competência."],
   },
   {
+    // Pacote do fechamento do mês assinado pelo trabalhador na Autentique: espelho de ponto e contracheque num só PDF.
+    code: "TIME_CLOSING_PACKAGE",
+    label: "Espelho de ponto e contracheque",
+    category: "remuneration",
+    folderCode: "REMUNERATION",
+    defaultAccessLevel: "confidential",
+    aliases: ["espelho de ponto assinado", "pacote do fechamento"],
+    classificationHints: ["Gerado pelo sistema no fechamento do mês; não é classificado por envio."],
+  },
+  {
     code: "TRANSPORT_REQUEST",
     label: "Solicitação de vale-transporte",
     category: "benefits",

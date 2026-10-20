@@ -34,7 +34,7 @@ function generationLabel(template: SystemDocumentTemplate) {
 
 function signatureLabel(template: SystemDocumentTemplate) {
   if (template.renderer === "rep_p_receipt") return "Assinatura digital PAdES";
-  if (template.renderer === "time_mirror") return "Concordância eletrônica do trabalhador";
+  if (template.renderer === "time_mirror") return "Autentique, com o contracheque do mês";
   if (template.signatureScope === "independent") return "Assinatura individual";
   if (template.signatureScope === "bundle") return "Assinatura do pacote";
   return "Sem assinatura";

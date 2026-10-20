@@ -451,7 +451,7 @@ const timeRecordingTemplates: SystemDocumentTemplate[] = [{
   name: "Espelho de ponto",
   documentTitle: "Espelho de ponto",
   category: "Controle de ponto",
-  description: "Espelho do mês fechado por pessoa: escala, batidas originais com NSR, desconsideradas e incluídas por ajuste aprovado, ausências e a declaração do fechamento, com a concordância do trabalhador ou \"pendente\".",
+  description: "Espelho do mês fechado por pessoa: escala, batidas originais com NSR, desconsideradas e incluídas por ajuste aprovado, ausências e a declaração do fechamento. Assinado pela empresa com o e-CNPJ e enviado com o contracheque do mês, num único PDF, para a assinatura do trabalhador na Autentique.",
   status: "published",
   version: 1,
   templateKind: "system_pdf",
@@ -461,14 +461,14 @@ const timeRecordingTemplates: SystemDocumentTemplate[] = [{
   sourceModulePath: "src/features/dp/time-adjustments/mirror-pdf.ts",
   variables: [],
   letterheadVersion: "none",
-  // Concordância eletrônica simples do titular, registrada no próprio sistema; não passa pelo fluxo de assinaturas.
-  signatureScope: "none",
+  // Pacote do fechamento (20/10/2026): espelho e contracheque num PDF assinado na Autentique; e-CNPJ da empresa em .p7s destacado.
+  signatureScope: "bundle",
   // Retenção de 20 anos decidida pelo programador (plano REP-P 10-B); descarte nunca é automático.
   retentionPolicyId: "manual_review",
   sourceFormat: "pdf",
   isSystem: true,
   previewUrl: "/api/documents/templates/system-ptrp-time-mirror/preview",
-  updatedAt: "2026-10-19T00:00:00.000Z",
+  updatedAt: "2026-10-20T00:00:00.000Z",
 }];
 
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [

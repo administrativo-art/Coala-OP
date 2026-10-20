@@ -68,6 +68,14 @@ const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
     displayNameTemplate: "Contracheque — {referenceMonthLabel}",
     requiredFields: ["referenceMonth"],
   },
+  TIME_CLOSING_PACKAGE: {
+    processCategory: "MONTHLY_REFERENCE",
+    duplicateStrategy: "VERSION",
+    duplicateKeys: ["referenceMonth"],
+    downloadNameTemplate: "{employeeCode}__ESPELHO-CONTRACHEQUE__{referenceMonth}__v{version}",
+    displayNameTemplate: "Espelho de ponto e contracheque — {referenceMonthLabel}",
+    requiredFields: ["referenceMonth"],
+  },
   VACATION_NOTICE: {
     processCategory: "VACATION_INSTALLMENT",
     duplicateStrategy: "VERSION",

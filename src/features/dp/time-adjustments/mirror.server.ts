@@ -13,7 +13,7 @@ import { AppError } from '@/lib/observability/app-error';
 
 import { competenceRange, type ClosurePerson } from './closure-core';
 import { assertClosureAccess, type ClosureRecord } from './closure.server';
-import { buildMirrorSnapshot, MIRROR_RENDERER_VERSION, mirrorIncompleteReason, mirrorSnapshotHash, type MirrorAgreement, type MirrorSnapshot } from './mirror-core';
+import { buildMirrorSnapshot, MIRROR_RENDERER_VERSION, mirrorSnapshotHash, type MirrorAgreement, type MirrorSnapshot } from './mirror-core';
 import { mirrorFileName, renderMirrorPdf } from './mirror-pdf';
 import type { MirrorActionInput } from './schemas';
 import { actInstant, CLOSURES, closureKey } from './service.server';
@@ -40,15 +40,25 @@ function refs(deps: Dependencies, workspaceId: string, competence: string, versi
 }
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
 
+/** Situação do pacote do fechamento; a recusa vem da solicitação de assinatura (webhook genérico da Autentique). */
+async function packageStatus(hrDb: Firestore, pack: { status: string; signatureRequestId: string; sentAt?: string | null; signedAt?: string | null }) {
+  const refused = pack.status === 'sent' && (await hrDb.collection('hrSignatureRequests').doc(pack.signatureRequestId).get()).get('status') === 'rejected';
+  return { status: refused ? 'refused' : pack.status, sentAt: pack.sentAt ?? null, signedAt: pack.signedAt ?? null };
+}
+
 /** Situação do espelho da pessoa no mês: só leitura, sem gerar nada. */
 export async function readMirrorStatus(context: ServerUserContext, competence: string, employeeUid?: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   const uid = subject(context, employeeUid);
   const closure = (await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).get()).data() as ClosureRecord | undefined;
   if (closure?.status !== 'closed') return { competence, closure: closure ? { status: closure.status, version: closure.version } : null, mirror: null };
-  const mirror = (await refs(deps, context.workspace_id, competence, closure.version, uid).mirror.get()).data() as MirrorRecord | undefined;
+  const target = refs(deps, context.workspace_id, competence, closure.version, uid);
+  const [mirror, pack] = await Promise.all([target.mirror.get(), target.closure.collection('versions').doc(String(closure.version)).collection('packages').doc(uid).get()]);
+  const record = mirror.data() as MirrorRecord | undefined;
   return { competence, closure: { status: closure.status, version: closure.version },
-    mirror: mirror ? { snapshotHash: mirror.snapshotHash, generatedAt: mirror.snapshot.generatedAt, agreement: mirror.agreement } : null };
+    mirror: record ? { snapshotHash: record.snapshotHash, generatedAt: record.snapshot.generatedAt, agreement: record.agreement } : null,
+    // Situação da assinatura do pacote do fechamento (espelho e contracheque) na Autentique.
+    package: pack.exists ? await packageStatus(deps.hrDb, pack.data() as { status: string; signatureRequestId: string; sentAt?: string | null; signedAt?: string | null }) : null };
 }
 
 async function buildSnapshot(deps: Dependencies, workspaceId: string, competence: string, closure: ClosureRecord, uid: string, declaration: ClosurePerson | null) {
@@ -101,29 +111,6 @@ export async function generateMirror(context: ServerUserContext, input: MirrorAc
     if (current.get('status') !== 'closed' || current.get('version') !== closure.version) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou durante a geração. Atualize e confira.', 'CONFLICT');
     tx.create(target.mirror, record);
     return record;
-  });
-}
-
-/** Concordância do titular: uma vez, sobre o instantâneo que ele viu, na versão fechada vigente. */
-export async function agreeWithMirror(context: ServerUserContext, input: MirrorActionInput, channel: 'web' | 'mobile', injected: Partial<Dependencies> = {}) {
-  const deps = { ...defaults, ...injected };
-  if (input.employeeUid && input.employeeUid !== context.decoded.uid) throw fail('PTRP_MIRROR_AGREEMENT_OWNER', 'Só o próprio trabalhador registra concordância.', 'AUTHORIZATION');
-  if (!input.snapshotHash) throw fail('PTRP_MIRROR_HASH_REQUIRED', 'Abra o espelho antes de concordar.');
-  const { at, clockSource } = await actInstant(deps.clock);
-  const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
-  const target = refs(deps, context.workspace_id, input.competence, input.expectedVersion, context.decoded.uid);
-  return deps.hrDb.runTransaction(async (tx) => {
-    const [closure, mirror] = await Promise.all([tx.get(closureRef), tx.get(target.mirror)]);
-    if (closure.get('status') !== 'closed' || closure.get('version') !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou. Abra o espelho atual.', 'CONFLICT');
-    const record = mirror.data() as MirrorRecord | undefined;
-    if (!record) throw fail('PTRP_MIRROR_NOT_FOUND', 'Abra o espelho antes de concordar.', 'NOT_FOUND');
-    if (record.snapshotHash !== input.snapshotHash) throw fail('PTRP_MIRROR_HASH_MISMATCH', 'O espelho não é o que você abriu. Abra de novo.', 'CONFLICT');
-    if (record.agreement) return record;
-    const incomplete = mirrorIncompleteReason(record.snapshot);
-    if (incomplete) throw fail('PTRP_MIRROR_INCOMPLETE', `${incomplete} Procure o DP antes de concordar.`, 'CONFLICT');
-    const agreement: MirrorAgreement = { at, clockSource, uid: context.decoded.uid, snapshotHash: record.snapshotHash, channel };
-    tx.update(target.mirror, { agreement });
-    return { ...record, agreement };
   });
 }
 

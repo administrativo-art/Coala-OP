@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
@@ -11,7 +11,9 @@ const { defaultAdminPermissions, defaultGuestPermissions } = await import('../..
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
-const { agreeWithMirror, generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
+const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
+const { readClosingPackage, sendClosingPackage, syncClosingPackageSignature } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
+const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { generateBankMonth, readBankStatement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
@@ -96,7 +98,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const versions = await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').get();
     assert.deepEqual(versions.docs.map((doc) => doc.id).sort(), ['1', '2']);
 
-    // Espelho da versão 2: gerado uma vez, concordância uma vez e sobre o instantâneo aberto.
+    // Espelho da versão 2: gerado uma vez por pessoa e versão; a assinatura é a do pacote do fechamento.
     await hrDbAdmin.collection('repP_receipts').doc(`${prefix}-r1`).set({ workspaceId, employeeId: userId, recordedDate: '2026-08-12', status: 'issued',
       snapshot: { nsr: 41, markedAt: '2026-08-12T12:00:00-0300', executionUnitId: unitId, collectorId: '01', employeeName: 'Maria Fiscal', employeeCpf: '52998224725',
         employerLegalName: 'Empregador do ensaio LTDA', employerCnpj: '14276603000125' } });
@@ -113,17 +115,58 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(mirror.snapshot.adjustments.length, 2);
     assert.equal(mirror.snapshot.actors[reviewer.decoded.uid], undefined);
     assert.equal((await generateMirror(closer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, mirrorDeps)).snapshotHash, mirror.snapshotHash);
-    await assert.rejects(agreeWithMirror(closer, { action: 'agree', competence, expectedVersion: 2, employeeUid: userId, snapshotHash: mirror.snapshotHash }, 'web', mirrorDeps), { code: 'PTRP_MIRROR_AGREEMENT_OWNER' });
-    await assert.rejects(agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: 'f'.repeat(64) }, 'web', mirrorDeps), { code: 'PTRP_MIRROR_HASH_MISMATCH' });
-    const agreed = await agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: mirror.snapshotHash }, 'mobile', mirrorDeps);
-    assert.equal(agreed.agreement.channel, 'mobile');
-    assert.equal((await agreeWithMirror(titular, { action: 'agree', competence, expectedVersion: 2, snapshotHash: mirror.snapshotHash }, 'web', mirrorDeps)).agreement.at, agreed.agreement.at);
-    const status = await readMirrorStatus(closer, competence, userId, mirrorDeps);
-    assert.equal(status.mirror.agreement.uid, userId);
     const pdf = await mirrorPdf(titular, competence, undefined, mirrorDeps);
     assert.equal(pdf.bytes.subarray(0, 4).toString(), '%PDF');
     assert.equal(pdf.filename, 'espelho-ponto-2026-08-v2.pdf');
     await assert.rejects(mirrorPdf(reviewer, competence, userId, mirrorDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+
+    // Pacote do fechamento: espelho e contracheque num PDF, e-CNPJ destacado, Autentique para o trabalhador.
+    const files = new Map();
+    const payslipDoc = await PDFDocument.create();
+    payslipDoc.addPage([595, 842]);
+    files.set('payslips/agosto.pdf', Buffer.from(await payslipDoc.save()));
+    const sent = [];
+    const packageDeps = {
+      mainDb: dbAdmin, hrDb: hrDbAdmin, now: () => new Date('2026-10-17T12:00:00.000Z'), mirror: mirrorDeps,
+      storage: { async save(path, bytes) { files.set(path, Buffer.from(bytes)); }, async download(path) { if (!files.has(path)) throw new Error('missing'); return files.get(path); } },
+      sign: async () => ({ bytes: Buffer.from('p7s'), certificateCnpj: '14276603000125' }),
+      createDocument: async (params) => { sent.push(params); return { sandbox: true, document: { id: `${prefix}-autentique`, created_at: '2026-10-17T12:00:01Z', signatures: [] } }; },
+      downloadSigned: async () => Buffer.from(sent[0].buffer),
+    };
+    const packageInput = { action: 'send', competence, expectedVersion: 2, employeeUid: userId };
+    await assert.rejects(sendClosingPackage(reviewer, packageInput, packageDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_CONTACT_REQUIRED' });
+    await dbAdmin.collection('users').doc(userId).set({ username: 'Maria Fiscal', email: 'maria@exemplo.com' }, { merge: true });
+    await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_PAYSLIP_MISSING' });
+    const payslipRef = hrDbAdmin.collection('employeeDocuments').doc(`${prefix}-payslip`);
+    await payslipRef.set({ employeeId: userId, documentTypeCode: 'PAYSLIP', caseId: `month-${competence}`, status: 'validated', storagePath: 'payslips/agosto.pdf',
+      version: 1, deletedAt: null, displayName: 'Contracheque — agosto de 2026' });
+    // Sem código de conferência, o contracheque não entra no pacote.
+    await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_PAYSLIP_UNVERIFIED' });
+    await payslipRef.update({ contentHash: createHash('sha256').update(files.get('payslips/agosto.pdf')).digest('hex') });
+    assert.deepEqual((await readClosingPackage(closer, { competence, employeeUid: userId }, packageDeps)).payslip, { documentId: payslipRef.id, name: 'Contracheque — agosto de 2026' });
+    const pack = await sendClosingPackage(closer, packageInput, packageDeps);
+    assert.deepEqual([pack.status, pack.providerDocumentId, pack.employerSignature.certificateCnpj], ['sent', `${prefix}-autentique`, '14276603000125']);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].signers[0].email, 'maria@exemplo.com');
+    assert.equal((await PDFDocument.load(sent[0].buffer)).getPageCount(), pack.bundle.pageCount);
+    assert.ok(files.has(pack.employerSignature.storagePath));
+    // Segundo envio não manda de novo; a situação aparece no espelho.
+    assert.equal((await sendClosingPackage(closer, packageInput, packageDeps)).sentAt, pack.sentAt);
+    assert.equal(sent.length, 1);
+    assert.equal((await readMirrorStatus(titular, competence, undefined, mirrorDeps)).package.status, 'sent');
+    // Recusa chega pela solicitação (webhook genérico) e aparece como recusado.
+    const requestRef = hrDbAdmin.collection('hrSignatureRequests').doc(pack.signatureRequestId);
+    await requestRef.update({ status: 'rejected' });
+    assert.equal((await readClosingPackage(closer, { competence, employeeUid: userId }, packageDeps)).package.status, 'refused');
+    await requestRef.update({ status: 'sent' });
+    // Webhook: assinado arquiva nos documentos do colaborador, uma vez.
+    const signed = await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'document.finished', signedUrl: 'https://api.autentique.com.br/x.pdf', at: '2026-10-18T09:00:00.000Z' }, packageDeps);
+    assert.equal(signed.status, 'signed');
+    const archived = (await hrDbAdmin.collection('employeeDocuments').doc(signed.archivedDocumentId).get()).data();
+    assert.deepEqual([archived.documentTypeCode, archived.employeeId, archived.caseId, archived.signatureStatus], ['TIME_CLOSING_PACKAGE', userId, `month-${competence}`, 'signed']);
+    assert.equal((await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'signature.rejected' }, packageDeps)).status, 'signed');
+    await payslipRef.delete();
 
     // Banco de horas do mês fechado: jornada de 7h20, turno de 4h com batida incluída, dia escalado sem batida e folga.
     const journeyId = `${prefix}-journey`;

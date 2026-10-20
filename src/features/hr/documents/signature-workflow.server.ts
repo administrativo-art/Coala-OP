@@ -2399,6 +2399,12 @@ export async function archiveAutentiqueSignedDocument(params: {
   const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION).doc(params.signatureRequestId);
   const request = await requestRef.get();
   if (!request.exists) throw new Error("Solicitação de assinatura não encontrada.");
+  // Pacote do fechamento do mês (espelho e contracheque): arquivado pelo próprio serviço do ponto.
+  if (request.get("purpose") === "time_closing_package") {
+    const { syncClosingPackageSignature } = await import("@/features/dp/time-adjustments/closing-package.server");
+    const synced = await syncClosingPackageSignature({ signatureRequestId: params.signatureRequestId, eventType: "document.finished", signedUrl: params.signedUrl, at: params.signedAt ?? null });
+    return synced?.archivedDocumentId ?? null;
+  }
   if (Array.isArray(request.get("archivedDocumentIds"))) {
     return (request.get("archivedDocumentIds") as string[])[0] ?? null;
   }

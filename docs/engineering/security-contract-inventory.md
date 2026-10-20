@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **478**
-- Totalmente contratados: **129**
+- Arquivos de rota: **479**
+- Totalmente contratados: **130**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -106,6 +106,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/adjustments/review` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/review/route.ts](../../src/app/api/dp/time-recording/adjustments/review/route.ts) |
 | `/api/dp/time-recording/aej` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/aej/route.ts](../../src/app/api/dp/time-recording/aej/route.ts) |
 | `/api/dp/time-recording/afd` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) |
+| `/api/dp/time-recording/closing-packages` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closing-packages/route.ts](../../src/app/api/dp/time-recording/closing-packages/route.ts) |
 | `/api/dp/time-recording/closures` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closures/route.ts](../../src/app/api/dp/time-recording/closures/route.ts) |
 | `/api/dp/time-recording/closures/[competence]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/[competence]/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |

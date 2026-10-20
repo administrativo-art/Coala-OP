@@ -4,6 +4,7 @@ import test from 'node:test';
 import { PDFDocument } from 'pdf-lib';
 
 import { buildMirrorSnapshot, hoursText, MIRROR_PREVIEW_SNAPSHOT, mirrorIncompleteReason, mirrorSnapshotHash, pairedMinutes } from '../../src/features/dp/time-adjustments/mirror-core';
+import { closingPackagePath, closingTermText, composeClosingPackage } from '../../src/features/dp/time-adjustments/closing-package';
 import { pdfSafe, renderMirrorPdf } from '../../src/features/dp/time-adjustments/mirror-pdf';
 
 const at = (date: string, time: string) => `${date}T${time}:00-0300`;
@@ -24,7 +25,7 @@ test('turno noturno: batidas do mesmo dia de trabalho ficam na ordem dos instant
   assert.deepEqual(night.arpReading, { count: 2, maxNsr: 2, readAt: '2026-02-02T12:00:00.000Z' });
 });
 
-test('espelho incompleto não recebe concordância', () => {
+test('espelho incompleto não vai para assinatura', () => {
   assert.equal(mirrorIncompleteReason(MIRROR_PREVIEW_SNAPSHOT), null);
   assert.match(mirrorIncompleteReason({ ...MIRROR_PREVIEW_SNAPSHOT, truncated: true })!, /não comporta/);
   assert.match(mirrorIncompleteReason({ ...MIRROR_PREVIEW_SNAPSHOT, employee: { ...MIRROR_PREVIEW_SNAPSHOT.employee, cpf: null } })!, /identificação/);
@@ -49,7 +50,7 @@ function MIRROR_PREVIEW_INPUT() {
     shifts: [], declaration: null, truncated: false, actors: {} };
 }
 
-test('PDF sai com concordância pendente ou registrada, mesmo com emoji no motivo', async () => {
+test('PDF sai com o bloco de assinaturas (ou a concordância antiga), mesmo com emoji no motivo', async () => {
   const snapshot = structuredClone(MIRROR_PREVIEW_SNAPSHOT);
   snapshot.adjustments[0].reason = 'Bati duas vezes 😅 na saída → intervalo';
   const pending = await renderMirrorPdf(snapshot, 'a'.repeat(64), null);
@@ -57,4 +58,21 @@ test('PDF sai com concordância pendente ou registrada, mesmo com emoji no motiv
   assert.ok((await PDFDocument.load(pending)).getPageCount() >= 1);
   assert.notEqual(Buffer.compare(pending, agreed), 0);
   assert.equal(pdfSafe('ok 😅 → ç'), 'ok ? ? ç');
+});
+
+test('pacote do fechamento junta espelho e contracheque sem alterar as páginas', async () => {
+  const mirror = await renderMirrorPdf(MIRROR_PREVIEW_SNAPSHOT, 'a'.repeat(64), null);
+  const payslipDoc = await PDFDocument.create();
+  payslipDoc.addPage([595, 842]);
+  const payslip = Buffer.from(await payslipDoc.save());
+  const bundle = await composeClosingPackage({ mirror, payslip, title: 'Espelho e contracheque', name: 'Maria', month: 'agosto de 2026' });
+  const mirrorPages = (await PDFDocument.load(mirror)).getPageCount();
+  assert.deepEqual(bundle.pages, { mirror: mirrorPages, payslip: 1 });
+  // Última página: termo de recebimento e ciência, onde fica a assinatura.
+  assert.equal((await PDFDocument.load(bundle.bytes)).getPageCount(), mirrorPages + 2);
+  assert.equal(bundle.pageCount, mirrorPages + 2);
+  assert.match(closingTermText({ name: 'Maria', month: 'agosto de 2026' }).join(' '), /não é quitação/);
+  assert.match(bundle.sha256, /^[a-f0-9]{64}$/);
+  await assert.rejects(composeClosingPackage({ mirror, payslip: Buffer.from('não é pdf'), title: 'x', name: 'M', month: 'm' }));
+  assert.equal(closingPackagePath('ws', '2026-08', 2, 'u'), 'time-closing-packages/ws/2026-08/v2/u');
 });
