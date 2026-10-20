@@ -347,6 +347,9 @@
     { "collectionGroup": "repP_receipts", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "recordedDate", "order": "ASCENDING" }
     ] },
+    { "collectionGroup": "employeeDocuments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "publication.status", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "repP_receipts", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
     ] },

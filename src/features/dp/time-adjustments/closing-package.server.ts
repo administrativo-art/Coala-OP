@@ -7,6 +7,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { PDFDocument } from 'pdf-lib';
 
 import { signPtrpDetached } from '@/features/dp/rep-p/service.server';
+import { autoPublishDocument } from '@/features/hr/documents/publication.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { createAutentiqueDocument } from '@/lib/autentique.server';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
@@ -53,9 +54,11 @@ type Dependencies = {
   sign: (bytes: Buffer) => Promise<{ bytes: Uint8Array; certificateCnpj: string }>;
   createDocument: typeof createAutentiqueDocument; downloadSigned: (url: string) => Promise<Buffer>;
   mirror: Parameters<typeof generateMirror>[2];
+  publish: (documentId: string) => Promise<unknown>;
 };
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, storage: bucketStorage, now: () => new Date(), sign: (bytes) => signPtrpDetached(bytes),
-  createDocument: createAutentiqueDocument, downloadSigned: downloadAutentiqueSigned, mirror: {} };
+  createDocument: createAutentiqueDocument, downloadSigned: downloadAutentiqueSigned, mirror: {},
+  publish: (documentId) => autoPublishDocument(documentId, 'signed') };
 
 export type ClosingPackageRecord = {
   schemaVersion: 1; status: 'sending' | 'sent' | 'signed' | 'refused' | 'failed'; uid: string; employeeId: string; competence: string; closureVersion: number;
@@ -223,7 +226,12 @@ export async function syncClosingPackageSignature(params: { signatureRequestId: 
   if (!request.exists || request.get('purpose') !== PURPOSE) return null;
   const target = packageRef(deps, String(request.get('workspaceId')), String(request.get('competence')), Number(request.get('closureVersion')), String(request.get('employeeUid')));
   const current = (await target.get()).data() as ClosingPackageRecord | undefined;
-  if (!current || current.status === 'signed') return current ?? null;
+  if (!current) return null;
+  // Já assinado: garante a publicação (idempotente), caso o processo tenha caído entre o arquivamento e a publicação.
+  if (current.status === 'signed') {
+    if (current.archivedDocumentId) await deps.publish(current.archivedDocumentId).catch(() => undefined);
+    return current;
+  }
   const at = params.at ?? deps.now().toISOString();
   if (params.eventType === 'signature.rejected') {
     await target.update({ status: 'refused', lastError: 'O trabalhador recusou a assinatura. Trate a divergência com ele.' });
@@ -260,5 +268,8 @@ export async function syncClosingPackageSignature(params: { signatureRequestId: 
     }
     tx.update(target, { status: 'signed', signedAt: at, signedStoragePath, signedSha256, archivedDocumentId, lastError: null });
   });
+  // Pasta do colaborador: o pacote assinado é publicado pela política do tipo; falha não desfaz o arquivamento
+  // (o próximo aviso da Autentique tenta de novo).
+  await deps.publish(archivedDocumentId).catch(() => undefined);
   return { ...current, status: 'signed' as const, signedAt: at, signedStoragePath, signedSha256, archivedDocumentId };
 }

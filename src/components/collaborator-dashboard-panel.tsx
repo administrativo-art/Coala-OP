@@ -1845,15 +1845,14 @@ function CollaboratorDashboardPanelInner() {
                     tone="bg-ds-info-bg text-ds-info"
                   />
                 ) : null}
-                {canAccessOwnProfile ? (
-                  <QuickAccessCard
-                    href={`/dashboard/dp/collaborators/${user!.id}/documents`}
-                    icon={<FolderOpen className="h-5 w-5" />}
-                    title="Meus documentos"
-                    description="Contracheques, termos e recibos"
-                    tone="bg-ds-ok-bg text-ds-ok"
-                  />
-                ) : null}
+                {/* A própria pasta (macro 02): só o que o DP publicou para a pessoa. */}
+                <QuickAccessCard
+                  href="/dashboard/collaborator/documents"
+                  icon={<FolderOpen className="h-5 w-5" />}
+                  title="Meus documentos"
+                  description="Espelho e contracheque, recibos e termos"
+                  tone="bg-ds-ok-bg text-ds-ok"
+                />
                 <QuickAccessCard
                   href="/dashboard/collaborator/requests"
                   icon={<Inbox className="h-5 w-5" />}

@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **479**
-- Totalmente contratados: **130**
+- Arquivos de rota: **482**
+- Totalmente contratados: **133**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -38,6 +38,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/collaborator/absence-requests/preparations` | POST ✓ | `CONTRACTED` | [src/app/api/collaborator/absence-requests/preparations/route.ts](../../src/app/api/collaborator/absence-requests/preparations/route.ts) |
 | `/api/collaborator/absence-requests/preview` | POST ✓ | `CONTRACTED` | [src/app/api/collaborator/absence-requests/preview/route.ts](../../src/app/api/collaborator/absence-requests/preview/route.ts) |
 | `/api/collaborator/dashboard` | GET | `LEGACY_BASELINE` | [src/app/api/collaborator/dashboard/route.ts](../../src/app/api/collaborator/dashboard/route.ts) |
+| `/api/collaborator/documents` | GET ✓ | `CONTRACTED` | [src/app/api/collaborator/documents/route.ts](../../src/app/api/collaborator/documents/route.ts) |
+| `/api/collaborator/documents/access` | POST ✓ | `CONTRACTED` | [src/app/api/collaborator/documents/access/route.ts](../../src/app/api/collaborator/documents/access/route.ts) |
 | `/api/collaborator/requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/route.ts](../../src/app/api/collaborator/requests/route.ts) |
 | `/api/collaborator/requests/[requestId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/[requestId]/route.ts](../../src/app/api/collaborator/requests/[requestId]/route.ts) |
 | `/api/collaborator/requests/[requestId]/document` | GET ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/[requestId]/document/route.ts](../../src/app/api/collaborator/requests/[requestId]/document/route.ts) |
@@ -303,6 +305,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/employee-documents/cleanup` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/cleanup/route.ts](../../src/app/api/hr/employee-documents/cleanup/route.ts) |
 | `/api/hr/employee-documents/confirm` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/confirm/route.ts](../../src/app/api/hr/employee-documents/confirm/route.ts) |
 | `/api/hr/employee-documents/item` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/item/route.ts](../../src/app/api/hr/employee-documents/item/route.ts) |
+| `/api/hr/employee-documents/publication` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/publication/route.ts](../../src/app/api/hr/employee-documents/publication/route.ts) |
 | `/api/hr/employee-documents/reanalyze` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/reanalyze/route.ts](../../src/app/api/hr/employee-documents/reanalyze/route.ts) |
 | `/api/hr/employee-documents/summary` | GET | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/summary/route.ts](../../src/app/api/hr/employee-documents/summary/route.ts) |
 | `/api/hr/employee-documents/visibility` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/visibility/route.ts](../../src/app/api/hr/employee-documents/visibility/route.ts) |

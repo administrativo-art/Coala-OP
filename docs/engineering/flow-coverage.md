@@ -40,7 +40,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — [ausências](flows/dp-absences.md): Etapa 1 publicada; Etapas 2 e 3 fechadas localmente, inclusive SLA, escala e coberturas do DP; cutover, homologação e publicação pendentes |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
-| `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
+| `employee-documents` | 4 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; pasta do colaborador e publicação com teste de integração (20/10/2026) |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — confirmação manual protegida por validação unitária; verificação integrada pendente |

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { autoPublishDocument } from "@/features/hr/documents/publication.server";
+
 import { createHash } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -2359,6 +2361,8 @@ async function createEmployeeSignedDocument(params: {
     workflowDocumentId: params.workflowDocumentId,
     at: now,
   });
+  // Publicação na pasta do colaborador conforme a política do tipo (assinado).
+  await autoPublishDocument(documentId, "signed");
   return documentId;
 }
 
@@ -2494,6 +2498,7 @@ export async function archiveAutentiqueSignedDocument(params: {
           deletedAt: null,
         });
       }
+      await autoPublishDocument(archivedDocumentId, "signed");
     }
     const archivedAt = new Date().toISOString();
     await Promise.all([

@@ -25,6 +25,8 @@ import {
   X,
 } from "lucide-react";
 
+import { PublicationControl } from "@/features/hr/documents/publication-control";
+import type { DocumentPublication } from "@/lib/hr/employee-document-publication";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/navigation/back-button";
@@ -79,6 +81,7 @@ type DocumentRow = {
   signatureRequired?: boolean;
   signatureStatus?: string | null;
   signedAt?: string | null;
+  publication?: DocumentPublication | null;
   source?: string | null;
   status: string;
   accessLevel: string;
@@ -1489,6 +1492,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         <div className="flex flex-wrap items-center gap-2">
                           <button onClick={() => void previewDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-4 w-4" /></button>
                           <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
+                          {canManage ? <PublicationControl firebaseUser={firebaseUser} documentId={item.id} publication={item.publication} onChanged={() => void load()} /> : null}
                           {canManage ? (
                             <>
                               <DropdownMenu>

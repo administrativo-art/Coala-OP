@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **479 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **482 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -61,6 +61,8 @@ Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/collaborator/absence-requests/preparations` | POST | [src/app/api/collaborator/absence-requests/preparations/route.ts](../../src/app/api/collaborator/absence-requests/preparations/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/collaborator/absence-requests/preview` | POST | [src/app/api/collaborator/absence-requests/preview/route.ts](../../src/app/api/collaborator/absence-requests/preview/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/collaborator/dashboard` | GET | [src/app/api/collaborator/dashboard/route.ts](../../src/app/api/collaborator/dashboard/route.ts) | [collaborator-dashboard](flows/collaborator-dashboard.md) |
+| `/api/collaborator/documents` | GET | [src/app/api/collaborator/documents/route.ts](../../src/app/api/collaborator/documents/route.ts) | [employee-documents](flows/employee-documents.md) |
+| `/api/collaborator/documents/access` | POST | [src/app/api/collaborator/documents/access/route.ts](../../src/app/api/collaborator/documents/access/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/collaborator/requests` | GET, POST | [src/app/api/collaborator/requests/route.ts](../../src/app/api/collaborator/requests/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
 | `/api/collaborator/requests/[requestId]` | PATCH | [src/app/api/collaborator/requests/[requestId]/route.ts](../../src/app/api/collaborator/requests/%5BrequestId%5D/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
 | `/api/collaborator/requests/[requestId]/document` | GET | [src/app/api/collaborator/requests/[requestId]/document/route.ts](../../src/app/api/collaborator/requests/%5BrequestId%5D/document/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
@@ -326,6 +328,7 @@ Inclui **56 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/hr/employee-documents/cleanup` | POST | [src/app/api/hr/employee-documents/cleanup/route.ts](../../src/app/api/hr/employee-documents/cleanup/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/confirm` | POST | [src/app/api/hr/employee-documents/confirm/route.ts](../../src/app/api/hr/employee-documents/confirm/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/item` | PATCH | [src/app/api/hr/employee-documents/item/route.ts](../../src/app/api/hr/employee-documents/item/route.ts) | [employee-documents](flows/employee-documents.md) |
+| `/api/hr/employee-documents/publication` | POST | [src/app/api/hr/employee-documents/publication/route.ts](../../src/app/api/hr/employee-documents/publication/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/reanalyze` | POST | [src/app/api/hr/employee-documents/reanalyze/route.ts](../../src/app/api/hr/employee-documents/reanalyze/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/summary` | GET | [src/app/api/hr/employee-documents/summary/route.ts](../../src/app/api/hr/employee-documents/summary/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/visibility` | GET, PUT | [src/app/api/hr/employee-documents/visibility/route.ts](../../src/app/api/hr/employee-documents/visibility/route.ts) | [employee-documents](flows/employee-documents.md) |

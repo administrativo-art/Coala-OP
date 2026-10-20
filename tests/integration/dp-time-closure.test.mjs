@@ -165,6 +165,8 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(signed.status, 'signed');
     const archived = (await hrDbAdmin.collection('employeeDocuments').doc(signed.archivedDocumentId).get()).data();
     assert.deepEqual([archived.documentTypeCode, archived.employeeId, archived.caseId, archived.signatureStatus], ['TIME_CLOSING_PACKAGE', userId, `month-${competence}`, 'signed']);
+    // Política do tipo: automática ao assinar; o pacote assinado entra na pasta do colaborador.
+    assert.equal(archived.publication?.status, 'published');
     assert.equal((await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'signature.rejected' }, packageDeps)).status, 'signed');
     await payslipRef.delete();
 

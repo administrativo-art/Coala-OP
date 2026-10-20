@@ -2,6 +2,8 @@ kind,source,symbol,guide,note
 api,src/app/api/mobile/push/devices/route.ts,,docs/engineering/coala-go-parity.md,Registro e revogacao propria de push com sessao e atestacao mobile; sem rota publica de envio.
 api,src/app/api/collaborator/absence-requests/options/route.ts,,docs/engineering/flows/dp-absences.md,Opcoes proprias limitadas e capacidade operacional condicionada ao cutover RH.
 api,src/app/api/collaborator/absence-requests/preview/route.ts,,docs/engineering/flows/dp-absences.md,Previa autenticada sem persistencia ou aceitacao de pedido.
+api,src/app/api/collaborator/documents/route.ts,,docs/engineering/flows/employee-documents.md,GET lista so os documentos do proprio titular publicados para ele (macro 02); consulta filtrada pelo titular; sem escrita.
+api,src/app/api/collaborator/documents/access/route.ts,,docs/engineering/flows/employee-documents.md,POST abre ou baixa documento proprio publicado; outro titular ou nao publicado responde nao encontrado; registra auditoria.
 api,src/app/api/collaborator/absence-requests/route.ts,,docs/engineering/flows/dp-absences.md,Listagem paginada propria ou atribuida e criacao propria RH condicionada ao gate.
 api,src/app/api/collaborator/absence-requests/[requestId]/route.ts,,docs/engineering/flows/dp-absences.md,Detalhe e transicoes autoritativas com versao esperada e operacao idempotente.
 api,src/app/api/collaborator/absence-requests/preparations/route.ts,,docs/engineering/flows/dp-absences.md,Preparacao privada de documentos obrigatorios antes da criacao do pedido.
@@ -281,6 +283,7 @@ api,src/app/api/hr/employee-documents/cleanup/route.ts,,docs/engineering/flows/e
 api,src/app/api/hr/employee-documents/confirm/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/item/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/reanalyze/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/hr/employee-documents/publication/route.ts,,docs/engineering/flows/employee-documents.md,POST publica ou retira documento da pasta do colaborador; so DP autorizado com edicao; politica do tipo; retirar exige motivo; auditoria.
 api,src/app/api/hr/employee-documents/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/summary/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/visibility/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
