@@ -199,7 +199,9 @@ sangria visível da unidade. A proteção contra captura de tela (`FLAG_SECURE`)
 continua padrão e é retirada apenas para contas da lista
 `SCREEN_CAPTURE_ACCOUNTS`, com sessão desbloqueada. `RulesTest`, `ViewModelsTest`
 e o contrato de fonte cobrem o comportamento; aparelho físico permanece fora
-desta homologação.
+desta homologação. O APK 0.3.12/code17 foi assinado pelo certificado público
+esperado e tem SHA-256
+`d181508f7cfe1e30114a037b4f5ceeb51bffbf2a43413d26f7b381ed4583853c`.
 
 ### Verificação da 0.3.11 (retomada da vinculação e filtros de unidade)
 
