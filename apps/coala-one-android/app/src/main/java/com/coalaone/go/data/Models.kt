@@ -2,7 +2,14 @@ package com.coalaone.go.data
 
 import kotlinx.serialization.Serializable
 
-@Serializable data class UnitRef(val id: String, val name: String)
+@Serializable data class UnitRef(
+    val id: String,
+    val name: String,
+    val groupId: String? = null,
+    val groupName: String? = null,
+    val organizationId: String? = null,
+    val organizationName: String? = null,
+)
 @Serializable data class Profile(val name: String, val email: String? = null, val role: String? = null, val avatarUrl: String? = null)
 @Serializable data class Modules(val localPurchase: Boolean = false, val stockCount: Boolean = false, val repositionReceipt: Boolean = false, val goals: Boolean = false, val schedule: Boolean = false, val signage: Boolean = false)
 @Serializable data class ProfileResponse(val profile: Profile, val modules: Modules)

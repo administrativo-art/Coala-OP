@@ -90,4 +90,18 @@ class RulesTest {
         assertEquals(one, Rules.unitChoices(one)); assertEquals(emptyList<Pair<String, String>>(), Rules.unitChoices(emptyList()))
         assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades") + two, Rules.unitChoices(two))
     }
+    @Test fun purchaseFiltersFollowOrganizationGroupAndUnitHierarchy() {
+        val units = listOf(
+            UnitRef("a", "Centro", "g1", "Quiosques", "o1", "Coala"),
+            UnitRef("b", "Orla", "g1", "Quiosques", "o1", "Coala"),
+            UnitRef("c", "CD", "g2", "Abastecimento", "o2", "Logística"),
+            UnitRef("d", "Legada"),
+        )
+        val withdrawals = units.mapIndexed { index, unit -> Withdrawal(index.toString().repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 100L + index) }
+        assertEquals(listOf("a", "b"), Rules.filterWithdrawals(withdrawals, units, "o1", "g1", Rules.ALL_UNITS).map { it.unitId })
+        assertEquals(listOf("c"), Rules.filterWithdrawals(withdrawals, units, "o2", Rules.ALL_UNITS, "c").map { it.unitId })
+        assertEquals(listOf("d"), Rules.filterWithdrawals(withdrawals, units, Rules.NO_ORGANIZATION, Rules.NO_GROUP, Rules.ALL_UNITS).map { it.unitId })
+        assertTrue(Rules.purchaseOrganizationChoices(units).contains(Rules.NO_ORGANIZATION to "Sem organização"))
+        assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades", "c" to "CD"), Rules.purchaseUnitChoices(units, "o2", "g2"))
+    }
 }
