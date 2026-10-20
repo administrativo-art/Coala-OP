@@ -147,21 +147,19 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.deepEqual([pendingStatement.statement.missing, pendingStatement.closures], [['2026-08'], { '2026-08': 2 }]);
     const bankMonth = await generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 2 }, bankDeps);
     assert.deepEqual(bankMonth.days.filter((item) => item.lines.length).map((item) => [item.date, item.lines.map((line) => `${line.nature}:${line.minutes}:${line.reason}`)]),
-      [['2026-08-12', ['bank_debit:200:worked_less']], ['2026-08-13', ['bank_debit:440:missing_day']]]);
-    assert.equal(bankMonth.totals.balance, -640);
+      [['2026-08-12', ['bank_debit:200:worked_less']], ['2026-08-13', ['review:440:missing_day']]]);
+    // Dia sem batida e sem ausência fica a tratar pelo DP: não entra no saldo. A ausência de 01 e 02/08, sem efeito no tipo, também vai para revisão.
+    assert.deepEqual([bankMonth.totals.balance, bankMonth.totals.review, bankMonth.totals.reviewDays], [-200, 440, 3]);
     assert.deepEqual(bankMonth.policies, [{ id: `${prefix}-policy`, version: 1 }]);
     assert.equal((await generateBankMonth(closer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, bankDeps)).generatedAt, bankMonth.generatedAt);
     const statement = (await readBankStatement(closer, { employeeUid: userId, date: '2026-08-20' }, bankDeps)).statement;
-    assert.deepEqual([statement.balanceMinutes, statement.debit, statement.missing, statement.ended], [-640, 640, [], true]);
-    assert.deepEqual(statement.residual, { minutes: -640, destination: 'review' });
+    assert.deepEqual([statement.balanceMinutes, statement.debit, statement.missing, statement.ended], [-200, 200, [], true]);
+    assert.deepEqual(statement.residual, { minutes: -200, destination: 'review' });
     assert.equal(statement.settlement, null);
+    // Dia sem batida a tratar no ciclo bloqueia o encerramento.
+    await assert.rejects(settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -200 }, bankDeps), { code: 'PTRP_BANK_PENDING_DAYS' });
     // Encerramento do ciclo: só quem fecha, com o residual conferido; uma vez, sem apagar nada.
-    await assert.rejects(settleBankCycle(titular, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
-    await assert.rejects(settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -600 }, bankDeps), { code: 'PTRP_BANK_RESIDUAL_CHANGED' });
-    const settled = await settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps);
-    assert.deepEqual([settled.minutes, settled.destination, settled.settledBy, settled.closureVersions], [-640, 'review', closer.decoded.uid, { '2026-08': 2 }]);
-    assert.equal((await settleBankCycle(closer, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -640 }, bankDeps)).settledAt, settled.settledAt);
-    assert.equal((await readBankStatement(titular, { date: '2026-08-20' }, bankDeps)).statement.settlement.minutes, -640);
+    await assert.rejects(settleBankCycle(titular, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -200 }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
 
     // AEJ do estabelecimento: só de competência fechada, com a inclusão aprovada e o motivo do AEJ.
     const treatment = (await hrDbAdmin.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', userId).limit(1).get()).docs[0].data();
@@ -190,9 +188,9 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       '05|1|2026-08-12T12:00:00-0300|1|S|001|O||',
     ]);
     assert.equal(aej.counts['05'], 2);
-    assert.deepEqual(aej.warnings, []);
-    // Registro 07: débitos do banco por dia, falta não justificada como "2" e folga sem trabalho como DSR.
-    assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|2|2026-08-13||', '07|1|3|2026-08-13|440|2', '07|1|1|2026-08-16||']);
+    assert.deepEqual(aej.warnings.map((item) => `${item.code}:${item.date}`), ['PENDING_DAY:2026-08-13']);
+    // Registro 07: débito do banco por dia e folga como DSR; o dia sem batida ainda não tratado não vira falta ("2").
+    assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|1|2026-08-16||']);
     const audit = (await hrDbAdmin.collection(AEJ_EXPORTS).where('workspaceId', '==', workspaceId).where('sha256', '==', aej.sha256).get()).docs[0].data();
     assert.equal(audit.sha256, aej.sha256);
     assert.deepEqual(audit.closureVersions, { '2026-08': 2 });

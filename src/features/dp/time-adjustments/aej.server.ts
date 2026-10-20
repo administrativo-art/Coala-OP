@@ -98,7 +98,7 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
       })),
     ];
     return {
-      cpf: person.cpf, name: person.name, shifts, absences,
+      cpf: person.cpf, name: person.name, shifts, absences, pendingDays: bankDays.filter((day) => day.issues.includes('MISSING_DAY')).map((day) => day.date),
       markings: arp.markings.filter((item) => item.employeeCpf === person.cpf)
         .map((item) => ({ workDate: item.workDate, markedAt: item.markedAt, nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
       inclusions: active.filter((item) => item.type === 'inclusion' && item.employeeUid === person.uid && item.markedAt)

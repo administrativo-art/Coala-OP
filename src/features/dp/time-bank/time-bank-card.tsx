@@ -17,7 +17,8 @@ type StatementResponse = { policy: { name: string; enabled: boolean } | null; st
 const REASON_LABELS: Record<BankLineReason, string> = {
   worked_less: "Trabalhou menos que a jornada",
   worked_more: "Trabalhou mais que a jornada",
-  missing_day: "Dia escalado sem batida",
+  missing_day: "Dia escalado sem batida (aguarda o DP lançar a ausência)",
+  absence_unexcused: "Falta injustificada",
   absence_debit: "Ausência com débito",
   absence_review: "Ausência para revisão",
   rest_day_work: "Trabalho na folga",
@@ -106,6 +107,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
         <span>Créditos <strong className="font-ds-mono text-ds-ink">{hm(statement.credit)}</strong></span>
         <span>Débitos <strong className="font-ds-mono text-ds-ink">{hm(statement.debit)}</strong></span>
         {statement.payroll ? <span>Extra para a folha <strong className="font-ds-mono text-ds-ink">{hm(statement.payroll)}</strong></span> : null}
+        {statement.discount ? <span>Desconto na folha <strong className="font-ds-mono text-ds-ink">{hm(statement.discount)}</strong></span> : null}
         {statement.review ? <span>Em revisão do DP <strong className="font-ds-mono text-ds-ink">{hm(statement.review)}</strong></span> : null}
       </div>
       {statement.limits.positiveExceeded ? <StatusPill variant="warn">Acima do limite positivo do banco</StatusPill> : null}
@@ -116,6 +118,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
       {employeeUid && statement.residual && !statement.settlement && !confirming ? <Button variant="ds-secondary" size="sm" onClick={() => setConfirming(true)}>Registrar encerramento do ciclo</Button> : null}
       {confirming && statement.residual ? <InlineConfirm message={`Registrar o encerramento com ${hm(statement.residual.minutes, true)} · ${RESIDUAL_LABELS[statement.residual.destination]}? O registro fica com data e autor e não é desfeito.`}
         confirmLabel="Registrar encerramento" loadingLabel="Registrando…" loading={busy} onConfirm={() => void settle()} onCancel={() => setConfirming(false)} /> : null}
+      {statement.reviewDays.some((item) => item.issues.includes("MISSING_DAY")) ? <StatusPill variant="warn">{statement.reviewDays.filter((item) => item.issues.includes("MISSING_DAY")).length} dia(s) escalado(s) sem batida a tratar pelo DP</StatusPill> : null}
       {statement.reviewDays.length ? <p className="text-xs text-ds-ink-muted">{statement.reviewDays.length} {statement.reviewDays.length === 1 ? "dia ficou" : "dias ficaram"} para revisão do DP e não {statement.reviewDays.length === 1 ? "entrou" : "entraram"} no saldo.</p> : null}
       {open.length ? <p className="text-xs text-ds-ink-muted">O mês em andamento entra no banco depois do fechamento pelo DP.</p> : null}
       {lines.length ? (
@@ -124,7 +127,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
             <li key={`${item.date}-${index}`} className="flex items-center justify-between gap-2 py-1.5">
               <span className="min-w-0 truncate"><span className="font-semibold text-ds-ink">{dateBR(item.date).slice(0, 5)}</span> · {REASON_LABELS[item.line.reason]}</span>
               <span className={`shrink-0 font-ds-mono font-semibold ${item.line.nature === "bank_debit" ? "text-ds-danger" : "text-ds-ink"}`}>
-                {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : "revisão"}`}
+                {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : item.line.nature === "payroll_discount" ? "desconto na folha" : "revisão"}`}
               </span>
             </li>
           ))}

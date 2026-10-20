@@ -43,17 +43,24 @@ describe('Banco de horas: apuração do dia', () => {
     assert.equal(shortBreak.deltaMinutes, 5);
   });
 
-  it('dia escalado sem batida e sem ausência debita a referência inteira; ausência abona ou debita conforme o tipo', () => {
+  it('dia escalado sem batida fica a tratar pelo DP; o tipo da ausência lançada decide abono, desconto na folha ou débito no banco', () => {
     const missing = computeBankDay(day({}));
-    assert.deepEqual([missing.lines, missing.unjustifiedAbsence], [[{ nature: 'bank_debit', minutes: 440, reason: 'missing_day' }], true]);
+    assert.deepEqual([missing.lines, missing.issues, missing.unjustifiedAbsence], [[{ nature: 'review', minutes: 440, reason: 'missing_day' }], ['MISSING_DAY'], false]);
+    // Sem batida e com 2h de ausência injustificada: as 2h vão à folha e o resto fica a tratar, sem débito no banco.
+    const partial = computeBankDay(day({ absences: [{ id: 'h', typeName: 'Atraso', unit: 'hour', startDate: '2026-10-14', endDate: '2026-10-14', minutes: 120, effect: 'unexcused_absence' }] }));
+    assert.deepEqual([partial.lines, partial.issues], [[{ nature: 'payroll_discount', minutes: 120, reason: 'absence_unexcused' }, { nature: 'review', minutes: 320, reason: 'missing_day' }], ['MISSING_DAY']]);
     const absence = { id: 'a', typeName: 'Atestado', unit: 'day' as const, startDate: '2026-10-14', endDate: '2026-10-14', minutes: null };
     const excused = computeBankDay(day({ absences: [{ ...absence, effect: 'excused_absence' }] }));
     assert.deepEqual([excused.lines, excused.abonoMinutes], [[], 440]);
     const unexcused = computeBankDay(day({ absences: [{ ...absence, effect: 'unexcused_absence' }] }));
-    assert.deepEqual([unexcused.lines, unexcused.unjustifiedAbsence, unexcused.absences], [[{ nature: 'bank_debit', minutes: 440, reason: 'absence_debit' }], true, [{ id: 'a', effect: 'unexcused_absence' }]]);
-    assert.equal(computeBankDay(day({ absences: [{ ...absence, effect: 'time_bank_debit' }] })).unjustifiedAbsence, false);
-    // Ausência em horas abonada sem nenhuma batida: abona as horas e debita só o resto.
-    assert.deepEqual(computeBankDay(day({ absences: [{ ...absence, unit: 'hour', minutes: 120, effect: 'excused_absence' }] })).lines, [{ nature: 'bank_debit', minutes: 320, reason: 'worked_less' }]);
+    assert.deepEqual([unexcused.lines, unexcused.unjustifiedAbsence, unexcused.absences], [[{ nature: 'payroll_discount', minutes: 440, reason: 'absence_unexcused' }], true, [{ id: 'a', effect: 'unexcused_absence' }]]);
+    const bankDebit = computeBankDay(day({ absences: [{ ...absence, effect: 'time_bank_debit' }] }));
+    assert.deepEqual([bankDebit.lines, bankDebit.unjustifiedAbsence], [[{ nature: 'bank_debit', minutes: 440, reason: 'absence_debit' }], false]);
+    // Injustificada em horas: desconto na folha das horas, e o banco só vê o resto.
+    assert.deepEqual(computeBankDay(day({ shift: { ...shift, referenceMinutes: 360 }, markings: punches('2026-10-14', '12:00', '13:00', '13:15', '16:15'),
+      absences: [{ ...absence, unit: 'hour', minutes: 120, effect: 'unexcused_absence' }] })).lines, [{ nature: 'payroll_discount', minutes: 120, reason: 'absence_unexcused' }]);
+    // Ausência em horas abonada sem nenhuma batida: abona as horas e o resto fica a tratar.
+    assert.deepEqual(computeBankDay(day({ absences: [{ ...absence, unit: 'hour', minutes: 120, effect: 'excused_absence' }] })).lines, [{ nature: 'review', minutes: 320, reason: 'missing_day' }]);
     assert.ok(computeBankDay(day({ absences: [{ ...absence, effect: 'manual_review' }] })).issues.includes('ABSENCE_REVIEW'));
     const hours = computeBankDay(day({ shift: { ...shift, referenceMinutes: 360 }, markings: punches('2026-10-14', '12:00', '13:00', '13:15', '16:15'),
       absences: [{ ...absence, unit: 'hour', minutes: 120, effect: 'excused_absence' }] }));
@@ -89,8 +96,8 @@ describe('Banco de horas: apuração do dia', () => {
     assert.ok(computeBankDay(day({ shift: { ...shift, referenceMinutes: null } })).issues.includes('NO_JOURNEY'));
     assert.ok(computeBankDay(day({ shift: { ...shift, referenceMinutes: 0 } })).issues.includes('NO_JOURNEY'));
     assert.ok(computeBankDay(day({ policy: null })).issues.includes('NO_POLICY'));
-    const disabled = computeBankDay(day({ policy: { ...policy, timeBank: { ...policy.timeBank, enabled: false } } }));
-    assert.deepEqual(disabled.lines, [{ nature: 'review', minutes: 440, reason: 'needs_review' }]);
+    const disabled = computeBankDay(day({ policy: { ...policy, timeBank: { ...policy.timeBank, enabled: false } }, markings: punches('2026-10-14', '10:00', '13:00', '13:15', '16:15') }));
+    assert.deepEqual(disabled.lines, [{ nature: 'review', minutes: 80, reason: 'needs_review' }]);
   });
 
   it('referência da jornada pelo ciclo fixo ou pela carga única quando a folga vem da escala', () => {

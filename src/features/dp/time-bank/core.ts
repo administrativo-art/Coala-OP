@@ -6,7 +6,8 @@
  * Regras (decisão do programador, 19 e 20/10/2026):
  * - Referência do dia = carga da jornada naquele dia, não a duração do turno (7h20 de jornada com turno de 6h cumprido = −1h20).
  * - Falta de tempo vira débito no banco; tempo a mais segue a faixa de hora extra da política (banco com fator, folha ou revisão).
- * - Dia escalado sem batida e sem ausência = débito da referência inteira.
+ * - Falta é ato do operador (20/10/2026): dia escalado sem batida e sem ausência fica "a tratar" (revisão), até o DP lançar
+ *   a ausência. O tipo decide: justificada ou crédito abonam, injustificada desconta na folha, débito no banco vai ao banco.
  * - Trabalho em folga, domingo, feriado ou fora da escala segue a faixa correspondente da política (ex.: folha a 100%).
  * - Tolerância única da jornada: até 5 min na entrada e até 5 min na saída, somando no máximo a tolerância da jornada
  *   (art. 58 §1º; pendência (a) do Doc Brown). Dentro dela, entrada e saída contam como no horário; acima, conta tudo.
@@ -15,7 +16,7 @@
  */
 import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy } from '@/types';
 
-export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v1' as const;
+export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v2' as const;
 export const MARKING_TOLERANCE_LIMIT = 5;
 
 export type BankJourney = { cycleLengthDays: number; validFrom: string; days: Array<{ dayIndex: number; plannedMinutes: number }>;
@@ -30,12 +31,12 @@ export type BankAbsence = { id: string; typeName: string; effect: DPAbsenceType[
 export type BankPolicy = Pick<DPOvertimePolicy, 'id' | 'version' | 'categories' | 'timeBank' | 'dailyOvertimeLimitMinutes'>;
 export type BankDayInput = { date: string; shift: BankShift | null; markings: string[]; absences: BankAbsence[]; holiday: boolean; policy: BankPolicy | null };
 
-export type BankLineNature = 'bank_credit' | 'bank_debit' | 'payroll_overtime' | 'review';
-export type BankLineReason = 'worked_less' | 'worked_more' | 'missing_day' | 'absence_debit' | 'absence_review'
+export type BankLineNature = 'bank_credit' | 'bank_debit' | 'payroll_overtime' | 'payroll_discount' | 'review';
+export type BankLineReason = 'worked_less' | 'worked_more' | 'missing_day' | 'absence_debit' | 'absence_unexcused' | 'absence_review'
   | 'rest_day_work' | 'sunday_work' | 'holiday_work' | 'unplanned_work' | 'daily_limit_exceeded' | 'no_category' | 'needs_review' | 'pending_approval';
 export type BankLine = { nature: BankLineNature; minutes: number; reason: BankLineReason; categoryId?: string; ratePercent?: number;
   factor?: number; requiresApproval?: boolean };
-export type BankIssue = 'ODD_MARKINGS' | 'NIGHT_SHIFT' | 'NO_JOURNEY' | 'NO_POLICY' | 'TIME_BANK_DISABLED' | 'HOLIDAY_SCHEDULED'
+export type BankIssue = 'MISSING_DAY' | 'ODD_MARKINGS' | 'NIGHT_SHIFT' | 'NO_JOURNEY' | 'NO_POLICY' | 'TIME_BANK_DISABLED' | 'HOLIDAY_SCHEDULED'
   | 'WORK_ON_ABSENCE' | 'ABSENCE_REVIEW';
 export type BankDay = {
   date: string; kind: 'workday' | 'rest_day' | 'no_schedule'; holiday: boolean; sunday: boolean;
@@ -43,7 +44,7 @@ export type BankDay = {
   deltaMinutes: number | null; toleranceApplied: boolean; abonoMinutes: number;
   /** Só o id e o efeito da ausência: o tipo (ex.: atestado) não entra no banco (LGPD art. 11). */
   absences: Array<{ id: string; effect: DPAbsenceType['workdayEffect'] }>;
-  /** Falta não justificada (dia escalado sem batida e sem ausência, ou ausência injustificada): vai ao AEJ como "2". */
+  /** Ausência injustificada do dia inteiro lançada pelo DP: vai ao AEJ como "2" e à folha como desconto. */
   unjustifiedAbsence: boolean;
   policy: { id: string; version: number } | null;
   lines: BankLine[]; issues: BankIssue[];
@@ -137,20 +138,26 @@ export function computeBankDay(input: BankDayInput): BankDay {
   if (day.issues.some((value) => value !== 'TIME_BANK_DISABLED')) return finish(day);
   const reference = day.referenceMinutes!;
 
-  // Ausência do dia inteiro: abona (justificada ou crédito de trabalho) ou debita a referência (falta ou débito no banco).
+  // Ausência do dia inteiro: abona (justificada ou crédito), desconta na folha (injustificada) ou debita no banco.
   if (dayAbsences.length) {
     const absence = dayAbsences[0];
     day.consideredMinutes = 0;
     if (absence.effect === 'excused_absence' || absence.effect === 'worked_credit') { day.abonoMinutes = reference; day.deltaMinutes = 0; }
-    else { day.deltaMinutes = -reference; day.unjustifiedAbsence = absence.effect === 'unexcused_absence'; day.lines = [{ nature: 'bank_debit', minutes: reference, reason: 'absence_debit' }]; }
+    else if (absence.effect === 'unexcused_absence') { day.deltaMinutes = 0; day.unjustifiedAbsence = true; day.lines = [{ nature: 'payroll_discount', minutes: reference, reason: 'absence_unexcused' }]; }
+    else { day.deltaMinutes = -reference; day.lines = [{ nature: 'bank_debit', minutes: reference, reason: 'absence_debit' }]; }
     return finish(day);
   }
-  const hourAbono = hourAbsences.filter((item) => item.effect === 'excused_absence' || item.effect === 'worked_credit').reduce((total, item) => total + (item.minutes ?? 0), 0);
-  if (!markings.length && !hourAbono) {
+  // Sem batida: as horas de ausência lançadas seguem o tipo; o resto do dia fica a tratar pelo DP (nada vai ao banco sozinho).
+  if (!markings.length) {
+    let covered = 0;
+    for (const absence of hourAbsences.filter((item) => item.effect !== 'manual_review' && item.minutes)) {
+      covered += absence.minutes!;
+      if (absence.effect === 'unexcused_absence') day.lines.push({ nature: 'payroll_discount', minutes: absence.minutes!, reason: 'absence_unexcused' });
+      else if (absence.effect === 'time_bank_debit') day.lines.push({ nature: 'bank_debit', minutes: absence.minutes!, reason: 'absence_debit' });
+      else day.abonoMinutes += absence.minutes!;
+    }
     day.consideredMinutes = 0;
-    day.deltaMinutes = -reference;
-    day.unjustifiedAbsence = true;
-    day.lines = [{ nature: 'bank_debit', minutes: reference, reason: 'missing_day' }];
+    if (covered < reference) { issue('MISSING_DAY'); day.lines.push({ nature: 'review', minutes: reference - covered, reason: 'missing_day' }); }
     return finish(day);
   }
 
@@ -166,13 +173,17 @@ export function computeBankDay(input: BankDayInput): BankDay {
     }
   }
   // Ausência em horas: a justificada ou com crédito soma ao considerado; a com débito deixa a falta aparecer.
+  // Ausência em horas: justificada ou crédito somam ao considerado; injustificada soma e vai à folha como desconto;
+  // débito no banco deixa a falta aparecer como débito.
+  const discounts: BankLine[] = [];
   for (const absence of hourAbsences) {
     if (absence.effect === 'excused_absence' || absence.effect === 'worked_credit') { day.abonoMinutes += absence.minutes ?? 0; considered += absence.minutes ?? 0; }
+    if (absence.effect === 'unexcused_absence' && absence.minutes) { considered += absence.minutes; discounts.push({ nature: 'payroll_discount', minutes: absence.minutes, reason: 'absence_unexcused' }); }
   }
   day.consideredMinutes = considered;
   day.deltaMinutes = considered - reference;
-  if (day.deltaMinutes < 0) day.lines = [{ nature: 'bank_debit', minutes: -day.deltaMinutes, reason: 'worked_less' }];
-  else day.lines = overtimeLines(day.deltaMinutes, categoryFor(policy!.categories, { kind, holiday: false, sunday, weekday: weekday(input.date) }), 'worked_more', policy!.dailyOvertimeLimitMinutes);
+  if (day.deltaMinutes < 0) day.lines = [...discounts, { nature: 'bank_debit', minutes: -day.deltaMinutes, reason: 'worked_less' }];
+  else day.lines = [...discounts, ...overtimeLines(day.deltaMinutes, categoryFor(policy!.categories, { kind, holiday: false, sunday, weekday: weekday(input.date) }), 'worked_more', policy!.dailyOvertimeLimitMinutes)];
   return finish(day);
 }
 
@@ -182,12 +193,12 @@ function finish(day: BankDay) {
   return day;
 }
 
-export type BankMonthTotals = { credit: number; debit: number; payroll: number; review: number; balance: number; reviewDays: number };
+export type BankMonthTotals = { credit: number; debit: number; payroll: number; discount: number; review: number; balance: number; reviewDays: number };
 export function monthTotals(days: BankDay[]): BankMonthTotals {
   const sum = (nature: BankLineNature) => days.reduce((total, day) => total + day.lines.filter((line) => line.nature === nature).reduce((acc, line) => acc + line.minutes, 0), 0);
   const credit = sum('bank_credit');
   const debit = sum('bank_debit');
-  return { credit, debit, payroll: sum('payroll_overtime'), review: sum('review'), balance: credit - debit, reviewDays: days.filter((day) => day.issues.length).length };
+  return { credit, debit, payroll: sum('payroll_overtime'), discount: sum('payroll_discount'), review: sum('review'), balance: credit - debit, reviewDays: days.filter((day) => day.issues.length).length };
 }
 
 export type BankSettlement = { uid: string; cycle: { start: string; end: string }; minutes: number; destination: 'carry' | 'payroll' | 'review' | 'forfeit';
@@ -196,7 +207,7 @@ export type BankMonthRecord = { competence: string; closureVersion: number; days
 export type BankStatementLine = { date: string; competence: string; closureVersion: number; line: BankLine };
 export type BankStatement = {
   cycle: { start: string; end: string; index: number } | null;
-  openingMinutes: number; balanceMinutes: number; credit: number; debit: number; payroll: number; review: number;
+  openingMinutes: number; balanceMinutes: number; credit: number; debit: number; payroll: number; discount: number; review: number;
   lines: BankStatementLine[]; reviewDays: Array<{ date: string; issues: BankIssue[] }>;
   /** Competências do período sem apuração gravada (mês aberto ou ainda não apurado). */
   missing: string[];
@@ -245,7 +256,7 @@ export function buildStatement(input: {
   const ended = Boolean(input.period && input.period.end < input.today && !input.missing.length);
   const cycle = input.timeBank.cycle;
   return {
-    cycle: input.period, openingMinutes: input.openingMinutes, balanceMinutes: balance, credit, debit, payroll: sum('payroll_overtime'), review: sum('review'),
+    cycle: input.period, openingMinutes: input.openingMinutes, balanceMinutes: balance, credit, debit, payroll: sum('payroll_overtime'), discount: sum('payroll_discount'), review: sum('review'),
     lines, reviewDays, missing: input.missing, ended, settlement: input.settlement ?? null,
     settlementOutdated: Boolean(input.settlement && (input.settlement.minutes !== balance
       || input.months.some((month) => month.competence in input.settlement!.closureVersions && input.settlement!.closureVersions[month.competence] !== month.closureVersion))),

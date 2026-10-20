@@ -83,7 +83,7 @@ const approvalLabels: Record<DPAbsencePolicy['approvalFlow'], string> = {
 };
 const workdayEffectLabels: Record<DPAbsenceType['workdayEffect'], string> = {
   excused_absence: 'Ausência justificada',
-  unexcused_absence: 'Ausência não justificada',
+  unexcused_absence: 'Ausência não justificada (desconto na folha)',
   worked_credit: 'Crédito como período trabalhado',
   time_bank_debit: 'Débito em banco de horas',
   manual_review: 'Revisão manual',

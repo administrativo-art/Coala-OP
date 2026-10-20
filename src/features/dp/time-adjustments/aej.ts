@@ -21,6 +21,8 @@ export type AejEmployee = {
   markings: Array<{ workDate: string; markedAt: string; nsr: number; discardReason: string | null }>;
   inclusions: Array<{ workDate: string; markedAt: string; reason: string }>;
   shifts: AejShift[];
+  /** Dias escalados sem batida e sem ausência ainda não tratados pelo DP: só aviso, nada no arquivo. */
+  pendingDays?: string[];
   /** Registro 07: "1" DSR, "2" falta não justificada, "3" movimento do banco ("1" inclusão, "2" compensação), "4" folga compensatória de feriado. */
   absences?: AejAbsence[];
 };
@@ -32,7 +34,7 @@ export type AejInput = {
   ptrp: { name: string; version: string; developerCnpj: string; developerName: string; developerEmail: string };
   employees: AejEmployee[];
 };
-export type AejWarning = { cpf: string; date: string; code: 'NO_SHIFT' | 'NIGHT_SHIFT' | 'ODD_MARKINGS' };
+export type AejWarning = { cpf: string; date: string; code: 'NO_SHIFT' | 'NIGHT_SHIFT' | 'ODD_MARKINGS' | 'PENDING_DAY' };
 
 /** ISO 8859-1 sem "|" nem quebra: o resto vira "?" para não corromper o leiaute. */
 export function aejText(value: string, max: number) {
@@ -71,6 +73,7 @@ export function generateAej(input: AejInput) {
   const codes = new Map([...byKey.keys()].sort().map((key, index) => [key, `HC${String(index + 1).padStart(3, '0')}`]));
   for (const [key, shift] of [...byKey.entries()].sort(([left], [right]) => left.localeCompare(right))) push('04', contractLine(codes.get(key)!, shift));
 
+  for (const employee of employees) for (const date of employee.pendingDays ?? []) if (date >= input.startDate && date <= input.endDate) warnings.push({ cpf: employee.cpf, date, code: 'PENDING_DAY' });
   employees.forEach((employee, index) => {
     const vinculo = String(index + 1);
     const dates = [...new Set([...employee.markings.map((item) => item.workDate), ...employee.inclusions.map((item) => item.workDate)])]

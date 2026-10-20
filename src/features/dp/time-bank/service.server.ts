@@ -207,6 +207,7 @@ export async function settleBankCycle(context: ServerUserContext, input: Extract
   const { policy, statement, closures } = await statementFor(deps, context.workspace_id, input.employeeUid, input.date);
   if (!policy || !statement?.cycle) throw fail('PTRP_BANK_NO_CYCLE', 'A política desta pessoa não tem ciclo de banco de horas.', 'CONFLICT');
   if (statement.settlement) return statement.settlement;
+  if (statement.reviewDays.some((item) => item.issues.includes('MISSING_DAY'))) throw fail('PTRP_BANK_PENDING_DAYS', 'Há dia escalado sem batida e sem ausência no ciclo. Lance a ausência (reabrindo o mês) antes de encerrar.', 'CONFLICT');
   if (!statement.ended || !statement.residual) throw fail('PTRP_BANK_CYCLE_OPEN', 'O ciclo ainda não terminou, falta apurar algum mês ou não há saldo a encerrar.', 'CONFLICT');
   if (statement.residual.minutes !== input.expectedMinutes) throw fail('PTRP_BANK_RESIDUAL_CHANGED', 'O saldo mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
   const record: BankSettlement = { uid: input.employeeUid, cycle: { start: statement.cycle.start, end: statement.cycle.end }, minutes: statement.residual.minutes,
