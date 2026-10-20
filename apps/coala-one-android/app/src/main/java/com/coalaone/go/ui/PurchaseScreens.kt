@@ -5,9 +5,12 @@ import androidx.compose.material3.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
@@ -72,6 +75,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
         }
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable fun PurchaseScreen(vm: PurchaseViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val review = state.review; val selected = state.selected
@@ -148,17 +152,40 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             }
             if (list?.partial == true) Text("Lista parcial. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             if (list != null && list.withdrawals.isEmpty()) Text("Nenhuma sangria aguardando nota.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
-            list?.withdrawals.orEmpty().forEach { withdrawal ->
-                Card(onClick = { vm.select("cash_withdrawal", withdrawal) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(money(withdrawal.amountCents), style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp))
-                            Text(listOfNotNull(withdrawal.unitName, (shortDate(withdrawal.date) ?: withdrawal.date) + (withdrawal.time?.takeIf(String::isNotBlank)?.let { " às ${it.take(5)}" } ?: "")).joinToString(" · "), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
-                            withdrawal.operatorName?.takeIf(String::isNotBlank)?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp)) }
-                            // Only when the PDV sends it: what the operator typed there when taking the money out.
-                            withdrawal.reason?.takeIf(String::isNotBlank)?.let { Text("Motivo: $it", color = Tokens.ink, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+            val units = state.context?.units.orEmpty()
+            if (units.size > 1) CardBlock {
+                Text("Filtrar sangrias", style = MaterialTheme.typography.titleMedium)
+                val filtersEnabled = !feedback.busy && state.pendingLink == null
+                Choices("Organização", Rules.purchaseOrganizationChoices(units), state.organizationFilter, filtersEnabled, vm::filterOrganization)
+                Choices("Grupo", Rules.purchaseGroupChoices(units, state.organizationFilter), state.groupFilter, filtersEnabled, vm::filterGroup)
+                Choices("Unidade", Rules.purchaseUnitChoices(units, state.organizationFilter, state.groupFilter), state.unitFilter, filtersEnabled, vm::filterUnit)
+                if (!filtersEnabled && state.pendingLink != null) Text("Conclua ou cancele a vinculação antes de trocar os filtros.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
+            val shownWithdrawals = Rules.filterWithdrawals(list?.withdrawals.orEmpty(), units, state.organizationFilter, state.groupFilter, state.unitFilter)
+            if (list?.withdrawals?.isNotEmpty() == true && shownWithdrawals.isEmpty()) Text("Nenhuma sangria nestes filtros.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
+            shownWithdrawals.groupBy { it.unitId }.entries.sortedBy { entry -> entry.value.firstOrNull()?.unitName.orEmpty() }.forEach { (_, unitWithdrawals) ->
+                Text(unitWithdrawals.first().unitName.uppercase(), color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.padding(top = 4.dp))
+                unitWithdrawals.forEach { withdrawal ->
+                    val activeLink = state.pendingLink?.takeIf { it.withdrawal.sourceId == withdrawal.sourceId }
+                    val requester = remember(withdrawal.sourceId) { BringIntoViewRequester() }
+                    if (activeLink != null) LaunchedEffect(state.linkFocusRequest) { requester.bringIntoView() }
+                    Card(onClick = { if (activeLink != null) vm.resumeLink() else vm.select("cash_withdrawal", withdrawal) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth().bringIntoViewRequester(requester), shape = RoundedCornerShape(16.dp), border = BorderStroke(if (activeLink != null) 2.dp else 1.dp, if (activeLink != null) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = if (activeLink != null) Tokens.accentSoft else Tokens.surface, disabledContainerColor = Tokens.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(money(withdrawal.amountCents), style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp))
+                                    Text((shortDate(withdrawal.date) ?: withdrawal.date) + (withdrawal.time?.takeIf(String::isNotBlank)?.let { " às ${it.take(5)}" } ?: ""), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                                    withdrawal.operatorName?.takeIf(String::isNotBlank)?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp)) }
+                                    // Only when the PDV sends it: what the operator typed there when taking the money out.
+                                    withdrawal.reason?.takeIf(String::isNotBlank)?.let { Text("Motivo: $it", color = Tokens.ink, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                                }
+                                Text(if (activeLink != null) "Retomar vinculação" else "Anexar nota", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+                            }
+                            activeLink?.let { link ->
+                                Text("${link.purchase.supplierName} · ${money(link.purchase.totalCents)}", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                                InlineConfirmation("Vincular esta compra a esta sangria?", feedback.busy, vm::cancelLink, "Cancelar vinculação", "Confirmar vínculo", vm::link)
+                            }
                         }
-                        Text("Anexar nota ›", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
                     }
                 }
             }
@@ -168,13 +195,15 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 ChoiceCard("SANGRIA", "Dinheiro do caixa", "Sangria fora da lista. Só a nota da compra.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("cash_withdrawal") }
                 ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Documento fiscal autorizado pode seguir sem comprovante.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
             }
-            if (list?.awaitingPurchases?.isNotEmpty() == true) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            list?.awaitingPurchases.orEmpty().forEach { purchase -> CardBlock {
+            val visibleUnitIds = shownWithdrawals.map { it.unitId }.toSet()
+            val shownPurchases = list?.awaitingPurchases.orEmpty().filter { it.unitId in visibleUnitIds }
+            if (shownPurchases.isNotEmpty()) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            shownPurchases.forEach { purchase -> CardBlock {
                 Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)
                 Text("Compra de ${fullDate(purchase.purchaseDate)} sem sangria vinculada", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                list?.withdrawals.orEmpty().filter { it.unitId == purchase.unitId }.forEach { withdrawal ->
+                shownWithdrawals.filter { it.unitId == purchase.unitId }.forEach { withdrawal ->
                     val selectedLink = state.pendingLink?.takeIf { it.purchase.id == purchase.id && it.withdrawal.sourceId == withdrawal.sourceId }
-                    if (selectedLink != null) InlineConfirmation("Vincular esta compra à sangria de ${money(withdrawal.amountCents)}?", feedback.busy, vm::cancelLink, "Confirmar vínculo", vm::link)
+                    if (selectedLink != null) Action("Retomar vinculação", feedback.busy, secondary = true, onClick = vm::resumeLink)
                     else Action("Selecionar sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.prepareLink(purchase, withdrawal) }
                 }
             } }
