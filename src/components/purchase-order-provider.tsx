@@ -85,6 +85,7 @@ export interface CreatePurchasePayload {
 }
 
 export type OrderEdits = {
+  destinationKioskId?: string;
   paymentMethod?: PurchaseOrder['paymentMethod'];
   paymentAccountId?: string | null;
   paymentAccountName?: string | null;

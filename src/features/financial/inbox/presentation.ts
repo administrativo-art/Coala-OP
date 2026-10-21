@@ -34,6 +34,20 @@ export function isFinancialInboxBulkDiscardEligible(message: Pick<FinancialInbox
   return ["pending_review", "document_pending", "suggestion_available", "divergent", "error"].includes(message.status);
 }
 
+/** Sinal local conservador; o servidor relê pedido e obrigação antes de arquivar. */
+export function isFinancialInboxArchiveCandidate(message: FinancialInboxMessage) {
+  if (message.status === "ignored") {
+    return !message.linkedExpenseId && !message.linkedProvisionId && !message.obligationId
+      && !message.paymentRequestId && !message.existingBankPayment && !message.statementTransactionId
+      && (!message.bankState || ["not_prepared", "cancelled"].includes(message.bankState));
+  }
+  return (message.status === "reconciled" || (message.status === "identified"
+    && message.resolution?.status === "identified"
+    && message.resolution.financialState === "reconciled"))
+    && (!message.bankState || message.bankState === "reconciled")
+    && (!message.existingBankPayment || Boolean(message.existingSettlement));
+}
+
 export function matchesFinancialInboxSearch(message: FinancialInboxMessage, search: string) {
   const terms = normalizeFinancialInboxSearch(search).split(" ").filter(Boolean);
   if (terms.length === 0) return true;

@@ -11,17 +11,20 @@ import { classifyFinancialEmail } from "./parser";
 import { listLocalPurchaseAccounts } from "@/features/purchasing/local-purchase-catalog.server";
 import { listLocalPurchaseProducts, recallLocalPurchaseItemLinks } from "@/features/purchasing/local-purchase-stock.server";
 import { extractMobilePurchaseDocuments } from "./mobile-purchase-extraction.server";
+import { verifyMobileFiscalDocuments } from "./mobile-fiscal-verification.server";
 import {
   buildFinancialInboxSearchTerms,
   FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
 } from "./search-index";
 import {
+  discardedFinancialInboxResolution,
   FINANCIAL_INBOX_RESOLUTION_VERSION,
   pendingFinancialInboxResolution,
 } from "./resolution-contract";
 import type { FinancialInboxAttachment, FinancialInboxMessage } from "./types";
 import {
   mobileInboxDocumentId,
+  mobilePurchaseMayOmitPaymentProof,
   type DetectedMobileInboxFile,
   type MobileInboxUploadMetadata,
   type MobilePurchaseAnalysis,
@@ -65,24 +68,63 @@ export async function ingestFinancialMobileUpload(params: {
   const { actor, metadata } = params;
   const documentId = mobileInboxDocumentId(actor.workspace_id, metadata.submissionId);
   const reference = financialDbAdmin.collection("financialInboxMessages").doc(documentId);
-  const existing = await reference.get();
-  if (existing.exists) {
-    const existingAttachments = existing.get("attachments");
+  function assertMatchingReplay(snapshot: FirebaseFirestore.DocumentSnapshot) {
+    const existingAttachments = snapshot.get("attachments");
     const storedHashes = (prefix: string) => (Array.isArray(existingAttachments) ? existingAttachments : [])
       .filter((attachment) => String(attachment?.filename ?? "").startsWith(prefix))
       .map((attachment) => String(attachment?.sha256 ?? ""));
-    if (existing.get("submittedBy.userId") !== actor.userDoc.id
-      || existing.get("mobilePurchaseFundingSource") !== metadata.fundingSource
+    if (snapshot.get("submittedBy.userId") !== actor.userDoc.id
+      || snapshot.get("mobilePurchaseFundingSource") !== metadata.fundingSource
       || !sameHashes(storedHashes("receipt-"), params.receipts.map(sha256Of))
       || !sameHashes(storedHashes("payment-proof-"), params.paymentProofs.map(sha256Of))) {
       throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_REPLAY_CONFLICT", kind: "CONFLICT", safeMessage: "Este identificador de envio já foi usado com outros documentos." });
     }
+  }
+  const existing = await reference.get();
+  if (existing.exists) {
+    assertMatchingReplay(existing);
     return {
       id: documentId,
       duplicate: true,
       status: String(existing.get("status") || "pending_review") as FinancialInboxMessage["status"],
       analysis: mobileAnalysis(existing),
     };
+  }
+
+  // Decide the proof exception from the actual document before accepting or archiving a new upload.
+  const products = actor.isDefaultAdmin || actor.permissions.app?.localPurchase?.stockEntry === true
+    ? await listLocalPurchaseProducts().catch(() => [])
+    : [];
+  const analysis = await extractMobilePurchaseDocuments({
+    metadata,
+    products,
+    accounts: await listLocalPurchaseAccounts().catch(() => []),
+    receipts: params.receipts.map((document) => ({ buffer: document.buffer, filename: document.originalFilename, detected: document.detected })),
+    paymentProofs: params.paymentProofs.map((document) => ({ buffer: document.buffer, filename: document.originalFilename, detected: document.detected })),
+  }).catch(() => null);
+  const receiptSha256s = params.receipts.map(sha256Of);
+  const fiscalVerification = metadata.fundingSource === "company_payment" && !params.paymentProofs.length
+    ? await verifyMobileFiscalDocuments({ analysis, receipts: params.receipts, receiptSha256s }) : null;
+  const receiptAttachmentsForCheck = params.receipts.map((document, index) => ({ filename: `receipt-${index}`, contentType: document.detected.contentType, archiveStatus: "stored", sha256: sha256Of(document) }));
+  if (metadata.fundingSource === "company_payment" && !params.paymentProofs.length
+    && !mobilePurchaseMayOmitPaymentProof(analysis, fiscalVerification, receiptAttachmentsForCheck)) {
+    throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_PAYMENT_PROOF_REQUIRED", kind: "VALIDATION", safeMessage: "Anexe o comprovante; sem ele, apenas NF-e, DANFE ou NFC-e com protocolo de autorização legível pode prosseguir. Documento em contingência pendente não dispensa comprovante." });
+  }
+  if (analysis) {
+    // A confirmed historical item link outranks the model suggestion and resolves the operational treatment.
+    const remembered = await recallLocalPurchaseItemLinks(
+      { workspaceId: actor.workspace_id, supplierTaxId: analysis.supplierTaxId, supplierName: analysis.supplierName },
+      analysis.items.map((item) => item.description),
+    ).catch(() => analysis.items.map(() => null));
+    analysis.items.forEach((item, index) => {
+      const productId = remembered[index];
+      if (!productId || !products.some((product) => product.id === productId)) return;
+      if (item.productId !== productId) item.packages = item.quantity;
+      item.productId = productId;
+      item.aiTreatment = "existing_item";
+      item.aiConfidence = "high";
+      item.aiReason = "Vínculo confirmado em compra anterior do mesmo fornecedor.";
+    });
   }
 
   const now = new Date().toISOString();
@@ -141,7 +183,8 @@ export async function ingestFinancialMobileUpload(params: {
     },
     attachments,
     mobilePurchaseFundingSource: metadata.fundingSource,
-    mobilePurchaseAnalysis: null,
+    mobilePurchaseAnalysis: analysis,
+    mobileFiscalVerification: fiscalVerification,
     rawStoragePath: null,
     rawSha256: null,
     archiveWarnings: [],
@@ -201,36 +244,15 @@ export async function ingestFinancialMobileUpload(params: {
     await batch.commit();
   } catch (error) {
     if (!isAlreadyExists(error)) throw error;
-    return { id: documentId, duplicate: true, status: "pending_review" as const };
+    const raced = await reference.get();
+    if (!raced.exists) throw error;
+    assertMatchingReplay(raced);
+    return { id: documentId, duplicate: true, status: String(raced.get("status") || "pending_review") as FinancialInboxMessage["status"], analysis: mobileAnalysis(raced) };
   }
 
-  const products = actor.isDefaultAdmin || actor.permissions.app?.localPurchase?.stockEntry === true
-    ? await listLocalPurchaseProducts().catch(() => [])
-    : [];
-  await extractMobilePurchaseDocuments({
-    metadata,
-    products,
-    // A failed catalog read only costs the suggestion; the operator still picks the category in the review.
-    accounts: await listLocalPurchaseAccounts().catch(() => []),
-    receipts: params.receipts.map((document, index) => ({ buffer: document.buffer, filename: storedReceipts[index]!.attachment.filename, detected: document.detected })),
-    paymentProofs: params.paymentProofs.map((document, index) => ({ buffer: document.buffer, filename: storedPaymentProofs[index]!.attachment.filename, detected: document.detected })),
-  }).then(async (analysis) => {
-    if (!analysis) return;
-    // What a person linked before for this supplier and description outranks the model's guess.
-    const remembered = await recallLocalPurchaseItemLinks(
-      { workspaceId: actor.workspace_id, supplierTaxId: analysis.supplierTaxId, supplierName: analysis.supplierName },
-      analysis.items.map((item) => item.description),
-    ).catch(() => analysis.items.map(() => null));
-    analysis.items.forEach((item, index) => {
-      const productId = remembered[index];
-      if (!productId || !products.some((product) => product.id === productId)) return;
-      if (item.productId !== productId) item.packages = item.quantity;
-      item.productId = productId;
-    });
-    await reference.set({ mobilePurchaseAnalysis: analysis, updatedAt: new Date().toISOString() }, { merge: true });
-  }).catch(async () => {
+  if (!analysis) {
     await reference.collection("events").doc().create({ type: "DOCUMENT_ANALYSIS_FAILED", at: new Date().toISOString(), actorId: "system:financial-inbox", safeMessage: "A análise automática não foi concluída; os documentos permanecem disponíveis para revisão manual." });
-  });
+  }
 
   const refreshed = await reference.get();
   return {
@@ -239,4 +261,47 @@ export async function ingestFinancialMobileUpload(params: {
     status: String(refreshed.get("status") || "pending_review") as FinancialInboxMessage["status"],
     analysis: mobileAnalysis(refreshed),
   };
+}
+
+/**
+ * The sender gives up a note that was read but never confirmed: the inbox entry is discarded so nobody
+ * reviews it, and the withdrawal it pointed to is free for another note. Nothing was posted yet, so
+ * there is no expense, stock or link to undo. A confirmed purchase is reversed elsewhere, never here.
+ */
+export async function cancelFinancialMobileUpload(params: { actor: ServerUserContext; submissionId: string }) {
+  const { actor } = params;
+  const reference = financialDbAdmin.collection("financialInboxMessages").doc(mobileInboxDocumentId(actor.workspace_id, params.submissionId));
+  const now = new Date().toISOString();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    // Never uploaded (or another workspace): the phone only has to drop its copy.
+    if (!snapshot.exists || snapshot.get("workspaceId") !== actor.workspace_id || snapshot.get("provider") !== "mobile") {
+      return { status: "not_found" as const };
+    }
+    if (!actor.isDefaultAdmin && snapshot.get("submittedBy.userId") !== actor.userDoc.id) {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "O envio pertence a outro usuário." });
+    }
+    if (snapshot.get("localPurchaseId")) {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_CONFIRMED", kind: "CONFLICT", safeMessage: "A compra já foi confirmada; peça o estorno em Compras." });
+    }
+    if (snapshot.get("status") === "ignored") return { status: "cancelled" as const };
+    if (snapshot.get("status") !== "pending_review") {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_STATE", kind: "CONFLICT", safeMessage: "O financeiro já tratou este envio." });
+    }
+    transaction.set(reference, {
+      status: "ignored",
+      resolution: discardedFinancialInboxResolution({ mode: "manual", at: now, by: actor.decoded.uid, reasons: ["nota cancelada no aplicativo por quem enviou"] }),
+      resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+      reviewedAt: now,
+      reviewedBy: actor.decoded.uid,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.create(reference.collection("events").doc(), {
+      type: "MOBILE_UPLOAD_CANCELLED",
+      at: now,
+      actorId: actor.decoded.uid,
+      actorEmail: actor.decoded.email ?? null,
+    });
+    return { status: "cancelled" as const };
+  });
 }

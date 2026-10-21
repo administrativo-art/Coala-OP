@@ -445,9 +445,9 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
               <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Informações gerais</h3>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField control={form.control} name="destinationKioskId" render={({ field }) => (
-                <FormItem className="sm:col-span-2"><FormLabel>Destino operacional da compra (opcional)</FormLabel>
+                <FormItem className="sm:col-span-2"><FormLabel>Destino operacional da compra</FormLabel>
                   <Select value={field.value || 'none'} onValueChange={value => field.onChange(value === 'none' ? '' : value)}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Não definido</SelectItem>{accessibleKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent></Select>
-                  <p className="text-xs text-muted-foreground">A compra a caminho aparece como aviso. Só a entrada dos lotes altera o saldo.</p><FormMessage />
+                  <p className="text-xs text-muted-foreground">Pode ficar indefinido durante a revisão, mas é obrigatório antes de confirmar itens operacionais. Só a entrada dos lotes altera o saldo.</p><FormMessage />
                 </FormItem>
               )}/>
               <FormField

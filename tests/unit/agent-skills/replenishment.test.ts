@@ -18,6 +18,10 @@ test("contrato da skill de reposição mantém cálculo, limites e entrada Claud
     "Converta **Comprar** para unidades inteiras do derivado selecionado e arredonde para cima",
     "Agrupe a lista final pelo fornecedor",
     "Sem derivado definido pela última compra",
+    "## Auditoria de cobertura das compras",
+    "**Compra ativa sem destino**",
+    "Nunca conclua que não existe compra somente porque a busca por destino veio vazia",
+    "**Compromisso comercial pendente de confirmação operacional**",
   ]) {
     assert.equal(skill.includes(phrase), true, `frase ausente na skill: ${phrase}`);
   }
@@ -26,7 +30,7 @@ test("contrato da skill de reposição mantém cálculo, limites e entrada Claud
   assert.match(openai, /allow_implicit_invocation: true/);
   assert.match(openai, /\$coala-reposicao/);
   assert.ok(Array.isArray(cases));
-  assert.ok(cases.length >= 3);
+  assert.ok(cases.length >= 4);
   assert.equal(lstatSync(claudeEntry).isSymbolicLink(), true);
   assert.equal(
     realpathSync(resolve(dirname(claudeEntry), readlinkSync(claudeEntry))),

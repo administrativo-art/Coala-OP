@@ -1,11 +1,13 @@
 import {
   inferPurchaseItemTreatment,
+  purchaseTreatmentRequiresKioskDestination,
   purchaseTreatmentSkipsOperationalEntry,
 } from "@/lib/purchasing-item-treatment";
 import type { PurchaseOrder, PurchaseOrderItem } from "@/types";
 
 export type PurchaseOrderConfirmationIssueCode =
   | "items"
+  | "destination"
   | "payment_due_date"
   | "payment_method"
   | "payment_card"
@@ -40,6 +42,7 @@ type ReadinessOrder = Pick<
   | "freightAccountPlanId"
   | "freightPaymentMode"
   | "freightSupplierName"
+  | "destinationKioskId"
 >;
 
 type ReadinessItem = Pick<
@@ -59,6 +62,14 @@ function isCardPayment(paymentMethod?: PurchaseOrder["paymentMethod"]) {
   return paymentMethod === "card_credit" || paymentMethod === "card_debit";
 }
 
+export function purchaseOrderRequiresKioskDestination(items: ReadinessItem[]) {
+  return items.some((item) =>
+    purchaseTreatmentRequiresKioskDestination(
+      inferPurchaseItemTreatment(item),
+    ),
+  );
+}
+
 export function getPurchaseOrderConfirmationIssues(
   order: ReadinessOrder,
   items: ReadinessItem[],
@@ -70,6 +81,16 @@ export function getPurchaseOrderConfirmationIssues(
       code: "items",
       label: "Inclua ao menos um item no pedido",
       scope: "items",
+    });
+  }
+  if (
+    purchaseOrderRequiresKioskDestination(items) &&
+    !hasText(order.destinationKioskId)
+  ) {
+    issues.push({
+      code: "destination",
+      label: "Defina o destino operacional da compra",
+      scope: "order",
     });
   }
   if (!hasText(order.paymentDueDate)) {

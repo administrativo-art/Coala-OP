@@ -32,6 +32,19 @@ test("interface separa a caixa operacional da auditoria de cobranças identifica
   assert.doesNotMatch(page, /const STAGE_OPTIONS/);
 });
 
+test("ruídos automáticos, descarte manual e arquivo têm filtros e ações distintos", () => {
+  assert.match(page, /Ruídos automáticos/);
+  assert.match(page, /Descartados manualmente/);
+  assert.match(page, /value: "archive", label: "Arquivadas"/);
+  assert.match(page, /status: "archived"/);
+  assert.match(page, /status: "ignored"/);
+  assert.match(page, /Arquivar retira da lista operacional, mas não exclui/);
+  assert.match(page, /restoreArchived\(selected\)/);
+  assert.match(page, /Selecionar todos desta página/);
+  assert.match(page, /messageGroups\.map\(\(group\) => group\.primary\)/);
+  assert.match(page, /setSelectedIds\(new Set\(\)\);\s*setCursor/);
+});
+
 test("mostra o lançamento sugerido antes da decisão e explicita o vínculo com a previsão", () => {
   assert.ok(page.indexOf("1. Lançamento sugerido") < page.indexOf("2. Próxima decisão"));
   assert.match(page, /Previsão a vincular/);
