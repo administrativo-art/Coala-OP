@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-19: o [Registro REP-P](flows/dp-time-recording.md) ganhou uma [especificação técnica de georreferenciamento](time-recording-geolocation.md), ainda não implementada. O projeto propõe política versionada por unidade, captura pontual, cálculo no servidor, evidência fora da ARP e conferência humana sem bloquear ou alterar a batida. Privacidade, retenção, base legal, RIPD, revisão jurídica, código, testes e piloto continuam pendentes; o grupo permanece Traçado.
+
 2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, NTP público do Observatório Nacional com quórum/falha fechada e AFD 004 com contrato CAdES. O ensaio é somente local; conectividade do runtime, validação oficial de assinaturas, Coala Go e piloto seguem bloqueados. Nenhum grupo/página foi promovido.
 
 2026-10-18: [Escalas DP](flows/dp-schedules.md) documenta simulação pura diária a partir de vínculo vigente e referências históricas explícitas, sem leitura atual de cadastro, API, UI ou persistência. Só o débito conservador de banco sob condições completas pode ser proposto; qualquer ausência ou trabalho extra vai para revisão. Não é apuração fiscal nem conclusão das Fases 1/2/3; o grupo permanece Traçado.
@@ -27,7 +29,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
-| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Meu ponto sem link de menu; NTP público preparado localmente, ainda sem sonda publicada; validação oficial, gates fiscais e Coala Go pendentes |
+| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Registro de ponto na barra lateral; [georreferenciamento](time-recording-geolocation.md) especificado, não implementado; validação oficial, gates fiscais e Coala Go pendentes |
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
@@ -38,7 +40,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — [ausências](flows/dp-absences.md): Etapa 1 publicada; Etapas 2 e 3 fechadas localmente, inclusive SLA, escala e coberturas do DP; cutover, homologação e publicação pendentes |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
-| `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
+| `employee-documents` | 4 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; pasta do colaborador e publicação com teste de integração (20/10/2026) |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote e confirmação manual cobertos localmente; verificação integrada pendente |

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { isValidCpf, normalizeCpf } from '@/lib/hr/employee-document-match';
 
-import { hashRepPType7, REP_P_AFD_LAYOUT_VERSION, type RepPCollectorId } from './core';
+import { hashRepPType7, REP_P_AFD_LAYOUT_VERSION, type RepPCollectorId, type RepPMarkingMode } from './core';
 
 const AFD_SIGNATURE_LITERAL = 'ASSINATURA_DIGITAL_EM_ARQUIVO_P7S';
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00[+-]\d{4}$/;
@@ -26,7 +26,7 @@ export type RepPSensitiveEvent = Readonly<{
 }>;
 export type RepPMarkingEvent = Readonly<{
   recordType: '7'; nsr: number; establishmentId: string; markedAt: string; employeeCpf: string;
-  recordedAt: string; collectorId: RepPCollectorId; mode: '0'; previousHash: string | null; hash: string;
+  recordedAt: string; collectorId: RepPCollectorId; mode: RepPMarkingMode; previousHash: string | null; hash: string;
 }>;
 export type RepPAfdEvent = RepPEmployerEvent | RepPClockAdjustmentEvent | RepPEmployeeEvent | RepPSensitiveEvent | RepPMarkingEvent;
 

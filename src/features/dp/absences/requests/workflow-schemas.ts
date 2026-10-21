@@ -3,12 +3,15 @@ import { absenceCivilDateSchema, absenceRequestPreviewSchema, absenceRequestTarg
 
 const uuid = z.string().uuid();
 const requestId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+/** Motivo opcional do pedido, visível ao titular e a quem analisa. */
+const absenceReason = z.string().trim().min(10, 'O motivo precisa ter ao menos 10 caracteres.').max(1000);
 export const createAbsenceDraftSchema = z.object({
   idempotencyKey: uuid,
   beneficiaryUid: absenceRequestTargetUidSchema.optional(),
   proposedRequestId: uuid.optional(),
   request: absenceRequestPreviewSchema,
   preparationIds: z.array(uuid).max(5).default([]),
+  reason: absenceReason.optional(),
 }).strict();
 export const absenceActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), expectedVersion: z.number().int().positive(), operationId: uuid }).strict(),
@@ -18,7 +21,8 @@ export const absenceActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('request_adjustments'), expectedVersion: z.number().int().positive(), operationId: uuid, reason: z.string().trim().min(10).max(1000) }).strict(),
   z.object({ action: z.literal('cancel'), expectedVersion: z.number().int().positive(), operationId: uuid, reason: z.string().trim().min(10).max(1000) }).strict(),
   z.object({ action: z.literal('update_draft'), expectedVersion: z.number().int().positive(), operationId: uuid,
-    request: absenceRequestPreviewSchema, preparationRef: uuid.optional(), preparationIds: z.array(uuid).max(5).default([]) }).strict(),
+    request: absenceRequestPreviewSchema, preparationRef: uuid.optional(), preparationIds: z.array(uuid).max(5).default([]),
+    reason: absenceReason.optional() }).strict(),
 ]);
 export const absenceRequestRouteSchema = z.object({ requestId }).strict();
 export const absenceListQuerySchema = z.object({

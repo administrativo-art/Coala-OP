@@ -5,6 +5,8 @@ import {
   assertTrustedRepPClockReading,
   formatRepPAfdTimestamp,
   REP_P_MAX_HLB_OFFSET_MS,
+  trustedRepPClockInstant,
+  unconfiguredRepPClock,
 } from '../../src/features/dp/rep-p/clock';
 
 describe('REP-P trusted clock boundary', () => {
@@ -40,5 +42,14 @@ describe('REP-P trusted clock boundary', () => {
       { ...base, verifiedAt: new Date(now.getTime() - 5 * 60_000 - 1) },
       { ...base, attestationId: '' },
     ]) assert.throws(() => assertTrustedRepPClockReading(reading, now), { code: 'REP_P_TIME_UNAVAILABLE' });
+  });
+
+  it('gives the signing instant only from a trusted reading', async () => {
+    const now = new Date();
+    const reading = { instant: now, source: 'test', assurance: 'hlb_verified' as const, observedOffsetMs: 0, verifiedAt: now, ...evidence };
+    assert.equal(await trustedRepPClockInstant({ async read() { return reading; } }), now);
+    await assert.rejects(trustedRepPClockInstant({ async read() { return { ...reading, assurance: 'unverified' as const }; } }),
+      { code: 'REP_P_TIME_UNAVAILABLE' });
+    await assert.rejects(trustedRepPClockInstant(unconfiguredRepPClock), { code: 'REP_P_TIME_PROVIDER_UNCONFIGURED' });
   });
 });

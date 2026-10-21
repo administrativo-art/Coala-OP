@@ -13,15 +13,18 @@ import { isValidCpf, normalizeCpf } from '@/lib/hr/employee-document-match';
 import { AppError } from '@/lib/observability/app-error';
 
 import { generateRepPAfd, signRepPAfd, type RepPAfdEvent, type RepPAfdProfile, type RepPCadesSigner } from './afd';
-import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp,
+import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp, trustedRepPClockInstant,
   unconfiguredRepPClock, type RepPClock } from './clock';
 import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } from './icp-signer';
 import { configuredRepPClock } from './hlb-ntp-clock.server';
+import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zones';
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
+import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS,
+  verifyRepPOfflineEvidence } from './offline';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
-import { repPAfdExportSchema, repPMarkingSchema, repPOwnHistorySchema, repPOwnOptionsSchema, type RepPAfdExportRequest, type RepPMarkingRequest,
-  type RepPOwnHistoryRequest } from './schemas';
+import { repPAfdExportSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
+  type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
 const ESTABLISHMENTS = 'repP_establishments';
 const EMPLOYEES = 'repP_employees';
@@ -29,14 +32,23 @@ const EVENTS = 'repP_events';
 const ATTEMPTS = 'repP_attempts';
 const EXPORT_AUDIT = 'repP_exportAudit';
 const RECEIPTS = 'repP_receipts';
-const MAX_AFD_EVENTS = 2_500;
+const OFFLINE_PERMITS = 'repP_offlinePermits';
+// Leitura em páginas para o AFD sair inteiro e de pronto (art. 81 §2º); o teto só protege memória.
+const AFD_PAGE_SIZE = 2_500;
+// Medido em 18/10/2026: 100 mil eventos somam ~340 MB ao processo (instância de 1 GiB); 50 mil deixam margem.
+const MAX_AFD_EVENTS = 50_000;
+const MAX_RECEIPT_RETRIES_PER_RUN = 50;
+// Espera entre tentativas de um mesmo comprovante: 15 min, depois 30 min no máximo (art. 80 II). Ordenar a fila
+// pela próxima tentativa impede que pendentes que falham sempre ocupem o lote e deixem os demais sem emissão.
+const RECEIPT_RETRY_BASE_MS = 15 * 60_000;
+const RECEIPT_RETRY_MAX_MS = 30 * 60_000;
 const MAX_HISTORY_MARKINGS = 300;
 const MAX_PENDING_RECEIPTS = 100;
 const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
@@ -56,11 +68,14 @@ const unavailableReceiptSigner: RepPPadesSigner = Object.freeze({
  * Credencial A1 da desenvolvedora vinda do Secret Manager (App Hosting expõe como variável).
  * Sem a variável, os assinadores continuam recusando; credencial inválida falha fechada a cada uso.
  */
+const environmentClock: RepPClock = configuredRepPClock() ?? unconfiguredRepPClock;
 let icpSigners: ReturnType<typeof createRepPIcpSigners> | null = null;
 function environmentIcpSigners() {
   const pem = process.env.REP_P_ICP_SIGNER_PEM;
   if (!pem?.trim()) return null;
-  icpSigners ??= createRepPIcpSigners(loadRepPIcpIdentity(pem, CT_SORVETES_CNPJ));
+  icpSigners ??= createRepPIcpSigners(loadRepPIcpIdentity(pem, CT_SORVETES_CNPJ),
+    // Instante gravado na assinatura (/M do PAdES, signingTime do CAdES) vem da Hora Legal; sem ela, a assinatura espera.
+    () => trustedRepPClockInstant(environmentClock));
   return icpSigners;
 }
 const environmentCadesSigner: RepPCadesSigner = Object.freeze({
@@ -70,7 +85,7 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
   signPdf: (content: Buffer) => (environmentIcpSigners()?.pades ?? unavailableReceiptSigner).signPdf(content),
 });
 const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
-  clock: configuredRepPClock() ?? unconfiguredRepPClock,
+  clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true' };
 
@@ -83,8 +98,20 @@ type EstablishmentDocument = {
   profile: RepPAfdProfile; lastNsr: number; lastType7Hash: string | null; lastType7Nsr: number | null;
 };
 
+type OfflinePermitDocument = {
+  schemaVersion: 1; workspaceId: string; employeeId: string; requestDigest: string;
+  permitId: string; installationId: string; deviceKeyId: string; devicePublicKey: string;
+  keySecurity: 'tee' | 'strongbox'; bootCount: number; anchorElapsedRealtimeMs: number;
+  anchorInstant: string; issuedAt: string; expiresAt: string; establishmentId: string;
+  employerCnpj: string; units: Array<{ id: string; name: string; timeZone: string }>;
+  status: 'active' | 'revoked'; lastAcceptedSequence: number; lastAcceptedHash: string | null;
+};
+
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND' | 'CONFLICT' | 'DATA_INTEGRITY' | 'AUTHORIZATION' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
+}
+function markingAllowedForProfile(context: ServerUserContext) {
+  return context.permissions.app.timeRecording?.mark === true;
 }
 function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function establishmentKey(workspaceId: string, cnpj: string) { return digest(['establishment', workspaceId, cnpj]); }
@@ -180,6 +207,87 @@ export async function provisionRepPReferenceData(input: {
   });
 }
 
+function offlinePermitDto(permit: OfflinePermitDocument) {
+  return {
+    permitId: permit.permitId, installationId: permit.installationId, deviceKeyId: permit.deviceKeyId,
+    keySecurity: permit.keySecurity, bootCount: permit.bootCount,
+    anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, anchorInstant: permit.anchorInstant,
+    issuedAt: permit.issuedAt, expiresAt: permit.expiresAt, units: permit.units,
+  };
+}
+
+/** Autoriza o Coala Go oficial a preservar marcações durante uma queda de rede. */
+export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
+  const parsed = repPOfflinePermitSchema.safeParse(raw);
+  if (!parsed.success) throw fail('REP_P_OFFLINE_PERMIT_INPUT_INVALID', 'Solicitação de contingência inválida.');
+  const input: RepPOfflinePermitRequest = parsed.data;
+  const deps = { ...defaults, ...injected };
+  if (!deps.markingEnabled) throw fail('REP_P_MARKING_DISABLED', 'O registro de ponto ainda não foi liberado.', 'AUTHORIZATION');
+  if (!markingAllowedForProfile(context)) throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
+  let calculatedKeyId: string;
+  try { calculatedKeyId = repPDeviceKeyId(input.devicePublicKey); }
+  catch { throw fail('REP_P_OFFLINE_DEVICE_KEY_INVALID', 'A chave segura deste aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
+  if (calculatedKeyId !== input.deviceKeyId) throw fail('REP_P_OFFLINE_DEVICE_KEY_MISMATCH', 'A identidade criptográfica deste aparelho não confere.', 'DATA_INTEGRITY');
+
+  const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
+  const permitId = digest(['offline-permit', context.workspace_id, context.decoded.uid, input.permitRequestId]);
+  const permitRef = deps.repDb.collection(OFFLINE_PERMITS).doc(permitId);
+  const existing = await permitRef.get();
+  if (existing.exists) {
+    const stored = existing.data() as OfflinePermitDocument;
+    if (stored.workspaceId !== context.workspace_id || stored.employeeId !== context.decoded.uid
+      || stored.requestDigest !== requestDigest) throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Autorização offline reutilizada com conteúdo diferente.', 'CONFLICT');
+    return offlinePermitDto(stored);
+  }
+
+  const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
+    userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
+  if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há vínculo histórico válido para ativar a contingência.', 'DATA_INTEGRITY');
+  if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
+    throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
+  }
+  const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
+  const [establishment, ...unitDocs] = await Promise.all([
+    deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get(),
+    ...[...new Set(reference.period.unitIds)].slice(0, 30).map((unitId) => deps.mainDb.collection('dp_units').doc(unitId).get()),
+  ]);
+  const establishmentData = establishment.data();
+  if (!validEstablishment(establishmentData) || establishmentData.workspaceId !== context.workspace_id
+    || establishmentData.profile.employerCnpj !== reference.period.employer.cnpj) {
+    throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'O estabelecimento ainda não está habilitado no REP-P.', 'DATA_INTEGRITY');
+  }
+  const units = unitDocs.filter((unit) => unit.exists).map((unit) => ({ id: unit.id,
+    name: String(unit.get('name') ?? unit.id), timeZone: repPMarkingTimeZone(unit.get('timeZone'), establishmentData.timeZone) }));
+  if (!units.length) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Nenhuma unidade válida está disponível para a contingência.', 'DATA_INTEGRITY');
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  if (!units.some((unit) => civilDateFromRepPTimestamp(formatRepPAfdTimestamp(reading.instant, unit.timeZone)) === input.workDate)) {
+    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data do aparelho não corresponde à hora oficial das unidades.', 'VALIDATION');
+  }
+  const issuedAt = reading.instant.toISOString();
+  const permit: OfflinePermitDocument = {
+    schemaVersion: 1, workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
+    permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
+    devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
+    anchorElapsedRealtimeMs: input.anchorElapsedRealtimeMs, anchorInstant: issuedAt, issuedAt,
+    expiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PERMIT_TTL_MS).toISOString(),
+    establishmentId, employerCnpj: reference.period.employer.cnpj, units, status: 'active',
+    lastAcceptedSequence: 0, lastAcceptedHash: null,
+  };
+  try { await permitRef.create({ ...permit, createdAt: Timestamp.now() }); }
+  catch (cause) {
+    const code = (cause as { code?: number | string } | null)?.code;
+    if (code !== 6 && code !== 'already-exists' && !String((cause as Error | null)?.message).includes('ALREADY_EXISTS')) throw cause;
+    const raced = await permitRef.get();
+    const stored = raced.data() as OfflinePermitDocument | undefined;
+    if (!stored || stored.requestDigest !== requestDigest || stored.employeeId !== context.decoded.uid) {
+      throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Não foi possível confirmar a autorização offline.', 'CONFLICT');
+    }
+    return offlinePermitDto(stored);
+  }
+  return offlinePermitDto(permit);
+}
+
 export async function recordOwnRepPMarking(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPMarkingSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_MARKING_INPUT_INVALID', 'Solicitação de marcação inválida.');
@@ -189,6 +297,11 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     throw new AppError({ code: 'REP_P_MARKING_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
   }
+  if (!markingAllowedForProfile(context)) {
+    throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
+      safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
+  }
+  if (input.offline) return recordOwnOfflineRepPMarking(context, input, deps);
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
   const existingAttempt = await attemptRef.get();
@@ -226,9 +339,11 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   }
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
-  const fiscalTimestamp = formatRepPAfdTimestamp(reading.instant, establishmentData.timeZone);
+  // O instante é um só (Hora Legal); o fuso gravado é o da unidade de execução, ou o do estabelecimento sem cadastro.
+  // O fuso é lido antes da transação: troca concomitante no cadastro vale a partir da batida seguinte.
+  const fiscalTimestamp = formatRepPAfdTimestamp(reading.instant, repPMarkingTimeZone(executionUnit.get('timeZone'), establishmentData.timeZone));
   if (civilDateFromRepPTimestamp(fiscalTimestamp) !== input.workDate) {
-    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data da marcação não corresponde à hora oficial do estabelecimento.', 'VALIDATION');
+    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data da marcação não corresponde à hora oficial da unidade.', 'VALIDATION');
   }
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
@@ -288,10 +403,174 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       cnoCaepf: current.profile.cnoCaepf ?? null, workLocation, inpiRegistration: current.profile.inpiRegistration,
       developerCnpj: current.profile.developerCnpj, employeeName: identity.name, employeeCpf: identity.cpf,
       collectorId, establishmentId, executionUnitId: input.executionUnitId };
+    const createdAt = Timestamp.now();
     transaction.create(deps.repDb.collection(RECEIPTS).doc(eventRef.id), { schemaVersion: 1,
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate, status: 'pending', snapshot,
-      attempts: 0, lastIssue: null, createdAt: Timestamp.now() });
+      attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
+    return { status: 'recorded' as const, marking: prepared.marking };
+  });
+  return { ...committed, ...await settleRepPReceipt(deps, committed.marking) };
+}
+
+/** Sincroniza uma marcação preservada pelo Coala Go; o NSR só nasce nesta transação no servidor. */
+async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: RepPMarkingRequest,
+  deps: Dependencies) {
+  const evidence = input.offline;
+  if (!evidence || input.channel !== 'mobile') throw fail('REP_P_OFFLINE_INPUT_INVALID', 'Marcação offline inválida.');
+  const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
+  const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
+  const existingAttempt = await attemptRef.get();
+  if (existingAttempt.exists) {
+    if (existingAttempt.get('workspaceId') !== context.workspace_id
+      || existingAttempt.get('employeeId') !== context.decoded.uid
+      || existingAttempt.get('requestDigest') !== requestDigest) {
+      throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
+    }
+    const prior = existingAttempt.get('marking') as RepPMarkingCandidate;
+    if (!verifyRepPMarkingCandidate(prior) || prior.mode !== '1') {
+      throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa offline persistida inconsistente.', 'DATA_INTEGRITY');
+    }
+    return { status: 'replayed' as const, marking: prior, ...await settleRepPReceipt(deps, prior) };
+  }
+
+  const permitRef = deps.repDb.collection(OFFLINE_PERMITS).doc(evidence.permitId);
+  const permitSnapshot = await permitRef.get();
+  const permit = permitSnapshot.data() as OfflinePermitDocument | undefined;
+  if (!permitSnapshot.exists || !permit || permit.schemaVersion !== 1 || permit.status !== 'active'
+    || permit.workspaceId !== context.workspace_id || permit.employeeId !== context.decoded.uid
+    || permit.permitId !== evidence.permitId || permit.deviceKeyId !== evidence.deviceKeyId
+    || permit.bootCount !== evidence.bootCount) {
+    throw fail('REP_P_OFFLINE_PERMIT_INVALID', 'A autorização offline não é válida para esta conta e aparelho.', 'AUTHORIZATION');
+  }
+  const permittedUnit = permit.units.find((unit) => unit.id === input.executionUnitId);
+  if (!permittedUnit) throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_PERMIT', 'A unidade não pertence à autorização offline.', 'AUTHORIZATION');
+  let expectedMarkedAt: string;
+  try {
+    expectedMarkedAt = deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
+      anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+      timeZone: permittedUnit.timeZone });
+  } catch { throw fail('REP_P_OFFLINE_TIME_INVALID', 'A hora preservada no aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
+  if (evidence.markedAt !== expectedMarkedAt || civilDateFromRepPTimestamp(expectedMarkedAt) !== input.workDate
+    || Date.parse(expectedMarkedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.parse(permit.expiresAt)) {
+    throw fail('REP_P_OFFLINE_TIME_MISMATCH', 'A hora da marcação não corresponde à autorização offline.', 'DATA_INTEGRITY');
+  }
+  if (!verifyRepPOfflineEvidence({ permitId: evidence.permitId, attemptId: input.attemptId,
+    executionUnitId: input.executionUnitId, deviceKeyId: evidence.deviceKeyId,
+    elapsedRealtimeMs: evidence.elapsedRealtimeMs, bootCount: evidence.bootCount,
+    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash,
+    markedAt: evidence.markedAt, publicKeyBase64: permit.devicePublicKey,
+    localHash: evidence.localHash, signature: evidence.signature })) {
+    throw fail('REP_P_OFFLINE_SIGNATURE_INVALID', 'A assinatura da marcação preservada no aparelho é inválida.', 'DATA_INTEGRITY');
+  }
+
+  const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
+    userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
+  if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há vínculo histórico válido para a data da marcação.', 'DATA_INTEGRITY');
+  if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
+    throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
+  }
+  if (!reference.period.unitIds.includes(input.executionUnitId)) {
+    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
+  }
+  const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
+  if (establishmentId !== permit.establishmentId || reference.period.employer.cnpj !== permit.employerCnpj) {
+    throw fail('REP_P_OFFLINE_EMPLOYMENT_CHANGED', 'O vínculo empregador mudou depois da autorização offline.', 'CONFLICT');
+  }
+  const [identity, executionUnit, establishmentBefore] = await Promise.all([
+    loadStrictIdentity(deps.hrDb, context.decoded.uid), deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
+    deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get(),
+  ]);
+  if (!executionUnit.exists) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
+  const establishmentData = establishmentBefore.data();
+  if (!validEstablishment(establishmentData) || establishmentData.workspaceId !== context.workspace_id
+    || establishmentData.profile.employerCnpj !== reference.period.employer.cnpj) {
+    throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'O estabelecimento ainda não está habilitado no REP-P.', 'DATA_INTEGRITY');
+  }
+  if (repPMarkingTimeZone(executionUnit.get('timeZone'), establishmentData.timeZone) !== permittedUnit.timeZone) {
+    throw fail('REP_P_OFFLINE_UNIT_CHANGED', 'O fuso da unidade mudou depois da autorização offline.', 'CONFLICT');
+  }
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  const recordedAt = formatRepPAfdTimestamp(reading.instant, permittedUnit.timeZone);
+  const workLocation = String(executionUnit.get('address') ?? '').trim() || null;
+  if (missingRepPReceiptFields({ employerLegalName: establishmentData.profile.employerLegalName, workLocation,
+    inpiRegistration: establishmentData.profile.inpiRegistration, employeeName: identity.name }).length) {
+    throw fail('REP_P_RECEIPT_PREREQUISITES_MISSING',
+      'O registro de ponto está indisponível nesta unidade até o cadastro do comprovante ser completado pelo DP.', 'DATA_INTEGRITY');
+  }
+
+  const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
+  const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
+  const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${input.workDate.slice(0, 7)}`);
+  const committed = await deps.repDb.runTransaction(async (transaction) => {
+    const [establishment, employee, attempt, currentPermit, closure] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, permitRef, closureRef);
+    const current = establishment.data();
+    if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
+      || !sameProfile(current.profile, establishmentData.profile) || current.timeZone !== establishmentData.timeZone) {
+      throw fail('REP_P_ESTABLISHMENT_CHANGED', 'O cadastro fiscal mudou durante a sincronização.', 'CONFLICT');
+    }
+    if (!employee.exists || employee.get('status') !== 'active' || employee.get('cpf') !== identity.cpf
+      || employee.get('name') !== identity.name || employee.get('userId') !== context.decoded.uid) {
+      throw fail('REP_P_EMPLOYEE_NOT_READY', 'A identidade do empregado ainda não está habilitada na ARP.', 'DATA_INTEGRITY');
+    }
+    if (closure.exists && closure.get('status') === 'closed') {
+      throw fail('REP_P_OFFLINE_COMPETENCE_CLOSED', 'O mês já foi fechado. A marcação preservada precisa ser conferida pelo DP.', 'CONFLICT');
+    }
+    if (attempt.exists) {
+      if (attempt.get('requestDigest') !== requestDigest) throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
+      const prior = attempt.get('marking') as RepPMarkingCandidate;
+      if (!verifyRepPMarkingCandidate(prior) || prior.mode !== '1') throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
+      return { status: 'replayed' as const, marking: prior };
+    }
+    const currentPermitData = currentPermit.data() as OfflinePermitDocument | undefined;
+    if (!currentPermitData || currentPermitData.status !== 'active'
+      || currentPermitData.deviceKeyId !== evidence.deviceKeyId || currentPermitData.bootCount !== evidence.bootCount) {
+      throw fail('REP_P_OFFLINE_PERMIT_REVOKED', 'A autorização offline foi revogada.', 'AUTHORIZATION');
+    }
+    if (evidence.sequence !== currentPermitData.lastAcceptedSequence + 1
+      || evidence.previousLocalHash !== currentPermitData.lastAcceptedHash) {
+      throw fail('REP_P_OFFLINE_SEQUENCE_INVALID', 'A sequência das marcações offline está incompleta ou fora de ordem.', 'CONFLICT');
+    }
+    const prepared = prepareRepPMarking({ attemptId: input.attemptId, workspaceId: context.workspace_id,
+      employeeId: context.decoded.uid, employeeCpf: identity.cpf, employmentHistoryId: reference.historyId,
+      employmentRevision: reference.revision, employerUnitId: reference.period.employerUnitId,
+      employerCnpj: reference.period.employer.cnpj, establishmentId, executionUnitId: input.executionUnitId,
+      markedAt: expectedMarkedAt, recordedAt, collectorId: '01', mode: '1' }, {
+      nextNsr: current.lastNsr + 1,
+      previousRecord: current.lastType7Hash && current.lastType7Nsr
+        ? { establishmentId, nsr: current.lastType7Nsr, hash: current.lastType7Hash } : null,
+    });
+    if (prepared.status !== 'created') throw fail('REP_P_SEQUENCE_INVALID', 'Sequência fiscal inconsistente.', 'DATA_INTEGRITY');
+    const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
+    transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
+      offlineEvidence: { permitId: permit.permitId, installationId: permit.installationId,
+        deviceKeyId: evidence.deviceKeyId, keySecurity: permit.keySecurity, bootCount: evidence.bootCount,
+        sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, localHash: evidence.localHash,
+        signature: evidence.signature, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+        permitIssuedAt: permit.issuedAt, permitExpiresAt: permit.expiresAt },
+      trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
+        verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
+        attestationId: reading.attestationId, attestationMode: reading.attestationMode,
+        quorum: reading.quorum, observations: reading.observations }, createdAt: Timestamp.now() });
+    transaction.create(attemptRef, { workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+      requestDigest, marking: prepared.marking, createdAt: Timestamp.now() });
+    transaction.update(establishmentRef, { lastNsr: prepared.marking.nsr, lastType7Hash: prepared.marking.hash,
+      lastType7Nsr: prepared.marking.nsr });
+    transaction.update(permitRef, { lastAcceptedSequence: evidence.sequence, lastAcceptedHash: evidence.localHash,
+      lastAcceptedAt: Timestamp.now() });
+    const snapshot: RepPReceiptSnapshot = { schemaVersion: 1, title: REP_P_RECEIPT_TITLE,
+      nsr: prepared.marking.nsr, markedAt: prepared.marking.markedAt, hash: prepared.marking.hash,
+      employerLegalName: current.profile.employerLegalName, employerCnpj: current.profile.employerCnpj,
+      cnoCaepf: current.profile.cnoCaepf ?? null, workLocation, inpiRegistration: current.profile.inpiRegistration,
+      developerCnpj: current.profile.developerCnpj, employeeName: identity.name, employeeCpf: identity.cpf,
+      collectorId: '01', establishmentId, executionUnitId: input.executionUnitId };
+    const createdAt = Timestamp.now();
+    transaction.create(deps.repDb.collection(RECEIPTS).doc(eventRef.id), { schemaVersion: 1,
+      workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
+      nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate,
+      status: 'pending', snapshot, attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
     return { status: 'recorded' as const, marking: prepared.marking };
   });
   return { ...committed, ...await settleRepPReceipt(deps, committed.marking) };
@@ -310,6 +589,11 @@ function sameReceiptSnapshot(snapshot: RepPReceiptSnapshot | undefined, marking:
     && snapshot.executionUnitId === marking.executionUnitId && snapshot.collectorId === marking.collectorId);
 }
 
+function nextReceiptAttempt(deps: Dependencies, attemptsSoFar: number) {
+  const delay = Math.min(RECEIPT_RETRY_BASE_MS * 2 ** Math.max(attemptsSoFar, 0), RECEIPT_RETRY_MAX_MS);
+  return Timestamp.fromMillis((deps.now?.() ?? new Date()).getTime() + delay);
+}
+
 function issueCode(cause: unknown) {
   return cause instanceof AppError ? cause.code : 'REP_P_RECEIPT_SIGNATURE_REJECTED';
 }
@@ -321,12 +605,12 @@ function issueCode(cause: unknown) {
 async function issueRepPReceipt(deps: Dependencies, marking: RepPMarkingCandidate): Promise<RepPReceiptState> {
   const receiptId = eventKey(marking.establishmentId, marking.nsr);
   const receiptRef = deps.repDb.collection(RECEIPTS).doc(receiptId);
+  const current = await receiptRef.get();
   const pending = async (receiptIssue: string): Promise<RepPReceiptState> => {
-    await receiptRef.update({ attempts: FieldValue.increment(1), lastIssue: receiptIssue,
-      lastAttemptAt: Timestamp.now() }).catch(() => undefined);
+    await receiptRef.update({ attempts: FieldValue.increment(1), lastIssue: receiptIssue, lastAttemptAt: Timestamp.now(),
+      nextAttemptAt: nextReceiptAttempt(deps, Number(current.get('attempts') ?? 0)) }).catch(() => undefined);
     return { receiptId, receiptStatus: 'pending', receiptIssue };
   };
-  const current = await receiptRef.get();
   if (!current.exists) return { receiptId, receiptStatus: 'pending', receiptIssue: 'REP_P_RECEIPT_MISSING' };
   if (current.get('status') === 'issued') return { receiptId, receiptStatus: 'available', receiptIssue: null };
   const snapshot = current.get('snapshot') as RepPReceiptSnapshot | undefined;
@@ -388,6 +672,40 @@ export async function retryOwnRepPReceipt(context: ServerUserContext, receiptId:
   return issueRepPReceipt(deps, marking);
 }
 
+/**
+ * Reemissão automática dos comprovantes pendentes do workspace cuja próxima tentativa já venceu, na ordem dela.
+ * Nunca registra batida nem altera a ARP: só emite o comprovante de marcações já persistidas.
+ */
+export async function retryPendingRepPReceipts(params: { workspaceId: string; limit?: number }, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const pending = await deps.repDb.collection(RECEIPTS).where('workspaceId', '==', params.workspaceId)
+    .where('status', '==', 'pending').where('nextAttemptAt', '<=', Timestamp.fromDate(deps.now?.() ?? new Date()))
+    .orderBy('nextAttemptAt').limit(params.limit ?? MAX_RECEIPT_RETRIES_PER_RUN).get();
+  const result = { attempted: 0, issued: 0, stillPending: 0, failed: 0 };
+  for (const receipt of pending.docs) {
+    result.attempted += 1;
+    try {
+      const marking = (await deps.repDb.collection(EVENTS).doc(receipt.id).get()).data() as RepPMarkingCandidate | undefined;
+      if (!marking || marking.workspaceId !== params.workspaceId || marking.markingId !== receipt.get('markingId')
+        || !verifyRepPMarkingCandidate(marking)) {
+        result.failed += 1;
+        // Registra a falha no próprio comprovante para a operação enxergar; nunca emite às cegas.
+        await receipt.ref.update({ attempts: FieldValue.increment(1), lastIssue: 'REP_P_RECEIPT_MARKING_UNVERIFIABLE',
+          lastAttemptAt: Timestamp.now(), nextAttemptAt: nextReceiptAttempt(deps, Number(receipt.get('attempts') ?? 0)) })
+          .catch(() => undefined);
+        continue;
+      }
+      const state = await issueRepPReceipt(deps, marking);
+      if (state.receiptStatus === 'available') result.issued += 1; else result.stillPending += 1;
+    } catch {
+      result.failed += 1;
+    }
+  }
+  return result;
+}
+
+export type RepPServiceDependencies = Partial<Dependencies>;
+
 export async function exportSignedRepPAfd(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPAfdExportSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_AFD_INPUT_INVALID', 'Período de exportação inválido.');
@@ -401,12 +719,27 @@ export async function exportSignedRepPAfd(context: ServerUserContext, raw: unkno
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
   const generatedAt = formatRepPAfdTimestamp(reading.instant, state.timeZone);
-  const snapshot = await deps.repDb.collection(EVENTS)
+  const pageSize = deps.afdPageSize ?? AFD_PAGE_SIZE;
+  const maxEvents = deps.afdMaxEvents ?? MAX_AFD_EVENTS;
+  const base = deps.repDb.collection(EVENTS)
     .where('workspaceId', '==', context.workspace_id).where('establishmentId', '==', input.establishmentId)
     .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
-    .orderBy('recordedDate').orderBy('nsr').limit(MAX_AFD_EVENTS + 1).get();
-  if (snapshot.size > MAX_AFD_EVENTS) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação.');
-  const events = snapshot.docs.map((document) => document.data() as RepPAfdEvent).sort((a, b) => a.nsr - b.nsr);
+    .orderBy('recordedDate').orderBy('nsr');
+  // Todas as páginas na mesma fotografia (transação somente leitura): batida gravada durante a
+  // exportação fica fora do arquivo inteiro, em vez de abrir lacuna de NSR no meio dele.
+  const events = await deps.repDb.runTransaction(async (transaction) => {
+    const collected: RepPAfdEvent[] = [];
+    for (let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null; ;) {
+      const page: FirebaseFirestore.QuerySnapshot = await transaction.get((cursor ? base.startAfter(cursor) : base).limit(pageSize));
+      collected.push(...page.docs.map((document) => document.data() as RepPAfdEvent));
+      if (collected.length > maxEvents) {
+        throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
+      }
+      if (page.size < pageSize) return collected;
+      cursor = page.docs[page.docs.length - 1];
+    }
+  }, { readOnly: true });
+  events.sort((a, b) => a.nsr - b.nsr);
   const pkg = generateRepPAfd({ profile: state.profile, startDate: input.startDate, endDate: input.endDate, generatedAt, events });
   const signed = await signRepPAfd(pkg, deps.signer, state.profile.developerCnpj);
   await deps.repDb.collection(EXPORT_AUDIT).add({ schemaVersion: 1, workspaceId: context.workspace_id,
@@ -417,6 +750,18 @@ export async function exportSignedRepPAfd(context: ServerUserContext, raw: unkno
   return { filename: signed.filename, afdBase64: signed.bytes.toString('base64'), sha256: signed.sha256,
     signatureFilename: signed.signatureFilename, signatureBase64: signed.signature.toString('base64'),
     certificateCnpj: signed.certificateCnpj, counts: signed.counts, lineCount: signed.lineCount };
+}
+
+/** Estabelecimentos fiscais disponíveis para a tela administrativa de exportação AFD/AEJ. */
+export async function listRepPFiscalEstablishments(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const snapshot = await deps.repDb.collection(ESTABLISHMENTS).where('workspaceId', '==', context.workspace_id).limit(101).get();
+  if (snapshot.size > 100) throw fail('REP_P_ESTABLISHMENT_LIMIT', 'Há estabelecimentos demais para listar com segurança.', 'CONFLICT');
+  return snapshot.docs.flatMap((doc) => {
+    const data = doc.data();
+    if (!validEstablishment(data)) return [];
+    return [{ id: doc.id, legalName: data.profile.employerLegalName, cnpj: data.profile.employerCnpj, timeZone: data.timeZone }];
+  }).sort((left, right) => left.legalName.localeCompare(right.legalName, 'pt-BR'));
 }
 
 function receiptTimestampMillis(value: unknown) {
@@ -442,8 +787,75 @@ export async function listOwnRepPMarkings(context: ServerUserContext, raw: unkno
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null };
-  }).sort((left, right) => left.markedAt.localeCompare(right.markedAt) || left.nsr - right.nsr);
+  }).sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
   return { startDate: input.startDate, endDate: input.endDate, markings, truncated: snapshot.size > MAX_HISTORY_MARKINGS };
+}
+
+/**
+ * Batidas de uma pessoa num período para o espelho do fechamento (Etapa 6): mesma consulta do histórico próprio,
+ * chamada só pelo serviço de espelho depois de conferir a permissão. Devolve também a identidade congelada no
+ * comprovante mais recente (nome, CPF e empregador), que o espelho usa em vez do cadastro atual.
+ */
+export async function readRepPMarkingsForMirror(workspaceId: string, employeeId: string, startDate: string, endDate: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const snapshot = await deps.repDb.collection(RECEIPTS)
+    .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeId)
+    .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate)
+    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
+  const receipts = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => ({ workDate: String(document.get('recordedDate')), receipt: document.get('snapshot') as RepPReceiptSnapshot }))
+    .sort((left, right) => repPInstantMs(left.receipt.markedAt) - repPInstantMs(right.receipt.markedAt) || left.receipt.nsr - right.receipt.nsr);
+  const latest = receipts.at(-1)?.receipt;
+  return {
+    markings: receipts.map(({ workDate, receipt }) => ({ workDate, nsr: receipt.nsr, markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId })),
+    identity: latest ? { employeeName: latest.employeeName, employeeCpf: latest.employeeCpf, employerLegalName: latest.employerLegalName, employerCnpj: latest.employerCnpj } : null,
+    truncated: snapshot.size > MAX_HISTORY_MARKINGS,
+  };
+}
+
+/**
+ * Insumos do AEJ (Etapa 6, parte 4) para um estabelecimento e período, chamados só pelo serviço do AEJ depois de
+ * conferir a permissão: perfil fiscal, batidas originais (eventos tipo 7, a fonte do AFD) e o vínculo uid → CPF e
+ * nome pelo catálogo de comprovantes, tudo na mesma fotografia somente leitura. Também carimba a geração pela
+ * Hora Legal no fuso do estabelecimento.
+ */
+export async function readRepPForAej(workspaceId: string, establishmentId: string, startDate: string, endDate: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const state = (await deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get()).data();
+  if (!validEstablishment(state) || state.workspaceId !== workspaceId) throw fail('REP_P_AFD_ESTABLISHMENT_MISSING', 'Estabelecimento REP-P não encontrado.', 'NOT_FOUND');
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  const maxEvents = deps.afdMaxEvents ?? MAX_AFD_EVENTS;
+  const { markings, receipts } = await deps.repDb.runTransaction(async (transaction) => {
+    const events = await transaction.get(deps.repDb.collection(EVENTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+      .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).orderBy('recordedDate').orderBy('nsr').limit(maxEvents + 1));
+    const catalog = await transaction.get(deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+      .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).limit(maxEvents + 1));
+    if (events.size > maxEvents || catalog.size > maxEvents) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
+    return {
+      markings: events.docs.map((doc) => doc.data()).filter((event) => event.recordType === '7').map((event) => ({
+        receiptId: eventKey(establishmentId, Number(event.nsr)), nsr: Number(event.nsr), markedAt: String(event.markedAt),
+        employeeCpf: String(event.employeeCpf), workDate: String(event.recordedDate) })),
+      receipts: catalog.docs.map((doc) => ({ employeeId: String(doc.get('employeeId')), snapshot: doc.get('snapshot') as RepPReceiptSnapshot })),
+    };
+  }, { readOnly: true });
+  const people = new Map<string, { uid: string; name: string }>();
+  for (const receipt of receipts) people.set(receipt.snapshot.employeeCpf, { uid: receipt.employeeId, name: receipt.snapshot.employeeName });
+  return { profile: state.profile, timeZone: state.timeZone, generatedAt: formatRepPAfdTimestamp(reading.instant, state.timeZone), markings,
+    people: [...people.entries()].map(([cpf, person]) => ({ cpf, ...person })) };
+}
+
+/** CPF e nome oficiais pelo cadastro do RH, para o AEJ de quem só tem inclusão aprovada no período. */
+export async function readRepPEmployeeIdentity(userId: string, injected: Partial<Dependencies> = {}) {
+  const { cpf, name } = await loadStrictIdentity(({ ...defaults, ...injected }).hrDb, userId);
+  return { cpf, name };
+}
+
+/** CNPJ da desenvolvedora do REP-P e do PTRP, titular do certificado que assina AFD e AEJ. */
+export const REP_P_DEVELOPER_CNPJ = CT_SORVETES_CNPJ;
+
+/** Assinatura CAdES destacada da desenvolvedora (a mesma do AFD), para o AEJ gerado pelo PTRP. */
+export async function signPtrpDetached(content: Buffer, injected: Partial<Dependencies> = {}) {
+  return ({ ...defaults, ...injected }).signer.signDetached(content);
 }
 
 /** Monitoração do DP: comprovantes ainda pendentes no workspace, mais antigos primeiro, sem CPF nem bytes. */
@@ -470,18 +882,23 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const parsed = repPOwnOptionsSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
+  if (!deps.markingEnabled || !markingAllowedForProfile(context)) {
+    return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
+      executionUnits: [], officialClock: null };
+  }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
-  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, executionUnits: [], officialClock: null };
+  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: true as const, executionUnits: [], officialClock: null };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
   const units = unitIds.length ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
   const executionUnits = units.filter((unit) => unit.exists)
     .map((unit) => ({ id: unit.id, name: String(unit.get('name') ?? unit.id),
-      employer: unit.id === reference.period.employerUnitId }))
+      employer: unit.id === reference.period.employerUnitId,
+      timeZone: isBrazilTimeZone(unit.get('timeZone')) ? String(unit.get('timeZone')) : null }))
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, executionUnits: eligible ? executionUnits : [],
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, executionUnits: eligible ? executionUnits : [],
     officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };
 }
 
@@ -509,3 +926,24 @@ export function getRepPSignerStatus(now = new Date()) {
 }
 
 export const repPIdentifiersForTest = Object.freeze({ establishmentKey, employeeKey, eventKey, receiptKey: eventKey });
+
+/**
+ * Leituras para o ajuste de ponto (PTRP), sem escrita na ARP: a batida do próprio titular no dia e o fuso do
+ * estabelecimento. Ficam aqui porque só o serviço do REP-P acessa as coleções `repP_*`.
+ */
+export async function readOwnRepPReceiptForAdjustment(context: ServerUserContext, receiptId: string, workDate: string,
+  injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const receipt = await deps.repDb.collection(RECEIPTS).doc(receiptId).get();
+  const snapshot = receipt.get('snapshot') as Partial<RepPReceiptSnapshot> | undefined;
+  if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid
+    || receipt.get('recordedDate') !== workDate || !snapshot?.nsr || !snapshot.markedAt || !snapshot.executionUnitId) return null;
+  return { receiptId: receipt.id, nsr: snapshot.nsr, markedAt: snapshot.markedAt, executionUnitId: snapshot.executionUnitId };
+}
+
+export async function repPEstablishmentForEmployer(workspaceId: string, employerCnpj: string, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const id = establishmentKey(workspaceId, employerCnpj);
+  const data = (await deps.repDb.collection(ESTABLISHMENTS).doc(id).get()).data();
+  return { establishmentId: id, timeZone: typeof data?.timeZone === 'string' ? data.timeZone : null };
+}

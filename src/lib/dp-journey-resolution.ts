@@ -43,7 +43,10 @@ export type DPJourneyResolutionCandidate = Pick<DPJourney,
   | 'validTo'
 >;
 
-export type DPJourneyResolution<TJourney extends DPJourneyResolutionCandidate = DPJourney> =
+/** O mínimo que a resolução usa: serve também para outras configurações versionadas por abrangência, como a política de hora extra. */
+export type DPApplicableCandidate = Pick<DPJourney, 'id' | 'version' | 'status' | 'applicability' | 'validFrom' | 'validTo'>;
+
+export type DPJourneyResolution<TJourney extends DPApplicableCandidate = DPJourney> =
   | { status: 'none'; candidates: [] }
   | { status: 'ambiguous'; candidates: TJourney[] }
   | { status: 'resolved'; journey: TJourney; resolvedBy: DPJourneyResolvedBy; candidates: TJourney[] };
@@ -75,7 +78,7 @@ function applicabilityMatches(applicability: DPTimeApplicability, target: DPJour
     && dimensionMatches(applicability.collaboratorIds, [target.collaboratorId]);
 }
 
-function isEffective(journey: DPJourneyResolutionCandidate, date: string) {
+function isEffective(journey: DPApplicableCandidate, date: string) {
   if (journey.status === 'draft') return false;
   if (journey.status === 'archived' && !journey.validTo) return false;
   return journey.validFrom <= date && (!journey.validTo || journey.validTo >= date);
@@ -90,7 +93,7 @@ function resolvedBy(applicability: DPTimeApplicability): DPJourneyResolvedBy {
   return applicability.scope.kind;
 }
 
-export function resolveDPJourney<TJourney extends DPJourneyResolutionCandidate = DPJourney>(params: {
+export function resolveDPJourney<TJourney extends DPApplicableCandidate = DPJourney>(params: {
   journeys: TJourney[];
   target: DPJourneyResolutionTarget;
   date: string;

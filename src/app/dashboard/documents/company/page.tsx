@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Building2, ChevronDown, Download, Eye, FileText, Folder, Loader2, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
+import Link from "next/link";
+import { Building2, ChevronDown, ChevronRight, Download, Eye, FileText, Folder, Loader2, Plus, Search, Sparkles, Trash2, Upload, Users, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -313,7 +314,7 @@ export default function CompanyDocumentsPage() {
     <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">01 · Documentos da empresa</p>
           <h1 className="text-xl font-black text-slate-950">Documentos da empresa</h1>
         </div>
         {canManage ? <Button size="sm" className="h-9 gap-2 rounded-lg" onClick={() => setDialogOpen(true)}>
@@ -322,6 +323,13 @@ export default function CompanyDocumentsPage() {
       </div>
 
       {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
+
+      <Link href="/dashboard/documents/collaborators" className="group flex items-center gap-3 rounded-xl border bg-white p-4 shadow-xs transition hover:border-pink-200 hover:shadow-md">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-pink-50 text-[#df2f78]"><Users className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Colaboradores</span>
+          <span className="block text-xs font-semibold text-slate-500">Pastas internas completas de cada pessoa, visíveis somente ao DP autorizado.</span></span>
+        <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#df2f78]" />
+      </Link>
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-const REP_P_COLLECTIONS = ['repP_establishments', 'repP_employees', 'repP_events', 'repP_attempts', 'repP_receipts', 'repP_exportAudit'];
+const REP_P_COLLECTIONS = ['repP_establishments', 'repP_employees', 'repP_events', 'repP_attempts', 'repP_receipts', 'repP_offlinePermits', 'repP_exportAudit'];
 
 describe('REP-P ARP isolation', () => {
   it('lives in coala-rh and denies every direct client operation on its collections', () => {

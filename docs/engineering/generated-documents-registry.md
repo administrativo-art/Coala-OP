@@ -10,7 +10,7 @@ Modelos com `generationMode: reference` são referências e não aparecem na lis
 
 A política é `deny by default`: enquanto não existir configuração explícita, o documento permanece somente no arquivo restrito. A superfície de Pessoal deve concentrar, por modelo ou pacote, vínculo do titular, elegibilidade de publicação, momento, pasta de destino e comportamento de novas versões. Essa configuração não duplica nem edita o modelo de origem.
 
-Uma implementação futura da escrita dessas políticas deve manter a autorização no servidor, registrar histórico e impedir que um documento seja publicado sem o identificador interno do colaborador. Documentos com assinatura só podem admitir a versão final assinada; a tela atual apresenta o catálogo e o estado seguro **Não configurada — permanece restrito**, sem afirmar que o motor de publicação já consome uma regra editável.
+Desde 20/10/2026 a publicação existe como marca no documento do colaborador, com política padrão por tipo de documento em código e publicação automática ao assinar ou validar; ver [documentos por colaborador](flows/employee-documents.md#duas-macros-e-publicação-20102026). Ela mantém a autorização no servidor, registra histórico, não publica sem o identificador do colaborador e só admite a versão final assinada. A tela atual ainda apresenta o catálogo e o estado **Não configurada — permanece restrito**; a edição da política pela tela é a próxima etapa.
 
 ## Regra para novas implementações
 

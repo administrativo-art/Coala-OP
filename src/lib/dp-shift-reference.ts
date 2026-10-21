@@ -21,6 +21,8 @@ export function buildShiftDefinitionReference(definition: ShiftDefinitionSource 
     breakDurationMinutes: definition.breakDurationMinutes ?? null,
     breakWindowStart: definition.breakWindowStart ?? null,
     breakWindowEnd: definition.breakWindowEnd ?? null,
+    // Só aparece no fixo intercalado, para não mudar a forma das referências já congeladas.
+    ...(definition.breakSegments?.length ? { breakSegments: definition.breakSegments.map((segment) => ({ ...segment })) } : {}),
     overnight: definition.overnight ?? false,
     expectedPunches: definition.expectedPunches ?? null,
     daysOfWeek: [...(definition.daysOfWeek ?? [])],
@@ -97,6 +99,7 @@ export function buildDPShiftReference(params: {
       scaleValidation: journey.scaleValidation ? { ...journey.scaleValidation } : null,
       expectedBreakMinutes: journey.expectedBreakMinutes ?? null,
       useDefinedShiftWhenShorter: journey.useDefinedShiftWhenShorter ?? null,
+      toleranceMinutes: journey.toleranceMinutes ?? null,
       allowedShiftDefinitionIds: [...(journey.allowedShiftDefinitionIds ?? [])],
     },
     shiftDefinition: buildShiftDefinitionReference(definition),

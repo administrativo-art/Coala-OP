@@ -203,7 +203,18 @@ service cloud.firestore {
     match /repP_events/{id} { allow read, write: if false; }
     match /repP_attempts/{id} { allow read, write: if false; }
     match /repP_receipts/{id} { allow read, write: if false; }
+    match /repP_offlinePermits/{id} { allow read, write: if false; }
     match /repP_exportAudit/{id} { allow read, write: if false; }
+
+    // Tratamento do ponto (PTRP): pedidos de ajuste e tratamentos só pelas APIs autenticadas; o original segue na ARP.
+    match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }
+    match /ptrp_treatments/{id} { allow read, write: if false; }
+    match /ptrp_competenceClosures/{id} {
+      allow read, write: if false;
+      match /{nested=**} { allow read, write: if false; }
+    }
+    match /dp_timeBankMovementGuards/{id} { allow read, write: if false; }
+    match /dp_timeBankMovementOperations/{id} { allow read, write: if false; }
 
     // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
     match /candidates/{id}   { allow read, write: if false; }

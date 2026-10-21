@@ -51,6 +51,13 @@ export function assertTrustedRepPClockReading(reading: RepPClockReading, evaluat
   }
 }
 
+/** Instante oficial já atestado; recusa como a batida quando a Hora Legal não está confiável. */
+export async function trustedRepPClockInstant(clock: RepPClock): Promise<Date> {
+  const reading = await clock.read();
+  assertTrustedRepPClockReading(reading);
+  return reading.instant;
+}
+
 export const unconfiguredRepPClock: RepPClock = Object.freeze({
   async read(): Promise<RepPClockReading> {
     throw new AppError({

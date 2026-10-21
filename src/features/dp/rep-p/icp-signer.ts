@@ -6,7 +6,7 @@ import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { AppError } from '@/lib/observability/app-error';
 
 import type { RepPCadesSigner } from './afd';
-import { decodeOid, der, parseDer, type DerNode } from './der';
+import { decodeOid, der, parseDer, tlv, type DerNode } from './der';
 import type { RepPPadesSigner } from './receipt';
 
 const OID = Object.freeze({
@@ -16,6 +16,8 @@ const OID = Object.freeze({
   messageDigest: '1.2.840.113549.1.9.4',
   signingTime: '1.2.840.113549.1.9.5',
   signingCertificateV2: '1.2.840.113549.1.9.16.2.47',
+  signaturePolicyId: '1.2.840.113549.1.9.16.2.15',
+  spqEtsUri: '1.2.840.113549.1.9.16.5.1',
   sha256: '2.16.840.1.101.3.4.2.1',
   sha256WithRsa: '1.2.840.113549.1.1.11',
   ecdsaWithSha256: '1.2.840.10045.4.3.2',
@@ -23,6 +25,17 @@ const OID = Object.freeze({
   icpBrasilCnpj: '2.16.76.1.3.3',
 });
 const PADES_CONTENTS_BYTES = 16_384;
+
+/**
+ * Política ICP-Brasil AD-RB vigente para CAdES (LPA_CAdES assinada pelo ITI, conferida em 18/10/2026):
+ * v2.4, válida de 12/06/2025 a 22/10/2037. O hash é do arquivo .der da política, guardado em docs/rep-p/referencias.
+ */
+export const REP_P_CADES_SIGNATURE_POLICY = Object.freeze({
+  oid: '2.16.76.1.7.1.1.2.4',
+  sha256: '25f148b0828c0ba93695742469566fcc4d1618aa0c20cac56ae72b3419ecee6b',
+  uri: 'http://politicas.icpbrasil.gov.br/PA_AD_RB_v2_4.der',
+});
+export type RepPSignaturePolicy = Readonly<{ oid: string; sha256: string; uri: string }>;
 export const REP_P_ICP_EXPIRY_WARNING_DAYS = 30;
 const BYTE_RANGE_PLACEHOLDER = '0000000000 0000000000 0000000000';
 
@@ -133,11 +146,19 @@ export function assertRepPIcpIdentityValid(identity: RepPIcpIdentity, now = new 
 
 function attribute(oid: string, value: Buffer) { return der.sequence(der.oid(oid), der.set(value)); }
 
+/** SignaturePolicyId (RFC 5126 5.8.1): OID, hash SHA-256 do documento da política e a URI como qualificador. */
+function signaturePolicyAttribute(policy: RepPSignaturePolicy) {
+  return attribute(OID.signaturePolicyId, der.sequence(der.oid(policy.oid),
+    der.sequence(der.sequence(der.oid(OID.sha256)), der.octetString(Buffer.from(policy.sha256, 'hex'))),
+    der.sequence(der.sequence(der.oid(OID.spqEtsUri), tlv(0x16, Buffer.from(policy.uri, 'ascii'))))));
+}
+
 /**
- * CMS SignedData destacado (CAdES-BES): contentType, messageDigest e signing-certificate-v2.
- * PAdES proíbe signingTime no CMS (o instante vai em /M); o AFD o inclui.
+ * CMS SignedData destacado (CAdES-BES): contentType, messageDigest e signing-certificate-v2; com política,
+ * acrescenta sigPolicyId (CAdES-EPES/AD-RB). PAdES proíbe signingTime no CMS (o instante vai em /M); o AFD o inclui.
  */
-export function buildRepPDetachedCms(identity: RepPIcpIdentity, content: Buffer, options: { signingTime?: Date } = {}): Buffer {
+export function buildRepPDetachedCms(identity: RepPIcpIdentity, content: Buffer,
+  options: { signingTime?: Date; signaturePolicy?: RepPSignaturePolicy } = {}): Buffer {
   const { serial, issuer } = certificateParts(identity.certificate);
   const essCertId = der.sequence(der.octetString(sha256(identity.certificate.raw)),
     der.sequence(der.sequence(der.explicit(4, issuer.raw)), serial.raw));
@@ -146,6 +167,7 @@ export function buildRepPDetachedCms(identity: RepPIcpIdentity, content: Buffer,
     attribute(OID.messageDigest, der.octetString(sha256(content))),
     attribute(OID.signingCertificateV2, der.sequence(der.sequence(essCertId))),
     ...(options.signingTime ? [attribute(OID.signingTime, der.utcTime(options.signingTime))] : []),
+    ...(options.signaturePolicy ? [signaturePolicyAttribute(options.signaturePolicy)] : []),
   );
   const rsa = identity.privateKey.asymmetricKeyType === 'rsa';
   const signatureAlgorithm = rsa ? der.sequence(der.oid(OID.sha256WithRsa), der.null()) : der.sequence(der.oid(OID.ecdsaWithSha256));
@@ -251,21 +273,23 @@ export function verifyRepPSignedPdf(pdf: Buffer): { valid: boolean; certificateC
   return verifyRepPDetachedCms(parseDer(Buffer.from(match[4], 'hex')).raw, Buffer.concat([pdf.subarray(0, start), pdf.subarray(resume)]));
 }
 
-export function createRepPIcpSigners(identity: RepPIcpIdentity, now: () => Date = () => new Date()): {
+/** `now` dá o instante gravado na assinatura; em produção vem da Hora Legal e pode recusar. */
+export function createRepPIcpSigners(identity: RepPIcpIdentity, now: () => Date | Promise<Date> = () => new Date()): {
   cades: RepPCadesSigner; pades: RepPPadesSigner;
 } {
   return {
     cades: {
       async signDetached(content) {
-        const instant = now();
+        const instant = await now();
         assertRepPIcpIdentityValid(identity, instant);
-        return { bytes: buildRepPDetachedCms(identity, content, { signingTime: instant }), format: 'CAdES', detached: true,
+        return { bytes: buildRepPDetachedCms(identity, content, { signingTime: instant, signaturePolicy: REP_P_CADES_SIGNATURE_POLICY }),
+          format: 'CAdES', detached: true,
           certificateCnpj: identity.cnpj };
       },
     },
     pades: {
       async signPdf(content) {
-        const instant = now();
+        const instant = await now();
         assertRepPIcpIdentityValid(identity, instant);
         return { bytes: await signRepPPdfIncrementally(content, identity, instant), format: 'PAdES', certificateCnpj: identity.cnpj };
       },

@@ -25,6 +25,9 @@ import {
   X,
 } from "lucide-react";
 
+import { PublicationControl } from "@/features/hr/documents/publication-control";
+import { LegacyDocumentClassification } from "@/features/hr/documents/legacy-document-classification";
+import type { DocumentPublication } from "@/lib/hr/employee-document-publication";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/navigation/back-button";
@@ -79,6 +82,7 @@ type DocumentRow = {
   signatureRequired?: boolean;
   signatureStatus?: string | null;
   signedAt?: string | null;
+  publication?: DocumentPublication | null;
   source?: string | null;
   status: string;
   accessLevel: string;
@@ -892,8 +896,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   async function setStatus(item: DocumentRow, status: string) {
     setBusy(true);
     try {
-      await request("/api/hr/employee-documents", {
-        method: "PATCH",
+      await request("/api/hr/employee-documents/status", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, status }),
       });
@@ -911,8 +915,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     setBusy(true);
     try {
       for (const item of targets) {
-        await request("/api/hr/employee-documents", {
-          method: "PATCH",
+        await request("/api/hr/employee-documents/status", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: item.id, status }),
         });
@@ -1489,6 +1493,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         <div className="flex flex-wrap items-center gap-2">
                           <button onClick={() => void previewDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-4 w-4" /></button>
                           <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
+                          {canManage ? <PublicationControl firebaseUser={firebaseUser} documentId={item.id} publication={item.publication} onChanged={() => void load()} /> : null}
                           {canManage ? (
                             <>
                               <DropdownMenu>
@@ -1555,6 +1560,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           onCancel={() => setRemoveTarget(null)}
                           onConfirm={() => void remove(item)}
                         />
+                      ) : null}
+
+                      {canManage && (!item.documentTypeCode || item.documentTypeCode === "UNKNOWN_DOCUMENT") ? (
+                        <LegacyDocumentClassification firebaseUser={firebaseUser} documentId={item.id} onChanged={() => void load()} />
                       ) : null}
 
                       {isExpanded ? (

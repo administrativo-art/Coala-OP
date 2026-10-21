@@ -105,9 +105,13 @@ describe('REP-P synthetic core', () => {
     assert.notEqual(second.marking.markingId, first.marking.markingId);
   });
 
-  it('rejects offline capture in this online-only MVP core', () => {
-    assert.deepEqual(prepareRepPMarking(fixture({ mode: '1' }), firstState()),
-      { status: 'rejected', issue: 'OFFLINE_OUTSIDE_MVP' });
+  it('creates an offline type 7 with distinct marking and recording instants', () => {
+    const result = created(fixture({ mode: '1', markedAt: '2026-10-18T08:15:00-0300',
+      recordedAt: '2026-10-18T09:00:00-0300' }));
+    assert.equal(result.marking.mode, '1');
+    assert.equal(result.marking.markedAt, '2026-10-18T08:15:00-0300');
+    assert.equal(result.marking.recordedAt, '2026-10-18T09:00:00-0300');
+    assert.equal(verifyRepPMarkingCandidate(result.marking), true);
   });
 
   it('fails closed on invalid identity, timestamps and collector', () => {

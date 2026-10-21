@@ -12,7 +12,7 @@
 ## Acesso em duas camadas
 
 1. **Central:** administrador padrão ou `settings.view` + `settings.viewSystemNotices` ("Ver avisos do sistema"). Sem isso a página e a API recusam.
-2. **Aviso:** cada documento declara um público em [`core.ts`](../../../src/features/system-notices/core.ts). `system.admin` é só do administrador padrão; `dp.time-manager-global` exige `dp.settings.manageTime` e acesso a todas as unidades (mesma regra da exportação do AFD). O servidor consulta `audience in [públicos do usuário]`; nada é filtrado só na tela.
+2. **Aviso:** cada documento declara um público em [`core.ts`](../../../src/features/system-notices/core.ts). `system.admin` é só do administrador padrão; `dp.time-manager-global` exige `dp.settings.manageTime` e acesso a todas as unidades (mesma regra da exportação do AFD). `dp.time-closure` (20/10/2026) é de quem tem `dp.timeClosure.close`; é o único público entregue no sino mesmo sem acesso à central (`BELL_WITHOUT_CENTRAL`), e o item do sino leva ao caminho do aviso (o painel do fechamento) em vez da central. Categoria `dp.time-closing`: pacote do fechamento sem assinatura em 24 horas ou recusado ([Registro de ponto](dp-time-recording.md)). O servidor consulta `audience in [públicos do usuário]`; nada é filtrado só na tela.
 
 O sino recebe uma cópia em `userNotifications` para quem atende às duas camadas pelo perfil (até 50 pessoas por aviso). Administrador definido apenas por claim do token vê a central, mas não recebe no sino. Perder a permissão remove o acesso à central na hora; avisos já entregues no sino levam à central, que revalida.
 
@@ -26,7 +26,7 @@ O sino recebe uma cópia em `userNotifications` para quem atende às duas camada
 
 - **Certificado e-CNPJ:** marcos em dias civis de America/Fortaleza — 60, 45, 30, 15, 7, 5, 4, 3, 2, 1, 0 (dia do vencimento) e vencido. Um aviso por marco e por impressão digital do certificado; o marco novo resolve o anterior e um certificado renovado resolve todos. Gravidade: informativo (60/45), atenção (30/15), crítico (≤7 e vencido). Credencial inválida gera aviso crítico. Não lê nem registra a chave.
 - **Hora Legal:** a rotina usa o mesmo relógio do registro e abre aviso crítico quando a atestação HLB está ausente, inválida ou vencida; exige uma consulta nova aos servidores e só resolve quando ela volta a passar por quórum, tolerância e atualidade. Cache/fallback nunca resolve o aviso. A sonda não substitui o gate global nem a validação em cada batida.
-- **Comprovantes pendentes** há mais de 1 hora: um aviso por dia enquanto houver; resolve quando zerar (consulta `count()` indexada).
+- **Comprovantes pendentes** há mais de 1 hora: antes de contar, a rotina tenta emiti-los (`retryPendingRepPReceipts`, até 50 por execução, com o mesmo `now` da rotina; a reemissão principal roda a cada 15 min em `repPReceiptRetryJob`); os que restarem geram um aviso por dia enquanto houver, resolvido quando zerar (consulta `count()` indexada).
 - **Revisão das normas:** aviso quando `REP_P_NORMS_REGISTRY.lastReviewedAt` for nulo ou tiver mais de 30 dias.
 
 Custo: uma execução por dia; leituras ≈ 4 consultas de avisos abertos + 1 contagem + até 200 perfis e 50 usuários por aviso novo, além de até quatro datagramas NTP de ida e quatro de volta. A central lê no máximo 51 documentos por página, sem listener nem polling.

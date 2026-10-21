@@ -41,7 +41,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         drawLine(Tokens.muted, center, androidx.compose.ui.geometry.Offset(center.x + 2.5.dp.toPx(), center.y + 1.5.dp.toPx()), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
     }
 }
-@Composable private fun NavSquare(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
+@Composable internal fun NavSquare(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
         Box(Modifier.size(34.dp).background(Tokens.surface, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
     }
