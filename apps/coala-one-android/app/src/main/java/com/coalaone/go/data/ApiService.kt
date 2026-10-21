@@ -23,6 +23,7 @@ interface ApiService {
     @Multipart @POST("api/financial/inbox/mobile-upload") suspend fun upload(@PartMap fields: Map<String, @JvmSuppressWildcards RequestBody>, @Part documents: List<MultipartBody.Part>, @Header("X-Coala-Local-Owner") expectedOwner: String? = null): UploadResponse
     @POST("api/purchasing/local-purchases/confirm") suspend fun confirm(@Body request: ConfirmPurchase): PurchaseResponse
     @POST("api/purchasing/local-purchases/link-withdrawal") suspend fun link(@Body request: LinkWithdrawal): PurchaseResponse
+    @POST("api/financial/inbox/mobile-upload/cancel") suspend fun cancelUpload(@Body request: CancelUpload): CancelUploadResponse
     @GET("api/dp/mobile-schedule") suspend fun schedule(@Query("year") year: Int, @Query("month") month: Int): MonthSchedule
     @GET("api/goals/mobile") suspend fun goalUnits(): GoalUnits
     @GET("api/goals/mobile") suspend fun goals(@Query("kioskId") kioskId: String): UnitGoals

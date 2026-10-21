@@ -31,6 +31,9 @@ export type WithdrawalClassification = {
   resultCenterName: string;
   description: string;
   createdExpense: boolean;
+  /** Presente quando a sangria quitou uma compra local registrada pelo aplicativo. */
+  localPurchaseId?: string;
+  localPurchaseSupplierName?: string;
   /** Troco devolvido ao caixa por suprimento: a despesa quitada é a sangria menos este valor. */
   changeReturnedCents?: number;
   active: boolean;

@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **491 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **492 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -248,6 +248,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/inbox/[id]/restore` | POST | [src/app/api/financial/inbox/[id]/restore/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/restore/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/bulk-review` | POST | [src/app/api/financial/inbox/bulk-review/route.ts](../../src/app/api/financial/inbox/bulk-review/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/mobile-upload` | POST | [src/app/api/financial/inbox/mobile-upload/route.ts](../../src/app/api/financial/inbox/mobile-upload/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/financial/inbox/mobile-upload/cancel` | POST | [src/app/api/financial/inbox/mobile-upload/cancel/route.ts](../../src/app/api/financial/inbox/mobile-upload/cancel/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/financial/inbox/settings` | GET, PUT | [src/app/api/financial/inbox/settings/route.ts](../../src/app/api/financial/inbox/settings/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/management-analysis` | POST | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) | [financial-overview](flows/financial-overview.md) |
 | `/api/financial/payment-requests` | GET, POST | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) | [payment-requests](flows/payment-requests.md) |

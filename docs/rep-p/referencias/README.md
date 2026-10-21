@@ -35,3 +35,9 @@ A cada conferência: procurar alterações no gov.br e no Diário Oficial, atual
 4. No piloto paralelo ao Bizneo, qual sistema é o registro oficial por estabelecimento e como tratar divergências (CLT art. 74; Súmula 338)?
 5. O que muda para o REP-P com a Consolidada MTE 1/2025 e a MTE 1.316/2026 (feriados no comércio e a CCT de São Luís)?
 6. A CT Sorvetes pode assinar como desenvolvedora o atestado técnico e o termo de responsabilidade do REP-P e do PTRP sendo também a empregadora?
+7. Assinar com o e-CNPJ da desenvolvedora amostras de AFD e comprovante com CNPJ e CPF de exemplo (dígitos válidos), rotuladas "AMOSTRA", gera risco de falsidade ou uso indevido se vazarem? Convém usar identificadores sem dígitos válidos ou há CNPJ de teste oficial?
+8. O atestado vale por versão publicada do programa ou pelo programa em geral? Que mudança exige novo atestado?
+9. Sem carimbo do tempo, por quanto tempo as assinaturas do AFD e do comprovante permanecem verificáveis após o vencimento do e-CNPJ (16/06/2027)? A guarda longa exige ACT?
+10. O atestado do REP-P pode ser assinado com `N/A` no certificado de registro do INPI quando houver só o número de registro?
+11. Se responsável legal e técnico forem pessoas diferentes, ambos assinam em PAdES o mesmo PDF, cada um com seu e-CPF?
+12. Ligar a flag em um único estabelecimento basta para o piloto? Quais obrigações do art. 80 e do Anexo IX valem desde a primeira batida real?

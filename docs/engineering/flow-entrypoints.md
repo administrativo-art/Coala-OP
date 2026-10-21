@@ -190,7 +190,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx).
 
-Arquivos locais percorridos: 32.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
@@ -575,7 +575,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 113.
+Arquivos locais percorridos: 114.
 
 Chamadas candidatas encontradas:
 
@@ -661,7 +661,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 37.
 
 Chamadas candidatas encontradas:
 
@@ -1323,7 +1323,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/purchasing/costs/page.tsx`](../../src/app/dashboard/purchasing/costs/page.tsx), [`src/app/dashboard/purchasing/orders/[orderId]/page.tsx`](../../src/app/dashboard/purchasing/orders/%5BorderId%5D/page.tsx), [`src/app/dashboard/purchasing/orders/[orderId]/receipt/page.tsx`](../../src/app/dashboard/purchasing/orders/%5BorderId%5D/receipt/page.tsx), [`src/app/dashboard/purchasing/orders/page.tsx`](../../src/app/dashboard/purchasing/orders/page.tsx), [`src/app/dashboard/purchasing/quotations/[quotationId]/confirm-purchase/page.tsx`](../../src/app/dashboard/purchasing/quotations/%5BquotationId%5D/confirm-purchase/page.tsx), [`src/app/dashboard/purchasing/quotations/[quotationId]/page.tsx`](../../src/app/dashboard/purchasing/quotations/%5BquotationId%5D/page.tsx), [`src/app/dashboard/purchasing/quotations/compare/page.tsx`](../../src/app/dashboard/purchasing/quotations/compare/page.tsx), [`src/app/dashboard/purchasing/quotations/page.tsx`](../../src/app/dashboard/purchasing/quotations/page.tsx), [`src/app/dashboard/purchasing/receipts/page.tsx`](../../src/app/dashboard/purchasing/receipts/page.tsx), [`src/app/dashboard/stock/purchasing/history/page.tsx`](../../src/app/dashboard/stock/purchasing/history/page.tsx), [`src/app/dashboard/stock/purchasing/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/stock/purchasing/sessions/%5BsessionId%5D/page.tsx).
 
-Arquivos locais percorridos: 100.
+Arquivos locais percorridos: 101.
 
 Chamadas candidatas encontradas:
 

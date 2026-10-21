@@ -264,7 +264,7 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 
 ### Seletor de unidade no cabeçalho (`UnitPickerHeader`)
 
-**Decidido.** Escala e Metas usam o mesmo componente, dentro da barra escura, logo abaixo do título.
+**Decidido.** Escala e Metas usam o mesmo componente, dentro da barra escura, logo abaixo do título. A Compra local reaproveita o mesmo componente para a **organização** (`label = "Organização"`, `action = "Trocar"`); o texto abaixo descreve o uso padrão, de unidade.
 
 - Caixa de largura total, borda de 1 dp (`onDark` a 14%), raio de 14 dp, 14 dp de margem lateral e 10 dp vertical.
 - À esquerda: "UNIDADE" em caixa alta e, embaixo, o nome da unidade escolhida (uma linha, com reticências) ou "Escolher unidade".
@@ -273,6 +273,15 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 - Toque abre a folha de seleção "Unidade"; a seta vira para cima enquanto ela está aberta.
 - Desabilitado enquanto a tela carrega.
 - As opções vêm de `Rules.unitChoices`: com mais de uma unidade, a primeira é **"Todas as unidades"**.
+
+### Filtro da lista de sangrias (Compra local)
+
+**Decidido (2026-10-20, 0.3.14).** A Compra local abre por etapas.
+
+- **Etapa 1 — unidades:** um cartão por unidade com sangria aguardando nota, com o nome, "N sangrias aguardando nota", um círculo com o número e, quando houver, "N notas em revisão". Unidade sem sangria não aparece. Abaixo, "Outra compra" (Dinheiro do caixa / Recurso da empresa) e as notas guardadas que não pertencem a uma sangria da lista.
+- **Filtro (etapa 1):** só organização e grupo. Organização no cabeçalho escuro com `UnitPickerHeader`; grupos em `FilterChip`s com rolagem horizontal. **Sem números** nas opções (a contagem fica nos cartões). Aparecem todas as organizações e grupos acessíveis; o filtro só aparece com mais de uma opção. A última escolha fica salva no aparelho por conta.
+- **Etapa 2 — sangrias da unidade:** tocar no cartão abre as sangrias daquela unidade ("Unidades" ou voltar retornam). Uma nota já enviada para uma sangria fica **no próprio cartão** dela, destacado, com "Retomar revisão" e "Cancelar nota" (confirmação inline). Compras aguardando conciliação da unidade ficam abaixo.
+- **Cancelar nota:** também na revisão ("Cancelar esta nota"). Tira a nota do aparelho e do financeiro e libera a sangria.
 
 ### Folha de seleção (`PickerSheet`)
 
@@ -383,7 +392,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Metas:** número grande, selo de ritmo, barra de 12 dp em degradê `accent` → `pink` com marcas brancas nos níveis. Abas Dias, Equipe e Prêmio. Gráfico de barras por dia: verde bateu, `accent` abaixo, `pink` hoje, linha tracejada na meta do dia, com legenda.
 - **Signage:** guia em passos numerados (círculo `accentSoft` com o número), monitor com o endereço sendo digitado, escolha de orientação em cartões, leitor de QR em tela cheia.
 - **Recorte da foto:** tela cheia escura; a foto num quadrado de cantos de 20 dp com tudo fora do círculo escurecido a 72%. Arrastar posiciona, dois dedos ou a barra aproximam.
-- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima.
+- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima. Na captura, comprovante é opcional somente quando o servidor identifica NF-e/DANFE ou NFC-e autorizada; cupom comum, recibo ou contingência pendente exige o anexo. A IA mostra em cada item uma destinação sugerida: item existente, item não encontrado, possível patrimônio, uso imediato ou revisão necessária. Essas opções não viram um seletor manual adicional no app; produto, quantidade e validade continuam revisáveis. A seleção de sangria pode ser cancelada antes do envio. A primeira etapa filtra por organização e grupo e abre cartões de unidade; não há um terceiro filtro por unidade. O vínculo posterior de compra aguardando sangria usa confirmação inline **dentro do cartão da própria sangria**: enquanto a escolha local estiver aberta, o cartão mostra “Retomar vinculação”, volta automaticamente para a área visível e não abre uma segunda captura. Cancelar ou voltar limpa a escolha sem chamar a API.
 - **Ponto (`ui/TimeScreens.kt`):** cartão `dark` "HORA OFICIAL" com relógio de segundos em `CodeFont`, no fuso da unidade escolhida e com o rótulo `UTC−03:00`; o relógio soma a leitura oficial ao tempo monotônico do aparelho. Batidas numeradas ("1ª", "2ª") com o tipo **sugerido pela ordem**; batida desconsiderada pelo DP fica riscada em `faint`, incluída leva "incluída pelo DP". On-line, a confirmação mostra NSR e comprovante do servidor. Sem conexão e com autorização ainda válida, a ação vira "Registrar ponto offline" e a confirmação avisa que a marcação fica guardada no aparelho, sem NSR nem comprovante até sincronizar. A tela mostra quantidade pendente e caso bloqueado sem apagar a evidência. Comprovante abre numa folha com "Abrir comprovante", "Compartilhar" (folha nativa) e "Salvar no aparelho" (seletor do sistema); comprovante pendente mostra só o aviso de indisponibilidade.
 - **Pedidos em duas etapas (ajuste de ponto, ausência, vale-transporte):** formulário → "Revisar …" → resumo em `SummaryLine` (rótulo `muted` sobre o valor) → `FooterPair` "Editar" / "Enviar …". O resumo do ajuste diz quem pede e que a batida original nunca é apagada. Textos longos usam `NoteInput` com contador do limite do servidor.
 

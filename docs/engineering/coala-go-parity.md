@@ -21,7 +21,7 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 | Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar | Foto/câmera física, permissões reais e gesto em aparelho físico |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
-| Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm` | `ViewModelsTest`: UUID estável, upload offline, retry de estoque; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod | OCR real, câmera e conciliação financeira integrada |
+| Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm`; NF-e/DANFE e NFC-e autorizada com classificação alta dispensam comprovante na compra normal; contingência pendente não dispensa; sangria não aceita comprovante; a IA sugere por item vínculo existente, cadastro pendente, possível patrimônio, uso imediato ou revisão; sangrias são agrupadas por unidade e filtradas por organização/grupo e vínculo posterior é retomado no próprio cartão | `ViewModelsTest`: UUID estável, upload offline, preservação da classificação dos itens, retry de estoque, sessão única/retomada e cancelamento da escolha de sangria; `RulesTest`: filtros organização/grupo com contagem e restauração; `local-purchase-units.test.ts`: hierarquia determinística; contrato visual: confirmação dentro da sangria; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod e política de classificação | OCR real, câmera e conciliação financeira integrada |
 | Pendências offline | Room + arquivos AES-GCM/Keystore por UID + WorkManager | `OfflineQueueInstrumentedTest`: persistência, cifra, tamper, conta errada, WorkManager, recuperação atômica, tombstone; `ViewModelsTest`: falha mantém fila | Reinício forçado/bateria/rede em aparelhos reais |
 | Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária, Equipe/Só minha e Todas as unidades | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
 | Metas | `/api/goals/mobile`, filtro `kioskId` ou `scope=all` (Todas as unidades); abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
@@ -175,6 +175,89 @@ O usuário confirmou `coalaone.go` como identificador novo, lado a lado e sem at
 Após autorização para retirar o antigo e atualizar download, versão sem parâmetro seleciona Go; query explícita antiga tem instalador nulo. Atestação mantém compatibilidade de formato/allowlist, exigindo reconhecimento Play e integridade. APK/metadados/link preparados localmente não atualizam produção sem deploy autorizado.
 
 Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
+
+### Verificação da 0.3.10 (nota fiscal e tratamento dos itens)
+
+A compra normal pode seguir sem comprovante quando duas leituras independentes
+concordam que o documento é NF-e/DANFE ou NFC-e autorizada e há protocolo
+literal de autorização; recibo, cupom não fiscal e contingência pendente ainda
+exigem comprovante. A seleção de sangria pode ser cancelada antes do envio. A
+IA sugere por linha item existente, item não encontrado, possível patrimônio,
+uso imediato ou revisão, e o servidor valida a decisão antes de persistir o
+estado operacional da compra. `RulesTest`, `ViewModelsTest`, os contratos
+Android/TypeScript e a suíte do backend cobrem o fluxo; aparelho físico, OCR
+real e validação fiscal oficial continuam fora desta homologação. O APK
+0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
+`0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
+
+### Verificação da 0.3.15 (registro de ponto e solicitações)
+
+O Coala Go passa a oferecer Ponto e Solicitações apenas quando as permissões
+efetivas da pessoa liberam cada módulo. A marcação on-line reutiliza as rotas
+REP-P, exibe a Hora Legal no fuso da unidade e recebe NSR e comprovante somente
+do servidor. A contingência offline exige autorização recente, identidade do
+aparelho e fila cifrada/assinada, sem inventar NSR ou comprovante antes da
+sincronização. Solicitações incluem ajuste, ausência, vale-transporte e troca
+de turno pelo contrato central, com aceite documentado das duas pessoas. Banco
+de horas e espelho são consultados sob demanda; a pasta de documentos continua
+somente no Coala One. Testes JVM, contratos TypeScript e integrações em emulador
+cobrem esses limites; Play Integrity real, aparelho físico e piloto com pessoas
+continuam gates separados. O APK 0.3.15/code20 foi assinado pelo certificado
+público esperado e tem SHA-256
+`801a41bf6e785925813480d6769d13b1c7f6329ee7a672233f4fd070f19b67eb`.
+
+### Verificação da 0.3.14 (etapas por unidade e cancelamento da nota)
+
+A Compra local abre em cartões por unidade com sangria aguardando nota (com a
+quantidade); tocar abre as sangrias da unidade. O filtro de organização e grupo
+fica na primeira etapa, sem números. A nota enviada e não confirmada passa a
+aparecer no cartão da própria sangria, com "Retomar revisão" e "Cancelar nota";
+a revisão também oferece "Cancelar esta nota". O cancelamento chama
+`/api/financial/inbox/mobile-upload/cancel` sob a mesma trava da sincronização
+(`QueueSync.discard`): o servidor descarta a entrada da Caixa de entrada
+(`status: ignored`, só quem enviou, nunca com compra confirmada) e só então o
+aparelho grava a lápide na fila. A confirmação recusa um envio cancelado.
+`ViewModelsTest` (cancelamento offline preservado e online removido), `RulesTest`,
+contrato de fonte e o teste de integração
+`financial-mobile-upload-cancel.test.mjs` cobrem o comportamento; aparelho
+físico permanece fora desta homologação. O APK 0.3.14/code19 foi assinado pelo
+certificado público esperado e tem SHA-256 `f42accb321e92b3bffb55cd7b0f879d159b319e641953ec5fee27599051a37ce`.
+
+### Verificação da 0.3.13 (filtro sempre visível, captura da conta administrativa)
+
+O 0.3.12 escondia organizações e grupos sem sangria pendente; com uma opção só,
+o filtro inteiro sumia. Agora aparecem todos os escopos das unidades acessíveis,
+com a contagem (inclusive zero). A captura de tela fica liberada para a conta de
+login do app `administrativo@coalashakes.com` (o 0.3.12 usava um e-mail que não
+é o do login). O APK 0.3.13/code18 foi assinado pelo certificado público
+esperado e tem SHA-256 `ae9d6aff8a3d21d64450a7eb21845f9691a4f4280955be9eb9894f84098c7ecf`.
+
+### Verificação da 0.3.12 (filtro por organização e grupo, captura de tela)
+
+A lista de sangrias da Compra local filtra só por organização (no cabeçalho
+escuro) e grupo (chips com contagem); o filtro de unidade saiu porque a lista já
+é agrupada por unidade. Só aparecem escopos com sangria pendente, a escolha fica
+salva por conta no aparelho e a vinculação aberta leva o filtro ao grupo da
+sangria. Compras aguardando conciliação seguem o mesmo filtro, sem depender de
+sangria visível da unidade. A proteção contra captura de tela (`FLAG_SECURE`)
+continua padrão e é retirada apenas para contas da lista
+`SCREEN_CAPTURE_ACCOUNTS`, com sessão desbloqueada. `RulesTest`, `ViewModelsTest`
+e o contrato de fonte cobrem o comportamento; aparelho físico permanece fora
+desta homologação. O APK 0.3.12/code17 foi assinado pelo certificado público
+esperado e tem SHA-256
+`d181508f7cfe1e30114a037b4f5ceeb51bffbf2a43413d26f7b381ed4583853c`.
+
+### Verificação da 0.3.11 (retomada da vinculação e filtros de unidade)
+
+A confirmação de conciliação posterior saiu da seção desconectada de compras
+pendentes e passou ao cartão da própria sangria. Uma sessão local aberta muda a
+ação para “Retomar vinculação”, traz o cartão para a área visível e bloqueia uma
+segunda captura até confirmar ou cancelar. A lista é agrupada por unidade e usa
+filtros de organização, grupo e unidade derivados apenas do vínculo estrutural
+cadastrado. Testes JVM, regra pura da hierarquia e contrato de fonte cobrem o
+comportamento; aparelho físico permanece fora desta homologação. O APK
+0.3.11/code16 foi assinado pelo certificado público esperado e tem SHA-256
+`9afe7f8d6fe66a059bec1607b0ba296feeea357bb77bedb500c1dd3b197cb163`.
 
 ### Verificação da 0.3.9 (Escala em "Todas as unidades", seta desenhada)
 

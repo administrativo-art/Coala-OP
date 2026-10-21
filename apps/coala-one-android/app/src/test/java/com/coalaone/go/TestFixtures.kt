@@ -32,6 +32,7 @@ class MemoryQueue : UploadQueue {
     override suspend fun markFailed(uid: String, id: String, failure: AppFailure) { rows.value = rows.value.map { if (it.owner == uid && it.id == id) it.copy(error = failure.message, retryCount = it.retryCount + 1, state = if (failure.retryable) "READY" else "BLOCKED") else it } }
     override suspend fun retry(uid: String, id: String) { rows.value = rows.value.map { if (it.owner == uid && it.id == id && it.state == "BLOCKED") it.copy(state = "READY") else it } }
     override suspend fun confirmed(uid: String, id: String, response: PurchaseResponse) { rows.value = rows.value.filterNot { it.owner == uid && it.id == id && it.state == "UPLOADED" }; payloads.remove(uid to id) }
+    override suspend fun discard(uid: String, id: String) { rows.value = rows.value.filterNot { it.owner == uid && it.id == id }; payloads.remove(uid to id); acks.remove(uid to id) }
 }
 class MemoryDrafts : CountDraftStore {
     val values = mutableMapOf<Pair<String, String>, StoredCountDraft>()

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LocalPurchaseItemResolutionStatus, LocalPurchaseItemTreatment, LocalPurchaseOperationalStatus } from "./local-purchase";
 
 /** Shape the web purchasing screens read; money in cents, dates as stored. */
 export type LocalPurchaseSummary = {
@@ -17,7 +18,20 @@ export type LocalPurchaseSummary = {
   resultCenterName: string;
   note: string;
   stockEntryStatus: "done" | "pending" | "not_needed" | "reversed";
-  items: Array<{ description: string; quantity: number; unit: string; totalCents: number }>;
+  operationalStatus: LocalPurchaseOperationalStatus;
+  resolvedItemCount: number;
+  itemCount: number;
+  items: Array<{
+    itemId: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    totalCents: number;
+    treatment: LocalPurchaseItemTreatment;
+    resolutionStatus: LocalPurchaseItemResolutionStatus;
+    aiConfidence: "high" | "medium" | "low" | null;
+    aiReason: string | null;
+  }>;
   stockLines: Array<{ itemIndex: number; productName: string; quantity: number; expiryDate: string | null; lotCode: string }>;
   withdrawal: null | { amountCents: number; date: string; changeCents: number };
   cancellation: null | { reason: string; at: string; by: string };

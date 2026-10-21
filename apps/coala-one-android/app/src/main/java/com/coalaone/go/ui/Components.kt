@@ -256,20 +256,20 @@ fun shortDate(value: String?): String? {
     SelectorCard(label, values.firstOrNull { it.first == selected }?.second, "Selecionar", enabled) { open = true }
     if (open) PickerSheet(label, values, selected, onSelect) { open = false }
 }
-/** Compact unit switcher in a dark page header, shared by Metas and Escala. */
-@Composable fun UnitPickerHeader(values: List<Pair<String, String>>, selected: String, busy: Boolean, onSelect: (String) -> Unit) {
+/** Compact switcher in a dark page header: the unit in Metas and Escala, the organization in Compra local. */
+@Composable fun UnitPickerHeader(values: List<Pair<String, String>>, selected: String, busy: Boolean, label: String = "Unidade", action: String = "Trocar unidade", onSelect: (String) -> Unit) {
     if (values.isEmpty()) return
     var choosingUnit by rememberSaveable { mutableStateOf(false) }
     val several = values.size > 1
-    if (choosingUnit) PickerSheet("Unidade", values, selected, onSelect) { choosingUnit = false }
+    if (choosingUnit) PickerSheet(label, values, selected, onSelect) { choosingUnit = false }
     Spacer(Modifier.height(10.dp))
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !busy, role = Role.Button, onClickLabel = action) { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
-            Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-            Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher unidade", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label.uppercase(), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+            Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher ${label.lowercase()}", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (several) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Trocar unidade", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+            Text(action, color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
             DropdownChevron(choosingUnit, Tokens.pink)
         }
     }
@@ -376,5 +376,8 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, label: String, onConfirm: () -> Unit) {
-    CardBlock { Text(message); Action("Voltar", busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
+    InlineConfirmation(message, busy, onCancel, "Voltar", label, onConfirm)
+}
+@Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, cancelLabel: String, label: String, onConfirm: () -> Unit) {
+    CardBlock { Text(message); Action(cancelLabel, busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
 }
