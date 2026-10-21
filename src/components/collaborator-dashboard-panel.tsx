@@ -13,6 +13,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CheckSquare,
+  ChevronDown,
   ChevronRight,
   Clock,
   FileText,
@@ -55,7 +56,15 @@ import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods"
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
+import { Segmented } from "@/components/patterns/segmented";
 import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/ui/status-pill";
+import {
+  groupTimelineTasks,
+  toTimelineTaskView,
+  type TimelineTaskUrgency,
+  type TimelineTaskView,
+} from "@/features/tasks/lib/timeline-presentation";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -468,6 +477,9 @@ function TimelineItem({
   title,
   titleHref,
   meta,
+  details,
+  urgency,
+  compact = false,
   completed,
   action,
   isLast,
@@ -481,21 +493,46 @@ function TimelineItem({
   title: string;
   titleHref?: string;
   meta?: string;
+  /** Substitui `meta` por um bloco estruturado (rota, itens). */
+  details?: React.ReactNode;
+  urgency?: TimelineTaskUrgency | null;
+  compact?: boolean;
   completed?: boolean;
   action: React.ReactNode;
   isLast: boolean;
 }) {
   const badge = TYPE_BADGE[type];
   const BadgeIcon = badge.icon;
+  const [expanded, setExpanded] = useState(false);
+  const body = details ?? (meta ? <p className="mt-0.5 text-xs text-ds-ink-muted">{meta}</p> : null);
+  if (compact) {
+    return (
+      <div className="grid grid-cols-[52px_1fr] gap-3">
+        <TimelineRail time={time} timeOverdue={timeOverdue} dot={dot} isLast={isLast} compact />
+        <div className="rounded-ds-card border border-ds-border bg-ds-surface px-3 py-2 shadow-xs">
+          <div className="flex items-center gap-2">
+            <BadgeIcon className={`h-3.5 w-3.5 shrink-0 ${badge.className.split(" ").find((name) => name.startsWith("text-"))}`} aria-label={badge.label} />
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((value) => !value)}
+              disabled={!body}
+            >
+              <span className={`truncate text-sm font-semibold ${completed ? "text-ds-ink-muted line-through" : ""}`}>{title}</span>
+              {body ? <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-ds-ink-faint transition-transform ${expanded ? "rotate-180" : ""}`} /> : null}
+            </button>
+            {urgency ? <UrgencyPill urgency={urgency} /> : null}
+            <div className="shrink-0">{action}</div>
+          </div>
+          {expanded && body ? <div className="pb-1 pl-5.5">{body}</div> : null}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-[52px_1fr] gap-3">
-      <div className="relative flex flex-col items-end pr-1 pt-3.5">
-        <span className={`font-mono text-xs tabular-nums ${timeOverdue ? "font-semibold text-ds-danger" : "text-ds-ink-muted"}`}>
-          {time}
-        </span>
-        <span className={`absolute right-[-13px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-background ${dot}`} />
-        {!isLast ? <span className="absolute right-[-8px] top-7 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
-      </div>
+      <TimelineRail time={time} timeOverdue={timeOverdue} dot={dot} isLast={isLast} />
 
       <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-xs">
         <div className="flex items-start justify-between gap-3">
@@ -509,21 +546,154 @@ function TimelineItem({
                 <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
                 {statusLabel}
               </span>
+              {urgency ? <UrgencyPill urgency={urgency} /> : null}
             </div>
             {titleHref ? (
               <Link href={titleHref} className="group/title block">
                 <h4 className={`mt-2 font-semibold underline-offset-2 group-hover/title:underline ${completed ? "text-ds-ink-muted line-through" : ""}`}>{title}</h4>
-                {meta ? <p className="mt-0.5 text-xs text-ds-ink-muted group-hover/title:text-ds-ink">{meta}</p> : null}
+                {details ?? (meta ? <p className="mt-0.5 text-xs text-ds-ink-muted group-hover/title:text-ds-ink">{meta}</p> : null)}
               </Link>
             ) : (
               <>
                 <h4 className={`mt-2 font-semibold ${completed ? "text-ds-ink-muted line-through" : ""}`}>{title}</h4>
-                {meta ? <p className="mt-0.5 text-xs text-ds-ink-muted">{meta}</p> : null}
+                {body}
               </>
             )}
           </div>
           <div className="shrink-0">{action}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineRail({ time, timeOverdue, dot, isLast, compact = false }: { time: string; timeOverdue?: boolean; dot: string; isLast: boolean; compact?: boolean }) {
+  return (
+    <div className={`relative flex flex-col items-end pr-1 ${compact ? "pt-2" : "pt-3.5"}`}>
+      <span className={`font-mono text-xs tabular-nums ${timeOverdue ? "font-semibold text-ds-danger" : "text-ds-ink-muted"}`}>
+        {time}
+      </span>
+      <span className={`absolute right-[-13px] ${compact ? "top-2.5" : "top-4"} h-2.5 w-2.5 rounded-full ring-4 ring-background ${dot}`} />
+      {!isLast ? <span className={`absolute right-[-8px] ${compact ? "top-5.5" : "top-7"} h-[calc(100%+0.75rem)] w-px bg-ds-divider`} /> : null}
+    </div>
+  );
+}
+
+const URGENCY_PILL = { overdue: "danger", today: "warn", soon: "info", later: "neutral" } as const;
+// A bolinha segue a urgência: atrasada em vermelho, hoje em laranja, sem pressa em azul.
+const URGENCY_DOT = { overdue: "bg-ds-danger", today: "bg-ds-warn", soon: "bg-ds-warn", later: "bg-ds-info" } as const;
+const URGENCY_TEXT = { overdue: "text-ds-danger", today: "text-ds-warn", soon: "text-ds-warn", later: "text-ds-info" } as const;
+
+function UrgencyPill({ urgency }: { urgency: TimelineTaskUrgency }) {
+  return <StatusPill variant={URGENCY_PILL[urgency.level]}>{urgency.label}</StatusPill>;
+}
+
+function urgencyTone(urgency: TimelineTaskUrgency | null) {
+  return urgency ? { dot: URGENCY_DOT[urgency.level], text: URGENCY_TEXT[urgency.level] } : { dot: "bg-ds-info", text: "text-ds-info" };
+}
+
+function TaskDetails({ view }: { view: TimelineTaskView }) {
+  if (!view.route && view.items.length === 0 && !view.text) return null;
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      {view.route ? (
+        <p className="flex flex-wrap items-center gap-1.5 text-sm text-ds-ink-2">
+          <span className="font-medium">{view.route.origin}</span>
+          <ArrowRight className="h-3.5 w-3.5 text-ds-accent-ink" aria-label="para" />
+          <span className="font-semibold text-ds-ink">{view.route.destination}</span>
+        </p>
+      ) : null}
+      {view.items.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5 text-xs">
+          {view.items.map((item) => (
+            <li key={item.name} className="rounded-md bg-ds-muted px-2 py-0.5 text-ds-ink-2">
+              {item.name} <span className="font-mono font-semibold tabular-nums text-ds-ink">{item.quantity}</span>
+            </li>
+          ))}
+          {view.hiddenItemCount > 0 ? (
+            <li className="px-1 py-0.5 font-medium text-ds-ink-muted">+{view.hiddenItemCount} {view.hiddenItemCount === 1 ? "item" : "itens"}</li>
+          ) : null}
+        </ul>
+      ) : null}
+      {view.text ? <p className="line-clamp-2 text-xs text-ds-ink-muted">{view.text}</p> : null}
+    </div>
+  );
+}
+
+function TaskAction({ view }: { view: TimelineTaskView }) {
+  return (
+    <Button asChild size="sm" variant="outline">
+      <Link href={resolveSafeReturnPath(view.action.href, "/dashboard/tasks")}>{view.action.label}</Link>
+    </Button>
+  );
+}
+
+function TaskTimelineEntry({ view, compact, isLast }: { view: TimelineTaskView; compact: boolean; isLast: boolean }) {
+  const tone = urgencyTone(view.urgency);
+  return (
+    <TimelineItem
+      type="task"
+      time="—"
+      timeOverdue={view.urgency?.level === "overdue"}
+      dot={tone.dot}
+      statusLabel="A fazer"
+      statusClass={tone.text}
+      title={view.title}
+      details={<TaskDetails view={view} />}
+      urgency={view.urgency}
+      compact={compact}
+      action={<TaskAction view={view} />}
+      isLast={isLast}
+    />
+  );
+}
+
+/** Várias tarefas da mesma origem viram um bloco recolhível; dentro, a rota é o título de cada linha. */
+function TaskTimelineGroup({ label, tasks, compact, isLast }: { label: string; tasks: TimelineTaskView[]; compact: boolean; isLast: boolean }) {
+  const [open, setOpen] = useState(tasks.length <= 3);
+  const top = tasks[0].urgency;
+  const tone = urgencyTone(top);
+  return (
+    <div className="grid grid-cols-[52px_1fr] gap-3">
+      <TimelineRail time="—" timeOverdue={top?.level === "overdue"} dot={tone.dot} isLast={isLast} compact={compact} />
+      <div className="rounded-ds-card border border-ds-border bg-ds-surface shadow-xs">
+        <button
+          type="button"
+          className={`flex w-full items-center gap-2 text-left ${compact ? "px-3 py-2" : "px-4 py-3"}`}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <CheckSquare className="h-3.5 w-3.5 text-ds-info" />
+          <span className="flex-1 text-sm font-semibold">
+            {label} <span className="font-mono text-ds-accent-ink tabular-nums">· {tasks.length}</span>
+          </span>
+          {top ? <UrgencyPill urgency={top} /> : <span className={`text-xs font-medium ${tone.text}`}>A fazer</span>}
+          <ChevronDown className={`h-4 w-4 text-ds-ink-faint transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open ? (
+          <ul className="border-t border-ds-divider">
+            {tasks.map((view) => (
+              <li key={view.id} className={`flex items-start justify-between gap-3 border-b border-ds-divider last:border-b-0 ${compact ? "px-3 py-2" : "px-4 py-3"}`}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {view.route ? (
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm">
+                        <span className="text-ds-ink-2">{view.route.origin}</span>
+                        <ArrowRight className="h-3.5 w-3.5 text-ds-accent-ink" aria-label="para" />
+                        <span className="font-semibold">{view.route.destination}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm font-semibold">{view.title}</p>
+                    )}
+                    {view.urgency && view !== tasks[0] ? <UrgencyPill urgency={view.urgency} /> : null}
+                  </div>
+                  {!compact ? <TaskDetails view={{ ...view, route: null }} /> : null}
+                </div>
+                <div className="shrink-0"><TaskAction view={view} /></div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </div>
   );
@@ -1417,6 +1587,8 @@ function QuickAccessCard({
 /* Panel                                                                      */
 /* -------------------------------------------------------------------------- */
 
+const TIMELINE_DENSITY_KEY = "coala.collaborator.timeline-density";
+
 function CollaboratorDashboardPanelInner() {
   const { firebaseUser, user, permissions } = useAuth();
   const { kiosks } = useKiosks();
@@ -1426,6 +1598,14 @@ function CollaboratorDashboardPanelInner() {
   const { auditSessions } = useStockAudit();
   const [confirmingReceipt, setConfirmingReceipt] = useState<{ activityId: string; description: string } | null>(null);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
+  const [compactTimeline, setCompactTimeline] = useState(false);
+  useEffect(() => {
+    try { setCompactTimeline(window.localStorage.getItem(TIMELINE_DENSITY_KEY) === "compact"); } catch { /* preferência só deste navegador */ }
+  }, []);
+  const changeTimelineDensity = (value: "detailed" | "compact") => {
+    setCompactTimeline(value === "compact");
+    try { window.localStorage.setItem(TIMELINE_DENSITY_KEY, value); } catch { /* preferência só deste navegador */ }
+  };
   const { units, shiftDefinitions } = useDPStore();
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
@@ -1645,6 +1825,7 @@ function CollaboratorDashboardPanelInner() {
             dot={STATUS_DOT[execution.status]}
             statusLabel={STATUS_LABELS[execution.status]}
             statusClass={STATUS_TEXT[execution.status]}
+            compact={compactTimeline}
             title={execution.template_name}
             meta={`${itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "item" : "itens"}` : "Formulário"}${contextLabel ? ` · ${contextLabel}` : ""}`}
             completed={completed}
@@ -1663,28 +1844,15 @@ function CollaboratorDashboardPanelInner() {
       });
     });
 
-    taskNotifications.forEach((task, index) => {
+    groupTimelineTasks(taskNotifications.map((task) => toTimelineTaskView(task, today))).forEach((group, index) => {
+      const [first] = group.tasks;
       items.push({
         sortMin: nowMinutes + 1,
         order: 2,
-        key: `task-${task.id}-${index}`,
-        render: (isLast) => (
-          <TimelineItem
-            type="task"
-            time="—"
-            dot="bg-ds-warn"
-            statusLabel="A fazer"
-            statusClass="text-ds-warn"
-            title={task.title}
-            meta={task.description}
-            action={
-              <Button asChild size="sm" variant="outline">
-                <Link href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}>Concluir</Link>
-              </Button>
-            }
-            isLast={isLast}
-          />
-        ),
+        key: group.tasks.length > 1 ? `task-group-${group.kind}` : `task-${first.id}-${index}`,
+        render: (isLast) => group.tasks.length > 1
+          ? <TaskTimelineGroup label={group.label} tasks={group.tasks} compact={compactTimeline} isLast={isLast} />
+          : <TaskTimelineEntry view={first} compact={compactTimeline} isLast={isLast} />,
       });
     });
 
@@ -1700,6 +1868,7 @@ function CollaboratorDashboardPanelInner() {
             dot="bg-ds-warn"
             statusLabel="A fazer"
             statusClass="text-ds-warn"
+            compact={compactTimeline}
             title={receipt.title}
             titleHref={receipt.link}
             meta={receipt.description}
@@ -1732,6 +1901,7 @@ function CollaboratorDashboardPanelInner() {
             dot="bg-ds-ok"
             statusLabel={receipt.hasDivergence ? "Concluído com divergência" : "Concluído"}
             statusClass={receipt.hasDivergence ? "text-ds-warn" : "text-ds-ok"}
+            compact={compactTimeline}
             title={receipt.title}
             meta={`${receipt.description} · Concluído por ${receipt.completedBy}`}
             completed
@@ -1783,7 +1953,7 @@ function CollaboratorDashboardPanelInner() {
 
     return items.sort((a, b) => a.sortMin - b.sortMin || a.order - b.order);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes]);
+  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes, compactTimeline]);
 
   const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
 
@@ -1892,7 +2062,15 @@ function CollaboratorDashboardPanelInner() {
 
           {/* Linha do dia */}
           <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Linha do dia</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Linha do dia</p>
+              <Segmented
+                aria-label="Densidade da linha do dia"
+                value={compactTimeline ? "compact" : "detailed"}
+                onChange={changeTimelineDensity}
+                options={[{ value: "detailed", label: "Detalhado" }, { value: "compact", label: "Compacto" }]}
+              />
+            </div>
 
             {loadingForms ? (
               <div className="flex min-h-28 items-center justify-center text-sm text-ds-ink-muted">
