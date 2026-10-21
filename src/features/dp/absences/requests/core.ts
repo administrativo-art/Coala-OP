@@ -11,6 +11,21 @@ export class AbsencePreviewError extends Error {
 
 function civilDay(value: string) { return Date.parse(`${value}T00:00:00Z`) / 86_400_000; }
 
+/** Competências civis tocadas pelo pedido, inclusive quando atravessa a virada do mês. */
+export function absenceCompetences(startDate: string, endDate: string) {
+  const result: string[] = [];
+  let year = Number(startDate.slice(0, 4));
+  let month = Number(startDate.slice(5, 7));
+  const lastYear = Number(endDate.slice(0, 4));
+  const lastMonth = Number(endDate.slice(5, 7));
+  while (year < lastYear || year === lastYear && month <= lastMonth) {
+    result.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month === 13) { year += 1; month = 1; }
+  }
+  return result;
+}
+
 export function belemCivilDate(now: Date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }

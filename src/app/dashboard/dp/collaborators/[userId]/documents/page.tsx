@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { PublicationControl } from "@/features/hr/documents/publication-control";
+import { LegacyDocumentClassification } from "@/features/hr/documents/legacy-document-classification";
 import type { DocumentPublication } from "@/lib/hr/employee-document-publication";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -895,8 +896,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   async function setStatus(item: DocumentRow, status: string) {
     setBusy(true);
     try {
-      await request("/api/hr/employee-documents", {
-        method: "PATCH",
+      await request("/api/hr/employee-documents/status", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, status }),
       });
@@ -914,8 +915,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     setBusy(true);
     try {
       for (const item of targets) {
-        await request("/api/hr/employee-documents", {
-          method: "PATCH",
+        await request("/api/hr/employee-documents/status", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: item.id, status }),
         });
@@ -1559,6 +1560,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           onCancel={() => setRemoveTarget(null)}
                           onConfirm={() => void remove(item)}
                         />
+                      ) : null}
+
+                      {canManage && (!item.documentTypeCode || item.documentTypeCode === "UNKNOWN_DOCUMENT") ? (
+                        <LegacyDocumentClassification firebaseUser={firebaseUser} documentId={item.id} onChanged={() => void load()} />
                       ) : null}
 
                       {isExpanded ? (

@@ -1,7 +1,7 @@
 /**
  * Declaração do fechamento da competência (plano mestre, "Declaração obrigatória no documento de fechamento"):
- * cada pessoa traz, um a um e ligados ao dia, os pedidos de ajuste e as ausências que tocam o mês, inclusive
- * recusados e cancelados. Puro: o serviço lê, este módulo monta, carimba e compara versões.
+ * cada pessoa traz, um a um e ligados ao dia, os pedidos de ajuste, as ausências e as trocas de turno que tocam
+ * o mês, inclusive recusados e cancelados. Puro: o serviço lê, este módulo monta, carimba e compara versões.
  */
 import { createHash } from 'node:crypto';
 
@@ -16,9 +16,29 @@ export type ClosureAbsence = {
   quantity: number; unit: 'day' | 'hour'; status: string; approval: 'review' | 'tacit_timeout' | null; decidedBy: string | null;
   decidedAt: string | null; attachmentCount: number;
 };
-export type ClosurePerson = { uid: string; name: string | null; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[] };
+export type ClosureShiftSwap = {
+  id: string; status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'stale'; date: string;
+  unitId: string; unitName: string; requesterUid: string; requesterName: string; targetUid: string; targetName: string;
+  offeredShift: { startTime: string; endTime: string; shiftName: string | null };
+  requestedShift: { startTime: string; endTime: string; shiftName: string | null };
+  reason: string | null; requestedAt: string; decidedAt: string | null;
+  acts: Array<{ action: 'submitted' | 'accepted' | 'rejected' | 'cancelled' | 'marked_stale'; at: string; actorUid: string; actorName: string; declaration: string }>;
+};
+export type ClosurePerson = {
+  uid: string; name: string | null; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; shiftSwaps: ClosureShiftSwap[];
+};
 export type ClosureRosterPerson = { uid: string; name: string | null };
 export type ClosureChanges = { added: string[]; changed: string[]; removed: string[] };
+
+/** Versões fechadas antes da inclusão da troca de turno continuam legíveis sem migração destrutiva. */
+export function normalizeClosurePerson(value: ClosurePerson): ClosurePerson {
+  return {
+    ...value,
+    adjustments: Array.isArray(value.adjustments) ? value.adjustments : [],
+    absences: Array.isArray(value.absences) ? value.absences : [],
+    shiftSwaps: Array.isArray(value.shiftSwaps) ? value.shiftSwaps : [],
+  };
+}
 
 /** Pedido ainda sem decisão: impede o fechamento. Rascunho de ausência não foi enviado e não conta. */
 export const OPEN_ABSENCE_STATUSES = ['submitted', 'in_review', 'adjustments_requested'] as const;
@@ -58,19 +78,24 @@ export function sha256(value: unknown) { return createHash('sha256').update(cano
 
 /** Pessoas por ordem de nome e itens por dia: a mesma entrada dá sempre o mesmo documento e o mesmo carimbo. */
 export function buildDeclaration(adjustments: Array<ClosureAdjustment & { employeeUid: string; employeeName: string | null }>,
-  absences: Array<ClosureAbsence & { beneficiaryUid: string; beneficiaryName: string | null }>): ClosurePerson[] {
+  absences: Array<ClosureAbsence & { beneficiaryUid: string; beneficiaryName: string | null }>, shiftSwaps: ClosureShiftSwap[] = []): ClosurePerson[] {
   const people = new Map<string, ClosurePerson>();
   const person = (uid: string, name: string | null) => {
-    const found = people.get(uid) ?? { uid, name: null, adjustments: [], absences: [] };
+    const found = people.get(uid) ?? { uid, name: null, adjustments: [], absences: [], shiftSwaps: [] };
     if (!found.name && name) found.name = name;
     people.set(uid, found);
     return found;
   };
   for (const { employeeUid, employeeName, ...item } of adjustments) person(employeeUid, employeeName).adjustments.push(item);
   for (const { beneficiaryUid, beneficiaryName, ...item } of absences) person(beneficiaryUid, beneficiaryName).absences.push(item);
+  for (const item of shiftSwaps) {
+    person(item.requesterUid, item.requesterName).shiftSwaps.push(item);
+    person(item.targetUid, item.targetName).shiftSwaps.push(item);
+  }
   for (const entry of people.values()) {
     entry.adjustments.sort((left, right) => left.workDate.localeCompare(right.workDate) || left.requestedAt.localeCompare(right.requestedAt) || left.id.localeCompare(right.id));
     entry.absences.sort((left, right) => left.startDate.localeCompare(right.startDate) || left.id.localeCompare(right.id));
+    entry.shiftSwaps.sort((left, right) => left.date.localeCompare(right.date) || left.requestedAt.localeCompare(right.requestedAt) || left.id.localeCompare(right.id));
   }
   return [...people.values()].sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));
 }
@@ -80,13 +105,13 @@ export function buildDeclaration(adjustments: Array<ClosureAdjustment & { employ
  * ausência no mês. Pessoas com ocorrência continuam incluídas ainda que tenham saído da equipe antes do fechamento.
  */
 export function includeClosureRoster(people: ClosurePerson[], roster: ClosureRosterPerson[]): ClosurePerson[] {
-  const merged = new Map(people.map((person) => [person.uid, { ...person, adjustments: [...person.adjustments], absences: [...person.absences] }]));
+  const merged = new Map(people.map((person) => [person.uid, { ...person, adjustments: [...person.adjustments], absences: [...person.absences], shiftSwaps: [...person.shiftSwaps] }]));
   for (const subject of roster) {
     const current = merged.get(subject.uid);
     if (current) {
       if (!current.name && subject.name) current.name = subject.name;
     } else {
-      merged.set(subject.uid, { uid: subject.uid, name: subject.name, adjustments: [], absences: [] });
+      merged.set(subject.uid, { uid: subject.uid, name: subject.name, adjustments: [], absences: [], shiftSwaps: [] });
     }
   }
   return [...merged.values()].sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));
@@ -96,6 +121,7 @@ export function pendingOf(people: ClosurePerson[]) {
   return {
     adjustments: people.reduce((sum, entry) => sum + entry.adjustments.filter((item) => item.status === 'in_review').length, 0),
     absences: people.reduce((sum, entry) => sum + entry.absences.filter((item) => (OPEN_ABSENCE_STATUSES as readonly string[]).includes(item.status)).length, 0),
+    shiftSwaps: new Set(people.flatMap((entry) => entry.shiftSwaps.filter((item) => item.status === 'pending').map((item) => item.id))).size,
   };
 }
 
@@ -105,6 +131,7 @@ export function itemDigests(people: ClosurePerson[]) {
   for (const entry of people) {
     for (const item of entry.adjustments) digests[`adjustment:${item.id}`] = sha256(item);
     for (const item of entry.absences) digests[`absence:${item.id}`] = sha256(item);
+    for (const item of entry.shiftSwaps) digests[`shift-swap:${item.id}`] = sha256(item);
   }
   return digests;
 }

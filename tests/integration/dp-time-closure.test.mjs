@@ -16,7 +16,7 @@ const { checkOverdueClosingPackages, finalizeClosingMonth, readClosingPackage, r
 const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
-const { generateBankMonth, readBankStatement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
+const { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
 
 test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
@@ -28,7 +28,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
   const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
   const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
   const roster = [{ uid: userId, name: 'Maria' }];
-  const closureDeps = { hrDb: hrDbAdmin, clock, readRoster: async () => [...roster] };
+  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock, readRoster: async () => [...roster] };
   const actor = (uid, permissions, extra = {}) => ({ decoded: { uid }, userDoc: { id: uid, unitIds: [unitId], ...extra }, profileId: null,
     permissions, isDefaultAdmin: false, workspace_id: workspaceId });
   const admin = { ...actor(`${prefix}-admin`, structuredClone(defaultAdminPermissions)), isDefaultAdmin: true };
@@ -40,6 +40,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
   closerPermissions.dp.timeClosure = { close: true, reopen: false };
   const closer = actor(`${prefix}-closer`, closerPermissions);
   const absenceRef = hrDbAdmin.collection('dp_absenceRequests').doc(`${prefix}-absence`);
+  const shiftSwapRef = dbAdmin.collection('dp_shiftSwapRequests').doc(`${prefix}-shift-swap`);
 
   try {
     await Promise.all([
@@ -59,20 +60,32 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     await absenceRef.set({ id: absenceRef.id, workspaceId, beneficiaryUid: userId, beneficiaryName: 'Maria', status: 'in_review', startDate: '2026-07-30', endDate: '2026-08-02',
       input: { startDate: '2026-07-30', endDate: '2026-08-02', unit: 'day' }, quantity: 4, unit: 'day', typeId: 'medical', typeSnapshot: { name: 'Atestado médico' },
       attachments: [{ id: 'a' }], history: [], reason: 'dado de saúde que não entra na declaração' });
+    await shiftSwapRef.set({ schemaVersion: 1, workspaceId, workDate: '2026-08-15', unitId, status: 'pending', version: 1,
+      requesterUid: userId, requesterName: 'Maria', targetUid: otherUserId, targetName: 'Outra pessoa', participantUids: [userId, otherUserId],
+      offeredShift: { scheduleId: 'schedule', shiftId: 'morning', unitId, unitName: 'Quiosque', date: '2026-08-15', startTime: '08:00', endTime: '16:00',
+        shiftDefinitionId: null, shiftName: 'Manhã', occupantUid: userId, occupantName: 'Maria', fingerprint: 'a' },
+      requestedShift: { scheduleId: 'schedule', shiftId: 'afternoon', unitId, unitName: 'Quiosque', date: '2026-08-15', startTime: '12:00', endTime: '20:00',
+        shiftDefinitionId: null, shiftName: 'Tarde', occupantUid: otherUserId, occupantName: 'Outra pessoa', fingerprint: 'b' },
+      reason: 'Compromisso familiar.', createdAt: '2026-08-10T12:00:00.000Z', updatedAt: '2026-08-10T12:00:00.000Z', decidedAt: null,
+      events: [{ action: 'submitted', at: '2026-08-10T12:00:00.000Z', actorUid: userId, actorName: 'Maria', declaration: 'Solicito a troca.', evidence: { authenticatedUid: userId } }] });
 
     const before = await readCompetenceClosure(closer, competence, closureDeps);
-    assert.deepEqual(before.pending, { adjustments: 1, absences: 1 });
-    assert.equal(before.people.length, 1);
+    assert.deepEqual(before.pending, { adjustments: 1, absences: 1, shiftSwaps: 1 });
+    assert.equal(before.people.length, 2);
     assert.equal(JSON.stringify(before.people).includes('dado de saúde'), false);
     await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_PENDING' });
 
     await decideAdjustment(reviewer, pending.id, { action: 'approve', expectedVersion: 1, reason: 'Conferido com a gerente da unidade.' }, deps);
     await absenceRef.update({ status: 'approved', approvalOrigin: 'tacit_timeout', decidedAt: '2026-08-05T12:00:00.000Z' });
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_PENDING' });
+    await shiftSwapRef.update({ status: 'accepted', version: 2, decidedAt: '2026-08-10T13:00:00.000Z', updatedAt: '2026-08-10T13:00:00.000Z',
+      events: [{ action: 'submitted', at: '2026-08-10T12:00:00.000Z', actorUid: userId, actorName: 'Maria', declaration: 'Solicito a troca.', evidence: { authenticatedUid: userId } },
+        { action: 'accepted', at: '2026-08-10T13:00:00.000Z', actorUid: otherUserId, actorName: 'Outra pessoa', declaration: 'Aceito a troca.', evidence: { authenticatedUid: otherUserId } }] });
     await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 3 }, closureDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
     const first = await closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps);
     assert.equal(first.status, 'closed');
     assert.equal(first.version, 1);
-    assert.deepEqual(first.counts, { adjustments: 1, absences: 1 });
+    assert.deepEqual(first.counts, { adjustments: 1, absences: 1, shiftSwaps: 1 });
     assert.equal(first.closedBy, closer.decoded.uid);
     assert.equal(first.clockSource, 'hora_legal');
     assert.match(first.manifestHash, /^[a-f0-9]{64}$/);
@@ -81,6 +94,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const frozen = await readCompetenceClosure(closer, competence, closureDeps);
     assert.equal(frozen.people[0].adjustments[0].decidedBy, reviewer.decoded.uid);
     assert.equal(frozen.people[0].absences[0].approval, 'tacit_timeout');
+    assert.deepEqual(frozen.people.map((person) => [person.uid, person.shiftSwaps[0]?.status]), [[userId, 'accepted'], [otherUserId, 'accepted']]);
     await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps), { code: 'PTRP_CLOSURE_ALREADY_CLOSED' });
     await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-20', kind: 'include', newTime: '08:00',
       reason: 'Esqueci de bater a entrada.' }, deps), { code: 'PTRP_COMPETENCE_CLOSED' });
@@ -117,6 +131,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.deepEqual(day.punches.map((item) => `${item.time}:${item.mark}`), ['08:00:included', '12:00:original']);
     assert.equal(day.pairedMinutes, 240);
     assert.equal(mirror.snapshot.adjustments.length, 2);
+    assert.deepEqual([mirror.snapshot.shiftSwaps[0].status, mirror.snapshot.shiftSwaps[0].acts.length], ['accepted', 2]);
     assert.equal(mirror.snapshot.actors[reviewer.decoded.uid], undefined);
     assert.equal((await generateMirror(closer, { action: 'generate', competence, expectedVersion: 2, employeeUid: userId }, mirrorDeps)).snapshotHash, mirror.snapshotHash);
     const pdf = await mirrorPdf(titular, competence, undefined, mirrorDeps);
@@ -233,6 +248,14 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     // Encerramento do ciclo: só quem fecha, com o residual conferido; uma vez, sem apagar nada.
     await assert.rejects(settleBankCycle(titular, { action: 'settle', employeeUid: userId, date: '2026-08-31', expectedMinutes: -200 }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
 
+    // Duas operações diferentes sobre o mesmo saldo não passam juntas; o movimento vencedor também integra o registro 07.
+    const concurrent = await Promise.allSettled([1, 2].map((attempt) => createBankMovement(closer, { action: 'movement', operationId: randomUUID(),
+      employeeUid: userId, date: '2026-08-20', kind: 'adjustment', minutes: 10, expectedBalance: -200,
+      reason: `Ajuste concorrente de ensaio número ${attempt}.` }, bankDeps)));
+    assert.equal(concurrent.filter((item) => item.status === 'fulfilled').length, 1);
+    assert.equal(concurrent.filter((item) => item.status === 'rejected').length, 1);
+    assert.equal((await readBankStatement(closer, { employeeUid: userId, date: '2026-08-20' }, bankDeps)).statement.balanceMinutes, -190);
+
     // AEJ do estabelecimento: só de competência fechada, com a inclusão aprovada e o motivo do AEJ.
     const treatment = (await hrDbAdmin.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', userId).limit(1).get()).docs[0].data();
     const readArp = async () => ({ profile: { establishmentId: treatment.establishmentId, employerCnpj: '14276603000125', employerLegalName: 'Empregador do ensaio LTDA',
@@ -262,11 +285,49 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(aej.counts['05'], 2);
     assert.deepEqual(aej.warnings.map((item) => `${item.code}:${item.date}`), ['PENDING_DAY:2026-08-13']);
     // Registro 07: débito do banco por dia e folga como DSR; o dia sem batida ainda não tratado não vira falta ("2").
-    assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|1|2026-08-16||']);
+    assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|1|2026-08-16||', '07|1|3|2026-08-20|10|1']);
     const audit = (await hrDbAdmin.collection(AEJ_EXPORTS).where('workspaceId', '==', workspaceId).where('sha256', '==', aej.sha256).get()).docs[0].data();
     assert.equal(audit.sha256, aej.sha256);
     assert.deepEqual(audit.closureVersions, { '2026-08': 2 });
+
+    // Uma extra estornada pode ser aprovada de novo por uma nova operação; repetir a mesma operação continua idempotente.
+    const policyRef = dbAdmin.collection('dp_overtimePolicies').doc(`${prefix}-policy`);
+    const policyRecord = (await policyRef.get()).data();
+    await policyRef.update({ categories: policyRecord.categories.map((item) => ({ ...item, requiresApproval: item.id === 'banco' })) });
+    const bankRecordRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('2').collection('timeBank').doc(userId);
+    const bankRecord = (await bankRecordRef.get()).data();
+    await bankRecordRef.update({ days: bankRecord.days.map((item) => item.date === '2026-08-12' ? { ...item,
+      lines: [{ nature: 'review', minutes: 60, reason: 'pending_approval', categoryId: 'banco', ratePercent: 50, requiresApproval: true }] } : item) });
+    const firstOperationId = randomUUID();
+    const firstApproval = await createBankMovement(closer, { action: 'approve_overtime', operationId: firstOperationId,
+      employeeUid: userId, date: '2026-08-12', categoryId: 'banco', minutes: 60, reason: 'Extra conferida no ensaio.' }, bankDeps);
+    await reverseBankMovement(closer, { action: 'reverse', employeeUid: userId, date: '2026-08-12', movementId: firstApproval.id,
+      reason: 'A aprovação precisava ser refeita.' }, bankDeps);
+    const secondOperationId = randomUUID();
+    const secondApproval = await createBankMovement(closer, { action: 'approve_overtime', operationId: secondOperationId,
+      employeeUid: userId, date: '2026-08-12', categoryId: 'banco', minutes: 60, reason: 'Extra reconferida no ensaio.' }, bankDeps);
+    assert.notEqual(secondApproval.id, firstApproval.id);
+    assert.equal(secondApproval.status, 'active');
+    assert.equal((await createBankMovement(closer, { action: 'approve_overtime', operationId: secondOperationId,
+      employeeUid: userId, date: '2026-08-12', categoryId: 'banco', minutes: 60, reason: 'Extra reconferida no ensaio.' }, bankDeps)).id, secondApproval.id);
+    await assert.rejects(createBankMovement(closer, { action: 'approve_overtime', operationId: secondOperationId,
+      employeeUid: userId, date: '2026-08-12', categoryId: 'banco', minutes: 60, reason: 'Payload diferente.' }, bankDeps), { code: 'PTRP_BANK_OPERATION_CONFLICT' });
+    await assert.rejects(createBankMovement(closer, { action: 'approve_overtime', operationId: secondOperationId,
+      employeeUid: userId, date: '2026-09-12', categoryId: 'banco', minutes: 60, reason: 'Extra reconferida no ensaio.' }, bankDeps), { code: 'PTRP_BANK_OPERATION_CONFLICT' });
+
+    // A liquidação que materializa o encerramento do ciclo não pode ser estornada separadamente.
+    const lockedMovementRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('timeBankMovements').doc('locked-payroll');
+    await lockedMovementRef.set({ id: lockedMovementRef.id, uid: userId, date: '2026-08-31', competence, status: 'active', kind: 'payroll', minutes: 30,
+      reason: 'Liquidação do ciclo.', createdAt: '2026-10-17T12:00:00.000Z', createdBy: closer.decoded.uid,
+      settlementCycle: { start: '2026-08-01', end: '2026-08-31' }, line: { nature: 'bank_credit', minutes: 30, reason: 'payroll_settlement' } });
+    await assert.rejects(reverseBankMovement(closer, { action: 'reverse', employeeUid: userId, date: '2026-08-31', movementId: lockedMovementRef.id,
+      reason: 'Tentativa isolada.' }, bankDeps), { code: 'PTRP_BANK_SETTLEMENT_REVERSAL_FORBIDDEN' });
+
+    // Operador limitado a outra unidade não consegue consultar nem movimentar o banco da pessoa.
+    const foreignCloser = actor(`${prefix}-foreign`, closerPermissions, { unitIds: [`${prefix}-foreign-unit`] });
+    await assert.rejects(readBankStatement(foreignCloser, { employeeUid: userId, date: '2026-08-20' }, bankDeps), { code: 'PTRP_BANK_SUBJECT_FORBIDDEN' });
+    await assert.rejects(readMirrorStatus(foreignCloser, competence, userId, mirrorDeps), { code: 'PTRP_MIRROR_SUBJECT_NOT_FOUND' });
   } finally {
-    await absenceRef.delete();
+    await Promise.all([absenceRef.delete(), shiftSwapRef.delete()]);
   }
 });

@@ -39,7 +39,29 @@ class MemoryDrafts : CountDraftStore {
     override suspend fun save(uid: String, sessionId: String, draft: StoredCountDraft) { values[uid to sessionId] = draft }
     override suspend fun clear(uid: String, sessionId: String) { values.remove(uid to sessionId) }
 }
+class MemoryTimeOfflineQueue : TimeOfflineQueue {
+    val rows = MutableStateFlow<List<TimeMarkingRow>>(emptyList())
+    var savedPermit: OfflinePermit? = null
+    var readyRows = emptyList<Pair<TimeMarkingRow, MarkingRequest>>()
+    val syncedIds = mutableListOf<String>()
+    val failures = mutableListOf<Pair<String, AppFailure>>()
+    override fun observe(uid: String) = rows
+    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long) = null
+    override suspend fun savePermit(uid: String, permit: OfflinePermit) { savedPermit = permit }
+    override suspend fun permit(uid: String) = savedPermit
+    override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? = null
+    override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long): CapturedOfflineMarking {
+        val id = java.util.UUID.randomUUID().toString(); rows.value += TimeMarkingRow(uid, id, "permit", rows.value.size + 1, 0, sealed = byteArrayOf())
+        return CapturedOfflineMarking(id, "2026-10-19T08:00:00-0300", "2026-10-19")
+    }
+    override suspend fun ready(uid: String) = readyRows
+    override suspend fun synced(uid: String, id: String) { syncedIds += id; rows.value = rows.value.filterNot { it.id == id } }
+    override suspend fun failed(uid: String, id: String, failure: AppFailure) { failures += id to failure }
+}
 fun pending() = PendingUpload("11111111-1111-4111-8111-111111111111", "2026-10-01T12:00:00Z", "Compra", "cash_withdrawal", listOf(Document("nota.jpg", "image/jpeg", byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 1))), emptyList())
 fun purchase() = ConfirmPurchase(pending().submissionId, "unit", "Fornecedor", null, "2026-10-01", 5000, "cash_withdrawal", null, "account", "center", items = listOf(PurchaseItem("Leite", 10.0, "un", 500, 5000)))
 fun countSession() = CountSession("count", "unit", "Unidade", "pending_review", "2026-10-01T12:00:00Z", "2026-10-01T13:00:00Z", listOf(CountItem("lot", "Leite", "L1", null, 12.0, "caixa")))
 fun repository(auth: TestAuth = TestAuth(), api: ApiService = DemoApi()) = ApiRepository(api, DemoApi(), RuntimeMode(auth))
+fun timeViewModel(auth: TestAuth, repository: ApiRepository, saved: androidx.lifecycle.SavedStateHandle,
+    queue: MemoryTimeOfflineQueue = MemoryTimeOfflineQueue()): com.coalaone.go.ui.TimeViewModel =
+    com.coalaone.go.ui.TimeViewModel(repository, saved, auth, queue, TimeOfflineSync(auth, queue, repository), TimeOfflineWorkScheduler { })

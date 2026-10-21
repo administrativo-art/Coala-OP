@@ -33,10 +33,12 @@ describe('ARP do REP-P protegida contra exclusão no banco compartilhado', () =>
   });
 
   it('only the adjustment and closure services reference ptrp_ collections, and it never deletes (retenção de 20 anos)', () => {
-    // The closure, mirror, AEJ and time-bank services reach the collections only through the constants exported by the adjustment service.
-    const PTRP_WRITERS = ['src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-adjustments/service.server.ts', 'src/features/dp/time-bank/service.server.ts'];
-    assert.deepEqual(files.filter((file) => file.text.includes('ptrp_')).map((file) => file.path), ['src/features/dp/time-adjustments/service.server.ts']);
-    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES|AEJ_EXPORTS)\b[^;]*from '(\.\/|@\/features\/dp\/time-adjustments\/)service\.server'/.test(file.text)).map((file) => file.path).sort(), ['src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-bank/service.server.ts']);
+    // The REP-P service reads the competence head before accepting a delayed offline punch. The remaining
+    // closure, mirror, AEJ and time-bank services reach these collections through constants from the adjustment service.
+    const PTRP_WRITERS = ['src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-adjustments/service.server.ts', 'src/features/dp/time-bank/service.server.ts'];
+    assert.deepEqual(files.filter((file) => file.text.includes('ptrp_')).map((file) => file.path).sort(),
+      ['src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/service.server.ts']);
+    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES|AEJ_EXPORTS)\b[^;]*from '(\.\/|@\/features\/dp\/time-adjustments\/)service\.server'/.test(file.text)).map((file) => file.path).sort(), ['src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-bank/service.server.ts']);
     for (const path of PTRP_WRITERS) {
       assert.doesNotMatch(readFileSync(path, 'utf8'), /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
     }

@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Centralizar pedidos recorrentes do colaborador com análise do Departamento Pessoal, trilha auditável, vigência calculada e documento próprio. O primeiro fluxo implementado é o vale-transporte, com adesão, alteração, suspensão e reativação.
+Centralizar pedidos recorrentes do colaborador. O vale-transporte segue para análise do Departamento Pessoal; a troca de turno é decidida pela outra pessoa envolvida e altera a escala automaticamente somente após o aceite autenticado.
 
 ## Entradas
 
@@ -12,8 +12,20 @@ Centralizar pedidos recorrentes do colaborador com análise do Departamento Pess
 - `src/app/api/collaborator/requests/[requestId]/route.ts`: cancela, aprova, rejeita ou refaz a geração do termo.
 - `src/app/api/collaborator/requests/[requestId]/document/route.ts`: entrega DOCX ou PDF somente ao titular ou ao RH autorizado.
 - `src/app/api/collaborator/requests/[requestId]/signature/route.ts`: consulta ou inicia a assinatura independente.
+- `src/app/api/collaborator/requests/shift-swaps`: lista e cria trocas de turno; `options` devolve somente pares possíveis e `[requestId]` aceita, recusa ou cancela.
+- `src/features/dp/shift-swaps/contract.server.ts`: contrato central e autoritativo consumido pela web e pelo Coala Go.
 - `src/app/api/dev/transport-voucher-templates/[kind]/route.ts`: prévia fictícia local dos três modelos; indisponível em produção e fora de `localhost`.
-- Coala Go, entrada **Solicitações** (Etapa 7, 19/10/2026): lista os pedidos próprios (`scope=own`) e cria adesão, alteração, suspensão ou reativação pela mesma rota, depois de um resumo; termo e assinatura continuam na web. O schema do pedido fica em `src/features/hr/requests/schemas.ts`, reexportado pela segurança, para também validar o payload do app.
+- Coala Go, entrada **Solicitações**: ausência, vale-transporte e troca de turno usam as mesmas rotas da web. Consulta de documentos não pertence ao aplicativo.
+
+## Regra da troca de turno
+
+A proposta sempre envolve dois turnos de trabalho futuros, da mesma unidade e do mesmo dia. O solicitante só oferece seu próprio turno e escolhe o turno de outra pessoa ativa. O servidor impede que qualquer um dos dois turnos participe de duas propostas pendentes.
+
+A pessoa convidada recebe notificação e pode aceitar ou recusar; o solicitante pode cancelar enquanto estiver pendente. A recusa não altera a escala. No aceite, o servidor lê a escala novamente, compara a fotografia de ambos os turnos, revalida lotação, jornada, definição do turno, ausências e ocupação do dia, e troca somente `userId`/`userName` em uma única transação. Horários, unidade, data e definição continuam iguais; cada novo ocupante recebe uma nova referência histórica para preservar o contrato do dia. Se a escala mudou ou o dia começou, a proposta fica obsoleta e uma nova solicitação é necessária.
+
+Cada envio, aceite, recusa e cancelamento registra no servidor UID autenticado, nome, instante, provedor da sessão, `auth_time`, operação idempotente, IP e agente do dispositivo, além da declaração apresentada. Isso identifica o aceite sem exigir assinatura reconhecida. A resposta aos participantes mostra a declaração, o nome, o instante e o provedor, mas redige e-mail, `auth_time`, IP, agente e chave idempotente. O cliente nunca decide a troca diretamente e o Firestore nega acesso direto a `dp_shiftSwapRequests`.
+
+A decisão do programador em 21/10/2026 aceita essa manifestação autenticada como prova operacional do acordo, sem assinatura reconhecida. O pedido e suas manifestações têm retenção mínima de 20 anos e não recebem TTL de exclusão automática; os `actionLogs` correspondentes usam vencimento de 20 anos. As consultas são sempre limitadas e escopadas pelo workspace: até 100 pedidos na central, até 20 candidatos por turno para impedir proposta concorrente e até 2.001 pedidos na conferência defensiva de uma competência. `firestore.indexes.json` declara os três índices do contrato (`workspaceId + participantUids`, `workspaceId + shiftKeys` e `workspaceId + workDate`).
 
 ## Regra do vale-transporte
 

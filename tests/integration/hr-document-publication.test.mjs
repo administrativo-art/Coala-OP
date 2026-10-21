@@ -6,27 +6,33 @@ import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-saf
 
 assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
-const { autoPublishDocument, changeDocumentPublication, listOwnPublishedDocuments, openOwnPublishedDocument } = await import('../../src/features/hr/documents/publication.server.ts');
+const { autoPublishDocument, changeDocumentPublication, changeEmployeeDocumentStatus, classifyLegacyEmployeeDocument,
+  listOwnPublishedDocuments, openOwnPublishedDocument, saveDocumentPublicationPolicies } = await import('../../src/features/hr/documents/publication.server.ts');
 
 test('pasta do colaborador: só o titular, só o publicado; só o DP publica e retira', async () => {
   const prefix = `pub-${randomUUID().slice(0, 6)}`;
   const actor = (uid, permissions, extra = {}) => ({ decoded: { uid }, userDoc: { id: uid, ...extra }, profileId: null, permissions, isDefaultAdmin: false, workspace_id: 'coala-one' });
   const maria = actor(`${prefix}-maria`, structuredClone(defaultGuestPermissions), { hrEmployeeId: `${prefix}-hr-maria` });
   const joao = actor(`${prefix}-joao`, structuredClone(defaultGuestPermissions));
-  const dp = actor(`${prefix}-dp`, structuredClone(defaultAdminPermissions));
+  const dp = actor(`${prefix}-dp`, structuredClone(defaultAdminPermissions), { unitAccessScope: 'all' });
+  const scopedDp = actor(`${prefix}-scoped-dp`, structuredClone(defaultAdminPermissions), { unitAccessScope: 'selected', unitAccessUnitIds: [`${prefix}-unit`] });
   const viewerPermissions = structuredClone(defaultGuestPermissions);
   viewerPermissions.dp.collaborators.view = true;
   const viewer = actor(`${prefix}-viewer`, viewerPermissions);
   const files = new Map([['docs/a.pdf', Buffer.from('%PDF-a')], ['docs/b.pdf', Buffer.from('%PDF-b')]]);
-  const deps = { hrDb: hrDbAdmin, now: () => new Date('2026-10-20T12:00:00.000Z'), overrides: async () => null,
+  const deps = { hrDb: hrDbAdmin, mainDb: dbAdmin, now: () => new Date('2026-10-20T12:00:00.000Z'), overrides: async () => null,
     storage: { async download(path) { return files.get(path); } } };
   const docRef = (id) => hrDbAdmin.collection('employeeDocuments').doc(`${prefix}-${id}`);
   await Promise.all([
+    dbAdmin.collection('users').doc(maria.decoded.uid).set({ id: maria.decoded.uid, hrEmployeeId: `${prefix}-hr-maria`, unitIds: [`${prefix}-unit`] }),
+    dbAdmin.collection('users').doc(joao.decoded.uid).set({ id: joao.decoded.uid, unitIds: [`${prefix}-unit`] }),
     // Da Maria pelo cadastro do RH: recibo de férias assinado (publicável) e atestado (restrito).
     docRef('receipt').set({ employeeId: `${prefix}-hr-maria`, documentTypeCode: 'VACATION_RECEIPT', displayName: 'Recibo de férias', storagePath: 'docs/a.pdf',
       signatureRequired: true, signatureStatus: 'signed', status: 'validated', deletedAt: null }),
     docRef('certificate').set({ employeeId: maria.decoded.uid, documentTypeCode: 'MEDICAL_CERTIFICATE', storagePath: 'docs/b.pdf', status: 'validated', deletedAt: null }),
+    docRef('orphan').set({ documentTypeCode: 'UNKNOWN_DOCUMENT', storagePath: 'docs/b.pdf', status: 'received', deletedAt: null }),
     // Do João, já publicado.
     docRef('joao').set({ employeeId: joao.decoded.uid, documentTypeCode: 'VACATION_RECEIPT', storagePath: 'docs/b.pdf', status: 'validated', deletedAt: null,
       publication: { status: 'published', at: '2026-10-19T00:00:00.000Z', by: 'dp', source: 'manual' } }),
@@ -38,6 +44,7 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
   // Só o DP autorizado com edição publica; quem só vê, não.
   await assert.rejects(changeDocumentPublication(maria, { id: docRef('receipt').id, action: 'publish' }, deps), { code: 'EMPLOYEE_DOCUMENT_PUBLICATION_FORBIDDEN' });
   await assert.rejects(changeDocumentPublication(viewer, { id: docRef('receipt').id, action: 'publish' }, deps), { code: 'EMPLOYEE_DOCUMENT_PUBLICATION_FORBIDDEN' });
+  await assert.rejects(classifyLegacyEmployeeDocument(dp, { id: docRef('orphan').id, documentTypeCode: 'ASO_PERIODIC' }, deps), { code: 'EMPLOYEE_DOCUMENT_NOT_FOUND' });
   // Tipo restrito não publica nem pelo DP.
   await assert.rejects(changeDocumentPublication(dp, { id: docRef('certificate').id, action: 'publish' }, deps), { code: 'EMPLOYEE_DOCUMENT_NOT_PUBLISHABLE' });
   const published = await changeDocumentPublication(dp, { id: docRef('receipt').id, action: 'publish' }, deps);
@@ -66,4 +73,21 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
   assert.equal((await autoPublishDocument(docRef('aso').id, 'validated', deps)).source, 'policy');
   assert.equal(await autoPublishDocument(docRef('certificate').id, 'validated', deps), null);
   assert.deepEqual((await listOwnPublishedDocuments(maria, deps)).map((item) => item.id), [docRef('aso').id]);
+
+  // Documento antigo: classificar não publica; validar usa a política configurada do tipo.
+  await docRef('legacy').set({ employeeId: maria.decoded.uid, documentTypeCode: 'UNKNOWN_DOCUMENT', status: 'received', storagePath: 'docs/a.pdf', deletedAt: null });
+  await classifyLegacyEmployeeDocument(dp, { id: docRef('legacy').id, documentTypeCode: 'ASO_PERIODIC' }, deps);
+  assert.equal((await docRef('legacy').get()).get('publication'), undefined);
+  const validated = await changeEmployeeDocumentStatus(dp, { id: docRef('legacy').id, status: 'validated' }, deps);
+  assert.equal(validated.publication.status, 'published');
+
+  // A tela salva a matriz completa; tipo desconhecido permanece sempre fechado.
+  const policies = await saveDocumentPublicationPolicies(dp, {
+    PAYSLIP: { mode: 'manual', trigger: 'validated' },
+    UNKNOWN_DOCUMENT: { mode: 'never', trigger: 'validated' },
+  }, deps);
+  assert.equal(policies.find((item) => item.code === 'PAYSLIP').policy.mode, 'manual');
+  assert.equal(policies.find((item) => item.code === 'UNKNOWN_DOCUMENT').policy.mode, 'never');
+  await assert.rejects(saveDocumentPublicationPolicies(scopedDp, { PAYSLIP: { mode: 'manual', trigger: 'validated' } }, deps),
+    { code: 'EMPLOYEE_DOCUMENT_PUBLICATION_POLICY_GLOBAL_FORBIDDEN' });
 });

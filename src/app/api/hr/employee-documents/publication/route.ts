@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { changeDocumentPublication } from '@/features/hr/documents/publication.server';
+import { assertDocumentsDp, changeDocumentPublication } from '@/features/hr/documents/publication.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -26,9 +26,10 @@ const contract = defineSecurityContract({
 });
 const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, Input, Resource>({
   id: 'hr-employee-documents-publication-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:documents-dp', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
+    assertDocumentsDp(actor);
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_PUBLICATION_QUERY_INVALID', kind: 'VALIDATION' });
     const parsed = inputSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_PUBLICATION_INPUT_INVALID', kind: 'VALIDATION', safeMessage: parsed.error.issues[0]?.message ?? 'Pedido inválido.' });

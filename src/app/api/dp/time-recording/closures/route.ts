@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { assertClosureAccess, closeCompetence, readCompetenceClosure } from '@/features/dp/time-adjustments/closure.server';
 import { closureCloseSchema, closureQuerySchema, type ClosureCloseInput } from '@/features/dp/time-adjustments/schemas';
+import { generateBankClosedCompetence } from '@/features/dp/time-bank/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -56,5 +57,8 @@ const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Serve
 
 export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) =>
   NextResponse.json(await readCompetenceClosure(security.actor, security.input.competence), { headers: { 'Cache-Control': 'private, no-store' } }));
-export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) =>
-  NextResponse.json({ closure: await closeCompetence(security.actor, security.input) }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } }));
+export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
+  const closure = await closeCompetence(security.actor, security.input);
+  const timeBank = await generateBankClosedCompetence(security.actor, closure.competence, closure.version);
+  return NextResponse.json({ closure, timeBank }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });
+});

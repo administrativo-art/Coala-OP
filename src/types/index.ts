@@ -3615,7 +3615,9 @@ export type DPUnit = {
   mergedIntoUnitId?: string;
   mergedIntoUnitName?: string;
   archivedAt?: Timestamp;
+  /** Identificação fiscal quando a unidade é usada como estabelecimento empregador; não é inferida da unidade de execução. */
   cnpj?: string;
+  /** Endereço fiscal/operacional congelado na vigência do vínculo quando a unidade é escolhida como empregadora. */
   address?: string;
   /** Fuso IANA usado na batida de ponto nesta unidade; ausente = fuso do estabelecimento do empregador. */
   timeZone?: string;

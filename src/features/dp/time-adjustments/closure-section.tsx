@@ -29,11 +29,12 @@ type ClosingSummary = {
   finalization: { at: string; by: string; people?: number; signed?: number } | null;
 };
 type ClosurePayload = {
-  competence: string; closure: ClosureView | null; people: ClosurePerson[]; pending: { adjustments: number; absences: number };
-  counts: { adjustments: number; absences: number }; truncated: boolean; can: { close: boolean; reopen: boolean };
+  competence: string; closure: ClosureView | null; people: ClosurePerson[]; pending: { adjustments: number; absences: number; shiftSwaps: number };
+  counts: { adjustments: number; absences: number; shiftSwaps: number }; truncated: boolean; can: { close: boolean; reopen: boolean };
 };
 
 const ABSENCE_STATUS: Record<string, string> = { submitted: "Enviada", in_review: "Em análise", adjustments_requested: "Ajustes pedidos", approved: "Aprovada", rejected: "Recusada", cancelled: "Cancelada" };
+const SHIFT_SWAP_STATUS: Record<string, string> = { pending: "Pendente", accepted: "Aceita", rejected: "Recusada", cancelled: "Cancelada", stale: "Não aplicada" };
 const dateBR = (value: string) => value.slice(0, 10).split("-").reverse().join("/");
 const timeOf = (value: string) => value.slice(11, 16);
 const whenBR = (value: string | null) => value ? `${dateBR(value)} ${timeOf(value)}` : "—";
@@ -149,7 +150,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   }
 
   const closed = data?.closure?.status === "closed";
-  const blocked = Boolean(data && (data.pending.adjustments || data.pending.absences || data.truncated));
+  const blocked = Boolean(data && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps || data.truncated));
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
@@ -162,19 +163,21 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       {error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
       {!data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
       {data ? <>
-        <p className="text-sm text-ds-ink">{data.people.length} {data.people.length === 1 ? "pessoa" : "pessoas"} no fechamento · {data.counts.adjustments} ajustes de ponto · {data.counts.absences} ausências.</p>
+        <p className="text-sm text-ds-ink">{data.people.length} {data.people.length === 1 ? "pessoa" : "pessoas"} no fechamento · {data.counts.adjustments} ajustes de ponto · {data.counts.absences} ausências · {data.counts.shiftSwaps} trocas de turno.</p>
         {closed ? <p className="text-xs text-ds-ink-muted">Fechada em {whenBR(data.closure!.closedAt)} por {nameOf(data.closure!.closedBy)}. Carimbo da declaração: <span className="font-mono">{data.closure!.manifestHash?.slice(0, 16)}…</span></p> : null}
         {closed && data.closure!.changes ? <p className="text-xs text-ds-ink-muted">Em relação à versão anterior: {data.closure!.changes.added.length} itens novos, {data.closure!.changes.changed.length} alterados, {data.closure!.changes.removed.length} retirados.</p> : null}
-        {!closed && (data.pending.adjustments || data.pending.absences) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
-          Há pedidos sem decisão: {data.pending.adjustments} de ajuste e {data.pending.absences} de ausência. Decida-os nas filas acima antes de fechar.</p> : null}
+        {!closed && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
+          Há pedidos sem decisão: {data.pending.adjustments} de ajuste, {data.pending.absences} de ausência e {data.pending.shiftSwaps} de troca de turno. Decida-os antes de fechar.</p> : null}
         {!closed && data.truncated ? <p role="alert" className="text-xs font-semibold text-ds-danger">O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.</p> : null}
-        {data.people.filter((person) => person.adjustments.length || person.absences.length).map((person) => {
-          const pending = person.adjustments.filter((item) => item.status === "in_review").length + person.absences.filter((item) => ["submitted", "in_review", "adjustments_requested"].includes(item.status)).length;
+        {data.people.filter((person) => person.adjustments.length || person.absences.length || person.shiftSwaps.length).map((person) => {
+          const pending = person.adjustments.filter((item) => item.status === "in_review").length
+            + person.absences.filter((item) => ["submitted", "in_review", "adjustments_requested"].includes(item.status)).length
+            + person.shiftSwaps.filter((item) => item.status === "pending").length;
           return (
             <LiftRow key={person.uid} table onClick={() => setSelected(person)} className="flex items-center justify-between gap-3">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-extrabold text-ds-ink">{person.name ?? nameOf(person.uid)}</span>
-                <span className="block text-sm text-ds-ink-muted">{person.adjustments.length} ajustes · {person.absences.length} ausências</span>
+                <span className="block text-sm text-ds-ink-muted">{person.adjustments.length} ajustes · {person.absences.length} ausências · {person.shiftSwaps.length} trocas</span>
               </span>
               {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : <StatusPill variant="neutral">Declarado</StatusPill>}
             </LiftRow>
@@ -201,7 +204,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
           {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
           {team.map((person) => {
             const individual = individualByUid.get(person.id);
-            return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [] })}
+            return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [], shiftSwaps: [] })}
               className="flex items-center justify-between gap-3">
               <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
               {individual?.status === "closed" ? <StatusPill variant="ok">Individual fechado</StatusPill>
@@ -228,7 +231,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       </> : null}
       {selected ? (
         <SidePanel open onOpenChange={(next) => { if (!next) setSelected(null); }} kicker={`Declaração do fechamento · ${dateBR(`${competence}-01`).slice(3)}`} title={selected.name ?? nameOf(selected.uid)}
-          subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências`}>
+          subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências · ${selected.shiftSwaps.length} trocas`}>
           {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
           {closed ? <ClosingPackageCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} onChanged={() => setPackagesKey((value) => value + 1)} /> : null}
           {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} /> : null}
@@ -248,6 +251,22 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
                 <p className="text-ds-ink">{item.startDate === item.endDate ? dateBR(item.startDate) : `${dateBR(item.startDate)} a ${dateBR(item.endDate)}`}{item.startTime && item.endTime ? ` · ${item.startTime}–${item.endTime}` : ""} · {item.quantity} {item.unit === "hour" ? "h" : item.quantity === 1 ? "dia" : "dias"}</p>
                 <p className="text-xs text-ds-ink-muted">{item.attachmentCount ? `${item.attachmentCount} comprovante(s) no pedido` : "Sem comprovante"}{item.decidedBy ? ` · decidido por ${nameOf(item.decidedBy)} em ${whenBR(item.decidedAt)}` : ""}</p>
               </div>)) : <p className="text-sm text-ds-ink-muted">Nenhuma ausência no mês.</p>}
+          </PanelSection>
+          <PanelSection title="Trocas de turno" aside="aceite autenticado">
+            {selected.shiftSwaps.length ? selected.shiftSwaps.map((item) => {
+              const requester = item.requesterUid === selected.uid;
+              const own = requester ? item.offeredShift : item.requestedShift;
+              const incoming = requester ? item.requestedShift : item.offeredShift;
+              const counterpart = requester ? item.targetName : item.requesterName;
+              return <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">
+                <p className="font-bold text-ds-ink">{dateBR(item.date)} · {SHIFT_SWAP_STATUS[item.status] ?? item.status} · {item.unitName}</p>
+                <p className="text-ds-ink">{own.startTime}–{own.endTime} por {incoming.startTime}–{incoming.endTime} · com {counterpart}</p>
+                {item.reason ? <p className="text-xs text-ds-ink-muted">Motivo: {item.reason}</p> : null}
+                {item.acts.map((act, index) => <p key={`${act.action}:${act.at}:${index}`} className="text-xs text-ds-ink-muted">
+                  {act.actorName} em {whenBR(act.at)}: {act.declaration}
+                </p>)}
+              </div>;
+            }) : <p className="text-sm text-ds-ink-muted">Nenhuma troca de turno no mês.</p>}
           </PanelSection>
         </SidePanel>
       ) : null}

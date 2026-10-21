@@ -87,6 +87,10 @@ class DemoApi @Inject constructor() : ApiService {
         listOf("08:03", "12:00").forEachIndexed { index, time -> simulatedMarkings += OwnMarking("sim-$today-$index", today.toString(), 200L + index, zoned(today, time), unit.id, "01", if (index == 1) "pending" else "available") }
     } }
     override suspend fun timeOptions(workDate: String) = TimeOptions(workDate, true, true, listOf(ExecutionUnit(unit.id, unit.name, true), ExecutionUnit(units[1].id, units[1].name)), OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"))
+    override suspend fun offlinePermit(request: OfflinePermitRequest) = OfflinePermitResponse(OfflinePermit(
+        "simulation-offline-permit", request.installationId, request.deviceKeyId, request.keySecurity, request.bootCount,
+        request.anchorElapsedRealtimeMs, java.time.Instant.now().toString(), java.time.Instant.now().toString(),
+        java.time.Instant.now().plusSeconds(12 * 60 * 60).toString(), listOf(OfflinePermitUnit(unit.id, unit.name, "America/Fortaleza"))))
     override suspend fun mark(request: MarkingRequest): MarkingResponse {
         seedMarkings()
         val nsr = 300L + simulatedMarkings.size
@@ -105,6 +109,13 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun receipt(receiptId: String): ResponseBody = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 120]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF".toResponseBody("application/pdf".toMediaType())
     override suspend fun adjustments(month: String) = OwnAdjustments(emptyList())
     override suspend fun requestAdjustment(request: AdjustmentRequest) = AdjustmentCreated(Adjustment("simulation-adjustment", request.workDate, request.kind, "in_review", 1, reason = request.reason, createdAt = java.time.Instant.now().toString()))
+    override suspend fun timeBank(date: String) = TimeBankResponse(TimeBankPolicy("simulation-policy", 1, "Banco de simulação", true),
+        TimeBankStatement(TimeBankCycle(date.take(7) + "-01", date, 0), balanceMinutes = 95, credit = 180, debit = 85, nightMinutes = 60,
+            lines = listOf(TimeBankStatementLine(date, date.take(7), 0, TimeBankLineValue("bank_credit", 60, "worked_more")),
+                TimeBankStatementLine(date, date.take(7), 0, TimeBankLineValue("bank_debit", 25, "worked_less")))), listOf(date.take(7)))
+    override suspend fun mirror(competence: String) = MirrorStatus(competence, ClosureStatus("closed", 1),
+        MirrorFileStatus("simulation", java.time.Instant.now().toString()), ClosingPackageStatus("signed", signedAt = java.time.Instant.now().toString()))
+    override suspend fun mirrorPdf(competence: String): ResponseBody = receipt("simulation-mirror")
     override suspend fun absenceOptions() = AbsenceOptions(listOf(AbsenceOption("sim-medical", "Atestado médico", listOf("day", "hour"), attachmentRequired = true), AbsenceOption("sim-personal", "Assunto particular", listOf("day"))), AbsenceCapabilities(true))
     override suspend fun absencePreview(request: AbsencePeriod) = AbsencePreviewResponse(AbsencePreview(PreviewType(request.absenceTypeId, if (request.absenceTypeId == "sim-medical") "Atestado médico" else "Assunto particular"),
         PreviewPeriod(request.startDate, request.endDate, request.startTime, request.endTime), PreviewQuantity((java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(request.startDate), LocalDate.parse(request.endDate)) + 1).toDouble(), request.unit), 3, request.absenceTypeId == "sim-medical"))
@@ -114,5 +125,23 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun absences() = AbsenceRequests(listOf(AbsenceRequestRow("sim-a1", "approved", 3, "Atestado médico", AbsenceInput(LocalDate.now().minusDays(9).toString(), LocalDate.now().minusDays(9).toString()), 1.0, "day", approvedByInaction = true, createdAt = "2026-10-01T12:00:00Z")))
     override suspend fun vouchers() = VoucherRequests(listOf(VoucherRequest("sim-v1", "activate", "approved", "Linha 401", "2026-09-02", "2026-10-01", createdAt = "2026-09-02T12:00:00Z")))
     override suspend fun requestVoucher(request: VoucherRequestCreate) = VoucherCreated(VoucherRequest("simulation-voucher", request.action, "pending", request.details, LocalDate.now().toString(), LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(), createdAt = java.time.Instant.now().toString()))
+    private fun simulatedSwapOptions(): ShiftSwapOptions {
+        val date = LocalDate.now().plusDays(3).toString()
+        return ShiftSwapOptions(
+            listOf(ShiftSwapOption("simulation-schedule", "simulation-own-shift", unit.id, unit.name, date, "08:00", "16:00", "simulation-morning", "Manhã", "simulation-user", simulatedUserName)),
+            listOf(ShiftSwapOption("simulation-schedule", "simulation-target-shift", unit.id, unit.name, date, "14:00", "22:00", "simulation-afternoon", "Tarde", "simulation-bia", "Bia")),
+            LocalDate.now().plusDays(62).toString())
+    }
+    private fun simulatedSwap(status: String = "pending", version: Int = 1): ShiftSwapRequest {
+        val options = simulatedSwapOptions(); val offered = options.ownShifts.single(); val requested = options.candidateShifts.single(); val now = java.time.Instant.now().toString()
+        return ShiftSwapRequest("simulation-swap", status, version, offered.occupantUid, offered.occupantName, requested.occupantUid, requested.occupantName,
+            ShiftSwapShift(offered.scheduleId, offered.shiftId, offered.unitId, offered.unitName, offered.date, offered.startTime, offered.endTime, offered.shiftDefinitionId, offered.shiftName, offered.occupantUid, offered.occupantName),
+            ShiftSwapShift(requested.scheduleId, requested.shiftId, requested.unitId, requested.unitName, requested.date, requested.startTime, requested.endTime, requested.shiftDefinitionId, requested.shiftName, requested.occupantUid, requested.occupantName),
+            events = emptyList(), createdAt = now, updatedAt = now, viewerActions = ShiftSwapViewerActions(cancel = status == "pending"))
+    }
+    override suspend fun shiftSwapOptions() = simulatedSwapOptions()
+    override suspend fun shiftSwaps() = ShiftSwapRequests(listOf(simulatedSwap()))
+    override suspend fun requestShiftSwap(request: ShiftSwapCreate) = ShiftSwapCreated(simulatedSwap())
+    override suspend fun decideShiftSwap(requestId: String, request: ShiftSwapDecision) = ShiftSwapCreated(simulatedSwap(if (request.action == "accept") "accepted" else if (request.action == "reject") "rejected" else "cancelled", 2))
     override suspend fun pair(request: PairScreen) = PairResponse(PairedScreen(request.screenId ?: "simulation-screen", if (request.screenId == null) "Tela 2" else "Tela 1", unitOf(request.kioskId).name, request.orientation), request.screenId == null)
 }

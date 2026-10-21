@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileSignature, FileText, Inbox, Loader2, Plus, Send, XCircle } from "lucide-react";
+import { ArrowLeftRight, FileSignature, FileText, Inbox, Loader2, Plus, Send, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { EmptyResults, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { ShiftSwapRequestsSection } from "@/features/dp/shift-swaps/shift-swap-requests-section";
 import {
   createCollaboratorRequest,
   fetchCollaboratorRequestSignature,
@@ -50,6 +51,7 @@ export function CollaboratorRequestsPage() {
   const [absencePreviewOpen, setAbsencePreviewOpen] = useState(false);
   const [absenceRefreshKey, setAbsenceRefreshKey] = useState(0);
   const [absenceListOpen, setAbsenceListOpen] = useState(false);
+  const [shiftSwapOpenSignal, setShiftSwapOpenSignal] = useState(0);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signature, setSignature] = useState<CollaboratorRequestSignature | null>(null);
@@ -237,7 +239,7 @@ export function CollaboratorRequestsPage() {
       />
 
       <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg px-4 py-3 text-[13px] text-ds-info">
-        <strong>Vale-transporte e ausência.</strong> O pedido de vale-transporte passa por análise. Para ausência, confira a prévia; quando a criação estiver habilitada, salve o rascunho e envie pelo detalhe.
+        <strong>Vale-transporte, ausência e troca de turno.</strong> A troca só altera a escala depois do aceite autenticado da outra pessoa.
       </div>
       {simulationMode ? <div className="rounded-ds-card border border-ds-warn/20 bg-ds-warn-bg px-4 py-3 text-[13px] text-ds-warn"><strong>Simulação local.</strong> Este pedido não foi gravado e nenhuma ação altera o cadastro do colaborador.</div> : null}
 
@@ -256,6 +258,7 @@ export function CollaboratorRequestsPage() {
       </section>
 
       {!simulationMode ? <div className="space-y-3"><Button variant="ds-secondary" onClick={() => setAbsenceListOpen((open) => !open)}>{absenceListOpen ? 'Ocultar pedidos de ausência' : 'Ver pedidos de ausência'}</Button>{absenceListOpen ? <AbsenceWorkflowSection firebaseUser={firebaseUser} scope="mine" refreshKey={absenceRefreshKey} /> : null}</div> : null}
+      {!simulationMode ? <ShiftSwapRequestsSection firebaseUser={firebaseUser} openCreateSignal={shiftSwapOpenSignal} /> : null}
 
       <SidePanel open={catalogOpen} onOpenChange={setCatalogOpen} kicker="Nova solicitação" title="O que você precisa solicitar?" subtitle="Escolha um tipo para iniciar ou calcular uma prévia.">
         <button
@@ -270,6 +273,11 @@ export function CollaboratorRequestsPage() {
         <button type="button" onClick={() => { setCatalogOpen(false); setAbsencePreviewOpen(true); }} className="group flex w-full items-center gap-4 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-accent hover:shadow-ds-lift focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-card bg-ds-info-bg text-ds-info"><Inbox className="h-5 w-5" /></span>
           <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-ds-ink">Prévia de ausência</span><span className="mt-0.5 block text-xs leading-5 text-ds-ink-muted">Confira datas e regra. Salve um rascunho se disponível.</span></span>
+          <span className="text-ds-ink-faint transition-transform group-hover:translate-x-0.5">›</span>
+        </button>
+        <button type="button" onClick={() => { setCatalogOpen(false); setShiftSwapOpenSignal((value) => value + 1); }} className="group flex w-full items-center gap-4 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-accent hover:shadow-ds-lift focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-card bg-ds-ok-bg text-ds-ok"><ArrowLeftRight className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-ds-ink">Troca de turno</span><span className="mt-0.5 block text-xs leading-5 text-ds-ink-muted">Troque com outra pessoa da mesma unidade e data, mediante aceite.</span></span>
           <span className="text-ds-ink-faint transition-transform group-hover:translate-x-0.5">›</span>
         </button>
       </SidePanel>

@@ -55,6 +55,15 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { attemptId: 'gate-check', workDate: '2026-10-18', executionUnitId, channel: 'browser' },
       { ...dependencies, markingEnabled: false, repDb: { collection() { throw new Error('gate touched database'); } } }),
     { code: 'REP_P_MARKING_DISABLED' });
+    const profileWithoutPoint = structuredClone(context);
+    profileWithoutPoint.permissions.app.timeRecording.mark = false;
+    await assert.rejects(recordOwnRepPMarking(profileWithoutPoint,
+      { attemptId: 'profile-gate-check', workDate: '2026-10-18', executionUnitId, channel: 'browser' },
+      { ...dependencies, repDb: { collection() { throw new Error('profile gate touched database'); } } }),
+    { code: 'REP_P_MARKING_PROFILE_DISABLED' });
+    assert.deepEqual(await listOwnRepPExecutionUnits(profileWithoutPoint, { workDate: '2026-10-18' }, {
+      ...dependencies, mainDb: { collection() { throw new Error('profile gate touched database'); } },
+    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, executionUnits: [], officialClock: null });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.

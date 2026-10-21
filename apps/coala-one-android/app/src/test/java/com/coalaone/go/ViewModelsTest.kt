@@ -236,11 +236,12 @@ class ViewModelsTest {
             override suspend fun mark(request: MarkingRequest): MarkingResponse { sent += request; failures.removeFirstOrNull()?.let { throw it }; return DemoApi().mark(request) }
         }
         val saved = androidx.lifecycle.SavedStateHandle()
-        val vm = TimeViewModel(repository(auth, api), saved); vm.load(); advanceUntilIdle()
+        val repository = repository(auth, api)
+        val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
         vm.record(); advanceUntilIdle()
         assertNotNull(vm.feedback.value.error)
         // A new view model over the same saved state (process killed) resends the same attempt and date.
-        val revived = TimeViewModel(repository(auth, api), saved); revived.load(); advanceUntilIdle()
+        val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
         revived.record(); advanceUntilIdle()
         assertEquals(sent[0], sent[1]); assertEquals("mobile", sent[1].channel)
         assertNotNull(revived.state.value.last); assertNull(saved.get<String>("attemptId"))
@@ -248,5 +249,34 @@ class ViewModelsTest {
         revived.record(); advanceUntilIdle(); assertNull(saved.get<String>("attemptId"))
         revived.record(); advanceUntilIdle()
         assertNotEquals(sent[2].attemptId, sent[3].attemptId)
+    }
+    @Test fun offlinePunchStaysLocalWithoutPretendingItHasAnNsr() = runTest {
+        var sends = 0
+        val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            sends++; return DemoApi().mark(request)
+        } }
+        val queue = MemoryTimeOfflineQueue(); val repository = repository(auth, api)
+        val vm = timeViewModel(auth, repository, androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle(); vm.record(false); advanceUntilIdle()
+        assertEquals(0, sends); assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline); assertNull(vm.state.value.last)
+    }
+    @Test fun offlineSyncStopsAtFirstFailureToPreserveTheSignedSequence() = runTest {
+        val queue = MemoryTimeOfflineQueue()
+        fun pending(id: String, sequence: Int) = TimeMarkingRow("test-owner", id, "permit", sequence, sequence.toLong(), sealed = byteArrayOf()) to
+            MarkingRequest(id, "2026-10-19", "unit")
+        queue.readyRows = listOf(pending("first", 1), pending("second", 2))
+        var sends = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sends++
+                throw IOException("offline")
+            }
+        }
+        val completed = TimeOfflineSync(auth, queue, repository(auth, api)).sync("test-owner")
+        assertFalse(completed)
+        assertEquals(1, sends)
+        assertEquals(listOf("first"), queue.failures.map { it.first })
+        assertTrue(queue.syncedIds.isEmpty())
     }
 }

@@ -12,21 +12,21 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const path = '/api/collaborator/documents' as const;
-type Resource = { workspaceId: string };
+type Resource = { workspaceId: string; employeeId: string };
 // Macro 02, a própria pasta: só documentos do titular publicados para ele; o filtro é feito no servidor.
 const contract = defineSecurityContract({
   schemaVersion: 1, id: 'collaborator.documents.list', version: 1,
   surface: { method: 'GET', path }, exposure: 'authenticated', identity: { kind: 'active-user' },
-  authorization: { kind: 'custom', strategy: 'own-published-documents' }, resourceScope: { kind: 'owner' },
+  authorization: { kind: 'owner' }, resourceScope: { kind: 'owner' },
   input: { kind: 'none' }, effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized',
 });
 const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, Record<string, never>, Resource>({
   id: 'collaborator-documents-list-v1',
-  guarantees: ['authenticated-user', 'active-user', 'owner-checked', 'input-validated'],
+  guarantees: ['authenticated-user', 'active-user', 'owner-checked'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'COLLABORATOR_DOCUMENTS_QUERY_INVALID', kind: 'VALIDATION' });
-    return { actor, input: {}, resource: { workspaceId: actor.workspace_id } };
+    return { actor, input: {}, resource: { workspaceId: actor.workspace_id, employeeId: actor.decoded.uid } };
   },
 });
 

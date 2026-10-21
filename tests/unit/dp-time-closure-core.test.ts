@@ -12,6 +12,13 @@ const absence = (id: string, beneficiaryUid: string, status: string) => ({
   id, beneficiaryUid, beneficiaryName: null, typeName: 'Atestado', startDate: '2026-08-30', endDate: '2026-09-02', startTime: null, endTime: null,
   quantity: 4, unit: 'day' as const, status, approval: status === 'approved' ? 'tacit_timeout' as const : null, decidedBy: null, decidedAt: null, attachmentCount: 1,
 });
+const shiftSwap = (id: string, status: 'pending' | 'accepted' | 'rejected' | 'stale' = 'accepted') => ({
+  id, status, date: '2026-09-15', unitId: 'unit', unitName: 'Quiosque', requesterUid: 'u1', requesterName: 'Bia', targetUid: 'u2', targetName: 'Ana',
+  offeredShift: { startTime: '08:00', endTime: '16:00', shiftName: 'Manhã' },
+  requestedShift: { startTime: '12:00', endTime: '20:00', shiftName: 'Tarde' },
+  reason: null, requestedAt: '2026-09-10T12:00:00.000Z', decidedAt: status === 'pending' ? null : '2026-09-10T13:00:00.000Z',
+  acts: [{ action: 'submitted' as const, at: '2026-09-10T12:00:00.000Z', actorUid: 'u1', actorName: 'Bia', declaration: 'Solicito a troca.' }],
+});
 
 test('competência: intervalo do mês, janela de busca das ausências e sobreposição', () => {
   assert.deepEqual(competenceRange('2026-02'), { start: '2026-02-01', end: '2026-02-28' });
@@ -26,12 +33,20 @@ test('declaração agrupa por pessoa, ordena de forma estável e conta pendênci
   assert.deepEqual(people.map((person) => person.name), ['Ana', 'Bia']);
   assert.deepEqual(people[1].adjustments.map((item) => item.id), ['a', 'b']);
   assert.equal(people[0].absences[0].id, 'x');
-  assert.deepEqual(pendingOf(people), { adjustments: 1, absences: 1 });
+  assert.deepEqual(pendingOf(people), { adjustments: 1, absences: 1, shiftSwaps: 0 });
   // Same input in another order: same declaration and the same stamp.
   const again = buildDeclaration([adjustment('c', 'u2', 'rejected'), adjustment('a', 'u1', 'in_review'), adjustment('b', 'u1', 'approved', '2026-09-12')],
     [absence('y', 'u1', 'approved'), absence('x', 'u2', 'in_review')]);
   assert.equal(sha256(again), sha256(people));
   assert.equal(sha256({ b: 1, a: 2 }), sha256({ a: 2, b: 1 }));
+});
+
+test('troca de turno integra a declaração das duas pessoas e a pendência conta uma única vez', () => {
+  const people = buildDeclaration([], [], [shiftSwap('swap', 'pending')]);
+  assert.deepEqual(people.map((person) => [person.uid, person.shiftSwaps.map((item) => item.id)]), [['u2', ['swap']], ['u1', ['swap']]]);
+  assert.deepEqual(pendingOf(people), { adjustments: 0, absences: 0, shiftSwaps: 1 });
+  assert.deepEqual(Object.keys(itemDigests(people)), ['shift-swap:swap']);
+  assert.equal(pendingOf(buildDeclaration([], [], [shiftSwap('stale', 'stale')])).shiftSwaps, 0);
 });
 
 test('fechamento inclui toda a equipe e preserva quem teve ocorrência', () => {

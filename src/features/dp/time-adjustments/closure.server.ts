@@ -4,14 +4,15 @@ import type { DocumentData, Firestore, Query, Transaction } from 'firebase-admin
 
 import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
+import { serializeShiftSwap, SHIFT_SWAP_REQUESTS } from '@/features/dp/shift-swaps/contract.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import {
-  absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, includeClosureRoster, itemDigests, overlapsCompetence, pendingOf, sha256,
-  type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson, type ClosureRosterPerson,
+  absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, includeClosureRoster, itemDigests, normalizeClosurePerson, overlapsCompetence, pendingOf, sha256,
+  type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson, type ClosureRosterPerson, type ClosureShiftSwap,
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
 import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from './service.server';
@@ -23,7 +24,7 @@ const ITEM_LIMIT = 2000;
 const PEOPLE_LIMIT = 450;
 
 type Clock = { read(): Promise<{ instant: Date }> };
-type Dependencies = { hrDb: Firestore; clock: Clock; readRoster(): Promise<ClosureRosterPerson[]> };
+type Dependencies = { mainDb: Firestore; hrDb: Firestore; clock: Clock; readRoster(): Promise<ClosureRosterPerson[]> };
 const unavailableClock: Clock = { async read() { throw new Error('Hora Legal não configurada.'); } };
 async function readActiveOperationalRoster() {
   const snapshot = await dbAdmin.collection('users').limit(PEOPLE_LIMIT + 1).get();
@@ -32,13 +33,13 @@ async function readActiveOperationalRoster() {
     .filter((doc) => doc.get('isActive') !== false && doc.get('operacional') !== false)
     .map((doc) => ({ uid: doc.id, name: typeof doc.get('username') === 'string' && doc.get('username').trim() ? doc.get('username').trim() : null }));
 }
-const defaults: Dependencies = { hrDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock, readRoster: readActiveOperationalRoster };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock, readRoster: readActiveOperationalRoster };
 
 export type ClosureReopening = { at: string; by: string; reason: string; fromVersion: number; clockSource: 'hora_legal' | 'server' };
 export type ClosureRecord = {
   workspaceId: string; competence: string; status: 'open' | 'closed'; version: number;
   closedAt: string | null; closedBy: string | null; clockSource: 'hora_legal' | 'server' | null; manifestHash: string | null;
-  peopleCount: number; counts: { adjustments: number; absences: number }; changes: ClosureChanges | null;
+  peopleCount: number; counts: { adjustments: number; absences: number; shiftSwaps: number }; changes: ClosureChanges | null;
   reopenings: ClosureReopening[]; updatedAt: string;
 };
 
@@ -77,6 +78,21 @@ function absenceItem(record: AbsenceRequestRecord): ClosureAbsence & { beneficia
   };
 }
 
+function shiftSwapItem(id: string, raw: DocumentData): ClosureShiftSwap {
+  const request = serializeShiftSwap(id, raw as Record<string, unknown>);
+  return {
+    id: request.id, status: request.status, date: request.offeredShift.date,
+    unitId: request.offeredShift.unitId, unitName: request.offeredShift.unitName,
+    requesterUid: request.requesterUid, requesterName: request.requesterName,
+    targetUid: request.targetUid, targetName: request.targetName,
+    offeredShift: { startTime: request.offeredShift.startTime, endTime: request.offeredShift.endTime, shiftName: request.offeredShift.shiftName },
+    requestedShift: { startTime: request.requestedShift.startTime, endTime: request.requestedShift.endTime, shiftName: request.requestedShift.shiftName },
+    reason: request.reason, requestedAt: request.createdAt, decidedAt: request.decidedAt,
+    // A declaração conserva a manifestação de vontade, sem copiar IP, e-mail, agente ou chave idempotente.
+    acts: request.events.map(({ action, at, actorUid, actorName, declaration }) => ({ action, at, actorUid, actorName, declaration })),
+  };
+}
+
 function monthQueries(hrDb: Firestore, workspaceId: string, competence: string) {
   const { start, end } = competenceRange(competence);
   return {
@@ -96,8 +112,27 @@ async function readDeclaration(get: (query: Query<DocumentData>) => Promise<{ do
       .filter((record) => record.status !== 'draft' && overlapsCompetence(record, competence)).map(absenceItem));
   return { people, truncated };
 }
+
+async function readShiftSwaps(mainDb: Firestore, workspaceId: string, competence: string) {
+  const { start, end } = competenceRange(competence);
+  const snapshot = await mainDb.collection(SHIFT_SWAP_REQUESTS).where('workspaceId', '==', workspaceId)
+    .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(ITEM_LIMIT + 1).get();
+  return { items: snapshot.docs.slice(0, ITEM_LIMIT).map((doc) => shiftSwapItem(doc.id, doc.data())), truncated: snapshot.size > ITEM_LIMIT };
+}
+
+function withShiftSwaps(people: ClosurePerson[], swaps: ClosureShiftSwap[]) {
+  return buildDeclaration(
+    people.flatMap((person) => person.adjustments.map((item) => ({ ...item, employeeUid: person.uid, employeeName: person.name }))),
+    people.flatMap((person) => person.absences.map((item) => ({ ...item, beneficiaryUid: person.uid, beneficiaryName: person.name }))),
+    swaps,
+  );
+}
 function counts(people: ClosurePerson[]) {
-  return { adjustments: people.reduce((sum, entry) => sum + entry.adjustments.length, 0), absences: people.reduce((sum, entry) => sum + entry.absences.length, 0) };
+  return {
+    adjustments: people.reduce((sum, entry) => sum + entry.adjustments.length, 0),
+    absences: people.reduce((sum, entry) => sum + entry.absences.length, 0),
+    shiftSwaps: new Set(people.flatMap((entry) => entry.shiftSwaps.map((item) => item.id))).size,
+  };
 }
 
 /** Situação do mês e a declaração que o fechamento congelaria; com o mês fechado, a declaração da versão gravada. */
@@ -108,10 +143,15 @@ export async function readCompetenceClosure(context: ServerUserContext, competen
   const snapshot = await ref.get();
   const closure = snapshot.exists ? snapshot.data() as ClosureRecord : null;
   const { people, truncated } = closure?.status === 'closed'
-    ? { people: (await ref.collection('versions').doc(String(closure.version)).collection('people').limit(PEOPLE_LIMIT + 1).get()).docs.map((doc) => doc.data() as ClosurePerson), truncated: false }
-    : await readDeclaration((query) => query.get(), deps.hrDb, context.workspace_id, competence).then(async (declaration) => ({
-      ...declaration,
-      people: includeClosureRoster(declaration.people, await deps.readRoster()),
+    ? { people: (await ref.collection('versions').doc(String(closure.version)).collection('people').limit(PEOPLE_LIMIT + 1).get()).docs
+      .map((doc) => normalizeClosurePerson(doc.data() as ClosurePerson)), truncated: false }
+    : await Promise.all([
+      readDeclaration((query) => query.get(), deps.hrDb, context.workspace_id, competence),
+      readShiftSwaps(deps.mainDb, context.workspace_id, competence),
+      deps.readRoster(),
+    ]).then(([declaration, swaps, roster]) => ({
+      truncated: declaration.truncated || swaps.truncated,
+      people: includeClosureRoster(withShiftSwaps(declaration.people, swaps.items), roster),
     }));
   return { competence, closure, people, pending: pendingOf(people), counts: counts(people), truncated, can: permissions(context) };
 }
@@ -126,6 +166,9 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
   const { at, clockSource } = await actInstant(deps.clock);
   if (!competenceEnded(input.competence, at)) throw fail('PTRP_CLOSURE_TOO_EARLY', 'Só é possível fechar um mês encerrado há pelo menos um dia em todos os fusos.');
   const roster = await deps.readRoster();
+  // A competência já terminou: novas trocas não podem ser abertas. Uma troca pendente lida aqui só pode caminhar
+  // para um estado terminal, então uma leitura concorrente no máximo bloqueia conservadoramente esta tentativa.
+  const swaps = await readShiftSwaps(deps.mainDb, context.workspace_id, input.competence);
   const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
   return deps.hrDb.runTransaction(async (tx: Transaction) => {
     const snapshot = await tx.get(ref);
@@ -133,12 +176,12 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
     if ((current?.version ?? 0) !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
     const declaration = await readDeclaration((query) => tx.get(query), deps.hrDb, context.workspace_id, input.competence);
-    const people = includeClosureRoster(declaration.people, roster);
-    const { truncated } = declaration;
+    const people = includeClosureRoster(withShiftSwaps(declaration.people, swaps.items), roster);
+    const truncated = declaration.truncated || swaps.truncated;
     if (truncated || people.length > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.', 'CONFLICT');
     const pending = pendingOf(people);
-    if (pending.adjustments || pending.absences) {
-      throw fail('PTRP_CLOSURE_PENDING', `Há pedidos sem decisão (${pending.adjustments} de ajuste, ${pending.absences} de ausência). Decida-os antes de fechar.`, 'CONFLICT');
+    if (pending.adjustments || pending.absences || pending.shiftSwaps) {
+      throw fail('PTRP_CLOSURE_PENDING', `Há pedidos sem decisão (${pending.adjustments} de ajuste, ${pending.absences} de ausência, ${pending.shiftSwaps} de troca de turno). Decida-os antes de fechar.`, 'CONFLICT');
     }
     const version = (current?.version ?? 0) + 1;
     const digests = itemDigests(people);

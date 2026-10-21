@@ -263,7 +263,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx), [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx).
 
-Arquivos locais percorridos: 66.
+Arquivos locais percorridos: 71.
 
 Chamadas candidatas encontradas:
 
@@ -274,6 +274,7 @@ Chamadas candidatas encontradas:
 - `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
 - `/api/collaborator/requests` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/route.ts`](../../src/app/api/collaborator/requests/route.ts)
 - `/api/collaborator/requests/` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/[requestId]/route.ts`](../../src/app/api/collaborator/requests/%5BrequestId%5D/route.ts)
+- `/api/collaborator/requests/shift-swaps` — interface [`src/features/dp/shift-swaps/client.ts`](../../src/features/dp/shift-swaps/client.ts); rota candidata [`src/app/api/collaborator/requests/shift-swaps/route.ts`](../../src/app/api/collaborator/requests/shift-swaps/route.ts)
 - `/api/dev/transport-voucher-templates/` — interface [`src/features/hr/requests/collaborator-requests-page.tsx`](../../src/features/hr/requests/collaborator-requests-page.tsx); rota candidata [`src/app/api/dev/transport-voucher-templates/[kind]/route.ts`](../../src/app/api/dev/transport-voucher-templates/%5Bkind%5D/route.ts)
 - `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
 - `/api/dp/absence-retention` — interface [`src/features/dp/absences/requests/retention-client.ts`](../../src/features/dp/absences/requests/retention-client.ts); rota candidata [`src/app/api/dp/absence-retention/route.ts`](../../src/app/api/dp/absence-retention/route.ts)
@@ -281,12 +282,14 @@ Chamadas candidatas encontradas:
 - `/api/dp/responsibility-coverages` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-coverages/route.ts`](../../src/app/api/dp/responsibility-coverages/route.ts)
 - `/api/dp/responsibility-tasks` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/route.ts`](../../src/app/api/dp/responsibility-tasks/route.ts)
 - `/api/dp/responsibility-tasks/` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/[taskId]/route.ts`](../../src/app/api/dp/responsibility-tasks/%5BtaskId%5D/route.ts)
+- `/api/dp/time-recording/` — interface [`src/features/dp/time-adjustments/fiscal-exports-card.tsx`](../../src/features/dp/time-adjustments/fiscal-exports-card.tsx)
 - `/api/dp/time-recording/adjustments` — interface [`src/features/dp/time-adjustments/adjustment-panel.tsx`](../../src/features/dp/time-adjustments/adjustment-panel.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/adjustments/` — interface [`src/features/dp/time-adjustments/review-section.tsx`](../../src/features/dp/time-adjustments/review-section.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts`](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts)
 - `/api/dp/time-recording/adjustments/review` — interface [`src/features/dp/time-adjustments/review-section.tsx`](../../src/features/dp/time-adjustments/review-section.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/review/route.ts`](../../src/app/api/dp/time-recording/adjustments/review/route.ts)
 - `/api/dp/time-recording/closing-packages` — interface [`src/features/dp/time-adjustments/closing-package-card.tsx`](../../src/features/dp/time-adjustments/closing-package-card.tsx); rota candidata [`src/app/api/dp/time-recording/closing-packages/route.ts`](../../src/app/api/dp/time-recording/closing-packages/route.ts)
 - `/api/dp/time-recording/closures` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closures/route.ts`](../../src/app/api/dp/time-recording/closures/route.ts)
 - `/api/dp/time-recording/closures/` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closures/[competence]/route.ts`](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts)
+- `/api/dp/time-recording/fiscal-options` — interface [`src/features/dp/time-adjustments/fiscal-exports-card.tsx`](../../src/features/dp/time-adjustments/fiscal-exports-card.tsx); rota candidata [`src/app/api/dp/time-recording/fiscal-options/route.ts`](../../src/app/api/dp/time-recording/fiscal-options/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/mirrors` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/route.ts`](../../src/app/api/dp/time-recording/mirrors/route.ts)
 - `/api/dp/time-recording/mirrors/pdf` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/pdf/route.ts`](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts)
@@ -311,6 +314,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.responsibilities.manage` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
 - `dp.responsibilities.receiveUnassignedAlerts` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
 - `dp.schedules.edit` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
+- `dp.settings.manageTime` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
 - `dp.timeClosure.close` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
 - `dp.timeClosure.reopen` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
 
@@ -482,7 +486,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx).
 
-Arquivos locais percorridos: 48.
+Arquivos locais percorridos: 49.
 
 Chamadas candidatas encontradas:
 
@@ -545,7 +549,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 37.
 
 Chamadas candidatas encontradas:
 
@@ -554,6 +558,7 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
+- `/api/hr/employee-documents/publication-policy` — interface [`src/features/hr/documents/publication-policy-control.tsx`](../../src/features/hr/documents/publication-policy-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication-policy/route.ts`](../../src/app/api/hr/employee-documents/publication-policy/route.ts)
 - `/api/hr/employee-documents/summary` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
 - `/api/hr/employee-documents/visibility` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
 
@@ -961,7 +966,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 86.
+Arquivos locais percorridos: 87.
 
 Chamadas candidatas encontradas:
 
@@ -976,10 +981,12 @@ Chamadas candidatas encontradas:
 - `/api/hr/employee-documents/access` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
 - `/api/hr/employee-documents/analyze-upload` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/analyze-upload/route.ts`](../../src/app/api/hr/employee-documents/analyze-upload/route.ts)
 - `/api/hr/employee-documents/batches` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/batches/route.ts`](../../src/app/api/hr/employee-documents/batches/route.ts)
+- `/api/hr/employee-documents/classification` — interface [`src/features/hr/documents/legacy-document-classification.tsx`](../../src/features/hr/documents/legacy-document-classification.tsx); rota candidata [`src/app/api/hr/employee-documents/classification/route.ts`](../../src/app/api/hr/employee-documents/classification/route.ts)
 - `/api/hr/employee-documents/confirm` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/confirm/route.ts`](../../src/app/api/hr/employee-documents/confirm/route.ts)
 - `/api/hr/employee-documents/item` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/item/route.ts`](../../src/app/api/hr/employee-documents/item/route.ts)
 - `/api/hr/employee-documents/publication` — interface [`src/features/hr/documents/publication-control.tsx`](../../src/features/hr/documents/publication-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication/route.ts`](../../src/app/api/hr/employee-documents/publication/route.ts)
 - `/api/hr/employee-documents/reanalyze` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/reanalyze/route.ts`](../../src/app/api/hr/employee-documents/reanalyze/route.ts)
+- `/api/hr/employee-documents/status` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
 - `/api/hr/employee-documents/visibility` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
 - `/api/hr/functions` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/functions/route.ts`](../../src/app/api/hr/functions/route.ts)
 - `/api/hr/functions/` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/functions/[functionId]/route.ts`](../../src/app/api/hr/functions/%5BfunctionId%5D/route.ts)

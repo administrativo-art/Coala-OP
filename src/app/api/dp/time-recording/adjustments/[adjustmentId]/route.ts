@@ -23,7 +23,7 @@ const contract = defineSecurityContract({
 });
 const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, AdjustmentDecisionInput, { workspaceId: string; adjustmentId: string }>({
   id: 'dp-time-adjustments-decide-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-cancels-or-reviewer-decides', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request, routeContext }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const route = adjustmentRouteSchema.safeParse(await routeContext.params);

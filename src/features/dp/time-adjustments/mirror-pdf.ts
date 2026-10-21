@@ -7,6 +7,7 @@ import { hoursText, MIRROR_RENDERER_VERSION, MIRROR_TITLE, type MirrorAgreement,
 const KIND: Record<string, string> = { include: 'Inclusão', discard: 'Desconsideração', correct: 'Correção (desconsidera e inclui)' };
 const ADJUSTMENT_STATUS: Record<string, string> = { in_review: 'em análise', approved: 'aprovado', rejected: 'recusado', cancelled: 'cancelado' };
 const ABSENCE_STATUS: Record<string, string> = { approved: 'aprovada', rejected: 'recusada', cancelled: 'cancelada', submitted: 'enviada', in_review: 'em análise', adjustments_requested: 'ajustes pedidos' };
+const SHIFT_SWAP_STATUS: Record<string, string> = { pending: 'pendente', accepted: 'aceita', rejected: 'recusada', cancelled: 'cancelada', stale: 'não aplicada' };
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const dateBR = (value: string) => value.slice(0, 10).split('-').reverse().join('/');
@@ -21,6 +22,7 @@ export const mirrorFileName = (snapshot: MirrorSnapshot) => `espelho-ponto-${sna
  * continua impressa quando existir.
  */
 export async function renderMirrorPdf(snapshot: MirrorSnapshot, snapshotHash: string, agreement: MirrorAgreement | null, options: { preview?: boolean } = {}): Promise<Buffer> {
+  const shiftSwaps = snapshot.shiftSwaps ?? [];
   const document = await PDFDocument.create({ updateMetadata: false });
   const created = new Date(Date.parse(snapshot.generatedAt));
   document.setTitle(`${MIRROR_TITLE} - ${snapshot.competence} - versão ${snapshot.closureVersion}`);
@@ -105,6 +107,16 @@ export async function renderMirrorPdf(snapshot: MirrorSnapshot, snapshotHash: st
   if (!snapshot.absences.length) paragraph('Nenhuma ausência no mês.', 8.5);
   for (const item of snapshot.absences) {
     paragraph(`${item.typeName} · ${item.startDate === item.endDate ? dateBR(item.startDate) : `${dateBR(item.startDate)} a ${dateBR(item.endDate)}`}${item.startTime && item.endTime ? ` ${item.startTime}-${item.endTime}` : ''} · ${item.quantity} ${item.unit === 'hour' ? 'h' : item.quantity === 1 ? 'dia' : 'dias'} · ${ABSENCE_STATUS[item.status] ?? item.status}${item.approval === 'tacit_timeout' ? ' por decurso de prazo' : item.approval === 'review' ? ' por análise' : ''}${item.decidedBy ? ` · decidido por ${actor(item.decidedBy)} em ${whenBR(item.decidedAt)}` : ''}.`, 8.5);
+  }
+  paragraph('Trocas de turno (manifestações autenticadas)', 9, bold);
+  if (!shiftSwaps.length) paragraph('Nenhuma troca de turno no mês.', 8.5);
+  for (const item of shiftSwaps) {
+    const requester = item.requesterUid === snapshot.employee.uid;
+    const own = requester ? item.offeredShift : item.requestedShift;
+    const incoming = requester ? item.requestedShift : item.offeredShift;
+    const counterpart = requester ? item.targetName : item.requesterName;
+    paragraph(`${dateBR(item.date)} · ${SHIFT_SWAP_STATUS[item.status] ?? item.status} · ${item.unitName} · meu turno ${own.startTime}-${own.endTime} por ${incoming.startTime}-${incoming.endTime}, com ${counterpart}.${item.reason ? ` Motivo: ${item.reason}.` : ''}`, 8.5);
+    for (const act of item.acts) paragraph(`${act.actorName} em ${whenBR(act.at)}: ${act.declaration}`, 7.5, regular, muted);
   }
 
   y -= 8;

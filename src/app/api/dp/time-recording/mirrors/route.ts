@@ -24,7 +24,7 @@ const getContract = defineSecurityContract({
 });
 const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; employeeUid?: string }, Resource>({
   id: 'dp-time-mirror-status-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const parsed = mirrorQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
@@ -41,7 +41,7 @@ const postContract = defineSecurityContract({
 });
 const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, MirrorActionInput, Resource>({
   id: 'dp-time-mirror-act-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'PTRP_MIRROR_QUERY_INVALID', kind: 'VALIDATION' });

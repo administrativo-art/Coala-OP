@@ -44,7 +44,7 @@ test('AEJ segue o leiaute 002: registros, ordem, E/S/D, origem, motivo, trailer 
   assert.ok(pkg.bytes.includes(Buffer.from('saída', 'latin1')));
 });
 
-test('AEJ avisa dia sem escala, turno noturno e batidas ímpares, sem inventar horário', () => {
+test('AEJ avisa dia sem escala e batidas ímpares, sem inventar horário', () => {
   const data = input();
   data.employees[0].shifts = [];
   data.employees[0].inclusions = [];
@@ -52,6 +52,20 @@ test('AEJ avisa dia sem escala, turno noturno e batidas ímpares, sem inventar h
   assert.deepEqual(pkg.warnings.map((item) => item.code).sort(), ['NO_SHIFT', 'ODD_MARKINGS']);
   assert.match(pkg.bytes.toString('latin1'), /05\|1\|2026-08-12T08:02:00-0300\|1\|E\|001\|O\|\|/);
   assert.equal(aejText('a|b\r\nc 😅', 150), 'a b c ?');
+});
+
+test('AEJ representa turno noturno e a saída após meia-noite no mesmo dia de jornada', () => {
+  const data = input();
+  data.employees[0].shifts = [{ date: '2026-08-12', startTime: '22:00', endTime: '05:00', overnight: true, netMinutes: 420, breaks: [] }];
+  data.employees[0].markings = [
+    { workDate: '2026-08-12', markedAt: '2026-08-12T22:00:00-0300', nsr: 10, discardReason: null },
+    { workDate: '2026-08-12', markedAt: '2026-08-13T05:00:00-0300', nsr: 11, discardReason: null },
+  ];
+  data.employees[0].inclusions = [];
+  const pkg = generateAej(data);
+  assert.equal(pkg.warnings.some((item) => item.code === 'NIGHT_SHIFT'), false);
+  assert.match(pkg.bytes.toString('latin1'), /04\|HC001\|420\|2200\|0500\|\|/);
+  assert.match(pkg.bytes.toString('latin1'), /2026-08-13T05:00:00-0300\|1\|S\|001\|O/);
 });
 
 test('horário contratual do dia vem da escala: fixo vira pares; intervalo livre fica só início e fim', () => {

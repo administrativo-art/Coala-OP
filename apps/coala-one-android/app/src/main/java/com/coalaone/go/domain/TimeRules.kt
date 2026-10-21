@@ -100,6 +100,18 @@ object TimeRules {
         return (originals + included).sortedBy { it.time }
     }
     fun receiptFileName(markedAt: String, nsr: Long) = "comprovante-ponto-${markedAt.take(10)}-nsr-$nsr.pdf"
+    fun durationText(minutes: Int, signed: Boolean = false): String {
+        val sign = if (signed && minutes > 0) "+" else if (minutes < 0) "−" else ""
+        val absolute = Math.abs(minutes)
+        return "$sign${absolute / 60}h${String.format("%02d", absolute % 60)}"
+    }
+    fun bankNatureText(nature: String) = when (nature) {
+        "bank_credit" -> "Crédito no banco"
+        "bank_debit" -> "Débito no banco"
+        "payroll_overtime" -> "Hora extra para a folha"
+        "payroll_discount" -> "Desconto para a folha"
+        else -> "A conferir pelo DP"
+    }
 
     /** Mirrors createAdjustmentSchema: what each kind needs, and the 10-character justification. */
     fun adjustmentRequest(attemptId: String, workDate: String, kind: String, targetReceiptId: String?, newTime: String, executionUnitId: String?, reason: String, today: LocalDate): AdjustmentRequest {

@@ -39,7 +39,7 @@ test('espelho mantém a original desconsiderada marcada, acrescenta a incluída 
   assert.equal(MIRROR_PREVIEW_SNAPSHOT.days.find((item) => item.date === '2026-01-11')!.shift, 'Folga');
   // Dias sem escala, batida nem ausência ficam fora.
   assert.equal(MIRROR_PREVIEW_SNAPSHOT.days.some((item) => item.date === '2026-01-20'), false);
-  const included = buildMirrorSnapshot({ ...MIRROR_PREVIEW_INPUT(), declaration: { uid: 'p', name: 'P', absences: [], adjustments: [{ id: 'i', workDate: '2026-01-05', kind: 'include', status: 'approved',
+  const included = buildMirrorSnapshot({ ...MIRROR_PREVIEW_INPUT(), declaration: { uid: 'p', name: 'P', absences: [], shiftSwaps: [], adjustments: [{ id: 'i', workDate: '2026-01-05', kind: 'include', status: 'approved',
     original: null, inclusion: { markedAt: '2026-01-05T17:00:00-0300' }, reason: 'Esqueci de bater a saída.', requestedBy: 'p', requestedAt: 'x', decidedBy: 'dp', decidedAt: 'y', decisionReason: null }] } });
   assert.equal(included.days[0].punches.at(-1)!.mark, 'included');
   assert.equal(mirrorSnapshotHash(MIRROR_PREVIEW_SNAPSHOT), mirrorSnapshotHash(structuredClone(MIRROR_PREVIEW_SNAPSHOT)));
@@ -53,6 +53,12 @@ function MIRROR_PREVIEW_INPUT() {
 test('PDF sai com o bloco de assinaturas (ou a concordância antiga), mesmo com emoji no motivo', async () => {
   const snapshot = structuredClone(MIRROR_PREVIEW_SNAPSHOT);
   snapshot.adjustments[0].reason = 'Bati duas vezes 😅 na saída → intervalo';
+  snapshot.shiftSwaps = [{ id: 'swap', status: 'accepted', date: '2026-01-05', unitId: 'u', unitName: 'Quiosque',
+    requesterUid: 'preview', requesterName: 'Pessoa colaboradora exemplo', targetUid: 'colega', targetName: 'Colega',
+    offeredShift: { startTime: '08:00', endTime: '16:00', shiftName: 'Manhã' }, requestedShift: { startTime: '12:00', endTime: '20:00', shiftName: 'Tarde' },
+    reason: 'Compromisso pessoal.', requestedAt: '2026-01-02T12:00:00.000Z', decidedAt: '2026-01-02T13:00:00.000Z',
+    acts: [{ action: 'submitted', at: '2026-01-02T12:00:00.000Z', actorUid: 'preview', actorName: 'Pessoa colaboradora exemplo', declaration: 'Solicito a troca.' },
+      { action: 'accepted', at: '2026-01-02T13:00:00.000Z', actorUid: 'colega', actorName: 'Colega', declaration: 'Aceito a troca.' }] }];
   const pending = await renderMirrorPdf(snapshot, 'a'.repeat(64), null);
   const agreed = await renderMirrorPdf(snapshot, 'a'.repeat(64), { at: '2026-02-03T10:00:00.000Z', clockSource: 'hora_legal', uid: 'preview', snapshotHash: 'a'.repeat(64), channel: 'mobile' });
   assert.ok((await PDFDocument.load(pending)).getPageCount() >= 1);

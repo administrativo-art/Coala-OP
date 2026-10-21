@@ -82,6 +82,7 @@ test('ausência sem análise no prazo da regra é aprovada por decurso; motivo f
   await hrDbAdmin.collection('dp_absenceTypes').doc(`${typeId}-sem-decurso`).set({ ...tacitType, lineageId: `${typeId}-sem-decurso`,
     name: 'Ausência sem decurso', policies: [plainPolicy] });
   const person = await actorFor(personUid);
+  const reviewer = await actorFor(reviewerUid);
   const startDate = addDays(belemCivilDate(new Date()), 5);
   const request = { absenceTypeId: typeId, startDate, endDate: startDate, unit: 'day' };
   const create = (reason) => createAbsenceDraft(person, { idempotencyKey: randomUUID(), request: { ...request, startDate: addDays(startDate, reason ? 0 : 7), endDate: addDays(startDate, reason ? 0 : 7) }, preparationIds: [], ...(reason ? { reason } : {}) });
@@ -120,4 +121,25 @@ test('ausência sem análise no prazo da regra é aprovada por decurso; motivo f
   // Ator de sistema não pode decidir fora da rotina nem ações que não sejam aprovar.
   await assert.rejects(actOnAbsenceRequest(person, notDue.id, { action: 'approve', expectedVersion: 2, operationId: randomUUID() }, undefined, { tacitTimeout: { days: 3 } }),
     { code: 'ABSENCE_ACTION_FORBIDDEN' });
+
+  // Competência fechada bloqueia criação, decisão manual e o mesmo caminho automático do decurso.
+  const closedWorkspace = `absence-closed-${suffix}`;
+  const closedPerson = { ...person, workspace_id: closedWorkspace };
+  const closedReviewer = { ...reviewer, workspace_id: closedWorkspace };
+  const guarded = await createAbsenceDraft(closedPerson, { idempotencyKey: randomUUID(), request, preparationIds: [] });
+  const submitted = await actOnAbsenceRequest(closedPerson, guarded.id,
+    { action: 'submit', expectedVersion: guarded.version, operationId: randomUUID() });
+  const closureRef = hrDbAdmin.collection('ptrp_competenceClosures').doc(`${closedWorkspace}_${startDate.slice(0, 7)}`);
+  t.after(() => closureRef.delete());
+  await closureRef.set({ workspaceId: closedWorkspace, competence: startDate.slice(0, 7), status: 'closed', version: 1 });
+  await hrDbAdmin.collection('dp_absenceRequests').doc(guarded.id).update({
+    'reviewSla.startedAt': ago(4), 'reviewSla.deadlineAt': ago(3),
+  });
+  await assert.rejects(actOnAbsenceRequest(closedReviewer, guarded.id,
+    { action: 'approve', expectedVersion: submitted.version, operationId: randomUUID() }), { code: 'PTRP_COMPETENCE_CLOSED' });
+  const blockedTacit = await applyTacitAbsenceApprovals(closedWorkspace, now);
+  assert.deepEqual([blockedTacit.approved, blockedTacit.skipped, blockedTacit.skippedCodes.PTRP_COMPETENCE_CLOSED], [0, 1, 1]);
+  assert.equal((await hrDbAdmin.collection('dp_absenceRequests').doc(guarded.id).get()).get('status'), 'in_review');
+  await assert.rejects(createAbsenceDraft(closedPerson, { idempotencyKey: randomUUID(), request, preparationIds: [] }),
+    { code: 'PTRP_COMPETENCE_CLOSED' });
 });

@@ -4,7 +4,8 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPEmployeeIdentity, readRepPForAej, REP_P_DEVELOPER_CNPJ, signPtrpDetached } from '@/features/dp/rep-p/service.server';
-import { bankMonthForAej } from '@/features/dp/time-bank/service.server';
+import { bankMonthForAej, bankMovementsForAej } from '@/features/dp/time-bank/service.server';
+import { bankLinesWithMovements, overnightWorkDate, type BankManualMovement } from '@/features/dp/time-bank/core';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -21,7 +22,8 @@ const DEVELOPER_NAME = 'CT SORVETES LTDA';
 const MAX_DAYS = 62;
 
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached;
-  readBank?: (workspaceId: string, competence: string, uid: string, actorUid: string) => ReturnType<typeof bankMonthForAej> };
+  readBank?: (workspaceId: string, competence: string, uid: string, actorUid: string) => ReturnType<typeof bankMonthForAej>;
+  readMovements?: (workspaceId: string, uid: string, competences: string[]) => Promise<BankManualMovement[]> };
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(), readArp: readRepPForAej, readIdentity: readRepPEmployeeIdentity, sign: signPtrpDetached };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' = 'VALIDATION') {
@@ -35,6 +37,11 @@ function months(start: string, end: string) {
     cursor = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
   }
   return list;
+}
+function mondayOf(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - (value.getUTCDay() + 6) % 7);
+  return value.toISOString().slice(0, 10);
 }
 /** Falha do gerador (ex.: motivo vazio) vira erro público sem detalhe interno. */
 function generateAejSafely(input: Parameters<typeof generateAej>[0]) {
@@ -51,13 +58,21 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
   // Banco apurado nos mesmos bancos de dados do AEJ (o REP-P e o PTRP moram no coala-rh).
   const readBank = deps.readBank ?? ((workspaceId: string, competence: string, uid: string, actorUid: string) =>
     bankMonthForAej(workspaceId, competence, uid, actorUid, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.hrDb }));
+  const readMovements = deps.readMovements ?? ((workspaceId: string, uid: string, competences: string[]) =>
+    bankMovementsForAej(workspaceId, uid, competences, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.hrDb }));
   const days = (Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`)) / 86_400_000 + 1;
   if (days < 1 || days > MAX_DAYS) throw fail('PTRP_AEJ_RANGE_INVALID', `Escolha um período de 1 a ${MAX_DAYS} dias.`);
   if (!deps.developerEmail) throw fail('PTRP_AEJ_DEVELOPER_EMAIL_MISSING', 'Configure o e-mail da desenvolvedora do PTRP (PTRP_DEVELOPER_EMAIL) antes de gerar o AEJ.', 'CONFLICT');
   const competences = months(input.startDate, input.endDate);
+  // Até seis dias anteriores preservam o teto semanal quando o período começa no meio da semana/competência.
+  const bankCompetenceCandidates = months(mondayOf(input.startDate), input.endDate);
   const closures = await deps.hrDb.getAll(...competences.map((competence) => deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, `${competence}-01`))));
   const open = competences.filter((_, index) => closures[index].get('status') !== 'closed');
   if (open.length) throw fail('PTRP_AEJ_COMPETENCE_OPEN', `Feche antes a competência ${open.join(', ')}: o AEJ sai só do tratamento concluído.`, 'CONFLICT');
+  const contextCompetences = bankCompetenceCandidates.filter((competence) => !competences.includes(competence));
+  const contextClosures = contextCompetences.length ? await deps.hrDb.getAll(...contextCompetences
+    .map((competence) => deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, `${competence}-01`)))) : [];
+  const bankCompetences = [...contextCompetences.filter((_, index) => contextClosures[index].get('status') === 'closed'), ...competences];
 
   const arp = await deps.readArp(context.workspace_id, input.establishmentId, input.startDate, input.endDate);
   // O registro 08 usa a razão social fixa da desenvolvedora: só vale com o CNPJ dela no perfil fiscal.
@@ -87,27 +102,32 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
       .map(aejShiftOf).filter((shift): shift is AejShift => shift !== null && shift.date >= input.startDate && shift.date <= input.endDate);
     // Registro 07: folga sem trabalho como DSR, falta não justificada como "2" e, por dia, a soma dos créditos (inclusão) e dos
     // débitos (compensação) do banco apurado. Qual folga é o DSR da semana e a natureza do débito são pendências do plano.
-    const bank = await Promise.all(competences.map((competence) => readBank(context.workspace_id, competence, person.uid, context.decoded.uid)));
+    const [bank, movements] = await Promise.all([
+      Promise.all(bankCompetences.map((competence) => readBank(context.workspace_id, competence, person.uid, context.decoded.uid))),
+      readMovements(context.workspace_id, person.uid, bankCompetences),
+    ]);
     const bankDays = bank.flatMap((month) => month.days);
+    const bankLines = bankLinesWithMovements(bank, movements)
+      .filter((item) => item.date >= input.startDate && item.date <= input.endDate);
+    const bankDates = [...new Set(bankLines.map((item) => item.date))];
     const absences: AejAbsence[] = [
       ...bankDays.filter((day) => day.kind === 'rest_day' && !day.workedMinutes).map((day) => ({ date: day.date, kind: '1' as const })),
       ...bankDays.filter((day) => day.unjustifiedAbsence).map((day) => ({ date: day.date, kind: '2' as const })),
-      ...bankDays.flatMap((day) => (['bank_credit', 'bank_debit'] as const).flatMap((nature) => {
-        const minutes = day.lines.filter((line) => line.nature === nature).reduce((total, line) => total + line.minutes, 0);
-        return minutes ? [{ date: day.date, kind: '3' as const, minutes, movement: nature === 'bank_credit' ? '1' as const : '2' as const }] : [];
+      ...bankDates.flatMap((date) => (['bank_credit', 'bank_debit'] as const).flatMap((nature) => {
+        const minutes = bankLines.filter((item) => item.date === date && item.line.nature === nature)
+          .reduce((total, item) => total + item.line.minutes, 0);
+        return minutes ? [{ date, kind: '3' as const, minutes, movement: nature === 'bank_credit' ? '1' as const : '2' as const }] : [];
       })),
     ];
     return {
       cpf: person.cpf, name: person.name, shifts, absences, pendingDays: bankDays.filter((day) => day.issues.includes('MISSING_DAY')).map((day) => day.date),
       markings: arp.markings.filter((item) => item.employeeCpf === person.cpf)
-        .map((item) => ({ workDate: item.workDate, markedAt: item.markedAt, nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
+        .map((item) => ({ workDate: overnightWorkDate(item.workDate, item.markedAt, shifts), markedAt: item.markedAt,
+          nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
       inclusions: active.filter((item) => item.type === 'inclusion' && item.employeeUid === person.uid && item.markedAt)
         .map((item) => ({ workDate: String(item.workDate), markedAt: String(item.markedAt), reason: String(item.motivo) })),
     };
   }));
-  // Turno noturno ainda não é suportado: falta a redução da hora noturna e o pareamento de batidas entre dois dias.
-  const night = employees.flatMap((employee) => employee.shifts.filter((shift) => shift.overnight).map((shift) => shift.date));
-  if (night.length) throw fail('PTRP_AEJ_NIGHT_SHIFT', `Há turno noturno no período (${[...new Set(night)].slice(0, 3).join(', ')}); o AEJ ainda não trata a hora noturna.`, 'CONFLICT');
   const cno = arp.profile.cnoCaepf?.replace(/\D/g, '') ?? '';
   const pkg = generateAejSafely({
     employer: { cnpj: arp.profile.employerCnpj, legalName: arp.profile.employerLegalName, caepf: cno.length === 14 ? cno : null, cno: cno.length === 12 ? cno : null },

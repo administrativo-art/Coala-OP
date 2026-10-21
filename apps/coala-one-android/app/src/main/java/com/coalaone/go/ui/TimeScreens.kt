@@ -64,6 +64,39 @@ private fun sharePdf(context: Context, file: File) {
     val send = Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM, pdfUri(context, file)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     context.startActivity(Intent.createChooser(send, "Compartilhar comprovante"))
 }
+private fun openFile(context: Context, file: File, mimeType: String): Boolean = try {
+    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(pdfUri(context, file), mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)); true
+} catch (_: ActivityNotFoundException) { false } catch (_: IllegalArgumentException) { false }
+private fun shareFile(context: Context, file: File, mimeType: String, title: String): Boolean = try {
+    val send = Intent(Intent.ACTION_SEND).setType(mimeType).putExtra(Intent.EXTRA_STREAM, pdfUri(context, file)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(send, title)); true
+} catch (_: ActivityNotFoundException) { false } catch (_: IllegalArgumentException) { false }
+
+/** Native open/share/save contract for the point mirror. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun FileSheet(title: String, subtitle: String, fileName: String, mimeType: String,
+    load: (String, (File) -> Unit) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var problem by remember { mutableStateOf<String?>(null) }
+    var pending by remember { mutableStateOf<File?>(null) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(mimeType)) { uri ->
+        val file = pending ?: return@rememberLauncherForActivityResult
+        if (uri != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } }
+            .onFailure { problem = "Não foi possível salvar o arquivo." }
+    }
+    // Personal files never outlive the sheet. Logout and leaving Ponto repeat the cleanup defensively.
+    DisposableEffect(Unit) { onDispose { File(context.cacheDir, "time-documents").deleteRecursively() } }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.surface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(subtitle, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Action("Abrir documento") { load("view") { if (!openFile(context, it, mimeType)) problem = "Nenhum aplicativo compatível neste aparelho. Use Compartilhar ou Salvar." } }
+            Action("Compartilhar", secondary = true) { load("download") { if (!shareFile(context, it, mimeType, "Compartilhar documento")) problem = "Não foi possível abrir o compartilhamento neste aparelho." } }
+            Action("Salvar no aparelho", secondary = true) { load("download") { pending = it; save.launch(fileName) } }
+            problem?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun ReceiptSheet(punch: DayPunch, markedAt: String, vm: TimeViewModel, onDismiss: () -> Unit) {
@@ -133,6 +166,11 @@ private fun sharePdf(context: Context, file: File) {
 
 @Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val context = LocalContext.current
+    val online = rememberOnline()
+    DisposableEffect(Unit) {
+        onDispose { listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() } }
+    }
     LaunchedEffect(Unit) { vm.load() }
     // Back from the background the official reading is taken again (one read), never on a timer.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -148,6 +186,7 @@ private fun sharePdf(context: Context, file: File) {
     var confirming by rememberSaveable { mutableStateOf(false) }
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
+    var selectedMirror by remember { mutableStateOf(false) }
     asking?.let { date -> AdjustmentScreen(vm, date) { asking = null; vm.clearAdjustment() }; return }
     val units = state.options?.executionUnits.orEmpty()
     val today = state.today.toString()
@@ -158,21 +197,40 @@ private fun sharePdf(context: Context, file: File) {
     val unitName = units.firstOrNull { it.id == state.unitId }?.name.orEmpty()
     fun markedAtOf(punch: DayPunch) = state.markings.firstOrNull { it.receiptId == punch.receiptId }?.markedAt ?: today
     receipt?.let { (punch, markedAt) -> ReceiptSheet(punch, markedAt, vm) { receipt = null } }
+    if (selectedMirror) FileSheet("Espelho de ponto", "Competência ${state.month} · versão ${state.mirror?.closure?.version ?: "—"}",
+        "espelho-ponto-${state.month}.pdf", "application/pdf", { _, then -> vm.mirrorPdf(context.cacheDir, then) }) { selectedMirror = false }
+    LaunchedEffect(tab, state.month) {
+        when (tab) {
+            "bank" -> if (state.bankDate != (if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()).toString()) vm.loadBank()
+            "mirror" -> if (state.mirrorCompetence != state.month.toString()) vm.loadMirror()
+        }
+    }
     // One main action: the punch, confirmed in the footer itself; the history has no footer.
     val footer: (@Composable ColumnScope.() -> Unit)? = if (tab != "today") null else { {
         if (confirming) {
-            Text("Registrar a próxima batida (sugerida: $next) em $unitName? Vale a hora oficial do momento do envio.", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-            FooterPair("Voltar", !feedback.busy, { confirming = false }, "Confirmar registro", !feedback.busy) { confirming = false; vm.record() }
-        } else Action("Registrar ponto", feedback.busy, enabled = TimeRules.canRecord(state.options, state.unitId)) { confirming = true }
+            Text(if (online) "Registrar a próxima batida (sugerida: $next) em $unitName? Vale a hora oficial do momento do envio."
+                else "Preservar a próxima batida (sugerida: $next) em $unitName neste aparelho? Ela receberá NSR e comprovante quando a internet voltar.",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+            FooterPair("Voltar", !feedback.busy, { confirming = false }, if (online) "Confirmar registro" else "Preservar no aparelho", !feedback.busy) {
+                confirming = false; vm.record(online)
+            }
+        } else Action(if (online) "Registrar ponto" else "Registrar ponto offline", feedback.busy,
+            enabled = TimeRules.canRecord(state.options, state.unitId)) { confirming = true }
     } }
     Page("Ponto", feedback, onBack, footer = footer, onRefresh = { vm.load() }, header = {
         TopBar("Ponto", busy = feedback.busy, onBack = onBack)
         // The punch needs one unit: no "Todas as unidades" here.
         if (units.isNotEmpty()) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), feedback.busy || confirming) { vm.unit(it) }
     }) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PillChoice("Hoje", tab == "today") { tab = "today" }
-            PillChoice("Histórico", tab == "history") { tab = "history"; confirming = false }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PillChoice("Hoje", tab == "today") { tab = "today" }
+                PillChoice("Histórico", tab == "history") { tab = "history"; confirming = false }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PillChoice("Banco de horas", tab == "bank") { tab = "bank"; confirming = false }
+                PillChoice("Espelho", tab == "mirror") { tab = "mirror"; confirming = false }
+            }
         }
         if (tab == "today") {
             OfficialClockCard(state)
@@ -180,6 +238,23 @@ private fun sharePdf(context: Context, file: File) {
                 Column(Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(reason, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                     if (state.options?.officialClock?.available != true) TextButton({ vm.refreshClock() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Tentar de novo", color = Tokens.wine) }
+                }
+            }
+            state.offlineIssue?.let { issue -> Text("O registro online continua disponível, mas a contingência offline não pôde ser renovada: $issue",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp)) }
+            if (state.offlineRows.isNotEmpty()) {
+                val blocked = state.offlineRows.count { it.state == "BLOCKED" }
+                Text(if (blocked == 0) "${state.offlineRows.size} ${if (state.offlineRows.size == 1) "marcação preservada aguarda" else "marcações preservadas aguardam"} sincronização."
+                    else "$blocked ${if (blocked == 1) "marcação precisa" else "marcações precisam"} de conferência do DP; nada foi apagado.",
+                    color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
+            }
+            state.lastOffline?.let { local ->
+                CardBlock(selected = true) {
+                    Text("Marcação preservada no aparelho · ${TimeRules.secondsOf(local.markedAt)}", style = MaterialTheme.typography.titleMedium)
+                    Text("Aguardando internet. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    Action("Ok", secondary = true) { vm.dismissOffline() }
                 }
             }
             state.last?.let { last ->
@@ -201,8 +276,85 @@ private fun sharePdf(context: Context, file: File) {
                 Text("Próxima: $next", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
             TextButton({ asking = today }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Pedir ajuste de ponto", color = Tokens.wine) }
-        } else HistoryTab(state, feedback.busy, vm, onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it })
+        } else if (tab == "history") HistoryTab(state, feedback.busy, vm, onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it })
+        else if (tab == "bank") BankTab(state, feedback.busy, vm)
+        else MirrorTab(state, feedback.busy, vm, onMirror = { selectedMirror = true })
     }
+}
+
+@Composable private fun AuxiliaryMonthPicker(state: TimeState, busy: Boolean, vm: TimeViewModel) {
+    val first = state.month.atDay(1)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        NavSquare("‹", "Mês anterior", !busy) { vm.selectAuxiliaryMonth(state.month.minusMonths(1)) }
+        Text(first.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) },
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+        NavSquare("›", "Próximo mês", !busy && state.month.isBefore(java.time.YearMonth.from(state.today))) { vm.selectAuxiliaryMonth(state.month.plusMonths(1)) }
+    }
+}
+
+@Composable private fun BankTab(state: TimeState, busy: Boolean, vm: TimeViewModel) {
+    AuxiliaryMonthPicker(state, busy, vm)
+    val response = state.bank
+    val statement = response?.statement
+    when {
+        response == null && !busy -> EmptyState("Banco ainda não carregado", "Puxe a tela para baixo para tentar novamente.")
+        response?.policy == null -> EmptyState("Sem política de banco de horas", "O DP ainda não vinculou uma política vigente para este período.")
+        statement == null -> EmptyState("Extrato indisponível", "Não há apuração disponível para este período.")
+        else -> {
+            CardBlock(selected = true) {
+                val balanceStatus = when {
+                    response.previewCompetences.isNotEmpty() -> "provisório"
+                    statement.missing.isNotEmpty() || statement.settlementOutdated -> "pendente de reapuração"
+                    else -> "fechado"
+                }
+                Text("Saldo $balanceStatus", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                Text(TimeRules.durationText(statement.balanceMinutes, true), style = MaterialTheme.typography.headlineLarge,
+                    color = if (statement.balanceMinutes < 0) Tokens.warning else Tokens.ink)
+                statement.cycle?.let { Text("Ciclo ${fullDate(it.start)} a ${fullDate(it.end)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                Text("Créditos ${TimeRules.durationText(statement.credit)} · débitos ${TimeRules.durationText(statement.debit)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
+            if (response.previewCompetences.isNotEmpty()) Text("Prévia: o mês aberto pode mudar até o fechamento.", color = Tokens.warning,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
+            if (statement.missing.isNotEmpty()) Text("Falta apurar: ${statement.missing.joinToString()}", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            if (statement.nightMinutes > 0) Text("${TimeRules.durationText(statement.nightMinutes)} em período noturno. Hora reduzida e adicional seguem para conferência da folha.",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            if (statement.lines.isEmpty()) EmptyState("Nenhum lançamento neste ciclo")
+            statement.lines.asReversed().take(100).forEach { item ->
+                CardBlock {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(TimeRules.bankNatureText(item.line.nature), style = MaterialTheme.typography.titleMedium)
+                            Text(fullDate(item.date), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        val signedMinutes = when (item.line.nature) { "bank_credit" -> item.line.minutes; "bank_debit" -> -item.line.minutes; else -> 0 }
+                        Text(if (signedMinutes == 0) TimeRules.durationText(item.line.minutes) else TimeRules.durationText(signedMinutes, true),
+                            color = if (item.line.nature == "bank_debit") Tokens.warning else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+            if (statement.lines.size > 100) Text("Mostrando os 100 lançamentos mais recentes do ciclo.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable private fun MirrorTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onMirror: () -> Unit) {
+    AuxiliaryMonthPicker(state, busy, vm)
+    CardBlock {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Espelho de ponto", style = MaterialTheme.typography.titleMedium)
+                val status = when {
+                    state.mirror?.closure == null -> "Competência ainda não fechada"
+                    state.mirror.mirror == null -> "Espelho ainda não gerado"
+                    else -> "Versão ${state.mirror.closure.version} · pacote ${state.mirror.`package`?.status ?: "não enviado"}"
+                }
+                Text(status, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
+            if (state.mirror?.mirror != null) StatusChip("Disponível", Tokens.okInk, Tokens.okBg)
+        }
+        if (state.mirror?.mirror != null) Action("Abrir espelho", secondary = true, enabled = !busy, onClick = onMirror)
+    }
+    Text("A pasta de documentos do colaborador continua disponível somente no Coala One.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable private fun HistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit, onAdjust: (String) -> Unit) {
@@ -315,17 +467,22 @@ private fun sharePdf(context: Context, file: File) {
     var creating by rememberSaveable { mutableStateOf(false) }
     if (creating) {
         val close = { creating = false; vm.clearSent(); vm.editAbsence() }
-        if (tab == "absence") AbsenceForm(vm, close) else VoucherForm(vm, close)
+        if (tab == "absence") AbsenceForm(vm, close) else if (tab == "voucher") VoucherForm(vm, close) else ShiftSwapForm(vm, close)
         return
     }
     val canCreateAbsence = state.absenceOptions?.capabilities?.canCreate == true && state.absenceOptions?.absenceTypes?.isNotEmpty() == true
+    val swapOptions = state.shiftSwapOptions
+    val canCreateSwap = swapOptions?.ownShifts?.any { own -> swapOptions.candidateShifts.any { other ->
+        other.scheduleId == own.scheduleId && other.unitId == own.unitId && other.date == own.date } } == true
     Page("Solicitações", feedback, onBack, onRefresh = { vm.load() }, footer = {
         if (tab == "absence") Action("Solicitar ausência", feedback.busy, enabled = canCreateAbsence) { creating = true }
-        else Action("Solicitar vale-transporte", feedback.busy) { creating = true }
+        else if (tab == "voucher") Action("Solicitar vale-transporte", feedback.busy) { creating = true }
+        else Action("Solicitar troca de turno", feedback.busy, enabled = canCreateSwap) { creating = true }
     }) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PillChoice("Ausência", tab == "absence") { tab = "absence" }
             PillChoice("Vale-transporte", tab == "voucher") { tab = "voucher" }
+            PillChoice("Troca de turno", tab == "swap") { tab = "swap" }
         }
         if (tab == "absence") {
             if (state.absenceOptions != null && !canCreateAbsence) Text("Nenhum tipo de ausência liberado para você pedir agora.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -342,7 +499,7 @@ private fun sharePdf(context: Context, file: File) {
                 }
             }
             Text("Para anexar documentos depois do envio ou acompanhar a análise completa, use o Coala One.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
-        } else {
+        } else if (tab == "voucher") {
             if (state.vouchers.isEmpty() && !feedback.busy) EmptyState("Nenhuma solicitação de vale-transporte", "Adesão, alteração, suspensão ou reativação.")
             state.vouchers.forEach { row ->
                 CardBlock {
@@ -354,7 +511,69 @@ private fun sharePdf(context: Context, file: File) {
                     row.review?.notes?.takeIf { it.isNotBlank() }?.let { Text("DP: $it", style = MaterialTheme.typography.bodySmall) }
                 }
             }
+        } else {
+            if (!canCreateSwap && !feedback.busy) Text("Não há dois turnos elegíveis na mesma unidade e no mesmo dia.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (state.shiftSwaps.isEmpty() && !feedback.busy) EmptyState("Nenhuma troca de turno", "As propostas enviadas e recebidas aparecem aqui.")
+            state.shiftSwaps.forEach { request -> ShiftSwapCard(request, feedback.busy, vm) }
         }
+    }
+}
+
+private fun swapStatus(value: String) = when (value) { "pending" -> "Aguardando resposta"; "accepted" -> "Aceita"; "rejected" -> "Recusada"; "cancelled" -> "Cancelada"; else -> "Escala alterada" }
+private fun swapShift(value: ShiftSwapShift) = "${fullDate(value.date)} · ${value.startTime}–${value.endTime} · ${value.occupantName}"
+
+@Composable private fun ShiftSwapCard(request: ShiftSwapRequest, busy: Boolean, vm: RequestsViewModel) {
+    var rejectReason by rememberSaveable(request.id) { mutableStateOf("") }
+    CardBlock {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("${request.requesterName} ⇄ ${request.targetName}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            StatusChip(swapStatus(request.status), if (request.status == "accepted") Tokens.okInk else if (request.status == "pending") Tokens.warning else Tokens.muted,
+                if (request.status == "accepted") Tokens.okBg else if (request.status == "pending") Tokens.warningBg else Tokens.soft)
+        }
+        Text("Oferecido: ${swapShift(request.offeredShift)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        Text("Solicitado: ${swapShift(request.requestedShift)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        request.reason?.let { Text("Motivo: $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+        if (request.viewerActions.accept) {
+            Text("Ao aceitar, você confirma sua identidade pela sessão autenticada e os dois turnos serão invertidos automaticamente.", color = Tokens.info, style = MaterialTheme.typography.bodySmall)
+            Action("Aceitar e trocar", busy, onClick = { vm.decideShiftSwap(request, "accept") })
+            NoteInput("Motivo da recusa", rejectReason, 500, "Explique por que não aceita (mínimo de 5 caracteres)", !busy) { rejectReason = it }
+            Action("Recusar", busy, enabled = rejectReason.trim().length >= 5, secondary = true) { vm.decideShiftSwap(request, "reject", rejectReason.trim()) }
+        } else if (request.viewerActions.cancel) Action("Cancelar proposta", busy, secondary = true) { vm.decideShiftSwap(request, "cancel") }
+        if (request.events.isNotEmpty()) Text("${request.events.size} ${if (request.events.size == 1) "ato de identidade registrado" else "atos de identidade registrados"}.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable private fun ShiftSwapForm(vm: RequestsViewModel, onClose: () -> Unit) {
+    val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val options = state.shiftSwapOptions
+    var offeredKey by rememberSaveable { mutableStateOf("") }
+    var requestedKey by rememberSaveable { mutableStateOf("") }
+    var reason by rememberSaveable { mutableStateOf("") }
+    val keyOf: (ShiftSwapOption) -> String = { "${it.scheduleId}:${it.shiftId}" }
+    val offered = options?.ownShifts?.firstOrNull { keyOf(it) == offeredKey }
+    val candidates = options?.candidateShifts.orEmpty().filter { offered != null && it.scheduleId == offered.scheduleId && it.unitId == offered.unitId && it.date == offered.date }
+    val requested = candidates.firstOrNull { keyOf(it) == requestedKey }
+    val sent = state.sentShiftSwap
+    Page("Troca de turno", feedback, onClose, footer = {
+        if (sent != null) Action("Concluir") { onClose() }
+        else Action("Enviar proposta", feedback.busy, enabled = offered != null && requested != null && (reason.isBlank() || reason.trim().length >= 5)) {
+            vm.requestShiftSwap(offered!!, requested!!, reason.trim().ifBlank { null })
+        }
+    }) {
+        if (sent != null) {
+            CardBlock(selected = true) {
+                Text("Proposta enviada", style = MaterialTheme.typography.titleMedium)
+                Text("${sent.targetName} recebeu a solicitação. A escala só muda quando essa pessoa aceitar pela própria conta.", color = Tokens.muted)
+            }
+            return@Page
+        }
+        Choices("Meu turno", options?.ownShifts.orEmpty().map { keyOf(it) to "${fullDate(it.date)} · ${it.startTime}–${it.endTime} · ${it.unitName}" }, offeredKey, !feedback.busy) {
+            offeredKey = it; requestedKey = ""
+        }
+        Choices("Turno que quero receber", candidates.map { keyOf(it) to "${it.startTime}–${it.endTime} · ${it.occupantName}" }, requestedKey, !feedback.busy && offered != null) { requestedKey = it }
+        if (offered != null && candidates.isEmpty()) Text("Não há outro turno elegível na mesma unidade e no mesmo dia.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+        NoteInput("Motivo (opcional)", reason, 500, "Explique a troca, se quiser", !feedback.busy) { reason = it }
+        Text("A outra pessoa será notificada. O aceite autenticado fica registrado e apenas os ocupantes dos dois turnos são invertidos; a escala não é reescrita.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 

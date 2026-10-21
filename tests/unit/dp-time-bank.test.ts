@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildStatement, categoryFor, computeBankDay, journeyReferenceMinutes, monthTotals, type BankDayInput, type BankPolicy, type BankShift } from '../../src/features/dp/time-bank/core';
+import { applyWeeklyOvertimeLimits, bankLinesWithMovements, buildStatement, categoryFor, computeBankDay, journeyReferenceMinutes, monthTotals, overnightWorkDate,
+  type BankDayInput, type BankPolicy, type BankShift } from '../../src/features/dp/time-bank/core';
 import { cycleLabel, cycleOf, presetOf } from '../../src/features/dp/time-bank/cycle';
 import type { DPOvertimeCategory } from '../../src/types';
 
@@ -92,12 +93,49 @@ describe('Banco de horas: apuração do dia', () => {
   it('casos sem regra segura vão para revisão, sem lançamento', () => {
     assert.deepEqual(computeBankDay(day({ markings: punches('2026-10-14', '10:00', '13:00', '13:15') })).issues, ['ODD_MARKINGS']);
     assert.deepEqual(computeBankDay(day({ holiday: true, markings: punches('2026-10-14', '10:00', '16:15') })).lines, []);
-    assert.ok(computeBankDay(day({ shift: { ...shift, overnight: true } })).issues.includes('NIGHT_SHIFT'));
     assert.ok(computeBankDay(day({ shift: { ...shift, referenceMinutes: null } })).issues.includes('NO_JOURNEY'));
     assert.ok(computeBankDay(day({ shift: { ...shift, referenceMinutes: 0 } })).issues.includes('NO_JOURNEY'));
     assert.ok(computeBankDay(day({ policy: null })).issues.includes('NO_POLICY'));
     const disabled = computeBankDay(day({ policy: { ...policy, timeBank: { ...policy.timeBank, enabled: false } }, markings: punches('2026-10-14', '10:00', '13:00', '13:15', '16:15') }));
     assert.deepEqual(disabled.lines, [{ nature: 'review', minutes: 80, reason: 'needs_review' }]);
+  });
+
+  it('pareia turno noturno pela virada do dia e preserva os minutos noturnos para a folha', () => {
+    const nightShift: BankShift = { ...shift, startTime: '22:00', endTime: '05:00', overnight: true, plannedMinutes: 420, referenceMinutes: 420 };
+    const result = computeBankDay(day({ date: '2026-10-14', shift: nightShift,
+      markings: ['2026-10-14T22:00:00-0300', '2026-10-15T05:00:00-0300'] }));
+    assert.deepEqual([result.workedMinutes, result.nightMinutes, result.deltaMinutes, result.lines, result.issues], [420, 420, 0, [], ['NIGHT_SHIFT']]);
+    assert.equal(overnightWorkDate('2026-10-15', '2026-10-15T05:00:00-0300', [{ date: '2026-10-14', overnight: true, endTime: '05:00' }]), '2026-10-14');
+    const sameDay = computeBankDay(day({ date: '2026-10-14', shift: { ...shift, startTime: '18:00', endTime: '23:00', referenceMinutes: 300 },
+      markings: punches('2026-10-14', '18:00', '23:00') }));
+    assert.deepEqual([sameDay.nightMinutes, sameDay.issues], [60, ['NIGHT_SHIFT']]);
+  });
+
+  it('aplica o limite semanal sem perder a memória da parte admitida', () => {
+    const weekly = { ...policy, weeklyOvertimeLimitMinutes: 90 };
+    const make = (date: string) => computeBankDay(day({ date, policy: weekly, shift: { ...shift, referenceMinutes: 360 },
+      markings: punches(date, '10:00', '13:00', '13:15', '17:15') }));
+    const limited = applyWeeklyOvertimeLimits([make('2026-10-12'), make('2026-10-13')]);
+    assert.deepEqual(limited.flatMap((item) => item.lines).map((line) => [line.nature, line.minutes, line.reason]), [
+      ['bank_credit', 90, 'worked_more'], ['bank_credit', 45, 'worked_more'], ['review', 30, 'weekly_limit_exceeded'],
+    ]);
+  });
+
+  it('reaplica o limite semanal na sequência consolidada quando a semana atravessa a competência', () => {
+    const weekly = { ...policy, weeklyOvertimeLimitMinutes: 90 };
+    const make = (date: string) => computeBankDay(day({ date, policy: weekly, shift: { ...shift, referenceMinutes: 360 },
+      markings: punches(date, '10:00', '13:00', '13:15', '17:15') }));
+    const september = applyWeeklyOvertimeLimits([make('2026-09-30')]);
+    const october = applyWeeklyOvertimeLimits([make('2026-10-01')]);
+    const lines = bankLinesWithMovements([
+      { competence: '2026-09', closureVersion: 1, days: september, totals: monthTotals(september) },
+      { competence: '2026-10', closureVersion: 1, days: october, totals: monthTotals(october) },
+    ]);
+    assert.deepEqual(lines.map((item) => [item.date, item.line.nature, item.line.minutes, item.line.reason]), [
+      ['2026-09-30', 'bank_credit', 90, 'worked_more'],
+      ['2026-10-01', 'bank_credit', 45, 'worked_more'],
+      ['2026-10-01', 'review', 30, 'weekly_limit_exceeded'],
+    ]);
   });
 
   it('referência da jornada pelo ciclo fixo ou pela carga única quando a folga vem da escala', () => {
@@ -141,5 +179,61 @@ describe('Banco de horas: ciclo e extrato', () => {
     const outdated = buildStatement({ period: { start: '2026-10-01', end: '2026-10-31', index: 9 }, today: '2026-11-06', months, missing: [], openingMinutes: 0, timeBank, settlement });
     assert.equal(outdated.settlementOutdated, true);
     assert.equal(buildStatement({ period: { start: '2026-10-01', end: '2026-10-31', index: 9 }, today: '2026-11-06', months, missing: [], openingMinutes: 0, timeBank, settlement: { ...settlement, closureVersions: { '2026-10': 2 } } }).settlementOutdated, false);
+  });
+
+  it('vence cada crédito remanescente e substitui a pendência quando a extra é aprovada', () => {
+    const approvalPolicy = { ...policy, categories: categories.map((item) => item.id === 'banco' ? { ...item, requiresApproval: true } : item) };
+    const pending = computeBankDay(day({ date: '2026-01-10', policy: approvalPolicy, shift: { ...shift, referenceMinutes: 360 },
+      markings: punches('2026-01-10', '10:00', '13:00', '13:15', '17:15') }));
+    const approved = buildStatement({ period: null, today: '2026-01-20', openingMinutes: 0, missing: [],
+      months: [{ competence: '2026-01', closureVersion: 1, days: [pending], totals: monthTotals([pending]) }],
+      movements: [{ id: 'm1', uid: 'u', date: '2026-01-10', competence: '2026-01', status: 'active', kind: 'overtime_approval', minutes: 60,
+        reason: 'Extra aprovada pelo DP.', createdAt: '2026-01-11T00:00:00Z', createdBy: 'dp', categoryId: 'banco', replacesMinutes: 60,
+        line: { nature: 'bank_credit', minutes: 90, reason: 'approved_overtime', categoryId: 'banco', factor: 1.5, ratePercent: 50 } }],
+      timeBank: policy.timeBank });
+    assert.deepEqual([approved.credit, approved.review, approved.balanceMinutes], [90, 0, 90]);
+    const expired = buildStatement({ period: null, today: '2026-02-20', openingMinutes: 0, missing: [],
+      months: [{ competence: '2026-01', closureVersion: 1, days: [{ ...pending, lines: [{ nature: 'bank_credit', minutes: 90, reason: 'worked_more' }] }], totals: monthTotals([]) }],
+      timeBank: { ...policy.timeBank, expirationDays: 30, expiredBalanceDestination: 'payroll' } });
+    assert.deepEqual([expired.credit, expired.debit, expired.payroll, expired.balanceMinutes], [90, 90, 90, 0]);
+  });
+
+  it('transporta movimentos anteriores e ignora aprovação vinculada a versão reaberta', () => {
+    const prior = computeBankDay(day({ date: '2026-09-21', shift: { ...shift, referenceMinutes: 300 },
+      markings: punches('2026-09-21', '10:00', '13:00', '13:15', '16:15') }));
+    const current = computeBankDay(day({ date: '2026-10-10', markings: punches('2026-10-10', '10:00', '13:00', '13:15', '16:15') }));
+    const movement = { id: 'm', uid: 'u', date: '2026-09-25', competence: '2026-09', status: 'active' as const, kind: 'compensation' as const,
+      minutes: 30, reason: 'Compensação do ciclo anterior.', createdAt: '2026-09-25T12:00:00Z', createdBy: 'dp',
+      line: { nature: 'bank_debit' as const, minutes: 30, reason: 'manual_compensation' as const } };
+    const statement = buildStatement({ period: { start: '2026-10-01', end: '2026-10-31', index: 9 }, today: '2026-10-20', missing: [], openingMinutes: 0,
+      carryFrom: '2026-09-01',
+      months: [{ competence: '2026-09', closureVersion: 1, days: [prior], totals: monthTotals([prior]) },
+        { competence: '2026-10', closureVersion: 1, days: [current], totals: monthTotals([current]) }], movements: [movement], timeBank: policy.timeBank });
+    assert.deepEqual([statement.openingMinutes, statement.balanceMinutes], [60, -20]);
+
+    const approvalPolicy = { ...policy, categories: categories.map((item) => item.id === 'banco' ? { ...item, requiresApproval: true } : item) };
+    const pending = computeBankDay(day({ date: '2026-10-10', policy: approvalPolicy, shift: { ...shift, referenceMinutes: 360 },
+      markings: punches('2026-10-10', '10:00', '13:00', '13:15', '17:15') }));
+    const stale = bankLinesWithMovements([{ competence: '2026-10', closureVersion: 2, days: [pending], totals: monthTotals([pending]) }], [{
+      id: 'approval', uid: 'u', date: '2026-10-10', competence: '2026-10', status: 'active', kind: 'overtime_approval', minutes: 60,
+      reason: 'Aprovação da versão anterior.', createdAt: '2026-10-11T00:00:00Z', createdBy: 'dp', categoryId: 'banco', replacesMinutes: 60,
+      sourceClosureVersion: 1, line: { nature: 'bank_credit', minutes: 90, reason: 'approved_overtime', categoryId: 'banco', factor: 1.5 },
+    }]);
+    assert.deepEqual(stale.map((item) => item.line.reason), ['pending_approval']);
+  });
+
+  it('não leva dias do ciclo anterior no mesmo mês sem transporte e respeita o marco do transporte', () => {
+    const before = computeBankDay(day({ date: '2026-10-05', shift: { ...shift, referenceMinutes: 300 },
+      markings: punches('2026-10-05', '10:00', '13:00', '13:15', '16:15') }));
+    const carried = computeBankDay(day({ date: '2026-10-12', shift: { ...shift, referenceMinutes: 300 },
+      markings: punches('2026-10-12', '10:00', '13:00', '13:15', '16:15') }));
+    const current = computeBankDay(day({ date: '2026-10-18', markings: punches('2026-10-18', '10:00', '13:00', '13:15', '16:15') }));
+    const months = [{ competence: '2026-10', closureVersion: 1, days: [before, carried, current], totals: monthTotals([before, carried, current]) }];
+    const period = { start: '2026-10-16', end: '2026-10-30', index: 1 };
+    const noCarry = buildStatement({ period, today: '2026-10-20', missing: [], openingMinutes: 0, months, timeBank: policy.timeBank });
+    assert.deepEqual([noCarry.openingMinutes, noCarry.credit, noCarry.debit, noCarry.balanceMinutes], [0, 0, 80, -80]);
+    const withCarry = buildStatement({ period, today: '2026-10-20', missing: [], openingMinutes: 0, months,
+      carryFrom: '2026-10-10', timeBank: policy.timeBank });
+    assert.deepEqual([withCarry.openingMinutes, withCarry.balanceMinutes], [90, 10]);
   });
 });

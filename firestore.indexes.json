@@ -1,6 +1,18 @@
 
 {
   "indexes": [
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "shiftKeys", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "dp_absenceOperationalAvailability", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "unitId", "order": "ASCENDING" },

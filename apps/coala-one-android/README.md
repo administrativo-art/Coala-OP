@@ -2,6 +2,8 @@
 
 Kotlin, Jetpack Compose/Material 3, MVVM com ViewModel e StateFlow, Navigation Compose, Hilt, Retrofit/OkHttp, kotlinx.serialization, Coil, Room com payloads AES-256-GCM/Android Keystore, WorkManager, CameraX/seletor do sistema, BiometricPrompt e Firebase Auth nativo.
 
+O ponto offline usa um banco Room separado: uma autorização on-line de até 12 horas ancora a Hora Legal ao relógio monotônico; cada batida é cifrada, encadeada e assinada por chave P-256 do Android Keystore protegida por TEE/StrongBox. Reiniciar invalida a autorização. O app mantém até 20 pendentes e sincroniza em ordem pelo WorkManager. Enquanto estiver apenas local, a interface nunca apresenta NSR nem comprovante.
+
 Android mínimo: **8 / API 26**, confirmado pelo usuário. Release usa `coalaone.go`; debug usa `coalaone.go.debug`. Coala Go é o único app mobile: após confirmar que não havia usuários, o responsável autorizou remover o Expo e o instalador antigo desta branch. Histórico Git e checkout original preservados.
 
 ## Configuração pública

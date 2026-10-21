@@ -60,6 +60,13 @@ const DEFAULT_ENRICHMENT: DocumentTypeEnrichment = {
 };
 
 const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
+  ADMISSION_PACKAGE: {
+    processCategory: "ADMISSION",
+    duplicateStrategy: "VERSION",
+    duplicateKeys: ["admissionDate"],
+    downloadNameTemplate: "{employeeCode}__PACOTE-ADMISSIONAL__{admissionDate}__v{version}",
+    displayNameTemplate: "Pacote admissional — {admissionDate}",
+  },
   PAYSLIP: {
     processCategory: "MONTHLY_REFERENCE",
     duplicateStrategy: "VERSION",
@@ -106,6 +113,13 @@ const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
     duplicateKeys: ["examDate"],
     downloadNameTemplate: "{employeeCode}__ASO-ADMISSIONAL__{examDate}__v{version}",
     displayNameTemplate: "ASO admissional — {examDate}",
+  },
+  ASO_REQUEST: {
+    processCategory: "OCCUPATIONAL_EXAM",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["examDate"],
+    downloadNameTemplate: "{employeeCode}__REQUISICAO-ASO__{examDate}__v{version}",
+    displayNameTemplate: "Requisição de ASO — {examDate}",
   },
   ASO_PERIODIC: {
     processCategory: "OCCUPATIONAL_EXAM",

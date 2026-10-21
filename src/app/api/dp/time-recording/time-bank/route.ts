@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { timeBankActionSchema, timeBankQuerySchema, type TimeBankActionInput } from '@/features/dp/time-bank/schemas';
-import { generateBankMonth, readBankStatement, settleBankCycle } from '@/features/dp/time-bank/service.server';
+import { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } from '@/features/dp/time-bank/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -24,7 +24,7 @@ const getContract = defineSecurityContract({
 });
 const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { employeeUid?: string; date?: string }, Resource>({
   id: 'dp-time-bank-statement-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const parsed = timeBankQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
@@ -41,7 +41,7 @@ const postContract = defineSecurityContract({
 });
 const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, TimeBankActionInput, Resource>({
   id: 'dp-time-bank-act-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'PTRP_BANK_QUERY_INVALID', kind: 'VALIDATION' });
@@ -56,6 +56,10 @@ export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer },
 export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
   const input = security.input;
   if (input.action === 'settle') return NextResponse.json({ settlement: await settleBankCycle(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  if (input.action === 'approve_overtime' || input.action === 'movement') {
+    return NextResponse.json({ movement: await createBankMovement(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
+  if (input.action === 'reverse') return NextResponse.json({ movement: await reverseBankMovement(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
   const record = await generateBankMonth(security.actor, input);
   return NextResponse.json({ month: { competence: record.competence, closureVersion: record.closureVersion, totals: record.totals } },
     { headers: { 'Cache-Control': 'private, no-store' } });

@@ -322,7 +322,8 @@ export function UnitWizardModal({
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="CNPJ" htmlFor="unit-cnpj" requirement="opcional" error={errors.cnpj}>
+            <Field label="CNPJ do estabelecimento fiscal" htmlFor="unit-cnpj" requirement="opcional" error={errors.cnpj}
+              hint="Usado como identificação fiscal quando esta unidade for escolhida como empregadora no histórico do colaborador.">
               <Input
                 id="unit-cnpj"
                 value={form.cnpj}
@@ -353,7 +354,8 @@ export function UnitWizardModal({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Endereço" htmlFor="unit-address" requirement="opcional">
+          <Field label="Endereço do estabelecimento" htmlFor="unit-address" requirement="opcional"
+            hint="Obrigatório, junto com o CNPJ, para usar esta unidade como empregadora no registro de ponto.">
             <Textarea
               id="unit-address"
               value={form.address}

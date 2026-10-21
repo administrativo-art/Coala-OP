@@ -2,7 +2,7 @@
  * Espelho de ponto do fechamento (Etapa 6, parte 2). O instantâneo é montado uma vez por pessoa e versão do
  * fechamento e gravado; o PDF é sempre derivado dele, nunca do cadastro atual. Puro e testável.
  */
-import { competenceRange, sha256, type ClosureAbsence, type ClosureAdjustment, type ClosurePerson } from './closure-core';
+import { competenceRange, sha256, type ClosureAbsence, type ClosureAdjustment, type ClosurePerson, type ClosureShiftSwap } from './closure-core';
 
 export const MIRROR_TITLE = 'Espelho de ponto' as const;
 export const MIRROR_RENDERER_VERSION = 'ptrp-mirror-pdf-v1' as const;
@@ -14,7 +14,7 @@ export type MirrorSnapshot = {
   schemaVersion: 1; title: typeof MIRROR_TITLE; workspaceId: string; competence: string; closureVersion: number; manifestHash: string;
   employee: { uid: string; name: string; cpf: string | null }; employer: { legalName: string | null; cnpj: string | null };
   generatedAt: string; clockSource: 'hora_legal' | 'server'; days: MirrorDay[];
-  adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; truncated: boolean;
+  adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; shiftSwaps: ClosureShiftSwap[]; truncated: boolean;
   /** O que foi lido do REP-P ao gerar: batidas tardias depois disso só entram por reabertura e versão nova. */
   arpReading: { count: number; maxNsr: number | null; readAt: string };
   /** Nome de quem pediu e de quem decidiu, congelado junto: o AEJ e o espelho identificam a autoria. */
@@ -52,6 +52,7 @@ export function buildMirrorSnapshot(input: MirrorInputs): MirrorSnapshot {
   const { start, end } = competenceRange(input.competence);
   const adjustments = input.declaration?.adjustments ?? [];
   const absences = input.declaration?.absences ?? [];
+  const shiftSwaps = input.declaration?.shiftSwaps ?? [];
   const approved = adjustments.filter((item) => item.status === 'approved');
   const discarded = new Set(approved.filter((item) => item.original && item.kind !== 'include').map((item) => `${item.original!.nsr}|${item.original!.markedAt}`));
   const days: MirrorDay[] = [];
@@ -74,7 +75,7 @@ export function buildMirrorSnapshot(input: MirrorInputs): MirrorSnapshot {
   return {
     schemaVersion: 1, title: 'Espelho de ponto', workspaceId: input.workspaceId, competence: input.competence, closureVersion: input.closureVersion,
     manifestHash: input.manifestHash, employee: input.employee, employer: input.employer, generatedAt: input.generatedAt, clockSource: input.clockSource,
-    days, adjustments, absences, truncated: input.truncated, actors: input.actors,
+    days, adjustments, absences, shiftSwaps, truncated: input.truncated, actors: input.actors,
     arpReading: { count: input.markings.length, maxNsr: input.markings.length ? Math.max(...input.markings.map((item) => item.nsr)) : null, readAt: input.generatedAt },
   };
 }
@@ -101,6 +102,6 @@ export const MIRROR_PREVIEW_SNAPSHOT: MirrorSnapshot = buildMirrorSnapshot({
     original: { nsr: 3, markedAt: '2026-01-05T12:01:00-0300' }, inclusion: null, reason: 'Bati duas vezes seguidas na saída para o intervalo.', requestedBy: 'preview',
     requestedAt: '2026-01-05T15:00:00.000Z', decidedBy: 'dp', decidedAt: '2026-01-06T12:00:00.000Z', decisionReason: 'Conferido com a gerente.' }],
   absences: [{ id: 'b', typeName: 'Atestado', startDate: '2026-01-06', endDate: '2026-01-06', startTime: null, endTime: null, quantity: 1, unit: 'day', status: 'approved',
-    approval: 'tacit_timeout', decidedBy: null, decidedAt: '2026-01-09T12:00:00.000Z', attachmentCount: 1 }] },
+    approval: 'tacit_timeout', decidedBy: null, decidedAt: '2026-01-09T12:00:00.000Z', attachmentCount: 1 }], shiftSwaps: [] },
   truncated: false, actors: { preview: 'Pessoa colaboradora exemplo', dp: 'Departamento Pessoal' },
 });

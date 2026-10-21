@@ -11,7 +11,7 @@ import { defaultGuestPermissions, type DPAbsenceType, type User } from '@/types'
 import { requireAbsenceWorkflowReady } from '../catalog.server';
 import { absenceResolutionTargetForUser, ownAbsenceResolutionTarget } from './service.server';
 import { resolveAbsenceBeneficiary } from './beneficiary.server';
-import { AbsencePreviewError, belemCivilDate, previewAbsenceRequest } from './core';
+import { absenceCompetences, AbsencePreviewError, belemCivilDate, previewAbsenceRequest } from './core';
 import { resolveAbsenceApprovers, type AbsenceApprovalStage } from './approval.server';
 import { verifyAbsenceFiles, type AbsenceFileStore, absenceFileStore } from './files.server';
 import { projectAbsenceRetentionCases } from './retention.server';
@@ -22,6 +22,7 @@ import type { z } from 'zod';
 import { absenceListQuerySchema } from './workflow-schemas';
 import { dispatchAbsenceNotification } from './notifications.server';
 import { ABSENCE_REVIEW_SLA_HOURS, createAbsenceReviewSla } from './review-sla';
+import { CLOSURES, closureKey } from '@/features/dp/time-adjustments/service.server';
 import { operationalGuardRequested } from '../operational/occupancy-guard.server';
 import { acknowledgeOperationalActivation, acknowledgeOperationalReversal, activateOperationalAbsence,
   beginOperationalIntent, markOperationalIntentPrepared, operationalIntentRef, prepareOperationalAbsence,
@@ -52,6 +53,24 @@ function stableUuid(value: string) {
 const fail = (code: string, message: string, kind: 'VALIDATION' | 'CONFLICT' | 'AUTHORIZATION' | 'NOT_FOUND' = 'CONFLICT') => new AppError({ code, kind, safeMessage: message });
 const nowIso = () => new Date().toISOString();
 const operationHash = (input: AbsenceActionInput) => hash(JSON.stringify(input));
+
+function closureRefs(workspaceId: string, startDate: string, endDate: string) {
+  const competences = absenceCompetences(startDate, endDate);
+  if (competences.length > 14) throw fail('ABSENCE_PERIOD_INVALID', 'Período da ausência inválido.', 'VALIDATION');
+  return competences.map((competence) => hrDbAdmin.collection(CLOSURES).doc(closureKey(workspaceId, competence)));
+}
+
+function assertClosureSnapshotsOpen(snapshots: FirebaseFirestore.DocumentSnapshot[]) {
+  if (snapshots.some((snapshot) => snapshot.exists && snapshot.get('status') === 'closed')) {
+    throw fail('PTRP_COMPETENCE_CLOSED', 'Uma competência deste período já foi fechada; reabra antes de alterar a ausência.', 'CONFLICT');
+  }
+}
+
+async function assertAbsenceCompetencesOpen(workspaceId: string, periods: Array<{ startDate: string; endDate: string }>) {
+  const refs = new Map<string, FirebaseFirestore.DocumentReference>();
+  for (const period of periods) for (const ref of closureRefs(workspaceId, period.startDate, period.endDate)) refs.set(ref.path, ref);
+  assertClosureSnapshotsOpen(await Promise.all([...refs.values()].map((ref) => ref.get())));
+}
 
 function fingerprint(target: NonNullable<Awaited<ReturnType<typeof ownAbsenceResolutionTarget>>>) {
   return hash(JSON.stringify([target.collaboratorId, target.employmentRelationshipType, target.unitId ?? null,
@@ -219,8 +238,9 @@ export async function createAbsenceDraft(actor: ServerUserContext, input: Create
   const keyRef = idempotency.doc(hash(`${actor.workspace_id}:${actor.decoded.uid}:${input.idempotencyKey}`));
   const requestHash = hash(JSON.stringify(input));
   const result = await hrDbAdmin.runTransaction(async (tx) => {
-    const [key, type, prepared] = await Promise.all([
+    const [key, type, prepared, closures] = await Promise.all([
       tx.get(keyRef), tx.get(hrDbAdmin.collection('dp_absenceTypes').doc(input.request.absenceTypeId)), prepRef ? tx.get(prepRef) : null,
+      Promise.all(closureRefs(actor.workspace_id, input.request.startDate, input.request.endDate).map((ref) => tx.get(ref))),
     ]);
     if (key.exists) {
       const existing = await tx.get(requests.doc(String(key.get('requestId'))));
@@ -228,6 +248,7 @@ export async function createAbsenceDraft(actor: ServerUserContext, input: Create
         && existing.get('beneficiaryUid') === beneficiary.id && key.get('requestHash') === requestHash) return existing.data() as AbsenceRequestRecord;
       throw fail('ABSENCE_IDEMPOTENCY_CONFLICT', 'Chave de repetição inválida.');
     }
+    assertClosureSnapshotsOpen(closures);
     if (!type.exists) throw fail('ABSENCE_TYPE_UNAVAILABLE', 'Tipo de ausência indisponível.', 'NOT_FOUND');
     const absenceType = { id: type.id, ...type.data() } as DPAbsenceType;
     let preview;
@@ -559,6 +580,10 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
   if (input.action === 'submit' && !assignment && current.attachments.length && !current.custodianDpUid) {
     throw fail('ABSENCE_CUSTODIAN_REQUIRED', 'Responsável de DP pelos documentos não configurado.');
   }
+  await assertAbsenceCompetencesOpen(actor.workspace_id, [
+    { startDate: current.startDate, endDate: current.endDate },
+    ...(input.action === 'update_draft' ? [{ startDate: input.request.startDate, endDate: input.request.endDate }] : []),
+  ]);
   let operationalIntent: OperationalIntent | null = null;
   let operationalEpoch: string | null = null;
   if (finalApproval && !operationalGuardRequested() && !process.env.FIRESTORE_EMULATOR_HOST) {
@@ -595,6 +620,12 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
       return original;
     }
     if (original.version !== input.expectedVersion || original.status !== current.status) throw fail('ABSENCE_VERSION_CONFLICT', 'A solicitação foi alterada. Atualize e tente novamente.');
+    const periodRefs = new Map<string, FirebaseFirestore.DocumentReference>();
+    for (const period of [{ startDate: original.startDate, endDate: original.endDate },
+      ...(input.action === 'update_draft' ? [{ startDate: input.request.startDate, endDate: input.request.endDate }] : [])]) {
+      for (const ref of closureRefs(actor.workspace_id, period.startDate, period.endDate)) periodRefs.set(ref.path, ref);
+    }
+    assertClosureSnapshotsOpen(await Promise.all([...periodRefs.values()].map((ref) => tx.get(ref))));
     if (input.action === 'cancel' && original.status === 'approved' && original.input.startDate <= belemCivilDate(new Date())) {
       throw fail('ABSENCE_CANCEL_NOT_FUTURE', 'Cancelamento aprovado disponível somente antes do início.');
     }

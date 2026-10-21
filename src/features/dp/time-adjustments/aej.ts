@@ -5,7 +5,7 @@
  *
  * Pontos ainda a conferir com o MTE/advogado (registrados no fluxo): largura de seqEntSaida (usamos 3 dígitos),
  * seqEntSaida da marcação desconsiderada (usamos "000") e dia sem escala (sem codHorContratual, vira aviso).
- * Turno noturno é recusado antes de gerar (aej.server.ts): falta a redução da hora noturna e o pareamento entre dias.
+ * Turno noturno preserva o horário contratual e recebe as saídas após meia-noite no dia de início do turno.
  */
 import { createHash } from 'node:crypto';
 
@@ -81,7 +81,6 @@ export function generateAej(input: AejInput) {
     for (const date of dates) {
       const shift = employee.shifts.find((item) => item.date === date) ?? null;
       if (!shift) warnings.push({ cpf: employee.cpf, date, code: 'NO_SHIFT' });
-      else if (shift.overnight) warnings.push({ cpf: employee.cpf, date, code: 'NIGHT_SHIFT' });
       type Row = { at: string; nsr: number | null; source: 'O' | 'I'; discardReason: string | null; reason: string | null };
       const rows: Row[] = [
         ...employee.markings.filter((item) => item.workDate === date).map((item) => ({ at: item.markedAt, nsr: item.nsr, source: 'O' as const, discardReason: item.discardReason, reason: null })),

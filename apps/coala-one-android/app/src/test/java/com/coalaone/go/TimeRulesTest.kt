@@ -9,6 +9,14 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class TimeRulesTest {
+    @Test fun offlineCanonicalMatchesTheServerAndUsesTheUnitTimeZone() {
+        val markedAt = com.coalaone.go.domain.TimeOfflineRules.markedAt("2026-10-18T11:00:00.000Z", 1000, 1801000, "America/Manaus")
+        assertEquals("2026-10-18T07:30:00-0400", markedAt)
+        val canonical = com.coalaone.go.domain.TimeOfflineRules.canonical("permit-a", "attempt-a", "unit-a", "a".repeat(64),
+            1801000, 7, 1, null, markedAt)
+        assertEquals("7ff09350eb0e301c83b874d29906e2f13717ac3c76bf1ec596c3a07356a465ee",
+            com.coalaone.go.domain.TimeOfflineRules.hash(canonical))
+    }
     private val options = TimeOptions("2026-10-19", true, true, listOf(ExecutionUnit("slz", "São Luís", true), ExecutionUnit("mao", "Manaus", timeZone = "America/Manaus")), OfficialClock(true, "2026-10-19T03:30:00Z", "America/Fortaleza"))
 
     @Test fun punchUsesTheUnitZoneForTheDateAndTheClock() {
@@ -46,6 +54,12 @@ class TimeRulesTest {
         assertEquals(listOf("08:00", "08:01", "16:00"), day.map { it.time })
         assertTrue(day[1].discarded); assertTrue(day[2].included); assertNull(day[2].receiptId)
         assertEquals("comprovante-ponto-2026-10-18-nsr-2.pdf", TimeRules.receiptFileName(markings[1].markedAt, 2))
+    }
+    @Test fun bankAmountsAndDestinationsAreExplicit() {
+        assertEquals("+1h20", TimeRules.durationText(80, true))
+        assertEquals("−0h45", TimeRules.durationText(-45, true))
+        assertEquals("Hora extra para a folha", TimeRules.bankNatureText("payroll_overtime"))
+        assertEquals("A conferir pelo DP", TimeRules.bankNatureText("review"))
     }
     @Test fun adjustmentMirrorsTheServerSchema() {
         val today = LocalDate.parse("2026-10-19")

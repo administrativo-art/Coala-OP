@@ -21,7 +21,7 @@ const contract = defineSecurityContract({
 });
 const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; employeeUid?: string }, { workspaceId: string }>({
   id: 'dp-time-mirror-pdf-v1',
-  guarantees: ['authenticated-user', 'active-user', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const parsed = mirrorQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));

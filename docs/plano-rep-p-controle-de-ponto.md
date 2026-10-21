@@ -88,13 +88,13 @@ Testar desvio, correção, indisponibilidade da referência, fuso e retorno ao f
 
 Fonte temporal do aparelho não deve ser aceita sem verificação. Preservar instantes originais, de recepção e contexto local quando aplicáveis.
 
-### 5.4. Online e extensão offline
+### 5.4. Online e contingência offline no aplicativo
 
-MVP online. Confirmar sucesso somente após persistência durável; distinguir registro persistido, comprovante pendente e comprovante disponível.
+O portal web permanece on-line. O Coala Go preserva marcações sem rede somente após pré-autorização on-line de até 12 horas. Distinguir sempre marcação apenas guardada no aparelho, registro persistido, comprovante pendente e comprovante disponível.
 
 Requisição tem identificador idempotente. Reenvio da mesma tentativa não duplica; duas marcações distintas não podem ser eliminadas por terem horários próximos.
 
-Offline é facultativo (L5, item 52), fora do MVP. Se implementado: fila protegida, origem identificada, hora confiável, tratamento de reinício/perda de referência, preservação do instante original e transmissão ao reconectar. Falta de rede não pode aparecer como “ponto registrado” se nada foi preservado.
+Offline é facultativo (L5, item 52). O incremento local de 21/10/2026 implementa no Coala Go fila cifrada por conta, chave P-256 em TEE/StrongBox, âncora da Hora Legal + relógio monotônico, cadeia e assinatura locais, limite de 20 pendentes, bloqueio após reinício, sincronização ordenada e modo `1` no registro 7 do AFD. NSR e comprovante só nascem no servidor. Ainda são gates do piloto: teste em aparelho físico e perda/retorno de rede, Play Integrity de release em modo `enforce`, revisão jurídica/Doc Brown, operação dos casos bloqueados e todas as pendências gerais do REP-P.
 
 ### 5.5. NSR e ARP
 
@@ -306,7 +306,7 @@ Decisões de produto registradas a partir da lista consolidada de perguntas; nã
 | Decurso em tipo com atestado obrigatório (orientação Doc Brown, 19/10/2026) | Pendente de confirmação: o decurso aprova também tipos com anexo obrigatório ainda não conferido? Alternativa: aprovar a ocorrência sem efeito de abono até o DP conferir | Hoje aprova com o efeito do tipo; aprovação depois do fechamento deve ser tratada no reprocessamento sem alterar espelho assinado; alerta ao DP para pedido vencido que não pode ser aprovado sozinho |
 | Tolerância | Uma só, na jornada (até 10 min por dia, art. 58 §1º); vale para saldo, banco e avisos de entrada, saída e intervalo | `toleranceMinutes` da jornada (plano mestre 3.6); turno e política de extra sem tolerância |
 | Fracionamento do intervalo | Respondido pelo planejamento das modalidades (plano mestre 3.6.1) | Modalidades fixas/flexíveis conforme cadastro |
-| Retenção | 20 anos para ARP, AFD, comprovantes, histórico de ajustes e evidências, como os demais documentos | Política de retenção de 20 anos |
+| Retenção | Decisão operacional: mínimo de 20 anos para ARP, AFD, comprovantes, histórico de ajustes, trocas e evidências, sem TTL nos documentos centrais; confirmar por classe com o advogado se o prazo uniforme preserva a finalidade sem retenção excessiva pela LGPD | Política de retenção de 20 anos; validação jurídica pendente |
 | Atestado assinado pela empregadora | Sim: a CT Sorvetes assina como desenvolvedora sendo também a empregadora | Confirmar com o advogado (pergunta mantida) |
 | Comprovante com atraso | Sem aviso ao sindicato; os registros de contingência (motivo, tentativas, horário de emissão) ajudam na fiscalização e ficam guardados | Mantidos `lastIssue`, `attempts` e instante de emissão |
 | Comprovante disponível depois | Basta o aviso de indisponibilidade; quando emitido, a pessoa baixa o comprovante, sem notificação no sino | Janela e dia mostram "comprovante em emissão" e liberam o download depois |
@@ -360,7 +360,7 @@ Todos os IDs permanecem com implementação/eficácia **não verificadas**. Uma 
 | R11 | O | Extração mínima das últimas 48 h | L5 item 40 | 2: download independente do RH |
 | R12 | O | AFD oficial extraível pelo REP-P | L6; L5 itens 38/39 | 2/4: formato e simulação fiscal |
 | R13 | O | AFD CAdES destacado pelo desenvolvedor | L5 itens 28/33 | 2/7: assinatura real e arquivo verificados |
-| R14 | D | MVP online; offline posterior | L5 item 52 | 2: contingência; extensão exige novo aceite |
+| R14 | D | Web on-line; contingência offline implementada localmente apenas no Coala Go, pré-autorizada por 12 h, fila cifrada/assinada e sincronização modo 1 | L5 item 52; AFD 004 registro 7 | Piloto exige aparelho físico, Play Integrity `enforce` e homologação operacional/jurídica |
 | R15 | D | Sem localização/biometria no MVP | Escopo e L10 | Antes do piloto: conferir dados coletados |
 | P1 | O | Tratamentos identificados e originais preservados | L3 art. 82; L5 itens 55/56 | 3: inclusão/desconsideração/reversão |
 | P2 | O | AEJ no leiaute e pares por jornada | L7; L5 itens 51/56–59 | 4: casos inclusive virada de dia |
@@ -409,4 +409,4 @@ A [análise de lacunas do plano mestre](plano-jornada-fechamento-rh.md#5-estado-
 - Procedimento de contingência online e acesso pós-desligamento.
 - Eventos/unidades exigidos pelo contador.
 - Estabelecimento piloto, janela de corte e retorno.
-- Necessidade futura de offline, fora do MVP; geolocalização possui [especificação técnica](engineering/time-recording-geolocation.md), ainda sem autorização para coleta real.
+- Homologação física e operacional do offline do Coala Go; geolocalização continua apenas na [especificação técnica](engineering/time-recording-geolocation.md), sem autorização para coleta real.

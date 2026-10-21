@@ -210,7 +210,10 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
             push.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
-        if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta") { File(context.cacheDir, "receipts").deleteRecursively(); session.signOut() }
+        if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta") {
+            listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() }
+            session.signOut()
+        }
         else TextButton({ signOut = true }) { Text("Sair da conta", color = Tokens.danger) }
     }
 }

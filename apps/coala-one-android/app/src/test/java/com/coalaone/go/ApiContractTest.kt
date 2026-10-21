@@ -60,6 +60,8 @@ class ApiContractTest {
             // Ponto and Solicitações: built by the same rules the screens use, checked against the server schemas.
             val today = java.time.LocalDate.parse("2026-10-19"); val uuid = "d033b3e8-dbc4-4c34-8cb7-0cdb5f61293e"
             put("marking", json.encodeToJsonElement(MarkingRequest(uuid, "2026-10-19", "unit-1")))
+            put("offlinePermit", json.encodeToJsonElement(OfflinePermitRequest(uuid, "2026-10-19", uuid,
+                "a".repeat(64), java.util.Base64.getEncoder().encodeToString(ByteArray(80) { 1 }), "tee", 1, 10)))
             put("adjustmentInclude", json.encodeToJsonElement(com.coalaone.go.domain.TimeRules.adjustmentRequest(uuid, "2026-10-18", "include", null, "08:00", "unit-1", "Esqueci de bater a entrada.", today)))
             put("adjustmentDiscard", json.encodeToJsonElement(com.coalaone.go.domain.TimeRules.adjustmentRequest(uuid, "2026-10-18", "discard", "receipt-1", "", "unit-1", "Bati duas vezes seguidas.", today)))
             put("adjustmentCorrect", json.encodeToJsonElement(com.coalaone.go.domain.TimeRules.adjustmentRequest(uuid, "2026-10-18", "correct", "receipt-1", "12:00", "unit-1", "O horário saiu errado.", today)))
@@ -105,12 +107,27 @@ class ApiContractTest {
             assertEquals(7L, api.mark(MarkingRequest("a", "2026-10-19", "u")).marking.nsr)
             val request = server.takeRequest(); assertEquals("/api/dp/time-recording/markings", request.path)
             assertTrue(request.body.readUtf8().contains("\"channel\":\"mobile\""))
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"permit":{"permitId":"p","installationId":"11111111-1111-4111-8111-111111111111","deviceKeyId":"${"a".repeat(64)}","keySecurity":"tee","bootCount":1,"anchorElapsedRealtimeMs":10,"anchorInstant":"2026-10-19T11:00:00Z","issuedAt":"2026-10-19T11:00:00Z","expiresAt":"2026-10-19T23:00:00Z","units":[{"id":"u","name":"Matriz","timeZone":"America/Belem"}]}}"""))
+            val permitRequest = OfflinePermitRequest("request", "2026-10-19", "11111111-1111-4111-8111-111111111111",
+                "a".repeat(64), java.util.Base64.getEncoder().encodeToString(ByteArray(80) { 1 }), "tee", 1, 10)
+            assertEquals("p", api.offlinePermit(permitRequest).permit.permitId)
+            val permitHttp = server.takeRequest(); assertEquals("/api/dp/time-recording/offline-permits", permitHttp.path)
+            assertTrue(permitHttp.body.readUtf8().contains("\"keySecurity\":\"tee\""))
             server.enqueue(MockResponse().setHeader("Content-Type", "application/pdf").setBody("%PDF"))
             assertEquals("%PDF", api.receipt("r1").string()); assertEquals("/api/dp/time-recording/receipts/r1", server.takeRequest().path)
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"requests":[],"nextCursor":null}"""))
             api.absences(); assertEquals("/api/collaborator/absence-requests?scope=mine&limit=25", server.takeRequest().path)
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"requests":[]}"""))
             api.vouchers(); assertEquals("/api/collaborator/requests?scope=own", server.takeRequest().path)
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"policy":{"id":"p","version":1,"name":"Banco","enabled":true},"statement":{"balanceMinutes":80,"lines":[],"missing":[],"limits":{}},"previewCompetences":["2026-10"]}"""))
+            assertEquals(80, api.timeBank("2026-10-20").statement?.balanceMinutes)
+            assertEquals("/api/dp/time-recording/time-bank?date=2026-10-20", server.takeRequest().path)
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"competence":"2026-10","closure":{"status":"closed","version":2},"mirror":{"snapshotHash":"h","generatedAt":"2026-10-21T00:00:00Z"},"package":{"status":"signed"}}"""))
+            assertEquals("signed", api.mirror("2026-10").`package`?.status)
+            assertEquals("/api/dp/time-recording/mirrors?competence=2026-10", server.takeRequest().path)
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"ownShifts":[{"scheduleId":"s","shiftId":"mine","unitId":"u","unitName":"Matriz","date":"2026-10-25","startTime":"08:00","endTime":"16:00","occupantUid":"me","occupantName":"Heucilene"}],"candidateShifts":[{"scheduleId":"s","shiftId":"other","unitId":"u","unitName":"Matriz","date":"2026-10-25","startTime":"14:00","endTime":"22:00","occupantUid":"other-user","occupantName":"Bia"}],"through":"2026-12-22"}"""))
+            assertEquals("Bia", api.shiftSwapOptions().candidateShifts.single().occupantName)
+            assertEquals("/api/collaborator/requests/shift-swaps/options", server.takeRequest().path)
         }
     }
 }

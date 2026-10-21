@@ -50,7 +50,8 @@ export function OwnDocumentsPage() {
 
   return (
     <PageContainer variant="compact" className="space-y-5 py-6">
-      <PageHeader title="Meus documentos" description="Documentos que o Departamento Pessoal liberou para você: espelho de ponto e contracheque assinados, recibos e termos." />
+      <div><p className="mb-1 text-xs font-black uppercase tracking-wide text-ds-accent-ink">02 · Documentos do colaborador</p>
+        <PageHeader title="Meus documentos" description="Documentos que o Departamento Pessoal liberou para você: espelho de ponto e contracheque assinados, recibos e termos." /></div>
       {error ? <p role="alert" className="text-sm font-semibold text-ds-danger">{error}</p> : null}
       {!documents && !error ? <ListSkeleton rows={4} /> : null}
       {documents && !documents.length ? <p className="rounded-ds-card border border-dashed border-ds-border-input px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum documento liberado ainda. Quando o DP liberar um documento para você, ele aparece aqui.</p> : null}

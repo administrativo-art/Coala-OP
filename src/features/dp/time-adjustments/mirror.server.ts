@@ -10,8 +10,9 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { canAccessUserByUnit } from '@/lib/unit-access';
 
-import { competenceRange, type ClosurePerson } from './closure-core';
+import { competenceRange, normalizeClosurePerson, type ClosurePerson } from './closure-core';
 import { assertClosureAccess, type ClosureRecord } from './closure.server';
 import { buildMirrorSnapshot, MIRROR_RENDERER_VERSION, mirrorSnapshotHash, type MirrorAgreement, type MirrorSnapshot } from './mirror-core';
 import { mirrorFileName, renderMirrorPdf } from './mirror-pdf';
@@ -27,10 +28,14 @@ type MirrorRecord = { snapshot: MirrorSnapshot; snapshotHash: string; rendererVe
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'AUTHORIZATION' | 'NOT_FOUND' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
 }
-/** O próprio espelho é do titular; ler o de outra pessoa exige o fechamento, e gerar exige poder fechar. */
-function subject(context: ServerUserContext, employeeUid?: string, need: 'read' | 'close' = 'read') {
+/** O próprio espelho é do titular; outro exige fechamento e uma unidade visível ao operador. */
+async function subject(deps: Dependencies, context: ServerUserContext, employeeUid?: string, need: 'read' | 'close' = 'read') {
   if (!employeeUid || employeeUid === context.decoded.uid) return context.decoded.uid;
   assertClosureAccess(context, need);
+  const employee = await deps.mainDb.collection('users').doc(employeeUid).get();
+  if (!employee.exists || !canAccessUserByUnit(context.userDoc, employee.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {
+    throw fail('PTRP_MIRROR_SUBJECT_NOT_FOUND', 'Pessoa não encontrada.', 'NOT_FOUND');
+  }
   return employeeUid;
 }
 function refs(deps: Dependencies, workspaceId: string, competence: string, version: number, uid: string) {
@@ -49,7 +54,7 @@ async function packageStatus(hrDb: Firestore, pack: { status: string; signatureR
 /** Situação do espelho da pessoa no mês: só leitura, sem gerar nada. */
 export async function readMirrorStatus(context: ServerUserContext, competence: string, employeeUid?: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const uid = subject(context, employeeUid);
+  const uid = await subject(deps, context, employeeUid);
   const closure = (await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).get()).data() as ClosureRecord | undefined;
   if (closure?.status !== 'closed') return { competence, closure: closure ? { status: closure.status, version: closure.version } : null, mirror: null };
   const target = refs(deps, context.workspace_id, competence, closure.version, uid);
@@ -70,7 +75,9 @@ async function buildSnapshot(deps: Dependencies, workspaceId: string, competence
     resolveEmploymentReferenceForSystem({ workspaceId, userId: uid, date: end, database: deps.mainDb }),
   ]);
   const actorIds = [...new Set((declaration?.adjustments ?? []).flatMap((item) => [item.requestedBy, item.decidedBy])
-    .concat((declaration?.absences ?? []).map((item) => item.decidedBy)).filter((value): value is string => Boolean(value)))].slice(0, 100);
+    .concat((declaration?.absences ?? []).map((item) => item.decidedBy))
+    .concat((declaration?.shiftSwaps ?? []).flatMap((item) => item.acts.map((act) => act.actorUid)))
+    .filter((value): value is string => Boolean(value)))].slice(0, 100);
   const actors = actorIds.length ? await deps.mainDb.getAll(...actorIds.map((id) => deps.mainDb.collection('users').doc(id))) : [];
   const { at, clockSource } = await actInstant(deps.clock);
   const employer = reference.status === 'matched' ? reference.period.employer : null;
@@ -90,7 +97,7 @@ async function buildSnapshot(deps: Dependencies, workspaceId: string, competence
  */
 export async function generateMirror(context: ServerUserContext, input: MirrorActionInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const uid = subject(context, input.employeeUid, 'close');
+  const uid = await subject(deps, context, input.employeeUid, 'close');
   const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
   const closure = (await closureRef.get()).data() as ClosureRecord | undefined;
   if (closure?.status !== 'closed') throw fail('PTRP_MIRROR_NOT_CLOSED', 'O espelho sai depois do fechamento do mês.', 'CONFLICT');
@@ -98,7 +105,8 @@ export async function generateMirror(context: ServerUserContext, input: MirrorAc
   const target = refs(deps, context.workspace_id, input.competence, closure.version, uid);
   const existing = (await target.mirror.get()).data() as MirrorRecord | undefined;
   if (existing) return existing;
-  const declaration = ((await target.person.get()).data() as ClosurePerson | undefined) ?? null;
+  const rawDeclaration = (await target.person.get()).data() as ClosurePerson | undefined;
+  const declaration = rawDeclaration ? normalizeClosurePerson(rawDeclaration) : null;
   // Outra pessoa só se estiver na declaração do mês ou cadastrada no sistema (o workspace é único por instalação).
   if (uid !== context.decoded.uid && !declaration && !(await deps.mainDb.collection('users').doc(uid).get()).exists) {
     throw fail('PTRP_MIRROR_SUBJECT_INVALID', 'Pessoa não encontrada.', 'NOT_FOUND');
@@ -117,7 +125,7 @@ export async function generateMirror(context: ServerUserContext, input: MirrorAc
 /** PDF do espelho já gerado, sem gravar nada; o arquivo é sempre derivado do instantâneo. */
 export async function mirrorPdf(context: ServerUserContext, competence: string, employeeUid?: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const uid = subject(context, employeeUid);
+  const uid = await subject(deps, context, employeeUid);
   const closure = (await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).get()).data() as ClosureRecord | undefined;
   if (closure?.status !== 'closed') throw fail('PTRP_MIRROR_NOT_CLOSED', 'O espelho sai depois do fechamento do mês.', 'NOT_FOUND');
   const record = (await refs(deps, context.workspace_id, competence, closure.version, uid).mirror.get()).data() as MirrorRecord | undefined;
