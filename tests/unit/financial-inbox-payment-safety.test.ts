@@ -46,6 +46,15 @@ test("pagamento por boleto não pode ser recriado quando já há extrato ou regi
   assert.match(paymentService, /mapInterBarcodeStatus\(candidate\.statusPagamento,[\s\S]{0,100}=== "paid"/);
 });
 
+test("resultado bancário atualiza a caixa e separa falha de handoff confirmado", () => {
+  assert.match(paymentService, /planFinancialInboxPaymentProjection/);
+  assert.match(paymentService, /MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF/);
+  assert.match(paymentService, /BANK_PAYMENT_ACTION_REQUIRED/);
+  assert.match(paymentService, /status: "failed", lastError, updatedAt: failedAt/);
+  assert.match(statementSync, /planFinancialInboxPaymentProjection/);
+  assert.match(statementSync, /message: inboxMessage,/);
+});
+
 test("preparação exige e preserva a identidade confirmada do favorecido", () => {
   assert.match(inboxPaymentRoute, /inboxBarcodePaymentPreparationSchema\.parse/);
   assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument/);
@@ -61,7 +70,7 @@ test("lembrete identificado não recebe vínculo financeiro principal", () => {
   assert.match(workflow, /analysisCanResolve/);
   assert.match(workflow, /triage\.kind !== "candidate" \|\| !analysisCanResolve/);
   assert.match(workflow, /: resolutionForDisplay\(message\)/);
-  assert.match(workflow, /\? automaticReminder\.status/);
+  assert.match(workflow, /automaticReminderArchive \? "archived" : automaticReminder\.status/);
   assert.doesNotMatch(workflow, /automaticReminder[\s\S]{0,240}linkedExpenseId/);
   assert.match(workflow, /resolutionOnly \? \{\} : \{\s*linkedExpenseId: expenseId/);
 });

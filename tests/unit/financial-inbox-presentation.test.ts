@@ -69,6 +69,7 @@ test("organiza todos os estados nas etapas operacionais sem misturar banco e con
     identified: "done",
     linked: "pay",
     awaiting_authorization: "bank",
+    payment_failed: "bank",
     scheduled: "bank",
     awaiting_statement: "bank",
     reconciled: "done",
@@ -105,7 +106,16 @@ test("arquivamento local só oferece estados terminais e ruídos sem efeito fina
     status: "identified", financialState: "reconciled", kind: "new_charge", mode: "manual", targetType: null,
     targetId: null, resolvedAt: null, resolvedBy: null,
   } as FinancialInboxMessage["resolution"] })), true);
-  for (const status of ["linked", "awaiting_authorization", "scheduled", "awaiting_statement", "pending_review", "suggestion_available", "divergent", "error"] as const) {
+  assert.equal(isFinancialInboxArchiveCandidate(message({
+    status: "scheduled",
+    bankState: "scheduled",
+    bankTransactionId: "inter-1",
+    resolution: {
+      status: "identified", financialState: "scheduled", kind: "new_charge", mode: "manual",
+      targetType: "expense", targetId: "expense-1", resolvedAt: null, resolvedBy: null,
+    } as FinancialInboxMessage["resolution"],
+  })), true);
+  for (const status of ["linked", "awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement", "pending_review", "suggestion_available", "divergent", "error"] as const) {
     assert.equal(isFinancialInboxArchiveCandidate(message({ status })), false, status);
   }
   assert.equal(isFinancialInboxArchiveCandidate(message({ status: "reconciled", bankState: "scheduled" })), false);

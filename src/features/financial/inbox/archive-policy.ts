@@ -1,7 +1,10 @@
 import type { FinancialInboxMessage } from "./types";
 
 export type InboxArchiveEvidence = {
+  paymentRequestId?: string | null;
   paymentRequestStatus: string | null;
+  paymentWorkspaceId?: string | null;
+  paymentInterRequestId?: string | null;
   paymentStatementStatus: string | null;
   paymentSourceType?: string | null;
   paymentSourceId?: string | null;
@@ -14,6 +17,7 @@ export type InboxArchiveEvidence = {
   expenseInboxMessageId?: string | null;
   expenseObligationId?: string | null;
   expenseReconciliationStatus?: string | null;
+  expensePaymentRequestId?: string | null;
 };
 
 export function financialInboxArchiveEligibility(
@@ -28,6 +32,37 @@ export function financialInboxArchiveEligibility(
       ? { eligible: true, reasonCode: "NOISE_OR_DISCARD_REVIEWED" }
       : { eligible: false, reasonCode: "IGNORED_WITH_FINANCIAL_LINK" };
   }
+  if (message.status === "payment_failed" || message.bankState === "failed") {
+    return { eligible: false, reasonCode: "PAYMENT_FAILED" };
+  }
+  const resolution = message.resolution;
+  const expenseId = message.linkedExpenseId || (resolution?.targetType === "expense"
+    ? resolution.targetId : null);
+  const reminder = resolution?.kind === "reminder" || resolution?.kind === "duplicate";
+  const expenseLinkMatches = Boolean(expenseId)
+    && evidence.expenseId === expenseId
+    && evidence.expenseWorkspaceId === message.workspaceId
+    && (evidence.expenseInboxMessageId === message.id || reminder);
+  const paymentId = message.paymentRequestId || evidence.expensePaymentRequestId || null;
+  const confirmedHandoff = resolution?.status === "identified"
+    && ["scheduled", "reconciled"].includes(resolution.financialState ?? "")
+    && ["identified", "scheduled", "awaiting_statement", "reconciled"].includes(message.status)
+    && ["scheduled", "awaiting_statement", "reconciled"].includes(message.bankState ?? "")
+    && expenseLinkMatches
+    && Boolean(paymentId)
+    && evidence.paymentRequestId === paymentId
+    && evidence.expensePaymentRequestId === paymentId
+    && evidence.paymentWorkspaceId === message.workspaceId
+    && ["scheduled", "processing", "awaiting_statement", "paid"].includes(evidence.paymentRequestStatus ?? "")
+    && Boolean(evidence.paymentInterRequestId)
+    && evidence.paymentExpenseId === expenseId
+    && ((evidence.paymentSourceType === "financial_inbox"
+      && (evidence.paymentSourceId === message.id || reminder))
+      || (reminder && evidence.paymentSourceType === "expense_boleto"
+        && evidence.paymentSourceId === expenseId));
+  if (confirmedHandoff) {
+    return { eligible: true, reasonCode: "FINANCIAL_HANDOFF_CONFIRMED" };
+  }
   if (message.status !== "reconciled" && (message.status !== "identified"
     || message.resolution?.status !== "identified"
     || message.resolution.financialState !== "reconciled")) {
@@ -39,12 +74,10 @@ export function financialInboxArchiveEligibility(
   if (message.existingBankPayment && !message.existingSettlement) {
     return { eligible: false, reasonCode: "BANK_IN_PROGRESS" };
   }
-  const expenseId = message.linkedExpenseId || (message.resolution?.targetType === "expense"
-    ? message.resolution.targetId : null);
   if (!expenseId || evidence.expenseId !== expenseId
     || evidence.expenseWorkspaceId !== message.workspaceId
     || (evidence.expenseInboxMessageId !== message.id
-      && !(message.resolution?.kind === "reminder" && message.resolution.targetId === expenseId))) {
+      && !(reminder && message.resolution?.targetId === expenseId))) {
     return { eligible: false, reasonCode: "EXPENSE_LINK_CONFLICT" };
   }
   if (evidence.expenseStatus !== "paid" || evidence.expenseReconciliationStatus !== "MATCHED") {

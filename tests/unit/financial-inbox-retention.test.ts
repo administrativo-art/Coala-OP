@@ -94,6 +94,10 @@ test("manutenção é seca por padrão, transacional e não apaga documentos", (
   const scheduled = readFileSync("functions/src/financial-inbox-jobs.ts", "utf8");
   assert.match(source, /const dryRun = params\.dryRun !== false/);
   assert.match(source, /backfillResolutionContract/);
+  assert.match(source, /backfillPaymentProjection/);
+  assert.match(source, /FINANCIAL_INBOX_PAYMENT_PROJECTION_STATE_ID/);
+  assert.match(source, /Math\.min\(params\.batchSize, 150\)/);
+  assert.match(source, /PAYMENT_PROJECTION_BACKFILLED/);
   assert.match(source, /resolutionContractVersion/);
   assert.match(source, /resolutionForDisplay\(message\)/);
   assert.match(source, /runTransaction\(async \(transaction\) =>/);

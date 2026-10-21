@@ -46,7 +46,7 @@ const SUMMARY_FALLBACK_LIMIT = 500;
 // A busca sem índice mantém o fallback legado limitado a 501 documentos.
 const ACTIVE_STATUSES: FinancialInboxStatus[] = [
   "pending_review", "document_pending", "suggestion_available", "under_review", "identified", "linked",
-  "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
+  "awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
 ];
 const FILTER_STATUSES = new Set<FinancialInboxStatus>([...ACTIVE_STATUSES, "archived"]);
 const RESOLUTION_KINDS = new Set<FinancialInboxResolutionKind>([
@@ -501,34 +501,46 @@ export async function archiveSelectedFinancialInboxMessages(params: {
       throw new FinancialInboxReviewError("NOT_FOUND");
     }
     const messages = snapshots.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }) as FinancialInboxMessage);
-    const paymentIds = [...new Set(messages.filter((message) => message.status !== "archived")
-      .map((message) => message.paymentRequestId).filter((id): id is string => Boolean(id)))];
     const obligationIds = [...new Set(messages.filter((message) => message.status !== "archived")
       .map((message) => message.obligationId).filter((id): id is string => Boolean(id)))];
     const expenseIds = [...new Set(messages.filter((message) => message.status !== "archived")
       .map((message) => message.linkedExpenseId || (message.resolution?.targetType === "expense"
         ? message.resolution.targetId : null)).filter((id): id is string => Boolean(id)))];
-    const paymentSnapshots = paymentIds.length
-      ? await transaction.getAll(...paymentIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)))
-      : [];
     const obligationSnapshots = obligationIds.length
       ? await transaction.getAll(...obligationIds.map((id) => financialDbAdmin.collection("financialObligations").doc(id)))
       : [];
     const expenseSnapshots = expenseIds.length
       ? await transaction.getAll(...expenseIds.map((id) => financialDbAdmin.collection("expenses").doc(id)))
       : [];
-    const payments = new Map(paymentSnapshots.map((snapshot) => [snapshot.id, snapshot]));
     const obligations = new Map(obligationSnapshots.map((snapshot) => [snapshot.id, snapshot]));
     const expenses = new Map(expenseSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    const paymentIdByMessage = new Map(messages.map((message) => {
+      const expenseId = message.linkedExpenseId || (message.resolution?.targetType === "expense"
+        ? message.resolution.targetId : null);
+      const expense = expenseId ? expenses.get(expenseId) : null;
+      const paymentId = message.paymentRequestId
+        || (expense?.exists ? String(expense.get("paymentRequestId") ?? "").trim() : "")
+        || null;
+      return [message.id, paymentId] as const;
+    }));
+    const paymentIds = [...new Set([...paymentIdByMessage.values()].filter((id): id is string => Boolean(id)))];
+    const paymentSnapshots = paymentIds.length
+      ? await transaction.getAll(...paymentIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)))
+      : [];
+    const payments = new Map(paymentSnapshots.map((snapshot) => [snapshot.id, snapshot]));
     const decisions = messages.map((message) => {
-      const payment = message.paymentRequestId ? payments.get(message.paymentRequestId) : null;
+      const paymentId = paymentIdByMessage.get(message.id) ?? null;
+      const payment = paymentId ? payments.get(paymentId) : null;
       const obligation = message.obligationId ? obligations.get(message.obligationId) : null;
       const expenseId = message.linkedExpenseId || (message.resolution?.targetType === "expense"
         ? message.resolution.targetId : null);
       const expense = expenseId ? expenses.get(expenseId) : null;
       const settlementSummary = expense?.get("settlementSummary") as Record<string, unknown> | undefined;
       return financialInboxArchiveEligibility(message, {
+        paymentRequestId: payment?.exists ? payment.id : null,
         paymentRequestStatus: payment?.exists ? String(payment.get("status") ?? "") : null,
+        paymentWorkspaceId: payment?.exists ? String(payment.get("workspaceId") ?? "") : null,
+        paymentInterRequestId: payment?.exists ? String(payment.get("interRequestId") ?? "") : null,
         paymentStatementStatus: payment?.exists ? String(payment.get("statementReconciliationStatus") ?? "") : null,
         paymentSourceType: payment?.exists ? String(payment.get("sourceType") ?? "") : null,
         paymentSourceId: payment?.exists ? String(payment.get("sourceId") ?? "") : null,
@@ -542,6 +554,7 @@ export async function archiveSelectedFinancialInboxMessages(params: {
         expenseObligationId: expense?.exists ? String(expense.get("obligationId") ?? "") : null,
         expenseReconciliationStatus: expense?.exists
           ? String(settlementSummary?.reconciliationStatus ?? "") : null,
+        expensePaymentRequestId: expense?.exists ? String(expense.get("paymentRequestId") ?? "") : null,
       });
     });
     if (decisions.some((decision) => !decision.eligible)) throw new FinancialInboxReviewError("STATE_CONFLICT");
