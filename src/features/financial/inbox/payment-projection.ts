@@ -201,6 +201,9 @@ export function planFinancialInboxPaymentProjection(params: {
   }
 
   const keepArchived = params.message.status === "archived" && !projection.requiresAction;
+  const keptArchivedThread = keepArchived
+    ? threadWithStatus(params.message, "archived")
+    : undefined;
   return {
     transition: "update",
     patch: {
@@ -211,7 +214,7 @@ export function planFinancialInboxPaymentProjection(params: {
         status: keepArchived ? "archived" : "identified",
         financialState: projection.financialState,
       },
-      ...(keepArchived ? { thread: threadWithStatus(params.message, "archived") } : {}),
+      ...(keptArchivedThread ? { thread: keptArchivedThread } : {}),
     },
   };
 }
