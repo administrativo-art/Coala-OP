@@ -25,11 +25,18 @@ import type {
 } from "./types";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { serializeFinancialValue } from "@/features/financial/lib/server-access";
+import { AppError } from "@/lib/observability";
 import {
   discardedFinancialInboxResolution,
+  financialInboxResolutionMigrationComplete,
+  FINANCIAL_INBOX_RESOLUTION_STATE_ID,
   FINANCIAL_INBOX_RESOLUTION_VERSION,
   pendingFinancialInboxResolution,
+  resolutionForDisplay,
+  restoredFinancialInboxResolution,
 } from "./resolution-contract";
+import { financialInboxArchiveEligibility } from "./archive-policy";
+import { financialInboxManualArchivePlan, FINANCIAL_INBOX_RETENTION_POLICY_VERSION } from "./retention-policy";
 
 const COLLECTION = "financialInboxMessages";
 const SEARCH_SCAN_LIMIT = 500;
@@ -100,7 +107,7 @@ function stageFrom(value: string | null | undefined): FinancialInboxStage | null
 }
 
 function viewFrom(value: string | null | undefined): FinancialInboxView {
-  return value === "identified" ? "identified" : "work";
+  return value === "identified" || value === "noise" || value === "discarded" ? value : "work";
 }
 
 function resolutionKindFrom(value: string | null | undefined): FinancialInboxResolutionKind | null {
@@ -121,6 +128,10 @@ function scopedInboxQuery(params: {
 }) {
   let query: FirebaseFirestore.Query = financialDbAdmin.collection(COLLECTION).where("workspaceId", "==", params.workspaceId);
   if (params.status) query = query.where("status", "==", params.status);
+  else if (params.view === "noise" || params.view === "discarded") {
+    query = query.where("status", "==", "ignored")
+      .where("resolution.mode", "==", params.view === "noise" ? "automatic" : "manual");
+  }
   else if (params.resolutionKind) {
     query = query
       .where("resolution.status", "==", "identified")
@@ -277,10 +288,25 @@ export async function listFinancialInboxMessages(params: {
   const status = params.status && FILTER_STATUSES.has(params.status as FinancialInboxStatus)
     ? params.status as FinancialInboxStatus
     : null;
-  const stage = status ? null : stageFrom(params.stage);
   const view = viewFrom(params.view);
-  const resolutionKind = status || stage ? null : resolutionKindFrom(params.resolutionKind);
-  const financialState = status || stage || resolutionKind ? null : financialStateFrom(params.financialState);
+  if (view === "noise" || view === "discarded") {
+    const migration = await financialDbAdmin.collection("financialSystemState")
+      .doc(FINANCIAL_INBOX_RESOLUTION_STATE_ID).get();
+    if (!financialInboxResolutionMigrationComplete(migration.data())) {
+      const anyLegacyData = await financialDbAdmin.collection(COLLECTION).limit(1).get();
+      if (!anyLegacyData.empty) {
+        throw new AppError({
+          code: "FINANCIAL_INBOX_RESOLUTION_MIGRATION_REQUIRED",
+          kind: "CONFLICT",
+          safeMessage: "A visão de ruídos aguarda a migração dos registros antigos; execute a manutenção até concluí-la.",
+        });
+      }
+    }
+  }
+  const stage = status || view === "noise" || view === "discarded" ? null : stageFrom(params.stage);
+  const resolutionKind = status || stage || view === "noise" || view === "discarded" ? null : resolutionKindFrom(params.resolutionKind);
+  const financialState = status || stage || resolutionKind || view === "noise" || view === "discarded"
+    ? null : financialStateFrom(params.financialState);
   const search = String(params.search ?? "").trim().slice(0, 120);
   const summaryPromise = summarizeFinancialInbox(params.workspaceId);
   let query = scopedInboxQuery({
@@ -377,9 +403,10 @@ export async function restoreArchivedFinancialInboxMessage(params: {
       throw new FinancialInboxReviewError("STATE_CONFLICT");
     }
     const restoredStatus = snapshot.get("archivedFromStatus") as "ignored" | "identified" | "reconciled";
+    const message = { id: snapshot.id, ...snapshot.data() } as FinancialInboxMessage;
     transaction.set(reference, {
       status: restoredStatus,
-      "resolution.status": restoredStatus === "ignored" ? "discarded" : "identified",
+      resolution: restoredFinancialInboxResolution(message, restoredStatus),
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       archivedAt: null,
       archivedBy: null,
@@ -455,4 +482,97 @@ export async function reviewFinancialInboxMessages(params: {
     });
   });
   return { updated: ids.length };
+}
+
+export async function archiveSelectedFinancialInboxMessages(params: {
+  ids: string[];
+  workspaceId: string;
+  actorId: string;
+  actorEmail?: string | null;
+}) {
+  const ids = [...new Set(params.ids)];
+  if (ids.length === 0 || ids.length > 50) throw new FinancialInboxReviewError("EMPTY_SELECTION");
+  const references = ids.map((id) => financialDbAdmin.collection(COLLECTION).doc(id));
+  const now = new Date();
+  const at = now.toISOString();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshots = await transaction.getAll(...references);
+    if (snapshots.some((snapshot) => !snapshot.exists || snapshot.get("workspaceId") !== params.workspaceId)) {
+      throw new FinancialInboxReviewError("NOT_FOUND");
+    }
+    const messages = snapshots.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }) as FinancialInboxMessage);
+    const paymentIds = [...new Set(messages.filter((message) => message.status !== "archived")
+      .map((message) => message.paymentRequestId).filter((id): id is string => Boolean(id)))];
+    const obligationIds = [...new Set(messages.filter((message) => message.status !== "archived")
+      .map((message) => message.obligationId).filter((id): id is string => Boolean(id)))];
+    const expenseIds = [...new Set(messages.filter((message) => message.status !== "archived")
+      .map((message) => message.linkedExpenseId || (message.resolution?.targetType === "expense"
+        ? message.resolution.targetId : null)).filter((id): id is string => Boolean(id)))];
+    const paymentSnapshots = paymentIds.length
+      ? await transaction.getAll(...paymentIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)))
+      : [];
+    const obligationSnapshots = obligationIds.length
+      ? await transaction.getAll(...obligationIds.map((id) => financialDbAdmin.collection("financialObligations").doc(id)))
+      : [];
+    const expenseSnapshots = expenseIds.length
+      ? await transaction.getAll(...expenseIds.map((id) => financialDbAdmin.collection("expenses").doc(id)))
+      : [];
+    const payments = new Map(paymentSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    const obligations = new Map(obligationSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    const expenses = new Map(expenseSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    const decisions = messages.map((message) => {
+      const payment = message.paymentRequestId ? payments.get(message.paymentRequestId) : null;
+      const obligation = message.obligationId ? obligations.get(message.obligationId) : null;
+      const expenseId = message.linkedExpenseId || (message.resolution?.targetType === "expense"
+        ? message.resolution.targetId : null);
+      const expense = expenseId ? expenses.get(expenseId) : null;
+      const settlementSummary = expense?.get("settlementSummary") as Record<string, unknown> | undefined;
+      return financialInboxArchiveEligibility(message, {
+        paymentRequestStatus: payment?.exists ? String(payment.get("status") ?? "") : null,
+        paymentStatementStatus: payment?.exists ? String(payment.get("statementReconciliationStatus") ?? "") : null,
+        paymentSourceType: payment?.exists ? String(payment.get("sourceType") ?? "") : null,
+        paymentSourceId: payment?.exists ? String(payment.get("sourceId") ?? "") : null,
+        paymentExpenseId: payment?.exists ? String(payment.get("expenseId") ?? "") : null,
+        obligationStatus: obligation?.exists ? String(obligation.get("status") ?? "") : null,
+        obligationSourceId: obligation?.exists ? String(obligation.get("sourceId") ?? "") : null,
+        expenseId: expense?.exists ? expense.id : null,
+        expenseWorkspaceId: expense?.exists ? String(expense.get("workspaceId") ?? "") : null,
+        expenseStatus: expense?.exists ? String(expense.get("status") ?? "") : null,
+        expenseInboxMessageId: expense?.exists ? String(expense.get("financialInboxMessageId") ?? "") : null,
+        expenseObligationId: expense?.exists ? String(expense.get("obligationId") ?? "") : null,
+        expenseReconciliationStatus: expense?.exists
+          ? String(settlementSummary?.reconciliationStatus ?? "") : null,
+      });
+    });
+    if (decisions.some((decision) => !decision.eligible)) throw new FinancialInboxReviewError("STATE_CONFLICT");
+    let archived = 0;
+    messages.forEach((message, index) => {
+      if (message.status === "archived") return;
+      const plan = financialInboxManualArchivePlan(message, now);
+      const resolution = resolutionForDisplay(message);
+      transaction.set(references[index], {
+        status: "archived",
+        resolution: { ...resolution, status: "archived" },
+        resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+        archivedAt: at,
+        archivedBy: params.actorId,
+        archivedFromStatus: plan.archivedFromStatus,
+        retentionClass: plan.retentionClass,
+        purgeEligibleAt: plan.purgeEligibleAt,
+        retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+        updatedAt: at,
+      }, { merge: true });
+      transaction.create(references[index].collection("events").doc(), {
+        type: "MESSAGE_ARCHIVED_BY_REVIEW",
+        at,
+        actorId: params.actorId,
+        actorEmail: params.actorEmail ?? null,
+        previousStatus: message.status,
+        reasonCode: decisions[index].reasonCode,
+        policyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+      });
+      archived += 1;
+    });
+    return { archived, alreadyArchived: messages.length - archived };
+  });
 }

@@ -10,6 +10,7 @@ import { canRevertPurchaseStage, canViewPurchasing } from "@/lib/purchasing-perm
 import { canAccessUnit } from "@/lib/unit-access";
 import { LOCAL_PURCHASE_WITHDRAWAL_LINKS } from "@/features/financial/cash-closures/withdrawal-classification.server";
 import { localPurchaseLotId, type LocalPurchaseStockLine } from "./local-purchase-stock";
+import { localPurchaseItemResolutionStatus, summarizeLocalPurchaseItems, type LocalPurchaseItemTreatment } from "./local-purchase";
 import {
   localPurchaseReversalBlock,
   localPurchaseStockShortfalls,
@@ -26,6 +27,24 @@ function failure(code: string, safeMessage: string, kind: "VALIDATION" | "AUTHOR
 function summary(snapshot: FirebaseFirestore.DocumentSnapshot): LocalPurchaseSummary {
   const data = snapshot.data() ?? {};
   const preLink = data.withdrawalPreLink as { amountCents?: number; date?: string; changeCents?: number } | undefined;
+  const stockIndexes = new Set((Array.isArray(data.stockLines) ? data.stockLines as LocalPurchaseStockLine[] : []).map((line) => line.itemIndex));
+  const items = (Array.isArray(data.items) ? data.items : []).map((item: Record<string, unknown>, index: number) => {
+    const storedTreatment = item.treatment;
+    // Compras anteriores a esta classificação preservam a semântica histórica: com estoque ou uso imediato.
+    const treatment: LocalPurchaseItemTreatment = storedTreatment === "existing_item" || storedTreatment === "item_not_found"
+      || storedTreatment === "asset_candidate" || storedTreatment === "immediate_use" || storedTreatment === "needs_review"
+      ? storedTreatment : stockIndexes.has(index) ? "existing_item" : "immediate_use";
+    const aiConfidence: "high" | "medium" | "low" | null = item.aiConfidence === "high" || item.aiConfidence === "medium" || item.aiConfidence === "low" ? item.aiConfidence : null;
+    return {
+      itemId: String(item.itemId ?? `item-${index + 1}`),
+      description: String(item.description ?? ""), quantity: Number(item.quantity ?? 0), unit: String(item.unit ?? ""), totalCents: Number(item.totalCents ?? 0),
+      treatment,
+      resolutionStatus: localPurchaseItemResolutionStatus(treatment),
+      aiConfidence,
+      aiReason: typeof item.aiReason === "string" && item.aiReason.trim() ? item.aiReason : null,
+    };
+  });
+  const itemSummary = summarizeLocalPurchaseItems(items);
   return {
     id: snapshot.id,
     unitId: String(data.unitId ?? ""),
@@ -42,9 +61,8 @@ function summary(snapshot: FirebaseFirestore.DocumentSnapshot): LocalPurchaseSum
     resultCenterName: String(data.resultCenterName ?? ""),
     note: String(data.note ?? ""),
     stockEntryStatus: data.stockEntryStatus ?? "not_needed",
-    items: (Array.isArray(data.items) ? data.items : []).map((item: Record<string, unknown>) => ({
-      description: String(item.description ?? ""), quantity: Number(item.quantity ?? 0), unit: String(item.unit ?? ""), totalCents: Number(item.totalCents ?? 0),
-    })),
+    ...itemSummary,
+    items,
     stockLines: (Array.isArray(data.stockLines) ? data.stockLines as LocalPurchaseStockLine[] : []).map((line) => ({
       itemIndex: line.itemIndex, productName: line.productName, quantity: line.quantity, expiryDate: line.expiryDate, lotCode: line.lotCode,
     })),

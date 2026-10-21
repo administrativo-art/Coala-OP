@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -16,6 +17,7 @@ function readyOrder(
     origin: "direct",
     externalOrderNumber: "702-2009843-2901867",
     supplierId: "supplier",
+    destinationKioskId: "matriz",
     receiptMode: "future_delivery",
     status: "created",
     estimatedReceiptDate: "2026-10-22",
@@ -111,4 +113,47 @@ test("não exige produto para consumo direto, mas mantém estoque sem vínculo p
     entryType: "asset",
   });
   assert.deepEqual(getPurchaseOrderConfirmationIssues(readyOrder(), [legacyAsset]), []);
+});
+
+test("exige destino para item operacional e preserva consumo direto sem destino", () => {
+  assert.deepEqual(
+    getPurchaseOrderConfirmationIssues(
+      readyOrder({ destinationKioskId: undefined }),
+      [readyItem()],
+    ).map((issue) => issue.code),
+    ["destination"],
+  );
+
+  assert.deepEqual(
+    getPurchaseOrderConfirmationIssues(
+      readyOrder({ destinationKioskId: undefined }),
+      [readyItem({ itemTreatment: "expense" })],
+    ),
+    [],
+  );
+});
+
+test("confirmação no servidor revalida destino e acesso à unidade", () => {
+  const route = readFileSync(
+    "src/app/api/purchasing/[...path]/route.ts",
+    "utf8",
+  );
+
+  assert.match(route, /purchaseTreatmentRequiresKioskDestination/);
+  assert.match(
+    route,
+    /Defina o destino operacional antes de confirmar a compra/,
+  );
+  assert.match(
+    route,
+    /canAccessUnit\(userContext\.userDoc, destinationKioskId/,
+  );
+  assert.match(
+    route,
+    /collection\('kiosks'\)\.doc\(destinationKioskId\)\.get\(\)/,
+  );
+  assert.match(
+    route,
+    /O destino só pode ser alterado enquanto o pedido está em revisão/,
+  );
 });

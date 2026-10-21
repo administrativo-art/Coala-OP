@@ -22,10 +22,23 @@ export function localPurchaseFinancialLabel(purchase: LocalPurchaseSummary) {
   return "A pagar";
 }
 
+export function localPurchaseItemsLabel(purchase: LocalPurchaseSummary) {
+  if (purchase.operationalStatus === "resolved") return "Todos os itens resolvidos";
+  return `${purchase.resolvedItemCount} de ${purchase.itemCount} itens resolvidos`;
+}
+
+const treatmentLabels: Record<LocalPurchaseSummary["items"][number]["treatment"], string> = {
+  existing_item: "Item existente vinculado",
+  item_not_found: "Item não encontrado · normalização pendente",
+  asset_candidate: "Possível patrimônio · revisão pendente",
+  immediate_use: "Uso imediato · sem controle de estoque",
+  needs_review: "Destinação aguardando revisão",
+};
+
 const stockLabels: Record<LocalPurchaseSummary["stockEntryStatus"], string> = {
   done: "Entrada concluída",
   pending: "Entrada pendente",
-  not_needed: "Sem entrada (consumo direto)",
+  not_needed: "Nenhuma entrada gerada",
   reversed: "Entrada estornada",
 };
 
@@ -88,6 +101,7 @@ export function LocalPurchasePanel(props: {
           <Row label="Origem">Aplicativo Coala Notas</Row>
           <Row label="Pagamento">{purchase.fundingSource === "cash_withdrawal" ? "Sangria do caixa" : `Recurso da empresa${purchase.companyPaymentMethod ? ` · ${purchase.companyPaymentMethod}` : ""}`}</Row>
           <Row label="Financeiro">{localPurchaseFinancialLabel(purchase)}</Row>
+          <Row label="Tratamento dos itens">{localPurchaseItemsLabel(purchase)}</Row>
           {purchase.withdrawal ? <Row label="Sangria escolhida">{purchasingMoney(purchase.withdrawal.amountCents / 100)} em {formatDay(purchase.withdrawal.date)}{purchase.withdrawal.changeCents > 0 ? ` · troco ${purchasingMoney(purchase.withdrawal.changeCents / 100)}` : ""}</Row> : null}
           <Row label="Categoria">{purchase.accountPlanName || "—"}</Row>
           <Row label="Centro de resultado">{purchase.resultCenterName || "—"}</Row>
@@ -102,7 +116,9 @@ export function LocalPurchasePanel(props: {
               const stock = stockByItem.get(index);
               return <li key={`${index}-${item.description}`} className="px-3 py-2.5 text-[13px]">
                 <div className="flex items-baseline justify-between gap-3"><span className="font-semibold text-ds-ink">{item.description}</span><span className="shrink-0 font-mono text-ds-ink">{purchasingMoney(item.totalCents / 100)}</span></div>
-                <p className="mt-0.5 text-xs text-ds-ink-faint">{item.quantity} {item.unit}{stock ? ` · estoque: ${stock.quantity} × ${stock.productName} · lote ${stock.lotCode}${stock.expiryDate ? ` · validade ${formatDay(stock.expiryDate)}` : " · sem validade"}` : " · consumo direto"}</p>
+                <p className="mt-0.5 text-xs text-ds-ink-faint">{item.quantity} {item.unit}{stock ? ` · estoque: ${stock.quantity} × ${stock.productName} · lote ${stock.lotCode}${stock.expiryDate ? ` · validade ${formatDay(stock.expiryDate)}` : " · sem validade"}` : ""}</p>
+                <p className={`mt-1 text-xs font-semibold ${item.resolutionStatus === "resolved" ? "text-ds-ok" : "text-ds-warn"}`}>{treatmentLabels[item.treatment]}</p>
+                {item.aiReason ? <p className="mt-0.5 text-xs text-ds-ink-faint">IA{item.aiConfidence ? ` · confiança ${item.aiConfidence === "high" ? "alta" : item.aiConfidence === "medium" ? "média" : "baixa"}` : ""}: {item.aiReason}</p> : null}
               </li>;
             })}
           </ul>
