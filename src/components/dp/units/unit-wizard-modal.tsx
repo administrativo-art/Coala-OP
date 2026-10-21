@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { BRAZIL_TIME_ZONES } from "@/features/dp/rep-p/time-zones";
 import { cn } from "@/lib/utils";
 import type { DPCoverageMode, DPUnit, DPUnitGroup, DPUnitOrganization, DPUnitStockRole, Kiosk } from "@/types";
 import {
@@ -45,6 +46,7 @@ function blankForm(): UnitForm {
     name: "",
     cnpj: "",
     address: "",
+    timeZone: "",
     unitType: "",
     organizationId: "",
     groupId: "",
@@ -105,6 +107,7 @@ export function UnitWizardModal({
         name: unit.name,
         cnpj: unit.cnpj ? CnpjValidator.format(unit.cnpj) : "",
         address: unit.address ?? "",
+        timeZone: unit.timeZone ?? "",
         unitType: unit.unitType ?? "",
         organizationId: unit.organizationId ?? group?.organizationId ?? "",
         groupId: unit.groupId ?? "",
@@ -319,7 +322,8 @@ export function UnitWizardModal({
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="CNPJ" htmlFor="unit-cnpj" requirement="opcional" error={errors.cnpj}>
+            <Field label="CNPJ do estabelecimento fiscal" htmlFor="unit-cnpj" requirement="opcional" error={errors.cnpj}
+              hint="Usado como identificação fiscal quando esta unidade for escolhida como empregadora no histórico do colaborador.">
               <Input
                 id="unit-cnpj"
                 value={form.cnpj}
@@ -340,7 +344,18 @@ export function UnitWizardModal({
               />
             </Field>
           </div>
-          <Field label="Endereço" htmlFor="unit-address" requirement="opcional">
+          <Field label="Fuso horário do ponto" htmlFor="unit-time-zone" requirement="opcional"
+            hint="Hora gravada nas batidas feitas nesta unidade. Sem escolha, vale o fuso do estabelecimento do empregador.">
+            <Select value={form.timeZone || "__establishment"} onValueChange={(value) => patch({ timeZone: value === "__establishment" ? "" : value })}>
+              <SelectTrigger id="unit-time-zone" className={fieldInputClass}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__establishment">Mesmo do estabelecimento (padrão)</SelectItem>
+                {BRAZIL_TIME_ZONES.map((zone) => <SelectItem key={zone.id} value={zone.id}>{zone.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Endereço do estabelecimento" htmlFor="unit-address" requirement="opcional"
+            hint="Obrigatório, junto com o CNPJ, para usar esta unidade como empregadora no registro de ponto.">
             <Textarea
               id="unit-address"
               value={form.address}

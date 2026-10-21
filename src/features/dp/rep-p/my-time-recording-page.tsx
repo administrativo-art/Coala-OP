@@ -1,116 +1,194 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, FileText, Loader2, RefreshCw, Share2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, Info } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { BackButton } from "@/components/navigation/back-button";
-import { Field, fieldInputClass } from "@/components/patterns/field";
-import { PanelSelectField, errorMessageOf } from "@/components/patterns/panel-form";
+import { errorMessageOf } from "@/components/patterns/panel-form";
 import { Segmented } from "@/components/patterns/segmented";
-import { Button } from "@/components/ui/button";
+import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
+import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
+import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
+import { MirrorCard } from "@/features/dp/time-adjustments/mirror-card";
+import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
+import type { AdjustmentView, TreatmentView } from "@/features/dp/time-adjustments/types";
+import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 
-import { brDate, fiscalTime, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
-import { dayMarkingOrder } from "./marking-order";
+import { buildMonthView, type DayAbsence, type DayMarking, type DayShift, type DayView, type DayIncident } from "./day-model";
+import { AbsencesAndAlerts, DAY_GRID, DayCard, DayPanel, INCIDENTS, type ReceiptActions } from "./day-list";
+import { saveFile } from "./marking-ui";
+import { hm, RecordStrip } from "./record-strip";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
 
-type ReceiptStatus = RepPReceiptStatus;
-type HistoryItem = {
-  receiptId: string; workDate: string; nsr: number; markedAt: string; executionUnitId: string;
-  collectorId: string; hash: string; receiptStatus: ReceiptStatus; receiptIssue: string | null;
-};
+type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
 type HistoryPayload = { markings: HistoryItem[]; truncated: boolean };
-type HistoryView = "today" | "day" | "period";
+type MonthPayload = { month: string; shifts: (DayShift & { date: string })[]; truncated: boolean };
+
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+// Ausências da conta "minhas" filtram pela data de início; 40 dias antes do mês pegam as que começaram no mês anterior.
+const ABSENCE_LOOKBACK_DAYS = 40;
+
+function shiftMonth(month: string, delta: number) {
+  const [year, value] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, value - 1 + delta, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function monthLabel(month: string) {
+  return `${MONTHS[Number(month.slice(5, 7)) - 1]} de ${month.slice(0, 4)}`;
+}
+function addDays(date: string, days: number) {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 export function MyTimeRecordingPage() {
   const { firebaseUser, permissions } = useAuth();
   const canView = permissions.dashboard.collaborator ?? permissions.dashboard.view;
-  const [view, setView] = useState<HistoryView>("today");
-  const loadHistoryRef = useRef<() => void>(() => undefined);
-  const onRecorded = useCallback(() => { if (view === "today") loadHistoryRef.current(); }, [view]);
-  const {
-    today, request, fetchReceiptFile, options, optionsError, unitId, setUnitId, recording, recordError, record: recordMarking,
-    lastMarking, setLastMarking, canRecord,
-  } = useRepPMarking({ onRecorded });
+  const [reloadKey, setReloadKey] = useState(0);
+  const onRecorded = useCallback(() => setReloadKey((current) => current + 1), []);
+  const marking = useRepPMarking({ onRecorded });
+  const { today, request, fetchReceiptFile, options, setLastMarking } = marking;
+  const currentMonth = today.slice(0, 7);
 
-  const [day, setDay] = useState(today);
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const [month, setMonth] = useState(currentMonth);
+  const [schedule, setSchedule] = useState<MonthPayload | null>(null);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [absences, setAbsences] = useState<DayAbsence[]>([]);
+  const [absencesUnavailable, setAbsencesUnavailable] = useState(false);
+  const [adjustments, setAdjustments] = useState<AdjustmentView[]>([]);
+  const [treatments, setTreatments] = useState<TreatmentView[]>([]);
+  const [adjustDate, setAdjustDate] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [showFuture, setShowFuture] = useState(false);
+  const [openDate, setOpenDate] = useState<string | null>(null);
+  // Pedido de ausência aberto na própria tela: undefined = fechado; "" = sem data; AAAA-MM-DD = vindo do dia.
+  const [absenceDate, setAbsenceDate] = useState<string | undefined>(undefined);
   const [busyReceipt, setBusyReceipt] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
 
-  const range = useMemo(() => view === "today" ? { startDate: today, endDate: today }
-    : view === "day" ? { startDate: day, endDate: day } : { startDate, endDate }, [view, today, day, startDate, endDate]);
-  // Com histórico truncado a ordem do dia pode estar incompleta: a numeração some em vez de errar.
-  const markingOrder = useMemo(() => history?.truncated ? new Map<string, number>() : dayMarkingOrder(history?.markings ?? []), [history]);
+  const monthStart = `${month}-01`;
+  const monthEnd = addDays(`${shiftMonth(month, 1)}-01`, -1);
+
+  // Uma leitura por troca de mês ou batida: escala própria, batidas do mês (até hoje) e ausências.
+  useEffect(() => {
+    if (!firebaseUser) return;
+    let cancelled = false;
+    const historyEnd = monthEnd < today ? monthEnd : today;
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([
+      request<MonthPayload>(`/api/dp/time-recording/month?month=${month}`, { fallbackError: "Não foi possível carregar sua escala." }),
+      monthStart <= today
+        ? request<HistoryPayload>(`/api/dp/time-recording/markings?${new URLSearchParams({ startDate: monthStart, endDate: historyEnd })}`,
+          { fallbackError: "Não foi possível carregar as batidas." })
+        : Promise.resolve({ markings: [], truncated: false }),
+      listAbsenceRequests(firebaseUser, "mine", undefined, { startDate: addDays(monthStart, -ABSENCE_LOOKBACK_DAYS), endDate: monthEnd })
+        .then((result) => ({ ok: true as const, result }), () => ({ ok: false as const, result: null })),
+      request<{ adjustments: AdjustmentView[]; treatments: TreatmentView[] }>(`/api/dp/time-recording/adjustments?month=${month}`,
+        { fallbackError: "Não foi possível carregar os ajustes." }).catch(() => ({ adjustments: [], treatments: [] })),
+    ]).then(([monthPayload, historyPayload, absencePayload, adjustmentPayload]) => {
+      setAdjustments(adjustmentPayload.adjustments);
+      setTreatments(adjustmentPayload.treatments);
+      if (cancelled) return;
+      setSchedule(monthPayload);
+      setHistory(historyPayload);
+      setAbsencesUnavailable(!absencePayload.ok);
+      setAbsences((absencePayload.result?.requests ?? [])
+        .filter((item) => item.input.startDate <= monthEnd && item.input.endDate >= monthStart && !["draft", "cancelled", "rejected"].includes(item.status))
+        .map((item) => ({ id: item.id, typeName: item.typeName, status: item.status, startDate: item.input.startDate, endDate: item.input.endDate,
+          approvedByInaction: item.approvedByInaction })));
+    }).catch((error) => {
+      if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês."));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
+
+  const days = useMemo(() => buildMonthView({
+    month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences, treatments,
+  }), [month, today, schedule, history, absences, treatments]);
+  // A faixa de registro mostra sempre o dia de hoje, mesmo navegando por outros meses.
+  const [todaySnapshot, setTodaySnapshot] = useState<DayView | null>(null);
+  useEffect(() => {
+    if (month !== currentMonth || !schedule) return;
+    const found = days.find((day) => day.date === today);
+    if (found) setTodaySnapshot(found);
+  }, [days, month, currentMonth, schedule, today]);
+  const todayView = useMemo<DayView>(() => todaySnapshot
+    ?? { date: today, shift: null, markings: [], allMarkings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null, balanceMinutes: null, deviation: null },
+  [todaySnapshot, today]);
   const unitNames = useMemo(() => new Map(options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [options]);
 
-  const loadHistory = useCallback(async () => {
-    if (!firebaseUser) return;
-    if (range.startDate > range.endDate) {
-      setHistoryError("A data inicial precisa ser anterior à final.");
-      return;
-    }
-    setHistoryLoading(true);
-    setHistoryError(null);
-    try {
-      const query = new URLSearchParams(range).toString();
-      setHistory(await request<HistoryPayload>(`/api/dp/time-recording/markings?${query}`,
-        { fallbackError: "Não foi possível carregar o histórico." }));
-    } catch (error) {
-      setHistoryError(errorMessageOf(error, "Não foi possível carregar o histórico."));
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [firebaseUser, range, request]);
+  const matches = useCallback((day: DayView) => {
+    if (filter === "alert") return day.incidents.length > 0;
+    if (filter === "absence") return day.absence !== null;
+    if (filter.startsWith("incident:")) return day.incidents.includes(filter.slice(9) as DayIncident);
+    if (filter.startsWith("absence:")) return day.absence?.id === filter.slice(8);
+    return true;
+  }, [filter]);
+  const past = days.filter((day) => day.date <= today);
+  const future = days.filter((day) => day.date > today);
+  // Hoje primeiro e os dias anteriores em seguida, agrupados por semana (domingo a sábado).
+  const weeks = useMemo(() => {
+    const grouped: DayView[][] = [];
+    [...past].reverse().forEach((day) => {
+      if (!grouped.length || new Date(`${day.date}T12:00:00Z`).getUTCDay() === 6) grouped.push([]);
+      grouped[grouped.length - 1].push(day);
+    });
+    return grouped;
+  }, [past]);
+  const alertDays = days.filter((day) => day.incidents.length).length;
+  const absenceDays = days.filter((day) => day.absence).length;
+  const registered = days.reduce((sum, day) => sum + day.workedMinutes, 0);
+  const balance = days.reduce((sum, day) => sum + (day.balanceMinutes ?? 0), 0);
+  const filterLabel = filter.startsWith("incident:") ? INCIDENTS[filter.slice(9) as DayIncident].label
+    : filter.startsWith("absence:") ? absences.find((item) => item.id === filter.slice(8))?.typeName ?? null : null;
+  const filtered = days.filter((day) => day.date <= today && matches(day)).length;
 
-  useEffect(() => { void loadHistory(); }, [loadHistory]);
-  useEffect(() => { loadHistoryRef.current = () => { void loadHistory(); }; }, [loadHistory]);
+  const changeMonth = (delta: number) => { setMonth((current) => shiftMonth(current, delta)); setFilter("all"); setOpenDate(null); };
 
   async function retryReceipt(receiptId: string) {
     setBusyReceipt(receiptId);
     setReceiptError(null);
     try {
-      const result = await request<{ receiptStatus: ReceiptStatus; receiptIssue: string | null }>(
+      const result = await request<{ receiptStatus: RepPReceiptStatus; receiptIssue: string | null }>(
         `/api/dp/time-recording/receipts/${receiptId}`, { method: "POST", fallbackError: "Não foi possível emitir o comprovante." });
       if (result.receiptStatus !== "available") {
         setReceiptError({ id: receiptId, message: "O comprovante continua pendente. O ponto está registrado; tente mais tarde." });
       }
       setLastMarking((current) => current?.receiptId === receiptId ? { ...current, ...result } : current);
-      void loadHistory();
+      setReloadKey((current) => current + 1);
     } catch (error) {
       setReceiptError({ id: receiptId, message: errorMessageOf(error, "Não foi possível emitir o comprovante.") });
     } finally {
       setBusyReceipt(null);
     }
   }
-
-  const fetchReceipt = fetchReceiptFile;
-
-  async function openReceipt(item: Pick<HistoryItem, "receiptId" | "nsr" | "markedAt">) {
+  async function openReceipt(item: DayMarking) {
     setBusyReceipt(item.receiptId);
     setReceiptError(null);
     try {
-      saveFile(await fetchReceipt(item.receiptId, item.nsr, item.markedAt));
+      saveFile(await fetchReceiptFile(item.receiptId, item.nsr, item.markedAt));
     } catch (error) {
       setReceiptError({ id: item.receiptId, message: errorMessageOf(error, "Não foi possível abrir o comprovante.") });
     } finally {
       setBusyReceipt(null);
     }
   }
-
-  const canShareFiles = typeof navigator !== "undefined" && typeof navigator.canShare === "function";
-  async function shareReceipt(item: Pick<HistoryItem, "receiptId" | "nsr" | "markedAt">) {
+  const canShare = typeof navigator !== "undefined" && typeof navigator.canShare === "function";
+  async function shareReceipt(item: DayMarking) {
     setBusyReceipt(item.receiptId);
     setReceiptError(null);
     try {
-      const file = await fetchReceipt(item.receiptId, item.nsr, item.markedAt);
+      const file = await fetchReceiptFile(item.receiptId, item.nsr, item.markedAt);
       if (!navigator.canShare?.({ files: [file] })) {
-        setReceiptError({ id: item.receiptId, message: "Este navegador não compartilha arquivos. Use Baixar comprovante." });
+        setReceiptError({ id: item.receiptId, message: "Este navegador não compartilha arquivos. Use Baixar." });
         return;
       }
       // Quem escolhe destino e confirma o envio é a pessoa, na folha nativa do sistema.
@@ -123,142 +201,141 @@ export function MyTimeRecordingPage() {
       setBusyReceipt(null);
     }
   }
-
-  function receiptActions(item: Pick<HistoryItem, "receiptId" | "nsr" | "markedAt" | "receiptStatus">) {
-    const busy = busyReceipt === item.receiptId;
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        {item.receiptStatus === "available" ? (
-          <>
-            <Button type="button" variant="ds-secondary" size="sm" loading={busy} loadingLabel="Abrindo…" onClick={() => openReceipt(item)}>
-              <FileText className="h-4 w-4" aria-hidden /> Baixar comprovante
-            </Button>
-            {canShareFiles ? (
-              <Button type="button" variant="ds-ghost" size="sm" disabled={busy} onClick={() => shareReceipt(item)}>
-                <Share2 className="h-4 w-4" aria-hidden /> Compartilhar
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <Button type="button" variant="ds-secondary" size="sm" loading={busy} loadingLabel="Emitindo…" onClick={() => retryReceipt(item.receiptId)}>
-            <RefreshCw className="h-4 w-4" aria-hidden /> Tentar emitir comprovante
-          </Button>
-        )}
-      </div>
-    );
-  }
+  const receipts: ReceiptActions = { busyReceipt, canShare, error: receiptError, open: (item) => void openReceipt(item),
+    share: (item) => void shareReceipt(item), retry: (id) => void retryReceipt(id) };
 
   if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para acessar o Painel do colaborador.</p>;
 
-  const noUnits = options && options.executionUnits.length === 0;
   return (
-    <PageContainer variant="compact" className="space-y-5 pb-8">
-      <BackButton fallbackHref="/dashboard/collaborator" label="Painel do colaborador" variant="ghost" size="sm" className="-ml-2" />
-      <h1 className="text-2xl font-black tracking-tight text-ds-ink">Registro de ponto</h1>
+    <PageContainer variant="wide" className="space-y-5 pb-8">
+      <header className="flex items-center gap-3">
+        <BackButton fallbackHref="/dashboard/collaborator" label="Painel do colaborador" variant="ghost" size="sm" className="-ml-2" />
+        <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Registro de ponto</h1>
+      </header>
 
-      <section className="space-y-4 rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="record-title">
-        <h2 id="record-title" className="text-base font-extrabold text-ds-ink">Registrar ponto</h2>
-        {optionsError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{optionsError}</p> : null}
-        {!options && !optionsError ? (
-          <p className="flex items-center gap-2 text-sm text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Carregando unidades…</p>
-        ) : null}
-        {options && !noUnits ? <OfficialClockDisplay clock={options.officialClock} /> : null}
-        {options && !options.markingEnabled && !noUnits ? (
-          <p className="text-sm text-ds-ink-muted">
-            O registro de ponto pelo sistema ainda não foi liberado. Quando for, as batidas e os comprovantes ficam aqui.
-          </p>
-        ) : null}
-        {noUnits ? (
-          <p className="text-sm text-ds-ink-muted">
-            Seu vínculo de hoje não está habilitado para registro de ponto. Procure o DP se isso estiver errado.
-          </p>
-        ) : null}
-        {options && !noUnits ? (
-          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-            {options.executionUnits.length > 1 ? (
-              <PanelSelectField id="execution-unit" label="Unidade onde você está trabalhando" value={unitId}
-                onChange={setUnitId}
-                options={options.executionUnits} />
-            ) : (
-              <p className="text-sm text-ds-ink-2">Unidade: <strong>{options.executionUnits[0]?.name}</strong></p>
-            )}
-            <Button type="button" variant="primary-page" size="xl" loading={recording} loadingLabel="Registrando…"
-              disabled={!canRecord} onClick={() => void recordMarking()}>
-              <Clock3 className="h-4 w-4" aria-hidden /> Registrar ponto
-            </Button>
-          </div>
-        ) : null}
-        {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
-        {lastMarking ? (
-          <div className="space-y-3 rounded-ds-md border border-ds-border bg-ds-warm p-4" role="status">
-            <p className="text-sm text-ds-ink">
-              Ponto registrado em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · NSR {lastMarking.marking.nsr}
-              {lastMarking.status === "replayed" ? " (já estava gravado)" : ""}
+      <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />
+
+      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} />
+          {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
+          {/* Só aparece com o mês fechado pelo DP. */}
+          <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} />
+          {/* Só aparece com o banco ligado na política; soma os meses já fechados do ciclo. */}
+          <TimeBankCard firebaseUser={firebaseUser} />
+        </aside>
+
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-9 items-center rounded-ds-md border border-ds-border bg-ds-surface">
+                <button type="button" aria-label="Mês anterior" onClick={() => changeMonth(-1)} className="px-2 text-ds-ink-muted hover:text-ds-ink"><ChevronLeft className="h-4 w-4" /></button>
+                <span className="px-1 text-[13px] font-bold text-ds-ink">{monthLabel(month)}</span>
+                <button type="button" aria-label="Próximo mês" onClick={() => changeMonth(1)} disabled={month >= shiftMonth(currentMonth, 1)}
+                  className="px-2 text-ds-ink-muted hover:text-ds-ink disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+              </div>
+              {month !== currentMonth ? <button type="button" onClick={() => setMonth(currentMonth)} className="text-xs font-bold text-ds-ink-2 underline">Voltar para hoje</button> : null}
+              <Segmented<string> aria-label="Filtrar dias" value={filter} onChange={setFilter}
+                options={[{ value: "all", label: "Todos" }, { value: "alert", label: `A conferir · ${alertDays}` }, { value: "absence", label: `Com ausência · ${absenceDays}` }]} />
+            </div>
+            <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ds-ink-muted">
+              <span><strong className="text-sm text-ds-ink">{hm(registered)}</strong> registradas</span>
+              <span>Saldo (prévia) <strong className="text-sm text-ds-ink">{hm(balance, true)}</strong></span>
             </p>
-            <ReceiptPill status={lastMarking.receiptStatus} />
-            {receiptActions({ receiptId: lastMarking.receiptId, nsr: lastMarking.marking.nsr,
-              markedAt: lastMarking.marking.markedAt, receiptStatus: lastMarking.receiptStatus })}
-            {receiptError?.id === lastMarking.receiptId ? <p role="alert" className="text-xs font-semibold text-ds-danger">{receiptError.message}</p> : null}
           </div>
-        ) : null}
-      </section>
 
-      <section className="space-y-4 rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="history-title">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="history-title" className="text-base font-extrabold text-ds-ink">Minhas batidas</h2>
-          <Segmented<HistoryView> aria-label="Período do histórico" value={view} onChange={setView}
-            options={[{ value: "today", label: "Hoje" }, { value: "day", label: "Dia" }, { value: "period", label: "Período" }]} />
-        </div>
-        {view === "day" ? (
-          <Field label="Dia" htmlFor="history-day">
-            <input id="history-day" type="date" className={fieldInputClass} value={day} max={today} onChange={(event) => setDay(event.target.value)} />
-          </Field>
-        ) : null}
-        {view === "period" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="De" htmlFor="history-start">
-              <input id="history-start" type="date" className={fieldInputClass} value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} />
-            </Field>
-            <Field label="Até" htmlFor="history-end" hint="Até 62 dias por consulta.">
-              <input id="history-end" type="date" className={fieldInputClass} value={endDate} max={today} onChange={(event) => setEndDate(event.target.value)} />
-            </Field>
-          </div>
-        ) : null}
-        {historyError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{historyError}</p> : null}
-        {historyLoading ? (
-          <p className="flex items-center gap-2 text-sm text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Carregando batidas…</p>
-        ) : history && history.markings.length === 0 ? (
-          <p className="text-sm text-ds-ink-muted">Nenhuma batida neste período.</p>
-        ) : history ? (
-          <ul className="divide-y divide-ds-divider">
-            {history.markings.map((item) => (
-              <li key={item.receiptId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  {markingOrder.has(item.receiptId) ? (
-                    <span className="mt-0.5 inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ds-warm px-2 text-sm font-extrabold text-ds-ink"
-                      aria-label={`${markingOrder.get(item.receiptId)}ª batida do dia`}>
-                      {markingOrder.get(item.receiptId)}ª
-                    </span>
-                  ) : null}
-                  <div className="space-y-1">
-                    <p className="text-sm text-ds-ink">
-                      <strong className="font-ds-mono text-base">{fiscalTime(item.markedAt)}</strong>
-                      <span className="text-ds-ink-muted"> · {brDate(item.markedAt)} · NSR {item.nsr}</span>
-                    </p>
-                    <p className="text-xs text-ds-ink-muted">{unitNames.get(item.executionUnitId) ?? "Unidade do registro"}</p>
-                    <ReceiptPill status={item.receiptStatus} />
+          {filterLabel ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-ds-btn-lg border border-ds-accent-ink/20 bg-ds-accent-row px-3 py-2 text-sm">
+              <span className="text-ds-ink-muted">Filtrando:</span>
+              <strong className="text-ds-ink">{filterLabel}</strong>
+              <span className="text-ds-ink-muted">· {filtered} {filtered === 1 ? "dia" : "dias"}</span>
+              <button type="button" onClick={() => setFilter("all")} className="ml-auto text-xs font-bold text-ds-accent-ink underline">Limpar filtro</button>
+            </div>
+          ) : null}
+
+          {loadError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{loadError}</p> : null}
+          {history?.truncated || schedule?.truncated ? (
+            <p className="text-xs text-ds-caution">O mês tem mais registros do que esta tela mostra de uma vez; confira os dias no fechamento.</p>
+          ) : null}
+
+          <div className="space-y-2">
+            <div className={cn(DAY_GRID, "hidden px-[18px] pb-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint md:grid")}>
+              <span>Dia</span><span>Escala</span><span>Batidas</span><span>Total</span><span>Saldo (prévia)</span><span>A conferir</span>
+            </div>
+            {loading && !schedule ? (
+              Array.from({ length: 6 }, (_, index) => (
+                <div key={index} className="flex items-center gap-4 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-[18px] py-4" aria-hidden>
+                  <span className="h-10 w-14 animate-pulse rounded-ds-md bg-ds-warm" />
+                  <span className="h-4 w-24 animate-pulse rounded bg-ds-warm" />
+                  <span className="h-3 flex-1 animate-pulse rounded-full bg-ds-warm" />
+                </div>
+              ))
+            ) : past.length === 0 && future.length === 0 ? null : (
+              <>
+                {future.length && filter === "all" ? (
+                  <button type="button" onClick={() => setShowFuture((current) => !current)}
+                    className="flex w-full items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface/60 px-4 py-2.5 text-left text-xs font-bold text-ds-ink-muted hover:bg-ds-surface">
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", !showFuture && "-rotate-90")} aria-hidden />
+                    Próximos dias ({future.length})
+                  </button>
+                ) : null}
+                {showFuture && filter === "all" ? [...future].reverse().map((day) => (
+                  <div key={day.date} className="flex items-center gap-3 rounded-ds-btn-lg border border-dashed border-ds-border px-4 py-2 text-xs text-ds-ink-muted">
+                    <span className="w-24 font-bold">{day.date.slice(8, 10)}/{day.date.slice(5, 7)}</span>
+                    {day.absence ? <span>{day.absence.typeName}</span>
+                      : day.shift?.type === "work" ? <span>{day.shift.shiftName ?? "Turno"} · {day.shift.startTime}–{day.shift.endTime}</span>
+                        : <span>{day.shift ? "Folga" : "Sem escala"}</span>}
                   </div>
-                </div>
-                <div className="space-y-1">
-                  {receiptActions(item)}
-                  {receiptError?.id === item.receiptId ? <p role="alert" className="text-xs font-semibold text-ds-danger">{receiptError.message}</p> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {history?.truncated ? <p className="text-xs text-ds-ink-muted">Mostrando as primeiras 300 batidas. Reduza o período para ver as demais.</p> : null}
-      </section>
+                )) : null}
+                {weeks.map((week) => {
+                  const visible = week.filter(matches);
+                  if (!visible.length) return null;
+                  const worked = week.reduce((sum, day) => sum + day.workedMinutes, 0);
+                  const weekAlerts = week.filter((day) => day.incidents.length).length;
+                  const first = week[week.length - 1].date;
+                  const last = week[0].date;
+                  return (
+                    <Fragment key={first}>
+                      <div className="flex flex-wrap items-center gap-3 px-1 pb-0.5 pt-4 text-xs first:pt-1">
+                        <strong className="text-ds-ink">{first.slice(8, 10)}/{first.slice(5, 7)} a {last.slice(8, 10)}/{last.slice(5, 7)}</strong>
+                        <span className="tabular-nums text-ds-ink-2"><strong className="text-ds-ink">{hm(worked)}</strong> registradas</span>
+                        {weekAlerts ? <span className="font-bold text-ds-danger">{weekAlerts} {weekAlerts === 1 ? "dia a conferir" : "dias a conferir"}</span> : <span className="text-ds-ink-muted">nada a conferir</span>}
+                      </div>
+                      {visible.map((day) => <DayCard key={day.date} day={day} today={today} selected={openDate === day.date} onOpen={() => setOpenDate(day.date)} />)}
+                    </Fragment>
+                  );
+                })}
+                {past.length === 0 ? <p className="rounded-[18px] border border-dashed border-ds-border bg-ds-surface p-6 text-center text-sm text-ds-ink-muted">Este mês ainda não começou.</p> : null}
+              </>
+            )}
+          </div>
+          <p className="flex items-center gap-1.5 text-xs text-ds-ink-muted">
+            <Info className="h-3.5 w-3.5" aria-hidden /> Saldo e itens a conferir são uma prévia; a apuração oficial é feita no fechamento do ponto.
+          </p>
+        </div>
+      </div>
+      <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
+        today={today} unitNames={unitNames} receipts={receipts} onClose={() => setOpenDate(null)}
+        onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
+        adjustments={adjustments.filter((item) => item.workDate === openDate)}
+        onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
+        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} />
+      {adjustDate ? (
+        <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
+          originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
+          onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />
+      ) : null}
+      {reportId && adjustments.find((item) => item.id === reportId) ? (() => {
+        const adjustment = adjustments.find((item) => item.id === reportId)!;
+        return (
+          <SidePanel open onOpenChange={(next) => { if (!next) setReportId(null); }} kicker={`Pedido de ajuste · ${adjustment.workDate.split("-").reverse().join("/")}`}
+            title="Relatório do pedido" subtitle="Antigo × novo, justificativa e quem pediu e decidiu.">
+            <AdjustmentReport adjustment={adjustment} originals={days.find((day) => day.date === adjustment.workDate)?.allMarkings ?? []} />
+          </SidePanel>
+        );
+      })() : null}
+      <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
+        firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} />
     </PageContainer>
   );
 }

@@ -36,6 +36,8 @@ export type UnitForm = {
   name: string;
   cnpj: string;
   address: string;
+  /** "" = mesmo fuso do estabelecimento. */
+  timeZone: string;
   unitType: string;
   organizationId: string;
   groupId: string;

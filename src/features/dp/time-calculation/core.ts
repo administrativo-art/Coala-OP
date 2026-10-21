@@ -191,17 +191,20 @@ export function calculateDailyTime(input: DailyTimeInput): DailyTimeResult {
       || breakType === 'none' && Boolean(definition.breakStart || definition.breakEnd)) {
       issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue;
     }
-    if (breakType === 'fixed' && (!hhmm(definition.breakStart) || !hhmm(definition.breakEnd))) {
+    // Fixo intercalado traz vários horários; fixo único, início e fim. Todos precisam caber no turno.
+    const fixedSegments = breakType === 'fixed'
+      ? (definition.breakSegments?.length ? definition.breakSegments : [{ start: definition.breakStart, end: definition.breakEnd }])
+      : [];
+    if (fixedSegments.some((segment) => !hhmm(segment.start) || !hhmm(segment.end))) {
       issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue;
     }
-    if (breakType === 'fixed' && definition.breakStart && definition.breakEnd) {
-      const breakSlot = interval(definition.breakStart, definition.breakEnd);
-      if (!breakSlot) { issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue; }
+    const outside = fixedSegments.some((segment) => {
+      const breakSlot = interval(segment.start!, segment.end!);
+      if (!breakSlot) return true;
       if (breakSlot[0] < slot[0]) { breakSlot[0] += 1440; breakSlot[1] += 1440; }
-      if (breakSlot[0] < slot[0] || breakSlot[1] > slot[1]) {
-        issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue;
-      }
-    }
+      return breakSlot[0] < slot[0] || breakSlot[1] > slot[1];
+    });
+    if (outside) { issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue; }
     if (['flexible', 'staggered'].includes(breakType) && !minute(definition.breakDurationMinutes)) {
       issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue;
     }
@@ -209,6 +212,7 @@ export function calculateDailyTime(input: DailyTimeInput): DailyTimeResult {
       startTime: definition.startTime, endTime: definition.endTime, overnight: definition.overnight,
       breakType, breakStart: definition.breakStart ?? undefined,
       breakEnd: definition.breakEnd ?? undefined, breakDurationMinutes: definition.breakDurationMinutes ?? undefined,
+      breakSegments: definition.breakSegments ?? undefined,
     });
     if (!minute(duration.workedMinutes) || duration.grossMinutes > 1440 || duration.breakMinutes >= duration.grossMinutes) {
       issues.add('SHIFT_DEFINITION_INCONSISTENT'); continue;

@@ -4,13 +4,13 @@ export type DPShiftDefinitionUpdate = Partial<Omit<DPShiftDefinition, 'id' | 'cr
 
 const EDITABLE_SHIFT_DEFINITION_FIELDS = [
   'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType',
-  'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'unitId', 'unitName',
+  'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'breakSegments', 'breakSplit', 'breakPauseCount', 'breakMinPauseMinutes', 'unitId', 'unitName',
   'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description',
-  'configurationNotes', 'overnight', 'expectedPunches', 'isArchived',
+  'configurationNotes', 'overnight', 'expectedPunches', 'executionUnitPolicy', 'isArchived',
 ] as const satisfies readonly (keyof DPShiftDefinitionUpdate)[];
 
 const NULLABLE_SHIFT_DEFINITION_FIELDS = new Set<keyof DPShiftDefinitionUpdate>([
-  'breakStart', 'breakEnd', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd',
+  'breakStart', 'breakEnd', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'breakSegments', 'breakSplit', 'breakPauseCount', 'breakMinPauseMinutes',
   'unitId', 'unitName', 'bizneoTemplateId', 'description', 'configurationNotes', 'expectedPunches',
 ]);
 

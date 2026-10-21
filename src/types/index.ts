@@ -754,6 +754,8 @@ export type PermissionSet = {
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     requests: { view: boolean; review: boolean; };
+    /** Fechamento do ponto por competência; ausente em perfis antigos (desligado). */
+    timeClosure?: { close: boolean; reopen: boolean; };
     responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; };
@@ -825,6 +827,15 @@ export type PermissionSet = {
     signage: {
       /** Adicionar telas do Coala Signage às unidades do usuário, lendo o QR code do monitor. */
       manage: boolean;
+    };
+    /** Ausente em perfis anteriores à Etapa 7 do REP-P: vale como desligado. */
+    timeRecording?: {
+      /** Mostrar o Ponto no app: bater ponto, comprovantes e pedido de ajuste (as rotas continuam conferindo vínculo e permissão de colaborador). */
+      mark: boolean;
+    };
+    requests?: {
+      /** Mostrar Solicitações no app: ausência e vale-transporte do próprio colaborador. */
+      create: boolean;
     };
   };
   // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
@@ -2985,6 +2996,7 @@ export const defaultGuestPermissions: PermissionSet = {
       schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       requests: { view: false, review: false },
+      timeClosure: { close: false, reopen: false },
       responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false },
@@ -3021,7 +3033,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
-    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false } },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false }, timeRecording: { mark: false }, requests: { create: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3099,6 +3111,7 @@ export const defaultAdminPermissions: PermissionSet = {
       schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       requests: { view: true, review: true },
+      timeClosure: { close: true, reopen: true },
       responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true },
@@ -3135,7 +3148,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
-    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true } },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true }, timeRecording: { mark: true }, requests: { create: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },
@@ -3602,8 +3615,12 @@ export type DPUnit = {
   mergedIntoUnitId?: string;
   mergedIntoUnitName?: string;
   archivedAt?: Timestamp;
+  /** Identificação fiscal quando a unidade é usada como estabelecimento empregador; não é inferida da unidade de execução. */
   cnpj?: string;
+  /** Endereço fiscal/operacional congelado na vigência do vínculo quando a unidade é escolhida como empregadora. */
   address?: string;
+  /** Fuso IANA usado na batida de ponto nesta unidade; ausente = fuso do estabelecimento do empregador. */
+  timeZone?: string;
   unitType?: string;
   organizationId?: string;
   groupId?: string;
@@ -3722,6 +3739,11 @@ export type DPJourney = {
   expectedBreakMinutes?: number;
   /** Quando ativo, um turno menor que a carga diária prevalece como expediente efetivo. */
   useDefinedShiftWhenShorter?: boolean;
+  /**
+   * Tolerância única da jornada, em minutos (art. 58 §1º da CLT: até 10 por dia): diferença do dia dentro dela não vira
+   * débito nem crédito, e é a mesma margem dos avisos de intervalo. Ausente em jornadas anteriores = sem tolerância.
+   */
+  toleranceMinutes?: number;
   allowedShiftDefinitionIds?: string[];
   applicability: DPTimeApplicability;
   validFrom: string;
@@ -3748,6 +3770,15 @@ export type DPOvertimeCategory = {
   requiresApproval: boolean;
 };
 
+export type DPTimeBankCycle = {
+  unit: 'month' | 'day';
+  length: number;
+  /** Marco inicial (AAAA-MM-DD); no ciclo em meses, o dia do marco abre cada período. */
+  anchorDate: string;
+  /** Saldo ao fim do ciclo: transportado ao próximo, pago/descontado na folha, para revisão do DP ou zerado. */
+  residualDestination: 'carry' | 'payroll' | 'review' | 'forfeit';
+};
+
 export type DPOvertimePolicy = {
   id: string;
   lineageId: string;
@@ -3759,7 +3790,6 @@ export type DPOvertimePolicy = {
   applicability: DPTimeApplicability;
   validFrom: string;
   validTo?: string;
-  dailyToleranceMinutes: number;
   dailyOvertimeLimitMinutes?: number;
   weeklyOvertimeLimitMinutes?: number;
   categories: DPOvertimeCategory[];
@@ -3770,6 +3800,8 @@ export type DPOvertimePolicy = {
     negativeLimitMinutes?: number;
     expirationDays?: number;
     expiredBalanceDestination: 'payroll' | 'forfeit' | 'review';
+    /** Ciclo do banco: períodos seguidos de `length` meses ou dias a partir do marco; o residual segue o destino no fim de cada ciclo. */
+    cycle?: DPTimeBankCycle;
   };
   externalCoverageRule: 'origin' | 'execution_unit' | 'manual_review';
   supersedesId?: string;
@@ -3851,6 +3883,8 @@ export type DPAbsencePolicy = {
   rejectionReasonRequired: boolean;
   allowFutureEdit: boolean;
   allowFutureCancel: boolean;
+  /** Dias corridos sem análise, contados desde a atribuição de cada etapa, para a etapa ser aprovada automaticamente. Ausente = nunca. */
+  tacitApprovalDays?: number;
   instructions?: string;
 };
 
@@ -3895,6 +3929,14 @@ export type DPShiftDefinition = {
   breakDurationMinutes?: number; // usado em intervalos livres ou intercalados
   breakWindowStart?: string; // HH:mm — início da janela do intervalo intercalado
   breakWindowEnd?: string; // HH:mm — fim da janela do intervalo intercalado
+  /** Fixo intercalado: vários horários definidos (2 a 6), em ordem e sem sobreposição; substitui breakStart/breakEnd. */
+  breakSegments?: { start: string; end: string }[];
+  /** Livre ou janela: uma pausa (padrão) ou várias somando a duração. */
+  breakSplit?: 'single' | 'multiple';
+  /** Com várias pausas: quantidade definida (2 a 10); ausente = em aberto. */
+  breakPauseCount?: number;
+  /** Duração mínima de cada pausa nas modalidades com várias pausas (minutos). */
+  breakMinPauseMinutes?: number;
   unitId?: string;     // legado: primeira unidade vinculada
   unitName?: string;   // legado: nome da primeira unidade vinculada
   unitIds?: string[];
@@ -3906,6 +3948,8 @@ export type DPShiftDefinition = {
   configurationNotes?: string;
   overnight?: boolean;
   expectedPunches?: number;
+  /** Unidade da batida: fixa da escala (padrão) ou livre entre as do vínculo (volante). Nunca bloqueia a batida. */
+  executionUnitPolicy?: 'scheduled' | 'free';
   isArchived?: boolean;
   archivedAt?: Timestamp;
   archivedBy?: string;

@@ -2,9 +2,9 @@
 
 **Produto:** Coala OP / Coala Go
 
-**Status:** Fase 1 parcial e etapas técnicas 1–4 do REP-P locais; ainda sem coleta real, provedores/certificados, PTRP, comprovantes ou fechamento
+**Status:** candidata técnica local com REP-P/PTRP, comprovantes, fechamento, documentos e Coala Go validados sinteticamente; coleta real, conformidade formal, piloto e publicação continuam bloqueados
 
-**Última atualização:** 17/10/2026
+**Última atualização:** 21/10/2026
 
 **Responsável funcional:** RH / Administração
 
@@ -83,7 +83,9 @@ O motor de ponto produz quantidades e natureza dos eventos; contador calcula sua
 
 Separar alerta operacional e apuração remuneratória. Respeitar limites aplicáveis por marcação e por dia, sem arredondar originais. Tempo à disposição e atividades particulares exigem regra validada; não são inferidos apenas da presença.
 
-### 3.6.1. Modalidades de intervalo e avisos na batida (proposta de 19/10/2026, não implementada)
+**Decisão do programador (20/10/2026): uma só tolerância, na jornada** (`toleranceMinutes`, 0 a 10 min). Diferença do dia dentro dela não gera débito nem crédito; acima, conta inteira (Súmula 366 do TST). Vale também para os avisos de entrada, saída e intervalo. Saíram a tolerância geral da política de hora extra (`dailyToleranceMinutes`, que fica só nos documentos antigos, sem uso) e as do intervalo no turno. Jornada sem o campo = sem tolerância. **Pendências do Doc Brown (20/10/2026, conforme com ressalvas):** (a) **pergunta ao advogado:** a empresa pode zerar até 10 min diários concentrados numa única marcação, ou cada marcação precisa respeitar 5 min? Até a resposta, o apurador do fechamento deve aplicar |entrada| ≤ 5, |saída| ≤ 5 e soma ≤ tolerância da jornada; hoje a margem única vale só na prévia do Registro de ponto. (b) Na apuração, redução de intervalo (art. 71, Súmula 437) não herda a tolerância do art. 58 §1º; a margem fica só no aviso. (c) Cadastrar o valor em cada jornada antes do uso. (d) Antes do apurador, ler a tolerância congelada na referência do turno e usar a jornada só para turnos antigos.
+
+### 3.6.1. Modalidades de intervalo e avisos na batida (decidido e implementado em 19/10/2026)
 
 Decisão do programador sobre o cadastro do turno; implementação depende das decisões abertas abaixo e de revisão do Doc Brown, porque turno alimenta escala e PTRP.
 
@@ -117,15 +119,15 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 - **Intercalado livre:** a duração total pode ser dividida em duas ou mais pausas, em número definido ou em aberto. A batida mostra o tempo usado, o que falta e o limite para iniciar.
 - **Janela livre:** uma pausa dentro de um período (ex.: entre 14:00 e 16:00). Enquanto o intervalo não começa, a batida mostra o limite para iniciar dentro da janela (fim da janela menos a duração).
 - **Janela intercalada livre:** a duração total dentro do período, em várias pausas (número definido ou em aberto), com o mesmo limite calculado sobre o que falta.
-- **Tolerância:** minutos aceitos para mais e para menos sem alerta; o mínimo legal continua valendo.
+- **Tolerância:** não fica no turno; vale a tolerância única da jornada (seção 3.6). O mínimo legal continua valendo.
 
-**Decisões abertas:** duração mínima por pausa e teto quando a quantidade é aberta; tolerância por pausa ou sobre o total; horário mínimo para iniciar no livre; antecedência dos avisos; avisar o gestor. **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
+**Implementação (19/10/2026):** cadastro com as sete modalidades, tolerância do intervalo (substituída em 20/10/2026 pela tolerância única da jornada, seção 3.6), pausa mínima opcional e quantidade de pausas definida ou em aberto (até 10); avisos na faixa do Registro de ponto. **Limites conhecidos:** a prévia do Registro de ponto lê o cadastro vivo do turno (alterar tolerância ou horários muda o "a conferir" de dias passados); o PTRP/AEJ deve usar o turno congelado ou versionado com modalidade, horários, tolerâncias, quantidade e pausa mínima. Fixo intercalado não aceita pausa depois da meia-noite em turno noturno. O aviso de horário fixo existe sempre (proximidade e pausa não feita), independentemente de tolerância cadastrada. **Ainda em aberto:** horário mínimo para iniciar no livre, antecedência definitiva dos avisos (provisória 15/10 min) e aviso ao gestor (não implementado). **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
 
 ### 3.7. Coleta inicial
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-MVP online com contingência definida. Offline é extensão condicionada à necessidade operacional e à validação de relógio, reinício do aparelho, fila local e sincronização. Geolocalização não integra o MVP; adoção posterior exige finalidade e necessidade. Biometria/reconhecimento facial ficam fora do escopo.
+O portal web permanece on-line. A contingência offline foi implementada localmente somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, bloqueio após reinício, fila cifrada e assinada, envio ordenado e NSR apenas no servidor. Ainda depende de Play Integrity `enforce`, teste físico e homologação jurídica/operacional antes do piloto. Geolocalização não integra o MVP inicial; sua extensão posterior está definida na [especificação técnica de georreferenciamento](engineering/time-recording-geolocation.md), com coleta somente na batida, sem bloqueio, evidência separada da ARP e gates de privacidade. Biometria/reconhecimento facial ficam fora do escopo.
 
 ### 3.8. Estágios
 
@@ -142,7 +144,7 @@ Piloto real produz dados pessoais e pode produzir prova. Divergência que indiqu
 
 ### 3.9. Experiência de ponto e documentos no aplicativo e na web
 
-Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada proposta **Ponto**, com as seguintes entregas; são requisitos a implementar, não funcionalidades já prontas:
+Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada **Ponto**, com as seguintes entregas. Estado em 21/10/2026 (sem teste em aparelho): itens 1 e 2 implementados para o mês corrente e anteriores; item 3 parcial (comprovante individual e espelho; falta seleção de período e ZIP); item 4 implementado para comprovante e espelho; item 5 implementado com saldo provisório/fechado, ciclo e extrato. A pasta de documentos pessoais permanece exclusivamente no Coala One. Solicitações (ausência, vale-transporte e troca de turno) ficaram nativas:
 
 1. **Hoje / bater ponto:** identidade do colaborador, estabelecimento, data/hora e ação de registro; mostrar confirmação somente após persistência. Exibir marcação registrada e acesso ao respectivo comprovante. Distinguir falha de registro, registro persistido com comprovante pendente e comprovante disponível; recuperação não pode duplicar batida nem aguardar indefinidamente sem alerta/contingência.
 2. **Histórico:** linha do tempo de hoje, seleção de outro dia e intervalo de datas, com marcações originais, origem app/web/terminal e tratamentos identificados separadamente. Turno planejado, jornada de referência e trabalho apurado aparecem com rótulos distintos; dia em andamento é parcial, não fechamento definitivo. Considerar fuso do estabelecimento e jornadas que atravessam meia-noite.
@@ -152,7 +154,7 @@ Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticaç�
 
 No **Coala One web**, prever “Meu ponto” para registro e consulta pessoal equivalente; painel DP com filtros autorizados por colaborador, unidade/estabelecimento, período e pendência. Ambas as interfaces consultam as mesmas fontes. Web oferece download e compartilhamento quando suportado pelo navegador, com download como alternativa; o link de consulta nunca contorna autenticação/permissões.
 
-Documentos pessoais ficam acessíveis também pela **pasta do colaborador**, mediante referências ao catálogo e aos mesmos arquivos originais, sem cópias divergentes. AFD/AEJ são exportações restritas do REP-P/PTRP por estabelecimento/período, não documentos gerais liberados na pasta pessoal. Escala planejada é outro documento, claramente separado dos registros de ponto.
+Documentos pessoais ficam acessíveis pela **pasta do colaborador no Coala One**, mediante referências ao catálogo e aos mesmos arquivos originais, sem cópias divergentes. O Coala Go não consulta essa pasta. AFD/AEJ são exportações restritas do REP-P/PTRP por estabelecimento/período, não documentos gerais liberados na pasta pessoal. Escala planejada é outro documento, claramente separado dos registros de ponto.
 
 Exportação em lote entrega os PDFs originais em pacote ZIP com índice; não fundir ou reimprimir PDFs assinados como se fossem novos originais. Consultas paginadas e geração de lotes limitados/retomáveis; informar filtros, arquivos indisponíveis e erros, sem apresentar lote incompleto como completo. Arquivos temporários e links devem ter acesso controlado e validade limitada; compartilhar arquivo pessoal não expõe arquivos de outros empregados. Abrir o seletor de compartilhamento não comprova envio/recebimento.
 
@@ -164,9 +166,17 @@ Implementar memória de cálculo com referência, turno, trabalho apurado, abono
 
 “Movimentação de banco” significa **extrato rastreável do banco de horas**: crédito, débito, compensação, ajuste, estorno e encerramento/liquidação. Cada lançamento identifica pessoa, data, ciclo, origem, regra, versão e responsável quando manual. Reprocessamento é idempotente; correção preserva trilha, não duplica saldo.
 
-Configurar ciclos mensais, de 15 dias, de seis meses ou de 180 dias, além de outros intervalos suportados explicitamente. Guardar marco inicial, unidade de duração, limites do período e vigência; seis meses de calendário não equivalem automaticamente a 180 dias. Distinguir encerramento periódico de vencimento individual de créditos; o campo atual `expirationDays` não representa sozinho esse contrato. “Resetar” encerra um ciclo e abre outro, **sem apagar extrato**; destino do residual (revisão, transporte ou liquidação conforme regra aprovada) precisa ser configurado, não presumido como perdão ou desconto.
+**Pendências do Doc Brown sobre o pacote do fechamento (20/10/2026):** (a) **perguntas ao advogado:** a assinatura do trabalhador no espelho é exigida pela Portaria 671 ou escolha da empresa, e a recusa tem efeito? Recibo de salário (art. 464) e espelho no mesmo documento: a recusa do pacote vale só como divergência do espelho (o depósito em conta segue como prova do pagamento)? Prazo de guarda do pacote assinado e se o e-CNPJ destacado basta sem carimbo do tempo. (b) Conferir se `signPtrpDetached` gera CAdES com carimbo do tempo (CAdES-T ou superior) para valer em 20 anos. (c) Empresa como signatária também na Autentique, ou entrega do `.p7s` ao trabalhador. (d) Retenção: `retentionUntil` e trava contra exclusão no documento arquivado; versionamento/retenção do bucket. (e) LGPD: contrato de operador com a Autentique (art. 39); quem fecha o mês passa a acionar a leitura do contracheque (finalidade: entrega ao titular); tirar o tipo de ausência do PDF do espelho. (f) Buscar o PDF assinado pela API da Autentique (`providerDocumentId`) em vez da URL do evento. (g) Contracheque retificado depois do envio não marca o pacote como desatualizado.
+
+**Pendências do Doc Brown sobre o banco (20/10/2026; decisões jurídicas, nada suposto no código):** (1) **Decidido pelo programador (20/10/2026):** falta é ato discricionário do operador. Dia sem batida fica "a tratar"; o DP lança a ausência e o tipo decide (injustificada desconta na folha e vai ao AEJ como "2"; "débito no banco" vai ao banco). O tamanho do ciclo é configurado por quem conhece o acordo; segue a **pergunta ao advogado** sobre o instrumento do banco. (2) Base legal na política (`timeBank.legalBasis`) para limitar o ciclo: mesmo mês, até 6 meses/180 dias (individual) ou até 12 meses/365 dias (coletivo); hoje o ciclo vai até 12 meses ou 366 dias, e o "transportar" pode envelhecer crédito além do prazo legal. (3) Natureza do débito por atraso no AEJ como "3"/"2" (compensação), a confirmar com o MTE e o atestado técnico. (4) **Decidido pelo programador (20/10/2026):** toda folga da escala, inclusive a prevista, é DSR; outro abono é ausência. Falta na escala: clicar no dia e escolher turno, DSR ou ausência. (5) Compensação, ajuste manual, estorno e lançamento da liquidação no extrato. (6) Apurar no fechamento ou congelar as entradas (escala, jornada, política, feriados), em vez da primeira leitura. (7) Vencimento individual do crédito (`expirationDays`) e limites positivo/negativo só como aviso. (8) Feriado por unidade quando a pessoa trabalha em locais com calendários diferentes. (9) Domingo escalado: só o excedente segue a faixa de domingo; confirmar na CCT.
+
+**Correção de liquidação (pendência operacional, 21/10/2026):** a liquidação criada pelo encerramento é imutável e não pode ser estornada isoladamente, para não recolocar no banco um valor já enviado à folha. Ainda falta definir e implementar o procedimento de correção conjunta entre o encerramento, o evento substitutivo de folha e a trilha do banco; até lá, divergência exige ajuste auditável do DP e não apaga o lançamento original.
+
+Configurar ciclos mensais, de 15 dias, de seis meses ou de 180 dias, além de outros intervalos suportados explicitamente. **Implementado em 20/10/2026** em `timeBank.cycle` da política (unidade mês ou dia, tamanho, marco, destino do residual: transportar, folha, revisão ou zerar); extrato em `docs/engineering/flows/dp-time-recording.md`. Guardar marco inicial, unidade de duração, limites do período e vigência; seis meses de calendário não equivalem automaticamente a 180 dias. O vencimento individual usa lotes FIFO por data e `expirationDays`; folha retira o crédito vencido do saldo e cria evento, revisão conserva o valor para decisão humana, e `forfeit` de crédito positivo também vira revisão. “Resetar” encerra um ciclo e abre outro, **sem apagar extrato**; destino do residual é configurado e a liquidação na folha cria movimento auditável.
 
 Histórico obrigatório **a partir do início dos testes**, com regras fiéis à operação pretendida e versionamento de jornada, turno, cargo, unidade e política. Ensaios sintéticos continuam isolados; coleta com empregados reais segue os gates do piloto. Não haverá recálculo/backfill obrigatório de períodos anteriores; comparação histórica com Bizneo é auditoria opcional. Alterações futuras de jornada/escala, inclusive eventual mudança de regime semanal, entram por vigência, sem pressupor mudança legislativa ou data de aplicação.
+
+**Decisão de 21/10/2026:** testar primeiro com algumas colaboradoras e só depois migrar toda a equipe. Para cada participante, o DP publica uma fotografia inicial na data de entrada no piloto; não se importa o histórico de batidas do Bizneo. Toda alteração posterior passa pelo contrato central de vigências, preserva a anterior e exige nova versão. No cadastro de unidades, CNPJ e endereço identificam o estabelecimento fiscal quando a unidade for selecionada como empregadora. A flag global da coleta nunca libera a equipe inteira sozinha: o servidor também exige `app.timeRecording.mark=true` no perfil efetivo da participante.
 
 ### 3.11. Empregador, lotação e trabalho em outra unidade
 
@@ -247,7 +257,7 @@ Consulta adicional, limitada e com projeção de campos, confirmou os parâmetro
 | Turnos | 11 definições com 6h líquidas, uma com 5h45 e uma de liderança com 8h; todas vinculadas à jornada publicada | Aplicar decisão da seção 3.10: 6h cumpridas frente a 7h20 geram −1h20 no banco; testar demais durações e ocorrências |
 | Prevalência de turno menor | `useDefinedShiftWhenShorter` ausente na jornada publicada; o validador bloqueia turno menor somente quando o campo é explicitamente `false` | Comportamento atual permite passar sem esse bloqueio; isso não é regra suficiente de remuneração/compensação |
 | Intervalos | 12 turnos com intervalo fixo de 15min; liderança com duração flexível de 60min | Usar previsão para comparação, sem converter intervalo esperado em intervalo efetivamente gozado |
-| Tolerância | `dailyToleranceMinutes = 5` | Campo único não representa separadamente limite por marcação e diário; não alterar configuração real sem definir o contrato de cálculo |
+| Tolerância | `dailyToleranceMinutes = 5` na política (legado) | Substituída em 20/10/2026 pela tolerância única da jornada (seção 3.6); cadastrar o valor em cada jornada antes do uso |
 | Extras | 50% em dia de trabalho com aprovação; 100% em domingo/feriado sem aprovação; destino folha | Parametrização existente; não há apurador de batidas identificado nesses consumidores. Aprovação não pode suprimir coleta nem resolver automaticamente direito ao pagamento |
 | Banco | Habilitado, saldo negativo permitido, vencimento em 180 dias, vencido para revisão; categorias atuais destinam extras à folha | Definir quais eventos creditam/debitam o banco, instrumento autorizador e liquidação; habilitar cadastro não significa possuir razão de movimentos |
 | Vigência | Jornada publicada começa 01/10/2026; política começa 13/10/2026; versão antiga da jornada está arquivada sem `validTo` | Resolver períodos sem política e política de histórico. Não inferir irregularidade de folha: não foram consultados registros oficiais históricos |
@@ -294,7 +304,7 @@ Não foram auditados todos os contratos, atribuições de empregados, eventos de
 
 | Lacuna | Responsável funcional / execução | Entrega e aceite |
 | --- | --- | --- |
-| Tolerância com campo diário único | DP/jurídico / desenvolvimento | Fases 0/1: definir limites por marcação e dia, tratamento ao excedê-los e vigência; Fase 3: casos de fronteira aprovados. Não copiar `dailyToleranceMinutes=5` para ambos os limites nem arredondar originais |
+| Tolerância única na jornada | DP/jurídico / desenvolvimento | Decidido em 20/10/2026: campo único diário na jornada (seção 3.6). Falta o jurídico confirmar se o limite de 5 min por marcação precisa de conferência separada; casos de fronteira na Fase 3 |
 | Aprovação de extra | DP/contador / desenvolvimento | Fase 3: distinguir autorização gerencial de classificação remuneratória; extra não aprovada permanece visível e vai para decisão, nunca some da coleta/cálculo |
 | Política começa após jornada | DP / desenvolvimento | Fase 1: cobertura sem lacunas desde o início dos testes; período anterior sem backfill obrigatório. Data sem regra impede finalizar cálculo conforme, não a coleta |
 | Domingos e intervalos | DP/jurídico / desenvolvimento | Fases 1/3: aplicar parâmetros validados no caminho autoritativo e testar limites; campo cadastrado não é execução comprovada |
@@ -318,9 +328,28 @@ Entrega incremental de interface, **sem retirar escopo**: Fase 2 entrega batida 
 | 5 — Fechamento e contador | Eventos, versões, envio, retorno e conciliação | Competência sintética completa |
 | 6 — Validação integrada | Simulação operacional e de falhas | Nenhuma pendência crítica; versão candidata identificada |
 | 7 — Conformidade formal | INPI, certificados reais e atestados REP-P/PTRP | Documentação e versão final validadas |
-| 8 — Piloto paralelo | Um estabelecimento no Coala e Bizneo | Uma competência sem perda ou divergência crítica não resolvida |
-| 9 — Oficial e expansão | Promoção por estabelecimento | Checklist completo; primeiro fechamento acompanhado |
+| 8 — Piloto técnico | Batida real para um usuário, antecipada por decisão do programador (19/10/2026), com comprovantes sem validade até o lançamento total; sem comparação com o Bizneo, pois nada é importado de lá | Batidas, comprovantes e AFD do piloto sem perda nem divergência crítica não resolvida |
+| 9 — Lançamento total | Promoção por estabelecimento depois das Fases 3 a 7; comprovantes passam a valer | Checklist completo; primeiro fechamento acompanhado |
 | 10 — Saída do Bizneo | Histórico independente; encerramento das integrações antigas | Consulta/recuperação verificadas antes do desligamento |
+
+### Sequência vigente (19/10/2026)
+
+Decisões do programador alteraram a ordem original: o piloto técnico (Fase 8) vem antes da conformidade formal (Fase 7), e a interface do colaborador antecipa partes das Fases 3 e 4. Estado e próximos passos:
+
+1. **Fase 0** — quase concluída: decisões na [seção 10-B do plano REP-P](plano-rep-p-controle-de-ponto.md); restam confirmações ao advogado.
+2. **Fase 2 e piloto técnico** — REP-P em produção com a batida desligada; reemissão, atalho "Bater ponto", tela Registro de ponto e fuso por unidade em PR. Próximo: mesclar, concluir ausências (etapa 4) e ligar a batida para um usuário.
+3. **Fase 1** — modalidades de intervalo e tolerância manual no turno (seção 3.6.1), após as decisões abertas.
+4. **Fase 3** — ausências (motivo, envio em duas etapas, decurso de prazo) e ajuste de ponto pedido pelo colaborador; apuração do mês.
+5. **Fases 4 e 5** — espelho com assinatura de concordância (ou pendente), documento de fechamento declarando ajustes e ausências, efeito da ausência conforme o tipo, banco de horas e AEJ com solicitante e decisor.
+6. **Fase 6** — simulação de uma competência completa com falhas.
+7. **Fase 7** — validação da assinatura no ITI, certificado do INPI e atestado assinado com e-CPF fora do sistema.
+8. **Fase 9** — lançamento total; Fase 10 reduzida, sem importação do Bizneo.
+
+**Etapa 7 — Coala Go: Ponto e Solicitações** (incluída em 19/10/2026 e executada antes da Etapa 6). Entradas nativas no app que reaproveitam as rotas web, sem rota nova: **Ponto** (hora oficial no fuso da unidade, batida como coletor móvel `01`, sequência de hoje, histórico do mês com tratamentos, comprovante para abrir, compartilhar pela folha nativa ou salvar, pedido de ajuste em duas etapas) e **Solicitações** (ausência com anexo, resumo e decurso de prazo; vale-transporte). Aparecem com as permissões `app.timeRecording.mark` e `app.requests.create` do perfil, mais a de colaborador. Banco de horas no app entra depois da Etapa 6. Exportação em lote, seleção por período e pasta do colaborador (3.9, itens 3 e 4) continuam pendentes.
+
+**Etapa 6 — fechamento do mês** (implementação local concluída, ainda sem publicação): declaração versionada por pessoa, reabertura com motivo e bloqueio transacional de ajustes e ausências em competência fechada. A versão congela toda a equipe e separa fechamento individual e geral: somente a assinatura do pacote espelho + contracheque na Autentique fecha a pessoa; o geral só fecha quando todos assinaram e, após 24 horas sem assinatura, continua pendente com aviso e possibilidade de reenvio. O banco tem prévia do mês aberto, apuração automática da equipe ao fechar, aprovação de extra, limites diário/semanal, vencimento individual, compensação, ajuste, lançamento na folha e estorno auditável; turno noturno é pareado pela virada do dia e preserva minutos noturnos. A tela administrativa exporta AFD e AEJ com as respectivas assinaturas. O Coala Go mostra espelho e extrato do banco sob demanda; a pasta publicada permanece no Coala One. **Lacunas restantes:** outros tratamentos fora da declaração, exportação em lote de comprovantes no app, consumidor monetário dos eventos de folha, congelamento completo de versões vivas e os gates fiscais/ICP do piloto.
+
+**Troca de turno em Solicitações (21/10/2026, local):** proposta entre dois turnos futuros da mesma unidade e data, aceite ou recusa pela outra pessoa, identidade da sessão e declaração preservadas por no mínimo 20 anos, sem TTL de exclusão automática no pedido. O programador confirmou a manifestação autenticada como prova operacional, sem assinatura reconhecida. O aceite revalida o contrato central e inverte somente os ocupantes na escala, com novas referências históricas; a recusa não altera nada. Web e Coala Go usam as mesmas rotas server-authoritative. A declaração do fechamento e o PDF do espelho passaram a listar a troca e suas manifestações para as duas pessoas; uma proposta pendente bloqueia o fechamento até receber decisão ou ficar não aplicável. As três consultas têm índices explícitos no banco principal e limites de 100, 20 por turno e 2.001 por competência. Falta homologar em duas contas reais, testar em aparelho e publicar os índices e a aplicação.
 
 ### Fase 0 — Base jurídica
 
@@ -435,6 +464,7 @@ Esquecimento, falha, marcação indevida, intervalo/saída ausente e conflito co
 - Identificar inclusão, desconsideração e pré-assinalação nos documentos.
 - Lote exige compatibilidade, prévia e auditoria.
 - Estados: nova → análise → aguardando informação → tratada/desconsiderada → reaberta.
+- **Implementado em 19/10/2026 (etapa 5):** pedido, decisão com justificativa, tratamentos D/I e relatório; ver [fluxo do Registro de ponto](engineering/flows/dp-time-recording.md). Falta gerar o AEJ e o espelho a partir dos tratamentos (fases 4 e 5).
 - Pedido do colaborador (orientação Doc Brown, 19/10/2026): batida esquecida = inclusão; errada/duplicada = desconsideração; horário errado = desconsideração + inclusão na mesma transação; unidade errada = tratamento de local, sem tocar a ARP. Justificativa obrigatória; hora sempre informada pela pessoa; evidência opcional (sem dado de saúde). Cada pedido tem um histórico consultável com original × novo, justificativa, autor, decisor, instantes, estado e reversões; se virar PDF persistente, entra em `SYSTEM_DOCUMENT_TEMPLATES`. Detalhes e perguntas ao advogado na [seção 10-A do plano REP-P](plano-rep-p-controle-de-ponto.md).
 
 ## 9. Eventos de folha

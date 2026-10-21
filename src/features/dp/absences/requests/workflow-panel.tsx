@@ -12,6 +12,7 @@ import { PanelField, PanelSection, SidePanel } from '@/components/patterns/side-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { TACIT_APPROVAL_LABEL } from './tacit-approval';
 import { Textarea } from '@/components/ui/textarea';
 import { formatBrazilianRequestText } from '@/features/hr/requests/core';
 import { formatRequestCompetence, formatRequestDate, formatRequestDateTime } from '@/features/hr/requests/request-ui';
@@ -39,6 +40,7 @@ const historyLabels: Record<string, string> = {
   operational_abort: 'Preparação operacional abortada',
   operational_activate: 'Bloqueio operacional ativado',
   operational_reverse: 'Bloqueio operacional revertido',
+  tacit_approve: 'Etapa aprovada por decurso de prazo (sem análise no prazo da regra)',
 };
 type Decision = 'reject' | 'request_adjustments' | 'confirm_profile' | 'cancel';
 
@@ -309,7 +311,7 @@ export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refre
     <ListShell minWidth={580}>
       {loading && !loaded ? <ListSkeleton rows={3} /> : error ? <div className="space-y-2 p-5 text-sm text-ds-danger"><p role="alert">{error}</p><Button variant="ds-secondary" size="sm" onClick={() => void load()}>Tentar novamente</Button></div> : items.length ? items.map((item) => <LiftRow key={item.id} table selected={selected?.id === item.id} onClick={() => void open(item)} className="flex items-center justify-between gap-4">
         <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-ds-ink">{beneficiaryName(item) ?? 'Titular não identificado'}</span><span className="block truncate text-sm font-semibold text-ds-ink">{item.typeName}</span><span className="block text-xs text-ds-ink-muted">{formatRequestDate(item.input.startDate)} a {formatRequestDate(item.input.endDate)} · {quantity(item)}</span>{item.reviewSla ? <span className={`block text-xs ${isAbsenceReviewOverdue(item.reviewSla) ? 'font-bold text-ds-danger' : 'text-ds-ink-muted'}`}>{isAbsenceReviewOverdue(item.reviewSla) ? 'Prazo de análise vencido' : `Analisar até ${formatRequestDateTime(item.reviewSla.deadlineAt)}`}</span> : null}</span>
-        <span className="flex shrink-0 flex-col items-end gap-1"><StatusPill variant={statusTones[item.status]}>{statusLabels[item.status]}</StatusPill>{item.operational ? <StatusPill variant={operationalPresentation(item.operational).tone}>{operationalPresentation(item.operational).label}</StatusPill> : null}</span>
+        <span className="flex shrink-0 flex-col items-end gap-1"><StatusPill variant={statusTones[item.status]}>{statusLabels[item.status]}</StatusPill>{item.approvedByInaction ? <StatusPill variant="warn">{TACIT_APPROVAL_LABEL}</StatusPill> : null}{item.operational ? <StatusPill variant={operationalPresentation(item.operational).tone}>{operationalPresentation(item.operational).label}</StatusPill> : null}</span>
       </LiftRow>) : <p className="p-6 text-center text-sm text-ds-ink-muted">{scope === 'review' ? 'Nenhuma ausência atribuída à sua análise.' : 'Você ainda não tem pedidos de ausência.'}</p>}
     </ListShell>
     {cursor ? <Button variant="ds-secondary" size="sm" onClick={() => void load(cursor)} disabled={loading}>Carregar mais ausências</Button> : null}
@@ -319,7 +321,7 @@ export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refre
         <PanelSection title="Pedido">
           <PanelField label="Colaborador titular">{beneficiaryName(selected) ?? 'Titular não identificado — atualize o detalhe antes de decidir.'}</PanelField>
           <div className="grid grid-cols-2 gap-4">
-            <PanelField label="Situação"><StatusPill variant={statusTones[selected.status]}>{statusLabels[selected.status]}</StatusPill></PanelField>
+            <PanelField label="Situação"><span className="flex flex-wrap gap-1"><StatusPill variant={statusTones[selected.status]}>{statusLabels[selected.status]}</StatusPill>{selected.approvedByInaction ? <StatusPill variant="warn">{TACIT_APPROVAL_LABEL}</StatusPill> : null}</span></PanelField>
             <PanelField label="Quantidade">{quantity(selected)}</PanelField>
             <PanelField label="Início">{formatRequestDate(selected.input.startDate)}{selected.input.startTime ? `, ${selected.input.startTime}` : ''}</PanelField>
             <PanelField label="Término ou retorno">{formatRequestDate(selected.input.endDate)}{selected.input.endTime ? `, ${selected.input.endTime}` : ''}</PanelField>
@@ -327,7 +329,11 @@ export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refre
             <PanelField label="Etapa">{selected.stage === 'manager' ? 'Gestor' : selected.stage === 'dp' ? 'Departamento Pessoal' : '—'}</PanelField>
             {selected.reviewSla ? <PanelField label="Prazo da análise">{formatRequestDateTime(selected.reviewSla.deadlineAt)}</PanelField> : null}
           </div>
-          {selected.reviewSla && isAbsenceReviewOverdue(selected.reviewSla) ? <p className="text-xs font-bold text-ds-danger">O prazo de 24 horas venceu. A solicitação continua aguardando decisão; não há aprovação automática.</p> : null}
+          {selected.reason ? <PanelField label="Motivo"><span className="whitespace-pre-wrap font-normal">{formatBrazilianRequestText(selected.reason)}</span></PanelField> : null}
+          {selected.reviewSla && isAbsenceReviewOverdue(selected.reviewSla) ? <p className="text-xs font-bold text-ds-danger">{selected.tacitApprovalDays
+            ? `O prazo de 24 horas venceu. Sem análise em ${selected.tacitApprovalDays} ${selected.tacitApprovalDays === 1 ? 'dia' : 'dias'} desde a atribuição, esta etapa é aprovada por decurso de prazo.`
+            : 'O prazo de 24 horas venceu. A solicitação continua aguardando decisão; não há aprovação automática para esta regra.'}</p> : null}
+          {selected.approvedByInaction ? <p className="text-xs text-ds-warn">Ninguém analisou no prazo da regra e a aprovação final aconteceu por decurso de prazo. O DP ainda confere no fechamento do ponto.</p> : null}
           {selected.status === 'adjustments_requested' ? <p className="text-xs text-ds-warn">Revise os dados e comprovantes antes de reenviar.</p> : null}
           {selected.profileReviewRequired ? <p className="text-xs text-ds-warn">O histórico ou perfil precisa de confirmação do Departamento Pessoal antes da decisão final.</p> : null}
         </PanelSection>

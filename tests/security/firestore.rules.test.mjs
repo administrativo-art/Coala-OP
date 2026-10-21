@@ -260,13 +260,13 @@ test("escala respeita o escopo de unidades e participante de meta só nasce pela
 });
 
 
-test("snapshot CMV, revisões e auditoria ficam inacessíveis diretamente ao cliente", async () => {
+test("snapshots internos, trocas de turno e auditoria ficam inacessíveis diretamente ao cliente", async () => {
   assertFirestoreEmulatorSafety({ projectId });
   const environment = await initializeTestEnvironment({ projectId, firestore: { rules } });
   try {
     for (const context of [environment.unauthenticatedContext(), environment.authenticatedContext("cmv-user"),
       environment.authenticatedContext("cmv-admin", { admin: true })]) {
-      for (const path of ["dreCmvClosures/test", "dreCmvClosures/test/revisions/1", "dreCmvClosures/test/audit/1"]) {
+      for (const path of ["dreCmvClosures/test", "dreCmvClosures/test/revisions/1", "dreCmvClosures/test/audit/1", "dp_shiftSwapRequests/test"]) {
         await assertFails(getDoc(doc(context.firestore(), path)));
         await assertFails(setDoc(doc(context.firestore(), path), { totalCmv: 0, status: "closed" }));
         await assertFails(deleteDoc(doc(context.firestore(), path)));

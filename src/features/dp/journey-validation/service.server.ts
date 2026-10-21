@@ -192,6 +192,7 @@ export async function validateScheduleJourneys(params: {
     const breakStart = document.get('breakStart');
     const breakEnd = document.get('breakEnd');
     const breakDurationMinutes = document.get('breakDurationMinutes');
+    const breakSegments = document.get('breakSegments');
     return [[document.id, {
       ...(journeyIds.length ? { journeyIds } : {}),
       startTime,
@@ -201,6 +202,7 @@ export async function validateScheduleJourneys(params: {
       ...(typeof breakStart === 'string' ? { breakStart } : {}),
       ...(typeof breakEnd === 'string' ? { breakEnd } : {}),
       ...(typeof breakDurationMinutes === 'number' ? { breakDurationMinutes } : {}),
+      ...(Array.isArray(breakSegments) ? { breakSegments } : {}),
     } as DPJourneyValidationShiftDefinition]];
   }));
   return validateDPJourneySchedule({

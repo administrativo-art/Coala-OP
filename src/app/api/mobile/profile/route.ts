@@ -43,6 +43,9 @@ const enforcer = defineSecurityEnforcer<NextRequest, StaticRouteContext, unknown
 export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
   const app = security.actor.permissions.app;
   const admin = security.actor.isDefaultAdmin;
+  // Ponto e Solicitações: liberação no grupo app do perfil e a permissão de colaborador que as rotas web exigem;
+  // quem pode bater ponto continua decidido por /api/dp/time-recording/options (vínculo CLT ou aprendiz do dia).
+  const collaborator = admin || (security.actor.permissions.dashboard.collaborator ?? security.actor.permissions.dashboard.view) === true;
   return NextResponse.json({
     profile: mobileProfile(security.actor),
     modules: {
@@ -52,6 +55,8 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
       goals: admin || app?.goals?.view === true,
       schedule: admin || app?.schedule?.view === true,
       signage: admin || app?.signage?.manage === true,
+      timeRecording: collaborator && app?.timeRecording?.mark === true,
+      requests: collaborator && app?.requests?.create === true,
     },
   }, { headers: { "Cache-Control": "private, no-store" } });
 });

@@ -2,6 +2,8 @@
 
 Kotlin, Jetpack Compose/Material 3, MVVM com ViewModel e StateFlow, Navigation Compose, Hilt, Retrofit/OkHttp, kotlinx.serialization, Coil, Room com payloads AES-256-GCM/Android Keystore, WorkManager, CameraX/seletor do sistema, BiometricPrompt e Firebase Auth nativo.
 
+O ponto offline usa um banco Room separado: uma autorização on-line de até 12 horas ancora a Hora Legal ao relógio monotônico; cada batida é cifrada, encadeada e assinada por chave P-256 do Android Keystore protegida por TEE/StrongBox. Reiniciar invalida a autorização. O app mantém até 20 pendentes e sincroniza em ordem pelo WorkManager. Enquanto estiver apenas local, a interface nunca apresenta NSR nem comprovante.
+
 Android mínimo: **8 / API 26**, confirmado pelo usuário. Release usa `coalaone.go`; debug usa `coalaone.go.debug`. Coala Go é o único app mobile: após confirmar que não havia usuários, o responsável autorizou remover o Expo e o instalador antigo desta branch. Histórico Git e checkout original preservados.
 
 ## Configuração pública
@@ -15,8 +17,8 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Google para Play Integrity |
-| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 19; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.14 |
+| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 20; crescente nas atualizações Go |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.15 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.

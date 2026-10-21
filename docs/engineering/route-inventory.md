@@ -14,10 +14,11 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/audit` | [page.tsx](../../src/app/dashboard/audit/page.tsx) | [stock-session-management.tsx](../../src/components/stock-session-management.tsx) |
 
-## collaborator (4)
+## collaborator (5)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
+| `dashboard/collaborator/documents` | [page.tsx](../../src/app/dashboard/collaborator/documents/page.tsx) | [own-documents-page.tsx](../../src/features/hr/documents/own-documents-page.tsx) |
 | `dashboard/collaborator` | [page.tsx](../../src/app/dashboard/collaborator/page.tsx) | [collaborator-dashboard-panel.tsx](../../src/components/collaborator-dashboard-panel.tsx) |
 | `dashboard/collaborator/requests` | [page.tsx](../../src/app/dashboard/collaborator/requests/page.tsx) | [collaborator-requests-page.tsx](../../src/features/hr/requests/collaborator-requests-page.tsx) |
 | `dashboard/collaborator/schedule` | [page.tsx](../../src/app/dashboard/collaborator/schedule/page.tsx) | [collaborator-schedule-page.tsx](../../src/components/collaborator-schedule-page.tsx) |
@@ -59,7 +60,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [inline-confirm.tsx](../../src/components/patterns/inline-confirm.tsx), [employee-document-options.ts](../../src/lib/hr/employee-document-options.ts) |
+| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [publication-control.tsx](../../src/features/hr/documents/publication-control.tsx), [legacy-document-classification.tsx](../../src/features/hr/documents/legacy-document-classification.tsx) |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
@@ -347,4 +348,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **165 páginas** no checkout usado para a geração.
+Total: **166 páginas** no checkout usado para a geração.

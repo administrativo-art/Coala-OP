@@ -4,14 +4,14 @@ import type { PermissionSet } from '@/types';
  * Públicos de avisos do sistema. Cada aviso declara um público; só vê o aviso quem pertence a ele
  * e também pode abrir a central. Adicionar público novo exige a regra aqui e o teste correspondente.
  */
-export const SYSTEM_NOTICE_AUDIENCES = ['system.admin', 'dp.time-manager-global'] as const;
+export const SYSTEM_NOTICE_AUDIENCES = ['system.admin', 'dp.time-manager-global', 'dp.time-closure'] as const;
 export type SystemNoticeAudience = typeof SYSTEM_NOTICE_AUDIENCES[number];
 export type SystemNoticeSeverity = 'info' | 'warning' | 'critical';
-export type SystemNoticeCategory = 'rep-p.certificate' | 'rep-p.clock' | 'rep-p.receipts' | 'rep-p.norms-review';
+export type SystemNoticeCategory = 'rep-p.certificate' | 'rep-p.clock' | 'rep-p.receipts' | 'rep-p.norms-review' | 'dp.time-closing';
 
 export type SystemNoticeActor = Readonly<{
   isDefaultAdmin: boolean;
-  permissions: Pick<PermissionSet, 'settings'> & { dp: { settings: { manageTime?: boolean } } };
+  permissions: Pick<PermissionSet, 'settings'> & { dp: { settings: { manageTime?: boolean }; timeClosure?: { close?: boolean } } };
   allUnits: boolean;
 }>;
 
@@ -26,10 +26,18 @@ export function belongsToSystemNoticeAudience(actor: SystemNoticeActor, audience
     case 'system.admin': return false;
     // Mesma regra da exportação do AFD: gestor de Tempo com acesso a todas as unidades.
     case 'dp.time-manager-global': return actor.permissions.dp.settings.manageTime === true && actor.allUnits;
+    // Responsáveis pelo fechamento do mês: quem pode fechar a competência.
+    case 'dp.time-closure': return actor.permissions.dp.timeClosure?.close === true;
   }
 }
 
 /** Públicos visíveis ao ator, já combinados com o acesso à central; vazio quando não pode abrir a central. */
+/**
+ * Público que recebe o aviso no sino mesmo sem acesso à central de avisos: o aviso leva direto à tela onde se trata
+ * (ex.: o fechamento do mês, para quem fecha).
+ */
+export const BELL_WITHOUT_CENTRAL: readonly SystemNoticeAudience[] = ['dp.time-closure'];
+
 export function systemNoticeAudiencesFor(actor: SystemNoticeActor): SystemNoticeAudience[] {
   if (!canViewSystemNotices(actor)) return [];
   return SYSTEM_NOTICE_AUDIENCES.filter((audience) => belongsToSystemNoticeAudience(actor, audience));

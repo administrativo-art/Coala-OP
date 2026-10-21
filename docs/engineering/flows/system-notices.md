@@ -12,7 +12,7 @@
 ## Acesso em duas camadas
 
 1. **Central:** administrador padrão ou `settings.view` + `settings.viewSystemNotices` ("Ver avisos do sistema"). Sem isso a página e a API recusam.
-2. **Aviso:** cada documento declara um público em [`core.ts`](../../../src/features/system-notices/core.ts). `system.admin` é só do administrador padrão; `dp.time-manager-global` exige `dp.settings.manageTime` e acesso a todas as unidades (mesma regra da exportação do AFD). O servidor consulta `audience in [públicos do usuário]`; nada é filtrado só na tela.
+2. **Aviso:** cada documento declara um público em [`core.ts`](../../../src/features/system-notices/core.ts). `system.admin` é só do administrador padrão; `dp.time-manager-global` exige `dp.settings.manageTime` e acesso a todas as unidades (mesma regra da exportação do AFD). `dp.time-closure` (20/10/2026) é de quem tem `dp.timeClosure.close`; é o único público entregue no sino mesmo sem acesso à central (`BELL_WITHOUT_CENTRAL`), e o item do sino leva ao caminho do aviso (o painel do fechamento) em vez da central. Categoria `dp.time-closing`: pacote do fechamento sem assinatura em 24 horas ou recusado ([Registro de ponto](dp-time-recording.md)). O servidor consulta `audience in [públicos do usuário]`; nada é filtrado só na tela.
 
 O sino recebe uma cópia em `userNotifications` para quem atende às duas camadas pelo perfil (até 50 pessoas por aviso). Administrador definido apenas por claim do token vê a central, mas não recebe no sino. Perder a permissão remove o acesso à central na hora; avisos já entregues no sino levam à central, que revalida.
 

@@ -107,7 +107,7 @@ fun shortDate(value: String?): String? {
                 if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack)
             }
             // What survives without a connection is said in words, not left for the person to guess.
-            if (!online) Text("Sem conexão. Rascunhos de contagem e notas de compra ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            if (!online) Text("Sem conexão. Rascunhos, notas de compra e o ponto previamente autorizado ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp).background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             val body: @Composable () -> Unit = {
                 Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -147,11 +147,16 @@ fun shortDate(value: String?): String? {
 @Composable fun rememberOnline(): Boolean {
     val context = LocalContext.current
     val manager = remember { context.getSystemService(android.net.ConnectivityManager::class.java) }
-    var online by remember { mutableStateOf(manager?.let { it.getNetworkCapabilities(it.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true } ?: true) }
+    fun connected() = manager?.let { service -> service.getNetworkCapabilities(service.activeNetwork)?.let { capabilities ->
+        capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            && capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } == true } ?: true
+    var online by remember { mutableStateOf(connected()) }
     DisposableEffect(manager) {
         val callback = object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) { online = true }
-            override fun onLost(network: android.net.Network) { online = manager?.activeNetwork != null }
+            override fun onAvailable(network: android.net.Network) { online = connected() }
+            override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) { online = connected() }
+            override fun onLost(network: android.net.Network) { online = connected() }
         }
         runCatching { manager?.registerDefaultNetworkCallback(callback) }
         onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }

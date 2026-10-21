@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
+import { FiscalExportsCard } from "@/features/dp/time-adjustments/fiscal-exports-card";
+import { AdjustmentReviewSection } from "@/features/dp/time-adjustments/review-section";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
 import { ResponsibilityTaskSection } from "@/features/dp/responsibility-coverage/task-section";
@@ -55,6 +58,8 @@ export function HrRequestsPage() {
   const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({ status: 'in_review' });
   const canReview = isDefaultAdmin || permissions.dp?.requests?.review === true;
   const canViewAbsences = isDefaultAdmin || permissions.dp?.requests?.view === true;
+  const canSeeClosure = isDefaultAdmin || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
+  const canExportFiscalFiles = isDefaultAdmin || permissions.dp?.settings?.manageTime === true;
   const canViewResponsibilityTasks = isDefaultAdmin || permissions.dp?.schedules?.edit === true
     || permissions.dp?.responsibilities?.manage === true
     || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true;
@@ -209,6 +214,23 @@ export function HrRequestsPage() {
         {absenceTeamOpen ? <AbsenceWorkflowSection key={`team:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="team" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} initialFilters={absenceTeamFilters} /> : null}
         {absenceRetentionOpen ? <AbsenceRetentionSection firebaseUser={firebaseUser} /> : null}
         {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setAbsenceTeamOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
+      </section> : null}
+
+      {canReview ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Pedidos dos colaboradores para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
+        <AdjustmentReviewSection firebaseUser={firebaseUser} people={activeUsers} />
+      </section> : null}
+
+      {canSeeClosure ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Fechamento do ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Congela o mês com a declaração de cada pessoa: todos os ajustes de ponto e ausências, inclusive recusados e cancelados. Pedido sem decisão impede o fechamento.</p>
+        <CompetenceClosureSection firebaseUser={firebaseUser} people={activeUsers} />
+      </section> : null}
+
+      {canExportFiscalFiles ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Exportação fiscal AFD e AEJ</h2>
+        <FiscalExportsCard firebaseUser={firebaseUser} />
       </section> : null}
 
       {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}

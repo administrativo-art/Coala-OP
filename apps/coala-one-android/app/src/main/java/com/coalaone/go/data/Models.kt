@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
     val organizationName: String? = null,
 )
 @Serializable data class Profile(val name: String, val email: String? = null, val role: String? = null, val avatarUrl: String? = null)
-@Serializable data class Modules(val localPurchase: Boolean = false, val stockCount: Boolean = false, val repositionReceipt: Boolean = false, val goals: Boolean = false, val schedule: Boolean = false, val signage: Boolean = false)
+@Serializable data class Modules(val localPurchase: Boolean = false, val stockCount: Boolean = false, val repositionReceipt: Boolean = false, val goals: Boolean = false, val schedule: Boolean = false, val signage: Boolean = false, val timeRecording: Boolean = false, val requests: Boolean = false)
 @Serializable data class ProfileResponse(val profile: Profile, val modules: Modules)
 @Serializable data class AvatarResponse(val avatarUrl: String)
 @Serializable data class Release(val versionCode: Int, val versionName: String, val minVersionCode: Int, val packagePath: String?)

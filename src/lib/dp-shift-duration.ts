@@ -15,11 +15,14 @@ function elapsedMinutes(start: string, end: string, crossesMidnight = false) {
 export function shiftDurationSummary(definition: Pick<
   DPShiftDefinition,
   'startTime' | 'endTime' | 'overnight' | 'breakType' | 'breakStart' | 'breakEnd' | 'breakDurationMinutes'
->) {
+> & Partial<Pick<DPShiftDefinition, 'breakSegments'>>) {
   const grossMinutes = elapsedMinutes(definition.startTime, definition.endTime, definition.overnight === true);
   const breakType = definition.breakType
     ?? (definition.breakStart && definition.breakEnd ? 'fixed' : 'none');
-  const breakMinutes = breakType === 'fixed' && definition.breakStart && definition.breakEnd
+  // Fixo intercalado soma os horários definidos; fixo único usa início e fim.
+  const breakMinutes = breakType === 'fixed' && definition.breakSegments?.length
+    ? definition.breakSegments.reduce((sum, segment) => sum + elapsedMinutes(segment.start, segment.end), 0)
+    : breakType === 'fixed' && definition.breakStart && definition.breakEnd
     ? elapsedMinutes(definition.breakStart, definition.breakEnd)
     : breakType === 'flexible' || breakType === 'staggered'
       ? definition.breakDurationMinutes ?? 0
@@ -53,7 +56,7 @@ export function shiftJourneyComparisons(
   definition: Pick<
     DPShiftDefinition,
     'startTime' | 'endTime' | 'overnight' | 'breakType' | 'breakStart' | 'breakEnd' | 'breakDurationMinutes'
-  >,
+  > & Partial<Pick<DPShiftDefinition, 'breakSegments'>>,
   journey: Pick<DPJourney, 'days' | 'expectedBreakMinutes'>,
 ) {
   const defined = shiftDurationSummary(definition);

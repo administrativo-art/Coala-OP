@@ -27,6 +27,11 @@ function secret() {
   return value;
 }
 
+/** Só informa: a chamada traz atestação válida do Coala Go para este uid? Sem segredo configurado, não. */
+export function hasValidMobileAttestation(request: NextRequest, uid: string) {
+  try { return verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), uid); } catch { return false; }
+}
+
 export function currentMobileAttestationMode() {
   return mobileAttestationMode(process.env.MOBILE_APP_ATTESTATION_MODE?.trim());
 }
@@ -45,6 +50,18 @@ export function assertMobileAppAttested(request: NextRequest, uid: string) {
     return;
   }
   throw new AppError({ code: "MOBILE_ATTESTATION_REQUIRED", kind: "AUTHORIZATION", safeMessage: "Atualize o Coala Go pelo canal oficial para continuar." });
+}
+
+/**
+ * Offline time recording is a stronger boundary than the other mobile routes: it must never be
+ * enabled while Play Integrity is only disabled or being monitored.
+ */
+export function assertOfficialMobileApp(request: NextRequest, uid: string) {
+  if (currentMobileAttestationMode() !== "enforce") {
+    throw new AppError({ code: "MOBILE_ATTESTATION_NOT_ENFORCED", kind: "UNEXPECTED_APPLICATION", retryable: true,
+      safeMessage: "O ponto offline ainda não foi liberado neste ambiente." });
+  }
+  assertMobileAppAttested(request, uid);
 }
 
 /** Exchanges a Play Integrity token, decoded by Google, for the short-lived pass. */

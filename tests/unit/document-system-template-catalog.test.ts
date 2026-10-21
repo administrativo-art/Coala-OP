@@ -27,7 +27,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 16);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 17);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Financeiro e recibos", "Uniformes"].sort(),
@@ -36,6 +36,10 @@ test("catálogo reúne base institucional, uniformes, kit admissional e comprova
   assert.equal(repPReceipt?.renderer, "rep_p_receipt");
   assert.equal(repPReceipt?.generationMode, "contextual");
   assert.equal(repPReceipt?.sourceModule, "time_recording");
+  const mirror = systemDocumentTemplateById("system-ptrp-time-mirror");
+  assert.equal(mirror?.renderer, "time_mirror");
+  assert.equal(mirror?.generationMode, "contextual");
+  assert.equal(mirror?.sourceModulePath, "src/features/dp/time-adjustments/mirror-pdf.ts");
   assert.equal(systemDocumentTemplateById("system-letterhead-blank")?.status, "published");
   assert.equal(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "uniform").length,
@@ -205,13 +209,13 @@ test("prévias versionadas dos três modelos de uniforme são PDFs A4 válidos",
   }
 });
 
-test("identificadores do catálogo são únicos e só o comprovante fiscal de ponto dispensa o timbrado", () => {
+test("identificadores do catálogo são únicos e só os documentos de ponto dispensam o timbrado", () => {
   const ids = SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.letterheadVersion !== "coala-letterhead-v2")
       .map((template) => template.id),
-    ["system-rep-p-marking-receipt"],
+    ["system-rep-p-marking-receipt", "system-ptrp-time-mirror"],
   );
 });
 
