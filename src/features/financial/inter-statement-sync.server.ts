@@ -24,6 +24,8 @@ import {
   planLateChargeBreakdown,
 } from "@/features/financial/payment-requests/barcode-amounts";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { planFinancialInboxPaymentProjection } from "@/features/financial/inbox/payment-projection";
+import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
@@ -659,10 +661,14 @@ async function reconcileExpectedBankDebit(params: {
   try {
     const expenseRef = financialDbAdmin.collection("expenses").doc(params.expected.expenseId);
     const paymentRequestRef = financialDbAdmin.collection("bankPaymentRequests").doc(params.expected.paymentRequestId);
-    const [expenseSnapshot, paymentRequestSnapshot, expectedDebitSnapshot] = await Promise.all([
+    const inboxMessageRef = params.expected.financialInboxMessageId
+      ? financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId)
+      : null;
+    const [expenseSnapshot, paymentRequestSnapshot, expectedDebitSnapshot, inboxMessageSnapshot] = await Promise.all([
       expenseRef.get(),
       paymentRequestRef.get(),
       expectedDebitRef.get(),
+      inboxMessageRef ? inboxMessageRef.get() : Promise.resolve(null),
     ]);
     if (!expenseSnapshot.exists) {
       throw new ExpectedBankDebitReviewError("A despesa esperada para o débito bancário não foi encontrada.");
@@ -682,6 +688,9 @@ async function reconcileExpectedBankDebit(params: {
       id: paymentRequestSnapshot.id,
       ...(paymentRequestSnapshot.data() || {}),
     } as BankPaymentRequest;
+    const inboxMessage = inboxMessageSnapshot?.exists
+      ? { id: inboxMessageSnapshot.id, ...inboxMessageSnapshot.data() } as FinancialInboxMessage
+      : null;
     const paymentRequestStatusAllowed = [
       "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement",
     ].includes(paymentRequest.status)
@@ -699,6 +708,9 @@ async function reconcileExpectedBankDebit(params: {
       throw new ExpectedBankDebitReviewError(
         "A solicitação bancária diverge do débito esperado; a baixa automática foi bloqueada.",
       );
+    }
+    if (paymentRequest.sourceType === "financial_inbox" && !inboxMessage) {
+      throw new ExpectedBankDebitReviewError("A cobrança de origem do pagamento não foi encontrada.");
     }
     const expensePrincipal = Number(expense.totalValue) || 0;
     const principal = params.expected.principalAmount;
@@ -884,14 +896,30 @@ async function reconcileExpectedBankDebit(params: {
       bankStatus: "STATEMENT_MATCHED",
       sourceCompletedAt: now.toDate().toISOString(),
     }, { merge: true });
-    if (paymentRequest.sourceType === "financial_inbox") batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
-      status: isDivergent ? "divergent" : "reconciled",
-      bankState: isDivergent ? "divergent" : "reconciled",
-      "resolution.status": "identified",
-      "resolution.financialState": isDivergent ? "scheduled" : "reconciled",
-      statementTransactionId: params.transactionId,
-      updatedAt: now.toDate().toISOString(),
-    }, { merge: true });
+    if (paymentRequest.sourceType === "financial_inbox" && inboxMessageRef && inboxMessage) {
+      const inboxPatch = isDivergent
+        ? {
+            status: "divergent",
+            bankState: "divergent",
+            "resolution.status": "identified",
+            "resolution.financialState": "scheduled",
+            statementTransactionId: params.transactionId,
+            updatedAt: now.toDate().toISOString(),
+          }
+        : {
+            ...planFinancialInboxPaymentProjection({
+              message: inboxMessage,
+              request: {
+                ...paymentRequest,
+                status: "paid",
+                statementReconciliationStatus: "matched",
+              },
+              observedAt: now.toDate().toISOString(),
+            }).patch,
+            statementTransactionId: params.transactionId,
+          };
+      batch.set(inboxMessageRef, inboxPatch, { merge: true });
+    }
     batch.set(paymentRequestRef.collection("events").doc(`statement-payment-${params.transactionId}`), isDivergent ? {
       type: "STATEMENT_DIVERGENCE_FOUND",
       at: now.toDate().toISOString(),

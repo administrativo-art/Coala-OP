@@ -5,7 +5,8 @@
 - Mensagens `ignored` ou `reconciled` permanecem na caixa ativa por seis meses após a última atualização do tratamento.
 - Depois desse prazo, o job altera o status para `archived`, preserva o status anterior e registra um evento de auditoria.
 - O arquivamento não exclui a despesa, o pagamento, o comprovante, os anexos nem o e-mail original.
-- Uma mensagem arquivada pode ser restaurada pela aba **Arquivadas**. A restauração recupera `ignored` ou `reconciled` e reinicia o prazo operacional.
+- Uma mensagem arquivada pode ser restaurada pela aba **Arquivadas**. A restauração recupera `ignored`, `identified` ou `reconciled` e reinicia o prazo operacional.
+- A confirmação de handoff para uma despesa e um pedido do Inter identificável encerra o trabalho documental e pode arquivar o e-mail antes da liquidação. Isso não baixa nem encerra a despesa; falha posterior reabre a mensagem como ação necessária.
 - `purgeEligibleAt` é apenas a data mínima para uma futura política de minimização: 1 ano para conteúdo não financeiro, 6 anos para o financeiro comum e 10 anos para tributos ou folha. Não há expurgo definitivo automático nesta versão.
 
 ## Busca indexada
@@ -26,7 +27,8 @@ O endpoint usa `INTER_RECONCILIATION_SECRET`, aceita no máximo 400 registros po
 
 - Backfill atual: 46 mensagens, portanto até 46 leituras, 46 atualizações e uma escrita de estado para concluir a primeira indexação.
 - Manutenção diária sem itens elegíveis: uma leitura do estado e a leitura mínima da consulta de retenção, aproximadamente 60 leituras por mês.
-- Execução diária no teto de 200 arquivamentos: até 400 leituras e 400 escritas na execução, porque cada candidato é relido na transação e gera a atualização da mensagem e um evento de auditoria.
+- Execução diária no teto de 200 arquivamentos por idade: até 400 leituras e 400 escritas na execução, porque cada candidato é relido na transação e gera a atualização da mensagem e um evento de auditoria.
+- A passagem única da projeção de pagamentos processa até 150 mensagens: no pior lote, 451 leituras (estado, mensagens, despesas e pedidos) e 301 escritas (mensagens, eventos e cursor). Depois de concluída, custa uma leitura de estado por manutenção.
 - Busca: é acionada somente na página, possui debounce de 350 ms, usa `workspaceId`, status e termo indexado, e examina no máximo 500 candidatos por solicitação. No cenário conservador de 2 buscas/hora × 5 usuários × 8 horas/dia × 22 dias, o teto é 880.000 leituras de candidatos por mês; termos seletivos retornam substancialmente menos documentos.
 - Durante a criação do índice agregado do resumo, um fallback consulta no máximo 501 mensagens do workspace para manter a caixa disponível. Ele só é usado quando o Firestore responde `FAILED_PRECONDITION`; acima de 500 mensagens falha de forma explícita em vez de exibir um total parcial.
 - Não existe polling, listener global nem leitura sem limite. O job roda uma vez por dia e todos os lotes possuem limite e cursor/estado persistido.

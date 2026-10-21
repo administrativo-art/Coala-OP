@@ -43,6 +43,8 @@ import {
   sourceAndFingerprintDuplicateCheck,
 } from "./inbox-deduplication";
 import { barcodeBankPreflight } from "./barcode-bank-preflight";
+import { planFinancialInboxPaymentProjection } from "@/features/financial/inbox/payment-projection";
+import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 
 export class FinancialServiceApprovalIneligibleError extends Error {}
 
@@ -716,9 +718,15 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       const requestEventId = randomUUID();
       const messageEventId = randomUUID();
       const request = await financialDbAdmin.runTransaction(async (transaction) => {
-        const currentSnapshot = await transaction.get(requestRef);
+        const [currentSnapshot, currentMessageSnapshot] = await Promise.all([
+          transaction.get(requestRef),
+          pending.sourceType === "financial_inbox" ? transaction.get(messageRef) : Promise.resolve(null),
+        ]);
         if (!currentSnapshot.exists || currentSnapshot.get("status") !== "submitting") {
           throw new Error("A solicitação mudou enquanto o Banco Inter processava o envio.");
+        }
+        if (pending.sourceType === "financial_inbox" && !currentMessageSnapshot?.exists) {
+          throw new Error("A cobrança vinculada não foi encontrada após o envio ao banco.");
         }
         transaction.set(requestRef, requestPatch, { merge: true });
         transaction.set(expectedDebitRef, {
@@ -741,15 +749,14 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           createdAt: submittedAt,
           updatedAt: submittedAt,
         }, { merge: true });
-        if (pending.sourceType === "financial_inbox") transaction.set(messageRef, {
-          status: next === "scheduled" ? "scheduled" : next === "awaiting_statement" ? "awaiting_statement" : "linked",
-          bankState: next,
-          "resolution.status": "identified",
-          "resolution.financialState": next === "scheduled" || next === "awaiting_statement"
-            ? "scheduled"
-            : "payment_prepared",
-          updatedAt: submittedAt,
-        }, { merge: true });
+        const projectionPlan = pending.sourceType === "financial_inbox" && currentMessageSnapshot?.exists
+          ? planFinancialInboxPaymentProjection({
+              message: { id: currentMessageSnapshot.id, ...currentMessageSnapshot.data() } as FinancialInboxMessage,
+              request: { ...pending, ...requestPatch },
+              observedAt: submittedAt,
+            })
+          : null;
+        if (projectionPlan) transaction.set(messageRef, projectionPlan.patch, { merge: true });
         if (pending.sourceType === "financial_inbox") transaction.set(messageRef.collection("events").doc(messageEventId), {
           type: "INTER_BARCODE_PAYMENT_ACCEPTED",
           at: submittedAt,
@@ -757,6 +764,14 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           interRequestId,
           bankStatus: result.statusPagamento ?? null,
           scheduledFor: pending.barcodeSnapshot.scheduledFor,
+        });
+        if (projectionPlan?.transition === "archive") transaction.set(messageRef.collection("events").doc(), {
+          type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+          at: submittedAt,
+          actorId: "system:financial-inbox-handoff",
+          paymentRequestId: id,
+          interRequestId,
+          previousStatus: currentMessageSnapshot?.get("status") ?? null,
         });
         transaction.set(requestRef.collection("events").doc(requestEventId), {
           type: approvalRequired ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED",
@@ -840,8 +855,43 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     return request;
   } catch (error) {
     const lastError = safeInterPaymentError(error);
-    await transitionPaymentRequest(id, ["submitting"], "failed", { lastError });
-    await addPaymentEvent(id, "INTER_SUBMISSION_FAILED", actor, { code: lastError.code });
+    const failedAt = new Date().toISOString();
+    await financialDbAdmin.runTransaction(async (transaction) => {
+      const requestRef = paymentRequestRef(id);
+      const snapshot = await transaction.get(requestRef);
+      if (!snapshot.exists || snapshot.get("status") !== "submitting") {
+        throw new Error("A solicitação mudou enquanto a falha bancária era registrada.");
+      }
+      const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+      const messageRef = current.sourceType === "financial_inbox"
+        ? financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId)
+        : null;
+      const messageSnapshot = messageRef ? await transaction.get(messageRef) : null;
+      const failedRequest = { ...current, status: "failed" as const, lastError, updatedAt: failedAt };
+      transaction.set(requestRef, { status: "failed", lastError, updatedAt: failedAt }, { merge: true });
+      transaction.set(requestRef.collection("events").doc(), {
+        type: "INTER_SUBMISSION_FAILED",
+        at: failedAt,
+        actorId: actor === "system" ? "system" : actor.uid,
+        actorEmail: actor === "system" ? null : actor.email ?? null,
+        code: lastError.code,
+      });
+      if (messageRef && messageSnapshot?.exists) {
+        const plan = planFinancialInboxPaymentProjection({
+          message: { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage,
+          request: failedRequest,
+          observedAt: failedAt,
+        });
+        transaction.set(messageRef, plan.patch, { merge: true });
+        transaction.set(messageRef.collection("events").doc(), {
+          type: "BANK_PAYMENT_ACTION_REQUIRED",
+          at: failedAt,
+          actorId: "system:financial-inbox",
+          paymentRequestId: id,
+          reasonCode: lastError.code,
+        });
+      }
+    });
     throw new Error(lastError.safeMessage);
   }
 }
@@ -1149,6 +1199,11 @@ export async function markStalePaymentSubmissionForReview(
       safeMessage: "O envio ao banco foi interrompido antes da confirmação interna. Revise a solicitação; um novo envio usará a mesma chave idempotente ou recuperará o boleto no Inter.",
       occurredAt,
     };
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    const messageRef = current.sourceType === "financial_inbox"
+      ? financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId)
+      : null;
+    const messageSnapshot = messageRef ? await transaction.get(messageRef) : null;
     transaction.set(ref, {
       status: "failed",
       lastError,
@@ -1160,6 +1215,21 @@ export async function markStalePaymentSubmissionForReview(
       actorId: "system",
       actorEmail: null,
     });
+    if (messageRef && messageSnapshot?.exists) {
+      const plan = planFinancialInboxPaymentProjection({
+        message: { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage,
+        request: { ...current, status: "failed", lastError, updatedAt: occurredAt } as BankPaymentRequest,
+        observedAt: occurredAt,
+      });
+      transaction.set(messageRef, plan.patch, { merge: true });
+      transaction.set(messageRef.collection("events").doc(), {
+        type: "BANK_PAYMENT_ACTION_REQUIRED",
+        at: occurredAt,
+        actorId: "system:financial-inbox",
+        paymentRequestId: id,
+        reasonCode: lastError.code,
+      });
+    }
     return { id, status: "failed" as const };
   });
 }
@@ -1187,6 +1257,10 @@ async function persistBarcodeBankObservation(params: {
       current.paymentRail !== "barcode"
       || !["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement", "failed"].includes(current.status)
     ) return current;
+    const messageRef = current.sourceType === "financial_inbox"
+      ? financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId)
+      : null;
+    const messageSnapshot = messageRef ? await transaction.get(messageRef) : null;
     const observation = planBankStatusObservation({
       current,
       nextStatus: params.nextStatus,
@@ -1255,19 +1329,29 @@ async function persistBarcodeBankObservation(params: {
         createdAt: current.submittedAt ?? current.createdAt,
         updatedAt: params.observedAt,
       }, { merge: true });
-      if (current.sourceType === "financial_inbox") transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
-        status: params.nextStatus === "scheduled"
-          ? "scheduled"
-          : params.nextStatus === "awaiting_statement"
-            ? "awaiting_statement"
-            : "linked",
-        bankState: params.nextStatus,
-        "resolution.status": "identified",
-        "resolution.financialState": params.nextStatus === "scheduled" || params.nextStatus === "awaiting_statement"
-          ? "scheduled"
-          : "payment_prepared",
-        updatedAt: params.observedAt,
-      }, { merge: true });
+      if (messageRef && messageSnapshot?.exists) {
+        const plan = planFinancialInboxPaymentProjection({
+          message: { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage,
+          request: { ...current, ...patch, status: params.nextStatus },
+          observedAt: params.observedAt,
+        });
+        transaction.set(messageRef, plan.patch, { merge: true });
+        if (plan.transition === "archive") transaction.set(messageRef.collection("events").doc(), {
+          type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+          at: params.observedAt,
+          actorId: "system:financial-inbox-handoff",
+          paymentRequestId: current.id,
+          interRequestId: current.interRequestId ?? null,
+          previousStatus: messageSnapshot.get("status") ?? null,
+        });
+        if (plan.transition === "action_required") transaction.set(messageRef.collection("events").doc(), {
+          type: "BANK_PAYMENT_ACTION_REQUIRED",
+          at: params.observedAt,
+          actorId: "system:financial-inbox",
+          paymentRequestId: current.id,
+          reasonCode: params.nextStatus,
+        });
+      }
     }
     if (observation.shouldWriteAuditEvent || amountChanged) {
       transaction.set(requestRef.collection("events").doc(eventId), {
@@ -1323,6 +1407,8 @@ async function preflightUnidentifiedInboxBarcodeRequest(
       if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
       const latest = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
       if (latest.interRequestId || latest.status !== "failed") return latest;
+      const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(latest.sourceId);
+      const messageSnapshot = await transaction.get(messageRef);
       const bankPreflight = { checkedAt: observedAt, outcome: "clear" as const, bankTransactionCode: null };
       transaction.set(ref, { bankPreflight, updatedAt: observedAt }, { merge: true });
       transaction.set(ref.collection("events").doc(eventId), {
@@ -1331,6 +1417,21 @@ async function preflightUnidentifiedInboxBarcodeRequest(
         actorId: actor === "system" ? "system" : actor.uid,
         actorEmail: actor === "system" ? null : actor.email ?? null,
       });
+      if (messageSnapshot.exists) {
+        const plan = planFinancialInboxPaymentProjection({
+          message: { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage,
+          request: latest,
+          observedAt,
+        });
+        transaction.set(messageRef, plan.patch, { merge: true });
+        transaction.set(messageRef.collection("events").doc("payment-failure-projection-v1"), {
+          type: "BANK_PAYMENT_ACTION_REQUIRED",
+          at: observedAt,
+          actorId: "system:financial-inbox",
+          paymentRequestId: latest.id,
+          reasonCode: latest.lastError?.code ?? "PAYMENT_REQUEST_FAILED",
+        }, { merge: true });
+      }
       return { ...latest, bankPreflight, updatedAt: observedAt } as BankPaymentRequest;
     });
   }

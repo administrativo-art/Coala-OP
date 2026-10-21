@@ -67,3 +67,67 @@ test("identificada só é terminal se a resolução registrar reconciliação", 
   assert.equal(financialInboxArchiveEligibility(resolved, { ...noEvidence, ...settledExpense, expenseObligationId: null }).eligible, true);
   assert.equal(financialInboxArchiveEligibility(resolved, noEvidence).reasonCode, "EXPENSE_LINK_CONFLICT");
 });
+
+test("handoff agendado permite arquivar o e-mail sem confundir agendamento com liquidação", () => {
+  const scheduled = {
+    ...base,
+    status: "scheduled",
+    bankState: "scheduled",
+    linkedExpenseId: "expense-1",
+    paymentRequestId: "request-1",
+    resolution: {
+      status: "identified",
+      financialState: "scheduled",
+      targetType: "expense",
+      targetId: "expense-1",
+      kind: "new_charge",
+    },
+  } as FinancialInboxMessage;
+  const evidence = {
+    ...noEvidence,
+    ...settledExpense,
+    expenseStatus: "pending",
+    expenseReconciliationStatus: "PENDING",
+    expensePaymentRequestId: "request-1",
+    paymentRequestId: "request-1",
+    paymentRequestStatus: "scheduled",
+    paymentWorkspaceId: "workspace-1",
+    paymentInterRequestId: "inter-1",
+    paymentSourceType: "financial_inbox",
+    paymentSourceId: "message-1",
+    paymentExpenseId: "expense-1",
+  };
+  assert.equal(financialInboxArchiveEligibility(scheduled, evidence).reasonCode, "FINANCIAL_HANDOFF_CONFIRMED");
+  assert.equal(financialInboxArchiveEligibility(scheduled, { ...evidence, paymentInterRequestId: null }).eligible, false);
+  assert.equal(financialInboxArchiveEligibility({ ...scheduled, status: "payment_failed", bankState: "failed" }, evidence).reasonCode, "PAYMENT_FAILED");
+});
+
+test("lembrete usa o pedido da despesa sem exigir que seja a mensagem principal", () => {
+  const reminder = {
+    ...base,
+    status: "identified",
+    bankState: "scheduled",
+    resolution: {
+      status: "identified",
+      financialState: "scheduled",
+      targetType: "expense",
+      targetId: "expense-1",
+      kind: "reminder",
+    },
+  } as FinancialInboxMessage;
+  assert.equal(financialInboxArchiveEligibility(reminder, {
+    ...noEvidence,
+    ...settledExpense,
+    expenseInboxMessageId: "primary-message",
+    expenseStatus: "pending",
+    expenseReconciliationStatus: "PENDING",
+    expensePaymentRequestId: "request-1",
+    paymentRequestId: "request-1",
+    paymentRequestStatus: "scheduled",
+    paymentWorkspaceId: "workspace-1",
+    paymentInterRequestId: "inter-1",
+    paymentSourceType: "financial_inbox",
+    paymentSourceId: "primary-message",
+    paymentExpenseId: "expense-1",
+  }).eligible, true);
+});
