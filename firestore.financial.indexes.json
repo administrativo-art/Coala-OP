@@ -15,6 +15,36 @@
     { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
     ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "provisionType", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "provisionCompetence", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "payments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "principalAmountCents", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "payments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "expenseId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "barcodeSnapshot.codeHash", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "barcodeSnapshot.code", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "sourceType", "order": "ASCENDING" },
+      { "fieldPath": "sourceId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "financialInboxMessages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "rawSha256", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankStatementEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "direction", "order": "ASCENDING" },
+      { "fieldPath": "amount", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "purchaseMonths", "arrayConfig": "CONTAINS" }
     ] },
@@ -401,6 +431,27 @@
       "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "receivedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "financialInboxMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "resolution.mode", "order": "ASCENDING" },
+        { "fieldPath": "receivedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "financialInboxMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "resolution.mode", "order": "ASCENDING" },
+        { "fieldPath": "searchTerms", "arrayConfig": "CONTAINS" },
         { "fieldPath": "receivedAt", "order": "DESCENDING" }
       ]
     },

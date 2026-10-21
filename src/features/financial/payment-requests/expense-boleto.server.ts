@@ -73,7 +73,7 @@ export async function prepareExpenseBoleto(expenseId: string, workspace: string,
     const legacyDuplicates = await tx.get(financialDbAdmin.collection("bankPaymentRequests").where("barcodeSnapshot.code", "==", input.barcode).limit(1));
     if (!duplicates.empty || !legacyDuplicates.empty) boletoConflict();
     const request: BarcodeBankPaymentRequest = {
-      id: requestRef.id, sourceType: "expense_boleto", sourceId: expenseId, expenseId, installmentNumber: 1,
+      id: requestRef.id, workspaceId: workspace, sourceType: "expense_boleto", sourceId: expenseId, expenseId, installmentNumber: 1,
       paymentRail: "barcode", barcodeSnapshot: { type: "barcode", code: input.barcode, codeHash: paymentBarcodeHash(input.barcode), maskedCode: normalizeFinancialDocumentIdentity({ barcode: input.barcode }).barcodeMasked!, dueDate: input.dueDate, scheduledFor, beneficiaryDocument: input.beneficiaryDocument },
       amount: input.amountCents / 100, description: String(data.description).slice(0, 140), status: "awaiting_financial_authorization", idempotencyKey: requestRef.id, statementReconciliationStatus: "not_expected", createdAt: now, updatedAt: now, createdBy: actor.uid,
     };
