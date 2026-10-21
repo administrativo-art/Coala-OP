@@ -7,8 +7,10 @@ import { openSystemNotice, resolveSystemNotices } from '@/features/system-notice
 import { civilDateIn, repPCertificateMilestone, repPCertificateMilestoneSeverity } from '@/features/system-notices/core';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { AppError } from '@/lib/observability/app-error';
 
 import { inspectRepPIcpCredential } from './icp-signer';
+import { retryPendingRepPReceipts, type RepPServiceDependencies } from './service.server';
 import { assertTrustedRepPClockReading, unconfiguredRepPClock, type RepPClock } from './clock';
 import { configuredRepPClock } from './hlb-ntp-clock.server';
 import { REP_P_NORMS_REGISTRY, REP_P_NORMS_REVIEW_INTERVAL_DAYS } from './norms-registry';
@@ -28,7 +30,7 @@ function brDate(instant: Date, timeZone: string) {
  */
 export async function runRepPDailyMonitor(params: {
   workspaceId: string; now?: Date; timeZone?: string; signerPem?: string;
-  database?: Firestore; repDatabase?: Firestore; clock?: RepPClock;
+  database?: Firestore; repDatabase?: Firestore; clock?: RepPClock; repDependencies?: RepPServiceDependencies;
 }) {
   const now = params.now ?? new Date();
   const timeZone = params.timeZone ?? 'America/Fortaleza';
@@ -90,6 +92,13 @@ export async function runRepPDailyMonitor(params: {
 
   // Comprovantes pendentes há mais de 1 hora: um aviso por dia enquanto houver pendência.
   // Falha ao ler a ARP (banco ausente ou indisponível) não impede as demais checagens; fica no resultado.
+  // Antes de contar, tenta emitir os pendentes; falha da reemissão não impede a contagem.
+  let receiptRetry: Awaited<ReturnType<typeof retryPendingRepPReceipts>> | { error: string } | null = null;
+  try {
+    receiptRetry = await retryPendingRepPReceipts({ workspaceId }, { repDb: repDatabase, ...params.repDependencies });
+  } catch (cause) {
+    receiptRetry = { error: cause instanceof AppError ? cause.code : 'REP_P_RECEIPT_RETRY_FAILED' };
+  }
   let pendingCount: number | null = null;
   try {
     const pending = await repDatabase.collection('repP_receipts').where('workspaceId', '==', workspaceId)
@@ -123,6 +132,6 @@ export async function runRepPDailyMonitor(params: {
   await resolveSystemNotices({ workspaceId, category: 'rep-p.norms-review', keepDedupeKeys: normsKey ? [normsKey] : [],
     reason: 'norms_reviewed' }, now, database);
 
-  return { certificateState: certificate.state, clockState, pendingReceipts: pendingCount, receiptsCheck: pendingCount === null ? 'unavailable' as const : 'ok' as const,
+  return { certificateState: certificate.state, clockState, receiptRetry, pendingReceipts: pendingCount, receiptsCheck: pendingCount === null ? 'unavailable' as const : 'ok' as const,
     normsReviewOverdue: overdue, opened };
 }
