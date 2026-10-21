@@ -177,5 +177,6 @@ test("aprovação pendente no Inter continua operacional e arquivo existente nã
   });
   assert.equal(paid.transition, "update");
   assert.equal(paid.patch.status, "archived");
+  assert.equal(Object.hasOwn(paid.patch, "thread"), false);
   assert.equal((paid.patch.resolution as { financialState: string }).financialState, "reconciled");
 });
