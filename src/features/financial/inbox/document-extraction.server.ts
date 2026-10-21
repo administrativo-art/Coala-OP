@@ -1,8 +1,9 @@
 import "server-only";
 
 import { getActiveSystemPrompt, renderSystemPrompt } from "@/ai/prompts/registry";
-import { classifyFinancialEmail, normalizeBrazilianServiceNumber, normalizePaymentBarcode } from "./parser";
+import { normalizeBrazilianServiceNumber, normalizePaymentBarcode } from "./parser";
 import { extractDeterministicFinancialDocumentText, isImageDocument, isPdfDocument } from "./document-text";
+import { shouldUseFinancialDocumentAi } from "./document-ai-policy";
 import type {
   FinancialInboxDocumentHints,
   FinancialInboxFiscalDocumentKind,
@@ -14,7 +15,7 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
 const PROMPT = getActiveSystemPrompt("financial.inbox-document-extraction");
 
-export const FINANCIAL_DOCUMENT_EXTRACTION_VERSION = `${PROMPT.version}:pdfjs-v1`;
+export const FINANCIAL_DOCUMENT_EXTRACTION_VERSION = `${PROMPT.version}:pdfjs-v2-triage`;
 const MAX_EXTRACTED_TEXT = 80_000;
 
 const EXTRACTION_SCHEMA = {
@@ -288,34 +289,13 @@ async function extractWithAi(params: {
   }
 }
 
-function shouldUseAi(params: { text: string; subject: string; senderDomain: string | null }) {
-  if (params.text.trim().length < 80) return true;
-  const parsed = classifyFinancialEmail({
-    subject: params.subject,
-    text: "",
-    senderDomain: params.senderDomain,
-    documentText: params.text,
-  }).classification;
-  const identity = parsed.billingIdentity;
-  const telecomIncomplete = (identity?.serviceType === "mobile" || identity?.serviceType === "landline")
-    && !identity.serviceNumbers.length;
-  const fiscal = parsed.fiscalIdentity;
-  const fiscalIncomplete = Boolean(fiscal && (
-    !fiscal.collectorName
-    || !fiscal.taxpayerTaxId
-    || !fiscal.documentNumber
-    || fiscal.revenueDescriptions.length === 0
-    || fiscal.revenueItems.length === 0
-  ));
-  return !parsed.amountCents || !parsed.dueDate || !parsed.competence || telecomIncomplete || fiscalIncomplete;
-}
-
 export async function extractFinancialDocument(params: {
   buffer: Buffer;
   filename: string;
   contentType: string;
   subject: string;
   senderDomain: string | null;
+  allowAi?: boolean;
   model?: string;
 }): Promise<FinancialDocumentExtraction> {
   try {
@@ -327,7 +307,9 @@ export async function extractFinancialDocument(params: {
       return { status: "unsupported", method: null, text: "", pageCount: null, hints: null };
     }
 
-    const useAi = isImageDocument(params.contentType, params.filename) || shouldUseAi({
+    const useAi = shouldUseFinancialDocumentAi({
+      candidate: params.allowAi === true,
+      supported: deterministic.supported,
       text,
       subject: params.subject,
       senderDomain: params.senderDomain,

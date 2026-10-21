@@ -13,6 +13,38 @@ object Rules {
     const val ALL_UNITS = "*"
     /** "Todas as unidades" is offered only when there is more than one unit to put side by side. */
     fun unitChoices(units: List<Pair<String, String>>) = if (units.size > 1) listOf(ALL_UNITS to "Todas as unidades") + units else units
+    const val NO_ORGANIZATION = "__no_organization__"
+    const val NO_GROUP = "__no_group__"
+    private fun organizationKey(unit: UnitRef) = unit.organizationId ?: NO_ORGANIZATION
+    private fun groupKey(unit: UnitRef) = unit.groupId ?: NO_GROUP
+    private fun sortedScope(values: Map<String, String>, fallback: String) = values.entries.sortedWith(compareBy<Map.Entry<String, String>> { it.key == fallback }.thenBy { it.value }).map { it.key to it.value }
+    /** Organization and group of the unit a withdrawal belongs to; null for a unit missing from the context. */
+    fun purchaseScope(units: List<UnitRef>, unitId: String) = units.firstOrNull { it.id == unitId }?.let { organizationKey(it) to groupKey(it) }
+    private fun inScope(unit: UnitRef, organizationId: String, groupId: String) =
+        (organizationId == ALL_UNITS || organizationKey(unit) == organizationId) && (groupId == ALL_UNITS || groupKey(unit) == groupId)
+    /** Every organization or group of the accessible units; the counts live on the unit cards, not here. */
+    private fun scopeChoices(units: List<UnitRef>, all: String, fallbackName: String, fallback: String, key: (UnitRef) -> String, name: (UnitRef) -> String?) =
+        listOf(ALL_UNITS to all) + sortedScope(units.associate { key(it) to (name(it) ?: fallbackName) }, fallback)
+    fun purchaseOrganizationChoices(units: List<UnitRef>) =
+        scopeChoices(units, "Todas as organizações", "Sem organização", NO_ORGANIZATION, ::organizationKey) { it.organizationName }
+    fun purchaseGroupChoices(units: List<UnitRef>, organizationId: String) =
+        scopeChoices(units.filter { inScope(it, organizationId, ALL_UNITS) }, "Todos", "Sem grupo", NO_GROUP, ::groupKey) { it.groupName }
+    /** First step of Compra local: one card per unit that has withdrawals waiting, with how many, by name. */
+    fun purchaseUnitCards(withdrawals: List<Withdrawal>): List<Triple<String, String, Int>> =
+        withdrawals.groupBy { it.unitId }.map { (id, rows) -> Triple(id, rows.first().unitName, rows.size) }.sortedBy { it.second }
+    /** A unit the context does not know only shows with no filter, so a withdrawal is never hidden for good. */
+    fun inPurchaseScope(units: List<UnitRef>, unitId: String, organizationId: String, groupId: String): Boolean {
+        val unit = units.firstOrNull { it.id == unitId } ?: return organizationId == ALL_UNITS && groupId == ALL_UNITS
+        return inScope(unit, organizationId, groupId)
+    }
+    fun filterWithdrawals(withdrawals: List<Withdrawal>, units: List<UnitRef>, organizationId: String, groupId: String) =
+        withdrawals.filter { inPurchaseScope(units, it.unitId, organizationId, groupId) }
+    /** A saved choice whose organization or group no longer exists falls back to everything. */
+    fun restorePurchaseScope(units: List<UnitRef>, organizationId: String, groupId: String): Pair<String, String> {
+        val organization = organizationId.takeIf { it == ALL_UNITS || units.any { unit -> organizationKey(unit) == it } } ?: return ALL_UNITS to ALL_UNITS
+        val group = groupId.takeIf { it == ALL_UNITS || units.any { unit -> inScope(unit, organization, ALL_UNITS) && groupKey(unit) == it } } ?: ALL_UNITS
+        return organization to group
+    }
     fun quantity(value: String): Double = value.trim().replace(".", "").replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: 0.0
     fun quantityText(value: Double): String = BigDecimal.valueOf(value).setScale(3, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
     fun cents(value: String): Long? = runCatching { BigDecimal(value.trim().replace(".", "").replace(',', '.')).movePointRight(2).longValueExact() }.getOrNull()
@@ -52,7 +84,7 @@ object Rules {
         Instant.parse(upload.capturedAt)
         require(upload.receipts.size in 1..2 && upload.paymentProofs.size <= 2) { "Escolha até duas imagens por documento." }
         require(upload.fundingSource in listOf("cash_withdrawal", "company_payment"))
-        require((upload.fundingSource == "company_payment") == upload.paymentProofs.isNotEmpty()) { "Compra empresarial exige comprovante; compra por sangria não usa comprovante." }
+        require(upload.fundingSource != "cash_withdrawal" || upload.paymentProofs.isEmpty()) { "Compra por sangria não usa comprovante." }
         require(upload.note.length <= 240) { "Observação: máximo de 240 caracteres." }
         val documents = upload.receipts + upload.paymentProofs
         require(documents.all { it.bytes.isNotEmpty() && it.bytes.size <= 15 * 1024 * 1024 && it.mimeType in listOf("image/jpeg", "image/png", "image/webp", "application/pdf") }) { "Documento inválido ou maior que 15 MB." }

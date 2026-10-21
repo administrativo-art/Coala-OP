@@ -63,6 +63,7 @@ export function summarizePaymentRead(command: string, body: RecordValue) {
     "unitName", "apportionments", "accountAllocations", "provisionSeriesKey", "provisionKind", "provisionType", "provisionCompetence", "provisionReconciliationStatus", "reconciledExpenseId", "reconciledProvisionId", "name", "notes",
     "statementTransactionId", "bankTransactionId", "linkedTransactionId", "importedFrom", "documentNumber", "documentReference",
     "externalReference", "receiptNumber", "legalEntitySnapshot", "statementReconciliationStatus", "bankLiquidationObservedAt",
+    "lastError", "submissionAttemptCount", "settlementRevision", "requestedSettlementAmount", "requestedLateChargeAmount",
     "date", "type", "direction", "bankPaymentTransactionId", "linkedBankTransactionId", "importSessionId", "importItemId"]);
   if (doc) doc.bankStatementData = pick((body.doc as RecordValue).bankStatementData,
     ["idTransacao", "codigoTransacao", "dataPagamento", "dataTransacao", "dataVencimento", "dataVencimentoTitulo",
