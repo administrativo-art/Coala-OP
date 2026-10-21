@@ -119,13 +119,16 @@ export function CashWithdrawalsPanel({ data, editable, operatorId: operatorScope
         {!scopedSources.length && !orphaned.length && <p className="text-sm text-muted-foreground">Nenhuma sangria em espécie {operatorScopeId ? "para este operador" : "neste fechamento"}.</p>}
         {[...scopedSources.map(row => ({ ...row, removed: false })), ...orphaned.map(row => ({ ...row, identityVerified: false, removed: true }))].map(row => {
           const link = payload.classifications.find(item => item.sourceId === row.sourceId && item.active);
+          const preLink = payload.preLinks.find(item => item.sourceId === row.sourceId);
+          const localPurchaseId = link?.localPurchaseId ?? preLink?.expenseId ?? null;
           const name = data.operators.find(operator => operator.operatorId === row.operatorId)?.operatorName ?? row.operatorId;
           const pdvReason = "pdvReason" in row && typeof row.pdvReason === "string" ? row.pdvReason : null;
           return <div key={row.sourceId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-            <div><p className="font-medium">{name} · <span className="font-ds-mono font-bold tabular-nums">{formatBRL(row.amountCents)}</span></p><p className="text-muted-foreground">{row.removed ? "Removida do PDV: desfaça o vínculo anterior" : !row.identityVerified ? "Identificador ainda não comprovado: sincronize o PDV" : link?.fingerprint === row.fingerprint ? `${link.accountPlanName} · ${link.resultCenterName}` : "Classificação pendente ou origem alterada"}</p>
+            <div><p className="font-medium">{name} · <span className="font-ds-mono font-bold tabular-nums">{formatBRL(row.amountCents)}</span></p><p className="text-muted-foreground">{row.removed ? "Removida do PDV: desfaça o vínculo anterior" : !row.identityVerified ? "Identificador ainda não comprovado: sincronize o PDV" : link?.fingerprint === row.fingerprint ? `${link.accountPlanName} · ${link.resultCenterName}` : preLink ? `Compra local de ${preLink.supplierName} aguardando conciliação` : "Classificação pendente ou origem alterada"}</p>
               {!row.removed && <p className="text-muted-foreground"><span className="font-medium text-foreground">Justificativa informada no PDV:</span> {pdvReason ?? "Não informada"}</p>}</div>
-            <div className="flex gap-2">{link && <Button asChild variant="outline" size="sm"><Link href={`/dashboard/financial/expenses?search=${encodeURIComponent(link.description)}`}>Ver despesa</Link></Button>}
-              {canClassify && <Button type="button" variant="outline" size="sm" disabled={busy} aria-expanded={selected === row.sourceId} onClick={() => choose(row.sourceId)}>{link ? "Corrigir despesa" : "Criar despesa"}</Button>}</div>
+            <div className="flex gap-2">{localPurchaseId && <Button asChild variant="outline" size="sm"><Link href={`/dashboard/purchasing/orders?localPurchase=${encodeURIComponent(localPurchaseId)}`}>Ver compra</Link></Button>}
+              {link && !localPurchaseId && <Button asChild variant="outline" size="sm"><Link href={`/dashboard/financial/expenses?search=${encodeURIComponent(link.description)}`}>Ver despesa</Link></Button>}
+              {canClassify && (!preLink || !!link) && <Button type="button" variant="outline" size="sm" disabled={busy} aria-expanded={selected === row.sourceId} onClick={() => choose(row.sourceId)}>{link ? "Corrigir despesa" : "Criar despesa"}</Button>}</div>
           </div>;
         })}
       </>}

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { renderSystemPrompt } from "@/ai/prompts/registry";
-import type { DetectedMobileInboxFile, MobileInboxUploadMetadata, MobilePurchaseAnalysis, MobilePurchasePaymentMethod } from "./mobile-upload";
+import { mobileFiscalAuthorizationWarnings, normalizeMobileFiscalDocument, type DetectedMobileInboxFile, type MobileInboxUploadMetadata, type MobilePurchaseAnalysis, type MobilePurchasePaymentMethod } from "./mobile-upload";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
@@ -10,8 +10,12 @@ const PAYMENT_METHODS = new Set<MobilePurchasePaymentMethod>(["pix", "card_credi
 const ANALYSIS_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["supplierName", "supplierTaxId", "purchaseDate", "amountCents", "items", "confidence", "suggestedAccountId", "payment", "warnings"],
+  required: ["purchaseDocumentKind", "purchaseDocumentKindConfidence", "fiscalAuthorizationStatus", "fiscalAuthorizationEvidence", "supplierName", "supplierTaxId", "purchaseDate", "amountCents", "items", "confidence", "suggestedAccountId", "payment", "warnings"],
   properties: {
+    purchaseDocumentKind: { type: "string", enum: ["nfe_or_danfe", "nfce", "coupon_or_receipt", "unknown"] },
+    purchaseDocumentKindConfidence: { type: "string", enum: ["high", "medium", "low"] },
+    fiscalAuthorizationStatus: { type: "string", enum: ["authorized", "pending", "unknown"] },
+    fiscalAuthorizationEvidence: { type: ["string", "null"] },
     suggestedAccountId: { type: ["string", "null"] },
     supplierName: { type: ["string", "null"] },
     supplierTaxId: { type: ["string", "null"] },
@@ -20,9 +24,12 @@ const ANALYSIS_SCHEMA = {
     items: {
       type: "array", maxItems: 100, items: {
         type: "object", additionalProperties: false,
-        required: ["description", "quantity", "unit", "unitPriceCents", "totalCents", "productId", "packages"],
+        required: ["description", "quantity", "unit", "unitPriceCents", "totalCents", "productId", "packages", "aiTreatment", "aiConfidence", "aiReason"],
         properties: {
           productId: { type: ["string", "null"] }, packages: { type: ["number", "null"] },
+          aiTreatment: { type: "string", enum: ["existing_item", "item_not_found", "asset_candidate", "immediate_use", "needs_review"] },
+          aiConfidence: { type: "string", enum: ["high", "medium", "low"] },
+          aiReason: { type: ["string", "null"] },
           description: { type: "string" }, quantity: { type: ["number", "null"] }, unit: { type: ["string", "null"] },
           unitPriceCents: { type: ["integer", "null"] }, totalCents: { type: ["integer", "null"] },
         },
@@ -70,7 +77,7 @@ function confidence(value: unknown): "high" | "medium" | "low" {
   return value === "high" || value === "medium" ? value : "low";
 }
 
-function normalize(value: unknown, fundingSource: MobileInboxUploadMetadata["fundingSource"], accounts: PurchaseAccount[], products: PurchaseProduct[]): MobilePurchaseAnalysis {
+function normalize(value: unknown, hasPaymentProof: boolean, accounts: PurchaseAccount[], products: PurchaseProduct[]): MobilePurchaseAnalysis {
   const productIds = new Set(products.map((product) => product.id));
   const raw = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const paymentRaw = raw.payment && typeof raw.payment === "object" && !Array.isArray(raw.payment) ? raw.payment as Record<string, unknown> : null;
@@ -82,9 +89,18 @@ function normalize(value: unknown, fundingSource: MobileInboxUploadMetadata["fun
     const packages = Number(item.packages);
     // As with the category, only an id from the offered catalog survives.
     const productId = typeof item.productId === "string" && productIds.has(item.productId) ? item.productId : null;
+    const rawTreatment = item.aiTreatment;
+    const aiTreatment: MobilePurchaseAnalysis["items"][number]["aiTreatment"] = productId
+      ? "existing_item"
+      : rawTreatment === "asset_candidate" || rawTreatment === "immediate_use" || rawTreatment === "item_not_found" || rawTreatment === "needs_review"
+        ? rawTreatment
+        : "needs_review";
     return [{
       productId,
       packages: productId && Number.isFinite(packages) && packages > 0 ? packages : null,
+      aiTreatment,
+      aiConfidence: confidence(item.aiConfidence),
+      aiReason: shortString(item.aiReason, 240),
       description,
       quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
       unit: shortString(item.unit, 30),
@@ -93,7 +109,10 @@ function normalize(value: unknown, fundingSource: MobileInboxUploadMetadata["fun
     }];
   }).slice(0, 100);
   const method = PAYMENT_METHODS.has(paymentRaw?.method as MobilePurchasePaymentMethod) ? paymentRaw!.method as MobilePurchasePaymentMethod : "unknown";
+  const fiscal = normalizeMobileFiscalDocument(raw);
+  const warnings = (Array.isArray(raw.warnings) ? raw.warnings : []).flatMap((warning) => shortString(warning, 240) ? [shortString(warning, 240)!] : []);
   return {
+    ...fiscal,
     supplierName: shortString(raw.supplierName, 240),
     supplierTaxId: companyTaxId(raw.supplierTaxId),
     purchaseDate: isoDate(raw.purchaseDate),
@@ -102,7 +121,7 @@ function normalize(value: unknown, fundingSource: MobileInboxUploadMetadata["fun
     confidence: confidence(raw.confidence),
     // Only an id from the offered list survives; anything else the model writes is discarded.
     suggestedAccountId: accounts.find((account) => account.id === raw.suggestedAccountId)?.id ?? null,
-    payment: fundingSource === "cash_withdrawal" ? null : {
+    payment: !hasPaymentProof ? null : {
       method,
       amountCents: cents(paymentRaw?.amountCents),
       paidAt: isoDate(paymentRaw?.paidAt),
@@ -112,7 +131,7 @@ function normalize(value: unknown, fundingSource: MobileInboxUploadMetadata["fun
       amountMatchesReceipt: typeof paymentRaw?.amountMatchesReceipt === "boolean" ? paymentRaw.amountMatchesReceipt : null,
       payeeMatchesSupplier: typeof paymentRaw?.payeeMatchesSupplier === "boolean" ? paymentRaw.payeeMatchesSupplier : null,
     },
-    warnings: (Array.isArray(raw.warnings) ? raw.warnings : []).flatMap((warning) => shortString(warning, 240) ? [shortString(warning, 240)!] : []).slice(0, 10),
+    warnings: mobileFiscalAuthorizationWarnings(warnings, fiscal.fiscalAuthorizationStatus),
   };
 }
 
@@ -176,7 +195,7 @@ export async function extractMobilePurchaseDocuments(params: {
     });
     const payload = await response.json() as any;
     if (!response.ok) throw new Error("OPENAI_MOBILE_PURCHASE_EXTRACTION_FAILED");
-    return normalize(JSON.parse(outputText(payload)), params.metadata.fundingSource, params.accounts, params.products);
+    return normalize(JSON.parse(outputText(payload)), params.paymentProofs.length > 0, params.accounts, params.products);
   } finally {
     await Promise.all(uploadedFileIds.map((fileId) => deleteFile(fileId, apiKey)));
   }

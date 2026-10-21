@@ -36,6 +36,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount|expense-supplier|expense-account|expense-account-center|expense-unit-month|expense-center-due-month --value VALOR
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
@@ -146,7 +147,7 @@ async function coalaRead(token: string, path: string) {
   return paymentCliJson<Record<string, unknown>>(response);
 }
 
-async function coalaPost(token: string, id: string, action: "authorize" | "submit") {
+async function coalaPost(token: string, id: string, action: "authorize" | "submit" | "refresh") {
   const response = await paymentCliFetch(`${COALA_URL}/api/financial/payment-requests/${encodeURIComponent(id)}/${action}`, {
     method: "POST", headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
   });
@@ -352,13 +353,14 @@ function printStatus(request: Record<string, unknown>) {
     barcodeLast8: typeof barcode?.code === "string" ? barcode.code.slice(-8) : null,
     interRequestId: request.interRequestId ?? null, bankStatus: request.bankStatus ?? null,
     bankScheduledFor: request.bankScheduledFor ?? null,
+    bankPreflight: request.bankPreflight ?? null,
   })}\n`);
 }
 
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "requests", "status", "refresh", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -440,6 +442,7 @@ async function main() {
   const request = (await coalaGet(token)).find((item) => item.id === id);
   if (!request) throw new PaymentCliError("A solicitação não apareceu entre as 100 mais recentes da consulta autenticada. Consulte pelo Coala; nenhuma ação foi feita.");
   if (command === "status") return printStatus(request);
+  if (command === "refresh") return printStatus(await coalaPost(token, id, "refresh"));
 
   const amountCents = Number(requireOption("amount-cents"));
   const scheduledFor = requireOption("scheduled-for");

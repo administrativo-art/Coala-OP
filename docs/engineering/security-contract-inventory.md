@@ -2,10 +2,10 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **466**
-- Totalmente contratados: **117**
-- Legados congelados: **347**
-- Exceções temporárias: **2**
+- Arquivos de rota: **467**
+- Totalmente contratados: **119**
+- Legados congelados: **345**
+- Exceções temporárias: **3**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -204,8 +204,9 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/inbox/[id]/link` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/[id]/link/route.ts) |
 | `/api/financial/inbox/[id]/payment` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/[id]/payment/route.ts) |
 | `/api/financial/inbox/[id]/restore` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/restore/route.ts](../../src/app/api/financial/inbox/[id]/restore/route.ts) |
-| `/api/financial/inbox/bulk-review` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/bulk-review/route.ts](../../src/app/api/financial/inbox/bulk-review/route.ts) |
+| `/api/financial/inbox/bulk-review` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/bulk-review/route.ts](../../src/app/api/financial/inbox/bulk-review/route.ts) |
 | `/api/financial/inbox/mobile-upload` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/mobile-upload/route.ts](../../src/app/api/financial/inbox/mobile-upload/route.ts) |
+| `/api/financial/inbox/mobile-upload/cancel` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/mobile-upload/cancel/route.ts](../../src/app/api/financial/inbox/mobile-upload/cancel/route.ts) |
 | `/api/financial/inbox/settings` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/financial/inbox/settings/route.ts](../../src/app/api/financial/inbox/settings/route.ts) |
 | `/api/financial/management-analysis` | POST | `LEGACY_BASELINE` | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) |
 | `/api/financial/payment-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) |
@@ -392,7 +393,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/public/bio` | GET | `LEGACY_BASELINE` | [src/app/api/public/bio/route.ts](../../src/app/api/public/bio/route.ts) |
 | `/api/public/bio/analytics` | POST | `LEGACY_BASELINE` | [src/app/api/public/bio/analytics/route.ts](../../src/app/api/public/bio/analytics/route.ts) |
 | `/api/public/bio/media/[id]` | GET | `LEGACY_BASELINE` | [src/app/api/public/bio/media/[id]/route.ts](../../src/app/api/public/bio/media/[id]/route.ts) |
-| `/api/purchasing/[...path]` | DELETE, GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/purchasing/[...path]/route.ts](../../src/app/api/purchasing/[...path]/route.ts) |
+| `/api/purchasing/[...path]` | DELETE, GET, PATCH, POST | `EXCEPTION` | [src/app/api/purchasing/[...path]/route.ts](../../src/app/api/purchasing/[...path]/route.ts) |
 | `/api/purchasing/local-purchases/confirm` | POST ✓ | `CONTRACTED` | [src/app/api/purchasing/local-purchases/confirm/route.ts](../../src/app/api/purchasing/local-purchases/confirm/route.ts) |
 | `/api/purchasing/local-purchases/context` | GET ✓ | `CONTRACTED` | [src/app/api/purchasing/local-purchases/context/route.ts](../../src/app/api/purchasing/local-purchases/context/route.ts) |
 | `/api/purchasing/local-purchases/link-withdrawal` | POST ✓ | `CONTRACTED` | [src/app/api/purchasing/local-purchases/link-withdrawal/route.ts](../../src/app/api/purchasing/local-purchases/link-withdrawal/route.ts) |

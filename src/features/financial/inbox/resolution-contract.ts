@@ -6,8 +6,14 @@ import type {
   FinancialInboxResolution,
 } from "./types";
 
-export const FINANCIAL_INBOX_RESOLUTION_VERSION = 1;
+export const FINANCIAL_INBOX_RESOLUTION_VERSION = 2;
 export const FINANCIAL_INBOX_RESOLUTION_STATE_ID = `inbox-resolution-v${FINANCIAL_INBOX_RESOLUTION_VERSION}`;
+
+export function financialInboxResolutionMigrationComplete(state: {
+  complete?: unknown; version?: unknown;
+} | null | undefined) {
+  return state?.complete === true && state.version === FINANCIAL_INBOX_RESOLUTION_VERSION;
+}
 
 export function pendingFinancialInboxResolution(): FinancialInboxResolution {
   return {
@@ -158,6 +164,11 @@ export function resolutionForDisplay(
     if (normalized.status === "archived" && message.archivedFromStatus === "reconciled") {
       normalized.financialState ??= "reconciled";
     }
+    if (message.status === "ignored" || (message.status === "archived" && message.archivedFromStatus === "ignored")) {
+      normalized.mode ??= "manual";
+      normalized.kind ??= "non_financial";
+      if (!message.resolution.mode) normalized.reasons = [...normalized.reasons, "LEGACY_DISCARD_ORIGIN_UNKNOWN"];
+    }
     return normalized;
   }
   const sourceStatus = message.status === "archived"
@@ -168,6 +179,7 @@ export function resolutionForDisplay(
       mode: "manual",
       at: message.reviewedAt ?? "",
       by: message.reviewedBy ?? "legacy",
+      reasons: ["LEGACY_DISCARD_ORIGIN_UNKNOWN"],
     });
     return message.status === "archived" ? { ...resolution, status: "archived" } : resolution;
   }
@@ -200,4 +212,16 @@ export function resolutionForDisplay(
     return { ...pendingFinancialInboxResolution(), status: "archived" };
   }
   return pendingFinancialInboxResolution();
+}
+
+export function restoredFinancialInboxResolution(
+  message: FinancialInboxMessage,
+  restoredStatus: "ignored" | "identified" | "reconciled",
+): FinancialInboxResolution {
+  const resolution = resolutionForDisplay(message);
+  return {
+    ...resolution,
+    status: restoredStatus === "ignored" ? "discarded" : "identified",
+    financialState: restoredStatus === "reconciled" ? "reconciled" : resolution.financialState,
+  };
 }

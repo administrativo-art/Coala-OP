@@ -273,6 +273,50 @@ test("dispatcher autoriza e envia em etapas separadas sem Chaves ou rede reais",
   assert.equal(JSON.parse(submission.stdout).status, "awaiting_bank_approval");
 });
 
+test("dispatcher de refresh consulta a ordem sem aceitar parâmetros de reenvio", () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    import childProcess from 'node:child_process';
+    import {syncBuiltinESMExports} from 'node:module';
+    import {pathToFileURL} from 'node:url';
+    const order = ${JSON.stringify(order)};
+    let posts = 0;
+    childProcess.spawnSync = () => ({status:0, stdout:'REFRESH_FICTICIO', stderr:''});
+    syncBuiltinESMExports();
+    globalThis.fetch = async (url, init) => {
+      const target = new URL(url);
+      if (target.hostname === 'securetoken.googleapis.com') return Response.json({id_token:'ID_TOKEN_FICTICIO', refresh_token:'REFRESH_FICTICIO', user_id:'demo'});
+      if (target.hostname === 'identitytoolkit.googleapis.com') return Response.json({users:[{email:'demo@example.invalid'}]});
+      assert.equal(target.hostname, 'op.coalashakes.com');
+      assert.equal(init.headers.Authorization, 'Bearer ID_TOKEN_FICTICIO');
+      if (target.pathname === '/api/financial/payment-requests') {
+        assert.equal(init.method, undefined);
+        return Response.json({requests:[{...order,status:'failed',submissionAttemptCount:2}]});
+      }
+      assert.equal(target.pathname, '/api/financial/payment-requests/' + order.id + '/refresh');
+      assert.equal(init.method, 'POST');
+      assert.equal(init.body, undefined);
+      posts++;
+      return Response.json({request:{...order,status:'failed',submissionAttemptCount:2,
+        bankPreflight:{checkedAt:'2026-10-21T12:00:00.000Z',outcome:'clear',bankTransactionCode:null}}});
+    };
+    process.on('exit', () => assert.equal(posts, 1));
+    process.argv = [process.execPath, ${JSON.stringify(cli)}, 'refresh', '--email', 'demo@example.invalid', '--id', order.id];
+    await import(pathToFileURL(${JSON.stringify(cli)}).href);
+  `;
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", source], {
+    encoding: "utf8", timeout: 15_000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /REFRESH_FICTICIO|ID_TOKEN_FICTICIO/);
+  assert.deepEqual(JSON.parse(result.stdout).bankPreflight, {
+    checkedAt: "2026-10-21T12:00:00.000Z",
+    outcome: "clear",
+    bankTransactionCode: null,
+  });
+});
+
 test("dispatcher impede escrita para ordem divergente ou tentativa anterior", () => {
   for (const scenario of [
     { state: "ready_to_submit", amount: "5001" },

@@ -117,9 +117,6 @@ const enforcer = defineSecurityEnforcer<NextRequest, StaticRouteContext, unknown
         safeMessage: "Compra por sangria não deve incluir comprovante de pagamento.",
       });
     }
-    if (metadataResult.data.fundingSource === "company_payment" && !rawPaymentProofs.length) {
-      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_PAYMENT_PROOF_REQUIRED", kind: "VALIDATION", safeMessage: "Anexe o comprovante da compra normal." });
-    }
     const receipts: MobileUploadDocument[] = [];
     for (const file of rawReceipts) receipts.push(await readDocument(file, "A nota"));
     const paymentProofs: MobileUploadDocument[] = [];

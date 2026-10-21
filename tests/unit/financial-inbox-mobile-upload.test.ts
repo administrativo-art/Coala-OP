@@ -55,12 +55,13 @@ test("local purchase permission is independent from inbox visibility and route e
   assert.match(route, /permissions\.app\?\.localPurchase\?\.register !== true/);
   assert.doesNotMatch(route, /permissions\.financial\?\.view/);
   assert.match(route, /detectMobileInboxFile\(buffer\)/);
-  assert.match(route, /PAYMENT_PROOF_REQUIRED/);
   assert.match(route, /PAYMENT_PROOF_UNEXPECTED/);
   assert.match(route, /MOBILE_INBOX_UPLOAD_MAX_TOTAL_BYTES/);
   assert.match(route, /additionalGuarantees: \["replay-protected"\]/);
   assert.match(route, /export const POST = secureRoute/);
   const ingestion = readFileSync("src/features/financial/inbox/mobile-upload.server.ts", "utf8");
+  assert.match(ingestion, /PAYMENT_PROOF_REQUIRED/);
+  assert.match(ingestion, /verifyMobileFiscalDocuments/);
   assert.match(ingestion, /submittedBy\.userId/);
   assert.match(ingestion, /FINANCIAL_INBOX_MOBILE_REPLAY_CONFLICT/);
   assert.match(ingestion, /sameHashes\(storedHashes\("receipt-"\)/);

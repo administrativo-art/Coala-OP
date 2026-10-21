@@ -5,6 +5,9 @@ import {
   automaticReminderResolutionPatch,
   isStrongAutomaticExpenseMatch,
   resolutionForDisplay,
+  restoredFinancialInboxResolution,
+  financialInboxResolutionMigrationComplete,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
 } from "../../src/features/financial/inbox/resolution-contract";
 import type { FinancialInboxExpenseSuggestion, FinancialInboxMessage } from "../../src/features/financial/inbox/types";
 
@@ -153,4 +156,28 @@ test("backfill preserva a natureza e a liquidação de registro legado arquivado
   assert.equal(resolution.kind, "reminder");
   assert.equal(resolution.targetId, "expense-legacy");
   assert.equal(resolution.financialState, "reconciled");
+});
+
+test("restauração recompõe objeto inteiro, inclusive vínculo e quitação", () => {
+  const archived = {
+    status: "archived", archivedFromStatus: "identified", linkedExpenseId: "expense-1",
+    resolution: { status: "archived", kind: "reminder", targetType: "expense", targetId: "expense-1",
+      financialState: "reconciled", mode: "automatic", reasons: ["MATCH_CONFIRMED"] },
+  } as FinancialInboxMessage;
+  const restored = restoredFinancialInboxResolution(archived, "identified");
+  assert.equal(restored.status, "identified");
+  assert.equal(restored.targetId, "expense-1");
+  assert.equal(restored.financialState, "reconciled");
+  assert.deepEqual(restored.reasons, ["MATCH_CONFIRMED"]);
+});
+
+test("ignored legado entra em descarte manual somente após migração v2 concluída", () => {
+  const legacy = { status: "ignored", resolution: { status: "discarded" }, linkedExpenseId: null } as FinancialInboxMessage;
+  const normalized = resolutionForDisplay(legacy);
+  assert.equal(normalized.mode, "manual");
+  assert.deepEqual(normalized.reasons, ["LEGACY_DISCARD_ORIGIN_UNKNOWN"]);
+  assert.equal(financialInboxResolutionMigrationComplete(null), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: true, version: 1 }), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: false, version: FINANCIAL_INBOX_RESOLUTION_VERSION }), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: true, version: FINANCIAL_INBOX_RESOLUTION_VERSION }), true);
 });
