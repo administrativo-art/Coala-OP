@@ -68,9 +68,13 @@ function bankStateForSuggestion(
   if (/aguardando[_\s-]*(?:aprova|autoriza)|awaiting[_\s-]*(?:approval|authorization)/.test(state)) {
     return "awaiting_bank_approval";
   }
+  if (/ready[_\s-]*to[_\s-]*submit|pront[oa][ _-]*(?:para|pra)[ _-]*enviar/.test(state)) {
+    return "ready_to_submit";
+  }
+  if (/submitting|enviando|submitted|enviado/.test(state)) return "submitted";
   if (/agendad|scheduled/.test(state)) return "scheduled";
   if (/process|execut|paid|pago|conclu/.test(state)) return "awaiting_statement";
-  return "scheduled";
+  return "not_prepared";
 }
 
 export function financialStateForExpenseSuggestion(
@@ -183,13 +187,13 @@ export function resolutionForDisplay(
     });
     return message.status === "archived" ? { ...resolution, status: "archived" } : resolution;
   }
-  if (message.linkedExpenseId || ["identified", "linked", "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled"].includes(sourceStatus)) {
+  if (message.linkedExpenseId || ["identified", "linked", "awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement", "reconciled"].includes(sourceStatus)) {
     const suggestion = message.existingExpenseSuggestion;
     const financialState: FinancialInboxFinancialState = sourceStatus === "reconciled"
       ? "reconciled"
       : sourceStatus === "scheduled" || sourceStatus === "awaiting_statement"
         ? "scheduled"
-        : sourceStatus === "awaiting_authorization"
+        : sourceStatus === "awaiting_authorization" || sourceStatus === "payment_failed"
           ? "payment_prepared"
         : "open";
     return {

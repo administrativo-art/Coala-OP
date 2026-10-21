@@ -40,6 +40,7 @@ import {
 
 import {
   financialInboxStageForStatus,
+  financialInboxArchiveCandidateReason,
   isFinancialInboxArchiveCandidate,
   isFinancialInboxBulkDiscardEligible,
 } from "./presentation";
@@ -88,6 +89,7 @@ const STATUS_LABEL: Record<FinancialInboxStatus, string> = {
   identified: "Identificada",
   linked: "Vinculada",
   awaiting_authorization: "Aguardando autorização",
+  payment_failed: "Falha no envio",
   scheduled: "Agendada",
   awaiting_statement: "Aguardando extrato",
   reconciled: "Conciliada",
@@ -105,6 +107,7 @@ const STATUS_PILL: Record<FinancialInboxStatus, StatusPillVariant> = {
   identified: "ok",
   linked: "info",
   awaiting_authorization: "info",
+  payment_failed: "danger",
   scheduled: "info",
   awaiting_statement: "info",
   reconciled: "ok",
@@ -385,13 +388,23 @@ function SuggestedPostingCard({
   );
 }
 
-function StatusChip({ status }: { status: FinancialInboxStatus }) {
-  return <StatusPill variant={STATUS_PILL[status]}>{STATUS_LABEL[status]}</StatusPill>;
+function StatusChip({ status, bankState }: {
+  status: FinancialInboxStatus;
+  bankState?: FinancialInboxMessage["bankState"];
+}) {
+  const label = status === "awaiting_authorization" && bankState === "ready_to_submit"
+    ? "Pronta para enviar"
+    : status === "awaiting_authorization" && bankState === "submitted"
+      ? "Enviando ao Inter"
+      : status === "awaiting_authorization" && bankState === "awaiting_bank_approval"
+        ? "Aguardando aprovação no Inter"
+        : STATUS_LABEL[status];
+  return <StatusPill variant={STATUS_PILL[status]}>{label}</StatusPill>;
 }
 
 function ResolutionChips({ message }: { message: FinancialInboxMessage }) {
   const resolution = resolutionForDisplay(message);
-  if (resolution.status !== "identified") return null;
+  if (resolution.status !== "identified" && resolution.status !== "archived") return null;
   return (
     <>
       {resolution.kind ? <StatusPill variant="ok">{RESOLUTION_KIND_LABEL[resolution.kind]}</StatusPill> : null}
@@ -1006,7 +1019,7 @@ export function FinancialInboxPage() {
                 const groupSelected = selectedGroup?.id === group.id && selected !== null;
                 return (
                   <LiftRow key={group.id} interactive={false} selected={groupSelected} className="flex items-start gap-3">
-                    {canDiscard && (view !== "identified" || auditFilter !== "archive") ? <Checkbox checked={checked} disabled={!selectable} aria-label={`Selecionar ${message.subject} para ${view === "work" ? "descarte" : "arquivamento"}`} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" /> : null}
+                    {canDiscard && (view !== "identified" || auditFilter !== "archive") ? <span title={!selectable ? (view === "work" ? "Este item já possui vínculo financeiro e não pode ser descartado." : financialInboxArchiveCandidateReason(message)) : undefined}><Checkbox checked={checked} disabled={!selectable} aria-label={`Selecionar ${message.subject} para ${view === "work" ? "descarte" : "arquivamento"}`} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" /></span> : null}
                     <button
                       type="button"
                       aria-label={`Abrir cobrança ${message.subject}`}
@@ -1018,7 +1031,7 @@ export function FinancialInboxPage() {
                       <span className="font-mono text-sm font-extrabold text-ds-ink md:order-3">{formatAmount(message.classification.amountCents)}</span>
                       <p className="col-span-2 line-clamp-2 text-sm leading-5 text-ds-ink-2 md:order-2 md:col-span-1">{message.subject}</p>
                       <div className="col-span-2 flex flex-wrap items-center gap-2 md:order-4 md:col-span-1">
-                        <StatusChip status={message.status} />
+                        <StatusChip status={message.status} bankState={message.bankState} />
                         <ResolutionChips message={message} />
                         <StatusPill variant="neutral">{TYPE_LABEL[message.classification.documentType]}</StatusPill>
                         {group.messageCount > 1 ? <StatusPill variant="info">{group.messageCount} e-mails</StatusPill> : null}
@@ -1049,7 +1062,7 @@ export function FinancialInboxPage() {
           className="sm:w-[560px]"
         >
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2"><StatusChip status={selected.status} /><ResolutionChips message={selected} /><StatusPill variant="neutral">{TYPE_LABEL[selected.classification.documentType]}</StatusPill></div>
+            <div className="flex flex-wrap items-center gap-2"><StatusChip status={selected.status} bankState={selected.bankState} /><ResolutionChips message={selected} /><StatusPill variant="neutral">{TYPE_LABEL[selected.classification.documentType]}</StatusPill></div>
             <p className="break-all text-sm text-ds-ink-muted"><span className="font-semibold text-ds-ink">Remetente do e-mail:</span> {selected.from}</p>
             <div className="grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência</p><p className="font-semibold">{formatCompetence(selected.classification.competence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento</p><p className="font-semibold">{formatDate(selected.classification.dueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebimento</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
           </div>
@@ -1076,6 +1089,13 @@ export function FinancialInboxPage() {
                     onSelectAlternative={(alternative) => setConfirmation({ kind: "link", message: selected, alternative, resolutionOnly: true })}
                   />
 
+                  {view === "identified" && auditFilter !== "archive" && !isFinancialInboxArchiveCandidate(selected) ? (
+                    <section className="rounded-2xl border border-ds-warn bg-ds-warn-bg p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ds-warn">Arquivamento indisponível</p>
+                      <p className="mt-1 text-sm text-ds-ink">{financialInboxArchiveCandidateReason(selected)}</p>
+                    </section>
+                  ) : null}
+
                   <section className="rounded-2xl border border-ds-info bg-ds-info-bg p-4">
                     <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ds-info">{selectedResolution?.status === "identified" ? "Resultado do tratamento" : "2. Próxima decisão"}</p>
                     <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1084,7 +1104,8 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "link" && selected.provisionSuggestion?.status === "suggested" ? <><p className="font-bold">Vincular a cobrança à previsão “{selected.provisionSuggestion.description || "Previsão encontrada"}”</p><p className="text-sm text-muted-foreground">O nome e a classificação oficial serão mantidos; os dados confirmados do documento serão agregados à mesma obrigação.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "link" && selected.provisionSuggestion?.status !== "suggested" ? <><p className="font-bold">Confirmar a despesa correspondente</p><p className="text-sm text-muted-foreground">Confira divergências antes de registrar o vínculo.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "pay" ? <><p className="font-bold">Preparar solicitação para autorização</p><p className="text-sm text-muted-foreground">Preparar não agenda, autoriza ou executa o pagamento.</p></> : null}
-                        {financialInboxStageForStatus(selected.status) === "bank" ? <><p className="font-bold">Acompanhar a situação no banco</p><p className="text-sm text-muted-foreground">A conciliação só ocorre depois da liquidação encontrada no extrato.</p></> : null}
+                        {financialInboxStageForStatus(selected.status) === "bank" && selected.status === "payment_failed" ? <><p className="font-bold">Revisar falha no envio ao Inter</p><p className="text-sm text-muted-foreground">Não há agendamento confirmado para esta cobrança. Abra a solicitação bancária para consultar o erro; nenhum reenvio é automático.</p></> : null}
+                        {financialInboxStageForStatus(selected.status) === "bank" && selected.status !== "payment_failed" ? <><p className="font-bold">Acompanhar a situação no banco</p><p className="text-sm text-muted-foreground">A conciliação só ocorre depois da liquidação encontrada no extrato.</p></> : null}
                         {selected.status === "identified" ? <><p className="font-bold">Cobrança já registrada no financeiro</p><p className="text-sm text-muted-foreground">O e-mail foi preservado como evidência; nenhuma despesa ou solicitação de pagamento foi criada.</p><div className="mt-3 flex gap-2 rounded-xl bg-ds-ok-bg p-3 text-sm text-ds-ok"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Nome, valor e pagamento foram preservados; identificadores confirmados do documento foram agregados à obrigação.</span></div></> : null}
                         {selected.status !== "identified" && financialInboxStageForStatus(selected.status) === "done" ? <><p className="font-bold">Cobrança conciliada</p><p className="text-sm text-muted-foreground">O vínculo e a liquidação foram preservados para auditoria.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">{selected.resolution?.mode === "automatic" ? "Ruído ignorado automaticamente" : "Mensagem descartada manualmente"}</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido. O e-mail pode ser arquivado ou reaberto.</p></> : null}

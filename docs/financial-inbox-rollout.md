@@ -63,8 +63,10 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 - a análise documental tem duas passagens: extração sem IA, nova triagem e OCR/IA apenas para candidato financeiro plausível ou domínio cadastrado com DMARC alinhado; PDF genérico não é enviado externamente só pela extensão;
 - fornecedor conhecido depende de configuração persistida versionada, DMARC `pass` alinhado ao `From`, domínio exato e CNPJ válido; o padrão é lista vazia;
 - envio automático ao Inter está desabilitado por contrato até política de negócio e reserva atômica dos limites por período; o envio manual expressamente autorizado consulta pedidos locais, despesa/obrigação, agenda/pagamentos Inter, extrato, fingerprint e identidade de origem e só alcança o POST com evidência completa e lock exclusivo;
-- arquivamento manual recebe somente 1 a 50 IDs selecionados, confere estados terminais, pedido e obrigação dentro de transação, mantém documentos e permite restauração; mensagens já arquivadas não geram novo evento;
-- o arquivamento também relê a despesa vinculada na transação e exige quitação e extrato atuais; ausência ou conflito bloqueia o lote;
+- arquivamento manual recebe somente 1 a 50 IDs selecionados, relê despesa e pedido dentro de transação, mantém documentos e permite restauração; mensagens já arquivadas não geram novo evento;
+- um e-mail tratado pode ser arquivado antes da liquidação somente quando o pedido atual da mesma despesa possui `interRequestId` e estado bancário confirmado (`scheduled`, `processing`, `awaiting_statement` ou `paid`); ausência, falha ou conflito bloqueia o lote;
+- a confirmação do handoff arquiva automaticamente a mensagem principal e lembretes documentais fortes; o acompanhamento financeiro continua na despesa/pedido, sem criar outro pagamento;
+- falha/rejeição/cancelamento projeta `payment_failed` na caixa e reabre a ação; `Aguardando autorização` não representa pedido `failed`;
 - a manutenção periódica, sem leituras correlatas, só arquiva `ignored` sem vínculos financeiros; cobrança `identified`/`reconciled` vinculada exige arquivamento explícito com o preflight transacional;
 - antes de expor `view=noise`/`discarded`, executar a migração de resolução v2 até `complete=true`; antes disso a API falha explicitamente e não oculta registros legados;
 - PDFs com camada textual, XML, CSV e TXT são lidos deterministicamente; imagens e PDFs escaneados usam análise visual somente quando a chave da OpenAI está configurada;
@@ -81,7 +83,7 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 ## Ativação e rollback
 
 1. Publicar os índices, inclusive os novos índices de despesas por `workspaceId`, e aguardar o estado pronto.
-2. Publicar o código e executar a manutenção de resolução v2 até `complete=true`.
+2. Publicar o código e executar as manutenções de resolução v2 e projeção de pagamento v1 até `complete=true`.
 3. Configurar `FINANCIAL_INBOUND_ADDRESS` e validar o webhook e os cabeçalhos DMARC recebidos no Resend.
 4. Enviar um e-mail direto ao endereço técnico e confirmar o registro único.
 5. Ativar no Google a regra do alias `cobrancas@coalashakes.com`.

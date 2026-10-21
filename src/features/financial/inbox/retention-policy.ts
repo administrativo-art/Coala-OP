@@ -60,8 +60,11 @@ export function financialInboxRetentionPlan(message: FinancialInboxMessage, now:
 
 export function financialInboxManualArchivePlan(message: FinancialInboxMessage, now: Date) {
   const retentionClass = retentionClassFor(message);
+  const archivedFromStatus = message.status === "ignored" || message.status === "reconciled"
+    ? message.status
+    : "identified";
   return {
-    archivedFromStatus: message.status as "ignored" | "identified" | "reconciled",
+    archivedFromStatus,
     retentionClass,
     purgeEligibleAt: addUtcMonths(now, retentionYears(retentionClass) * 12).toISOString(),
   };
