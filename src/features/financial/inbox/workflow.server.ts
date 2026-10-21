@@ -44,6 +44,10 @@ import {
 } from "./search-index";
 import { classificationForFinancialInboxReanalysis } from "./reanalysis-classification";
 import type { FinancialInboxMessage } from "./types";
+import {
+  financialInboxManualArchivePlan,
+  FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+} from "./retention-policy";
 
 const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
@@ -375,7 +379,18 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     : automaticIdentificationAllowed
       ? automaticReminderResolutionPatch({ suggestion: existingExpenseSuggestion, at: checkedAt })
       : null;
-  const nextResolution = automaticReminder?.resolution
+  const automaticReminderArchive = Boolean(automaticReminder
+    && ["scheduled", "reconciled"].includes(automaticReminder.resolution.financialState ?? "")
+    && ["scheduled", "awaiting_statement", "reconciled"].includes(automaticReminder.bankState)
+    && (existingExpenseSuggestion.existingBankPayment?.transactionId
+      || existingExpenseSuggestion.existingSettlement?.transactionId));
+  const automaticReminderResolution = automaticReminder
+    ? {
+        ...automaticReminder.resolution,
+        status: automaticReminderArchive ? "archived" as const : automaticReminder.resolution.status,
+      }
+    : null;
+  const nextResolution = automaticReminderResolution
     ?? (triage.kind === "noise" && analysisCanResolve
       ? discardedFinancialInboxResolution({
           mode: "automatic",
@@ -389,7 +404,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   const nextStatus = triage.kind === "noise"
     ? "ignored"
     : automaticReminder
-      ? automaticReminder.status
+      ? automaticReminderArchive ? "archived" : automaticReminder.status
     : triage.kind === "candidate" && (existingExpenseSuggestion.status === "suggested"
       || suggestion.status === "suggested"
       || creationSuggestion.status === "suggested")
@@ -429,7 +444,10 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       ? await transaction.get(financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId))
       : null;
     if (primaryMessageSnapshot?.exists && (primaryMessageSnapshot.get("workspaceId") !== message.workspaceId
-      || ["ignored", "archived"].includes(primaryMessageSnapshot.get("status")))) return false;
+      || primaryMessageSnapshot.get("status") === "ignored")) return false;
+    const automaticArchivePlan = automaticReminderArchive
+      ? financialInboxManualArchivePlan(message, new Date(checkedAt))
+      : null;
     transaction.set(messageRef, {
     classification,
     triage,
@@ -447,6 +465,17 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     ...(automaticReminder ? {
       bankState: automaticReminder.bankState,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+    } : {}),
+    ...(automaticArchivePlan ? {
+      archivedAt: checkedAt,
+      archivedBy: "system:financial-inbox-handoff",
+      archivedFromStatus: "identified",
+      retentionClass: automaticArchivePlan.retentionClass,
+      purgeEligibleAt: automaticArchivePlan.purgeEligibleAt,
+      retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
     } : {}),
     updatedAt: checkedAt,
     }, { merge: true });
@@ -505,8 +534,8 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         : null;
       const currentThreadMessage = inboxThreadMessage({
         ...message,
-        status: automaticReminder.status,
-        resolution: automaticReminder.resolution,
+        status: automaticReminderArchive ? "archived" : automaticReminder.status,
+        resolution: automaticReminderResolution,
       });
       const threadMessages = mergeInboxThreadMessages(
         primaryMessage?.thread?.messages,
@@ -547,6 +576,16 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       automationPolicyVersion: automationSettings.policyVersion,
       resolutionOnly: true,
     }, { merge: true });
+    if (automaticReminderArchive) transaction.set(messageRef.collection("events").doc("automatic-reminder-archive-v1"), {
+      type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+      at: checkedAt,
+      actorId: "system:financial-inbox-handoff",
+      paymentRequestId: null,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+      previousStatus: message.status,
+    }, { merge: true });
   }
     transaction.create(messageRef.collection("events").doc(), {
       type: "INBOX_TRIAGED", at: checkedAt, actorId: "system:financial-inbox",
@@ -570,6 +609,14 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     resolution: nextResolution,
     ...(automaticReminder ? {
       bankState: automaticReminder.bankState,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+    } : {}),
+    ...(automaticReminderArchive ? {
+      archivedAt: checkedAt,
+      archivedBy: "system:financial-inbox-handoff",
+      archivedFromStatus: "identified",
     } : {}),
   } as FinancialInboxMessage;
 }
@@ -1056,10 +1103,21 @@ export async function linkInboxChargeToExistingExpense(
       at: now,
       by: actor.uid,
     });
+    const archiveAfterHandoff = ["scheduled", "awaiting_statement", "reconciled"].includes(inboxState.status)
+      && Boolean(existingBankPayment?.transactionId || existingSettlement?.transactionId);
+    const persistedResolution = archiveAfterHandoff
+      ? { ...resolution, status: "archived" as const }
+      : resolution;
+    const persistedMessageStatus = archiveAfterHandoff
+      ? "archived" as const
+      : resolutionOnly ? "identified" as const : inboxState.status;
+    const archivePlan = archiveAfterHandoff
+      ? financialInboxManualArchivePlan(message, new Date(now))
+      : null;
     const currentThreadMessage = inboxThreadMessage({
       ...message,
-      status: resolutionOnly ? "identified" : inboxState.status,
-      resolution,
+      status: persistedMessageStatus,
+      resolution: persistedResolution,
     });
     const primaryThreadMessages = primaryMessage?.thread?.messages
       ?? (primaryMessage ? [inboxThreadMessage(primaryMessage)] : []);
@@ -1081,8 +1139,9 @@ export async function linkInboxChargeToExistingExpense(
     }, { merge: true });
     if (primaryMessageId !== id) transaction.set(primaryMessageRef, { thread, updatedAt: now }, { merge: true });
     transaction.set(messageRef, {
-      status: resolutionOnly ? "identified" : inboxState.status,
+      status: persistedMessageStatus,
       bankState: inboxState.bankState,
+      bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
       ...(resolutionOnly ? {} : {
         linkedExpenseId: expenseId,
         linkedExpenseInstallmentNumber: installmentNumber,
@@ -1090,7 +1149,7 @@ export async function linkInboxChargeToExistingExpense(
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
       thread,
-      resolution,
+      resolution: persistedResolution,
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       classification: { ...classification, billingIdentity },
       searchTerms: buildFinancialInboxSearchTerms({
@@ -1120,6 +1179,14 @@ export async function linkInboxChargeToExistingExpense(
       } : {}),
       reviewedAt: now,
       reviewedBy: actor.uid,
+      ...(archivePlan ? {
+        archivedAt: now,
+        archivedBy: "system:financial-inbox-handoff",
+        archivedFromStatus: "identified",
+        retentionClass: archivePlan.retentionClass,
+        purgeEligibleAt: archivePlan.purgeEligibleAt,
+        retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+      } : {}),
       updatedAt: now,
     }, { merge: true });
     transaction.create(messageRef.collection("events").doc(), {
@@ -1138,12 +1205,27 @@ export async function linkInboxChargeToExistingExpense(
       obligationId,
       resolutionOnly,
     });
+    if (archiveAfterHandoff) transaction.set(messageRef.collection("events").doc(), {
+      type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+      at: now,
+      actorId: "system:financial-inbox-handoff",
+      paymentRequestId: null,
+      bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
+      previousStatus: message.status,
+    });
     return {
       message: {
         ...message,
-        status: resolutionOnly ? "identified" as const : inboxState.status,
-        resolution,
+        status: persistedMessageStatus,
+        bankState: inboxState.bankState,
+        bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
+        resolution: persistedResolution,
         ...(resolutionOnly ? {} : { linkedExpenseId: expenseId }),
+        ...(archivePlan ? {
+          archivedAt: now,
+          archivedBy: "system:financial-inbox-handoff",
+          archivedFromStatus: "identified" as const,
+        } : {}),
       },
       expenseId,
       duplicate: resolutionOnly

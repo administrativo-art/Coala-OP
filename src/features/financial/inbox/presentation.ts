@@ -9,7 +9,7 @@ export const FINANCIAL_INBOX_STAGE_STATUSES: Record<FinancialInboxStage, Financi
   classify: ["pending_review", "document_pending", "under_review", "error"],
   link: ["suggestion_available", "divergent"],
   pay: ["linked"],
-  bank: ["awaiting_authorization", "scheduled", "awaiting_statement"],
+  bank: ["awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement"],
   done: ["identified", "reconciled"],
   off: ["ignored"],
   archive: ["archived"],
@@ -41,11 +41,36 @@ export function isFinancialInboxArchiveCandidate(message: FinancialInboxMessage)
       && !message.paymentRequestId && !message.existingBankPayment && !message.statementTransactionId
       && (!message.bankState || ["not_prepared", "cancelled"].includes(message.bankState));
   }
+  const identifiedHandoff = ["identified", "scheduled", "awaiting_statement"].includes(message.status)
+    && message.resolution?.status === "identified"
+    && message.resolution.targetType === "expense"
+    && Boolean(message.resolution.targetId)
+    && ["scheduled", "reconciled"].includes(message.resolution.financialState ?? "")
+    && ["scheduled", "awaiting_statement", "reconciled"].includes(message.bankState ?? "")
+    && Boolean(message.bankTransactionId || message.existingBankPayment?.transactionId);
+  if (identifiedHandoff) return true;
   return (message.status === "reconciled" || (message.status === "identified"
     && message.resolution?.status === "identified"
     && message.resolution.financialState === "reconciled"))
     && (!message.bankState || message.bankState === "reconciled")
     && (!message.existingBankPayment || Boolean(message.existingSettlement));
+}
+
+export function financialInboxArchiveCandidateReason(message: FinancialInboxMessage) {
+  if (isFinancialInboxArchiveCandidate(message)) return "Pronta para arquivar";
+  if (message.status === "payment_failed" || message.bankState === "failed") {
+    return "Não pode ser arquivada: o envio ao banco falhou e exige revisão.";
+  }
+  if (message.status === "awaiting_authorization") {
+    return "Não pode ser arquivada: a solicitação ainda aguarda autorização ou confirmação do banco.";
+  }
+  if (message.status === "scheduled" && !message.bankTransactionId) {
+    return "Não pode ser arquivada: falta a confirmação identificável do agendamento no banco.";
+  }
+  if (message.status === "linked") {
+    return "Não pode ser arquivada: a cobrança ainda não foi entregue ao fluxo bancário.";
+  }
+  return "Não pode ser arquivada enquanto o tratamento do e-mail estiver incompleto.";
 }
 
 export function matchesFinancialInboxSearch(message: FinancialInboxMessage, search: string) {

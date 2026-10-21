@@ -14,7 +14,7 @@ const app = initializeApp({ projectId }, "financial-inbox-payment-e2e");
 const db = getFirestore(app, "coala"), financial = getFirestore(app, "coala-financeiro"), auth = getAuth(app);
 const origin = "http://127.0.0.1:3107";
 
-test("API E2E: prepara cobrança da caixa com CNPJ confirmado e bloqueia divergência/permissão", { timeout: 240000 }, async (t) => {
+test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente após handoff confirmado", { timeout: 240000 }, async (t) => {
   const server = spawn("node_modules/.bin/next", ["dev", "--hostname", "127.0.0.1", "--port", "3107"], {
     env: { ...process.env, NODE_ENV: "development" }, stdio: ["ignore", "pipe", "pipe"],
   });
@@ -39,7 +39,15 @@ test("API E2E: prepara cobrança da caixa com CNPJ confirmado e bloqueia diverg�
   const inboxId = "inbox-payment-e2e", expenseId = "expense-inbox-payment-e2e";
   const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   const barcode = "8".repeat(48), beneficiaryDocument = "11222333000181";
-  await financial.collection("expenses").doc(expenseId).set({ workspaceId: "coala", status: "pending", paymentMethod: "single", totalValue: 39.99, dueDate: Timestamp.fromDate(new Date(`${dueDate}T15:00:00Z`)), description: "Cobrança recebida de teste" });
+  await financial.collection("expenses").doc(expenseId).set({
+    workspaceId: "coala",
+    status: "pending",
+    paymentMethod: "single",
+    totalValue: 39.99,
+    dueDate: Timestamp.fromDate(new Date(`${dueDate}T15:00:00Z`)),
+    description: "Cobrança recebida de teste",
+    financialInboxMessageId: inboxId,
+  });
   await financial.collection("financialInboxMessages").doc(inboxId).set({
     workspaceId: "coala", status: "linked", subject: "Cobrança de teste", linkedExpenseId: expenseId,
     classification: { amountCents: 3999, dueDate, barcode }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -65,6 +73,47 @@ test("API E2E: prepara cobrança da caixa com CNPJ confirmado e bloqueia diverg�
   assert.equal((await financial.collection("financialInboxMessages").doc(inboxId).get()).get("status"), "awaiting_authorization");
   assert.equal((await send(token, { scheduledFor: dueDate, barcode, beneficiaryDocument: "64433090000197" })).status, 400);
   assert.equal((await financial.collection("bankPaymentRequests").where("sourceId", "==", inboxId).get()).size, 1);
+
+  const archive = () => fetch(`${origin}/api/financial/inbox/bulk-review`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: [inboxId], status: "archived" }),
+  });
+  const prematureArchive = await archive();
+  assert.equal(prematureArchive.status, 409, `${await prematureArchive.text()}\n${logs}`);
+
+  const handoffAt = new Date().toISOString();
+  await Promise.all([
+    financial.collection("bankPaymentRequests").doc(requests[0].id).set({
+      status: "scheduled",
+      interRequestId: "inter-schedule-e2e",
+      updatedAt: handoffAt,
+    }, { merge: true }),
+    financial.collection("expenses").doc(expenseId).set({
+      paymentRequestId: requests[0].id,
+      updatedAt: handoffAt,
+    }, { merge: true }),
+    financial.collection("financialInboxMessages").doc(inboxId).set({
+      status: "scheduled",
+      bankState: "scheduled",
+      resolution: {
+        status: "identified",
+        kind: "new_charge",
+        targetType: "expense",
+        targetId: expenseId,
+        financialState: "scheduled",
+        mode: "manual",
+        reasons: ["E2E_CONFIRMED_FINANCIAL_HANDOFF"],
+      },
+      updatedAt: handoffAt,
+    }, { merge: true }),
+  ]);
+  const confirmedArchive = await archive();
+  assert.equal(confirmedArchive.status, 200, `${await confirmedArchive.text()}\n${logs}`);
+  const archivedMessage = await financial.collection("financialInboxMessages").doc(inboxId).get();
+  assert.equal(archivedMessage.get("status"), "archived");
+  assert.equal(archivedMessage.get("archivedFromStatus"), "identified");
+  assert.equal(archivedMessage.get("resolution.financialState"), "scheduled");
 
   const confirmedInboxId = "inbox-confirmed-document-e2e";
   const forecastId = "forecast-confirmed-document-e2e";
