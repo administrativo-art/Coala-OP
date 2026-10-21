@@ -193,7 +193,7 @@ export function prepareNatashaPositions(
       add({ code: 'SHIFT_NOT_ALLOWED_IN_UNIT', category: 'data', unitId: template.unitId, shiftDefinitionId: definition.id });
       continue;
     }
-    if (definition.breakStart || definition.breakEnd) {
+    if (definition.breakStart || definition.breakEnd || definition.breakConfigured) {
       add({ code: 'SHIFT_HAS_BREAK_UNSUPPORTED', category: 'question', unitId: template.unitId, shiftDefinitionId: definition.id });
       continue;
     }
@@ -285,7 +285,7 @@ export function prepareNatashaPositions(
           } else if (!definition.daysOfWeek.includes(weekday(day.date))) {
             add({ code: 'SHIFT_NOT_ACTIVE_ON_DATE', category: 'question', unitId: unit.unitId,
               date: day.date, shiftDefinitionId: definition.id });
-          } else if (definition.breakStart || definition.breakEnd) {
+          } else if (definition.breakStart || definition.breakEnd || definition.breakConfigured) {
             add({ code: 'SHIFT_HAS_BREAK_UNSUPPORTED', category: 'question', unitId: unit.unitId,
               shiftDefinitionId: definition.id });
           } else {

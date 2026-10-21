@@ -6,9 +6,11 @@ const marking = readFileSync('src/app/api/dp/time-recording/markings/route.ts', 
 const afd = readFileSync('src/app/api/dp/time-recording/afd/route.ts', 'utf8');
 const schemas = readFileSync('src/features/dp/rep-p/schemas.ts', 'utf8');
 const options = readFileSync('src/app/api/dp/time-recording/options/route.ts', 'utf8');
+const offlinePermit = readFileSync('src/app/api/dp/time-recording/offline-permits/route.ts', 'utf8');
 const pending = readFileSync('src/app/api/dp/time-recording/pending-receipts/route.ts', 'utf8');
 const signerStatus = readFileSync('src/app/api/dp/time-recording/signer-status/route.ts', 'utf8');
 const receipt = readFileSync('src/app/api/dp/time-recording/receipts/[receiptId]/route.ts', 'utf8');
+const mobileAttestation = readFileSync('src/lib/security/mobile-app-attestation.server.ts', 'utf8');
 
 describe('REP-P API route contracts', () => {
   it('records only the authenticated owner through a directly exported secure route', () => {
@@ -19,7 +21,20 @@ describe('REP-P API route contracts', () => {
     assert.match(marking, /export const POST = secureRoute/);
     const markingInput = schemas.split('export const repPMarkingSchema', 2)[1].split('export const repPAfdExportSchema', 1)[0];
     assert.match(markingInput, /attemptId:[\s\S]*workDate:[\s\S]*executionUnitId:[\s\S]*channel:/);
-    assert.doesNotMatch(markingInput, /employeeCpf|employerCnpj|markedAt|nsr:/);
+    assert.doesNotMatch(markingInput, /employeeCpf|employerCnpj|nsr:/);
+    assert.match(markingInput, /offline:[\s\S]*channel !== 'mobile'/);
+    assert.match(marking, /if \(parsed\.data\.offline\) assertOfficialMobileApp/);
+  });
+
+  it('issues offline permits only to the attested mobile owner', () => {
+    assert.match(offlinePermit, /authorization: \{ kind: 'owner' \}/);
+    assert.match(offlinePermit, /resourceScope: \{ kind: 'owner' \}/);
+    assert.match(offlinePermit, /assertOfficialMobileApp\(request, actor\.decoded\.uid\)/);
+    assert.match(offlinePermit, /control:mobile-app-attested/);
+    assert.match(offlinePermit, /export const POST = secureRoute/);
+    const strictGate = mobileAttestation.split('export function assertOfficialMobileApp', 2)[1];
+    assert.match(strictGate, /currentMobileAttestationMode\(\) !== "enforce"/);
+    assert.match(strictGate, /assertMobileAppAttested\(request, uid\)/);
   });
 
   it('restricts AFD export to the time manager and workspace', () => {

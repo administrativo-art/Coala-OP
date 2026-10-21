@@ -98,6 +98,9 @@ env:
   # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
   - variable: REP_P_ICP_SIGNER_PEM
     secret: REP_P_ICP_SIGNER_PEM
+  # Contato da CT Sorvetes LTDA, identificada como desenvolvedora do PTRP no AEJ.
+  - variable: PTRP_DEVELOPER_EMAIL
+    value: "administrativo@coalashakes.com"
   # HLB gratuita: consulta com quórum aos quatro servidores NTP publicados pelo Observatório Nacional.
   # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
   - variable: REP_P_HLB_NTP_ENABLED

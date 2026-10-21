@@ -17,6 +17,7 @@ export type AccessPolicyId =
   | "EMPLOYEE_VISIBLE"
   | "ADMIN_ONLY";
 
+import { isPublishedToEmployee, type DocumentPublication } from "@/lib/hr/employee-document-publication";
 import {
   DEFAULT_PROFILE_ACCESS_MATRIX,
   resolveFieldAccessPermission,
@@ -32,11 +33,14 @@ export const DOCUMENT_TYPE_ACCESS_POLICY: Record<string, AccessPolicyId> = {
   PERSONAL_ID: "HR_RESTRICTED",
   ADDRESS_PROOF: "HR_OPERATIONAL",
   EMPLOYEE_REGISTRATION: "HR_RESTRICTED",
+  ADMISSION_PACKAGE: "HR_RESTRICTED",
   EMPLOYMENT_CONTRACT: "HR_RESTRICTED",
   PROBATION_CONTRACT: "HR_RESTRICTED",
   PROBATION_EXTENSION: "HR_RESTRICTED",
   PAYSLIP: "HR_FINANCE",
+  TIME_CLOSING_PACKAGE: "HR_FINANCE",
   TRANSPORT_REQUEST: "HR_OPERATIONAL",
+  ASO_REQUEST: "OCCUPATIONAL_HEALTH",
   ASO_ADMISSION: "OCCUPATIONAL_HEALTH",
   ASO_PERIODIC: "OCCUPATIONAL_HEALTH",
   VACATION_NOTICE: "HR_OPERATIONAL",
@@ -194,13 +198,28 @@ export function subjectFromPermissions(
   };
 }
 
-/** Atalho: resolve política do documento e decide o acesso em um passo. */
+/**
+ * DP autorizado (macro 01, Documentos da empresa → Colaboradores): administrador, gestão de usuários ou permissão de
+ * colaboradores sem a restrição "só o próprio perfil". Gestor sem essa permissão não vê documento de ninguém.
+ */
+export function isDocumentsDp(s: DocumentAccessSubject) {
+  if (s.isDefaultAdmin || s.canManageUsers) return true;
+  return !s.ownProfileOnly && (s.collaboratorsView || s.collaboratorsEdit || s.rhRole === "admin" || s.rhRole === "manager");
+}
+
+/**
+ * Regra única de leitura (decisão do programador, 20/10/2026):
+ * - DP autorizado: pela política interna do tipo e pela matriz de visibilidade, como antes;
+ * - titular sem permissão do DP (macro 02, a própria pasta): só documento PUBLICADO para ele;
+ * - qualquer outra pessoa: nada.
+ */
 export function canAccessDocument(
-  doc: { documentTypeCode?: string | null; category?: string | null; accessLevel?: string | null },
+  doc: { documentTypeCode?: string | null; category?: string | null; accessLevel?: string | null; publication?: DocumentPublication | null; deletedAt?: unknown },
   subject: DocumentAccessSubject,
   visibilityConfig?: DocumentVisibilityConfig | null,
 ): { allowed: boolean; policy: AccessPolicyId } {
   const policy = resolveDocumentAccessPolicy(doc);
+  if (!isDocumentsDp(subject)) return { allowed: subject.isOwner && isPublishedToEmployee(doc), policy };
   if (subject.accessMatrix) {
     const visibility = resolveDocumentVisibility(doc, visibilityConfig);
     const role = subject.profileRole ?? (subject.isDefaultAdmin || subject.canManageUsers ? "admin" : subject.collaboratorsEdit ? "manager" : "employee");

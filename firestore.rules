@@ -795,6 +795,9 @@ service cloud.firestore {
     match /dp_employmentReferenceHistories/{id} { allow read, write: if false; }
     match /dp_employmentReferenceRequests/{id} { allow read, write: if false; }
 
+    // Propostas, aceites e recusas de troca de turno contêm evidência de identidade; somente servidor.
+    match /dp_shiftSwapRequests/{id} { allow read, write: if false; }
+
     // Escalas
     match /dp_schedules/{scheduleId} {
       // A criação usa um identificador determinístico e consulta antes de criar.

@@ -130,6 +130,10 @@ test('hora extra orienta uma situação por faixa para preservar precedência', 
   const overtime = readFileSync('src/components/dp/dp-settings-overtime.tsx', 'utf8');
   assert.match(overtime, /Escolha uma situação por faixa/);
   assert.match(overtime, /Para outra situação, crie outra faixa/);
-  assert.match(overtime, /Todas as faixas usam a tolerância geral definida acima/);
+  // A tolerância é única e fica na jornada; a política de hora extra não tem campo de tolerância.
+  assert.match(overtime, /A tolerância fica na jornada de cada pessoa, não aqui/);
+  assert.doesNotMatch(overtime, /dailyToleranceMinutes/);
+  const journeys = readFileSync('src/components/dp/dp-settings-journeys.tsx', 'utf8');
+  assert.match(journeys, /id="journey-tolerance"/);
   assert.doesNotMatch(overtime, /overtime-category-start/);
 });

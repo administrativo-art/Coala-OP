@@ -5,6 +5,7 @@ import { repPMarkingSchema, repPOwnHistorySchema, type RepPMarkingRequest, type 
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { assertOfficialMobileApp } from '@/lib/security/mobile-app-attestation.server';
 import { defineSecurityContract } from '@/lib/security/route-contract';
 import { secureRoute } from '@/lib/security/secure-route.server';
 import { rethrowServerAuthenticationFailure } from '@/lib/server-authentication-failure';
@@ -30,6 +31,7 @@ const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUse
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'REP_P_MARKING_QUERY_INVALID', kind: 'VALIDATION' });
     const parsed = repPMarkingSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) throw new AppError({ code: 'REP_P_MARKING_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Solicitação de marcação inválida.' });
+    if (parsed.data.offline) assertOfficialMobileApp(request, actor.decoded.uid);
     return { actor, input: parsed.data, resource: { workspaceId: actor.workspace_id, employeeId: actor.decoded.uid } };
   },
 });

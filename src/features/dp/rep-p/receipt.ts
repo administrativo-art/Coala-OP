@@ -88,10 +88,10 @@ function assertSnapshot(snapshot: RepPReceiptSnapshot) {
   }
 }
 
-function formatCnpj(value: string) {
+export function formatCnpj(value: string) {
   return CnpjValidator.clean(value).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
-function formatCpf(value: string) {
+export function formatCpf(value: string) {
   return normalizeCpf(value).replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 }
 function formatMarkedAt(value: string) {
@@ -100,7 +100,7 @@ function formatMarkedAt(value: string) {
 }
 
 /** Quebra o texto pela largura medida na fonte; palavras maiores que a linha são cortadas por caractere. */
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
   const lines: string[] = [];
   let current = '';
   for (const word of text.split(/\s+/).filter(Boolean)) {

@@ -44,8 +44,10 @@ function previewError(error: unknown, fallback: string) {
   return error instanceof Error ? formatBrazilianRequestText(error.message) : fallback;
 }
 
-export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, beneficiaryUid, beneficiaryName, editingRequest, onDraftCreated }: {
+export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, beneficiaryUid, beneficiaryName, editingRequest, onDraftCreated, initialDate }: {
   open: boolean;
+  /** Data já trazida de outra tela (ex.: dia "sem batidas" no Registro de ponto). */
+  initialDate?: string;
   onOpenChange: (open: boolean) => void;
   firebaseUser: FirebaseUser | null;
   beneficiaryUid?: string;
@@ -57,7 +59,9 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
   const userUid = useRef(firebaseUser?.uid ?? null);
   userUid.current = firebaseUser?.uid ?? null;
   const previewSequence = useRef(-1);
-  const draftAttempt = useRef<{ idempotencyKey: string; operationId: string; proposedRequestId: string; preparationIds: string[] } | null>(null);
+  const draftAttempt = useRef<{ idempotencyKey: string; operationId: string; submitOperationId: string; proposedRequestId: string; preparationIds: string[]; savedRequest?: AbsenceRequestDto } | null>(null);
+  const [step, setStep] = useState<'form' | 'summary'>('form');
+  const [reason, setReason] = useState('');
   const [options, setOptions] = useState<AbsenceRequestOption[]>([]);
   const [canCreate, setCanCreate] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(false);
@@ -94,7 +98,9 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     draftAttempt.current = null;
     setOptions([]);
     setCanCreate(false);
-    setForm(editingRequest?.input ?? { absenceTypeId: '', unit: 'day', startDate: '', endDate: '' });
+    setForm(editingRequest?.input ?? { absenceTypeId: '', unit: 'day', startDate: initialDate ?? '', endDate: initialDate ?? '' });
+    setReason(editingRequest?.reason ?? '');
+    setStep('form');
     setPreview(null);
     setFiles([]);
     setSaving(false);
@@ -105,7 +111,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     if (open) void loadOptions();
     const currentSequence = sequence;
     return () => { currentSequence.current++; };
-  }, [open, loadOptions, editingRequest]);
+  }, [open, loadOptions, editingRequest, initialDate]);
 
   const selected = options.find((option) => option.id === form.absenceTypeId);
 
@@ -115,7 +121,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     draftAttempt.current = null;
     setForm((current) => ({ ...current, ...patch }));
     setPreview(null);
-    setFiles([]);
+    setStep('form');
     setSaveError(null);
     setCalculating(false);
     setCalculationError(null);
@@ -138,7 +144,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     setFieldError(null);
     try {
       const response = await calculateAbsenceRequestPreview(firebaseUser, form, beneficiaryUid);
-      if (request === sequence.current) { setPreview(response.preview); previewSequence.current = request; }
+      if (request === sequence.current) { setPreview(response.preview); previewSequence.current = request; setStep('summary'); }
     } catch (error) {
       if (request === sequence.current) setCalculationError(previewError(error, 'Não foi possível calcular a prévia.'));
     } finally {
@@ -146,7 +152,17 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     }
   };
 
-  const saveDraft = async () => {
+  const trimmedReason = reason.trim();
+  const reasonError = trimmedReason && trimmedReason.length < 10 ? 'O motivo precisa ter ao menos 10 caracteres.' : null;
+  const missingDocument = Boolean(selected?.attachmentRequired) && files.length + (editingRequest?.attachmentCount ?? 0) === 0;
+
+  const conclude = () => {
+    if (reasonError) { setFieldError(reasonError); return; }
+    void calculate();
+  };
+
+  /** Salva o rascunho e, com `submit`, envia em seguida; se só o envio falhar, o rascunho fica salvo para enviar pelo detalhe. */
+  const saveDraft = async (submit = false) => {
     if (!firebaseUser || !preview || !canCreate || saving || preview.quantity.value === null || preview.source !== 'coala-rh'
       || previewSequence.current !== sequence.current) return;
     if (preview.attachmentRequired && files.length + (editingRequest?.attachmentCount ?? 0) === 0) {
@@ -155,7 +171,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     }
     const requestSequence = sequence.current;
     const requestUid = firebaseUser.uid;
-    const currentAttempt = draftAttempt.current ?? { idempotencyKey: crypto.randomUUID(), operationId: crypto.randomUUID(), proposedRequestId: crypto.randomUUID(), preparationIds: [] };
+    const currentAttempt = draftAttempt.current ?? { idempotencyKey: crypto.randomUUID(), operationId: crypto.randomUUID(), submitOperationId: crypto.randomUUID(), proposedRequestId: crypto.randomUUID(), preparationIds: [] };
     draftAttempt.current = currentAttempt;
     setSaving(true);
     setSaveError(null);
@@ -167,14 +183,30 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
       }
       if (requestSequence !== sequence.current) return;
       let saved: { request: AbsenceRequestDto };
-      if (editingRequest) {
+      if (currentAttempt.savedRequest) {
+        saved = { request: currentAttempt.savedRequest };
+      } else if (editingRequest) {
         saved = await actOnAbsenceRequest(firebaseUser, editingRequest.id, { action: 'update_draft', expectedVersion: editingRequest.version,
           operationId: currentAttempt.operationId, request: form, ...(currentAttempt.preparationIds.length ? { preparationRef: currentAttempt.proposedRequestId } : {}),
-          preparationIds: currentAttempt.preparationIds });
+          preparationIds: currentAttempt.preparationIds, ...(trimmedReason ? { reason: trimmedReason } : {}) });
       } else {
         saved = await createAbsenceDraft(firebaseUser, { idempotencyKey: currentAttempt.idempotencyKey,
           proposedRequestId: currentAttempt.preparationIds.length ? currentAttempt.proposedRequestId : undefined,
-          preparationIds: currentAttempt.preparationIds, request: form, ...(beneficiaryUid ? { beneficiaryUid } : {}) });
+          preparationIds: currentAttempt.preparationIds, request: form, ...(beneficiaryUid ? { beneficiaryUid } : {}),
+          ...(trimmedReason ? { reason: trimmedReason } : {}) });
+      }
+      currentAttempt.savedRequest = saved.request;
+      if (submit) {
+        try {
+          saved = await actOnAbsenceRequest(firebaseUser, saved.request.id, { action: 'submit', expectedVersion: saved.request.version,
+            operationId: currentAttempt.submitOperationId });
+        } catch (error) {
+          if (requestSequence === sequence.current) {
+            onDraftCreated?.(saved.request);
+            setSaveError(`O rascunho foi salvo, mas o envio não foi concluído: ${previewError(error, 'tente de novo ou envie pelo detalhe.')}`);
+          }
+          return;
+        }
       }
       if (requestSequence === sequence.current && requestUid === userUid.current) onDraftCreated?.(saved.request);
       if (requestSequence === sequence.current && requestUid === userUid.current) {
@@ -200,13 +232,21 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
     setSaveError(null);
   };
 
-  return <SidePanel open={open} onOpenChange={(value) => { if (!saving) onOpenChange(value); }} kicker="Minhas solicitações" title={editingRequest ? 'Editar rascunho de ausência' : 'Prévia de ausência'} subtitle="Confira a regra e o período antes de preparar uma solicitação.">
-    {beneficiaryName ? <p className="text-xs font-bold text-ds-ink">Solicitação para {beneficiaryName}</p> : null}
-    <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg p-4 text-[12.5px] leading-5 text-ds-info">
-      {canCreate ? editingRequest ? 'A edição cria uma nova revisão do rascunho. Os comprovantes anteriores permanecem no histórico; o pedido só será enviado pelo detalhe.' : 'Calcule a prévia e confira a regra antes de salvar um rascunho. O pedido só será enviado por uma ação posterior no detalhe.' : 'Esta é apenas uma prévia: nenhum pedido será criado. Anexar documentos e enviar a solicitação ainda não estão disponíveis.'}
-    </div>
+  const fileInput = <label className="block space-y-1.5 text-xs font-bold text-ds-ink">Comprovantes {selected?.attachmentRequired ? '(obrigatórios para este tipo)' : '(opcionais)'}
+    <Input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={saving} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} className="h-11 rounded-ds-btn" />
+    <span className="block text-[11px] font-semibold text-ds-ink-muted">Atestado ou outro documento: até cinco arquivos PDF, JPEG ou PNG, com 10 MB cada. No celular, dá para fotografar. Só você e os responsáveis autorizados acessam.</span>
+  </label>;
 
-    <PanelSection title="Período da ausência">
+  return <SidePanel open={open} onOpenChange={(value) => { if (!saving) onOpenChange(value); }} kicker={beneficiaryUid ? "Solicitação para a equipe" : "Minhas solicitações"} title={editingRequest ? 'Editar rascunho de ausência' : 'Solicitar ausência'} subtitle={step === 'summary' ? 'Confira o resumo antes de enviar.' : 'Preencha o pedido e anexe o documento.'}>
+    {beneficiaryName ? <p className="text-xs font-bold text-ds-ink">Solicitação para {beneficiaryName}</p> : null}
+    {canCreate ? <ol className="flex items-center gap-2 text-xs font-bold" aria-label="Etapas do pedido">
+      {([['form', '1 · Dados e comprovante'], ['summary', '2 · Resumo e envio']] as const).map(([key, label], index) => <li key={key} className="flex items-center gap-2">
+        {index ? <span className="h-px w-6 bg-ds-border" aria-hidden /> : null}
+        <span className={step === key ? 'rounded-full bg-ds-ink px-2.5 py-1 text-white' : 'rounded-full bg-ds-warm px-2.5 py-1 text-ds-ink-muted'}>{label}</span>
+      </li>)}
+    </ol> : <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg p-4 text-[12.5px] leading-5 text-ds-info">Esta é apenas uma prévia: nenhum pedido será criado. Anexar documentos e enviar a solicitação ainda não estão disponíveis.</div>}
+
+    {step === 'form' ? <PanelSection title="Ausência">
       {optionsLoading ? <p role="status" className="text-sm text-ds-ink-muted">Carregando tipos de ausência…</p> : optionsError ? <div role="alert" className="space-y-2 text-sm text-ds-danger"><p>{optionsError}</p><Button variant="ds-secondary" size="sm" onClick={() => void loadOptions()}>Tentar novamente</Button></div> : options.length === 0 ? <p className="text-sm text-ds-ink-muted">Nenhum tipo de ausência está disponível para o seu vínculo neste momento.</p> : <>
         <label className="block space-y-1.5 text-[12px] font-extrabold text-ds-ink">Tipo de ausência
           <Select value={form.absenceTypeId} disabled={saving} onValueChange={(value) => { const option = options.find((item) => item.id === value); change({ absenceTypeId: value, unit: option?.units[0] ?? 'day', startTime: undefined, endTime: undefined }); }}>
@@ -229,23 +269,38 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
           </> : null}
         </div> : null}
         {form.unit === 'hour' && selected ? <p className="text-xs text-ds-ink-muted">Para um período que atravessa a noite, escolha a data seguinte no término.</p> : null}
+        {selected ? <label className="block space-y-1.5 text-[12px] font-extrabold text-ds-ink">Motivo <span className="font-semibold text-ds-ink-muted">(opcional)</span>
+          <textarea rows={3} maxLength={1000} value={reason} disabled={saving} onChange={(event) => { setReason(event.target.value); draftAttempt.current = null; }}
+            placeholder="Ex.: consulta marcada às 9h, retorno ao trabalho às 13h." className="w-full rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 py-2 text-sm font-normal text-ds-ink" />
+          <span className="block text-[11px] font-semibold text-ds-ink-muted">Mínimo de 10 caracteres quando preenchido. Visível só para você e quem analisa. Não descreva diagnóstico: o atestado vai no anexo.</span>
+        </label> : null}
+        {selected && canCreate ? fileInput : null}
+        {editingRequest?.attachmentCount ? <p className="text-xs font-semibold text-ds-ink-muted">{editingRequest.attachmentCount} comprovante(s) já vinculado(s) serão preservados.</p> : null}
+        {files.length ? <p className="text-xs text-ds-ink-muted">{files.length} arquivo(s) selecionado(s).</p> : null}
         {fieldError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{fieldError}</p> : null}
-        <Button variant="primary-modal" onClick={() => void calculate()} disabled={!selected || calculating || saving} loading={calculating} loadingLabel="Calculando…">Calcular prévia</Button>
+        {saveError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{saveError}</p> : null}
+        <Button variant="primary-modal" onClick={conclude} disabled={!selected || calculating || saving || (canCreate && missingDocument)} loading={calculating} loadingLabel="Conferindo…">{canCreate ? 'Concluir' : 'Calcular prévia'}</Button>
+        {canCreate && missingDocument ? <p className="text-xs text-ds-ink-muted">Anexe o documento exigido por este tipo para concluir.</p> : null}
         {calculationError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{calculationError}</p> : null}
       </>}
-    </PanelSection>
+    </PanelSection> : null}
 
-    {preview ? <>
-      <PanelSection title="Resultado da prévia">
+    {step === 'summary' && preview ? <>
+      <PanelSection title="Resumo da solicitação">
         <div className="grid grid-cols-2 gap-4">
+          <PanelField label="Tipo">{preview.absenceType.name}</PanelField>
           <PanelField label="Quantidade">{formatAbsenceQuantity(preview)}</PanelField>
-          <PanelField label="Contagem">{preview.quantity.unit === 'hour' ? 'Horas corridas' : preview.quantity.calculation === 'scheduled_workdays' ? 'Dias previstos na escala' : preview.quantity.calculation === 'calendar_days_until_return' ? 'Dias corridos até o retorno' : 'Dias corridos, inclusive início e término'}</PanelField>
           <PanelField label="Início">{formatRequestDate(preview.period.startDate)}{preview.period.startTime ? `, ${preview.period.startTime}` : ''}</PanelField>
           <PanelField label={preview.quantity.unit === 'day' && preview.quantity.calculation === 'calendar_days_until_return' ? 'Retorno' : 'Término'}>{formatRequestDate(preview.period.endDate)}{preview.period.endTime ? `, ${preview.period.endTime}` : ''}</PanelField>
+          <div className="col-span-2"><PanelField label="Motivo">{trimmedReason || <span className="font-normal text-ds-ink-muted">Não informado</span>}</PanelField></div>
+          <div className="col-span-2"><PanelField label="Comprovantes">{files.length ? files.map((file) => file.name).join(', ') : editingRequest?.attachmentCount ? `${editingRequest.attachmentCount} já vinculado(s)` : <span className="font-normal text-ds-ink-muted">Nenhum</span>}</PanelField></div>
+          <PanelField label="Contagem">{preview.quantity.unit === 'hour' ? 'Horas corridas' : preview.quantity.calculation === 'scheduled_workdays' ? 'Dias previstos na escala' : preview.quantity.calculation === 'calendar_days_until_return' ? 'Dias corridos até o retorno' : 'Dias corridos, inclusive início e término'}</PanelField>
           <PanelField label="Regra aplicada">{preview.rule.name} · versão {preview.absenceType.version}</PanelField>
           <PanelField label="Aprovação prevista">{approvalLabels[preview.approvalFlow]}</PanelField>
-          <PanelField label="Documento">{preview.attachmentRequired ? 'Obrigatório para criar o pedido' : 'Não obrigatório'}</PanelField>
         </div>
+        {preview.tacitApprovalDays ? <p className="rounded-ds-md bg-ds-warn-bg px-3 py-2 text-xs text-ds-ink">
+          Se ninguém analisar em <strong>{preview.tacitApprovalDays} {preview.tacitApprovalDays === 1 ? 'dia' : 'dias'}</strong>, cada etapa é aprovada automaticamente e o pedido mostra a tag <strong>“Aprovada por decurso de prazo”</strong>.
+        </p> : null}
         {preview.instructions ? <p className="whitespace-pre-wrap text-[12.5px] leading-5 text-ds-ink-muted">{formatBrazilianRequestText(preview.instructions)}</p> : null}
       </PanelSection>
       <PanelSection title="Prazos e limites configurados">
@@ -255,20 +310,17 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
           <PanelField label="Antecedência mínima">{preview.limits.minimumNoticeDays ?? 0} dia(s)</PanelField>
           <PanelField label="Retroatividade máxima">{preview.limits.maximumRetroactiveDays ?? 0} dia(s)</PanelField>
         </div>
-        <p className="text-xs text-ds-ink-muted">Estes são os limites da regra. O saldo disponível ainda não foi verificado.</p>
       </PanelSection>
-      <PanelSection title="Antes de solicitar"><ul className="list-disc space-y-1.5 pl-4 text-[12.5px] leading-5 text-ds-ink-muted">{preview.pending.filter((item) => !canCreate || item !== 'approval_and_submission_unavailable').map((item) => <li key={item}>{canCreate && item === 'document_required' ? 'Anexe o documento obrigatório antes de salvar o rascunho.' : pendingLabels[item]}</li>)}</ul></PanelSection>
-      {canCreate ? <PanelSection title="Preparar rascunho">
-        <p className="text-xs text-ds-ink-muted">Até cinco comprovantes no total, em PDF, JPEG ou PNG, com 10 MB por arquivo. O acesso ao conteúdo é restrito ao titular e aos responsáveis autorizados.</p>
-        {editingRequest?.attachmentCount ? <p className="text-xs font-semibold text-ds-ink-muted">{editingRequest.attachmentCount} comprovante(s) já vinculado(s) serão preservados.</p> : null}
-        <label className="block space-y-1.5 text-xs font-bold text-ds-ink">Comprovantes {preview.attachmentRequired ? '(obrigatórios)' : '(opcionais)'}
-          <Input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={saving} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} className="h-11 rounded-ds-btn" />
-        </label>
-        {files.length ? <p className="text-xs text-ds-ink-muted">{files.length} arquivo(s) selecionado(s).</p> : null}
-        {preview.quantity.value === null ? <p className="text-xs text-ds-warn">A quantidade depende da escala e ainda não pode ser usada para criar um pedido.</p> : null}
-        {saveError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{saveError}</p> : null}
-        <Button variant="primary-modal" loading={saving} loadingLabel="Salvando…" disabled={saving || preview.quantity.value === null || preview.source !== 'coala-rh'} onClick={() => void saveDraft()}>{editingRequest ? 'Salvar revisão' : 'Salvar rascunho'}</Button>
-      </PanelSection> : null}
+      {preview.pending.filter((item) => !canCreate || (item !== 'approval_and_submission_unavailable' && item !== 'document_required')).length ? <PanelSection title="Antes de solicitar"><ul className="list-disc space-y-1.5 pl-4 text-[12.5px] leading-5 text-ds-ink-muted">{preview.pending.filter((item) => !canCreate || (item !== 'approval_and_submission_unavailable' && item !== 'document_required')).map((item) => <li key={item}>{pendingLabels[item]}</li>)}</ul></PanelSection> : null}
+      {preview.quantity.value === null ? <p className="text-xs text-ds-warn">A quantidade depende da escala e ainda não pode ser usada para criar um pedido.</p> : null}
+      {saveError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{saveError}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="ds-secondary" disabled={saving} onClick={() => setStep('form')}>Voltar e editar</Button>
+        {canCreate ? <>
+          <Button variant="ds-ghost" loading={saving} loadingLabel="Salvando…" disabled={saving || preview.quantity.value === null || preview.source !== 'coala-rh'} onClick={() => void saveDraft(false)}>{editingRequest ? 'Salvar revisão' : 'Salvar rascunho'}</Button>
+          <Button variant="primary-modal" className="flex-1" loading={saving} loadingLabel="Enviando…" disabled={saving || preview.quantity.value === null || preview.source !== 'coala-rh' || missingDocument} onClick={() => void saveDraft(true)}>Enviar solicitação</Button>
+        </> : null}
+      </div>
     </> : null}
   </SidePanel>;
 }

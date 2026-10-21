@@ -52,6 +52,8 @@ const normalizedShiftSchema = z.object({
   endTime: timeSchema,
   breakStart: timeSchema.nullable(),
   breakEnd: timeSchema.nullable(),
+  /** Intervalo configurado sem início/fim único (livre, janela ou fixo intercalado): também bloqueia a preparação. */
+  breakConfigured: z.boolean().default(false),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7),
   allowedUnitIds: z.array(idSchema).min(1).max(5),
   journeyIds: z.array(idSchema).max(30).default([]),
@@ -113,6 +115,10 @@ export function prepareNatashaShiftDirectory(
       endTime: document.endTime,
       breakStart: document.breakStart ?? null,
       breakEnd: document.breakEnd ?? null,
+      breakConfigured: Boolean(document.breakStart || document.breakEnd)
+        || ['fixed', 'flexible', 'staggered'].includes(String((document as { breakType?: unknown }).breakType ?? ''))
+        || (Array.isArray((document as { breakSegments?: unknown }).breakSegments)
+          && ((document as unknown as { breakSegments: unknown[] }).breakSegments.length > 0)),
       daysOfWeek: [...document.daysOfWeek].sort((left, right) => left - right),
       allowedUnitIds,
       journeyIds: [...new Set(document.journeyIds ?? [])].sort(),

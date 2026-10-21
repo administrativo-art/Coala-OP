@@ -75,7 +75,7 @@ export type RepPMarkingCandidate = Readonly<{
   markedAt: string;
   recordedAt: string;
   collectorId: RepPCollectorId;
-  mode: '0';
+  mode: RepPMarkingMode;
   nsr: number;
   nsrField: string;
   previousHash: string | null;
@@ -85,7 +85,6 @@ export type RepPMarkingCandidate = Readonly<{
 
 export type RepPPreparationIssue =
   | 'INVALID_INPUT'
-  | 'OFFLINE_OUTSIDE_MVP'
   | 'INVALID_SEQUENCE'
   | 'ATTEMPT_CONFLICT'
   | 'EXISTING_ATTEMPT_INVALID';
@@ -221,7 +220,7 @@ export function verifyRepPMarkingCandidate(marking: RepPMarkingCandidate): boole
     if (!marking || marking.schemaVersion !== 1 || marking.coreVersion !== REP_P_CORE_VERSION
       || marking.complianceStatus !== 'synthetic_only' || marking.persistenceStatus !== 'not_persisted'
       || marking.layoutVersion !== REP_P_AFD_LAYOUT_VERSION || marking.recordType !== '7'
-      || marking.mode !== '0' || !hashPattern.test(marking.hash)
+      || (marking.mode !== '0' && marking.mode !== '1') || !hashPattern.test(marking.hash)
       || marking.nsrField !== nsrField(marking.nsr) || marking.employeeCpfField !== cpfField(marking.employeeCpf)
       || marking.inputDigest !== inputDigest(marking)
       || marking.markingId !== `rep-p:${marking.establishmentId}:${marking.nsr}:${marking.inputDigest.slice(0, 16)}`
@@ -246,7 +245,6 @@ export function verifyRepPMarkingCandidate(marking: RepPMarkingCandidate): boole
 /** Prepara uma transição determinística. Persistência, transação de NSR, ARP e assinatura ficam fora deste core. */
 export function prepareRepPMarking(input: RepPMarkingInput, state: RepPSequenceState): RepPPreparationResult {
   if (!validInput(input)) return { status: 'rejected', issue: 'INVALID_INPUT' };
-  if (input.mode === '1') return { status: 'rejected', issue: 'OFFLINE_OUTSIDE_MVP' };
   const digest = inputDigest(input);
 
   if (state?.existingAttempt) {
@@ -276,7 +274,7 @@ export function prepareRepPMarking(input: RepPMarkingInput, state: RepPSequenceS
     employerUnitId: input.employerUnitId, employerCnpj: cleanCnpj,
     establishmentId: input.establishmentId, executionUnitId: input.executionUnitId,
     markedAt: input.markedAt, recordedAt: input.recordedAt, collectorId: input.collectorId,
-    mode: '0', nsr: state.nextNsr, nsrField: nsrField(state.nextNsr), previousHash, hash,
+    mode: input.mode, nsr: state.nextNsr, nsrField: nsrField(state.nextNsr), previousHash, hash,
     receiptSeed: {
       title: 'Comprovante de Registro de Ponto do Trabalhador', nsr: state.nextNsr,
       employerCnpj: cleanCnpj, employeeCpf: cleanCpf, markedAt: input.markedAt, hash,

@@ -31,7 +31,8 @@ import { activeOperationalUnits } from '@/lib/dp-units';
 import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import { cn } from '@/lib/utils';
-import type { DPOvertimeCategory, DPOvertimePolicy, DPTimeApplicability } from '@/types';
+import { CYCLE_PRESET_LABELS, CYCLE_PRESETS, cycleLabel, presetOf, RESIDUAL_LABELS, type CyclePreset } from '@/features/dp/time-bank/cycle';
+import type { DPOvertimeCategory, DPOvertimePolicy, DPTimeApplicability, DPTimeBankCycle } from '@/types';
 
 const ROW_TEMPLATE = 'minmax(230px,1.4fr) minmax(170px,1fr) 130px 150px 16px';
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -57,7 +58,6 @@ type OvertimeForm = {
   applicability: DPTimeApplicability;
   validFrom: string;
   validTo: string;
-  dailyToleranceMinutes: string;
   dailyOvertimeLimit: string;
   weeklyOvertimeLimit: string;
   categories: CategoryForm[];
@@ -68,6 +68,11 @@ type OvertimeForm = {
     negativeLimit: string;
     expirationDays: string;
     expiredBalanceDestination: 'payroll' | 'forfeit' | 'review';
+    cyclePreset: CyclePreset;
+    cycleUnit: DPTimeBankCycle['unit'];
+    cycleLength: string;
+    cycleAnchorDate: string;
+    cycleResidual: DPTimeBankCycle['residualDestination'];
   };
   externalCoverageRule: DPOvertimePolicy['externalCoverageRule'];
 };
@@ -97,7 +102,6 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
     applicability: item?.applicability ?? { scope: { kind: 'company' } },
     validFrom: item?.validFrom ?? new Date().toISOString().slice(0, 10),
     validTo: item?.validTo ?? '',
-    dailyToleranceMinutes: String(item?.dailyToleranceMinutes ?? 10),
     dailyOvertimeLimit: item?.dailyOvertimeLimitMinutes ? formatDuration(item.dailyOvertimeLimitMinutes) : '',
     weeklyOvertimeLimit: item?.weeklyOvertimeLimitMinutes ? formatDuration(item.weeklyOvertimeLimitMinutes) : '',
     categories: item?.categories.map((category) => ({
@@ -112,6 +116,11 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
       negativeLimit: item?.timeBank.negativeLimitMinutes ? formatDuration(item.timeBank.negativeLimitMinutes) : '',
       expirationDays: item?.timeBank.expirationDays == null ? '' : String(item.timeBank.expirationDays),
       expiredBalanceDestination: item?.timeBank.expiredBalanceDestination ?? 'review',
+      cyclePreset: presetOf(item?.timeBank.cycle),
+      cycleUnit: item?.timeBank.cycle?.unit ?? 'day',
+      cycleLength: item?.timeBank.cycle ? String(item.timeBank.cycle.length) : '',
+      cycleAnchorDate: item?.timeBank.cycle?.anchorDate ?? item?.validFrom ?? new Date().toISOString().slice(0, 10),
+      cycleResidual: item?.timeBank.cycle?.residualDestination ?? 'review',
     },
     externalCoverageRule: item?.externalCoverageRule ?? 'origin',
   };
@@ -130,13 +139,24 @@ function optionalDuration(value: string, label: string) {
   return minutes;
 }
 
+function buildCycle(timeBank: OvertimeForm['timeBank']): DPTimeBankCycle | null {
+  if (timeBank.cyclePreset === 'none') return null;
+  const size = timeBank.cyclePreset === 'custom'
+    ? { unit: timeBank.cycleUnit, length: Number(timeBank.cycleLength) }
+    : CYCLE_PRESETS[timeBank.cyclePreset];
+  if (!Number.isInteger(size.length) || size.length < 1 || size.length > (size.unit === 'month' ? 12 : 366)) {
+    throw new Error(size.unit === 'month' ? 'O ciclo em meses vai de 1 a 12.' : 'O ciclo em dias vai de 1 a 366.');
+  }
+  if (!timeBank.cycleAnchorDate) throw new Error('Informe o marco inicial do ciclo.');
+  if (size.unit === 'month' && Number(timeBank.cycleAnchorDate.slice(8, 10)) > 28) throw new Error('No ciclo em meses, use marco entre os dias 1 e 28.');
+  return { ...size, anchorDate: timeBank.cycleAnchorDate, residualDestination: timeBank.cycleResidual };
+}
+
 function buildPayload(form: OvertimeForm) {
   if (form.name.trim().length < 2) throw new Error('Informe um nome com pelo menos 2 caracteres.');
   if (!form.validFrom) throw new Error('Informe o início da vigência.');
   if (form.validTo && form.validTo < form.validFrom) throw new Error('O fim da vigência deve ser posterior ao início.');
   if (form.applicability.scope.kind !== 'company' && !form.applicability.scope.id) throw new Error('Selecione a abrangência da política.');
-  const dailyToleranceMinutes = Number(form.dailyToleranceMinutes);
-  if (!Number.isInteger(dailyToleranceMinutes) || dailyToleranceMinutes < 0 || dailyToleranceMinutes > 180) throw new Error('A tolerância diária deve ficar entre 0 e 180 minutos.');
   if (form.categories.length === 0) throw new Error('Cadastre ao menos uma faixa de hora extra.');
   if (new Set(form.categories.map((category) => category.id.trim())).size !== form.categories.length) throw new Error('Os códigos das faixas precisam ser únicos.');
 
@@ -164,6 +184,7 @@ function buildPayload(form: OvertimeForm) {
   const negativeLimitMinutes = optionalDuration(form.timeBank.negativeLimit, 'O limite negativo');
   const expirationDays = form.timeBank.expirationDays ? Number(form.timeBank.expirationDays) : undefined;
   if (expirationDays !== undefined && (!Number.isInteger(expirationDays) || expirationDays <= 0)) throw new Error('A validade do banco deve ser informada em dias inteiros.');
+  const cycle = buildCycle(form.timeBank);
 
   return {
     name: form.name.trim(),
@@ -172,7 +193,6 @@ function buildPayload(form: OvertimeForm) {
     applicability: form.applicability,
     validFrom: form.validFrom,
     ...(form.validTo ? { validTo: form.validTo } : {}),
-    dailyToleranceMinutes,
     ...(optionalDuration(form.dailyOvertimeLimit, 'O limite de hora extra por dia') ? { dailyOvertimeLimitMinutes: optionalDuration(form.dailyOvertimeLimit, 'O limite de hora extra por dia') } : {}),
     ...(optionalDuration(form.weeklyOvertimeLimit, 'O limite de hora extra por semana') ? { weeklyOvertimeLimitMinutes: optionalDuration(form.weeklyOvertimeLimit, 'O limite de hora extra por semana') } : {}),
     categories,
@@ -183,6 +203,7 @@ function buildPayload(form: OvertimeForm) {
       ...(negativeLimitMinutes ? { negativeLimitMinutes } : {}),
       ...(expirationDays ? { expirationDays } : {}),
       expiredBalanceDestination: form.timeBank.expiredBalanceDestination,
+      ...(form.timeBank.enabled && cycle ? { cycle } : {}),
     },
     externalCoverageRule: form.externalCoverageRule,
   };
@@ -339,7 +360,7 @@ export function DPSettingsOvertime() {
         <ListHead template={ROW_TEMPLATE}><span>Política</span><span>Abrangência</span><span>Faixas</span><span>Situação</span><span /></ListHead>
         {visibleItems.map((entry) => (
           <ListRow key={entry.id} template={ROW_TEMPLATE} isOpen={item?.id === entry.id} isSelected={false} isMuted={entry.status === 'archived'} onOpen={() => setPanel({ mode: 'view', item: entry })} label={`Abrir política ${entry.name}`}>
-            <div className="min-w-0"><p className="truncate text-[13.5px] font-bold">{entry.name}</p><p className="truncate text-xs text-ds-ink-muted">Versão {entry.version} · tolerância {entry.dailyToleranceMinutes} min</p></div>
+            <div className="min-w-0"><p className="truncate text-[13.5px] font-bold">{entry.name}</p><p className="truncate text-xs text-ds-ink-muted">Versão {entry.version}</p></div>
             <span className="truncate text-xs text-ds-ink-muted">{applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}</span>
             <span className="font-ds-mono text-[13px] font-semibold">{entry.categories.length}</span>
             <StatusPill variant={statusVariant(entry.status)}>{timeConfigStatusLabel(entry.status)}</StatusPill>
@@ -360,10 +381,11 @@ export function DPSettingsOvertime() {
             </PanelSection>
             <PanelSection title="Limites">
               <div className="grid grid-cols-2 gap-4">
-                <PanelField label="Tolerância geral">{item.dailyToleranceMinutes} min</PanelField>
                 <PanelField label="Limite de hora extra por dia">{formatDuration(item.dailyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Limite de hora extra por semana">{formatDuration(item.weeklyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Banco de horas">{item.timeBank.enabled ? 'Ativo' : 'Desativado'}</PanelField>
+                {item.timeBank.enabled ? <PanelField label="Ciclo do banco">{cycleLabel(item.timeBank.cycle)}</PanelField> : null}
+                {item.timeBank.enabled && item.timeBank.cycle ? <PanelField label="Saldo no fim do ciclo">{RESIDUAL_LABELS[item.timeBank.cycle.residualDestination]}</PanelField> : null}
               </div>
             </PanelSection>
             <PanelSection title="Faixas" aside={`${item.categories.length}`}>
@@ -407,18 +429,17 @@ export function DPSettingsOvertime() {
             <Field label="Descrição" htmlFor="overtime-description" requirement="opcional"><textarea id="overtime-description" className={`${fieldInputClass} min-h-20 py-2`} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
             <Field label="Referência da CCT ou acordo" htmlFor="overtime-agreement" requirement="opcional" hint="Referência informativa. O sistema não interpreta o documento automaticamente."><Input id="overtime-agreement" className={fieldInputClass} value={form.collectiveAgreementReference} onChange={(event) => setForm((current) => ({ ...current, collectiveAgreementReference: event.target.value }))} placeholder="Ex.: CCT 2026 · cláusula 12" /></Field>
             <PanelSection title="Abrangência"><DPTimeApplicabilityFields value={form.applicability} onChange={(applicability) => setForm((current) => ({ ...current, applicability }))} units={activeOperationalUnits(units)} unitOrganizations={activeOperationalUnits(unitOrganizations)} unitGroups={unitGroups} roles={roles} functions={functions} people={activeUsers} /></PanelSection>
-            <PanelSection title="Vigência e tolerância geral">
+            <PanelSection title="Vigência e limites">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Início" htmlFor="overtime-valid-from"><Input id="overtime-valid-from" type="date" className={fieldInputClass} value={form.validFrom} onChange={(event) => setForm((current) => ({ ...current, validFrom: event.target.value }))} /></Field>
                 <Field label="Fim" htmlFor="overtime-valid-to" requirement="opcional"><Input id="overtime-valid-to" type="date" className={fieldInputClass} value={form.validTo} onChange={(event) => setForm((current) => ({ ...current, validTo: event.target.value }))} /></Field>
-                <Field label="Tolerância geral de hora extra" htmlFor="overtime-tolerance" hint="Margem diária única, em minutos, aplicada a todas as faixas desta política antes de começar a apurar hora extra. A regra só será aplicada quando o motor de ponto for ativado."><Input id="overtime-tolerance" type="number" min={0} max={180} className={fieldInputClass} value={form.dailyToleranceMinutes} onChange={(event) => setForm((current) => ({ ...current, dailyToleranceMinutes: event.target.value }))} /></Field>
                 <Field label="Limite de hora extra por dia" htmlFor="overtime-daily-limit" requirement="opcional" hint="Máximo de horas extras reconhecidas automaticamente no dia. Não é o total da jornada. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-daily-limit" className={`${fieldInputClass} font-ds-mono`} value={form.dailyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, dailyOvertimeLimit: event.target.value }))} placeholder="02:00" /></Field>
                 <Field label="Limite de hora extra por semana" htmlFor="overtime-weekly-limit" requirement="opcional" hint="Máximo acumulado de horas extras reconhecidas automaticamente na semana. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-weekly-limit" className={`${fieldInputClass} font-ds-mono`} value={form.weeklyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, weeklyOvertimeLimit: event.target.value }))} placeholder="10:00" /></Field>
               </div>
             </PanelSection>
             <PanelSection title="Faixas de hora extra" aside={`${form.categories.length}`}>
               <TimeConfigurationNotice>
-                Todas as faixas usam a tolerância geral definida acima. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
+                A tolerância fica na jornada de cada pessoa, não aqui. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
               </TimeConfigurationNotice>
               <div className="space-y-3">
                 {form.categories.map((category, index) => (
@@ -477,6 +498,15 @@ export function DPSettingsOvertime() {
                   <Field label="Limite negativo" htmlFor="time-bank-negative" requirement="opcional" hint="Use HH:MM."><Input id="time-bank-negative" className={`${fieldInputClass} font-ds-mono`} value={form.timeBank.negativeLimit} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, negativeLimit: event.target.value } }))} /></Field>
                   <Field label="Validade do saldo" htmlFor="time-bank-expiration" requirement="opcional" hint="Em dias."><Input id="time-bank-expiration" type="number" min={1} className={fieldInputClass} value={form.timeBank.expirationDays} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, expirationDays: event.target.value } }))} /></Field>
                   <Field label="Destino ao vencer" htmlFor="time-bank-expired"><OvertimeSelect id="time-bank-expired" value={form.timeBank.expiredBalanceDestination} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, expiredBalanceDestination: event.target.value as OvertimeForm['timeBank']['expiredBalanceDestination'] } }))}><option value="review">Revisão manual</option><option value="payroll">Folha</option><option value="forfeit">Descartar saldo</option></OvertimeSelect></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Ciclo do banco" htmlFor="time-bank-cycle" hint="Período em que o saldo é apurado; no fim, o residual segue o destino escolhido."><OvertimeSelect id="time-bank-cycle" value={form.timeBank.cyclePreset} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, cyclePreset: event.target.value as CyclePreset } }))}>{(Object.keys(CYCLE_PRESET_LABELS) as CyclePreset[]).map((key) => <option key={key} value={key}>{CYCLE_PRESET_LABELS[key]}</option>)}</OvertimeSelect></Field>
+                  {form.timeBank.cyclePreset !== 'none' ? <Field label="Marco inicial" htmlFor="time-bank-anchor" hint="Primeiro dia do primeiro ciclo."><Input id="time-bank-anchor" type="date" className={fieldInputClass} value={form.timeBank.cycleAnchorDate} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, cycleAnchorDate: event.target.value } }))} /></Field> : null}
+                  {form.timeBank.cyclePreset === 'custom' ? <>
+                    <Field label="Tamanho do ciclo" htmlFor="time-bank-cycle-length"><Input id="time-bank-cycle-length" type="number" min={1} max={form.timeBank.cycleUnit === 'month' ? 12 : 366} className={fieldInputClass} value={form.timeBank.cycleLength} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, cycleLength: event.target.value } }))} /></Field>
+                    <Field label="Unidade" htmlFor="time-bank-cycle-unit" hint="Seis meses não são 180 dias."><OvertimeSelect id="time-bank-cycle-unit" value={form.timeBank.cycleUnit} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, cycleUnit: event.target.value as DPTimeBankCycle['unit'] } }))}><option value="day">Dias corridos</option><option value="month">Meses</option></OvertimeSelect></Field>
+                  </> : null}
+                  {form.timeBank.cyclePreset !== 'none' ? <Field label="Saldo no fim do ciclo" htmlFor="time-bank-residual"><OvertimeSelect id="time-bank-residual" value={form.timeBank.cycleResidual} onChange={(event) => setForm((current) => ({ ...current, timeBank: { ...current.timeBank, cycleResidual: event.target.value as DPTimeBankCycle['residualDestination'] } }))}>{(Object.keys(RESIDUAL_LABELS) as Array<DPTimeBankCycle['residualDestination']>).map((key) => <option key={key} value={key}>{RESIDUAL_LABELS[key]}</option>)}</OvertimeSelect></Field> : null}
                 </div>
               </div> : <p className="text-xs text-ds-ink-muted">As faixas ficam disponíveis apenas para folha ou revisão manual.</p>}
             </PanelSection>

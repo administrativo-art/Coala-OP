@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Segmented } from '@/components/patterns/segmented';
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox, Clock } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -564,6 +564,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </AccordionContent>
                                 </AccordionItem>
 
+                                <AccordionItem value="app-time">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><Clock className="mr-2 h-5 w-5" /> Ponto e solicitações</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.timeRecording.mark" as any, "Ponto", "Mostra o Ponto no app: bater ponto com a hora oficial, ver e compartilhar comprovantes e pedir ajuste. Só bate ponto quem tem vínculo CLT ou de aprendiz no dia; também exige a permissão de colaborador do sistema.")}
+                                    {renderPermissionSwitch("permissions.app.requests.create" as any, "Solicitações", "Mostra Solicitações no app: pedir ausência (com atestado) e vale-transporte. Também exige a permissão de colaborador do sistema.")}
+                                  </AccordionContent>
+                                </AccordionItem>
+
                                 <AccordionItem value="app-signage">
                                   <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
                                     <div className="flex items-center"><MonitorPlay className="mr-2 h-5 w-5" /> Coala Signage</div>
@@ -1075,6 +1085,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.dp.requests.review" as any, "Analisar solicitações", "Permite aprovar, rejeitar e gerar novamente os documentos resultantes.", !dpRequestsViewWatch, true)}
                                   </div>
+                                </div>
+
+                                {/* Fechamento do ponto */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Clock className="h-4 w-4" /> Fechamento do ponto</h4>
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.close" as any, "Fechar competência", "Congela o mês do ponto com a declaração de cada pessoa (ajustes e ausências). Só fecha sem pedido pendente; depois disso não se aceita pedido de ajuste no mês. O painel fica em Solicitações do DP.", !dpRequestsViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.reopen" as any, "Reabrir competência", "Reabre um mês fechado, com motivo. A versão anterior fica guardada e o novo fechamento declara o que mudou.", !dpRequestsViewWatch)}
                                 </div>
 
                                 {/* Cobertura de responsabilidades */}

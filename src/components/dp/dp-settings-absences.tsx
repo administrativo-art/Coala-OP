@@ -45,7 +45,9 @@ function AbsenceSelect({ className, children, ...props }: ComponentProps<'select
   );
 }
 
-type PolicyForm = Omit<DPAbsencePolicy, 'maxUnitsPerRequest' | 'maxUnitsPerPeriod' | 'minimumNoticeDays' | 'maximumRetroactiveDays'> & {
+type PolicyForm = Omit<DPAbsencePolicy, 'maxUnitsPerRequest' | 'maxUnitsPerPeriod' | 'minimumNoticeDays' | 'maximumRetroactiveDays' | 'tacitApprovalDays'> & {
+  /** "" = nunca aprova sozinho. */
+  tacitApprovalDays: string;
   maxUnitsPerRequest: string;
   maxUnitsPerPeriod: string;
   minimumNoticeDays: string;
@@ -81,7 +83,7 @@ const approvalLabels: Record<DPAbsencePolicy['approvalFlow'], string> = {
 };
 const workdayEffectLabels: Record<DPAbsenceType['workdayEffect'], string> = {
   excused_absence: 'Ausência justificada',
-  unexcused_absence: 'Ausência não justificada',
+  unexcused_absence: 'Ausência não justificada (desconto na folha)',
   worked_credit: 'Crédito como período trabalhado',
   time_bank_debit: 'Débito em banco de horas',
   manual_review: 'Revisão manual',
@@ -328,6 +330,8 @@ function defaultPolicy(index = 0): PolicyForm {
     maximumRetroactiveDays: '0',
     attachment: 'not_required',
     approvalFlow: 'dp',
+    // Decisão do programador (19/10/2026): sem análise em 3 dias, a etapa é aprovada por decurso de prazo.
+    tacitApprovalDays: '3',
     rejectionReasonRequired: true,
     allowFutureEdit: true,
     allowFutureCancel: true,
@@ -358,6 +362,7 @@ function formFor(item?: DPAbsenceType): AbsenceForm {
       maxUnitsPerPeriod: policy.maxUnitsPerPeriod == null ? '' : String(policy.maxUnitsPerPeriod),
       minimumNoticeDays: policy.minimumNoticeDays == null ? '' : String(policy.minimumNoticeDays),
       maximumRetroactiveDays: policy.maximumRetroactiveDays == null ? '' : String(policy.maximumRetroactiveDays),
+      tacitApprovalDays: policy.tacitApprovalDays == null ? '' : String(policy.tacitApprovalDays),
       instructions: policy.instructions ?? (seedMedicalInstructions ? generateRequesterInstructions(instructionContext, policy) : ''),
     })) ?? [defaultPolicy()],
     validFrom: item?.validFrom ?? new Date().toISOString().slice(0, 10),
@@ -390,6 +395,7 @@ function buildPayload(form: AbsenceForm) {
       maxUnitsPerPeriod: optionalNumber(policy.maxUnitsPerPeriod, 'O limite acumulado'),
       minimumNoticeDays: optionalNumber(policy.minimumNoticeDays, 'A antecedência mínima'),
       maximumRetroactiveDays: optionalNumber(policy.maximumRetroactiveDays, 'O limite retroativo'),
+      tacitApprovalDays: policy.approvalFlow === 'automatic' ? undefined : optionalNumber(policy.tacitApprovalDays, 'O prazo de aprovação por decurso'),
       ...(policy.instructions?.trim() ? { instructions: policy.instructions.trim() } : { instructions: undefined }),
     })),
     validFrom: form.validFrom,
@@ -674,6 +680,13 @@ export function DPSettingsAbsences() {
                       <div className="space-y-2">
                         <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-bold"><span>Exigir motivo ao rejeitar</span><Switch checked={policy.rejectionReasonRequired} onCheckedChange={(rejectionReasonRequired) => updatePolicy(index, { rejectionReasonRequired })} /></label>
                         <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-bold"><span>Permitir editar pedido futuro</span><Switch checked={policy.allowFutureEdit} onCheckedChange={(allowFutureEdit) => updatePolicy(index, { allowFutureEdit })} /></label>
+                        {policy.approvalFlow !== 'automatic' ? (
+                          <Field label="Aprovar por decurso de prazo após (dias corridos)" htmlFor={`absence-tacit-${index}`} requirement="opcional"
+                            hint="Sem análise nesse prazo, contado desde a atribuição de cada etapa, a etapa é aprovada automaticamente e o pedido mostra a tag “Aprovada por decurso de prazo”. Em branco: nunca aprova sozinho.">
+                            <Input id={`absence-tacit-${index}`} type="number" min={1} max={30} className={fieldInputClass} value={policy.tacitApprovalDays}
+                              onChange={(event) => updatePolicy(index, { tacitApprovalDays: event.target.value })} />
+                          </Field>
+                        ) : null}
                         <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-bold"><span>Permitir cancelar pedido futuro</span><Switch checked={policy.allowFutureCancel} onCheckedChange={(allowFutureCancel) => updatePolicy(index, { allowFutureCancel })} /></label>
                       </div>
                       <div className="space-y-2">

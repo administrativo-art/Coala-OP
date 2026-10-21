@@ -16,9 +16,9 @@ describe('Relógio do coletor REP-P', () => {
     const hook = readFileSync('src/features/dp/rep-p/use-rep-p-marking.ts', 'utf8');
     assert.match(hook, /canRecord: Boolean\(unitId\) && options\?\.markingEnabled === true && options\?\.officialClock\?\.available === true/);
     // "Registro de ponto" e a janela "Bater ponto" da barra superior são coletores: relógio visível e botão preso a canRecord.
-    for (const file of ['my-time-recording-page.tsx', 'quick-marking-button.tsx']) {
+    for (const file of ['record-strip.tsx', 'quick-marking-button.tsx']) {
       const screen = readFileSync(`src/features/dp/rep-p/${file}`, 'utf8');
-      assert.match(screen, /<OfficialClockDisplay clock=\{options\.officialClock\} \/>/, file);
+      assert.match(screen, /<OfficialClockDisplay clock=\{unitClock\}/, file);
       assert.match(screen, /disabled=\{!canRecord\}/, file);
     }
     // A janela rápida não fecha com a batida em voo, senão a confirmação do servidor se perde e a pessoa bate de novo.
@@ -37,7 +37,7 @@ describe('Caminho para o Registro de ponto', () => {
     const integration = sidebar.indexOf('{ label: "Integração", href: "/dashboard/hr/recruitment/integration"');
     assert.ok(profile >= 0 && entry > profile && integration > entry);
     // Sem coleta ligada a tela abre, avisa e não deixa registrar.
-    const page = readFileSync('src/features/dp/rep-p/my-time-recording-page.tsx', 'utf8');
-    assert.match(page, /ainda não foi liberado/);
+    const strip = readFileSync('src/features/dp/rep-p/record-strip.tsx', 'utf8');
+    assert.match(strip, /ainda não liberado/);
   });
 });
