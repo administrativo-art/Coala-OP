@@ -5,12 +5,13 @@ import test from 'node:test';
 import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
 
 assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
+const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
-  recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt } = await import('../../src/features/dp/rep-p/service.server.ts');
+  recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
@@ -122,6 +123,26 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       [second.receiptId]);
     assert.equal(pendingReceipts.receipts.find((item) => item.receiptId === second.receiptId).lastIssue, 'REP_P_RECEIPT_SIGNATURE_REJECTED');
 
+    // Reemissão automática: emite os pendentes sem registrar batida nem mexer no NSR.
+    const nsrBeforeRetry = (await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
+    const arpSnapshot = async () => (await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get())
+      .docs.map((doc) => [doc.id, doc.get('nsr'), doc.get('hash') ?? null]).sort((a, b) => a[1] - b[1]);
+    const arpBeforeRetry = await arpSnapshot();
+    const failedRetry = await retryPendingRepPReceipts({ workspaceId }, dependencies);
+    assert.deepEqual(failedRetry, { attempted: 1, issued: 0, stillPending: 1, failed: 0 });
+    const retried = await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner });
+    assert.deepEqual(retried, { attempted: 1, issued: 1, stillPending: 0, failed: 0 });
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner }),
+      { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
+    assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
+    assert.deepEqual(await arpSnapshot(), arpBeforeRetry);
+    assert.equal(verifyRepPSignedPdf((await getOwnRepPReceipt(context, second.receiptId, dependencies)).bytes).valid, true);
+
+    // Acesso do próprio trabalhador sem prazo de expiração: um comprovante de 3 dias segue disponível (mínimo legal: 48 h).
+    const receiptRef = hrDbAdmin.collection('repP_receipts').doc(first.receiptId);
+    await receiptRef.update({ createdAt: Timestamp.fromMillis(Date.now() - 72 * 3_600_000) });
+    assert.equal((await getOwnRepPReceipt(context, first.receiptId, dependencies)).sha256, receipt.sha256);
+
     const receiptSnapshot = await hrDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
     assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
@@ -150,12 +171,31 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(verifyRepPDetachedCms(Buffer.from(signedAfd.signatureBase64, 'base64'),
       Buffer.from(signedAfd.afdBase64, 'base64')).valid, true);
     assert.deepEqual(afd.counts, { '2': 1, '3': 0, '4': 0, '5': 1, '6': 0, '7': 2 });
+    // Leitura paginada (página de 1 evento) gera exatamente os mesmos bytes do AFD.
+    const paged = await exportSignedRepPAfd(context,
+      { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' }, { ...dependencies, afdPageSize: 1 });
+    assert.equal(paged.sha256, afd.sha256);
+    // Total múltiplo exato da página (4 eventos, página de 2) e de 4: mesma saída; teto excedido falha fechado.
+    for (const afdPageSize of [2, 4]) {
+      assert.equal((await exportSignedRepPAfd(context, { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' },
+        { ...dependencies, afdPageSize })).sha256, afd.sha256);
+    }
+    await assert.rejects(exportSignedRepPAfd(context, { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' },
+      { ...dependencies, afdPageSize: 2, afdMaxEvents: 3 }), { code: 'REP_P_AFD_RANGE_TOO_LARGE' });
+    // AFD por intervalo: período sem eventos traz só cabeçalho, trailer e assinatura.
+    const emptyRange = await exportSignedRepPAfd(context,
+      { establishmentId, startDate: '2026-10-19', endDate: '2026-10-20' }, { ...dependencies, signer: icpSigners.cades });
+    assert.deepEqual(emptyRange.counts, { '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0 });
+    const emptyLines = Buffer.from(emptyRange.afdBase64, 'base64').toString('latin1').split('\r\n');
+    assert.equal(emptyRange.lineCount, 3);
+    assert.ok(emptyLines[0].startsWith('000000000') && emptyLines[1].startsWith('999999999') && emptyLines[2].startsWith('ASSINATURA_DIGITAL_EM_ARQUIVO_P7S'));
+    assert.equal(verifyRepPDetachedCms(Buffer.from(emptyRange.signatureBase64, 'base64'), Buffer.from(emptyRange.afdBase64, 'base64')).valid, true);
     const contents = Buffer.from(afd.afdBase64, 'base64').toString('latin1');
     assert.equal(contents.match(/\r\n/g)?.length, afd.lineCount);
     assert.ok(contents.includes(first.marking.hash));
     assert.ok(contents.includes(second.marking.hash));
     const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
-    assert.equal(exportAudit.size, 2);
+    assert.equal(exportAudit.size, 6);
     assert.ok(exportAudit.docs.some((doc) => doc.get('sha256') === afd.sha256));
 
     const eventSnapshot = await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
