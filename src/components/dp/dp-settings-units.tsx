@@ -80,6 +80,7 @@ export function DPSettingsUnits() {
   const {
     addUnit,
     updateUnit,
+    setUnitTimeZone,
     deleteUnit,
     addUnitGroup,
     updateUnitGroup,
@@ -300,6 +301,7 @@ export function DPSettingsUnits() {
 
     setSaving("unit");
     try {
+      const nextTimeZone = form.timeZone || null;
       if (dialog.mode === "edit") {
         await updateUnit({
           ...dialog.unit,
@@ -315,8 +317,9 @@ export function DPSettingsUnits() {
           operatingHours: form.operatingHours,
           stockRole: form.stockRole,
         });
+        if ((dialog.unit.timeZone ?? null) !== nextTimeZone) await setUnitTimeZone(dialog.unit.id, nextTimeZone);
       } else {
-        await addUnit({
+        const created = await addUnit({
           name,
           cnpj: cnpj?.clean,
           address: form.address.trim() || undefined,
@@ -331,6 +334,7 @@ export function DPSettingsUnits() {
           operatingHours: form.operatingHours,
           stockRole: form.stockRole,
         });
+        if (created && nextTimeZone) await setUnitTimeZone(created.id, nextTimeZone);
       }
       setUnitDialog(null);
     } finally {

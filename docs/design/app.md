@@ -237,7 +237,7 @@ Não há vibração, som nem animação de celebração.
 **Como está hoje — toda tela usa `Page`** (`ui/Components.kt`), que tem quatro faixas:
 
 1. **Barra escura** no topo: fundo `dark`, cantos de baixo com raio de 28 dp, passa por baixo da barra de status do Android (que fica sempre com ícones claros). Margens de 20 dp, 8 dp em cima e 18 dp embaixo.
-2. **Aviso de conexão**, só quando o aparelho está sem internet: faixa `warningBg` com o texto "Sem conexão. Rascunhos de contagem e notas de compra ficam guardados neste aparelho; o restante precisa de internet."
+2. **Aviso de conexão**, só quando o aparelho está sem internet: faixa `warningBg` informa que rascunhos, notas de compra e o ponto previamente autorizado ficam guardados neste aparelho; o restante precisa de internet.
 3. **Corpo** rolável, largura máxima de 600 dp, blocos separados por 10 dp. Quando a tela tem atualização, ela é por **puxar para baixo** — não há botão de atualizar na barra dessas telas.
 4. **Rodapé** fixo, só quando há ação ou mensagem: fundo `surface` com divisória em cima quando há ação. Dentro dele, nesta ordem: erro, aviso, ações.
 
@@ -341,6 +341,7 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 - **Compra local** (quando liberada): cartão de largura total, com sombra, título, descrição, selo "N notas no aparelho" e ilustração grande à direita.
 - **Demais módulos:** grade de duas colunas com cartões de mesma altura; ícone num quadro de 44 dp, selo de estado no canto superior direito, título e uma linha de descrição.
 - **Selos:** "Em curso" (contagem aberta, cor de aviso), número de reposições a receber, horário do turno de hoje, percentual da meta.
+- **Ponto** e **Solicitações** entram na grade antes dos demais módulos e aparecem só com a liberação do grupo `app` do perfil (`app.timeRecording.mark`, `app.requests.create`) somada à permissão de colaborador do sistema.
 - Só aparecem os módulos que o perfil libera. Sem nenhum: "Nenhum módulo liberado".
 
 ## Comportamento de abertura das telas
@@ -351,6 +352,8 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 | Metas | Na última escolha da pessoa neste aparelho — unidade ou "Todas as unidades" —, guardada por conta. Sem escolha guardada, na primeira unidade | Como está hoje |
 | Início | Saudação e cartões dos módulos liberados; os selos carregam em seguida | Como está hoje |
 | Signage | Lista de unidades; depois o painel da unidade; depois o guia em passos | Como está hoje |
+| Ponto | Aba "Hoje", na unidade de trabalho principal do vínculo (a empregadora primeiro). Sem "Todas as unidades": a batida precisa de uma unidade | Etapa 7 (2026-10-19) |
+| Solicitações | Aba "Ausência", com a lista dos próprios pedidos; o botão do rodapé abre o pedido novo | Etapa 7 (2026-10-19) |
 | Aplicativo | Bloqueado com conta conhecida: pede a biometria sozinho, se a pessoa ativou. Sem conta: entrada | Como está hoje |
 
 A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `Rules.ALL_UNITS`) e no reinício a cada visita em `ScheduleScreen`; `coala-go-ui-contract.test.ts` e `ViewModelsTest` protegem as duas partes.
@@ -365,7 +368,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Voltar** da barra e do sistema fazem o mesmo. Dentro de fluxos em níveis (Signage, etapas), voltar recua um nível antes de sair da tela.
 - Voltar fica bloqueado enquanto a tela está ocupada.
 - Tarefas de conta ficam no **perfil**, fora do início: foto, versão do app, atualização e "Sair da conta".
-- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; solicitações continuam abrindo na web até existir operação nativa. Simulação não registra dispositivos.
+- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; as notificações de solicitações continuam abrindo na web. Pedir ausência e vale-transporte já é nativo (Solicitações); acompanhar a análise completa e anexar depois do envio seguem no Coala One. Simulação não registra dispositivos.
 
 ## Estados e mensagens
 
@@ -389,7 +392,9 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Metas:** número grande, selo de ritmo, barra de 12 dp em degradê `accent` → `pink` com marcas brancas nos níveis. Abas Dias, Equipe e Prêmio. Gráfico de barras por dia: verde bateu, `accent` abaixo, `pink` hoje, linha tracejada na meta do dia, com legenda.
 - **Signage:** guia em passos numerados (círculo `accentSoft` com o número), monitor com o endereço sendo digitado, escolha de orientação em cartões, leitor de QR em tela cheia.
 - **Recorte da foto:** tela cheia escura; a foto num quadrado de cantos de 20 dp com tudo fora do círculo escurecido a 72%. Arrastar posiciona, dois dedos ou a barra aproximam.
-- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima. Na captura, comprovante é opcional somente quando o servidor identifica NF-e/DANFE ou NFC-e autorizada; cupom comum, recibo ou contingência pendente exige o anexo. A IA mostra em cada item uma destinação sugerida: item existente, item não encontrado, possível patrimônio, uso imediato ou revisão necessária. Essas opções não viram um seletor manual adicional no app; produto, quantidade e validade continuam revisáveis. A seleção de sangria pode ser cancelada antes do envio. Sangrias são agrupadas por unidade e podem ser filtradas pela hierarquia organização → grupo → unidade. O vínculo posterior de compra aguardando sangria usa confirmação inline **dentro do cartão da própria sangria**: enquanto a escolha local estiver aberta, o cartão mostra “Retomar vinculação”, volta automaticamente para a área visível e não abre uma segunda captura. Cancelar ou voltar limpa a escolha sem chamar a API.
+- **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima. Na captura, comprovante é opcional somente quando o servidor identifica NF-e/DANFE ou NFC-e autorizada; cupom comum, recibo ou contingência pendente exige o anexo. A IA mostra em cada item uma destinação sugerida: item existente, item não encontrado, possível patrimônio, uso imediato ou revisão necessária. Essas opções não viram um seletor manual adicional no app; produto, quantidade e validade continuam revisáveis. A seleção de sangria pode ser cancelada antes do envio. A primeira etapa filtra por organização e grupo e abre cartões de unidade; não há um terceiro filtro por unidade. O vínculo posterior de compra aguardando sangria usa confirmação inline **dentro do cartão da própria sangria**: enquanto a escolha local estiver aberta, o cartão mostra “Retomar vinculação”, volta automaticamente para a área visível e não abre uma segunda captura. Cancelar ou voltar limpa a escolha sem chamar a API.
+- **Ponto (`ui/TimeScreens.kt`):** cartão `dark` "HORA OFICIAL" com relógio de segundos em `CodeFont`, no fuso da unidade escolhida e com o rótulo `UTC−03:00`; o relógio soma a leitura oficial ao tempo monotônico do aparelho. Batidas numeradas ("1ª", "2ª") com o tipo **sugerido pela ordem**; batida desconsiderada pelo DP fica riscada em `faint`, incluída leva "incluída pelo DP". On-line, a confirmação mostra NSR e comprovante do servidor. Sem conexão e com autorização ainda válida, a ação vira "Registrar ponto offline" e a confirmação avisa que a marcação fica guardada no aparelho, sem NSR nem comprovante até sincronizar. A tela mostra quantidade pendente e caso bloqueado sem apagar a evidência. Comprovante abre numa folha com "Abrir comprovante", "Compartilhar" (folha nativa) e "Salvar no aparelho" (seletor do sistema); comprovante pendente mostra só o aviso de indisponibilidade.
+- **Pedidos em duas etapas (ajuste de ponto, ausência, vale-transporte):** formulário → "Revisar …" → resumo em `SummaryLine` (rótulo `muted` sobre o valor) → `FooterPair` "Editar" / "Enviar …". O resumo do ajuste diz quem pede e que a batida original nunca é apagada. Textos longos usam `NoteInput` com contador do limite do servidor.
 
 ## Acessibilidade
 
@@ -420,6 +425,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 ## Lacunas
 
 - Nenhuma medida deste guia foi conferida em aparelho; tudo foi lido do código em 2026-10-14.
+- Ponto e Solicitações (Etapa 7, 2026-10-19) foram verificados só por testes de unidade, contrato e lint, sem emulador nem aparelho, a pedido do programador.
 - Os trechos marcados "Como está hoje" não passaram por decisão de design. Se um deles for contestado, o código atual não serve de argumento.
 - O protótipo `Coala One App - Prototipo` não foi reaberto para este levantamento; diferenças entre ele e o app não estão listadas aqui.
 - Os pontos fora do padrão de [Cores](#cores) (hex solto) e de [Ícones de interface](#ícones-de-interface) (caracteres como ícone) seguem abertas.

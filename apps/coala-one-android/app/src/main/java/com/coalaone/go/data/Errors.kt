@@ -26,4 +26,19 @@ object Errors {
         is IllegalArgumentException -> AppFailure(ErrorCategory.VALIDATION, false, cause.message ?: "Revise os dados.")
         else -> AppFailure(ErrorCategory.CONTRACT, false, "Não foi possível concluir. Tente novamente.")
     }
+    /**
+     * Ponto and Solicitações show the server's public message on a refused request ("Hora oficial indisponível",
+     * "Já existe pedido em análise"), so the person knows what to fix. Only `error.message` of the sanitized
+     * envelope is read; 401 and 5xx keep the generic text of [classify].
+     */
+    fun withServerMessage(cause: Throwable): Throwable {
+        if (cause !is HttpException || cause.code() == 401 || cause.code() !in 400..499) return cause
+        val message = runCatching {
+            val body = cause.response()?.errorBody()?.string().orEmpty()
+            kotlinx.serialization.json.Json.parseToJsonElement(body).let { it as? kotlinx.serialization.json.JsonObject }?.get("error")
+                ?.let { it as? kotlinx.serialization.json.JsonObject }?.get("message")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && it.length <= 300 } ?: return cause
+        val category = when (cause.code()) { 403 -> ErrorCategory.PERMISSION; 409 -> ErrorCategory.CONFLICT; 429 -> ErrorCategory.RATE_LIMIT; else -> ErrorCategory.VALIDATION }
+        return AppFailure(category, cause.code() == 429, message)
+    }
 }

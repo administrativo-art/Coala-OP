@@ -23,6 +23,7 @@ export type DPJourneyValidationShiftDefinition = {
   breakStart?: string;
   breakEnd?: string;
   breakDurationMinutes?: number;
+  breakSegments?: { start: string; end: string }[];
 };
 
 export type DPJourneyValidationPerson = DPJourneyResolutionTarget & {

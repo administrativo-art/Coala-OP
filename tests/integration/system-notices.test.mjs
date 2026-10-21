@@ -11,6 +11,7 @@ const { defaultAdminPermissions, defaultGuestPermissions } = await import('../..
 const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monitor.server.ts');
 const { listSystemNotices } = await import('../../src/features/system-notices/service.server.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
+const { REP_P_NORMS_REGISTRY } = await import('../../src/features/dp/rep-p/norms-registry.ts');
 
 const unavailableClock = { async read() { throw Object.assign(new Error('sem HLB'), { code: 'REP_P_TIME_UNAVAILABLE' }); } };
 const trustedClock = (now) => ({ async read() { return { instant: now, source: 'hlb-test', assurance: 'hlb_verified',
@@ -40,13 +41,16 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
       viewerProfile.set({ name: 'Só avisos', permissions: permissions(false) }),
       manager.set({ isActive: true, profileId: managerProfile.id, unitAccessScope: 'all' }),
       viewer.set({ isActive: true, profileId: viewerProfile.id, unitAccessScope: 'all' }),
-      pendingReceipt.set({ workspaceId, status: 'pending', createdAt: Timestamp.fromDate(new Date('2029-11-09T00:00:00Z')) }),
+      pendingReceipt.set({ workspaceId, status: 'pending', createdAt: Timestamp.fromDate(new Date('2029-11-09T00:00:00Z')),
+        nextAttemptAt: Timestamp.fromDate(new Date('2029-11-09T00:00:00Z')) }),
     ]);
 
     const firstNow = new Date('2029-11-10T12:00:00Z');
     const first = await runRepPDailyMonitor({ workspaceId, signerPem, now: firstNow, clock: unavailableClock });
     assert.equal(first.certificateState, 'valid');
     assert.equal(first.pendingReceipts, 1);
+    // A reemissão roda antes da contagem; sem a batida correspondente o comprovante não é emitido às cegas.
+    assert.deepEqual(first.receiptRetry, { attempted: 1, issued: 0, stillPending: 0, failed: 1 });
     assert.equal(first.normsReviewOverdue, true);
     assert.equal(first.clockState, 'unavailable');
     assert.equal(first.opened.length, 4);
@@ -116,5 +120,25 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
     ]);
     await Promise.all([...notices.docs.map((doc) => doc.ref), ...bells.docs.map((doc) => doc.ref),
       managerProfile, viewerProfile, manager, viewer, pendingReceipt].map((ref) => ref.delete().catch(() => undefined)));
+  }
+});
+
+test('vigia diário com tudo em dia não abre aviso e resolve os anteriores', async () => {
+  const workspaceId = 'system-notices-all-clear';
+  // Um dia depois da última revisão das normas; certificado de teste vale até 2030, longe dos marcos.
+  const now = new Date(Date.parse(`${REP_P_NORMS_REGISTRY.lastReviewedAt}T12:00:00Z`) + 86_400_000);
+  const stale = dbAdmin.collection('systemNotices').doc('system-notices-all-clear-stale');
+  try {
+    await stale.set({ schemaVersion: 1, workspaceId, category: 'rep-p.clock', dedupeKey: 'rep-p-clock:REP_P_TIME_UNAVAILABLE',
+      audience: 'dp.time-manager-global', severity: 'critical', title: 'antigo', body: 'antigo', status: 'open',
+      createdAt: now.toISOString(), updatedAt: now.toISOString(), resolvedAt: null, resolvedReason: null });
+    const result = await runRepPDailyMonitor({ workspaceId, signerPem: createTestIcpCredential().pem, now, clock: trustedClock(now) });
+    assert.deepEqual(result, { certificateState: 'valid', clockState: 'ok',
+      receiptRetry: { attempted: 0, issued: 0, stillPending: 0, failed: 0 }, pendingReceipts: 0, receiptsCheck: 'ok',
+      normsReviewOverdue: false, opened: [] });
+    assert.equal((await stale.get()).get('resolvedReason'), 'official_time_restored');
+  } finally {
+    const notices = await dbAdmin.collection('systemNotices').where('workspaceId', '==', workspaceId).get();
+    await Promise.all([...notices.docs.map((doc) => doc.ref), stale].map((ref) => ref.delete().catch(() => undefined)));
   }
 });

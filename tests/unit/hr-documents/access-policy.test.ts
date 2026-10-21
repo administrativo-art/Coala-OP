@@ -19,6 +19,7 @@ const financeViewer: DocumentAccessSubject = { ...basicViewer, canViewSalary: tr
 const elevatedHr: DocumentAccessSubject = { ...basicViewer, collaboratorsEdit: true };
 const admin: DocumentAccessSubject = { ...basicViewer, isDefaultAdmin: true };
 const owner: DocumentAccessSubject = { ...basicViewer, collaboratorsView: false, rhRole: undefined, isOwner: true };
+const PUBLISHED = { status: "published" as const, at: "2026-10-20T12:00:00.000Z", by: "dp", source: "manual" as const };
 
 describe("resolveDocumentAccessPolicy", () => {
   test("prioriza o código do tipo documental", () => {
@@ -45,8 +46,9 @@ describe("enforcement — contracheque (HR_FINANCE)", () => {
   test("financeiro acessa", () => {
     assert.equal(canAccessDocument(doc, financeViewer).allowed, true);
   });
-  test("o próprio colaborador acessa o seu contracheque", () => {
-    assert.equal(canAccessDocument(doc, owner).allowed, true);
+  test("o próprio colaborador só acessa o seu contracheque se ele foi publicado para ele", () => {
+    assert.equal(canAccessDocument(doc, owner).allowed, false);
+    assert.equal(canAccessDocument({ ...doc, publication: PUBLISHED }, owner).allowed, true);
   });
   test("admin acessa", () => {
     assert.equal(canAccessDocument(doc, admin).allowed, true);
@@ -77,8 +79,9 @@ describe("enforcement — aviso de férias (HR_OPERATIONAL)", () => {
   test("perfil somente titular não acessa documento operacional de terceiro", () => {
     assert.equal(canAccessDocument(doc, { ...basicViewer, ownProfileOnly: true, isOwner: false }).allowed, false);
   });
-  test("perfil somente titular acessa documento operacional próprio", () => {
-    assert.equal(canAccessDocument(doc, { ...basicViewer, ownProfileOnly: true, isOwner: true }).allowed, true);
+  test("perfil somente titular acessa documento operacional próprio só quando publicado", () => {
+    assert.equal(canAccessDocument(doc, { ...basicViewer, ownProfileOnly: true, isOwner: true }).allowed, false);
+    assert.equal(canAccessDocument({ ...doc, publication: PUBLISHED }, { ...basicViewer, ownProfileOnly: true, isOwner: true }).allowed, true);
   });
 });
 
@@ -145,5 +148,25 @@ describe("matriz compartilhada de documentos", () => {
     assert.equal(allowed({ userId: "viewer", roleIds: ["rh-analyst"], functionIds: [] }), true);
     assert.equal(allowed({ userId: "viewer", roleIds: [], functionIds: ["dp-reviewer"] }), true);
     assert.equal(allowed({ userId: "direct-user", roleIds: [], functionIds: [] }), true);
+  });
+});
+
+describe("publicação para o colaborador (duas macros)", () => {
+  const colleague: DocumentAccessSubject = { ...owner, isOwner: false };
+  const manager: DocumentAccessSubject = { ...owner, isOwner: false, rhRole: "employee", collaboratorsView: false };
+  test("colaborador nunca vê documento de outro, mesmo publicado", () => {
+    assert.equal(canAccessDocument({ documentTypeCode: "VACATION_RECEIPT", publication: PUBLISHED }, colleague).allowed, false);
+  });
+  test("gestor sem permissão do DP não vê documento da equipe", () => {
+    assert.equal(canAccessDocument({ documentTypeCode: "VACATION_NOTICE" }, manager).allowed, false);
+  });
+  test("retirado, excluído ou não identificado não aparece para o titular", () => {
+    assert.equal(canAccessDocument({ documentTypeCode: "VACATION_RECEIPT", publication: { ...PUBLISHED, status: "withdrawn" } }, owner).allowed, false);
+    assert.equal(canAccessDocument({ documentTypeCode: "VACATION_RECEIPT", publication: PUBLISHED, deletedAt: "x" }, owner).allowed, false);
+    assert.equal(canAccessDocument({ documentTypeCode: "UNKNOWN_DOCUMENT", publication: PUBLISHED }, owner).allowed, false);
+  });
+  test("DP autorizado continua pela regra interna, publicado ou não", () => {
+    assert.equal(canAccessDocument({ documentTypeCode: "ASO_PERIODIC" }, elevatedHr).allowed, true);
+    assert.equal(canAccessDocument({ documentTypeCode: "ASO_PERIODIC" }, basicViewer).allowed, false);
   });
 });

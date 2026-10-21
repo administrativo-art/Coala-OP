@@ -43,6 +43,7 @@ const absencePolicySchema = z.object({
   rejectionReasonRequired: z.boolean(),
   allowFutureEdit: z.boolean(),
   allowFutureCancel: z.boolean(),
+  tacitApprovalDays: z.number().int().min(1).max(30).optional(),
   instructions: z.string().trim().max(2000).optional(),
 }).strict().superRefine((value, context) => {
   if (value.maxUnitsPerPeriod !== undefined && value.limitPeriod === undefined) {

@@ -5,12 +5,14 @@ import test from 'node:test';
 import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
 
 assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
+const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
-  recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt } = await import('../../src/features/dp/rep-p/service.server.ts');
+  recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
+const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monitor.server.ts');
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
@@ -53,9 +55,19 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { attemptId: 'gate-check', workDate: '2026-10-18', executionUnitId, channel: 'browser' },
       { ...dependencies, markingEnabled: false, repDb: { collection() { throw new Error('gate touched database'); } } }),
     { code: 'REP_P_MARKING_DISABLED' });
+    const profileWithoutPoint = structuredClone(context);
+    profileWithoutPoint.permissions.app.timeRecording.mark = false;
+    await assert.rejects(recordOwnRepPMarking(profileWithoutPoint,
+      { attemptId: 'profile-gate-check', workDate: '2026-10-18', executionUnitId, channel: 'browser' },
+      { ...dependencies, repDb: { collection() { throw new Error('profile gate touched database'); } } }),
+    { code: 'REP_P_MARKING_PROFILE_DISABLED' });
+    assert.deepEqual(await listOwnRepPExecutionUnits(profileWithoutPoint, { workDate: '2026-10-18' }, {
+      ...dependencies, mainDb: { collection() { throw new Error('profile gate touched database'); } },
+    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, executionUnits: [], officialClock: null });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
-      execution.set({ name: 'Execução excepcional', address: 'Rua operacional, 2', cnpj: '11222333000181', timeZone: 'America/Belem' }),
+      // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.
+      execution.set({ name: 'Execução excepcional', address: 'Rua operacional, 2', cnpj: '11222333000181', timeZone: 'America/Manaus' }),
       user.set({ isActive: true, unitId: employerUnitId, unitIds: [employerUnitId, executionUnitId] }),
       employee.set({ auth_uid: userId, name: 'Maria Teste', bizneo_employee_id: '99' }),
       cpfField.set({ value_text: cpf }),
@@ -74,12 +86,15 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
 
     const options = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
     assert.equal(options.eligible, true);
+    assert.equal(options.markingEnabled, true);
+    // Com a coleta desligada, o atalho da barra superior some: as opções avisam sem esconder o vínculo.
+    assert.equal((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies, markingEnabled: false })).markingEnabled, false);
     assert.deepEqual(options.officialClock, { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' });
     assert.deepEqual((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies,
       clock: { async read() { throw new Error('fonte fora do ar'); } } })).officialClock,
     { available: false, issue: 'REP_P_TIME_UNAVAILABLE' });
-    assert.deepEqual(options.executionUnits.map((unit) => [unit.id, unit.employer]),
-      [[employerUnitId, true], [executionUnitId, false]]);
+    assert.deepEqual(options.executionUnits.map((unit) => [unit.id, unit.employer, unit.timeZone]),
+      [[employerUnitId, true, 'America/Belem'], [executionUnitId, false, 'America/Manaus']]);
     assert.deepEqual((await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
       { workDate: '2026-10-18' }, dependencies)).executionUnits, []);
 
@@ -88,6 +103,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       recordOwnRepPMarking(context, { attemptId: 'attempt-2', workDate: '2026-10-18', executionUnitId, channel: 'browser' }, dependencies),
     ]);
     assert.equal(first.status, 'recorded');
+    assert.equal(first.marking.markedAt, '2026-10-18T07:15:00-0400');
     assert.equal(second.status, 'recorded');
     assert.deepEqual([first.marking.nsr, second.marking.nsr].sort(), [3, 4]);
     assert.ok(first.marking.employerUnitId === employerUnitId && second.marking.employerUnitId === employerUnitId);
@@ -122,6 +138,49 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       [second.receiptId]);
     assert.equal(pendingReceipts.receipts.find((item) => item.receiptId === second.receiptId).lastIssue, 'REP_P_RECEIPT_SIGNATURE_REJECTED');
 
+    // Reemissão automática: emite os pendentes sem registrar batida nem mexer no NSR.
+    const nsrBeforeRetry = (await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
+    const arpSnapshot = async () => (await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get())
+      .docs.map((doc) => [doc.id, doc.get('nsr'), doc.get('hash') ?? null]).sort((a, b) => a[1] - b[1]);
+    const arpBeforeRetry = await arpSnapshot();
+    const at = (minutes) => () => new Date(Date.now() + minutes * 60_000);
+    const secondRef = hrDbAdmin.collection('repP_receipts').doc(second.receiptId);
+    // A falha na batida adiou a próxima tentativa em 15 min; antes disso a rotina não insiste.
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, dependencies), { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
+    // Fila justa: um pendente antigo que falha sempre é adiado e não ocupa o lote dos seguintes.
+    const stuckRef = hrDbAdmin.collection('repP_receipts').doc(repPIdentifiersForTest.receiptKey(establishmentId, 999_999_999));
+    await stuckRef.set({ schemaVersion: 1, workspaceId, establishmentId, employeeId: userId, status: 'pending', attempts: 3,
+      lastIssue: null, createdAt: Timestamp.fromMillis(Date.now() - 86_400_000), nextAttemptAt: Timestamp.fromMillis(Date.now() - 86_400_000) });
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId, limit: 1 }, { ...dependencies, now: at(16) }),
+      { attempted: 1, issued: 0, stillPending: 0, failed: 1 });
+    const stuck = await stuckRef.get();
+    assert.equal(stuck.get('lastIssue'), 'REP_P_RECEIPT_MARKING_UNVERIFIABLE');
+    assert.equal(stuck.get('nextAttemptAt').toMillis() - stuck.get('lastAttemptAt').toMillis() >= 29 * 60_000, true);
+    const failedRetry = await retryPendingRepPReceipts({ workspaceId, limit: 1 }, { ...dependencies, now: at(16) });
+    assert.deepEqual(failedRetry, { attempted: 1, issued: 0, stillPending: 1, failed: 0 });
+    // Segunda falha: a espera sobe para o teto de 30 min a partir da tentativa.
+    const delayMs = (await secondRef.get()).get('nextAttemptAt').toMillis() - Date.now();
+    assert.ok(delayMs > 45 * 60_000 && delayMs < 47 * 60_000, `espera inesperada: ${delayMs}`);
+    await stuckRef.delete();
+    // Caminho de sucesso pelo vigia diário: reemite e conta sem pendência deste estabelecimento.
+    const monitorNow = at(47)();
+    const monitored = await runRepPDailyMonitor({ workspaceId, now: monitorNow, signerPem: '', clock,
+      repDependencies: { ...dependencies, receiptSigner: padesSigner } });
+    assert.deepEqual(monitored.receiptRetry, { attempted: 1, issued: 1, stillPending: 0, failed: 0 });
+    assert.equal(monitored.receiptsCheck, 'ok');
+    const monitorNotices = await dbAdmin.collection('systemNotices').where('workspaceId', '==', workspaceId).get();
+    await Promise.all(monitorNotices.docs.filter((doc) => monitored.opened.includes(doc.get('dedupeKey'))).map((doc) => doc.ref.delete()));
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner, now: at(47) }),
+      { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
+    assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
+    assert.deepEqual(await arpSnapshot(), arpBeforeRetry);
+    assert.equal(verifyRepPSignedPdf((await getOwnRepPReceipt(context, second.receiptId, dependencies)).bytes).valid, true);
+
+    // Acesso do próprio trabalhador sem prazo de expiração: um comprovante de 3 dias segue disponível (mínimo legal: 48 h).
+    const receiptRef = hrDbAdmin.collection('repP_receipts').doc(first.receiptId);
+    await receiptRef.update({ createdAt: Timestamp.fromMillis(Date.now() - 72 * 3_600_000) });
+    assert.equal((await getOwnRepPReceipt(context, first.receiptId, dependencies)).sha256, receipt.sha256);
+
     const receiptSnapshot = await hrDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
     assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
@@ -150,12 +209,31 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(verifyRepPDetachedCms(Buffer.from(signedAfd.signatureBase64, 'base64'),
       Buffer.from(signedAfd.afdBase64, 'base64')).valid, true);
     assert.deepEqual(afd.counts, { '2': 1, '3': 0, '4': 0, '5': 1, '6': 0, '7': 2 });
+    // Leitura paginada (página de 1 evento) gera exatamente os mesmos bytes do AFD.
+    const paged = await exportSignedRepPAfd(context,
+      { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' }, { ...dependencies, afdPageSize: 1 });
+    assert.equal(paged.sha256, afd.sha256);
+    // Total múltiplo exato da página (4 eventos, página de 2) e de 4: mesma saída; teto excedido falha fechado.
+    for (const afdPageSize of [2, 4]) {
+      assert.equal((await exportSignedRepPAfd(context, { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' },
+        { ...dependencies, afdPageSize })).sha256, afd.sha256);
+    }
+    await assert.rejects(exportSignedRepPAfd(context, { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' },
+      { ...dependencies, afdPageSize: 2, afdMaxEvents: 3 }), { code: 'REP_P_AFD_RANGE_TOO_LARGE' });
+    // AFD por intervalo: período sem eventos traz só cabeçalho, trailer e assinatura.
+    const emptyRange = await exportSignedRepPAfd(context,
+      { establishmentId, startDate: '2026-10-19', endDate: '2026-10-20' }, { ...dependencies, signer: icpSigners.cades });
+    assert.deepEqual(emptyRange.counts, { '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0 });
+    const emptyLines = Buffer.from(emptyRange.afdBase64, 'base64').toString('latin1').split('\r\n');
+    assert.equal(emptyRange.lineCount, 3);
+    assert.ok(emptyLines[0].startsWith('000000000') && emptyLines[1].startsWith('999999999') && emptyLines[2].startsWith('ASSINATURA_DIGITAL_EM_ARQUIVO_P7S'));
+    assert.equal(verifyRepPDetachedCms(Buffer.from(emptyRange.signatureBase64, 'base64'), Buffer.from(emptyRange.afdBase64, 'base64')).valid, true);
     const contents = Buffer.from(afd.afdBase64, 'base64').toString('latin1');
     assert.equal(contents.match(/\r\n/g)?.length, afd.lineCount);
     assert.ok(contents.includes(first.marking.hash));
     assert.ok(contents.includes(second.marking.hash));
     const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
-    assert.equal(exportAudit.size, 2);
+    assert.equal(exportAudit.size, 6);
     assert.ok(exportAudit.docs.some((doc) => doc.get('sha256') === afd.sha256));
 
     const eventSnapshot = await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();

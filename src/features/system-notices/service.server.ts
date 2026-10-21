@@ -11,7 +11,7 @@ import { AppError } from '@/lib/observability/app-error';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import type { User } from '@/types';
 
-import { belongsToSystemNoticeAudience, canViewSystemNotices, systemNoticeAudiencesFor,
+import { BELL_WITHOUT_CENTRAL, belongsToSystemNoticeAudience, canViewSystemNotices, systemNoticeAudiencesFor,
   type SystemNoticeActor, type SystemNoticeAudience, type SystemNoticeCategory, type SystemNoticeSeverity } from './core';
 
 const NOTICES = 'systemNotices';
@@ -66,6 +66,19 @@ export async function resolveSystemNotices(params: {
   return stale.length;
 }
 
+/** Resolve avisos abertos pelas chaves informadas (ex.: o fechamento do mês finalizado). */
+export async function resolveSystemNoticeKeys(workspaceId: string, dedupeKeys: readonly string[], reason = 'Resolvido.', now = new Date(), database: Firestore = dbAdmin) {
+  let resolved = 0;
+  for (const key of dedupeKeys) {
+    const ref = database.collection(NOTICES).doc(noticeId(workspaceId, key));
+    const snapshot = await ref.get();
+    if (snapshot.get('status') !== 'open') continue;
+    await ref.update({ status: 'resolved', resolvedAt: now.toISOString(), resolvedReason: reason, updatedAt: now.toISOString() });
+    resolved += 1;
+  }
+  return resolved;
+}
+
 /**
  * Entrega no sino de quem pode ver a central e pertence ao público do aviso. A elegibilidade vem
  * do perfil; administradores definidos só por claim do token veem o aviso na central, não no sino.
@@ -80,7 +93,7 @@ async function deliverSystemNoticeToBell(id: string, database: Firestore) {
     const permissions = buildPermissionSet(profile.get('permissions'), isDefaultAdmin);
     // Unidade é conferida por usuário abaixo; aqui só a permissão do perfil.
     const actor = { isDefaultAdmin, permissions, allUnits: true };
-    return canViewSystemNotices(actor) && belongsToSystemNoticeAudience(actor, audience);
+    return (canViewSystemNotices(actor) || BELL_WITHOUT_CENTRAL.includes(audience)) && belongsToSystemNoticeAudience(actor, audience);
   });
   const recipients: { uid: string }[] = [];
   for (let index = 0; index < eligibleProfiles.length && recipients.length < MAX_BELL_RECIPIENTS; index += 30) {
@@ -99,7 +112,8 @@ async function deliverSystemNoticeToBell(id: string, database: Firestore) {
   await Promise.all(recipients.map(({ uid }) => database.collection('userNotifications')
     .doc(createHash('sha256').update(`system-notice:${id}:${uid}`).digest('hex'))
     .create({ ownerUid: uid, workspaceId, sourceEventId: `systemNotices/${id}`, eventId: id,
-      title: String(notice.get('title')), body: String(notice.get('body')), path: '/dashboard/system-notices',
+      title: String(notice.get('title')), body: String(notice.get('body')),
+      path: BELL_WITHOUT_CENTRAL.includes(audience) && notice.get('path') ? String(notice.get('path')) : '/dashboard/system-notices',
       readAt: null, createdAt })
     .catch(() => undefined)));
   return recipients.length;

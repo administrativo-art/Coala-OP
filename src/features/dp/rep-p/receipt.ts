@@ -88,10 +88,10 @@ function assertSnapshot(snapshot: RepPReceiptSnapshot) {
   }
 }
 
-function formatCnpj(value: string) {
+export function formatCnpj(value: string) {
   return CnpjValidator.clean(value).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
-function formatCpf(value: string) {
+export function formatCpf(value: string) {
   return normalizeCpf(value).replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 }
 function formatMarkedAt(value: string) {
@@ -100,7 +100,7 @@ function formatMarkedAt(value: string) {
 }
 
 /** Quebra o texto pela largura medida na fonte; palavras maiores que a linha são cortadas por caractere. */
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
   const lines: string[] = [];
   let current = '';
   for (const word of text.split(/\s+/).filter(Boolean)) {
@@ -125,7 +125,7 @@ export function repPReceiptFilename(snapshot: Pick<RepPReceiptSnapshot, 'nsr' | 
  * Gera o PDF sem assinatura de forma determinística: mesmo snapshot, mesmos bytes.
  * Metadados de data usam o instante da marcação, e não o momento da renderização.
  */
-export async function renderRepPReceiptPdf(snapshot: RepPReceiptSnapshot, options: { preview?: boolean } = {}): Promise<Buffer> {
+export async function renderRepPReceiptPdf(snapshot: RepPReceiptSnapshot, options: { preview?: boolean; sample?: boolean } = {}): Promise<Buffer> {
   assertSnapshot(snapshot);
   const document = await PDFDocument.create({ updateMetadata: false });
   const markedAt = new Date(Date.parse(snapshot.markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')));
@@ -145,6 +145,12 @@ export async function renderRepPReceiptPdf(snapshot: RepPReceiptSnapshot, option
   const ink = rgb(0.1, 0.1, 0.12);
   const muted = rgb(0.38, 0.38, 0.42);
 
+  if (options.sample) {
+    // Faixa visível no topo: a amostra de homologação não pode ser confundida com comprovante.
+    page.drawRectangle({ x: margin, y: y - 22, width, height: 22, color: rgb(0.75, 0.07, 0.24) });
+    page.drawText('AMOSTRA - SEM VALIDADE', { x: margin + 8, y: y - 16, size: 12, font: bold, color: rgb(1, 1, 1) });
+    y -= 30;
+  }
   for (const line of wrap(REP_P_RECEIPT_TITLE, bold, 14, width)) {
     page.drawText(line, { x: margin, y: y - 14, size: 14, font: bold, color: ink });
     y -= 19;
@@ -177,7 +183,8 @@ export async function renderRepPReceiptPdf(snapshot: RepPReceiptSnapshot, option
   field('Código hash SHA-256 da marcação', snapshot.hash, mono, 8);
 
   const footer = options.preview ? 'Prévia do modelo com dados fictícios - sem assinatura e sem validade.'
-    : 'Documento assinado digitalmente (PAdES).';
+    : options.sample ? 'Amostra de homologação com dados fictícios, assinada digitalmente (PAdES) - sem validade como comprovante.'
+      : 'Documento assinado digitalmente (PAdES).';
   page.drawText(footer, { x: margin, y: margin, size: 7, font: regular, color: muted });
   return Buffer.from(await document.save({ useObjectStreams: false }));
 }

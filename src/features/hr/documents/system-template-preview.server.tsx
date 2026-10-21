@@ -14,6 +14,8 @@ import {
 } from "@/features/hr/documents/system-template-catalog";
 import { loadSystemDocumentTemplateSource } from "@/features/hr/documents/system-template-source.server";
 import { REP_P_RECEIPT_PREVIEW_SNAPSHOT, renderRepPReceiptPdf } from "@/features/dp/rep-p/receipt";
+import { MIRROR_PREVIEW_SNAPSHOT } from "@/features/dp/time-adjustments/mirror-core";
+import { renderMirrorPdf } from "@/features/dp/time-adjustments/mirror-pdf";
 import { uniformSystemTemplateById } from "@/features/uniforms/template-catalog";
 import { loadUniformSystemTemplatePreview } from "@/features/uniforms/template-preview.server";
 
@@ -79,6 +81,9 @@ export async function renderSystemDocumentTemplatePreview(template: SystemDocume
   }
   if (template.renderer === "rep_p_receipt") {
     return renderRepPReceiptPdf(REP_P_RECEIPT_PREVIEW_SNAPSHOT, { preview: true });
+  }
+  if (template.renderer === "time_mirror") {
+    return renderMirrorPdf(MIRROR_PREVIEW_SNAPSHOT, "0".repeat(64), null, { preview: true });
   }
   if (template.renderer === "uniform") {
     const uniformTemplate = uniformSystemTemplateById(template.id);

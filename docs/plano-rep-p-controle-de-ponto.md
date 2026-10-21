@@ -88,13 +88,13 @@ Testar desvio, correção, indisponibilidade da referência, fuso e retorno ao f
 
 Fonte temporal do aparelho não deve ser aceita sem verificação. Preservar instantes originais, de recepção e contexto local quando aplicáveis.
 
-### 5.4. Online e extensão offline
+### 5.4. Online e contingência offline no aplicativo
 
-MVP online. Confirmar sucesso somente após persistência durável; distinguir registro persistido, comprovante pendente e comprovante disponível.
+O portal web permanece on-line. O Coala Go preserva marcações sem rede somente após pré-autorização on-line de até 12 horas. Distinguir sempre marcação apenas guardada no aparelho, registro persistido, comprovante pendente e comprovante disponível.
 
 Requisição tem identificador idempotente. Reenvio da mesma tentativa não duplica; duas marcações distintas não podem ser eliminadas por terem horários próximos.
 
-Offline é facultativo (L5, item 52), fora do MVP. Se implementado: fila protegida, origem identificada, hora confiável, tratamento de reinício/perda de referência, preservação do instante original e transmissão ao reconectar. Falta de rede não pode aparecer como “ponto registrado” se nada foi preservado.
+Offline é facultativo (L5, item 52). O incremento local de 21/10/2026 implementa no Coala Go fila cifrada por conta, chave P-256 em TEE/StrongBox, âncora da Hora Legal + relógio monotônico, cadeia e assinatura locais, limite de 20 pendentes, bloqueio após reinício, sincronização ordenada e modo `1` no registro 7 do AFD. NSR e comprovante só nascem no servidor. Ainda são gates do piloto: teste em aparelho físico e perda/retorno de rede, Play Integrity de release em modo `enforce`, revisão jurídica/Doc Brown, operação dos casos bloqueados e todas as pendências gerais do REP-P.
 
 ### 5.5. NSR e ARP
 
@@ -172,6 +172,7 @@ Detalhes funcionais no [plano mestre](plano-jornada-fechamento-rh.md).
 - Ocorrência não resolvida impede declarar documento conforme; não autoriza ocultar fatos ou reter originais.
 - Assinatura/ciência do empregado não substitui conformidade técnica nem quita direitos. Prever contestação.
 - Ausências seguem [contrato do DP](engineering/flows/dp-absences.md); anexos médicos não entram em AFD, AEJ ou projeção de escala.
+- **Documento de fechamento declara todos os tratamentos e pedidos do período (decisão do programador, 19/10/2026).** O espelho/documento de fechamento da competência lista, por pessoa e dia, todo pedido que afetou a jornada: ajustes de ponto (original × novo, tipo inclusão/desconsideração, justificativa, solicitante, decisor, instantes e situação, inclusive recusados e revertidos), ausências (tipo, período, situação e forma de aprovação, inclusive **aprovada por decurso de prazo**) e demais tratamentos (troca de unidade, pré-assinalação). Nada que alterou ou justificou a jornada fica fora do documento; o detalhe sigiloso (anexo médico, motivo longo) é referenciado, não reproduzido. Detalhes no [plano mestre, seção 10](plano-jornada-fechamento-rh.md).
 - Documentos gerados entram no catálogo oficial, com política de acesso/publicação explícita.
 
 ### 6.1. Tipos, localização e distribuição
@@ -251,8 +252,10 @@ Ordem canônica no [plano mestre](plano-jornada-fechamento-rh.md#6-fases):
 - Fases 3/4: PTRP, AEJ/espelho e simulação fiscal.
 - Fases 5/6: fechamento/contador e validação integrada sintética.
 - Fase 7: INPI, certificados reais, atestados e teste da configuração final.
-- Fase 8: piloto real paralelo ao Bizneo, por competência completa.
-- Fases 9/10: promoção por estabelecimento e saída do Bizneo após preservar histórico.
+- Fase 8: piloto técnico com um usuário, antecipado por decisão do programador (19/10/2026); comprovantes sem validade até o lançamento total; sem paralelo com o Bizneo.
+- Fases 9/10: lançamento total por estabelecimento, depois das Fases 3 a 7; saída do Bizneo simplificada, sem importação.
+
+Sequência vigente e estado de cada fase: [plano mestre, seção 6](plano-jornada-fechamento-rh.md#sequência-vigente-19102026).
 
 Nenhum dado sintético vira registro oficial. Registro de piloto real é preservado como tal, pode produzir prova e exige apuração de divergências.
 
@@ -271,14 +274,55 @@ Pendências nomeadas, mantidas por decisão do programador. `REP_P_MARKING_ENABL
 | Pendência | Origem | Gate |
 | --- | --- | --- |
 | Eventos tipo 6 (indisponibilidade/retorno) e decisão sobre tipo 4 gravados na ARP | Anexo IX 6.2 e 6.4 | Piloto |
-| Reemissão automática de comprovantes pendentes; AFD fatiado por dia ou NSR acima de 2.500 eventos | Art. 80 II; art. 81 §2º | Piloto |
-| Política de assinatura ICP-Brasil (`sigPolicyId` AD-RB) no CAdES; cadeia até a raiz e revogação; `/M` e `signingTime` vindos da hora legal | Art. 88; DOC-ICP-15.03 | Validar no verificador do ITI com o e-CNPJ real antes do piloto |
+| Frequência da reemissão, `/M`/`signingTime` pela hora legal e fila de pendentes permanentes. **Perguntas ao advogado:** comprovante emitido com atraso por falha técnica, com registro persistido, estado pendente visível e reemissão automática em até 30 min, atende ao art. 80 II? Que evidências de contingência guardar (`lastIssue`, `attempts`, log)? O atraso exige comunicar trabalhador ou sindicato? | Art. 80 II | Piloto. Feito em 18/10/2026: reemissão automática sem tocar a ARP, AFD paginado em fotografia única, função `repPReceiptRetryJob` a cada 15 min, fila ordenada pela próxima tentativa (espera de 15 e depois 30 min) e `/M`/`signingTime` pela hora legal, com testes. Falta publicar a função e o índice `nextAttemptAt` no `coala-rh` e confirmar por leitura que nenhum pendente está sem `nextAttemptAt` antes de ligar a flag |
+| Política de assinatura ICP-Brasil: feito em 18/10/2026 no CAdES do AFD (AD-RB v2.4, referência 19). Falta o PAdES do comprovante (a política v1.3 pede `sigPolicyId` e `/Filter /PBAD_PAdES`, em conflito com a leitura anterior); até lá o comprovante pode não ser reconhecido como AD-RB pelo verificador, o que bloqueia a flag se o comprovante assinado for requisito do piloto. Faltam também a cadeia até a raiz e a revogação. **Pergunta ao advogado:** um comprovante PAdES fora da política vigente vale para o trabalhador e para a fiscalização enquanto o ITI não valida? | Art. 88; DOC-ICP-15.03 | Validar no verificador do ITI com o e-CNPJ real antes do piloto |
 | Carimbo de tempo emitido por ACT | DOC-ICP-11 e política aplicável | **Pendência:** pode ser pago; decidir necessidade jurídica/técnica antes do piloto, sem presumir contratação |
 | Preenchimento dos campos numéricos do AFD (espaço à direita ou zeros à esquerda) | Leiaute AFD, regra 7 | **Antes do primeiro registro real** (irreversível pelo hash) |
 | ARP imutável (backup agendado, PITR e proteção contra exclusão no `coala-rh`; cópia longa trancada), retenção e contingência | Anexo IX 7; plano 5.10 | Piloto |
 | Batida recusada quando a data do aparelho diverge da hora oficial (virada de dia, celular desregulado) | Art. 74 | Decidir antes do piloto |
 | NTP público do ON no runtime, INPI, atestados, simulação fiscal | Arts. 89 e 91; Anexo IX | Publicar e homologar antes do piloto |
+| Volume do AFD: teto de 50 mil eventos por exportação (medição em 18/10/2026; um estabelecimento de ~40 pessoas passa disso em cerca de um ano). Duas exportações simultâneas dobram o pico de memória (instância única de 1 GiB). A recusa acima do teto não grava auditoria. Gerar em fatias/streaming ou limitar uma exportação por vez | Art. 81 §2º | Antes de fiscalização real. **Pergunta ao advogado:** entregar o AFD em partes por período cumpre o art. 81 §2º, e a fiscalização pode exigir arquivo único? |
+| Atalho **Bater ponto** na barra superior (18/10/2026): aparece só com a coleta ligada, vínculo elegível e unidade; não fecha com a batida em andamento e oferece o comprovante quando emitido. Se a leitura das opções falhar, o botão some. Caminho fixo resolvido em 19/10/2026: item **Registro de ponto** na barra lateral (Gestão do colaborador). **Pergunta ao advogado:** comprovante pendente disponibilizado depois, em outra tela (Registro de ponto), atende o art. 80? | Art. 80; Anexo IX 3 | Antes de ligar `REP_P_MARKING_ENABLED` |
 | ReSinc/HLB certificada | Anexo IX item 2; serviço do ON | **Pendência:** serviço pago; não se concluiu que seja necessário para REP-P virtual |
+| Perguntas da maquete do Registro de ponto (19/10/2026) | Arts. 74, 80, 82, 84; CLT arts. 58 §1º e 71 | **Perguntas ao advogado:** (1) registrar troca de unidade para conferência do DP, sem bloquear a batida, é adequado? (2) Fuso: **decidido pelo programador em 19/10/2026** que a batida usa o fuso da unidade de execução (sem cadastro, o do estabelecimento); confirmar com o advogado que o AFD com fusos diferentes por marcação no mesmo estabelecimento é aceito. Confirmar também se o cabeçalho do AFD continua no fuso do estabelecimento. Risco técnico registrado: o filtro por data civil (`recordedDate`, no fuso da unidade) pode deixar NSR consecutivos em dias diferentes na borda de um período exportado, criando lacuna aparente de NSR; tratar junto com o fatiamento do art. 81 §2º antes de fiscalização. (3) A tolerância de 5 min do art. 58 §1º vale para o intervalo? (4) Aprovação de ausência por decurso de prazo (3 dias) é aceitável, inclusive com atestado não conferido? Pode ser revertida e com que justificativa? |
+| Tela Registro de ponto, etapa 1 (19/10/2026) | Art. 74; art. 80; Anexo IX 3 | Saldo e itens "a conferir" são prévia, não apuração; a tela não usa a palavra "abono". **Decisão jurídica/DP:** ausência aprovada abona a jornada ou só justifica (depende de CCT e banco de horas)? Hoje a ausência aprovada ou em análise apenas cobre o dia na prévia, sem gerar crédito. Avisos de intervalo (±5 min) e de desvio (10 min) são de conferência, não a tolerância do art. 58 §1º CLT. Jornada que atravessa a meia-noite fica sem avisos até o PTRP. |
+| Ajuste de ponto pedido pelo colaborador (orientação Doc Brown, 19/10/2026) | Art. 74 IV; art. 82 p.ú.; art. 84 V; leiaute AEJ registro 05 | Original nunca é alterada; "substituir" = desconsideração (`tpMarc` D) + inclusão (`fonteMarc` I) atômicas no PTRP, com `motivo` ≤150 caracteres (obrigatório para D e I). Colaborador solicita; gestor/DP decide; solicitante nunca aprova o próprio pedido; nenhuma hora é preenchida pelo sistema. Autoria por ato (UID, papel, instante pela Hora Legal, canal, hash encadeado), reversão cria registro novo. **Pendências:** arquivar leiaute AEJ com hash; conferir `fonteMarc` "I " com espaço e a representação da linha D. **Perguntas ao advogado:** colaborador pode executar sem decisão? AEJ precisa identificar autor/decisor? Pedido após fechamento exige reabertura e quem autoriza? Ciência do espelho exige assinatura e o que fazer na discordância? Inclusão sem evidência vale como prova? Retenção do histórico e de IP/dispositivo? |
+| Georreferenciamento planejado (19/10/2026) | Art. 74; LGPD arts. 6º, 7º, 9º, 37, 38 e 46; orientação laboral CNPD | A [especificação técnica](engineering/time-recording-geolocation.md) separa localização da ARP, coleta somente na confirmação, calcula no servidor e nunca bloqueia a marcação. `outside` e `indeterminate` geram no máximo conferência humana, sem efeito automático em PTRP, folha ou disciplina. **Gates:** finalidade, base legal, RIPD, aviso, retenção, acesso, CCT/ACT aplicável e resposta do advogado antes de piloto real. |
+
+### 10-B. Decisões do programador sobre as perguntas jurídicas (19/10/2026)
+
+Decisões de produto registradas a partir da lista consolidada de perguntas; não substituem o parecer do advogado nos pontos marcados "confirmar".
+
+| Tema | Decisão do programador | Efeito no sistema |
+| --- | --- | --- |
+| Ajuste de ponto: quem decide | O ajuste sempre precisa de aprovação; o fluxo de aprovação exige justificativa | Colaborador solicita; gestor/DP aprova com justificativa obrigatória; solicitante nunca aprova o próprio pedido |
+| Ajuste no AEJ | O arquivo do fechamento identifica quem pediu e quem decidiu | Autor e decisor por ato, além de tipo e motivo |
+| Pedido depois do fechamento | Não existe: período fechado não aceita pedido | Pedido de ajuste ou ausência para competência fechada é recusado no servidor |
+| Ciência do espelho | Assinatura do pacote individual na Autentique; sem assinatura, o individual e o fechamento geral ficam pendentes, inclusive depois de 24 horas | Lista da versão congelada, individual pendente/fechado e geral somente depois da assinatura de todos |
+| Inclusão sem evidência | Vale como prova: a cadeia de autoria comprova que foi o titular quem pediu | Evidência opcional; justificativa, aprovação e trilha de autoria obrigatórias |
+| Ausência abona ou justifica | Depende do efeito cadastrado no tipo (`workdayEffect`) | Fechamento aplica o efeito do tipo; a tela mostra a prévia conforme o efeito |
+| Reversão de ausência aprovada por decurso | Só com fraude comprovada; implementação futura | Sem reversão comum; pendência de fluxo de fraude |
+| Ajuste de ponto — pendências da revisão (Doc Brown, 19/10/2026) | Art. 82; leiaute AEJ registro 05 | **Gate de piloto:** o bloqueio de competência fechada depende de a etapa 6 gravar `ptrp_competenceClosures/{workspace}_{AAAA-MM}`; o fechamento deve impedir fechar com pedido pendente ou cancelá-lo com ato registrado. **Perguntas ao advogado:** instante do ato pela Hora Legal com reserva do relógio do servidor (`clockSource` gravado) basta, ou o ato deve ser recusado sem Hora Legal? O AEJ tem campo para solicitante e decisor, ou ficam no dossiê com a justificativa do decisor no motivo? Inclusão sem evidência como prova unilateral (Súmula 338 TST). **Falta para o AEJ:** leiaute arquivado com hash, gerador do registro 05 (D/I, motivo, NSR), vetores de teste e mapa de `codHorario`. |
+| Decurso em tipo com atestado obrigatório (orientação Doc Brown, 19/10/2026) | Pendente de confirmação: o decurso aprova também tipos com anexo obrigatório ainda não conferido? Alternativa: aprovar a ocorrência sem efeito de abono até o DP conferir | Hoje aprova com o efeito do tipo; aprovação depois do fechamento deve ser tratada no reprocessamento sem alterar espelho assinado; alerta ao DP para pedido vencido que não pode ser aprovado sozinho |
+| Tolerância | Uma só, na jornada (até 10 min por dia, art. 58 §1º); vale para saldo, banco e avisos de entrada, saída e intervalo | `toleranceMinutes` da jornada (plano mestre 3.6); turno e política de extra sem tolerância |
+| Fracionamento do intervalo | Respondido pelo planejamento das modalidades (plano mestre 3.6.1) | Modalidades fixas/flexíveis conforme cadastro |
+| Retenção | Decisão operacional: mínimo de 20 anos para ARP, AFD, comprovantes, histórico de ajustes, trocas e evidências, sem TTL nos documentos centrais; confirmar por classe com o advogado se o prazo uniforme preserva a finalidade sem retenção excessiva pela LGPD | Política de retenção de 20 anos; validação jurídica pendente |
+| Atestado assinado pela empregadora | Sim: a CT Sorvetes assina como desenvolvedora sendo também a empregadora | Confirmar com o advogado (pergunta mantida) |
+| Comprovante com atraso | Sem aviso ao sindicato; os registros de contingência (motivo, tentativas, horário de emissão) ajudam na fiscalização e ficam guardados | Mantidos `lastIssue`, `attempts` e instante de emissão |
+| Comprovante disponível depois | Basta o aviso de indisponibilidade; quando emitido, a pessoa baixa o comprovante, sem notificação no sino | Janela e dia mostram "comprovante em emissão" e liberam o download depois |
+| Unidade e fuso da batida | A unidade vem da escala, com o fuso dela; troca de unidade é registrada sem bloqueio e conferida pelo DP | Implementado na etapa 2 |
+| Fusos no AFD | Unidade em outra cidade/fuso terá CNPJ próprio (estabelecimento e AFD próprios); o que importa é a carga horária. Fuso em cada linha de batida; o cabeçalho segue o leiaute | Pergunta retirada; caso residual: empregado de um CNPJ cobrindo unidade em outro fuso grava o fuso da unidade na linha da batida |
+| Formato dos campos do AFD | Leiaute 004 item 7: conteúdo à esquerda e espaços à direita, inclusive numéricos; exceções literais (`004`, `01`/`02`, zeros do cabeçalho). CPF de 12 posições com espaço à direita (FAQ MTE 50 aceita também zero à esquerda; padronizado espaço). CRC-16/KERMIT com vetor oficial `123456789` → `2189`. Não há validador oficial público do AFD; o VALIDAR do ITI confere só a assinatura | Já implementado assim (`core.ts` `numericField`/`nsrField`/`cpfField`, `afd.ts`; teste do vetor CRC). Resta sem vetor oficial a serialização exata do SHA-256 do tipo 7: manter teste próprio e, se houver dúvida, consulta técnica à SIT |
+| Carimbo do tempo para a guarda | Pergunta retirada pelo programador | Mantida a assinatura com a hora oficial registrada; sem ACT |
+| Certificado do INPI no atestado | O atestado sai com o registro completo quando o INPI concluir | Sem "N/A" |
+| Validade dos comprovantes no piloto | No piloto os comprovantes não têm validade; tudo passa a valer no lançamento total, depois da validação da assinatura no ITI | Pergunta retirada; validar amostra no ITI antes do lançamento total |
+| AFD fracionado | Questão jurídica encerrada: o FAQ MTE 39 autoriza fracionar o AFD do REP-P; o teto de 50 mil eventos por arquivo pode ficar | Antes da produção, conferir tecnicamente: (1) cada parte é AFD válido com cabeçalho e trailer — atende; (2) cada parte tem seu `.p7s` CAdES — atende; (3) NSR original sem reinício — atende; (4) partes sem omissão nem duplicação na fronteira de datas — falta teste de fronteira; (5) exportar o período inteiro — hoje acima de 50 mil a exportação recusa e pede dividir o período manualmente; falta gerar as partes automaticamente e auditar a recusa |
+| Feriados no comércio (MTE 1.316/2026) | Fora do escopo do ponto por ora | Pergunta retirada |
+| Piloto | Piloto geral liberado pelo programador; primeiro teste com um usuário | Ligar `REP_P_MARKING_ENABLED` continua sendo ação de produção com autorização própria e gates do item 10-A |
+| Registro oficial x Bizneo | Irrelevante: nada é importado do Bizneo | Pergunta retirada |
+| Duas assinaturas no atestado | Responsáveis legal e técnico diferentes assinam o mesmo PDF, cada um com seu e-CPF | Fluxo de assinatura com dois PAdES no mesmo documento |
+| LGPD da geolocalização | Resolvido com atualização da cláusula de LGPD nos contratos | Gate de contrato atualizado antes do piloto com localização |
+| Atestado técnico | Um atestado quando o sistema estiver validado; a necessidade de novo atestado a cada alteração será analisada depois da liberação total | Atestado único na liberação; reavaliar por versão depois |
 
 ## 11. Matriz de requisitos legais
 
@@ -312,11 +356,11 @@ Todos os IDs permanecem com implementação/eficácia **não verificadas**. Uma 
 | R7 | O | Hash fiscal da marcação | L6; L3 art. 79 | 2: vetores e coerência comprovante/AFD |
 | R8 | C | Escritor dedicado, privilégio mínimo e evidência independente | Projeto de proteção, não tecnologia imposta por lei | 2: tentativa de reescrita detectada/impedida |
 | R9 | C | Backup/restauração e preservação independente | Projeto a aprovar; L3 Anexo IX a conferir | 2/6: recuperação íntegra e continuidade |
-| R10 | O | Comprovante PDF assinado e acesso após marcação | L5 itens 30/40; L3 arts. 79–80 | 2/7: campos, PAdES e acesso. Campos/INPI e pré-requisitos corrigidos em 10-A; **lacunas abertas:** reemissão automática, política ICP-Brasil e acesso nas 48 h com comprovante pendente |
+| R10 | O | Comprovante PDF assinado e acesso após marcação | L5 itens 30/40; L3 arts. 79–80 | 2/7: campos, PAdES e acesso. Campos/INPI e pré-requisitos corrigidos em 10-A; reemissão automática a cada 15 min com fila justa e `/M` pela hora legal feitos (falta publicar); **lacunas abertas:** política ICP-Brasil e acesso nas 48 h com comprovante pendente |
 | R11 | O | Extração mínima das últimas 48 h | L5 item 40 | 2: download independente do RH |
 | R12 | O | AFD oficial extraível pelo REP-P | L6; L5 itens 38/39 | 2/4: formato e simulação fiscal |
 | R13 | O | AFD CAdES destacado pelo desenvolvedor | L5 itens 28/33 | 2/7: assinatura real e arquivo verificados |
-| R14 | D | MVP online; offline posterior | L5 item 52 | 2: contingência; extensão exige novo aceite |
+| R14 | D | Web on-line; contingência offline implementada localmente apenas no Coala Go, pré-autorizada por 12 h, fila cifrada/assinada e sincronização modo 1 | L5 item 52; AFD 004 registro 7 | Piloto exige aparelho físico, Play Integrity `enforce` e homologação operacional/jurídica |
 | R15 | D | Sem localização/biometria no MVP | Escopo e L10 | Antes do piloto: conferir dados coletados |
 | P1 | O | Tratamentos identificados e originais preservados | L3 art. 82; L5 itens 55/56 | 3: inclusão/desconsideração/reversão |
 | P2 | O | AEJ no leiaute e pares por jornada | L7; L5 itens 51/56–59 | 4: casos inclusive virada de dia |
@@ -365,4 +409,4 @@ A [análise de lacunas do plano mestre](plano-jornada-fechamento-rh.md#5-estado-
 - Procedimento de contingência online e acesso pós-desligamento.
 - Eventos/unidades exigidos pelo contador.
 - Estabelecimento piloto, janela de corte e retorno.
-- Necessidade futura de offline/geolocalização, fora do MVP.
+- Homologação física e operacional do offline do Coala Go; geolocalização continua apenas na [especificação técnica](engineering/time-recording-geolocation.md), sem autorização para coleta real.

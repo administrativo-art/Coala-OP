@@ -119,6 +119,8 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
         composable("schedule") { ScheduleScreen(hiltViewModel(), back) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
+        composable("time") { TimeScreen(hiltViewModel(), back) }
+        composable("requests") { RequestsScreen(hiltViewModel(), back) }
     }
 }
 private fun installUpdate(context: android.content.Context, file: File) {
@@ -156,7 +158,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         } }
         state?.modules?.let { modules ->
             if (modules.localPurchase) HomeTile("Compra local", "purchase", Modifier.fillMaxWidth(), pending.size) { navigate("purchase") }
-            val tiles = listOf(Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            val tiles = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.requests, "Solicitações", "requests"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
             tiles.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { (_, title, route) ->
@@ -166,7 +168,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
+            if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
         }
     }
 }
@@ -214,7 +216,10 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
             push.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
-        if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta", session::signOut)
+        if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta") {
+            listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() }
+            session.signOut()
+        }
         else TextButton({ signOut = true }) { Text("Sair da conta", color = Tokens.danger) }
     }
 }

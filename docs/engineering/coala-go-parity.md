@@ -26,6 +26,8 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 | Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária, Equipe/Só minha e Todas as unidades | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
 | Metas | `/api/goals/mobile`, filtro `kioskId` ou `scope=all` (Todas as unidades); abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
 | Signage | `/api/signage/mobile`, `/api/signage/mobile/screens`; CameraX/QR `COALA-SIGNAGE` | `RulesTest`, `ViewModelsTest`, `signage-tizen-app.test.ts`; payload Zod | Scanner físico e TV Tizen ponta a ponta |
+| Ponto (Etapa 7) | `/api/dp/time-recording/options`, `/offline-permits`, `/markings` (canal `mobile`, coletor 01; modo 1 após sincronização), `/month`, `/receipts/{id}`, `/adjustments`, `/time-bank`, `/mirrors` e `/mirrors/pdf`; offline em Room cifrado, chave P-256 TEE/StrongBox e WorkManager; comprovantes e espelho no cache privado; visível com `app.timeRecording.mark` + colaborador. A pasta de documentos permanece somente no Coala One. | `TimeRulesTest`: fuso/data e canônico offline; `ViewModelsTest`: queda de rede preserva sem fingir NSR; `ApiContractTest`: rotas e payload; `verify-android-contracts.mts`; `dp-rep-p-offline` no servidor; `coala-go-ui-contract.test.ts` | Batida e sincronização em aparelho físico, reinício/bateria/rede real e Play Integrity de release `enforce`; abrir/compartilhar/salvar documentos; exportação ZIP por período |
+| Solicitações (Etapa 7) | `/api/collaborator/absence-requests/options`, `/preview`, `/preparations` (anexos), `POST` rascunho + `PATCH` envio; `/api/collaborator/requests` (vale-transporte); `/api/collaborator/requests/shift-swaps` (opções, lista, proposta e decisão), pelo mesmo contrato central da web; visível com `app.requests.create` + colaborador | `TimeRulesTest`: período, motivo, anexos, VT; `ApiContractTest` e `coala-go-ui-contract.test.ts`: troca central | Câmera/arquivo físico, envio com anexo e troca de turno entre duas contas em ambiente real |
 | Biometria | BiometricPrompt forte; opt-in por UID, cifrado e sem prazo de validade (decisão do responsável em 2026-10-11); pedido automaticamente ao abrir o app bloqueado | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
 | Atestação | `/api/mobile/app-attestation`; package opcional, nonce local e Play Integrity nativo | `mobile-app-attestation.test.ts`: Go/legado/cross-package; `ApiContractTest`: DTO/transporte | Play Integrity com certificado de release e políticas do servidor |
 | Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
@@ -187,6 +189,22 @@ Android/TypeScript e a suíte do backend cobrem o fluxo; aparelho físico, OCR
 real e validação fiscal oficial continuam fora desta homologação. O APK
 0.3.10/code15 foi assinado pelo certificado público esperado e tem SHA-256
 `0abc2be295bf9965a97fb2a3dbc326a91a9a7c1600969f5b24b896a885b72077`.
+
+### Verificação da 0.3.15 (registro de ponto e solicitações)
+
+O Coala Go passa a oferecer Ponto e Solicitações apenas quando as permissões
+efetivas da pessoa liberam cada módulo. A marcação on-line reutiliza as rotas
+REP-P, exibe a Hora Legal no fuso da unidade e recebe NSR e comprovante somente
+do servidor. A contingência offline exige autorização recente, identidade do
+aparelho e fila cifrada/assinada, sem inventar NSR ou comprovante antes da
+sincronização. Solicitações incluem ajuste, ausência, vale-transporte e troca
+de turno pelo contrato central, com aceite documentado das duas pessoas. Banco
+de horas e espelho são consultados sob demanda; a pasta de documentos continua
+somente no Coala One. Testes JVM, contratos TypeScript e integrações em emulador
+cobrem esses limites; Play Integrity real, aparelho físico e piloto com pessoas
+continuam gates separados. O APK 0.3.15/code20 foi assinado pelo certificado
+público esperado e tem SHA-256
+`801a41bf6e785925813480d6769d13b1c7f6329ee7a672233f4fd070f19b67eb`.
 
 ### Verificação da 0.3.14 (etapas por unidade e cancelamento da nota)
 

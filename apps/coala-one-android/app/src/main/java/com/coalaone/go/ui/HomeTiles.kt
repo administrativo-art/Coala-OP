@@ -104,7 +104,7 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
                 badge?.let { StatusChip(it, if (badgeWarm) Tokens.warning else Tokens.info, if (badgeWarm) Tokens.warningBg else Tokens.infoBg) }
             }
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-            Text(when (route) { "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Quem trabalha e suas folgas"; "goals" -> "O que falta e o placar da equipe"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
+            Text(when (route) { "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Quem trabalha e suas folgas"; "goals" -> "O que falta e o placar da equipe"; "time" -> "Bater ponto e ver comprovantes"; "requests" -> "Ausência e vale-transporte"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         }
     }
 }

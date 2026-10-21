@@ -30,7 +30,7 @@ function fixture(): DailyTimeInput {
         { dayIndex: 7, plannedMinutes: 0, isRestDay: true }],
       regime: { mode: 'fixed' as const }, weeklyRest: { placement: 'fixed_cycle' as const, maxConsecutiveWorkDays: 6 },
       scaleValidation: { mode: 'consecutive_days' as const }, expectedBreakMinutes: 60,
-      useDefinedShiftWhenShorter: null, allowedShiftDefinitionIds: ['definition-a'] },
+      useDefinedShiftWhenShorter: null, toleranceMinutes: null, allowedShiftDefinitionIds: ['definition-a'] },
     shiftDefinition: { id: 'definition-a', code: null, name: '6 horas', startTime: '09:00', endTime: '16:00',
       breakType: 'fixed' as const, breakStart: '12:00', breakEnd: '13:00', breakDurationMinutes: null,
       breakWindowStart: null, breakWindowEnd: null, overnight: false, expectedPunches: null,

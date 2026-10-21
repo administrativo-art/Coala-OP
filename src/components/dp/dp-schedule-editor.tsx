@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
+import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
 import {
@@ -350,8 +351,8 @@ function ShiftDialog({
     }
     if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
       toast({
-        title: 'Existe uma folga confirmada nesta data.',
-        description: 'Remova a folga e aguarde a confirmação do Bizneo antes de atribuir o turno.',
+        title: 'Existe um DSR confirmado nesta data.',
+        description: 'Remova o DSR e aguarde a confirmação do Bizneo antes de atribuir o turno.',
         variant: 'destructive',
       });
       return;
@@ -599,6 +600,7 @@ function ShiftDialog({
   );
 }
 
+/** Escolha da pessoa no dia: DSR (publicado no Bizneo como folga) ou ausência (abre o pedido com a pessoa e a data). */
 function ManualDayOffDialog({
   open,
   onOpenChange,
@@ -606,6 +608,7 @@ function ManualDayOffDialog({
   unit,
   users,
   onConfirm,
+  mode = 'dsr',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -613,7 +616,9 @@ function ManualDayOffDialog({
   unit?: DPUnit;
   users: User[];
   onConfirm: (userId: string) => Promise<boolean>;
+  mode?: 'dsr' | 'absence';
 }) {
+  const absence = mode === 'absence';
   const [userId, setUserId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -636,9 +641,11 @@ function ManualDayOffDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Lançar folga manualmente</DialogTitle>
+          <DialogTitle>{absence ? 'Lançar ausência' : 'Lançar DSR'}</DialogTitle>
           <DialogDescription>
-            A folga será registrada no Coala One e publicada no Bizneo.
+            {absence
+              ? 'Escolha a pessoa e preencha o tipo de ausência em seguida. O efeito no ponto vem da configuração do tipo.'
+              : 'O descanso semanal remunerado será registrado no Coala One e publicado no Bizneo como folga.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -656,8 +663,8 @@ function ManualDayOffDialog({
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 {users.map((item) => (
-                  <SelectItem key={item.id} value={item.id} disabled={!item.registrationIdBizneo}>
-                    {item.username}{item.registrationIdBizneo ? '' : ' — sem vínculo Bizneo'}
+                  <SelectItem key={item.id} value={item.id} disabled={!absence && !item.registrationIdBizneo}>
+                    {item.username}{absence || item.registrationIdBizneo ? '' : ' — sem vínculo Bizneo'}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -665,7 +672,9 @@ function ManualDayOffDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Se existir um turno de trabalho nessa data, remova ou substitua o turno antes de lançar a folga.
+            {absence
+              ? 'Abono, atestado, falta e débito no banco são tipos de ausência; o DSR é lançado à parte.'
+              : 'Se existir um turno de trabalho nessa data, remova ou substitua o turno antes de lançar o DSR.'}
           </p>
         </div>
 
@@ -675,11 +684,38 @@ function ManualDayOffDialog({
           </Button>
           <Button type="button" disabled={!userId || submitting} onClick={() => void handleConfirm()}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Confirmar folga
+            {absence ? 'Continuar' : 'Confirmar DSR'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Um botão por dia: o operador escolhe o que lançar (turno, DSR ou ausência), em vez de procurar botões separados. */
+function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence }: {
+  canShift: boolean; canDayOff: boolean; canAbsence: boolean; onShift: () => void; onDayOff: () => void; onAbsence: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const pick = (action: () => void) => () => { setOpen(false); action(); };
+  const item = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-semibold text-foreground hover:bg-muted';
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 px-2 py-1.5 text-xs text-muted-foreground/60 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary/70"
+        >
+          <Plus className="h-3 w-3 shrink-0" />
+          <span>Lançar no dia</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-1" align="start">
+        {canShift ? <button type="button" className={item} onClick={pick(onShift)}><Clock3 className="h-3.5 w-3.5" />Turno</button> : null}
+        {canDayOff ? <button type="button" className={item} onClick={pick(onDayOff)}><CalendarOff className="h-3.5 w-3.5" />DSR</button> : null}
+        {canAbsence ? <button type="button" className={item} onClick={pick(onAbsence)}><CalendarDays className="h-3.5 w-3.5" />Ausência</button> : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -903,13 +939,14 @@ function DayOffBadge({
   const needsRetry = hasFailed || isPendingRetry;
   const canAction = canPublish && !isPublished && !isPublishing && !isRemoving && !removalFailed;
   const canRemoveAction = canRemove && explicit && !isPublishing && !isRemoving;
-  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar folga';
-  let badgeLabel = 'Folga';
+  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar DSR';
+  // Toda folga da escala é o DSR (decisão do programador, 20/10/2026); outro abono é ausência.
+  let badgeLabel = 'DSR';
   if (isRemoving) badgeLabel = 'Removendo';
   else if (removalFailed) badgeLabel = 'Falha ao remover';
   else if (isPublishing) badgeLabel = 'Enviando';
-  else if (!explicit) badgeLabel = canAction ? actionLabel : 'Folga prevista';
-  else if (isPublished) badgeLabel = 'Folga confirmada';
+  else if (!explicit) badgeLabel = canAction ? actionLabel : 'DSR previsto';
+  else if (isPublished) badgeLabel = 'DSR confirmado';
   else if (hasFailed) badgeLabel = 'Falha no Bizneo';
   else if (isPendingRetry) badgeLabel = 'Envio pendente';
 
@@ -967,8 +1004,8 @@ function DayOffBadge({
             type="button"
             onClick={onRemove}
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label={removalFailed ? `Tentar remover novamente a folga de ${user.username}` : `Remover folga de ${user.username}`}
-            title={removalFailed ? 'Tentar remover novamente' : 'Remover folga'}
+            aria-label={removalFailed ? `Tentar remover novamente o DSR de ${user.username}` : `Remover DSR de ${user.username}`}
+            title={removalFailed ? 'Tentar remover novamente' : 'Remover DSR'}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -1297,7 +1334,7 @@ interface DPScheduleEditorProps {
 }
 
 export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth }: DPScheduleEditorProps) {
-  const { activeUsers, permissions, updateUser, user, isDefaultAdmin } = useAuth();
+  const { activeUsers, permissions, updateUser, user, isDefaultAdmin, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const {
     updateSchedule,
@@ -1443,6 +1480,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
+  // Ausência lançada pela escala: primeiro a pessoa, depois o pedido com a data já preenchida.
+  const [absencePicker, setAbsencePicker] = useState<{ date: string; unitId: string } | null>(null);
+  const [absenceLaunch, setAbsenceLaunch] = useState<{ date: string; userId: string } | null>(null);
+  const canLaunchAbsence = !isArchivedUnitSchedule && (isDefaultAdmin || permissions.dp?.requests?.review === true);
   const [publishingDayOffKey, setPublishingDayOffKey] = useState<string | null>(null);
   const [removingDayOffKey, setRemovingDayOffKey] = useState<string | null>(null);
   const [dayOffRemovalTarget, setDayOffRemovalTarget] = useState<{
@@ -1483,18 +1524,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         {
           method: 'POST',
           json: params,
-          fallbackError: 'Falha ao publicar a folga.',
+          fallbackError: 'Falha ao publicar o DSR.',
         },
       );
       toast({
-        title: result.alreadyPublished ? 'Folga já confirmada.' : 'Folga confirmada.',
+        title: result.alreadyPublished ? 'DSR já confirmado.' : 'DSR confirmado.',
         description: 'O Bizneo reconheceu o dia como folga.',
       });
       notifyDPScheduleShiftsChanged(params.scheduleId ?? schedule.id);
       return true;
     } catch (caught) {
       toast({
-        title: 'Não foi possível publicar a folga.',
+        title: 'Não foi possível publicar o DSR.',
         description: caught instanceof Error ? caught.message : 'Tente novamente.',
         variant: 'destructive',
       });
@@ -1520,18 +1561,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             unitId: shift.unitId,
             date: shift.date,
           },
-          fallbackError: 'Falha ao remover a folga.',
+          fallbackError: 'Falha ao remover o DSR.',
         },
       );
       toast({
-        title: result.alreadyRemoved ? 'Folga já removida.' : 'Folga removida.',
+        title: result.alreadyRemoved ? 'DSR já removido.' : 'DSR removido.',
         description: 'O Bizneo e o Coala One foram atualizados.',
       });
       notifyDPScheduleShiftsChanged(shift.scheduleId);
       setDayOffRemovalTarget(null);
     } catch (caught) {
       toast({
-        title: 'Não foi possível remover a folga.',
+        title: 'Não foi possível remover o DSR.',
         description: caught instanceof Error ? caught.message : 'Tente novamente.',
         variant: 'destructive',
       });
@@ -1669,13 +1710,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     activeUsers.filter(u => u.operacional === true),
     [activeUsers]
   );
-  const manualDayOffUsers = useMemo(() => {
-    if (!manualDayOffDialog?.unitId) return operationalUsers;
-    const linked = operationalUsers.filter((candidate) => (
-      userMatchesDPUnit(candidate, manualDayOffDialog.unitId, units, kiosks)
-    ));
+  const usersOfUnit = useCallback((unitId: string | undefined) => {
+    if (!unitId) return operationalUsers;
+    const linked = operationalUsers.filter((candidate) => userMatchesDPUnit(candidate, unitId, units, kiosks));
     return linked.length > 0 ? linked : operationalUsers;
-  }, [kiosks, manualDayOffDialog?.unitId, operationalUsers, units]);
+  }, [kiosks, operationalUsers, units]);
+  const manualDayOffUsers = useMemo(() => usersOfUnit(manualDayOffDialog?.unitId), [manualDayOffDialog?.unitId, usersOfUnit]);
+  const absencePickerUsers = useMemo(() => usersOfUnit(absencePicker?.unitId), [absencePicker?.unitId, usersOfUnit]);
 
   // User lookup map
   const userMap = useMemo(() => {
@@ -2149,7 +2190,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         (dayOffIndex[date]?.[unit.id] ?? []).forEach(({ userId, shift }) => {
           const userName = effectiveUserMap.get(userId)?.username ?? shift?.userName ?? 'Colaborador';
           if (workDayOffConflictKeys.has(`${userId}::${date}`)) {
-            alerts.push({ key: `day-off:${userId}`, label: `${userName}: turno e folga no mesmo dia`, tone: 'danger' });
+            alerts.push({ key: `day-off:${userId}`, label: `${userName}: turno e DSR no mesmo dia`, tone: 'danger' });
           }
           if (shift?.bizneoSyncStatus === 'failed' || shift?.bizneoSyncStatus === 'removal_failed') {
             alerts.push({ key: `bizneo-failed:${shift.id}`, label: `${userName}: falha no Bizneo`, tone: 'danger' });
@@ -2954,7 +2995,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             explicit={explicit}
                             shift={shift}
                             user={user}
-                            contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `Folga em ${sourceUnitName}` : undefined}
+                            contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
                             canPublish={canPublishDayOff && (explicit || !schedule.locked)}
                             canRemove={canPublishDayOff && explicit}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
@@ -2981,25 +3022,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           statusLabel={candidate.statusLabel}
                         />
                       ));
-                      const addShiftButton = canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => setAddDialog({ date, unitId: unit.id })}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 px-2 py-1.5 text-xs text-muted-foreground/60 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary/70"
-                        >
-                          <Plus className="h-3 w-3 shrink-0" />
-                          <span>Adicionar turno</span>
-                        </button>
-                      ) : null;
-                      const addDayOffButton = canPublishDayOff && !schedule.locked ? (
-                        <button
-                          type="button"
-                          onClick={() => setManualDayOffDialog({ date, unitId: unit.id })}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-300/70 px-2 py-1.5 text-xs text-sky-600/80 transition-colors hover:border-sky-500 hover:bg-sky-50 dark:border-sky-800 dark:hover:bg-sky-950/20"
-                        >
-                          <CalendarOff className="h-3 w-3 shrink-0" />
-                          <span>Adicionar folga</span>
-                        </button>
+                      const canAddDayOff = canPublishDayOff && !schedule.locked;
+                      const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
+                        <DayLaunchMenu
+                          canShift={canEdit}
+                          canDayOff={canAddDayOff}
+                          canAbsence={canLaunchAbsence}
+                          onShift={() => setAddDialog({ date, unitId: unit.id })}
+                          onDayOff={() => setManualDayOffDialog({ date, unitId: unit.id })}
+                          onAbsence={() => setAbsencePicker({ date, unitId: unit.id })}
+                        />
                       ) : null;
 
                       return (
@@ -3031,7 +3063,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               <div className="flex flex-col gap-1 p-2">
                                 {dayOffCards}
                                 {unassignedCards}
-                                {addDayOffButton}
                               </div>
                               <div className="flex flex-col gap-1 p-2">
                                 {coverageAlert ? (
@@ -3074,12 +3105,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               {workCards}
                               {dayOffCards}
                               {unassignedCards}
-                              {(addShiftButton || addDayOffButton) && (
-                                <div className={cn('grid gap-1', addShiftButton && addDayOffButton ? 'grid-cols-2' : 'grid-cols-1')}>
-                                  {addShiftButton}
-                                  {addDayOffButton}
-                                </div>
-                              )}
+                              {addShiftButton}
                             </div>
                           )}
                         </td>
@@ -3258,6 +3284,25 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       />
 
       <ManualDayOffDialog
+        mode="absence"
+        open={!!absencePicker}
+        onOpenChange={(open) => { if (!open) setAbsencePicker(null); }}
+        date={absencePicker?.date ?? ''}
+        unit={activeUnits.find((unit) => unit.id === absencePicker?.unitId)}
+        users={absencePickerUsers}
+        onConfirm={async (userId) => { setAbsenceLaunch({ date: absencePicker?.date ?? '', userId }); return true; }}
+      />
+      <AbsencePreviewPanel
+        open={!!absenceLaunch}
+        onOpenChange={(open) => { if (!open) setAbsenceLaunch(null); }}
+        firebaseUser={firebaseUser}
+        beneficiaryUid={absenceLaunch?.userId}
+        beneficiaryName={operationalUsers.find((person) => person.id === absenceLaunch?.userId)?.username}
+        initialDate={absenceLaunch?.date}
+        onDraftCreated={() => setAbsenceLaunch(null)}
+      />
+
+      <ManualDayOffDialog
         open={!!manualDayOffDialog}
         onOpenChange={(open) => { if (!open) setManualDayOffDialog(null); }}
         date={manualDayOffDialog?.date ?? ''}
@@ -3295,9 +3340,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover folga?</AlertDialogTitle>
+            <AlertDialogTitle>Remover DSR?</AlertDialogTitle>
             <AlertDialogDescription>
-              A folga de {dayOffRemovalTarget?.userName} em{' '}
+              O DSR de {dayOffRemovalTarget?.userName} em{' '}
               {dayOffRemovalTarget?.shift.date
                 ? format(parseISO(dayOffRemovalTarget.shift.date), "dd 'de' MMMM", { locale: ptBR })
                 : ''}{' '}
@@ -3314,7 +3359,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
               disabled={!!removingDayOffKey}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {removingDayOffKey ? 'Removendo...' : 'Remover folga'}
+              {removingDayOffKey ? 'Removendo...' : 'Remover DSR'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -13,12 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPersonName } from "@/lib/person-name";
-import { canAccessUserByUnit } from "@/lib/unit-access";
+import { canAccessUserByUnit, resolveUnitAccess } from "@/lib/unit-access";
 import {
   EMPLOYEE_DOCUMENT_CATEGORIES,
   EMPLOYEE_DOCUMENT_TYPE_CATALOG,
 } from "@/lib/hr/employee-document-options";
 import type { DocumentVisibilityConfig, NormalizedFieldVisibility } from "@/types/rh";
+import { PublicationPolicyControl } from "@/features/hr/documents/publication-policy-control";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -266,6 +267,8 @@ export default function DPDocumentsPage() {
   const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
   const canView = Boolean(permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && !ownProfileOnly));
   const canManage = permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true;
+  const canManageGlobalPolicy = canManage && Boolean(currentUser)
+    && resolveUnitAccess(currentUser ?? {}, { isDefaultAdmin }).allUnits;
   const showStorageNotice = process.env.NODE_ENV !== "production";
   const allUsers = useMemo(() => {
     if (!currentUser) return [];
@@ -414,8 +417,8 @@ export default function DPDocumentsPage() {
     <div className="min-w-0 space-y-2.5">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[#df2f78]">Departamento pessoal</p>
-          <h1 className="text-xl font-black tracking-tight text-[#1d1d26]">Documentos dos colaboradores</h1>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#df2f78]">01 · Documentos da empresa</p>
+          <h1 className="text-xl font-black tracking-tight text-[#1d1d26]">Pasta Colaboradores</h1>
           <p className="text-xs font-medium text-[#777784]">
             Acesse as pastas individuais e acompanhe pendências, validações e vencimentos.
           </p>
@@ -428,10 +431,13 @@ export default function DPDocumentsPage() {
             </div>
           ) : null}
           {canManage ? (
-            <Button size="sm" variant="outline" className="h-9 gap-2 rounded-lg text-xs" onClick={() => void openVisibilitySettings()}>
-              <Settings2 className="h-4 w-4" />
-              Configurar visibilidade
-            </Button>
+            <>
+              {canManageGlobalPolicy ? <PublicationPolicyControl firebaseUser={firebaseUser} /> : null}
+              <Button size="sm" variant="outline" className="h-9 gap-2 rounded-lg text-xs" onClick={() => void openVisibilitySettings()}>
+                <Settings2 className="h-4 w-4" />
+                Configurar visibilidade
+              </Button>
+            </>
           ) : null}
         </div>
       </div>

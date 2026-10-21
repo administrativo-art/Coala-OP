@@ -81,7 +81,7 @@ val LocalMotionEnabled = staticCompositionLocalOf { true }
 
 /** Code-native illustrations: no bitmap, network request or animation dependency. */
 @Composable fun ModuleIcon(kind: String, modifier: Modifier = Modifier) {
-    val duration = when (kind) { "purchase", "biometric" -> 2400; "receive" -> 3600; "schedule" -> 3000; "goals" -> 2400; else -> 2600 }
+    val duration = when (kind) { "purchase", "biometric" -> 2400; "receive" -> 3600; "schedule" -> 3000; "goals" -> 2400; "time" -> 60000; else -> 2600 }
     val phase = motionPhase("module $kind", duration)
     val receiptBob = if (kind == "purchase") motionPhase("receipt bob", 3200) else 0f
     val animated = LocalMotionEnabled.current
@@ -126,6 +126,20 @@ val LocalMotionEnabled = staticCompositionLocalOf { true }
                     val x = if (!animated || phase < .33f) 28f else 21f
                     val y = if (animated && phase >= .66f) 24f else 29f
                     drawCircle(Tokens.accent, 3f, Offset(x, y))
+                }
+                "time" -> {
+                    // Clock face; the minute hand turns once a minute when motion is on, otherwise it rests at ten past.
+                    drawCircle(Tokens.indigo, 16f, Offset(22f, 22f), style = stroke)
+                    val angle = (if (animated) phase else 1f / 6) * 2 * Math.PI.toFloat() - Math.PI.toFloat() / 2
+                    line(22f, 22f, 22f + 11f * kotlin.math.cos(angle), 22f + 11f * sin(angle))
+                    line(22f, 22f, 22f, 14f, Tokens.indigo)
+                    drawCircle(Tokens.accent, 2f, Offset(22f, 22f))
+                }
+                "requests" -> {
+                    drawRoundRect(Tokens.indigo, Offset(9f, 5f), Size(26f, 34f), androidx.compose.ui.geometry.CornerRadius(3f), style = stroke)
+                    line(15f, 14f, 29f, 14f, Tokens.indigo); line(15f, 20f, 25f, 20f, Tokens.indigo)
+                    val tick = if (animated) .6f + .4f * (1 - kotlin.math.cos(phase * 2 * Math.PI.toFloat())) / 2 else 1f
+                    line(17f, 30f, 17f + 3f * tick, 30f + 3f * tick); line(20f, 33f, 20f + 7f * tick, 33f - 7f * tick)
                 }
                 "signage" -> {
                     drawRoundRect(Tokens.indigo, Offset(4f, 7f), Size(36f, 25f), androidx.compose.ui.geometry.CornerRadius(3f), style = stroke)
