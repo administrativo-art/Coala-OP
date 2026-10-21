@@ -41,6 +41,7 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun upload(fields: Map<String, RequestBody>, documents: List<MultipartBody.Part>, expectedOwner: String?) = UploadResponse(Submission("simulation-submission", false, "pending_review", ReceiptAnalysis("Fornecedor de simulação", null, "2026-10-01", 5000, listOf(AnalysisItem("Leite integral", 10.0, "un", 500, 5000)), "high")))
     override suspend fun confirm(request: ConfirmPurchase) = PurchaseResponse(PurchaseResult("simulation-purchase", "confirmed", stockEntry = "done", stockItemCount = request.items.count { it.stock != null }))
     override suspend fun link(request: LinkWithdrawal) = PurchaseResponse(PurchaseResult(request.purchaseId, "linked", changeCents = 0))
+    override suspend fun cancelUpload(request: CancelUpload) = CancelUploadResponse(CancelledUpload("cancelled"))
     override suspend fun schedule(year: Int, month: Int): MonthSchedule {
         val first = LocalDate.of(year, month, 1)
         val colleagues = listOf("Bia" to null, "Caio" to "#FFADAD", "Lia" to "#9BF6FF", "Rafa" to "#FDFFB6", "Duda" to "#FBCFE8", "Edna" to null, "Joana" to "#BDB2FF", "Samila" to null)

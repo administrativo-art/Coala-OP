@@ -18,6 +18,8 @@ export const mobileInboxUploadMetadataSchema = z.object({
 }).strict();
 
 export type MobileInboxUploadMetadata = z.infer<typeof mobileInboxUploadMetadataSchema>;
+export const mobileInboxUploadCancelSchema = z.object({ submissionId: z.string().uuid("Identificador de envio inválido.") }).strict();
+export type MobileInboxUploadCancel = z.infer<typeof mobileInboxUploadCancelSchema>;
 export type MobilePurchasePaymentMethod = z.infer<typeof mobilePurchasePaymentMethodSchema>;
 
 export type MobilePurchaseAnalysis = {

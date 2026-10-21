@@ -276,12 +276,12 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 
 ### Filtro da lista de sangrias (Compra local)
 
-**Decidido (2026-10-20).** Só organização e grupo; os cartões já vêm separados por unidade, então não há filtro de unidade.
+**Decidido (2026-10-20, 0.3.14).** A Compra local abre por etapas.
 
-- Organização no cabeçalho escuro com `UnitPickerHeader`; grupos em `FilterChip`s numa faixa com rolagem horizontal, logo abaixo de "Sangrias aguardando nota".
-- Cada opção mostra quantas sangrias tem (`Quiosques · 5`), inclusive zero: aparecem todas as organizações e grupos das unidades acessíveis (0.3.13; no 0.3.12 só os com sangria pendente, o que escondia o filtro).
-- O filtro aparece sempre que há mais de uma organização ou grupo para escolher. A última escolha fica salva no aparelho por conta; escolha que deixou de existir abre em "Todas".
-- Enquanto uma vinculação está aberta, o filtro vai para o grupo da sangria e fica travado. Filtro sem resultado mostra "Ver todas".
+- **Etapa 1 — unidades:** um cartão por unidade com sangria aguardando nota, com o nome, "N sangrias aguardando nota", um círculo com o número e, quando houver, "N notas em revisão". Unidade sem sangria não aparece. Abaixo, "Outra compra" (Dinheiro do caixa / Recurso da empresa) e as notas guardadas que não pertencem a uma sangria da lista.
+- **Filtro (etapa 1):** só organização e grupo. Organização no cabeçalho escuro com `UnitPickerHeader`; grupos em `FilterChip`s com rolagem horizontal. **Sem números** nas opções (a contagem fica nos cartões). Aparecem todas as organizações e grupos acessíveis; o filtro só aparece com mais de uma opção. A última escolha fica salva no aparelho por conta.
+- **Etapa 2 — sangrias da unidade:** tocar no cartão abre as sangrias daquela unidade ("Unidades" ou voltar retornam). Uma nota já enviada para uma sangria fica **no próprio cartão** dela, destacado, com "Retomar revisão" e "Cancelar nota" (confirmação inline). Compras aguardando conciliação da unidade ficam abaixo.
+- **Cancelar nota:** também na revisão ("Cancelar esta nota"). Tira a nota do aparelho e do financeiro e libera a sangria.
 
 ### Folha de seleção (`PickerSheet`)
 

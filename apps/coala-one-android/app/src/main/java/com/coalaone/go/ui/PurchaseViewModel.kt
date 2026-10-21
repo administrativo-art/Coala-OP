@@ -28,13 +28,23 @@ data class PurchaseState(
     val linkFocusRequest: Int = 0,
     val organizationFilter: String = Rules.ALL_UNITS,
     val groupFilter: String = Rules.ALL_UNITS,
+    /** Unit whose withdrawals are open (second step); null on the unit cards. */
+    val unitView: String? = null,
+    /** Note kept on the phone → the withdrawal it was attached to, so the card can show it. */
+    val queueWithdrawals: Map<String, String> = emptyMap(),
 )
 @HiltViewModel class PurchaseViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val sync: QueueSync, private val scheduler: WorkScheduler) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(PurchaseState())
     val state = mutable.asStateFlow()
     init {
         refresh()
-        if (!mode.simulation) viewModelScope.launch { queue.observe(mode.identity().uid).collect { rows -> mutable.update { it.copy(queue = rows) } } }
+        if (!mode.simulation) viewModelScope.launch {
+            val uid = mode.identity().uid
+            queue.observe(uid).collect { rows ->
+                val links = rows.mapNotNull { row -> runCatching { queue.payload(uid, row.id).withdrawal?.sourceId }.getOrNull()?.let { row.id to it } }.toMap()
+                mutable.update { it.copy(queue = rows, queueWithdrawals = links) }
+            }
+        }
     }
     fun refresh() = run { mutable.update { it.copy(context = repository.api.purchaseContext(), withdrawals = repository.api.withdrawals()) } }
     fun select(source: String, withdrawal: Withdrawal? = null) {
@@ -103,14 +113,21 @@ data class PurchaseState(
             feedbackMutable.value = Feedback(notice = "Já existe uma vinculação em andamento. Retome ou cancele antes de escolher outra.")
             return
         }
-        // Narrow the list to the withdrawal's group so the card being linked is in view.
-        val (organization, group) = Rules.purchaseScope(mutable.value.context?.units.orEmpty(), withdrawal.unitId) ?: (Rules.ALL_UNITS to Rules.ALL_UNITS)
-        mutable.update { it.copy(pendingLink = PendingWithdrawalLink(purchase, withdrawal), linkFocusRequest = it.linkFocusRequest + 1, organizationFilter = organization, groupFilter = group) }
+        mutable.update { it.copy(pendingLink = PendingWithdrawalLink(purchase, withdrawal), linkFocusRequest = it.linkFocusRequest + 1, unitView = withdrawal.unitId) }
     }
     fun resumeLink() { if (mutable.value.pendingLink != null) mutable.update { it.copy(linkFocusRequest = it.linkFocusRequest + 1) } }
     fun cancelLink() { mutable.update { it.copy(pendingLink = null) } }
     fun filterOrganization(id: String) { mutable.update { it.copy(organizationFilter = id, groupFilter = Rules.ALL_UNITS) } }
     fun filterGroup(id: String) { mutable.update { it.copy(groupFilter = id) } }
+    fun openUnit(unitId: String) { mutable.update { it.copy(unitView = unitId, result = null) } }
+    fun closeUnit() { mutable.update { it.copy(unitView = null) } }
+    /** Gives up a note that was sent or kept but never confirmed: the server discards it, then the phone. */
+    fun discard(submissionId: String) = run("Nota cancelada. A sangria está livre para outra nota.") {
+        if (mode.simulation) repository.cancelUpload(submissionId) else sync.discard(mode.identity().uid, submissionId)
+        mutable.update { current ->
+            if (current.selected?.submissionId == submissionId) current.copy(selected = null, review = null, analysis = null) else current
+        }
+    }
     /** The choice saved on this phone, applied once the units are known; a stale one opens on everything. */
     fun restoreFilter(organizationId: String, groupId: String) {
         val units = mutable.value.context?.units ?: return
