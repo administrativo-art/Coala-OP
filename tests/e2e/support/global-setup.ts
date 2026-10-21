@@ -4,6 +4,10 @@ import { getFirestore } from "firebase-admin/firestore";
 
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
 import { shiftClosureDate, todayInClosureTimezone } from "../../../src/features/financial/cash-closures/date";
+import {
+  FINANCIAL_INBOX_RESOLUTION_STATE_ID,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
+} from "../../../src/features/financial/inbox/resolution-contract";
 
 const PROJECT_ID = "demo-coala-e2e";
 export const E2E_USER = {
@@ -21,6 +25,8 @@ export const E2E_FINANCIAL_INBOX_IDS = {
   expense: "expense-e2e-vivo-0001",
   automaticMessage: "inbox-e2e-automatic-0002",
   automaticExpense: "expense-e2e-automatic-0002",
+  noiseA: "inbox-e2e-noise-0003",
+  noiseB: "inbox-e2e-noise-0004",
 };
 export const E2E_FINANCIAL_INBOX_BARCODE = "23793493079001004992396000130003915620000113884";
 export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
@@ -733,7 +739,7 @@ export async function resetFinancialE2EFixtures() {
       resolvedAt: null,
       resolvedBy: null,
     },
-    resolutionContractVersion: 1,
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
@@ -801,17 +807,65 @@ export async function resetFinancialE2EFixtures() {
       resolvedAt: null,
       resolvedBy: null,
     },
-    resolutionContractVersion: 1,
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
     updatedAt: now,
+  });
+  const noiseFixture = {
+    workspaceId: "coala",
+    provider: "resend",
+    messageId: null,
+    status: "ignored",
+    from: "Boletim <news@example.test>",
+    fromAddress: "news@example.test",
+    senderDomain: "example.test",
+    to: ["financeiro@coala.test"],
+    originalRecipients: [],
+    receivedAt: "2026-09-11T12:00:00.000Z",
+    textPreview: "Newsletter sem cobrança.",
+    textContent: "Newsletter sem cobrança.",
+    classification: { documentType: "other", financeLikely: false, confidence: "high", supplierName: null,
+      competence: null, dueDate: null, amountCents: null, barcode: null, barcodeMasked: null, links: [] },
+    attachments: [],
+    rawStoragePath: null,
+    rawSha256: null,
+    archiveWarnings: [],
+    linkedExpenseId: null,
+    linkedProvisionId: null,
+    obligationId: null,
+    paymentRequestId: null,
+    existingBankPayment: null,
+    statementTransactionId: null,
+    bankState: "not_prepared",
+    resolution: { status: "discarded", kind: "non_financial", targetType: null, targetId: null,
+      installmentNumber: null, financialState: null, mode: "automatic", confidence: "high", reasons: [],
+      resolvedAt: now, resolvedBy: null },
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+    reviewedAt: now,
+    reviewedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.noiseA), {
+    ...noiseFixture, providerEmailId: "email-e2e-noise-a", providerEventId: "event-e2e-noise-a", subject: "Boletim sem cobrança A E2E",
+  });
+  financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.noiseB), {
+    ...noiseFixture, providerEmailId: "email-e2e-noise-b", providerEventId: "event-e2e-noise-b", subject: "Boletim sem cobrança B E2E",
   });
   financialBatch.set(financialDb.collection("financialInboxSettings").doc("coala"), {
     mode: "manual",
     policyVersion: 1,
     updatedAt: now,
     updatedBy: E2E_USER.uid,
+  });
+  financialBatch.set(financialDb.collection("financialSystemState").doc(FINANCIAL_INBOX_RESOLUTION_STATE_ID), {
+    version: FINANCIAL_INBOX_RESOLUTION_VERSION,
+    complete: true,
+    cursor: null,
+    lastRunAt: now,
+    updatedInLastRun: 0,
   });
   await financialBatch.commit();
 }

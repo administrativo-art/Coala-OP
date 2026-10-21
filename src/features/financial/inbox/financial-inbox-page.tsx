@@ -11,7 +11,7 @@ import { Segmented } from "@/components/patterns/segmented";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -40,6 +40,7 @@ import {
 
 import {
   financialInboxStageForStatus,
+  isFinancialInboxArchiveCandidate,
   isFinancialInboxBulkDiscardEligible,
 } from "./presentation";
 import { resolutionForDisplay } from "./resolution-contract";
@@ -141,7 +142,7 @@ const WORK_STAGE_OPTIONS: Array<{ value: FinancialInboxStage | "all"; label: str
   { value: "bank", label: "No banco" },
 ];
 
-type AuditFilter = "all" | "reminder" | "new_charge" | "scheduled" | "reconciled" | "off" | "archive";
+type AuditFilter = "all" | "reminder" | "new_charge" | "scheduled" | "reconciled" | "archive";
 
 const AUDIT_FILTER_OPTIONS: Array<{ value: AuditFilter; label: string }> = [
   { value: "all", label: "Todas" },
@@ -149,7 +150,6 @@ const AUDIT_FILTER_OPTIONS: Array<{ value: AuditFilter; label: string }> = [
   { value: "new_charge", label: "Novas cobranças" },
   { value: "scheduled", label: "Agendadas" },
   { value: "reconciled", label: "Conciliadas" },
-  { value: "off", label: "Descartadas" },
   { value: "archive", label: "Arquivadas" },
 ];
 
@@ -185,6 +185,7 @@ const EMPTY_SUMMARY: FinancialInboxSummary = {
 
 type Confirmation =
   | { kind: "discard"; ids: string[] }
+  | { kind: "archive"; ids: string[] }
   | { kind: "link"; message: FinancialInboxMessage; alternative?: FinancialInboxExpenseAlternative; resolutionOnly?: boolean }
   | { kind: "create"; message: FinancialInboxMessage }
   | { kind: "payment"; message: FinancialInboxMessage }
@@ -434,6 +435,8 @@ export function FinancialInboxPage() {
   const [searchTruncated, setSearchTruncated] = useState(false);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
   const [working, setWorking] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [paymentDateMode, setPaymentDateMode] = useState<"today" | "due" | "custom">("due");
@@ -479,8 +482,18 @@ export function FinancialInboxPage() {
     })), [selected, selectedGroup]);
   const selectedThreadCount = Math.max(selected?.thread?.messageCount ?? 0, selectedGroup?.messageCount ?? 0);
   const selectedForDiscard = useMemo(
-    () => messages.filter((message) => selectedIds.has(message.id) && isFinancialInboxBulkDiscardEligible(message)),
-    [messages, selectedIds],
+    () => messageGroups.map((group) => group.primary).filter((message) => selectedIds.has(message.id) && isFinancialInboxBulkDiscardEligible(message)),
+    [messageGroups, selectedIds],
+  );
+  const selectedForArchive = useMemo(
+    () => messageGroups.map((group) => group.primary).filter((message) => selectedIds.has(message.id) && isFinancialInboxArchiveCandidate(message)),
+    [messageGroups, selectedIds],
+  );
+  const selectableOnPage = useMemo(() => messageGroups.map((group) => group.primary).filter((message) =>
+    canDiscard && (view === "work" ? isFinancialInboxBulkDiscardEligible(message)
+      : view === "noise" || view === "discarded" || (view === "identified" && auditFilter !== "archive")
+        ? isFinancialInboxArchiveCandidate(message) : false)),
+    [auditFilter, canDiscard, messageGroups, view],
   );
   const selectedComparison = useMemo(() => selected ? comparisonRows(selected) : [], [selected]);
   const selectedResolution = useMemo(() => selected ? resolutionForDisplay(selected) : null, [selected]);
@@ -496,6 +509,8 @@ export function FinancialInboxPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setSearch(searchInput.trim());
+      setSelectedIds(new Set());
+      setConfirmation(null);
       setCursor(null);
       setCursorStack([]);
       setNextCursor(null);
@@ -526,18 +541,21 @@ export function FinancialInboxPage() {
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
+    const requestNumber = ++loadSequence.current;
     setLoading(true);
+    setLoadError(null);
     try {
       const query = new URLSearchParams({ limit: "25", view });
       if (view === "work" && stage !== "all") query.set("stage", stage);
       if (view === "identified") {
         if (auditFilter === "reminder" || auditFilter === "new_charge") query.set("kind", auditFilter);
         if (auditFilter === "scheduled" || auditFilter === "reconciled") query.set("financialState", auditFilter);
-        if (auditFilter === "off" || auditFilter === "archive") query.set("stage", auditFilter);
+        if (auditFilter === "archive") query.set("stage", auditFilter);
       }
       if (search) query.set("q", search);
       if (cursor) query.set("cursor", cursor);
       const payload = await api(`/api/financial/inbox?${query.toString()}`);
+      if (requestNumber !== loadSequence.current) return;
       const nextMessages = (payload.messages ?? []) as FinancialInboxMessage[];
       setMessages(nextMessages);
       setSummary((payload.summary ?? EMPTY_SUMMARY) as FinancialInboxSummary);
@@ -547,11 +565,14 @@ export function FinancialInboxPage() {
       setSelectedIds(new Set());
       setSelectedId((current) => nextMessages.some((message) => message.id === current) ? current : null);
     } catch (error) {
-      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar cobranças." });
+      if (requestNumber !== loadSequence.current) return;
+      setMessages([]);
+      setSelectedIds(new Set());
+      setLoadError(error instanceof Error ? error.message : "Falha ao carregar cobranças.");
     } finally {
-      setLoading(false);
+      if (requestNumber === loadSequence.current) setLoading(false);
     }
-  }, [api, auditFilter, cursor, firebaseUser, search, stage, toast, view]);
+  }, [api, auditFilter, cursor, firebaseUser, search, stage, view]);
 
   const loadAutomationSettings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -591,14 +612,22 @@ export function FinancialInboxPage() {
   }
 
   function changeStage(nextStage: FinancialInboxStage | "all") {
+    loadSequence.current += 1;
+    setLoading(true);
     setStage(nextStage);
+    setSelectedIds(new Set());
+    setConfirmation(null);
     setCursor(null);
     setCursorStack([]);
     setNextCursor(null);
   }
 
   function changeView(nextView: FinancialInboxView) {
+    loadSequence.current += 1;
+    setLoading(true);
     setView(nextView);
+    setSelectedIds(new Set());
+    setConfirmation(null);
     setStage("all");
     setAuditFilter("all");
     setCursor(null);
@@ -607,20 +636,28 @@ export function FinancialInboxPage() {
   }
 
   function changeAuditFilter(nextFilter: AuditFilter) {
+    loadSequence.current += 1;
+    setLoading(true);
     setAuditFilter(nextFilter);
+    setSelectedIds(new Set());
+    setConfirmation(null);
     setCursor(null);
     setCursorStack([]);
     setNextCursor(null);
   }
 
   function toggleSelected(message: FinancialInboxMessage, checked: boolean) {
-    if (!isFinancialInboxBulkDiscardEligible(message)) return;
+    if (!selectableOnPage.some((candidate) => candidate.id === message.id)) return;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (checked) next.add(message.id);
       else next.delete(message.id);
       return next;
     });
+  }
+
+  function selectVisible() {
+    setSelectedIds(new Set(selectableOnPage.map((message) => message.id)));
   }
 
   async function review(message: FinancialInboxMessage, nextStatus: "pending_review" | "ignored") {
@@ -650,6 +687,23 @@ export function FinancialInboxPage() {
       await load();
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao descartar mensagens." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function archiveMany(ids: string[]) {
+    setWorking("archive:many");
+    try {
+      const payload = await api("/api/financial/inbox/bulk-review", {
+        method: "POST",
+        body: JSON.stringify({ ids, status: "archived" }),
+      });
+      setConfirmation(null);
+      toast({ title: `${payload.archived ?? ids.length} ${ids.length === 1 ? "mensagem arquivada" : "mensagens arquivadas"}.`, description: "E-mails, anexos e vínculos foram preservados. Use Arquivadas para restaurar." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao arquivar mensagens." });
     } finally {
       setWorking(null);
     }
@@ -824,6 +878,10 @@ export function FinancialInboxPage() {
       void preparePayment(action.message);
       return;
     }
+    if (action.kind === "archive") {
+      void archiveMany(action.ids);
+      return;
+    }
     setConfirmation(null);
     if (action.kind === "discard") void discardMany(action.ids);
     if (action.kind === "link") void linkSuggestion(action.message, action.alternative, action.resolutionOnly === true);
@@ -838,8 +896,8 @@ export function FinancialInboxPage() {
     <PageContainer variant="default" className="space-y-5 pb-28">
       <PageHero
         kicker="Financeiro · Despesas"
-        title={view === "work" ? "Caixa de cobranças" : "Cobranças identificadas"}
-        subtitle={view === "work" ? "Analise, confirme e prepare somente o que ainda exige ação." : "Audite a origem, a identificação e a situação financeira de cada cobrança tratada."}
+        title={view === "work" ? "Caixa de cobranças" : view === "identified" ? "Cobranças identificadas" : "Ruídos"}
+        subtitle={view === "work" ? "Analise, confirme e prepare somente o que ainda exige ação." : view === "identified" ? "Acompanhe cobranças identificadas e arquive apenas as que já foram tratadas." : "Revise mensagens ignoradas automaticamente e descartes feitos por pessoas."}
         actions={<>
           {lastLoadedAt ? <span className="text-xs text-ds-on-dark-sub">Atualizada às {formatDateTime(lastLoadedAt).split(" ").at(-1)}</span> : null}
           <Button variant="on-dark-secondary" size="md" onClick={() => void load()} disabled={loading}><RefreshCw aria-hidden="true" className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Atualizar lista</Button>
@@ -855,12 +913,14 @@ export function FinancialInboxPage() {
         <div className="flex flex-wrap items-center gap-3">
           <Segmented
             aria-label="Visão das cobranças"
-            value={view}
+            value={view === "discarded" ? "noise" : view}
             onChange={changeView}
             options={[
               { value: "work", label: <span className="inline-flex items-center gap-1.5"><Inbox className="h-3.5 w-3.5" />Caixa de cobranças <span className="text-xs opacity-60">{workSummary.count}</span></span> },
               { value: "identified", label: <span className="inline-flex items-center gap-1.5"><History className="h-3.5 w-3.5" />Cobranças identificadas <span className="text-xs opacity-60">{identifiedSummary.count}</span></span> },
+              { value: "noise", label: <span className="inline-flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Ruídos</span> },
             ]}
+            className="max-w-full overflow-x-auto"
           />
           <ControlSearch value={searchInput} onChange={setSearchInput} placeholder="Buscar fornecedor, assunto, valor, conta ou telefone..." />
         </div>
@@ -871,18 +931,25 @@ export function FinancialInboxPage() {
             allCount={workSummary.count}
             chips={WORK_STAGE_OPTIONS.filter((option) => option.value !== "all").map((option) => ({ value: option.value, label: option.label, count: summary.stages[option.value as FinancialInboxStage].count }))}
           />
-        ) : (
+        ) : view === "identified" ? (
           <FilterChips
             value={auditFilter === "all" ? null : auditFilter}
             onChange={(value) => changeAuditFilter((value ?? "all") as AuditFilter)}
             chips={AUDIT_FILTER_OPTIONS.filter((option) => option.value !== "all").map((option) => ({ value: option.value, label: option.label }))}
+          />
+        ) : (
+          <FilterChips
+            includeAll={false}
+            value={view}
+            onChange={(value) => changeView(value === "discarded" ? "discarded" : "noise")}
+            chips={[{ value: "noise", label: "Ruídos automáticos" }, { value: "discarded", label: "Descartados manualmente" }]}
           />
         )}
       </PageHero>
 
       <div className="flex items-start gap-3 rounded-xl border border-ds-ok bg-ds-ok-bg p-4 text-sm text-ds-ok">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-        <div><strong>{view === "work" ? "Entrada protegida." : "Trilha preservada."}</strong> {view === "work" ? "Receber ou analisar não cria despesa, não autoriza pagamento e não envia nada ao banco." : "Uma identificação preserva os dados financeiros e pode enriquecer somente os identificadores documentais, sem executar pagamento."} O e-mail original permanece arquivado.</div>
+        <div><strong>{view === "work" ? "Entrada protegida." : "Trilha preservada."}</strong> {view === "work" ? "Receber ou analisar não cria despesa, não autoriza pagamento e não envia nada ao banco." : view === "identified" ? "Uma identificação preserva os dados financeiros e pode enriquecer somente os identificadores documentais, sem executar pagamento." : "Ruído automático e descarte manual são decisões diferentes, registradas separadamente."} Arquivar retira da lista operacional, mas não exclui o e-mail nem os anexos; é possível restaurar.</div>
       </div>
 
       {view === "work" ? (
@@ -915,21 +982,31 @@ export function FinancialInboxPage() {
           <div className="rounded-t-[18px] border-b border-ds-border bg-ds-warn-bg px-4 py-2 text-xs font-semibold text-ds-warn">A busca verificou as 500 mensagens mais recentes deste filtro. Refine os termos para localizar registros mais antigos.</div>
         ) : null}
 
-        {loading ? (
+        {loadError ? (
+          <div role="alert" className="flex min-h-56 flex-col items-center justify-center gap-3 p-8 text-center"><AlertTriangle className="h-8 w-8 text-ds-danger" /><p className="font-semibold">Não foi possível carregar esta lista</p><p className="max-w-md text-sm text-muted-foreground">{loadError}</p><Button variant="ds-secondary" onClick={() => void load()}>Tentar novamente</Button></div>
+        ) : loading ? (
           <div className="space-y-3 p-4">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-20 w-full rounded-xl" />)}</div>
         ) : messages.length === 0 ? (
-          <div className="flex min-h-72 flex-col items-center justify-center gap-2 p-8 text-center">{view === "work" ? <Inbox className="h-9 w-9 text-muted-foreground" /> : <History className="h-9 w-9 text-muted-foreground" />}<p className="font-semibold">Nenhuma cobrança encontrada</p><p className="max-w-md text-sm text-muted-foreground">Ajuste o filtro ou a busca. Receber mensagens continua sendo uma operação sem efeito financeiro.</p></div>
+          <div className="flex min-h-72 flex-col items-center justify-center gap-2 p-8 text-center">{view === "work" ? <Inbox className="h-9 w-9 text-muted-foreground" /> : <History className="h-9 w-9 text-muted-foreground" />}<p className="font-semibold">{view === "noise" ? "Nenhum ruído automático encontrado" : view === "discarded" ? "Nenhum descarte manual encontrado" : "Nenhuma cobrança encontrada"}</p><p className="max-w-md text-sm text-muted-foreground">{search ? "Ajuste a busca ou o filtro para encontrar outras mensagens." : "Esta lista está vazia no momento."}</p></div>
         ) : (
           <>
+            {canDiscard && (view !== "identified" || auditFilter !== "archive") && selectableOnPage.length > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider px-4 py-2.5 text-sm">
+                <span className="text-ds-ink-muted">{selectableOnPage.length} {selectableOnPage.length === 1 ? "item elegível nesta página" : "itens elegíveis nesta página"}</span>
+                <Button variant="ds-link" size="sm" onClick={selectableOnPage.every((message) => selectedIds.has(message.id)) ? () => setSelectedIds(new Set()) : selectVisible}>
+                  {selectableOnPage.every((message) => selectedIds.has(message.id)) ? "Limpar seleção" : "Selecionar todos desta página"}
+                </Button>
+              </div>
+            ) : null}
             <div>
               {messageGroups.map((group) => {
                 const message = group.primary;
-                const discardEligible = canDiscard && isFinancialInboxBulkDiscardEligible(message);
+                const selectable = selectableOnPage.some((candidate) => candidate.id === message.id);
                 const checked = selectedIds.has(message.id);
                 const groupSelected = selectedGroup?.id === group.id && selected !== null;
                 return (
                   <LiftRow key={group.id} interactive={false} selected={groupSelected} className="flex items-start gap-3">
-                    {view === "work" ? <Checkbox checked={checked} disabled={!discardEligible} aria-label={`Selecionar ${message.subject} para descarte`} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" /> : null}
+                    {canDiscard && (view !== "identified" || auditFilter !== "archive") ? <Checkbox checked={checked} disabled={!selectable} aria-label={`Selecionar ${message.subject} para ${view === "work" ? "descarte" : "arquivamento"}`} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" /> : null}
                     <button
                       type="button"
                       aria-label={`Abrir cobrança ${message.subject}`}
@@ -954,8 +1031,8 @@ export function FinancialInboxPage() {
               })}
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-ds-divider p-3">
-              <Button variant="ds-secondary" size="xs" disabled={cursorStack.length === 0} onClick={() => { const previous = cursorStack.at(-1) || null; setCursorStack((current) => current.slice(0, -1)); setCursor(previous); }}><ArrowLeft className="mr-2 h-4 w-4" />Anterior</Button>
-              <Button variant="ds-secondary" size="xs" disabled={!nextCursor} onClick={() => { if (!nextCursor) return; setCursorStack((current) => [...current, cursor ?? ""]); setCursor(nextCursor); }}>Próxima<ArrowRight className="ml-2 h-4 w-4" /></Button>
+              <Button variant="ds-secondary" size="xs" disabled={cursorStack.length === 0} onClick={() => { const previous = cursorStack.at(-1) || null; loadSequence.current += 1; setLoading(true); setSelectedIds(new Set()); setCursorStack((current) => current.slice(0, -1)); setCursor(previous); }}><ArrowLeft className="mr-2 h-4 w-4" />Anterior</Button>
+              <Button variant="ds-secondary" size="xs" disabled={!nextCursor} onClick={() => { if (!nextCursor) return; loadSequence.current += 1; setLoading(true); setSelectedIds(new Set()); setCursorStack((current) => [...current, cursor ?? ""]); setCursor(nextCursor); }}>Próxima<ArrowRight className="ml-2 h-4 w-4" /></Button>
             </div>
           </>
         )}
@@ -1010,8 +1087,8 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "bank" ? <><p className="font-bold">Acompanhar a situação no banco</p><p className="text-sm text-muted-foreground">A conciliação só ocorre depois da liquidação encontrada no extrato.</p></> : null}
                         {selected.status === "identified" ? <><p className="font-bold">Cobrança já registrada no financeiro</p><p className="text-sm text-muted-foreground">O e-mail foi preservado como evidência; nenhuma despesa ou solicitação de pagamento foi criada.</p><div className="mt-3 flex gap-2 rounded-xl bg-ds-ok-bg p-3 text-sm text-ds-ok"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Nome, valor e pagamento foram preservados; identificadores confirmados do documento foram agregados à obrigação.</span></div></> : null}
                         {selected.status !== "identified" && financialInboxStageForStatus(selected.status) === "done" ? <><p className="font-bold">Cobrança conciliada</p><p className="text-sm text-muted-foreground">O vínculo e a liquidação foram preservados para auditoria.</p></> : null}
-                        {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">Mensagem descartada</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido.</p></> : null}
-                        {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada pela política de retenção</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; a trilha e os vínculos continuam preservados.</p></> : null}
+                        {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">{selected.resolution?.mode === "automatic" ? "Ruído ignorado automaticamente" : "Mensagem descartada manualmente"}</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido. O e-mail pode ser arquivado ou reaberto.</p></> : null}
+                        {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; e-mail, anexos, trilha e vínculos continuam preservados. É possível restaurar.</p></> : null}
                       </div>
                       <div className="shrink-0">
                         {view === "work" && financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Analisar cobrança</Button> : null}
@@ -1019,7 +1096,7 @@ export function FinancialInboxPage() {
                         {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Vincular cobrança à previsão</Button> : null}
                         {view === "work" && financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <Button onClick={() => openPaymentPreparation(selected)}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button> : null}
                         {view === "work" && financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />Abrir no banco</Link></Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <Button variant="outline" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button> : null}
+                        {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <Button variant="ds-secondary" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir mensagem</Button> : null}
                         {financialInboxStageForStatus(selected.status) === "archive" && canDiscard ? <Button variant="outline" onClick={() => void restoreArchived(selected)} disabled={working === `restore:${selected.id}`}>{working === `restore:${selected.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Restaurar</Button> : null}
                       </div>
                     </div>
@@ -1071,15 +1148,18 @@ export function FinancialInboxPage() {
       ) : null}
 
       <BulkBar
-        count={selectedForDiscard.length}
-        summary={`${selectedForDiscard.length} ${selectedForDiscard.length === 1 ? "selecionada" : "selecionadas"} para descarte`}
-        actions={[{ label: "Descartar", isDanger: true, onClick: () => setConfirmation({ kind: "discard", ids: selectedForDiscard.map((message) => message.id) }) }]}
+        count={loading || loadError || working ? 0 : view === "work" ? selectedForDiscard.length : selectedForArchive.length}
+        summary={`${view === "work" ? selectedForDiscard.length : selectedForArchive.length} ${(view === "work" ? selectedForDiscard.length : selectedForArchive.length) === 1 ? "selecionada" : "selecionadas"} para ${view === "work" ? "descarte" : "arquivamento"}`}
+        actions={view === "work"
+          ? [{ label: "Descartar mensagens", isDanger: true, onClick: () => { if (selectedForDiscard.length) setConfirmation({ kind: "discard", ids: selectedForDiscard.map((message) => message.id) }); } }]
+          : [{ label: "Arquivar mensagens", onClick: () => { if (selectedForArchive.length) setConfirmation({ kind: "archive", ids: selectedForArchive.map((message) => message.id) }); } }]}
         onClear={() => setSelectedIds(new Set())}
       />
 
       <Dialog open={confirmation !== null} onOpenChange={(open) => { if (!open && !working) setConfirmation(null); }}>
         <DialogContent className="rounded-ds-modal sm:max-w-lg">
           {confirmation?.kind === "discard" ? <><DialogHeader><DialogTitle>Descartar {confirmation.ids.length === 1 ? "esta mensagem" : `${confirmation.ids.length} mensagens`}?</DialogTitle><DialogDescription>O descarte será auditado e não excluirá o e-mail original. Nenhuma despesa ou pagamento será criado. Mensagens já vinculadas ou em processamento são bloqueadas pelo servidor.</DialogDescription></DialogHeader><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="danger" size="md" onClick={confirmAction} disabled={working === "discard:many"}><Trash2 className="mr-2 h-4 w-4" />Confirmar descarte</Button></DialogFooter></> : null}
+          {confirmation?.kind === "archive" ? <><DialogHeader><DialogTitle>Arquivar {confirmation.ids.length === 1 ? "esta mensagem" : `${confirmation.ids.length} mensagens`}?</DialogTitle><DialogDescription>Arquivar retira da lista operacional, mas não exclui e-mails, anexos ou vínculos. Você pode restaurar em Arquivadas. O servidor verificará se todas as cobranças estão concluídas; se alguma estiver em andamento, o lote inteiro será recusado.</DialogDescription></DialogHeader><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="primary-modal" size="md" onClick={confirmAction} disabled={working === "archive:many"}>{working === "archive:many" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Arquivar mensagens</Button></DialogFooter></> : null}
           {confirmation?.kind === "link" ? <><DialogHeader><DialogTitle>{confirmation.resolutionOnly ? "Confirmar identificação?" : confirmation.message.provisionSuggestion?.status === "suggested" ? "Vincular esta cobrança à previsão?" : "Confirmar vínculo?"}</DialogTitle><DialogDescription>{confirmation.resolutionOnly ? "A mensagem será registrada como lembrete de uma despesa existente. Nome, valor e pagamento serão preservados; identificadores confirmados do documento poderão ser agregados." : confirmation.message.provisionSuggestion?.status === "suggested" ? <>A cobrança será vinculada à previsão “{confirmation.message.provisionSuggestion.description || "Previsão encontrada"}”. O nome e a classificação oficial serão mantidos, a obrigação não será duplicada e nenhum pagamento será autorizado ou executado.</> : <>Esta ação registra a relação entre a cobrança e {confirmation.alternative ? `“${confirmation.alternative.description}”` : "o lançamento sugerido"}. Ela não autoriza nem executa pagamento.</>}</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="text-xs font-medium text-muted-foreground">Cobrança recebida</p><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{confirmation.message.provisionSuggestion?.status === "suggested" && !confirmation.resolutionOnly ? <><p className="mt-3 border-t pt-3 text-xs font-medium text-muted-foreground">Previsão vinculada</p><p className="font-semibold">{confirmation.message.provisionSuggestion.description || "Previsão encontrada"}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.provisionSuggestion.provisionedAmountCents)}</p></> : null}</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Revisar novamente</Button><Button variant="primary-modal" size="md" onClick={confirmAction}>{confirmation.resolutionOnly ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Link2 className="mr-2 h-4 w-4" />}{confirmation.resolutionOnly ? "Registrar como já existente" : confirmation.message.provisionSuggestion?.status === "suggested" ? "Vincular e atualizar informações" : "Registrar vínculo"}</Button></DialogFooter></> : null}
           {confirmation?.kind === "create" ? <><DialogHeader><DialogTitle>Criar uma nova despesa?</DialogTitle><DialogDescription>Use esta opção quando a cobrança realmente representar uma nova obrigação. As correspondências encontradas continuarão disponíveis para evitar duplicidade.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{(confirmation.message.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? <p className="mt-2 font-medium text-ds-warn">Há lançamentos semelhantes. Confirme que esta é uma obrigação diferente.</p> : null}</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="primary-modal" size="md" asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(confirmation.message.id)}`}>Continuar e criar</Link></Button></DialogFooter></> : null}
           {confirmation?.kind === "payment" ? <><DialogHeader><DialogTitle>Preparar solicitação de pagamento</DialogTitle><DialogDescription><strong>Preparar não autoriza, agenda nem executa pagamento.</strong> A solicitação seguirá para a fila de autorizações financeiras.</DialogDescription></DialogHeader><div className="space-y-4"><div className="rounded-xl border bg-muted/30 p-3"><p className="text-sm font-semibold">{confirmation.message.subject}</p><p className="mt-1 font-mono text-lg font-bold">{formatAmount(confirmation.message.classification.amountCents)}</p></div>{!confirmation.message.classification.barcode ? <div><label htmlFor="payment-barcode" className="text-sm font-medium">Código de barras</label><Input id="payment-barcode" className="mt-1 font-mono" value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} placeholder="Informe o código completo" /></div> : <p className="rounded-xl bg-ds-ok-bg p-3 text-sm text-ds-ok"><CheckCircle2 className="mr-2 inline h-4 w-4" />Código de barras extraído do documento.</p>}<div><label htmlFor="payment-beneficiary-document" className="text-sm font-medium">CNPJ do favorecido</label><Input id="payment-beneficiary-document" className="mt-1 font-mono" value={beneficiaryDocument} onChange={(event) => setBeneficiaryDocument(event.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" /><p className="mt-1 text-xs text-muted-foreground">Confirme o CNPJ que identifica o emissor no documento original.</p></div><fieldset><legend className="text-sm font-medium">Data pretendida</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{([{ value: "due", label: `Vencimento (${formatDate(confirmation.message.classification.dueDate)})` }, { value: "today", label: "Hoje" }, { value: "custom", label: "Outra data" }] as const).map((option) => <button key={option.value} type="button" onClick={() => setPaymentDateMode(option.value)} className={cn("rounded-xl border p-3 text-left text-xs font-semibold", paymentDateMode === option.value ? "border-ds-info bg-ds-info-bg text-ds-info" : "hover:bg-muted")}>{option.label}</button>)}</div></fieldset>{paymentDateMode === "custom" ? <div><label htmlFor="custom-payment-date" className="text-sm font-medium">Data</label><Input id="custom-payment-date" type="date" value={customPaymentDate} max={confirmation.message.classification.dueDate ?? undefined} onChange={(event) => setCustomPaymentDate(event.target.value)} className="mt-1" /></div> : null}<div className="flex gap-2 rounded-xl border border-ds-warn bg-ds-warn-bg p-3 text-xs text-ds-warn"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>A autorização no sistema e a aprovação no Banco Inter continuam sendo etapas separadas.</span></div></div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)} disabled={working === `payment:${confirmation.message.id}`}>Cancelar</Button><Button variant="primary-modal" size="md" onClick={confirmAction} disabled={working === `payment:${confirmation.message.id}`}>{working === `payment:${confirmation.message.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}Enviar para autorização</Button></DialogFooter></> : null}

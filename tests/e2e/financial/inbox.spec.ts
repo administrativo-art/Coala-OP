@@ -60,3 +60,34 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   await expect(page.getByText("Identificação automática em", { exact: false })).toBeVisible();
   await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
 });
+
+test("separa ruído automático de descarte manual e arquiva só a página visível com restauração", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("E-mail").fill(E2E_USER.email);
+  await page.getByLabel("Senha").fill(E2E_USER.password);
+  await page.getByRole("button", { name: "Entrar no sistema" }).click();
+  await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeHidden();
+
+  await page.goto("/dashboard/financial/expenses/inbox");
+  await page.getByRole("radio", { name: "Ruídos" }).click();
+  await expect(page.getByRole("heading", { name: "Ruídos" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança B E2E/ })).toBeVisible();
+  await page.getByRole("button", { name: "Selecionar todos desta página" }).click();
+  await expect(page.getByRole("region", { name: "Ações em massa" })).toContainText("2 selecionadas para arquivamento");
+  await page.getByRole("region", { name: "Ações em massa" }).getByRole("button", { name: "Arquivar mensagens" }).click();
+  await expect(page.getByRole("heading", { name: "Arquivar 2 mensagens?" })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Arquivar mensagens" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByText("2 mensagens arquivadas.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeHidden();
+
+  await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
+  await page.getByRole("button", { name: "Arquivadas" }).click();
+  await page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ }).click();
+  await page.getByRole("button", { name: "Restaurar" }).click();
+  await page.getByRole("radio", { name: "Ruídos" }).click();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeVisible();
+  await page.getByRole("button", { name: "Descartados manualmente" }).click();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeHidden();
+});

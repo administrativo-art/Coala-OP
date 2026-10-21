@@ -5,9 +5,16 @@ import type {
   FinancialInboxAutomationMode,
   FinancialInboxAutomationSettings,
 } from "./types";
+import { validatedTrustedInboxSuppliers } from "./triage-policy";
 
 export const FINANCIAL_INBOX_AUTOMATION_POLICY_VERSION = 1;
 const COLLECTION = "financialInboxSettings";
+
+export async function getTrustedInboxSuppliers(workspaceId: string) {
+  const snapshot = await financialDbAdmin.collection(COLLECTION).doc(workspaceId).get();
+  if (!snapshot.exists || snapshot.get("trustedSuppliersPolicyVersion") !== 1) return [];
+  return validatedTrustedInboxSuppliers(snapshot.get("trustedSuppliers"));
+}
 
 export function defaultFinancialInboxAutomationSettings(): FinancialInboxAutomationSettings {
   return {

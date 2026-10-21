@@ -37,9 +37,12 @@ export async function revalidatePaidPaymentBeneficiary(request: BankPaymentReque
   });
 }
 
-export async function findPaymentRequestBySource(sourceType: string, sourceId: string) {
+export async function findPaymentRequestBySource(sourceType: string, sourceId: string, workspaceId: string) {
   const snapshot = await financialDbAdmin.collection(COLLECTION)
-    .where("sourceType", "==", sourceType).where("sourceId", "==", sourceId).limit(1).get();
+    .where("workspaceId", "==", workspaceId)
+    .where("sourceType", "==", sourceType)
+    .where("sourceId", "==", sourceId)
+    .limit(1).get();
   return snapshot.empty ? null : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as BankPaymentRequest);
 }
 
