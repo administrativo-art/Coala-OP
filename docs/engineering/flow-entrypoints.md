@@ -190,7 +190,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx).
 
-Arquivos locais percorridos: 32.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
