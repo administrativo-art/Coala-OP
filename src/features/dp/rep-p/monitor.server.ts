@@ -95,7 +95,7 @@ export async function runRepPDailyMonitor(params: {
   // Antes de contar, tenta emitir os pendentes; falha da reemissão não impede a contagem.
   let receiptRetry: Awaited<ReturnType<typeof retryPendingRepPReceipts>> | { error: string } | null = null;
   try {
-    receiptRetry = await retryPendingRepPReceipts({ workspaceId }, { repDb: repDatabase, ...params.repDependencies });
+    receiptRetry = await retryPendingRepPReceipts({ workspaceId }, { repDb: repDatabase, now: () => now, ...params.repDependencies });
   } catch (cause) {
     receiptRetry = { error: cause instanceof AppError ? cause.code : 'REP_P_RECEIPT_RETRY_FAILED' };
   }

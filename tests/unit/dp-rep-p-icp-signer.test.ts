@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
 import { PDFDocument } from 'pdf-lib';
 
 import { generateRepPAfd, signRepPAfd } from '../../src/features/dp/rep-p/afd';
 import { hashRepPType7 } from '../../src/features/dp/rep-p/core';
+import { decodeOid, der, parseDer } from '../../src/features/dp/rep-p/der';
 import {
-  buildRepPDetachedCms, createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf,
+  buildRepPDetachedCms, createRepPIcpSigners, REP_P_CADES_SIGNATURE_POLICY, inspectRepPIcpCredential, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf,
 } from '../../src/features/dp/rep-p/icp-signer';
 import { REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt, type RepPReceiptSnapshot } from '../../src/features/dp/rep-p/receipt';
 import { createTestIcpCredential } from '../helpers/rep-p-test-certificate';
@@ -56,6 +60,30 @@ describe('Assinador ICP-Brasil A1 do REP-P', () => {
     assert.equal(verifyRepPDetachedCms(signed.signature, pkg.bytes).valid, true);
   });
 
+  it('declares the ICP-Brasil AD-RB policy in the AFD CAdES, pinned to the official policy file', async () => {
+    const policyFile = readFileSync(new URL('../../docs/rep-p/referencias/icp-brasil/PA_AD_RB_v2_4.der', import.meta.url));
+    assert.equal(createHash('sha256').update(policyFile).digest('hex'), REP_P_CADES_SIGNATURE_POLICY.sha256);
+    assert.ok(policyFile.includes(der.oid(REP_P_CADES_SIGNATURE_POLICY.oid)));
+    const identity = loadRepPIcpIdentity(credential.pem, developerCnpj, now);
+    const signedAttributes = (cms: Buffer) => {
+      const signedData = parseDer(cms).children[1].children[0];
+      const signerInfo = signedData.children[signedData.children.length - 1].children[0];
+      return new Map(signerInfo.children[3].children.map((item) => [decodeOid(item.children[0]), item.children[1].children[0]]));
+    };
+    const signers = createRepPIcpSigners(identity, () => now);
+    const cades = signedAttributes((await signers.cades.signDetached(Buffer.from('afd'))).bytes);
+    const policy = cades.get('1.2.840.113549.1.9.16.2.15')!;
+    assert.equal(decodeOid(policy.children[0]), REP_P_CADES_SIGNATURE_POLICY.oid);
+    assert.equal(policy.children[1].children[1].content.toString('hex'), REP_P_CADES_SIGNATURE_POLICY.sha256);
+    assert.equal(policy.children[2].children[0].children[1].content.toString('ascii'), REP_P_CADES_SIGNATURE_POLICY.uri);
+    assert.ok(cades.has('1.2.840.113549.1.9.16.2.47') && cades.has('1.2.840.113549.1.9.5'));
+    // PAdES segue sem política nem signingTime até a validação no verificador do ITI decidir o formato.
+    const padesPdf = (await signers.pades.signPdf(await renderRepPReceiptPdf(snapshot))).bytes.toString('latin1');
+    const contents = Buffer.from(/\/Contents <([0-9A-F]+)>/.exec(padesPdf)![1], 'hex');
+    const pades = signedAttributes(parseDer(contents).raw);
+    assert.equal(pades.has('1.2.840.113549.1.9.16.2.15') || pades.has('1.2.840.113549.1.9.5'), false);
+  });
+
   it('signs the receipt incrementally as PAdES, keeping original bytes and a loadable PDF', async () => {
     const identity = loadRepPIcpIdentity(credential.pem, developerCnpj, now);
     const unsigned = await renderRepPReceiptPdf(snapshot);
@@ -75,6 +103,16 @@ describe('Assinador ICP-Brasil A1 do REP-P', () => {
     const signers = createRepPIcpSigners(identity, () => new Date('2031-01-01T00:00:00Z'));
     await assert.rejects(signers.pades.signPdf(await renderRepPReceiptPdf(snapshot)), { code: 'REP_P_ICP_CERTIFICATE_EXPIRED' });
     await assert.rejects(signers.cades.signDetached(Buffer.from('x')), { code: 'REP_P_ICP_CERTIFICATE_EXPIRED' });
+  });
+
+  it('records the instant from an asynchronous official clock and waits when it refuses', async () => {
+    const identity = loadRepPIcpIdentity(credential.pem, developerCnpj, now);
+    const official = new Date('2026-10-18T12:34:56Z');
+    const signed = await createRepPIcpSigners(identity, async () => official).pades.signPdf(await renderRepPReceiptPdf(snapshot));
+    assert.match(signed.bytes.toString('latin1'), /\/M \(D:20261018123456Z\)/);
+    const refusing = createRepPIcpSigners(identity, async () => { throw Object.assign(new Error('hora'), { code: 'REP_P_TIME_UNAVAILABLE' }); });
+    await assert.rejects(refusing.pades.signPdf(await renderRepPReceiptPdf(snapshot)), { code: 'REP_P_TIME_UNAVAILABLE' });
+    await assert.rejects(refusing.cades.signDetached(Buffer.from('x')), { code: 'REP_P_TIME_UNAVAILABLE' });
   });
 
   it('reports validity for monitoring, warning 30 days before expiry, without throwing', () => {

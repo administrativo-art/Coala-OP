@@ -27,7 +27,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
-| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Meu ponto sem link de menu; NTP público preparado localmente, ainda sem sonda publicada; validação oficial, gates fiscais e Coala Go pendentes |
+| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Registro de ponto na barra lateral (Gestão do colaborador); NTP público preparado localmente, ainda sem sonda publicada; validação oficial, gates fiscais e Coala Go pendentes |
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |

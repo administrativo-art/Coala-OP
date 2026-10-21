@@ -83,6 +83,44 @@ O motor de ponto produz quantidades e natureza dos eventos; contador calcula sua
 
 Separar alerta operacional e apuração remuneratória. Respeitar limites aplicáveis por marcação e por dia, sem arredondar originais. Tempo à disposição e atividades particulares exigem regra validada; não são inferidos apenas da presença.
 
+### 3.6.1. Modalidades de intervalo e avisos na batida (proposta de 19/10/2026, não implementada)
+
+Decisão do programador sobre o cadastro do turno; implementação depende das decisões abertas abaixo e de revisão do Doc Brown, porque turno alimenta escala e PTRP.
+
+| Grupo | Modalidade | Regra | Hoje no cadastro |
+| --- | --- | --- | --- |
+| — | Sem intervalo | — | `none` |
+| Fixo | Fixo único | Um horário definido (início e fim) | `fixed` ("Único pré-definido") |
+| Fixo | Fixo intercalado | Vários horários definidos | novo |
+| Flexível | Livre | Duração total em uma pausa, a qualquer momento do turno | `flexible` |
+| Flexível | Intercalado livre | Duração total em 2+ pausas; quantidade definida ou em aberto | novo |
+| Flexível | Janela livre | Uma pausa dentro de um período definido | `staggered` ("Intercalado") |
+| Flexível | Janela intercalada livre | Duração total dentro do período, em várias pausas (quantidade definida ou em aberto) | novo |
+
+Turnos existentes caem no tipo equivalente sem migração; campos novos: lista de horários (fixo intercalado), quantidade de pausas (número ou em aberto) e tolerância para mais/para menos. Conferir se o export Bizneo aceita mais de dois blocos para o fixo intercalado.
+
+**Avisos na faixa de registro e no painel do dia** (calculados na tela com a hora oficial e o turno escalado do dia; sem leitura recorrente; nunca bloqueiam a batida — art. 74):
+
+- **Fixo:** proximidade do início e do fim de cada horário; durante a pausa, "volte às HH:MM"; após o fim sem retorno, alerta.
+- **Livre e intercalado livre:** limite para iniciar = fim do turno − tempo de intervalo que ainda falta. Ex.: turno até 14:00 e 15 min → iniciar até 13:45.
+- **Janela livre e janela intercalada:** antes da janela, quando ela abre; dentro, enquanto o intervalo não começou, o **limite para iniciar = fim da janela − tempo de intervalo que ainda falta** (janela até 14:00 e 15 min → até 13:45). A duração vem da jornada/turno de cada pessoa, nunca de valor fixo.
+- **Intercalados:** tempo usado × total, pausas feitas × previstas e limite recalculado com o que falta.
+- Níveis: informativo (azul) até 15 min antes; atenção (mostarda) a 10 min do limite ou 2 min do fim da pausa; problema (rosado) quando passa do limite sem intervalo, excede total + tolerância ou fica abaixo do mínimo.
+- Batidas esperadas = 2 + 2 × pausas; estado (trabalhando/em pausa) pela ordem das batidas do dia.
+
+**Notas explicativas do cadastro** (substituem o texto atual do tooltip "Tipos de intervalo" em `dp-settings-shifts.tsx`, junto com o guia `docs/engineering/flows/dp-configuration.md`):
+
+- **Sem intervalo:** o turno não prevê pausa.
+- **Fixo único:** um horário definido de início e fim (ex.: 13:00–13:15). A batida avisa a proximidade do início e do fim.
+- **Fixo intercalado:** vários horários definidos (ex.: 11:00–11:10 e 15:00–15:10). Cada pausa tem seu aviso.
+- **Livre:** só a duração; a pessoa escolhe quando. A batida mostra até que horas o intervalo precisa começar para caber antes do fim do turno.
+- **Intercalado livre:** a duração total pode ser dividida em duas ou mais pausas, em número definido ou em aberto. A batida mostra o tempo usado, o que falta e o limite para iniciar.
+- **Janela livre:** uma pausa dentro de um período (ex.: entre 14:00 e 16:00). Enquanto o intervalo não começa, a batida mostra o limite para iniciar dentro da janela (fim da janela menos a duração).
+- **Janela intercalada livre:** a duração total dentro do período, em várias pausas (número definido ou em aberto), com o mesmo limite calculado sobre o que falta.
+- **Tolerância:** minutos aceitos para mais e para menos sem alerta; o mínimo legal continua valendo.
+
+**Decisões abertas:** duração mínima por pausa e teto quando a quantidade é aberta; tolerância por pausa ou sobre o total; horário mínimo para iniciar no livre; antecedência dos avisos; avisar o gestor. **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
+
 ### 3.7. Coleta inicial
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
@@ -397,6 +435,7 @@ Esquecimento, falha, marcação indevida, intervalo/saída ausente e conflito co
 - Identificar inclusão, desconsideração e pré-assinalação nos documentos.
 - Lote exige compatibilidade, prévia e auditoria.
 - Estados: nova → análise → aguardando informação → tratada/desconsiderada → reaberta.
+- Pedido do colaborador (orientação Doc Brown, 19/10/2026): batida esquecida = inclusão; errada/duplicada = desconsideração; horário errado = desconsideração + inclusão na mesma transação; unidade errada = tratamento de local, sem tocar a ARP. Justificativa obrigatória; hora sempre informada pela pessoa; evidência opcional (sem dado de saúde). Cada pedido tem um histórico consultável com original × novo, justificativa, autor, decisor, instantes, estado e reversões; se virar PDF persistente, entra em `SYSTEM_DOCUMENT_TEMPLATES`. Detalhes e perguntas ao advogado na [seção 10-A do plano REP-P](plano-rep-p-controle-de-ponto.md).
 
 ## 9. Eventos de folha
 
@@ -417,6 +456,14 @@ Ressalva documenta motivo, responsável, pessoas, impacto e prazo. Não certific
 Falha de integridade, assinatura inválida, falta de documento obrigatório ou cálculo não confiável impede declarar conformidade/promover o sistema. Procedimento acordado com contador permite cumprir obrigações de pagamento tempestivamente, documentando ajustes/retificações.
 
 Congelar entradas, referências a originais, tratamentos, regras, resultados, eventos, documentos e aprovadores. Reabertura cria nova versão e preserva a anterior.
+
+**Declaração obrigatória no documento de fechamento (decisão do programador, 19/10/2026).** O documento de fechamento do ponto de cada pessoa e competência declara todos os pedidos e tratamentos que afetaram ou justificaram a jornada, um a um, ligados ao dia:
+
+- **Ajustes de ponto:** marcação original (NSR, instante) × nova, tipo (inclusão/desconsideração), justificativa, solicitante, decisor, instantes e situação, inclusive recusados, revertidos e reabertos.
+- **Ausências:** tipo, período, quantidade, situação e forma de aprovação (análise humana ou **aprovada por decurso de prazo**), com referência ao comprovante sem reproduzir dado de saúde.
+- **Outros tratamentos:** troca de unidade conferida, pré-assinalação, abonos e qualquer correção do DP, com autor e motivo.
+
+Fechar a competência sem que todos esses itens estejam declarados é impedimento de conformidade; pedido em aberto aparece como pendente, nunca omitido. A versão reaberta declara o que mudou em relação à anterior.
 
 Chave do fechamento: empregador/estabelecimento fiscal e competência, com pessoas/vínculos incluídos explicitamente. Fechar usa a versão esperada e verifica ausência de entradas alteradas, jobs pendentes e divergências críticas; concorrência rejeita a transição e exige revisão. Se a materialização for em lotes, publicar o manifesto completo somente após verificar todos os itens; pacote parcial não é fechamento concluído.
 
