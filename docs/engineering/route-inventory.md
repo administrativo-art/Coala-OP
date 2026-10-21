@@ -60,7 +60,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [publication-control.tsx](../../src/features/hr/documents/publication-control.tsx), [employee-document-publication.ts](../../src/lib/hr/employee-document-publication.ts) |
+| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [publication-control.tsx](../../src/features/hr/documents/publication-control.tsx), [legacy-document-classification.tsx](../../src/features/hr/documents/legacy-document-classification.tsx) |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |

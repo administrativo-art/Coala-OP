@@ -21,7 +21,7 @@ const contract = defineSecurityContract({ schemaVersion: 1, id: 'collaborator.re
   authorization: { kind: 'custom', strategy: 'shift-swap-participant-action' }, resourceScope: { kind: 'custom', strategy: 'shift-swap-participant' },
   input: { kind: 'schema', schema: 'shift-swap-decision', unknownFields: 'reject' }, effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized' });
 const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUserContext, DecideShiftSwapInput, Resource>({
-  id: 'collaborator-shift-swap-decision-v1', guarantees: ['authenticated-user', 'active-user', 'authorization:participant-action', 'input-validated', 'fields-allowlisted'],
+  id: 'collaborator-shift-swap-decision-v1', guarantees: ['authenticated-user', 'active-user', 'authorization:shift-swap-participant-action', 'scope:shift-swap-participant', 'input-validated', 'fields-allowlisted'],
   async enforce({ request, routeContext }) {
     const current = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     if (current.userDoc.id !== current.decoded.uid) throw new AppError({ code: 'SHIFT_SWAP_OWNER_MISMATCH', kind: 'AUTHORIZATION' });

@@ -47,6 +47,8 @@ O catálogo visível em **Configurações → Pessoal → Documentos → Geraç�
 
 Todas as rotas persistentes exigem usuário ativo. O colaborador acessa o próprio pedido; o RH precisa das permissões de solicitações e continua limitado às unidades visíveis. Entradas são validadas por schema e as rotas declaram contratos de segurança. A rota de prévia é apenas uma ferramenta local com dados fictícios e controle explícito de host.
 
+Na decisão da troca, o contrato declara explicitamente a autorização `shift-swap-participant-action` e o escopo `shift-swap-participant`. O serviço autoritativo continua sendo a fonte da decisão: somente o solicitante cancela e somente a pessoa convidada aceita ou recusa, sempre dentro do mesmo workspace e com nova validação da escala antes da escrita.
+
 ## Estado atual
 
 Implementado em 13/10/2026. A integração de assinatura reutiliza o fluxo de assinatura independente de documentos gerados. A data prevista do contracheque usa o quinto dia útil; feriados precisam continuar sendo fornecidos ao cálculo quando o calendário de folha estiver conectado ao fluxo.
