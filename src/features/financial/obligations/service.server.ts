@@ -3,6 +3,7 @@ import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { FieldValue, Timestamp, type WriteBatch } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { WORKSPACE_ID } from "@/lib/workspace";
 import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
@@ -323,6 +324,7 @@ export async function queueMatchedBankPayment(params: {
     updatedAt: now,
   }, { merge: true });
   params.batch.set(financialDbAdmin.collection("payments").doc(paymentId), {
+    workspaceId: params.expense.workspaceId || WORKSPACE_ID,
     expenseId: params.expenseId,
     obligationId,
     linkId,
@@ -625,10 +627,17 @@ export async function registerReportedPayment(
       forecastSnapshot = await transaction.get(financialDbAdmin.collection("expenses").doc(forecastId));
     }
     const forecast = forecastSnapshot?.data() ?? null;
-    if (input.forecastExpenseId) {
+    if (forecastId) {
       if (!forecastSnapshot?.exists || forecast?.provisionType !== "forecast") {
         throw new Error("A previsão informada não foi encontrada.");
       }
+      const expenseWorkspaceId = String(expense.workspaceId || "").trim();
+      if (!expenseWorkspaceId || String(forecast.workspaceId || "").trim() !== expenseWorkspaceId) {
+        throw new Error("A previsão informada não pertence ao mesmo ambiente da despesa.");
+      }
+    }
+    if (input.forecastExpenseId) {
+      if (!forecastSnapshot || !forecast) throw new Error("A previsão informada não foi encontrada.");
       const provisionConsultation = consultExpenseProvision(
         { id: expenseId, ...expense },
         [{ id: forecastSnapshot.id, ...forecast }],
@@ -772,6 +781,7 @@ export async function registerReportedPayment(
 
     transaction.set(obligationRef, obligationPayload, { merge: true });
     transaction.set(paymentRef, {
+      workspaceId: expense.workspaceId || WORKSPACE_ID,
       expenseId,
       obligationId,
       linkId,

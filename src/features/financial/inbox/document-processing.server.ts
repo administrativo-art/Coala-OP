@@ -5,6 +5,7 @@ import { getStorage } from "firebase-admin/storage";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { extractFinancialDocument, FINANCIAL_DOCUMENT_EXTRACTION_VERSION } from "./document-extraction.server";
+import { shouldUseFinancialDocumentAi } from "./document-ai-policy";
 import { archiveFinancialInboxLinkedDocuments } from "./linked-document-resolver.server";
 import type { FinancialInboxAttachment, FinancialInboxDocumentHints, FinancialInboxMessage } from "./types";
 
@@ -35,12 +36,17 @@ async function existingExtractedText(attachment: FinancialInboxAttachment) {
 async function processAttachment(
   attachment: FinancialInboxAttachment,
   message: FinancialInboxMessage,
+  allowAi: boolean,
 ) {
   if (attachment.archiveStatus !== "stored" || !attachment.storagePath) {
     return { attachment, text: "", hints: null as FinancialInboxDocumentHints | null };
   }
   const cachedText = await existingExtractedText(attachment);
-  if (cachedText != null) return { attachment, text: cachedText, hints: attachment.extractedHints ?? null };
+  if (cachedText != null && (!allowAi || attachment.extractionStatus === "ocr_extracted"
+    || !shouldUseFinancialDocumentAi({ candidate: true, supported: true, text: cachedText,
+      subject: message.subject, senderDomain: message.senderDomain }))) {
+    return { attachment, text: cachedText, hints: attachment.extractedHints ?? null };
+  }
   const buffer = await loadStorageBuffer(attachment.storagePath);
   const extraction = await extractFinancialDocument({
     buffer,
@@ -48,6 +54,7 @@ async function processAttachment(
     contentType: attachment.contentType,
     subject: message.subject,
     senderDomain: message.senderDomain,
+    allowAi,
     model: message.provider === "mobile"
       ? process.env.OPENAI_MOBILE_RECEIPT_MODEL?.trim() || "gpt-5-mini"
       : undefined,
@@ -78,8 +85,17 @@ async function processAttachment(
   return { attachment: processed, text: extraction.text, hints: extraction.hints };
 }
 
-export async function prepareFinancialInboxDocuments(message: FinancialInboxMessage) {
-  const linked = await archiveFinancialInboxLinkedDocuments(message);
+export async function prepareFinancialInboxDocuments(
+  message: FinancialInboxMessage,
+  allowAi = false,
+  prior?: {
+    attachments: FinancialInboxAttachment[];
+    linkResolution: Awaited<ReturnType<typeof archiveFinancialInboxLinkedDocuments>>["resolution"];
+  },
+) {
+  const linked = prior
+    ? { attachments: prior.attachments, resolution: prior.linkResolution }
+    : await archiveFinancialInboxLinkedDocuments(message);
   const sourceAttachments = linked.attachments;
   const results: Array<{ attachment: FinancialInboxAttachment; text: string; hints: FinancialInboxDocumentHints | null }> = [];
   let analyzedDocuments = 0;
@@ -95,7 +111,7 @@ export async function prepareFinancialInboxDocuments(message: FinancialInboxMess
     }
     analyzedDocuments += 1;
     try {
-      results.push(await processAttachment(attachment, message));
+      results.push(await processAttachment(attachment, message, allowAi));
     } catch {
       results.push({
         attachment: {
