@@ -8,6 +8,7 @@ export type FinancialInboxStatus =
   | "identified"
   | "linked"
   | "awaiting_authorization"
+  | "payment_failed"
   | "scheduled"
   | "awaiting_statement"
   | "reconciled"
@@ -377,6 +378,8 @@ export type FinancialInboxMessage = {
   existingSettlement?: FinancialInboxExistingSettlement | null;
   linkedExpenseInstallmentNumber?: number | null;
   bankState?: FinancialInboxBankState | null;
+  bankTransactionId?: string | null;
+  paymentProjectionVersion?: number | null;
   statementTransactionId?: string | null;
   resolution?: FinancialInboxResolution | null;
   resolutionContractVersion?: number;

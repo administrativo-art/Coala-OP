@@ -92,6 +92,36 @@ test("pagamento aguardando aprovação não é apresentado como agendado", () =>
   assert.equal(patch?.resolution.financialState, "payment_prepared");
 });
 
+test("pedido ainda pronto para envio ou desconhecido nunca é inferido como agendado", () => {
+  const ready = automaticReminderResolutionPatch({
+    suggestion: suggestion({
+      existingBankPayment: {
+        transactionId: "request-ready-1",
+        bankStatus: null,
+        schedulingStatus: "ready_to_submit",
+        scheduledFor: "2026-09-14",
+      },
+    }),
+    at: "2026-09-11T14:00:00.000Z",
+  });
+  const unknown = automaticReminderResolutionPatch({
+    suggestion: suggestion({
+      existingBankPayment: {
+        transactionId: "request-unknown-1",
+        bankStatus: "STATUS_NOVO",
+        schedulingStatus: null,
+        scheduledFor: "2026-09-14",
+      },
+    }),
+    at: "2026-09-11T14:00:00.000Z",
+  });
+
+  assert.equal(ready?.bankState, "ready_to_submit");
+  assert.equal(ready?.resolution.financialState, "payment_prepared");
+  assert.equal(unknown?.bankState, "not_prepared");
+  assert.equal(unknown?.resolution.financialState, "payment_prepared");
+});
+
 test("mensagens legadas vinculadas continuam aparecendo como identificadas", () => {
   const resolution = resolutionForDisplay({
     status: "linked",

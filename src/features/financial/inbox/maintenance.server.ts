@@ -17,6 +17,12 @@ import {
 } from "./resolution-contract";
 import type { FinancialInboxMessage } from "./types";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import {
+  FINANCIAL_INBOX_PAYMENT_PROJECTION_STATE_ID,
+  FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION,
+  planFinancialInboxPaymentProjection,
+} from "./payment-projection";
+import type { BankPaymentRequest } from "../payment-requests/types";
 
 const COLLECTION = "financialInboxMessages";
 const STATE_COLLECTION = "financialSystemState";
@@ -119,6 +125,153 @@ async function backfillResolutionContract(params: { dryRun: boolean; batchSize: 
   return { scanned: snapshot.size, updated: appliedUpdates, complete };
 }
 
+async function backfillPaymentProjection(params: { dryRun: boolean; batchSize: number; now: Date }) {
+  // Uma passagem histórica limitada. Depois dela, as transições do pedido
+  // atualizam a mensagem na mesma unidade de consistência.
+  const pageSize = Math.min(params.batchSize, 150);
+  const stateRef = financialDbAdmin.collection(STATE_COLLECTION).doc(FINANCIAL_INBOX_PAYMENT_PROJECTION_STATE_ID);
+  const state = await stateRef.get();
+  if (state.get("complete") === true
+    && state.get("version") === FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION) {
+    return { scanned: 0, updated: 0, archived: 0, actionRequired: 0, complete: true };
+  }
+  const cursor = typeof state.get("cursor") === "string" ? String(state.get("cursor")) : null;
+  let query: FirebaseFirestore.Query = financialDbAdmin.collection(COLLECTION)
+    .orderBy(FieldPath.documentId())
+    .limit(pageSize);
+  if (cursor) query = query.startAfter(cursor);
+  const snapshot = await query.get();
+  const complete = snapshot.size < pageSize;
+  if (params.dryRun) {
+    const messages = snapshot.docs
+      .map((document) => ({ id: document.id, ...document.data() }) as FinancialInboxMessage)
+      .filter((message) => message.paymentProjectionVersion !== FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION);
+    const expenseIds = [...new Set(messages.map((message) => (
+      message.linkedExpenseId
+      || (message.resolution?.targetType === "expense" ? message.resolution.targetId : null)
+    )).filter((id): id is string => Boolean(id)))];
+    const expenseSnapshots = expenseIds.length
+      ? await financialDbAdmin.getAll(...expenseIds.map((id) => financialDbAdmin.collection("expenses").doc(id)))
+      : [];
+    const expenses = new Map(expenseSnapshots.map((document) => [document.id, document]));
+    const requestIdByMessage = new Map(messages.map((message) => {
+      const expenseId = message.linkedExpenseId
+        || (message.resolution?.targetType === "expense" ? message.resolution.targetId : null);
+      const expense = expenseId ? expenses.get(expenseId) : null;
+      const requestId = message.paymentRequestId
+        || (expense?.exists ? String(expense.get("paymentRequestId") ?? "").trim() : "")
+        || null;
+      return [message.id, requestId] as const;
+    }));
+    const requestIds = [...new Set([...requestIdByMessage.values()].filter((id): id is string => Boolean(id)))];
+    const requestSnapshots = requestIds.length
+      ? await financialDbAdmin.getAll(...requestIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)))
+      : [];
+    const requests = new Map(requestSnapshots
+      .filter((document) => document.exists)
+      .map((document) => [document.id, { id: document.id, ...document.data() } as BankPaymentRequest]));
+    const plans = messages.flatMap((message) => {
+      const requestId = requestIdByMessage.get(message.id);
+      const request = requestId ? requests.get(requestId) : null;
+      return request ? [planFinancialInboxPaymentProjection({
+        message,
+        request,
+        observedAt: params.now.toISOString(),
+      })] : [];
+    });
+    return {
+      scanned: snapshot.size,
+      updated: plans.length,
+      archived: plans.filter((plan) => plan.transition === "archive").length,
+      actionRequired: plans.filter((plan) => plan.transition === "action_required").length,
+      complete,
+    };
+  }
+  const result = await financialDbAdmin.runTransaction(async (transaction) => {
+    const currentState = await transaction.get(stateRef);
+    const currentCursor = typeof currentState.get("cursor") === "string"
+      ? String(currentState.get("cursor")) : null;
+    if (currentCursor !== cursor) return { applied: false, updated: 0, archived: 0, actionRequired: 0 };
+    const currentMessages = snapshot.docs.length
+      ? await transaction.getAll(...snapshot.docs.map((document) => document.ref))
+      : [];
+    const messages = currentMessages
+      .filter((document) => document.exists)
+      .map((document) => ({ id: document.id, ...document.data() }) as FinancialInboxMessage);
+    const expenseIds = [...new Set(messages.map((message) => (
+      message.linkedExpenseId
+      || (message.resolution?.targetType === "expense" ? message.resolution.targetId : null)
+    )).filter((id): id is string => Boolean(id)))];
+    const expenseSnapshots = expenseIds.length
+      ? await transaction.getAll(...expenseIds.map((id) => financialDbAdmin.collection("expenses").doc(id)))
+      : [];
+    const expenses = new Map(expenseSnapshots.map((document) => [document.id, document]));
+    const requestIdByMessage = new Map(messages.map((message) => {
+      const expenseId = message.linkedExpenseId
+        || (message.resolution?.targetType === "expense" ? message.resolution.targetId : null);
+      const expense = expenseId ? expenses.get(expenseId) : null;
+      const requestId = message.paymentRequestId
+        || (expense?.exists ? String(expense.get("paymentRequestId") ?? "").trim() : "")
+        || null;
+      return [message.id, requestId] as const;
+    }));
+    const requestIds = [...new Set([...requestIdByMessage.values()].filter((id): id is string => Boolean(id)))];
+    const requestSnapshots = requestIds.length
+      ? await transaction.getAll(...requestIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)))
+      : [];
+    const requests = new Map(requestSnapshots
+      .filter((document) => document.exists)
+      .map((document) => [document.id, { id: document.id, ...document.data() } as BankPaymentRequest]));
+    let updated = 0;
+    let archived = 0;
+    let actionRequired = 0;
+    messages.forEach((message) => {
+      if (message.paymentProjectionVersion === FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION) return;
+      const requestId = requestIdByMessage.get(message.id);
+      const request = requestId ? requests.get(requestId) : null;
+      if (!request) return;
+      const plan = planFinancialInboxPaymentProjection({
+        message,
+        request,
+        observedAt: params.now.toISOString(),
+      });
+      const reference = financialDbAdmin.collection(COLLECTION).doc(message.id);
+      transaction.set(reference, plan.patch, { merge: true });
+      transaction.set(reference.collection("events").doc(`payment-projection-v${FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION}`), {
+        type: plan.transition === "archive"
+          ? "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF"
+          : plan.transition === "action_required"
+            ? "BANK_PAYMENT_ACTION_REQUIRED"
+            : "PAYMENT_PROJECTION_BACKFILLED",
+        at: params.now.toISOString(),
+        actorId: "system:financial-inbox-maintenance",
+        paymentRequestId: request.id,
+        interRequestId: request.interRequestId ?? null,
+        previousStatus: message.status,
+        projectionVersion: FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION,
+      }, { merge: true });
+      updated += 1;
+      if (plan.transition === "archive") archived += 1;
+      if (plan.transition === "action_required") actionRequired += 1;
+    });
+    transaction.set(stateRef, {
+      version: FINANCIAL_INBOX_PAYMENT_PROJECTION_VERSION,
+      cursor: complete ? null : snapshot.docs.at(-1)?.id ?? cursor,
+      complete,
+      lastRunAt: params.now.toISOString(),
+      updatedInLastRun: updated,
+      archivedInLastRun: archived,
+      actionRequiredInLastRun: actionRequired,
+    }, { merge: true });
+    return { applied: true, updated, archived, actionRequired };
+  });
+  if (!result.applied) {
+    return { scanned: 0, updated: 0, archived: 0, actionRequired: 0, complete: false };
+  }
+  return { scanned: snapshot.size, updated: result.updated, archived: result.archived,
+    actionRequired: result.actionRequired, complete };
+}
+
 async function archiveTreatedMessages(params: { dryRun: boolean; batchSize: number; now: Date }) {
   const cutoff = financialInboxRetentionCutoff(params.now).toISOString();
   const archiveBatchSize = Math.min(params.batchSize, 200);
@@ -202,12 +355,14 @@ export async function maintainFinancialInbox(params: {
   const dryRun = params.dryRun !== false;
   const searchIndex = await backfillSearchIndex({ dryRun, batchSize, now });
   const resolutionContract = await backfillResolutionContract({ dryRun, batchSize, now });
+  const paymentProjection = await backfillPaymentProjection({ dryRun, batchSize, now });
   const retention = await archiveTreatedMessages({ dryRun, batchSize, now });
   return {
     mode: dryRun ? "dry-run" : "execute",
     policyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
     searchIndex,
     resolutionContract,
+    paymentProjection,
     retention,
     generatedAt: now.toISOString(),
   };
