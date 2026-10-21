@@ -17,6 +17,7 @@ import {
   FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
 } from "./search-index";
 import {
+  discardedFinancialInboxResolution,
   FINANCIAL_INBOX_RESOLUTION_VERSION,
   pendingFinancialInboxResolution,
 } from "./resolution-contract";
@@ -260,4 +261,47 @@ export async function ingestFinancialMobileUpload(params: {
     status: String(refreshed.get("status") || "pending_review") as FinancialInboxMessage["status"],
     analysis: mobileAnalysis(refreshed),
   };
+}
+
+/**
+ * The sender gives up a note that was read but never confirmed: the inbox entry is discarded so nobody
+ * reviews it, and the withdrawal it pointed to is free for another note. Nothing was posted yet, so
+ * there is no expense, stock or link to undo. A confirmed purchase is reversed elsewhere, never here.
+ */
+export async function cancelFinancialMobileUpload(params: { actor: ServerUserContext; submissionId: string }) {
+  const { actor } = params;
+  const reference = financialDbAdmin.collection("financialInboxMessages").doc(mobileInboxDocumentId(actor.workspace_id, params.submissionId));
+  const now = new Date().toISOString();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    // Never uploaded (or another workspace): the phone only has to drop its copy.
+    if (!snapshot.exists || snapshot.get("workspaceId") !== actor.workspace_id || snapshot.get("provider") !== "mobile") {
+      return { status: "not_found" as const };
+    }
+    if (!actor.isDefaultAdmin && snapshot.get("submittedBy.userId") !== actor.userDoc.id) {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "O envio pertence a outro usuário." });
+    }
+    if (snapshot.get("localPurchaseId")) {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_CONFIRMED", kind: "CONFLICT", safeMessage: "A compra já foi confirmada; peça o estorno em Compras." });
+    }
+    if (snapshot.get("status") === "ignored") return { status: "cancelled" as const };
+    if (snapshot.get("status") !== "pending_review") {
+      throw new AppError({ code: "FINANCIAL_INBOX_MOBILE_CANCEL_STATE", kind: "CONFLICT", safeMessage: "O financeiro já tratou este envio." });
+    }
+    transaction.set(reference, {
+      status: "ignored",
+      resolution: discardedFinancialInboxResolution({ mode: "manual", at: now, by: actor.decoded.uid, reasons: ["nota cancelada no aplicativo por quem enviou"] }),
+      resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+      reviewedAt: now,
+      reviewedBy: actor.decoded.uid,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.create(reference.collection("events").doc(), {
+      type: "MOBILE_UPLOAD_CANCELLED",
+      at: now,
+      actorId: actor.decoded.uid,
+      actorEmail: actor.decoded.email ?? null,
+    });
+    return { status: "cancelled" as const };
+  });
 }

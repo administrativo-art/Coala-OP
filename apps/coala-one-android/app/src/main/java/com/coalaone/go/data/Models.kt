@@ -65,6 +65,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class PurchaseResult(val id: String, val status: String, val duplicate: Boolean = false, val stockEntry: String? = null, val stockItemCount: Int? = null, val changeCents: Long? = null, val operationalStatus: String? = null, val resolvedItemCount: Int? = null, val itemCount: Int? = null)
 @Serializable data class PurchaseResponse(val purchase: PurchaseResult)
 @Serializable data class LinkWithdrawal(val purchaseId: String, val withdrawal: WithdrawalLink)
+@Serializable data class CancelUpload(val submissionId: String)
+@Serializable data class CancelledUpload(val status: String)
+@Serializable data class CancelUploadResponse(val submission: CancelledUpload)
 @Serializable data class Document(val name: String, val mimeType: String, @Serializable(with = Base64Bytes::class) val bytes: ByteArray)
 @Serializable data class PendingUpload(val submissionId: String, val capturedAt: String, val note: String, val fundingSource: String, val receipts: List<Document>, val paymentProofs: List<Document>, val withdrawal: Withdrawal? = null)
 

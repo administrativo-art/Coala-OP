@@ -82,7 +82,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val review = state.review; val selected = state.selected
     var confirmation by rememberSaveable { mutableStateOf(false) }
-    val back = { if (state.pendingLink != null) vm.cancelLink() else if (selected != null || review != null) vm.leaveReview() else onBack() }
+    val back = { if (state.pendingLink != null) vm.cancelLink() else if (selected != null || review != null) vm.leaveReview() else if (state.unitView != null) vm.closeUnit() else onBack() }
     BackHandler { if (!feedback.busy) back() }
     val needsProof = selected?.fundingSource == "company_payment"
     val canAnalyze = selected != null && selected.receipts.isNotEmpty()
@@ -98,8 +98,11 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     }
     fun saveFilter() { preferences.edit().putString("organization:$owner", vm.state.value.organizationFilter).putString("group:$owner", vm.state.value.groupFilter).apply() }
     val filtersEnabled = !feedback.busy && state.pendingLink == null
-    val organizations = Rules.purchaseOrganizationChoices(units, pending)
-    val groups = Rules.purchaseGroupChoices(units, pending, state.organizationFilter)
+    val organizations = Rules.purchaseOrganizationChoices(units)
+    val groups = Rules.purchaseGroupChoices(units, state.organizationFilter)
+    // A note kept on the phone for a withdrawal lives on that withdrawal's card, not in a list of its own.
+    val noteFor = state.queueWithdrawals.entries.associate { (rowId, sourceId) -> sourceId to rowId }
+    var discarding by rememberSaveable { mutableStateOf<String?>(null) }
     Page(if (review != null) "Revisão obrigatória" else "Compra local", feedback, back, footer = when {
         review != null -> ({
             if (confirmation) InlineConfirmation("Confirmar esta compra e os dados revisados?", feedback.busy, { confirmation = false }, "Confirmar compra") { vm.confirm(); confirmation = false }
@@ -126,7 +129,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             Text(listOfNotNull(fullDate(review.purchaseDate).takeIf(String::isNotBlank), unitName).joinToString(" · "), color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
         } else {
             StepHeader("Compra local", "", if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"))
-            if (selected == null && organizations.size > 2) UnitPickerHeader(organizations, state.organizationFilter, !filtersEnabled, "Organização", "Trocar") { vm.filterOrganization(it); saveFilter() }
+            if (selected == null && state.unitView == null && organizations.size > 2) UnitPickerHeader(organizations, state.organizationFilter, !filtersEnabled, "Organização", "Trocar") { vm.filterOrganization(it); saveFilter() }
         }
     }) {
         if (review != null) {
@@ -137,6 +140,8 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 if (payment.amountMatchesReceipt == false || payment.payeeMatchesSupplier == false) Text("O comprovante diverge da nota. Confira antes de confirmar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp))
             }
             key(review.submissionId) { ReviewFields(review, state.context, selected?.withdrawal, !feedback.busy, vm::review) }
+            if (discarding == review.submissionId) InlineConfirmation("Cancelar esta nota? Ela sai do aparelho e do financeiro, e a sangria fica livre para outra nota.", feedback.busy, { discarding = null }, "Voltar", "Cancelar nota") { vm.discard(review.submissionId); discarding = null }
+            else Action("Cancelar esta nota", feedback.busy, secondary = true) { discarding = review.submissionId }
         } else if (selected != null) {
             Row(Modifier.fillMaxWidth().background(Tokens.soft, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -161,31 +166,67 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 result.changeCents?.takeIf { it > 0 }?.let { Text("Troco de ${money(it)}: devolva esse valor ao caixa.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp)) }
             } }
             val list = state.withdrawals
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Sangrias aguardando nota", style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
-                    Text(list?.let { "Registradas no PDV desde ${shortDate(it.window.from) ?: it.window.from}" } ?: "Registradas no PDV", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                }
-                Text("Atualizar", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Tokens.surface).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)).clickable(enabled = !feedback.busy, role = Role.Button) { vm.refresh() }.padding(horizontal = 12.dp, vertical = 9.dp))
-            }
-            if (groups.size > 2) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                groups.forEach { (id, name) -> FilterChip(state.groupFilter == id, onClick = { vm.filterGroup(id); saveFilter() }, enabled = filtersEnabled, label = { Text(name, maxLines = 1) }) }
-            }
-            if (state.pendingLink != null && (organizations.size > 2 || groups.size > 2)) Text("Conclua ou cancele a vinculação antes de trocar o filtro.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            if (list?.partial == true) Text("Lista parcial. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (list != null && list.withdrawals.isEmpty()) Text("Nenhuma sangria aguardando nota.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
+            val unitView = state.unitView
             val shownWithdrawals = Rules.filterWithdrawals(pending, units, state.organizationFilter, state.groupFilter)
-            if (pending.isNotEmpty() && shownWithdrawals.isEmpty()) Row(Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Nenhuma sangria neste filtro.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.weight(1f))
-                Text("Ver todas", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = filtersEnabled, role = Role.Button) { vm.filterOrganization(Rules.ALL_UNITS); saveFilter() }.padding(14.dp))
-            }
-            shownWithdrawals.groupBy { it.unitId }.entries.sortedBy { entry -> entry.value.firstOrNull()?.unitName.orEmpty() }.forEach { (_, unitWithdrawals) ->
-                Text(unitWithdrawals.first().unitName.uppercase(), color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.padding(top = 4.dp))
+            if (unitView == null) {
+                // Step 1: one card per unit with withdrawals waiting; a unit with nothing open does not show.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Sangrias aguardando nota", style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
+                        Text(list?.let { "Registradas no PDV desde ${shortDate(it.window.from) ?: it.window.from}" } ?: "Registradas no PDV", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Atualizar", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Tokens.surface).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)).clickable(enabled = !feedback.busy, role = Role.Button) { vm.refresh() }.padding(horizontal = 12.dp, vertical = 9.dp))
+                }
+                if (groups.size > 2) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    groups.forEach { (id, name) -> FilterChip(state.groupFilter == id, onClick = { vm.filterGroup(id); saveFilter() }, enabled = filtersEnabled, label = { Text(name, maxLines = 1) }) }
+                }
+                if (list?.partial == true) Text("Lista parcial. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                if (list != null && shownWithdrawals.isEmpty()) Text(if (pending.isEmpty()) "Nenhuma sangria aguardando nota." else "Nenhuma sangria aguardando nota neste filtro.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
+                Rules.purchaseUnitCards(shownWithdrawals).forEach { (unitId, name, count) ->
+                    val notes = shownWithdrawals.count { it.unitId == unitId && it.sourceId in noteFor }
+                    Card(onClick = { vm.openUnit(unitId) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(name, style = MaterialTheme.typography.titleMedium)
+                                Text(if (count == 1) "1 sangria aguardando nota" else "$count sangrias aguardando nota", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                                if (notes > 0) Text(if (notes == 1) "1 nota em revisão" else "$notes notas em revisão", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp))
+                            }
+                            Box(Modifier.size(32.dp).background(Tokens.accentSoft, CircleShape), contentAlignment = Alignment.Center) { Text("$count", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.ExtraBold)) }
+                        }
+                    }
+                }
+                Text("Outra compra", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                Text("Se a sangria ainda não apareceu na lista, ou a compra não foi paga com o caixa, informe como ela foi paga.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ChoiceCard("SANGRIA", "Dinheiro do caixa", "Sangria fora da lista. Só a nota da compra.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("cash_withdrawal") }
+                    ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Documento fiscal autorizado pode seguir sem comprovante.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
+                }
+                // Notes not tied to a withdrawal on the list (other purchases, or a withdrawal that left it).
+                val loose = state.queue.filter { row -> state.queueWithdrawals[row.id]?.let { source -> pending.none { it.sourceId == source } } ?: true }
+                if (loose.isNotEmpty()) {
+                    Text("Notas guardadas no aparelho", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                    if (state.queue.any { it.state != "UPLOADED" }) Action("Sincronizar pendências", feedback.busy, secondary = true) { vm.sync() }
+                    loose.forEach { row -> CardBlock { QueuedNote(row, discarding == row.id, feedback.busy, { vm.resume(row) }, { discarding = row.id }, { discarding = null }) { vm.discard(row.id); discarding = null } } }
+                }
+            } else {
+                // Step 2: the withdrawals of one unit, each card carrying its note in review when there is one.
+                val unitWithdrawals = pending.filter { it.unitId == unitView }
+                val unitTitle = unitWithdrawals.firstOrNull()?.unitName ?: units.firstOrNull { it.id == unitView }?.name ?: "Unidade"
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(unitTitle, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
+                        Text(if (unitWithdrawals.size == 1) "1 sangria aguardando nota" else "${unitWithdrawals.size} sangrias aguardando nota", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Unidades", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy && state.pendingLink == null, role = Role.Button, onClick = vm::closeUnit).padding(8.dp))
+                }
+                if (unitWithdrawals.isEmpty()) Text("Nenhuma sangria aguardando nota nesta unidade.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
                 unitWithdrawals.forEach { withdrawal ->
                     val activeLink = state.pendingLink?.takeIf { it.withdrawal.sourceId == withdrawal.sourceId }
+                    val note = noteFor[withdrawal.sourceId]?.let { id -> state.queue.firstOrNull { it.id == id } }
                     val requester = remember(withdrawal.sourceId) { BringIntoViewRequester() }
                     if (activeLink != null) LaunchedEffect(state.linkFocusRequest) { requester.bringIntoView() }
-                    Card(onClick = { if (activeLink != null) vm.resumeLink() else vm.select("cash_withdrawal", withdrawal) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth().bringIntoViewRequester(requester), shape = RoundedCornerShape(16.dp), border = BorderStroke(if (activeLink != null) 2.dp else 1.dp, if (activeLink != null) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = if (activeLink != null) Tokens.accentSoft else Tokens.surface, disabledContainerColor = Tokens.surface)) {
+                    val highlighted = activeLink != null || note != null
+                    Card(onClick = { when { activeLink != null -> vm.resumeLink(); note != null -> vm.resume(note); else -> vm.select("cash_withdrawal", withdrawal) } }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth().bringIntoViewRequester(requester), shape = RoundedCornerShape(16.dp), border = BorderStroke(if (highlighted) 2.dp else 1.dp, if (highlighted) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = if (highlighted) Tokens.accentSoft else Tokens.surface, disabledContainerColor = Tokens.surface)) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -195,43 +236,39 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                                     // Only when the PDV sends it: what the operator typed there when taking the money out.
                                     withdrawal.reason?.takeIf(String::isNotBlank)?.let { Text("Motivo: $it", color = Tokens.ink, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 3, overflow = TextOverflow.Ellipsis) }
                                 }
-                                Text(if (activeLink != null) "Retomar vinculação" else "Anexar nota", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+                                Text(when { activeLink != null -> "Retomar vinculação"; note != null -> "Retomar nota"; else -> "Anexar nota" }, color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
                             }
                             activeLink?.let { link ->
                                 Text("${link.purchase.supplierName} · ${money(link.purchase.totalCents)}", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
                                 InlineConfirmation("Vincular esta compra a esta sangria?", feedback.busy, vm::cancelLink, "Cancelar vinculação", "Confirmar vínculo", vm::link)
                             }
+                            if (activeLink == null && note != null) QueuedNote(note, discarding == note.id, feedback.busy, { vm.resume(note) }, { discarding = note.id }, { discarding = null }) { vm.discard(note.id); discarding = null }
                         }
                     }
                 }
-            }
-            Text("Outra compra", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Text("Se a sangria ainda não apareceu na lista, ou a compra não foi paga com o caixa, informe como ela foi paga.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ChoiceCard("SANGRIA", "Dinheiro do caixa", "Sangria fora da lista. Só a nota da compra.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("cash_withdrawal") }
-                ChoiceCard("COMPRA NORMAL", "Recurso da empresa", "Documento fiscal autorizado pode seguir sem comprovante.", !feedback.busy, Modifier.weight(1f).fillMaxHeight()) { vm.select("company_payment") }
-            }
-            val shownPurchases = list?.awaitingPurchases.orEmpty().filter { Rules.inPurchaseScope(units, it.unitId, state.organizationFilter, state.groupFilter) }
-            if (shownPurchases.isNotEmpty()) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            shownPurchases.forEach { purchase -> CardBlock {
-                Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)
-                Text("Compra de ${fullDate(purchase.purchaseDate)} sem sangria vinculada", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                shownWithdrawals.filter { it.unitId == purchase.unitId }.forEach { withdrawal ->
-                    val selectedLink = state.pendingLink?.takeIf { it.purchase.id == purchase.id && it.withdrawal.sourceId == withdrawal.sourceId }
-                    if (selectedLink != null) Action("Retomar vinculação", feedback.busy, secondary = true, onClick = vm::resumeLink)
-                    else Action("Selecionar sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.prepareLink(purchase, withdrawal) }
-                }
-            } }
-            if (state.queue.isNotEmpty()) {
-                Text("Notas guardadas no aparelho", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-                Action("Sincronizar pendências", feedback.busy, secondary = true) { vm.sync() }
-                state.queue.forEach { row -> CardBlock {
-                    Text(when (row.state) { "UPLOADED" -> "Recebido — revisão pendente"; "BLOCKED" -> "Revise o envio antes de tentar novamente"; else -> "Aguardando envio" }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                    row.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
-                    Action(if (row.state == "UPLOADED") "Revisar compra recebida" else "Abrir documentos pendentes", feedback.busy, secondary = true) { vm.resume(row) }
+                val unitPurchases = list?.awaitingPurchases.orEmpty().filter { it.unitId == unitView }
+                if (unitPurchases.isNotEmpty() && unitWithdrawals.isNotEmpty()) Text("Compras aguardando conciliação", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                if (unitWithdrawals.isNotEmpty()) unitPurchases.forEach { purchase -> CardBlock {
+                    Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)
+                    Text("Compra de ${fullDate(purchase.purchaseDate)} sem sangria vinculada", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    unitWithdrawals.filter { it.sourceId !in noteFor }.forEach { withdrawal ->
+                        val selectedLink = state.pendingLink?.takeIf { it.purchase.id == purchase.id && it.withdrawal.sourceId == withdrawal.sourceId }
+                        if (selectedLink != null) Action("Retomar vinculação", feedback.busy, secondary = true, onClick = vm::resumeLink)
+                        else Action("Selecionar sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.prepareLink(purchase, withdrawal) }
+                    }
                 } }
             }
         }
+    }
+}
+/** A note kept on the phone: where it stands, how to pick it up again, and how to give it up. */
+@Composable private fun QueuedNote(row: com.coalaone.go.offline.QueueRow, confirming: Boolean, busy: Boolean, onResume: () -> Unit, onAskDiscard: () -> Unit, onKeep: () -> Unit, onDiscard: () -> Unit) {
+    Text(when (row.state) { "UPLOADED" -> "Nota enviada · revisão pendente"; "BLOCKED" -> "Revise o envio antes de tentar novamente"; else -> "Nota aguardando envio" }, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp))
+    row.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+    if (confirming) InlineConfirmation("Cancelar esta nota? Ela sai do aparelho e do financeiro, e a sangria fica livre para outra nota.", busy, onKeep, "Voltar", "Cancelar nota", onDiscard)
+    else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f)) { Action(if (row.state == "UPLOADED") "Retomar revisão" else "Abrir documentos", busy, onClick = onResume) }
+        Box(Modifier.weight(1f)) { Action("Cancelar nota", busy, secondary = true, onClick = onAskDiscard) }
     }
 }
 /** Numbered section header of the review: a tick when collapsed, the number while open. */

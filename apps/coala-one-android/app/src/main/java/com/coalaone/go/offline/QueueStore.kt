@@ -26,6 +26,7 @@ interface UploadQueue {
     suspend fun markFailed(uid: String, id: String, failure: AppFailure)
     suspend fun retry(uid: String, id: String)
     suspend fun confirmed(uid: String, id: String, response: PurchaseResponse)
+    suspend fun discard(uid: String, id: String)
 }
 @Singleton class QueueStore @Inject constructor(@ApplicationContext context: Context, private val db: QueueDatabase, private val vault: Vault, private val json: Json) : UploadQueue {
     private val directory = File(context.noBackupFilesDir, "coala-go-queue").apply { mkdirs() }
@@ -85,5 +86,9 @@ interface UploadQueue {
     override suspend fun confirmed(uid: String, id: String, response: PurchaseResponse) = withContext(Dispatchers.IO) { mutex.withLock {
         require(response.purchase.id.isNotBlank() && response.purchase.status.isNotBlank()) { "Compra não confirmada; a fila foi preservada." }
         if (db.queue().removeConfirmed(vault.owner(uid), id) == 1) file(uid, id).delete()
+    } }
+    override suspend fun discard(uid: String, id: String) = withContext(Dispatchers.IO) { mutex.withLock {
+        if (db.queue().discard(vault.owner(uid), id) == 1) file(uid, id).delete()
+        Unit
     } }
 }
