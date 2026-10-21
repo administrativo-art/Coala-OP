@@ -278,7 +278,6 @@ export async function createInboxBarcodePaymentRequest(input: {
       throw new Error("Cobrança recebida não encontrada.");
     }
     if (currentMessageSnapshot.get("linkedExpenseId") !== message.linkedExpenseId
-      || currentMessageSnapshot.get("status") !== "linked"
       || currentMessageSnapshot.get("existingSettlement.transactionId")
       || currentMessageSnapshot.get("existingBankPayment.transactionId")) {
       throw new Error("A cobrança mudou durante a preparação. Atualize e confira os dados novamente.");
@@ -287,7 +286,14 @@ export async function createInboxBarcodePaymentRequest(input: {
       throw new Error("A despesa vinculada não pertence ao mesmo ambiente da cobrança.");
     }
     if (currentRequestSnapshot.exists) {
+      const linkedRequestId = String(currentMessageSnapshot.get("paymentRequestId") || "").trim();
+      if (linkedRequestId && linkedRequestId !== ref.id) {
+        throw new Error("A cobrança passou a apontar para outra solicitação bancária.");
+      }
       return { id: currentRequestSnapshot.id, ...currentRequestSnapshot.data() } as BankPaymentRequest;
+    }
+    if (currentMessageSnapshot.get("status") !== "linked") {
+      throw new Error("A cobrança mudou durante a preparação. Atualize e confira os dados novamente.");
     }
     transaction.create(ref, Object.fromEntries(Object.entries(request).filter(([key]) => key !== "id")));
     transaction.set(messageRef, {
