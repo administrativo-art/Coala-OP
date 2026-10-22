@@ -10,7 +10,7 @@ const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
-const { exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
+const { exportOwnRepPReceipts, exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
   recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { REP_P_LOCATION_EVIDENCE, repPLocationPolicyRef, saveRepPLocationPolicy }
   = await import('../../src/features/dp/rep-p/location-policy.server.ts');
@@ -19,6 +19,21 @@ const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monito
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
+
+function zipEntries(zip) {
+  const entries = new Map();
+  let offset = 0;
+  while (zip.readUInt32LE(offset) === 0x04034b50) {
+    const size = zip.readUInt32LE(offset + 18);
+    const nameSize = zip.readUInt16LE(offset + 26);
+    const extraSize = zip.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameSize + extraSize;
+    entries.set(zip.subarray(nameStart, nameStart + nameSize).toString('utf8'), zip.subarray(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return entries;
+}
 
 test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo original em AFD assinado', async () => {
   const prefix = 'rep-p-integration';
@@ -45,8 +60,16 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     ] }; } };
   const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
     inpiRegistration: '12345678901234567', developerCnpj: employerCnpj };
+  const fiscalObjects = new Map();
+  const fiscalStore = {
+    async put(path, bytes, contentType, sha256, retainUntilTime) {
+      assert.equal(fiscalObjects.has(path), false); const generation = String(fiscalObjects.size + 1);
+      fiscalObjects.set(path, { bytes: Buffer.from(bytes), contentType, sha256, generation, retainUntilTime });
+      return { bucket: 'fiscal-test', generation, retainUntilTime, retentionMode: 'Locked' };
+    },
+  };
   const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true,
+    markingEnabled: true, fiscalStore,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -220,6 +243,13 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
     assert.deepEqual(await arpSnapshot(), arpBeforeRetry);
     assert.equal(verifyRepPSignedPdf((await getOwnRepPReceipt(context, second.receiptId, dependencies)).bytes).valid, true);
+    const receiptArchive = await exportOwnRepPReceipts(context,
+      { startDate: '2026-10-18', endDate: '2026-10-18' }, { ...dependencies, now: () => new Date('2026-10-19T12:00:00.000Z') });
+    assert.deepEqual([receiptArchive.complete, receiptArchive.total, receiptArchive.exported, receiptArchive.unavailable], [true, 2, 2, 0]);
+    assert.ok(receiptArchive.bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])));
+    assert.match(receiptArchive.filename, /-completo\.zip$/);
+    assert.equal((await exportOwnRepPReceipts(stranger,
+      { startDate: '2026-10-18', endDate: '2026-10-18' }, dependencies)).total, 0);
 
     // Acesso do próprio trabalhador sem prazo de expiração: um comprovante de 3 dias segue disponível (mínimo legal: 48 h).
     const receiptRef = hrDbAdmin.collection('repP_receipts').doc(first.receiptId);
@@ -278,9 +308,22 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(contents.match(/\r\n/g)?.length, afd.lineCount);
     assert.ok(contents.includes(first.marking.hash));
     assert.ok(contents.includes(second.marking.hash));
+    await assert.rejects(exportSignedRepPAfd(context,
+      { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' }, { ...dependencies, fiscalStore: {
+        async put() { throw new Error('storage unavailable'); },
+      } }), { code: 'REP_P_AFD_ARCHIVE_FAILED' });
     const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
-    assert.equal(exportAudit.size, 6);
-    assert.ok(exportAudit.docs.some((doc) => doc.get('sha256') === afd.sha256));
+    assert.equal(exportAudit.size, 7);
+    assert.ok(exportAudit.docs.some((doc) => doc.get('status') === 'archive_failed'));
+    const storedAfd = exportAudit.docs.find((doc) => doc.get('status') === 'exported' && doc.get('sha256') === afd.sha256).data();
+    assert.equal(storedAfd.schemaVersion, 2);
+    const afdBundle = fiscalObjects.get(storedAfd.artifacts.bundle.storagePath).bytes;
+    const afdEntries = zipEntries(afdBundle);
+    assert.equal(afdEntries.get(storedAfd.artifacts.content.filename).toString('base64'), afd.afdBase64);
+    assert.equal(afdEntries.get(storedAfd.artifacts.signature.filename).toString('base64'), afd.signatureBase64);
+    assert.equal(storedAfd.artifacts.retentionYears, 20);
+    assert.equal(storedAfd.artifacts.bundle.retentionMode, 'Locked');
+    assert.equal(storedAfd.artifacts.bundle.storageBucket, 'fiscal-test');
 
     // Piloto nominal: ativar a unidade não coleta de quem não está na lista, mesmo se um cliente adulterado enviar coordenadas.
     await saveRepPLocationPolicy(context, executionUnitId, {

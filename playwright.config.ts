@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const e2ePort = Number(process.env.E2E_PORT ?? "3100");
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -15,14 +17,14 @@ export default defineConfig({
     : "line",
   outputDir: "test-results",
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: `http://127.0.0.1:${e2ePort}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
   },
   webServer: {
     command: "node scripts/start-e2e-app.mjs",
-    url: "http://127.0.0.1:3100/login",
+    url: `http://127.0.0.1:${e2ePort}/login`,
     reuseExistingServer: false,
     timeout: 240_000,
   },

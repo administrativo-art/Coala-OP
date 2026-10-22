@@ -18,6 +18,21 @@ const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.s
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
 
+function zipEntries(zip) {
+  const entries = new Map();
+  let offset = 0;
+  while (zip.readUInt32LE(offset) === 0x04034b50) {
+    const size = zip.readUInt32LE(offset + 18);
+    const nameSize = zip.readUInt16LE(offset + 26);
+    const extraSize = zip.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameSize + extraSize;
+    entries.set(zip.subarray(nameStart, nameStart + nameSize).toString('utf8'), zip.subarray(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return entries;
+}
+
 test('fechamento da competência: pendência bloqueia, declaração congela, mês fechado recusa pedido, reabertura gera nova versão', async () => {
   const prefix = `closure-${randomUUID().slice(0, 6)}`;
   const workspaceId = `${prefix}-ws`;
@@ -229,7 +244,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     await Promise.all([plannedShift('a', { date: '2026-08-12' }), plannedShift('b', { date: '2026-08-13' }), plannedShift('c', { date: '2026-08-16', type: 'day_off', startTime: '00:00', endTime: '00:00' })]);
     const bankDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date('2026-10-17T12:00:00.000Z') };
     await assert.rejects(generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 1 }, bankDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
-    await assert.rejects(readBankStatement(reviewer, { employeeUid: userId }, bankDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+    await assert.rejects(readBankStatement(reviewer, { employeeUid: userId }, bankDeps), { code: 'PTRP_BANK_SUBJECT_FORBIDDEN' });
     const pendingStatement = await readBankStatement(titular, { date: '2026-08-20' }, bankDeps);
     assert.deepEqual([pendingStatement.statement.missing, pendingStatement.closures], [['2026-08'], { '2026-08': 2 }]);
     const bankMonth = await generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 2 }, bankDeps);
@@ -264,7 +279,15 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       people: [{ cpf: '52998224725', uid: userId, name: 'Maria Fiscal' }] });
     const sign = async () => ({ bytes: Buffer.from('p7s'), format: 'CAdES', detached: true, certificateCnpj: '14276603000125' });
     const readIdentity = async () => ({ cpf: '52998224725', name: 'Maria Fiscal' });
-    const aejDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: 'dev@exemplo.com', readArp, readIdentity, sign };
+    const fiscalObjects = new Map();
+    const fiscalStore = {
+      async put(path, bytes, contentType, sha256, retainUntilTime) {
+        assert.equal(fiscalObjects.has(path), false); const generation = String(fiscalObjects.size + 1);
+        fiscalObjects.set(path, { bytes: Buffer.from(bytes), contentType, sha256, generation, retainUntilTime });
+        return { bucket: 'fiscal-test', generation, retainUntilTime, retentionMode: 'Locked' };
+      },
+    };
+    const aejDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: 'dev@exemplo.com', readArp, readIdentity, sign, fiscalStore };
     const input = { establishmentId: treatment.establishmentId, startDate: '2026-08-01', endDate: '2026-08-31' };
     await assert.rejects(exportAej(admin, { ...input, endDate: '2026-09-30' }, aejDeps), { code: 'PTRP_AEJ_COMPETENCE_OPEN' });
     await assert.rejects(exportAej(admin, input, { ...aejDeps, developerEmail: undefined }), { code: 'PTRP_AEJ_DEVELOPER_EMAIL_MISSING' });
@@ -288,6 +311,14 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.deepEqual(lines.filter((line) => line.startsWith('07|')), ['07|1|3|2026-08-12|200|2', '07|1|1|2026-08-16||', '07|1|3|2026-08-20|10|1']);
     const audit = (await hrDbAdmin.collection(AEJ_EXPORTS).where('workspaceId', '==', workspaceId).where('sha256', '==', aej.sha256).get()).docs[0].data();
     assert.equal(audit.sha256, aej.sha256);
+    assert.equal(audit.schemaVersion, 2);
+    const aejBundle = fiscalObjects.get(audit.artifacts.bundle.storagePath).bytes;
+    const aejEntries = zipEntries(aejBundle);
+    assert.equal(aejEntries.get(audit.artifacts.content.filename).toString('base64'), aej.aejBase64);
+    assert.equal(aejEntries.get(audit.artifacts.signature.filename).toString('base64'), aej.signatureBase64);
+    assert.equal(audit.artifacts.retentionYears, 20);
+    assert.equal(audit.artifacts.bundle.retentionMode, 'Locked');
+    assert.equal(audit.artifacts.bundle.storageBucket, 'fiscal-test');
     assert.deepEqual(audit.closureVersions, { '2026-08': 2 });
 
     // Uma extra estornada pode ser aprovada de novo por uma nova operação; repetir a mesma operação continua idempotente.

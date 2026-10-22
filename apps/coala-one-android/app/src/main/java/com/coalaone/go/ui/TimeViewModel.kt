@@ -151,6 +151,15 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         }
         then(file)
     }
+    /** Exports the selected month's original signed receipts plus the server-generated completeness index. */
+    fun receiptArchive(directory: File, then: (File) -> Unit) = serverRun {
+        val state = mutable.value
+        require(!state.truncated) { "O mês tem registros demais. Escolha um período menor no Coala One." }
+        val (start, end) = TimeRules.monthRange(state.month)
+        val complete = state.markings.all { it.receiptStatus == "available" }
+        val fileName = "comprovantes-ponto-$start-a-$end-${if (complete) "completo" else "incompleto"}.zip"
+        then(cacheFile(directory, "time-documents", fileName, api.receiptArchive(start, end)))
+    }
     private fun dateInSelectedMonth(state: TimeState) = if (state.month == YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     /** Banco é carregado só quando a aba é aberta: não acrescenta leituras ao registro diário. */
     fun loadBank() = serverRun {

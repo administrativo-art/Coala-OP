@@ -4,6 +4,8 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPEmployeeIdentity, readRepPForAej, REP_P_DEVELOPER_CNPJ, signPtrpDetached } from '@/features/dp/rep-p/service.server';
+import { fiscalArtifactStore, persistFiscalArtifactPair,
+  type FiscalArtifactStore, type PersistedFiscalArtifacts } from '@/features/dp/rep-p/fiscal-artifact-storage.server';
 import { bankMonthForAej, bankMovementsForAej } from '@/features/dp/time-bank/service.server';
 import { bankLinesWithMovements, overnightWorkDate, type BankManualMovement } from '@/features/dp/time-bank/core';
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -22,9 +24,11 @@ const DEVELOPER_NAME = 'CT SORVETES LTDA';
 const MAX_DAYS = 62;
 
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached;
+  fiscalStore: FiscalArtifactStore;
   readBank?: (workspaceId: string, competence: string, uid: string, actorUid: string) => ReturnType<typeof bankMonthForAej>;
   readMovements?: (workspaceId: string, uid: string, competences: string[]) => Promise<BankManualMovement[]> };
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(), readArp: readRepPForAej, readIdentity: readRepPEmployeeIdentity, sign: signPtrpDetached };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(),
+  readArp: readRepPForAej, readIdentity: readRepPEmployeeIdentity, sign: signPtrpDetached, fiscalStore: fiscalArtifactStore };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
@@ -136,10 +140,25 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
     employees,
   });
   const signed = await deps.sign(pkg.bytes);
-  await deps.hrDb.collection(AEJ_EXPORTS).add({ schemaVersion: 1, workspaceId: context.workspace_id, establishmentId: input.establishmentId,
+  const auditRef = deps.hrDb.collection(AEJ_EXPORTS).doc();
+  const auditBase = { schemaVersion: 2, workspaceId: context.workspace_id, establishmentId: input.establishmentId,
     startDate: input.startDate, endDate: input.endDate, generatedAt: arp.generatedAt, actorId: context.decoded.uid, layoutVersion: '002',
-    filename: pkg.filename, sha256: pkg.sha256, certificateCnpj: signed.certificateCnpj, counts: pkg.counts, lineCount: pkg.lineCount,
-    warnings: pkg.warnings.length, closureVersions: Object.fromEntries(competences.map((competence, index) => [competence, closures[index].get('version')])), createdAt: new Date().toISOString() });
+    filename: pkg.filename, signatureFilename: pkg.signatureFilename, sha256: pkg.sha256, certificateCnpj: signed.certificateCnpj,
+    counts: pkg.counts, lineCount: pkg.lineCount, warnings: pkg.warnings.length,
+    closureVersions: Object.fromEntries(competences.map((competence, index) => [competence, closures[index].get('version')])) };
+  await auditRef.set({ ...auditBase, status: 'archiving', createdAt: new Date().toISOString() });
+  let artifacts: PersistedFiscalArtifacts | undefined;
+  try {
+    artifacts = await persistFiscalArtifactPair({ store: deps.fiscalStore, kind: 'aej', workspaceId: context.workspace_id,
+      establishmentId: input.establishmentId, exportId: auditRef.id, filename: pkg.filename, content: pkg.bytes,
+      expectedSha256: pkg.sha256, signatureFilename: pkg.signatureFilename, signature: Buffer.from(signed.bytes) });
+    await auditRef.set({ ...auditBase, status: 'exported', artifacts, completedAt: new Date().toISOString() }, { merge: true });
+  } catch (cause) {
+    await auditRef.set({ status: 'archive_failed', ...(artifacts ? { artifacts } : {}), updatedAt: new Date().toISOString() }, { merge: true }).catch(() => undefined);
+    throw new AppError({ code: 'PTRP_AEJ_ARCHIVE_FAILED', kind: 'TRANSIENT_EXTERNAL', retryable: true,
+      safeMessage: 'O AEJ foi gerado, mas não pôde ser arquivado com segurança. Tente novamente.', cause });
+  }
   return { filename: pkg.filename, aejBase64: pkg.bytes.toString('base64'), sha256: pkg.sha256, signatureFilename: pkg.signatureFilename,
-    signatureBase64: Buffer.from(signed.bytes).toString('base64'), certificateCnpj: signed.certificateCnpj, counts: pkg.counts, lineCount: pkg.lineCount, warnings: pkg.warnings };
+    signatureBase64: Buffer.from(signed.bytes).toString('base64'), certificateCnpj: signed.certificateCnpj, counts: pkg.counts,
+    lineCount: pkg.lineCount, warnings: pkg.warnings, exportId: auditRef.id, archived: true as const };
 }
