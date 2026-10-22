@@ -9,7 +9,11 @@ import { describe, it } from 'node:test';
  * (Anexo IX, item 7). Este teste impede os caminhos estáticos de exclusão que o banco
  * compartilhado abriria.
  */
-const ARP_WRITERS = ['src/features/dp/rep-p/service.server.ts', 'src/features/dp/rep-p/monitor.server.ts'];
+const ARP_WRITERS = [
+  'src/features/dp/rep-p/location-policy.server.ts',
+  'src/features/dp/rep-p/monitor.server.ts',
+  'src/features/dp/rep-p/service.server.ts',
+];
 
 function sources(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -21,7 +25,7 @@ function sources(directory: string): string[] {
 const files = [...sources('src'), ...sources('functions/src')].map((path) => ({ path, text: readFileSync(path, 'utf8') }));
 
 describe('ARP do REP-P protegida contra exclusão no banco compartilhado', () => {
-  it('only the REP-P service and monitor reference repP_ collections', () => {
+  it('only the bounded REP-P services reference repP_ collections', () => {
     assert.deepEqual(files.filter((file) => file.text.includes('repP_')).map((file) => file.path).sort(), [...ARP_WRITERS].sort());
   });
 

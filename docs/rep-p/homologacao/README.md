@@ -1,6 +1,6 @@
 # Homologação do REP-P
 
-Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `REP_P_MARKING_ENABLED`. Nada aqui registra batida nem altera a ARP. Estado em 18/10/2026.
+Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `REP_P_MARKING_ENABLED`. Nada aqui registra batida nem altera a ARP. Estado em 22/10/2026.
 
 ## Relatório de gates
 
@@ -10,10 +10,10 @@ Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `R
 | 2 | Backup, PITR e proteção contra exclusão do `coala-rh` | Ligados | Conferido em 18/10/2026: PITR e proteção ativos, backup diário com retenção de 98 dias; **restauração ainda não ensaiada** ([roteiro](iam-e-restauracao.md)) |
 | 3 | e-CNPJ A1 da desenvolvedora no Secret Manager | Atendido | `REP_P_ICP_SIGNER_PEM` v1, válido até 16/06/2027; vencimento monitorado pela central de avisos |
 | 4 | Amostras AFD/CAdES e comprovante/PAdES aprovadas no ITI | Pendente | Gerar com o [script de amostras](#amostras) e seguir o [checklist ITI](validacao-iti.md) |
-| 5 | e-CPF A1 do responsável técnico (e do responsável legal, se for outra pessoa) | Pendente (compra) | Fica com cada pessoa; **não** vai ao sistema nem ao Secret Manager ([roteiro](#assinatura-com-e-cpf)) |
+| 5 | e-CPF A1 do responsável técnico (e do responsável legal, se for outra pessoa) | Instalado localmente; validação pendente | O e-CPF informado pelo programador foi instalado em 21/10/2026. Falta assinar uma amostra e validar a cadeia/qualificação no ITI. Fica com cada pessoa; **não** vai ao sistema nem ao Secret Manager ([roteiro](#assinatura-com-e-cpf)) |
 | 6 | Atestado Técnico e Termo de Responsabilidade do REP-P | Pendente | [Modelo preenchível](atestados.md#rep-p); depende do INPI (gate 8) |
-| 7 | Atestado do PTRP | Bloqueado | O PTRP (apuração) ainda não existe; não atestar programa não implementado |
-| 8 | Registro do programa no INPI | Pendente | Número definitivo configura comprovante e AFD (13 dígitos, P&R 49) |
+| 7 | Atestado do PTRP | Pendente | Tratamentos, fechamento, espelho, AEJ e banco existem; falta fechar a versão candidata, validar o conjunto integrado e preencher/assinar o atestado correspondente |
+| 8 | Registro do programa no INPI | Pendente, pacote técnico preparado | O [checklist do INPI](inpi.md) e o gerador reproduzível de ZIP/hash estão prontos. Faltam autores/titularidade, datas, requerente/signatário e a versão final; o número definitivo configura comprovante e AFD (13 dígitos, P&R 49) |
 | 9 | IAM revisado (privilégio mínimo sobre `repP_*`) | Pendente, com achado | Conta padrão do Compute com `firebase.admin` alcança a ARP ([inventário](iam-e-restauracao.md#inventário-iam)) |
 | 10 | Perguntas ao advogado respondidas | Pendente | [Registro de normas](../referencias/README.md#perguntas-abertas-ao-advogado): preenchimento numérico do AFD é irreversível após a 1ª batida real |
 | 11 | Validade das assinaturas e ReSinc | Risco aberto | O e-CNPJ vence em 16/06/2027: sem carimbo do tempo (ACT), AFD e comprovantes de guarda longa podem perder verificabilidade. Decidir sobre ACT e o plano de renovação do e-CNPJ **antes** de ligar a flag; ReSinc/HLB certificada segue como decisão jurídica (gate 10) |
@@ -24,9 +24,9 @@ Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `R
 
 ## Ordem recomendada
 
-1. Comprar o e-CPF A1 do responsável técnico.
+1. Validar no ITI uma assinatura de amostra feita com o e-CPF instalado.
 2. Responder com o advogado as perguntas do registro de normas, inclusive a acumulação de responsável legal e técnico pela mesma pessoa e se um único e-CPF assina os dois campos.
-3. Pedir o registro no INPI.
+3. Preencher o [checklist do INPI](inpi.md), congelar a versão, gerar o ZIP/hash e protocolar o registro.
 4. Gerar as amostras e validá-las no ITI.
 5. Ensaiar a restauração e revisar o IAM.
 6. Com o número definitivo do INPI em mãos, preencher e assinar o atestado do REP-P.

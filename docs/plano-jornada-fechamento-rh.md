@@ -127,7 +127,7 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-O portal web permanece on-line. A contingência offline foi implementada localmente somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, bloqueio após reinício, fila cifrada e assinada, envio ordenado e NSR apenas no servidor. Ainda depende de Play Integrity `enforce`, teste físico e homologação jurídica/operacional antes do piloto. Geolocalização não integra o MVP inicial; sua extensão posterior está definida na [especificação técnica de georreferenciamento](engineering/time-recording-geolocation.md), com coleta somente na batida, sem bloqueio, evidência separada da ARP e gates de privacidade. Biometria/reconhecimento facial ficam fora do escopo.
+O portal web permanece on-line. A contingência offline foi implementada localmente somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, bloqueio após reinício, fila cifrada e assinada, envio ordenado e NSR apenas no servidor. Ainda depende de Play Integrity `enforce`, teste físico e homologação jurídica/operacional antes do piloto. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila offline não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
 
 ### 3.8. Estágios
 
@@ -556,4 +556,4 @@ Todos necessários:
 | Assinatura, proteção ARP e contingência | Desenvolvimento + responsáveis | Fase 2 |
 | Eventos, unidades e formatos contábeis | DP + contador | Fase 5 |
 | Estabelecimento piloto e critérios de diferença | RH + desenvolvimento | Antes da Fase 8 |
-| Necessidade offline/geolocalização | Operação + jurídico + desenvolvimento | Extensão posterior |
+| Parâmetros e validação física da geolocalização | Operação + jurídico + desenvolvimento | Antes do piloto nominal |

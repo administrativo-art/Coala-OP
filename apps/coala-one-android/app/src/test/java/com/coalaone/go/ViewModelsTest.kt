@@ -309,6 +309,30 @@ class ViewModelsTest {
         revived.record(); advanceUntilIdle()
         assertNotEquals(sent[2].attemptId, sent[3].attemptId)
     }
+    @Test fun locationIsPreservedWithThePunchAcrossNetworkFailureAndProcessRestart() = runTest {
+        val sent = mutableListOf<MarkingRequest>(); var first = true
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                val original = DemoApi().timeOptions(workDate)
+                return original.copy(executionUnits = original.executionUnits.map { unit ->
+                    unit.copy(locationPolicy = LocationPolicy("observe", 1, 10_000, 100.0, "https://example.test/privacidade"))
+                })
+            }
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sent += request
+                if (first) { first = false; throw java.io.IOException("lost") }
+                return DemoApi().mark(request)
+            }
+        }
+        val saved = androidx.lifecycle.SavedStateHandle(); val repository = repository(auth, api)
+        val location = LocationAttempt("capture-1", "captured", 300, "2026-10-19T11:00:00Z", -1.4558, -48.4902, 15.0)
+        val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
+        vm.record(true, location); advanceUntilIdle(); assertTrue(vm.hasPendingLocationAttempt())
+        val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
+        revived.record(); advanceUntilIdle()
+        assertEquals(sent[0].attemptId, sent[1].attemptId); assertEquals(location, sent[1].locationAttempt)
+        assertFalse(revived.hasPendingLocationAttempt()); assertNull(saved.get<String>("attemptLocation"))
+    }
     @Test fun offlinePunchStaysLocalWithoutPretendingItHasAnNsr() = runTest {
         var sends = 0
         val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest): MarkingResponse {

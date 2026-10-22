@@ -121,10 +121,10 @@ export type ReceiptActions = {
   retry: (receiptId: string) => void;
 };
 
-export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment }: {
-  day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions; onClose: () => void;
+export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment, readOnly = false }: {
+  day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null; onClose: () => void;
   onRequestAbsence: (date: string) => void;
-  adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void; onOpenAdjustment: (id: string) => void;
+  adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void; onOpenAdjustment: (id: string) => void; readOnly?: boolean;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -150,7 +150,7 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
               </div>
             );
           })}
-          {day.incidents.includes("missing") ? (
+          {day.incidents.includes("missing") && !readOnly ? (
             <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAbsence(day.date)}>
               <CalendarPlus className="h-4 w-4" aria-hidden /> Justificar com ausência
             </Button>
@@ -184,7 +184,7 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
       <PanelSection title="Batidas" aside={day.markings.length ? `${day.markings.length} no dia` : undefined}>
         {day.allMarkings.length === 0 ? <p className="text-sm text-ds-ink-muted">Nenhuma batida neste dia.</p> : day.allMarkings.map((marking) => {
           const index = day.markings.indexOf(marking);
-          const busy = receipts.busyReceipt === marking.receiptId;
+          const busy = receipts?.busyReceipt === marking.receiptId;
           if (marking.treatment === "discarded" || marking.treatment === "included") {
             return (
               <div key={marking.receiptId} className="flex items-start gap-3 border-b border-ds-divider pb-3 last:border-0 last:pb-0">
@@ -211,7 +211,7 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
                 <p className="text-xs text-ds-ink-muted">NSR {marking.nsr} · {unitNames.get(marking.executionUnitId) ?? "Unidade do registro"}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <ReceiptPill status={marking.receiptStatus} />
-                  {marking.receiptStatus === "available" ? (
+                  {marking.receiptStatus === "available" && receipts ? (
                     <>
                       <Button type="button" variant="ds-secondary" size="sm" loading={busy} loadingLabel="Abrindo…" onClick={() => receipts.open(marking)}>
                         <FileText className="h-4 w-4" aria-hidden /> Baixar
@@ -222,13 +222,13 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
                         </Button>
                       ) : null}
                     </>
-                  ) : (
+                  ) : marking.receiptStatus !== "available" && receipts ? (
                     <Button type="button" variant="ds-secondary" size="sm" loading={busy} loadingLabel="Emitindo…" onClick={() => receipts.retry(marking.receiptId)}>
                       <RefreshCw className="h-4 w-4" aria-hidden /> Tentar emitir
                     </Button>
-                  )}
+                  ) : null}
                 </div>
-                {receipts.error?.id === marking.receiptId ? <p role="alert" className="text-xs font-semibold text-ds-danger">{receipts.error.message}</p> : null}
+                {receipts?.error?.id === marking.receiptId ? <p role="alert" className="text-xs font-semibold text-ds-danger">{receipts.error.message}</p> : null}
               </div>
             </div>
           );
@@ -236,7 +236,7 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
         <p className="flex items-start gap-1.5 text-xs text-ds-ink-muted">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Entrada, intervalo e saída são só uma leitura pela ordem das batidas; a batida guarda apenas o horário.
         </p>
-        {day.date <= today ? (
+        {day.date <= today && !readOnly ? (
           <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Pedir ajuste de ponto</Button>
         ) : null}
       </PanelSection>
@@ -244,8 +244,8 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
   );
 }
 
-export function AbsencesAndAlerts({ days, absences, filter, onFilter, onRequestAbsence }: {
-  days: DayView[]; absences: DayAbsence[]; filter: string; onFilter: (filter: string) => void; onRequestAbsence: () => void;
+export function AbsencesAndAlerts({ days, absences, filter, onFilter, onRequestAbsence, readOnly = false }: {
+  days: DayView[]; absences: DayAbsence[]; filter: string; onFilter: (filter: string) => void; onRequestAbsence: () => void; readOnly?: boolean;
 }) {
   const alerts = (Object.keys(INCIDENTS) as DayIncident[]).map((key) => ({ key, count: days.filter((day) => day.incidents.includes(key)).length }));
   const selectedClass = "bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]";
@@ -271,9 +271,11 @@ export function AbsencesAndAlerts({ days, absences, filter, onFilter, onRequestA
             </button>
           );
         })}
-        <Button type="button" variant="ds-secondary" size="sm" className="mt-1 w-full" onClick={onRequestAbsence}>
-          <CalendarPlus className="h-4 w-4" aria-hidden /> Solicitar ausência
-        </Button>
+        {!readOnly ? (
+          <Button type="button" variant="ds-secondary" size="sm" className="mt-1 w-full" onClick={onRequestAbsence}>
+            <CalendarPlus className="h-4 w-4" aria-hidden /> Solicitar ausência
+          </Button>
+        ) : null}
       </div>
       <div className="space-y-1.5 border-t border-ds-divider pt-4">
         <h2 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">A conferir</h2>

@@ -8,7 +8,7 @@ import { errorMessageOf, PanelSelectField } from "@/components/patterns/panel-fo
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-import { brDate, fiscalTime, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
+import { brDate, fiscalTime, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import { useRepPMarking } from "./use-rep-p-marking";
 
 const MY_TIME_RECORDING_PATH = "/dashboard/collaborator/time-recording";
@@ -24,7 +24,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
   const marking = useRepPMarking();
   const {
     options, optionsError, loadOptions, unitId, setUnitId, recording, recordError, record, lastMarking, setLastMarking, canRecord,
-    fetchReceiptFile, unitClock,
+    fetchReceiptFile, unitClock, locationCaptureState, unitLocationPolicy, discardPendingAttempt,
   } = marking;
 
   if (!options?.markingEnabled || !options.eligible || options.executionUnits.length === 0) return null;
@@ -33,6 +33,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
     // Com a batida em voo a janela não fecha: a confirmação do servidor não pode se perder.
     if (!next && recording) return;
     setOpen(next);
+    if (!next) discardPendingAttempt();
     if (next) {
       setLastMarking(null);
       setReceiptError(null);
@@ -74,6 +75,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
                   Ponto registrado em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · NSR {lastMarking.marking.nsr}
                   {lastMarking.status === "replayed" ? " (já estava gravado)" : ""}
                 </p>
+                <LocationResultNotice location={lastMarking.location} />
                 <ReceiptPill status={lastMarking.receiptStatus} />
                 {lastMarking.receiptStatus === "available" ? (
                   <Button type="button" variant="ds-secondary" size="sm" loading={downloading} loadingLabel="Abrindo…" onClick={() => void downloadReceipt()}>
@@ -90,6 +92,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
             ) : (
               <p className="text-sm text-ds-ink-2">Unidade: <strong>{options.executionUnits[0]?.name}</strong></p>
             )}
+            {!lastMarking ? <LocationCaptureNotice policy={unitLocationPolicy} state={locationCaptureState} /> : null}
             {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Button asChild variant="ds-ghost" size="sm">

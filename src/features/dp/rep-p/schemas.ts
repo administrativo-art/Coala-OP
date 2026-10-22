@@ -7,6 +7,23 @@ const date = z.string().refine(isCivilDate, 'Data civil inválida.');
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const safeElapsed = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
+const locationCaptureBase = z.object({
+  captureId: id,
+  elapsedMs: z.number().int().nonnegative().max(60_000),
+});
+
+export const repPLocationAttemptSchema = z.discriminatedUnion('status', [
+  locationCaptureBase.extend({
+    status: z.literal('captured'),
+    capturedAt: z.string().datetime({ offset: true }),
+    latitude: z.number().finite().min(-90).max(90),
+    longitude: z.number().finite().min(-180).max(180),
+    accuracyMeters: z.number().finite().positive().max(100_000),
+  }).strict(),
+  ...(['denied', 'unavailable', 'timeout', 'unsupported', 'error'] as const).map((status) =>
+    locationCaptureBase.extend({ status: z.literal(status) }).strict()),
+]);
+
 export const repPOfflineEvidenceSchema = z.object({
   permitId: id,
   deviceKeyId: sha256,
@@ -25,8 +42,11 @@ export const repPMarkingSchema = z.object({
   executionUnitId: id,
   channel: z.enum(['mobile', 'browser']),
   offline: repPOfflineEvidenceSchema.optional(),
+  locationAttempt: repPLocationAttemptSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.offline && value.channel !== 'mobile') context.addIssue({ code: 'custom', path: ['channel'], message: 'Marcação offline exige o Coala Go.' });
+  if (value.offline && value.locationAttempt) context.addIssue({ code: 'custom', path: ['locationAttempt'],
+    message: 'A contingência offline não aceita localização sem assinatura criptográfica própria.' });
 });
 
 export const repPOfflinePermitSchema = z.object({
@@ -60,6 +80,7 @@ export const repPOwnOptionsSchema = z.object({ workDate: date }).strict();
 export type RepPOwnOptionsRequest = z.infer<typeof repPOwnOptionsSchema>;
 export type RepPOwnHistoryRequest = z.infer<typeof repPOwnHistorySchema>;
 export type RepPMarkingRequest = z.infer<typeof repPMarkingSchema>;
+export type RepPLocationAttemptRequest = z.infer<typeof repPLocationAttemptSchema>;
 export type RepPOfflinePermitRequest = z.infer<typeof repPOfflinePermitSchema>;
 export type RepPAfdExportRequest = z.infer<typeof repPAfdExportSchema>;
 

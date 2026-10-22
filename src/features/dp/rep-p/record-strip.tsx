@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { breakStatus, plannedPausesOf, type BreakLevel } from "./break-status";
 import { fiscalClock, workedMinutes, type DayShift, type DayView } from "./day-model";
-import { brDate, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
+import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import type { useRepPMarking } from "./use-rep-p-marking";
 
 type Marking = ReturnType<typeof useRepPMarking>;
@@ -206,13 +206,14 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
 function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onRecorded }: {
   open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; unitName: string; label: string; index: number; onRecorded: () => void;
 }) {
-  const { recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile, unitClock } = marking;
+  const { recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile, unitClock,
+    locationCaptureState, unitLocationPolicy } = marking;
   const [downloading, setDownloading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
 
   function changeOpen(next: boolean) {
     if (!next && recording) return;
-    if (!next) { setLastMarking(null); setReceiptError(null); }
+    if (!next) { setLastMarking(null); setReceiptError(null); marking.discardPendingAttempt(); }
     onOpenChange(next);
   }
   async function confirm() {
@@ -244,6 +245,7 @@ function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onR
             </DialogHeader>
             <p className="font-ds-mono text-[44px] font-extrabold leading-none text-ds-ink">{fiscalClock(lastMarking.marking.markedAt)}</p>
             <p className="text-sm text-ds-ink-muted">{brDate(lastMarking.marking.markedAt)} · {unitName} · NSR {lastMarking.marking.nsr}</p>
+            <LocationResultNotice location={lastMarking.location} />
             <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-3">
               <ReceiptPill status={lastMarking.receiptStatus} />
               {lastMarking.receiptStatus === "available" ? (
@@ -270,6 +272,7 @@ function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onR
               <dt className="text-ds-ink-muted">Sugestão</dt>
               <dd className="font-bold text-ds-ink">{label} <span className="font-normal text-ds-ink-muted">(sugerida pela ordem das batidas)</span></dd>
             </dl>
+            <LocationCaptureNotice policy={unitLocationPolicy} state={locationCaptureState} />
             {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ds-ghost" onClick={() => changeOpen(false)} disabled={recording}>Cancelar</Button>

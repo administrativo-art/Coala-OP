@@ -234,7 +234,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
           subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências · ${selected.shiftSwaps.length} trocas`}>
           {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
           {closed ? <ClosingPackageCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} onChanged={() => setPackagesKey((value) => value + 1)} /> : null}
-          {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} /> : null}
+          {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} canManage={data.can.close} /> : null}
           <PanelSection title="Ajustes de ponto">
             {selected.adjustments.length ? selected.adjustments.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">

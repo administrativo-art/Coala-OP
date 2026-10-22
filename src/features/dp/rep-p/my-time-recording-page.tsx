@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Eye, Info } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { BackButton } from "@/components/navigation/back-button";
@@ -26,6 +26,15 @@ import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
 type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
 type HistoryPayload = { markings: HistoryItem[]; truncated: boolean };
 type MonthPayload = { month: string; shifts: (DayShift & { date: string })[]; truncated: boolean };
+type EmployeeMonthPayload = {
+  employee: { uid: string; name: string };
+  schedule: MonthPayload;
+  history: HistoryPayload;
+  absences: DayAbsence[];
+  adjustments: AdjustmentView[];
+  treatments: TreatmentView[];
+  unitNames: Record<string, string>;
+};
 
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 // Ausências da conta "minhas" filtram pela data de início; 40 dias antes do mês pegam as que começaram no mês anterior.
@@ -43,12 +52,16 @@ function addDays(date: string, days: number) {
   return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-export function MyTimeRecordingPage() {
-  const { firebaseUser, permissions } = useAuth();
-  const canView = permissions.dashboard.collaborator ?? permissions.dashboard.view;
+export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = {}) {
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
+  const readOnly = Boolean(employeeUid);
+  const canReadOthers = isDefaultAdmin || permissions.dp?.timeRecording?.view === true
+    || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
+  const canView = readOnly ? canReadOthers : (permissions.dashboard.collaborator ?? permissions.dashboard.view);
+  const canReadClosure = isDefaultAdmin || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
   const [reloadKey, setReloadKey] = useState(0);
   const onRecorded = useCallback(() => setReloadKey((current) => current + 1), []);
-  const marking = useRepPMarking({ onRecorded });
+  const marking = useRepPMarking({ onRecorded, enabled: !readOnly });
   const { today, request, fetchReceiptFile, options, setLastMarking } = marking;
   const currentMonth = today.slice(0, 7);
 
@@ -70,6 +83,8 @@ export function MyTimeRecordingPage() {
   const [absenceDate, setAbsenceDate] = useState<string | undefined>(undefined);
   const [busyReceipt, setBusyReceipt] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
+  const [employeeName, setEmployeeName] = useState<string | null>(null);
+  const [employeeUnitNames, setEmployeeUnitNames] = useState<Record<string, string>>({});
 
   const monthStart = `${month}-01`;
   const monthEnd = addDays(`${shiftMonth(month, 1)}-01`, -1);
@@ -81,6 +96,24 @@ export function MyTimeRecordingPage() {
     const historyEnd = monthEnd < today ? monthEnd : today;
     setLoading(true);
     setLoadError(null);
+    if (employeeUid) {
+      request<EmployeeMonthPayload>(`/api/dp/time-recording/employees/${encodeURIComponent(employeeUid)}`,
+        { method: "POST", json: { month }, fallbackError: "Não foi possível carregar o ponto do colaborador." })
+        .then((payload) => {
+          if (cancelled) return;
+          setEmployeeName(payload.employee.name);
+          setEmployeeUnitNames(payload.unitNames);
+          setSchedule(payload.schedule);
+          setHistory(payload.history);
+          setAbsences(payload.absences);
+          setAbsencesUnavailable(false);
+          setAdjustments(payload.adjustments);
+          setTreatments(payload.treatments);
+        })
+        .catch((error) => { if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês.")); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
     Promise.all([
       request<MonthPayload>(`/api/dp/time-recording/month?month=${month}`, { fallbackError: "Não foi possível carregar sua escala." }),
       monthStart <= today
@@ -108,7 +141,7 @@ export function MyTimeRecordingPage() {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
+  }, [employeeUid, firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
 
   const days = useMemo(() => buildMonthView({
     month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences, treatments,
@@ -123,7 +156,9 @@ export function MyTimeRecordingPage() {
   const todayView = useMemo<DayView>(() => todaySnapshot
     ?? { date: today, shift: null, markings: [], allMarkings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null, balanceMinutes: null, deviation: null },
   [todaySnapshot, today]);
-  const unitNames = useMemo(() => new Map(options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [options]);
+  const unitNames = useMemo(() => new Map(readOnly
+    ? Object.entries(employeeUnitNames)
+    : options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [employeeUnitNames, options, readOnly]);
 
   const matches = useCallback((day: DayView) => {
     if (filter === "alert") return day.incidents.length > 0;
@@ -204,25 +239,34 @@ export function MyTimeRecordingPage() {
   const receipts: ReceiptActions = { busyReceipt, canShare, error: receiptError, open: (item) => void openReceipt(item),
     share: (item) => void shareReceipt(item), retry: (id) => void retryReceipt(id) };
 
-  if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para acessar o Painel do colaborador.</p>;
+  if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para consultar este registro de ponto.</p>;
 
   return (
     <PageContainer variant="wide" className="space-y-5 pb-8">
       <header className="flex items-center gap-3">
-        <BackButton fallbackHref="/dashboard/collaborator" label="Painel do colaborador" variant="ghost" size="sm" className="-ml-2" />
-        <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Registro de ponto</h1>
+        <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
+          label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="ghost" size="sm" className="-ml-2" />
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Registro de ponto</h1>
+          {readOnly ? <p className="text-sm font-semibold text-ds-ink-muted">{employeeName ?? "Colaborador"}</p> : null}
+        </div>
       </header>
 
-      <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />
+      {readOnly ? (
+        <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
+          <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
+          <p><strong className="text-ds-ink">Modo de conferência.</strong> Esta tela permite analisar escala, batidas, ausências, ajustes, alertas e saldo. Ela não registra ponto em nome do colaborador.</p>
+        </div>
+      ) : <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />}
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} />
+          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} readOnly={readOnly} />
           {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
           {/* Só aparece com o mês fechado pelo DP. */}
-          <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} />
+          {!readOnly || canReadClosure ? <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} employeeUid={employeeUid} /> : null}
           {/* Só aparece com o banco ligado na política; soma os meses já fechados do ciclo. */}
-          <TimeBankCard firebaseUser={firebaseUser} />
+          <div id="banco-de-horas" className="scroll-mt-28"><TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} /></div>
         </aside>
 
         <div className="min-w-0 space-y-3">
@@ -315,12 +359,12 @@ export function MyTimeRecordingPage() {
         </div>
       </div>
       <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
-        today={today} unitNames={unitNames} receipts={receipts} onClose={() => setOpenDate(null)}
+        today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} onClose={() => setOpenDate(null)}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
-        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} />
-      {adjustDate ? (
+        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} />
+      {adjustDate && !readOnly ? (
         <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
           originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
           onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />
@@ -334,8 +378,8 @@ export function MyTimeRecordingPage() {
           </SidePanel>
         );
       })() : null}
-      <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
-        firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} />
+      {!readOnly ? <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
+        firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} /> : null}
     </PageContainer>
   );
 }

@@ -36,7 +36,8 @@ const rules = {
 
 test("ARP do REP-P no coala-rh não é acessível a nenhum cliente, nem administrador", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-arp", firestore: { rules: rules.rh } });
-  const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_offlinePermits", "repP_exportAudit"];
+  const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_offlinePermits", "repP_exportAudit",
+    "repP_locationPolicies", "repP_locationEvidence", "repP_locationReviews"];
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "rh_access_cache/owner"), { active: true, isDefaultAdmin: true, sessionVersion: 1 });

@@ -161,13 +161,18 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Cre
 
 /** Pedidos e tratamentos do próprio titular no mês, para o Registro de ponto. */
 export async function listOwnAdjustments(context: ServerUserContext, input: AdjustmentMonthInput, injected: Partial<Dependencies> = {}) {
+  return listAdjustmentsOfPerson(context.workspace_id, context.decoded.uid, input, injected);
+}
+
+/** Pedidos e tratamentos mensais de uma pessoa já autorizada pelo chamador. */
+export async function listAdjustmentsOfPerson(workspaceId: string, employeeUid: string, input: AdjustmentMonthInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   const start = `${input.month}-01`;
   const end = `${input.month}-31`;
   const [requests, treatments] = await Promise.all([
-    deps.hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', context.workspace_id).where('employeeUid', '==', context.decoded.uid)
+    deps.hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
       .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(MONTH_LIMIT).get(),
-    deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', context.workspace_id).where('employeeUid', '==', context.decoded.uid)
+    deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
       .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(MONTH_LIMIT * 2).get(),
   ]);
   return {

@@ -602,8 +602,8 @@ export default function SettingsPage() {
     },
     {
       value: "overtime",
-      label: "Hora extra",
-      title: "Hora extra",
+      label: "Hora extra e banco",
+      title: "Hora extra e banco de horas",
       description: "Configure regras, faixas e banco de horas, sem cálculo financeiro nesta fase.",
       content: <DPSettingsOvertime />,
     },

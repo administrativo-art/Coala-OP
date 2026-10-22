@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { StatusPill } from "@/components/ui/status-pill";
 
 import { formatOfficialClock, officialClockOffsetMs } from "./official-clock";
-import type { RepPOfficialClock, RepPReceiptStatus } from "./use-rep-p-marking";
+import type { RepPLocationCaptureState, RepPLocationPolicyForCollector, RepPMarkingPayload,
+  RepPOfficialClock, RepPReceiptStatus } from "./use-rep-p-marking";
 
 /** Entrega o arquivo ao navegador como download, sem abrir outra aba. */
 export function saveFile(file: File) {
@@ -68,4 +69,32 @@ export function ReceiptPill({ status }: { status: RepPReceiptStatus }) {
   return status === "available"
     ? <StatusPill variant="ok">Comprovante disponível</StatusPill>
     : <StatusPill variant="warn">Comprovante pendente</StatusPill>;
+}
+
+const CAPTURE_TEXT: Record<RepPLocationCaptureState, string> = {
+  idle: "A localização será solicitada somente ao confirmar esta batida.",
+  capturing: "Obtendo localização…",
+  ready: "Localização pronta.",
+  imprecise: "Localização imprecisa — o ponto será registrado para conferência.",
+  unavailable: "Localização não permitida ou indisponível — o ponto será registrado.",
+};
+
+export function LocationCaptureNotice({ policy, state }: {
+  policy: RepPLocationPolicyForCollector | null; state: RepPLocationCaptureState;
+}) {
+  if (!policy || policy.mode === "disabled") return null;
+  return <div className="rounded-ds-md border border-ds-info bg-ds-info-bg p-3 text-xs text-ds-ink-2">
+    <p className="font-semibold" aria-live="polite">{CAPTURE_TEXT[state]}</p>
+    <p className="mt-1">A posição é uma evidência informada pelo aparelho. Ela não bloqueia nem invalida a batida.</p>
+    {policy.privacyNoticeUrl ? <a className="mt-1 inline-block font-bold text-ds-accent-ink underline" href={policy.privacyNoticeUrl}
+      target="_blank" rel="noreferrer">Ler aviso de privacidade</a> : null}
+  </div>;
+}
+
+export function LocationResultNotice({ location }: { location: RepPMarkingPayload["location"] }) {
+  if (!location || location.evaluation === "not_requested") return null;
+  const text = location.evaluation === "inside" ? "Localização compatível com a unidade."
+    : location.evaluation === "outside" ? "Localização fora da área — ponto registrado para conferência."
+      : "Não foi possível confirmar a localização — ponto registrado.";
+  return <p className="text-xs font-semibold text-ds-ink-muted">{text}</p>;
 }
