@@ -17,8 +17,8 @@ Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `R
 | 9 | IAM revisado (privilégio mínimo sobre `repP_*`) | Pendente, com achado | Conta padrão do Compute com `firebase.admin` alcança a ARP ([inventário](iam-e-restauracao.md#inventário-iam)) |
 | 10 | Perguntas ao advogado respondidas | Pendente | [Registro de normas](../referencias/README.md#perguntas-abertas-ao-advogado): preenchimento numérico do AFD é irreversível após a 1ª batida real |
 | 11 | Validade das assinaturas e ReSinc | Risco aberto | O e-CNPJ vence em 16/06/2027: sem carimbo do tempo (ACT), AFD e comprovantes de guarda longa podem perder verificabilidade. Decidir sobre ACT e o plano de renovação do e-CNPJ **antes** de ligar a flag; ReSinc/HLB certificada segue como decisão jurídica (gate 10) |
-| 11-A | Pré-condições operacionais | Pendente | Cadastro fiscal e local de trabalho aprovados por estabelecimento; política para assinador fora do ar (pergunta 2); retenção e prazo mínimo (pergunta 3); AFD por intervalo e acesso do trabalhador ao comprovante e às últimas 48 h (art. 80 p.ú.) com teste; comunicação ao trabalhador e LGPD |
-| 12 | E2E da tela, Coala Go e piloto paralelo ao Bizneo | Pendente | E2E e Coala Go após os gates 4–11-A; o piloto liga a flag para um único estabelecimento, com o Bizneo como registro oficial (pergunta 4) |
+| 11-A | Pré-condições operacionais | Pendente, com preservação implementada | AFD/AEJ agora só são entregues depois de arquivar um ZIP único com os bytes exatos do `.txt` e do `.p7s`, mais manifesto; o código exige bucket fiscal dedicado com retenção por objeto em modo `Locked` por 20 anos. Falta provisionar esse bucket, configurar `REP_P_FISCAL_STORAGE_BUCKET`, conceder IAM mínimo e provar a trava. Também faltam cadastro fiscal/local aprovado, política de indisponibilidade do assinador, ensaio do acesso às últimas 48 h, comunicação ao trabalhador e LGPD |
+| 12 | E2E da tela, Coala Go e piloto paralelo ao Bizneo | Parcial | Em 22/10/2026 passaram o E2E local da tela pessoal × conferência administrativa, os testes JVM do Coala Go e o APK assinado 0.3.17/code22. Faltam aparelho físico, Play Integrity `enforce` e piloto com um único estabelecimento, mantendo o Bizneo como registro oficial (pergunta 4) |
 
 `REP_P_MARKING_ENABLED` só pode virar `true` com os gates 1–6, 8–11 e 11-A atendidos (o 7 vale para o PTRP), revisão do Doc Brown e decisão registrada do programador. Ligar a flag é um passo do piloto, não uma decisão posterior a ele: o piloto só existe com a flag ligada, limitado a um estabelecimento e com o Bizneo como registro oficial. As obrigações do art. 80 e do Anexo IX valem desde a primeira batida real.
 
@@ -28,9 +28,15 @@ Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `R
 2. Responder com o advogado as perguntas do registro de normas, inclusive a acumulação de responsável legal e técnico pela mesma pessoa e se um único e-CPF assina os dois campos.
 3. Preencher o [checklist do INPI](inpi.md), congelar a versão, gerar o ZIP/hash e protocolar o registro.
 4. Gerar as amostras e validá-las no ITI.
-5. Ensaiar a restauração e revisar o IAM.
+5. Provisionar o bucket fiscal com retenção por objeto, configurar `REP_P_FISCAL_STORAGE_BUCKET`, ensaiar a restauração e revisar o IAM.
 6. Com o número definitivo do INPI em mãos, preencher e assinar o atestado do REP-P.
 7. Concluir E2E e Coala Go; ligar a flag para um único estabelecimento-piloto; avaliar antes de expandir.
+
+## Arquivo fiscal imutável
+
+AFD/AEJ e suas assinaturas destacadas usam um bucket separado do armazenamento geral. O backend cria um único ZIP não comprimido com manifesto, arquivo fiscal e assinatura, preservando os bytes exatos dos dois últimos. Ele recusa a exportação quando `REP_P_FISCAL_STORAGE_BUCKET` não existe, quando o bucket não tem **Object Retention** habilitado ou quando o pacote não volta da API com retenção `Locked` por 20 anos. A gravação usa precondição de geração zero, registra bucket, caminho, geração, SHA-256, tamanho e término real da retenção na auditoria e não responde sucesso se o pacote não estiver protegido.
+
+Habilitar Object Retention é irreversível para o bucket e objetos em modo `Locked` não podem ter o prazo reduzido nem ser excluídos antes dele. Por isso, a criação/configuração do bucket e o IAM do runtime são um gate operacional deliberado, não uma mutação automática do deploy da aplicação. Depois do provisionamento, validar com `gcloud storage buckets describe gs://BUCKET --format="default(per_object_retention)"` e, numa amostra sem dados pessoais, conferir `retention_settings`, geração e SHA-256 dos dois objetos.
 
 ## Amostras
 

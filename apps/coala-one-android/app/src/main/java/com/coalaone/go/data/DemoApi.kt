@@ -117,6 +117,8 @@ class DemoApi @Inject constructor() : ApiService {
     }
     // A minimal PDF, so open, share and save can be tried in simulation.
     override suspend fun receipt(receiptId: String): ResponseBody = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 120]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF".toResponseBody("application/pdf".toMediaType())
+    override suspend fun receiptArchive(startDate: String, endDate: String): ResponseBody =
+        "PK\u0003\u0004demo".toResponseBody("application/zip".toMediaType())
     override suspend fun adjustments(month: String) = OwnAdjustments(emptyList())
     override suspend fun requestAdjustment(request: AdjustmentRequest) = AdjustmentCreated(Adjustment("simulation-adjustment", request.workDate, request.kind, "in_review", 1, reason = request.reason, createdAt = java.time.Instant.now().toString()))
     override suspend fun timeBank(date: String) = TimeBankResponse(TimeBankPolicy("simulation-policy", 1, "Banco de simulação", true),

@@ -20,6 +20,8 @@ import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } f
 import { configuredRepPClock } from './hlb-ntp-clock.server';
 import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zones';
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
+import { fiscalArtifactStore, persistFiscalArtifactPair,
+  type FiscalArtifactStore, type PersistedFiscalArtifacts } from './fiscal-artifact-storage.server';
 import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS,
   verifyRepPOfflineEvidence } from './offline';
 import { evaluateRepPLocation, repPLocationEvidenceDigest, repPLocationSummary,
@@ -28,6 +30,7 @@ import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_E
   repPLocationPolicyRef, disabledRepPLocationPolicy } from './location-policy.server';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
+import { buildRepPReceiptArchive } from './receipt-archive';
 import { repPAfdExportSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -53,7 +56,8 @@ const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; fiscalStore: FiscalArtifactStore;
+  afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
@@ -92,7 +96,7 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
 const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
-  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true' };
+  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true', fiscalStore: fiscalArtifactStore };
 
 export type RepPReceiptState = Readonly<{
   receiptId: string; receiptStatus: 'available' | 'pending'; receiptIssue: string | null;
@@ -859,14 +863,28 @@ export async function exportSignedRepPAfd(context: ServerUserContext, raw: unkno
   events.sort((a, b) => a.nsr - b.nsr);
   const pkg = generateRepPAfd({ profile: state.profile, startDate: input.startDate, endDate: input.endDate, generatedAt, events });
   const signed = await signRepPAfd(pkg, deps.signer, state.profile.developerCnpj);
-  await deps.repDb.collection(EXPORT_AUDIT).add({ schemaVersion: 1, workspaceId: context.workspace_id,
+  const auditRef = deps.repDb.collection(EXPORT_AUDIT).doc();
+  const auditBase = { schemaVersion: 2, workspaceId: context.workspace_id,
     establishmentId: input.establishmentId, startDate: input.startDate, endDate: input.endDate,
     generatedAt, actorId: context.decoded.uid, layoutVersion: '004', filename: signed.filename,
     signatureFilename: signed.signatureFilename, sha256: signed.sha256, certificateCnpj: signed.certificateCnpj,
-    counts: signed.counts, lineCount: signed.lineCount, createdAt: Timestamp.now() });
+    counts: signed.counts, lineCount: signed.lineCount };
+  await auditRef.set({ ...auditBase, status: 'archiving', createdAt: Timestamp.now() });
+  let artifacts: PersistedFiscalArtifacts | undefined;
+  try {
+    artifacts = await persistFiscalArtifactPair({ store: deps.fiscalStore, kind: 'afd', workspaceId: context.workspace_id,
+      establishmentId: input.establishmentId, exportId: auditRef.id, filename: signed.filename, content: signed.bytes,
+      expectedSha256: signed.sha256, signatureFilename: signed.signatureFilename, signature: Buffer.from(signed.signature) });
+    await auditRef.set({ ...auditBase, status: 'exported', artifacts, completedAt: Timestamp.now() }, { merge: true });
+  } catch (cause) {
+    await auditRef.set({ status: 'archive_failed', ...(artifacts ? { artifacts } : {}), updatedAt: Timestamp.now() }, { merge: true }).catch(() => undefined);
+    throw new AppError({ code: 'REP_P_AFD_ARCHIVE_FAILED', kind: 'TRANSIENT_EXTERNAL', retryable: true,
+      safeMessage: 'O AFD foi gerado, mas não pôde ser arquivado com segurança. Tente novamente.', cause });
+  }
   return { filename: signed.filename, afdBase64: signed.bytes.toString('base64'), sha256: signed.sha256,
     signatureFilename: signed.signatureFilename, signatureBase64: signed.signature.toString('base64'),
-    certificateCnpj: signed.certificateCnpj, counts: signed.counts, lineCount: signed.lineCount };
+    certificateCnpj: signed.certificateCnpj, counts: signed.counts, lineCount: signed.lineCount,
+    exportId: auditRef.id, archived: true as const };
 }
 
 /** Estabelecimentos fiscais disponíveis para a tela administrativa de exportação AFD/AEJ. */
@@ -891,6 +909,38 @@ function receiptTimestampMillis(value: unknown) {
  */
 export async function listOwnRepPMarkings(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   return listRepPMarkingsOfPerson(context.workspace_id, context.decoded.uid, raw, injected);
+}
+
+/** Exporta os comprovantes assinados da própria pessoa e relaciona pendências sem fingir que o pacote está completo. */
+export async function exportOwnRepPReceipts(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
+  const parsed = repPOwnHistorySchema.safeParse(raw);
+  if (!parsed.success) throw fail('REP_P_RECEIPT_ARCHIVE_INPUT_INVALID', 'Período de exportação inválido.');
+  const deps = { ...defaults, ...injected };
+  const snapshot = await deps.repDb.collection(RECEIPTS)
+    .where('workspaceId', '==', context.workspace_id).where('employeeId', '==', context.decoded.uid)
+    .where('recordedDate', '>=', parsed.data.startDate).where('recordedDate', '<=', parsed.data.endDate)
+    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
+  if (snapshot.size > MAX_HISTORY_MARKINGS) {
+    throw fail('REP_P_RECEIPT_ARCHIVE_TRUNCATED', 'O período tem comprovantes demais. Divida o intervalo de datas.', 'CONFLICT');
+  }
+  try {
+    return buildRepPReceiptArchive({ startDate: parsed.data.startDate, endDate: parsed.data.endDate,
+      generatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      receipts: snapshot.docs.map((document) => {
+        const receipt = document.get('snapshot') as RepPReceiptSnapshot | undefined;
+        if (!receipt) throw new TypeError('Comprovante sem instantâneo.');
+        const issued = document.get('status') === 'issued';
+        return { receiptId: document.id, workDate: String(document.get('recordedDate')), nsr: receipt.nsr,
+          markedAt: receipt.markedAt, status: issued ? 'issued' as const : 'pending' as const,
+          issue: issued ? null : (document.get('lastIssue') as string | null) ?? null,
+          filename: issued ? String(document.get('filename') ?? '') : null,
+          pdf: issued ? document.get('pdf') as Uint8Array | undefined : null,
+          sha256: issued ? String(document.get('sha256') ?? '') : null };
+      }) });
+  } catch (cause) {
+    if (cause instanceof RangeError) throw fail('REP_P_RECEIPT_ARCHIVE_TOO_LARGE', 'O pacote ficou grande demais. Divida o intervalo de datas.', 'CONFLICT');
+    throw fail('REP_P_RECEIPT_ARCHIVE_CORRUPT', 'Um comprovante armazenado não confere com sua integridade.', 'DATA_INTEGRITY');
+  }
 }
 
 /** Mesma leitura limitada do histórico, para uma pessoa já autorizada pelo chamador. */
