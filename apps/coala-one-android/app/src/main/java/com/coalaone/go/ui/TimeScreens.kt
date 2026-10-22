@@ -191,6 +191,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
     var selectedMirror by remember { mutableStateOf(false) }
+    var selectedReceiptArchive by remember { mutableStateOf(false) }
     asking?.let { date -> AdjustmentScreen(vm, date) { asking = null; vm.clearAdjustment() }; return }
     val units = state.options?.executionUnits.orEmpty()
     val today = state.today.toString()
@@ -220,6 +221,16 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     receipt?.let { (punch, markedAt) -> ReceiptSheet(punch, markedAt, vm) { receipt = null } }
     if (selectedMirror) FileSheet("Espelho de ponto", "Competência ${state.month} · versão ${state.mirror?.closure?.version ?: "—"}",
         "espelho-ponto-${state.month}.pdf", "application/pdf", { _, then -> vm.mirrorPdf(context.cacheDir, then) }) { selectedMirror = false }
+    if (selectedReceiptArchive) {
+        val (start, end) = TimeRules.monthRange(state.month)
+        val complete = !state.truncated && state.markings.all { it.receiptStatus == "available" }
+        val unavailable = state.markings.count { it.receiptStatus != "available" }
+        FileSheet("Comprovantes do mês",
+            if (complete) "${state.markings.size} comprovante(s) original(is) · pacote completo"
+            else "$unavailable comprovante(s) ainda indisponível(is) · o índice identificará o pacote como incompleto",
+            "comprovantes-ponto-$start-a-$end-${if (complete) "completo" else "incompleto"}.zip", "application/zip",
+            { _, then -> vm.receiptArchive(context.cacheDir, then) }) { selectedReceiptArchive = false }
+    }
     LaunchedEffect(tab, state.month) {
         when (tab) {
             "bank" -> if (state.bankDate != (if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()).toString()) vm.loadBank()
@@ -317,7 +328,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 Text("Próxima: $next", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
             TextButton({ asking = today }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Pedir ajuste de ponto", color = Tokens.wine) }
-        } else if (tab == "history") HistoryTab(state, feedback.busy, vm, onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it })
+        } else if (tab == "history") HistoryTab(state, feedback.busy, vm,
+            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, onArchive = { selectedReceiptArchive = true })
         else if (tab == "bank") BankTab(state, feedback.busy, vm)
         else MirrorTab(state, feedback.busy, vm, onMirror = { selectedMirror = true })
     }
@@ -398,7 +410,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     Text("A pasta de documentos do colaborador continua disponível somente no Coala One.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
 }
 
-@Composable private fun HistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit, onAdjust: (String) -> Unit) {
+@Composable private fun HistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit,
+    onAdjust: (String) -> Unit, onArchive: () -> Unit) {
     val first = state.month.atDay(1)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         NavSquare("‹", "Mês anterior", !busy) { vm.month(state.month.minusMonths(1)) }
@@ -406,6 +419,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         NavSquare("›", "Próximo mês", !busy && state.month.isBefore(java.time.YearMonth.from(state.today))) { vm.month(state.month.plusMonths(1)) }
     }
     if (state.truncated) Text("O mês tem mais registros do que esta lista mostra; o espelho completo fica no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    Action("Exportar comprovantes do mês", secondary = true,
+        enabled = !busy && !state.truncated && state.markings.isNotEmpty(), onClick = onArchive)
     val last = if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     val days = generateSequence(last) { it.minusDays(1) }.takeWhile { !it.isBefore(first) }.toList()
         .filter { date -> state.markings.any { it.workDate == date.toString() } || state.shifts.any { it.date == date.toString() } || state.treatments.any { it.workDate == date.toString() } }

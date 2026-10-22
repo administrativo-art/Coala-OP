@@ -37,6 +37,7 @@ interface ApiService {
     @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
     @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
     @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody
+    @Streaming @GET("api/dp/time-recording/receipts/export") suspend fun receiptArchive(@Query("startDate") startDate: String, @Query("endDate") endDate: String): ResponseBody
     @GET("api/dp/time-recording/adjustments") suspend fun adjustments(@Query("month") month: String): OwnAdjustments
     @POST("api/dp/time-recording/adjustments") suspend fun requestAdjustment(@Body request: AdjustmentRequest): AdjustmentCreated
     @GET("api/dp/time-recording/time-bank") suspend fun timeBank(@Query("date") date: String): TimeBankResponse

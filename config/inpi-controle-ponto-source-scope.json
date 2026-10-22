@@ -97,6 +97,7 @@
     "tests/unit/dp-rep-p-official-clock.test.ts",
     "tests/unit/dp-rep-p-offline.test.ts",
     "tests/unit/dp-rep-p-receipt.test.ts",
+    "tests/unit/dp-rep-p-receipt-archive.test.ts",
     "tests/unit/dp-rep-p-route-contract.test.ts",
     "tests/unit/dp-rep-p-rules-contract.test.ts",
     "tests/unit/dp-rep-p-time-zones.test.ts",
@@ -116,7 +117,8 @@
     "tests/unit/dp-time-config.test.ts",
     "tests/unit/dp-time-mirror.test.ts",
     "tests/unit/inpi-controle-ponto-package.test.ts",
-    "tests/unit/schedule-mobile.test.ts"
+    "tests/unit/schedule-mobile.test.ts",
+    "tests/e2e/hr/time-recording.spec.ts"
   ],
   "includePrefixes": [
     "src/app/api/collaborator/absence-requests",
