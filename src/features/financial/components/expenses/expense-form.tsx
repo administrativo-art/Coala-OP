@@ -550,7 +550,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     inboxPrefillLoadedRef.current = inboxMessageId;
     let cancelled = false;
     void firebaseUser.getIdToken()
-      .then((token) => fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}`, {
+      .then((token) => fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}/case`, {
         headers: { Authorization: `Bearer ${token}` },
       }))
       .then(async (response) => {
@@ -558,6 +558,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         if (!response.ok) throw new Error(payload.error || "Falha ao carregar a cobrança.");
         if (cancelled) return;
         const message = payload.message;
+        const accounting = payload.expense?.accounting as Record<string, any> | null | undefined;
         const classification = message?.classification || {};
         const creationSuggestion = message?.creationSuggestion || {};
         const billingIdentity = classification.billingIdentity as FinancialInboxBillingIdentity | null | undefined;
@@ -582,6 +583,39 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         }
         if (/^\d{4}-\d{2}$/.test(classification.competence || "")) {
           form.setValue("competenceDate", new Date(`${classification.competence}-01T12:00:00-03:00`), { shouldValidate: true });
+        }
+        if (accounting) {
+          if (accounting.accountPlanId) form.setValue("accountPlan", String(accounting.accountPlanId), { shouldValidate: true });
+          const accountAllocations = Array.isArray(accounting.accountAllocations)
+            ? accounting.accountAllocations.map((allocation: any) => ({
+                accountPlanId: String(allocation.accountPlanId ?? ""),
+                amount: Number(allocation.amount) || 0,
+              })).filter((allocation: any) => allocation.accountPlanId)
+            : [];
+          form.setValue("hasAccountAllocations", accounting.hasAccountAllocations === true && accountAllocations.length > 0, { shouldValidate: true });
+          form.setValue("accountAllocations", accountAllocations, { shouldValidate: true });
+          form.setValue("referenceResultCenterId", String(accounting.referenceResultCenterId ?? ""), { shouldValidate: true });
+          form.setValue("resultCenter", String(accounting.referenceResultCenterName ?? ""), { shouldValidate: true });
+          const loadedApportionments = Array.isArray(accounting.apportionments)
+            ? accounting.apportionments.map((allocation: any) => ({
+                resultCenter: String(allocation.resultCenter ?? ""),
+                percentage: Number(allocation.percentage) || 0,
+                ...(Number.isFinite(Number(allocation.basisValue)) ? { basisValue: Number(allocation.basisValue) } : {}),
+                ...(allocation.participationStartDate ? { participationStartDate: toOptionalDate(`${String(allocation.participationStartDate).slice(0, 10)}T12:00:00`) } : {}),
+              })).filter((allocation: any) => allocation.resultCenter)
+            : [];
+          const hasRateio = accounting.isApportioned === true && loadedApportionments.length > 0;
+          form.setValue("isApportioned", hasRateio, { shouldValidate: true });
+          form.setValue("apportionments", hasRateio ? loadedApportionments : [{ resultCenter: "", percentage: 100 }], { shouldValidate: true });
+          if (["equal", "fixed", "revenue", "headcount"].includes(accounting.rateioCriterion)) {
+            form.setValue("rateioCriterion", accounting.rateioCriterion, { shouldValidate: true });
+          }
+          if (accounting.rateioEffectiveFrom) {
+            form.setValue("rateioEffectiveFrom", toOptionalDate(`${String(accounting.rateioEffectiveFrom).slice(0, 10)}T12:00:00`), { shouldValidate: true });
+          }
+          if (["full", "prorated"].includes(accounting.rateioFirstMonthMode)) {
+            form.setValue("rateioFirstMonthMode", accounting.rateioFirstMonthMode, { shouldValidate: true });
+          }
         }
       })
       .catch((error) => {
