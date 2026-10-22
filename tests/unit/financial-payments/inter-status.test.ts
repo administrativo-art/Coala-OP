@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { safeInterPaymentError } from "../../../src/lib/integrations/inter/payment-error";
 import { mapInterPixStatus, normalizeInterPixKey } from "../../../src/lib/integrations/inter/pix-payments.server";
-import { paymentReceiverMatchesSnapshot } from "../../../src/features/financial/payment-requests/reconciliation";
+import {
+  comparePaymentReceiverToSnapshot,
+  findExactPixReceiverDocument,
+  paymentReceiverMatchesSnapshot,
+} from "../../../src/features/financial/payment-requests/reconciliation";
+import { InterApiError, safeInterApiError } from "../../../src/lib/integrations/inter/error";
 import { createHash } from "node:crypto";
 import { mapInterBarcodeStatus } from "../../../src/lib/integrations/inter/barcode-payments.server";
 
@@ -73,4 +78,80 @@ test("concilia o CNPJ completo do banco com o hash do snapshot mascarado", () =>
     snapshotDocument: "**.***.***/****-25",
     snapshotDocumentHash: createHash("sha256").update(receiverDocument).digest("hex"),
   }), false);
+});
+
+test("documento mascarado pelo status do Pix fica pendente e nunca vira divergência", () => {
+  const snapshotDocumentHash = createHash("sha256").update("61261029321").digest("hex");
+  assert.equal(comparePaymentReceiverToSnapshot({
+    receiverDocument: "***610293**",
+    snapshotDocument: "***.***.***-21",
+    snapshotDocumentHash,
+  }), "unavailable");
+  assert.equal(paymentReceiverMatchesSnapshot({
+    receiverDocument: "***610293**",
+    snapshotDocument: "***.***.***-21",
+    snapshotDocumentHash,
+  }), true);
+  assert.equal(comparePaymentReceiverToSnapshot({
+    receiverDocument: "10987654321",
+    snapshotDocument: "***.***.***-21",
+    snapshotDocumentHash,
+  }), "divergent");
+});
+
+test("extrato completo resolve o recebedor somente por referência, valor e débito Pix exatos", () => {
+  const entry = {
+    references: ["request-1", "e2e-1"],
+    amount: -285.60,
+    operationType: "D",
+    transactionType: "PIX",
+    raw: { detalhes: { cpfCnpjRecebedor: "61.261.029/321" } },
+  };
+  assert.equal(findExactPixReceiverDocument([entry], {
+    interRequestId: "request-1",
+    endToEndId: "e2e-1",
+    amount: 285.60,
+  }), "61261029321");
+  assert.equal(findExactPixReceiverDocument([{ ...entry, amount: -285.61 }], {
+    interRequestId: "request-1",
+    endToEndId: "e2e-1",
+    amount: 285.60,
+  }), null);
+  assert.equal(findExactPixReceiverDocument([entry, {
+    ...entry,
+    raw: { detalhes: { cpfCnpjRecebedor: "10.987.654/321" } },
+  }], {
+    interRequestId: "request-1",
+    amount: 285.60,
+  }), null);
+});
+
+test("recusa HTTP 400 do cliente Inter recebe mensagem segura e acionável", () => {
+  const parsed = safeInterPaymentError(new InterApiError({
+    code: "INTER_HTTP_400",
+    operation: "api-request",
+    statusCode: 400,
+  }), "2026-10-22T12:00:00.000Z");
+  assert.deepEqual(parsed, {
+    code: "INTER_HTTP_400",
+    safeMessage: "O Banco Inter recusou os dados do pagamento. Revise os dados antes de tentar novamente.",
+    occurredAt: "2026-10-22T12:00:00.000Z",
+  });
+});
+
+test("cliente Inter preserva apenas a categoria segura do campo recusado", () => {
+  const parsed = safeInterApiError({
+    isAxiosError: true,
+    response: {
+      status: 400,
+      data: {
+        violacoes: [{
+          propriedade: "codBarraLinhaDigitavel",
+          razao: "Linha 48190000030000515058653993860146216110000028560 inválida.",
+        }],
+      },
+    },
+  }, "api-request");
+  assert.equal(parsed.safeMessage, "O Banco Inter recusou a linha digitável do boleto.");
+  assert.doesNotMatch(parsed.safeMessage, /48190000030000515058653993860146216110000028560/);
 });

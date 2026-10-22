@@ -8,6 +8,7 @@ import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/pr
 import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
 import { findInterBarcodePaymentsByCode, getInterBarcodePayment, mapInterBarcodeStatus, submitInterBarcodePayment } from "@/lib/integrations/inter/barcode-payments.server";
 import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/integrations/inter/pix-payments.server";
+import { listInterStatementEntries } from "@/lib/integrations/inter/statements.server";
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoSchema } from "./expense-boleto";
@@ -25,7 +26,7 @@ import {
   interBarcodePaymentMatchesRequest,
   observeInterBarcodeAmounts,
 } from "./barcode-amounts";
-import { paymentReceiverMatchesSnapshot } from "./reconciliation";
+import { comparePaymentReceiverToSnapshot, findExactPixReceiverDocument } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
@@ -1481,6 +1482,8 @@ async function persistPixBankObservation(params: {
   paidAt?: string | null;
   actor: PaymentActor | "system";
   observedAt: string;
+  beneficiaryVerificationStatus?: "verified" | "unavailable";
+  beneficiaryVerificationWarning?: string | null;
 }) {
   const eventId = randomUUID();
   return financialDbAdmin.runTransaction(async (transaction) => {
@@ -1508,6 +1511,15 @@ async function persistPixBankObservation(params: {
       patch.paidAt = params.paidAt ?? params.observedAt;
       patch.postPaymentProcessingStatus = "pending";
       patch.nextPostPaymentAttemptAt = params.observedAt;
+      patch.beneficiaryVerificationStatus = params.beneficiaryVerificationStatus ?? "unavailable";
+      patch.beneficiaryVerificationWarning = params.beneficiaryVerificationWarning ?? null;
+      patch.beneficiaryVerificationObservedAt = params.observedAt;
+      // A prior false divergence caused by a masked document must not survive a
+      // later successful bank observation. A complete mismatch is blocked
+      // before this function is called.
+      patch.bankReconciliationDivergenceField = null;
+      patch.statementReconciliationStatus = "not_expected";
+      patch.lastError = null;
     }
     if (!observation.changed && Object.keys(patch).length === 0) return current;
     const updatedAt = params.observedAt;
@@ -1651,8 +1663,9 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     return finishPaidPaymentRequest(current);
   }
   if (!current.interRequestId) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
+  const interRequestId = current.interRequestId;
   if (!current.beneficiaryReference || !current.beneficiarySnapshot) throw new Error("Os dados do favorecido não estão disponíveis.");
-  const bank = await getInterPixStatus(current.interRequestId);
+  const bank = await getInterPixStatus(interRequestId);
   const transaction = bank.transacaoPix ?? {};
   const rawStatus = String(transaction.status ?? "");
   const next = mapInterPixStatus(rawStatus, current.scheduledFor);
@@ -1696,14 +1709,51 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     await paymentRequestRef(id).set({ beneficiarySnapshot: current.beneficiarySnapshot }, { merge: true });
     await addPaymentEvent(id, "BENEFICIARY_DOCUMENT_HASH_BACKFILLED", "system", { sourceType: current.beneficiaryReference.sourceType });
   }
-  if (!paymentReceiverMatchesSnapshot({
+  let receiverComparison = comparePaymentReceiverToSnapshot({
     receiverDocument: transaction.recebedor?.cpfCnpj,
     snapshotDocument: current.beneficiarySnapshot.document,
     snapshotDocumentHash: current.beneficiarySnapshot.documentHash,
-  })) {
+  });
+  if (receiverComparison === "unavailable" && next === "paid") {
+    try {
+      const movementDate = String(transaction.dataHoraMovimento ?? "").slice(0, 10);
+      const baseDate = /^\d{4}-\d{2}-\d{2}$/.test(movementDate)
+        ? new Date(`${movementDate}T12:00:00.000Z`)
+        : new Date();
+      const startDate = new Date(baseDate);
+      const endDate = new Date(baseDate);
+      startDate.setUTCDate(startDate.getUTCDate() - 1);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      const receiverDocument = findExactPixReceiverDocument(
+        await listInterStatementEntries(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
+        {
+          interRequestId,
+          endToEndId: transaction.endToEnd,
+          amount: current.amount,
+        },
+      );
+      if (receiverDocument) receiverComparison = comparePaymentReceiverToSnapshot({
+        receiverDocument,
+        snapshotDocument: current.beneficiarySnapshot.document,
+        snapshotDocumentHash: current.beneficiarySnapshot.documentHash,
+      });
+    } catch {
+      // The status remains authoritative for payment state. Missing statement
+      // evidence keeps identity pending and never creates a divergence.
+    }
+  }
+  if (receiverComparison === "divergent") {
     const safeMessage = "O favorecido confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.";
     await blockBankReconciliationDivergence({ id, actor, field: "receiver", rawBankStatus: rawStatus, safeMessage });
     throw new Error(safeMessage);
+  }
+  if (
+    receiverComparison === "unavailable"
+    && current.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE"
+  ) {
+    // Never erase a previously recorded full-document divergence using a
+    // later masked response. Exact statement evidence is required to recover.
+    return current;
   }
   const observedAt = new Date().toISOString();
   let updated = await persistPixBankObservation({
@@ -1715,6 +1765,10 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     paidAt: transaction.dataHoraMovimento,
     actor,
     observedAt,
+    beneficiaryVerificationStatus: receiverComparison === "matched" ? "verified" : "unavailable",
+    beneficiaryVerificationWarning: receiverComparison === "matched"
+      ? null
+      : "O Inter confirmou o pagamento, mas mascarou o CPF/CNPJ neste retorno. A identidade será confirmada pelo extrato completo; isso não indica divergência.",
   });
   if (next === "paid") updated = await finishPaidPaymentRequest(updated);
   return updated;
