@@ -296,7 +296,7 @@ Ordem de preferência:
 
 O PDF gerado pelo Coala deve se chamar claramente **Comprovante de pagamento confirmado pelo Banco Inter**, sem se apresentar como comprovante emitido pelo banco. Ele deve conter:
 
-- favorecido e CPF/CNPJ mascarado;
+- favorecido e CPF/CNPJ mascarado; dado parcial é apenas indisponível para verificação, nunca prova de divergência, que exige documento completo incompatível;
 - valor;
 - data e hora de confirmação;
 - descrição;

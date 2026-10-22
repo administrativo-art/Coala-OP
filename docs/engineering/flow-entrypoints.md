@@ -939,7 +939,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/authorizations/page.tsx`](../../src/app/dashboard/financial/expenses/authorizations/page.tsx).
 
-Arquivos locais percorridos: 25.
+Arquivos locais percorridos: 26.
 
 Chamadas candidatas encontradas:
 
