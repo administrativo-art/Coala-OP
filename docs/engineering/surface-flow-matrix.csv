@@ -35,6 +35,7 @@ api,src/app/api/auth/first-access/[token]/route.ts,,docs/engineering/access-and-
 api,src/app/api/auth/forgot-password/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/last-login/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/password-changed/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/auth/view-as/route.ts,,docs/engineering/access-and-privacy.md,Ferramenta DEV somente leitura; ator real preservado e inicio/fim auditados.
 api,src/app/api/catalogo/route.ts,,docs/engineering/flows/catalog.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/client/bootstrap/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/collaborator/dashboard/route.ts,,docs/engineering/flows/collaborator-dashboard.md,Destino de investigacao; conferir metodo e ramo no handler.
