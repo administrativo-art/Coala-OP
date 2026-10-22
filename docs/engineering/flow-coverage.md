@@ -1,6 +1,8 @@
 # Cobertura dos grupos de fluxo
 
-2026-10-19: o [Registro REP-P](flows/dp-time-recording.md) ganhou uma [especificação técnica de georreferenciamento](time-recording-geolocation.md), ainda não implementada. O projeto propõe política versionada por unidade, captura pontual, cálculo no servidor, evidência fora da ARP e conferência humana sem bloquear ou alterar a batida. Privacidade, retenção, base legal, RIPD, revisão jurídica, código, testes e piloto continuam pendentes; o grupo permanece Traçado.
+2026-10-22: o [Registro REP-P](flows/dp-time-recording.md) ganhou implementação local da [geolocalização pontual](time-recording-geolocation.md) na web e no Coala Go: política por unidade e participante, cálculo no servidor, evidência fora da ARP, TTL fixo de cinco anos e nenhuma consequência automática. O perfil do colaborador também passou a abrir Registro de ponto e Banco de horas; a visão de terceiros é somente leitura, usa permissão dedicada com compatibilidade para fechamento e aplica escopo de unidade no servidor. Código ainda não publicado; cláusula/aditivo, parâmetros reais, Doc Brown, aparelho físico e piloto continuam pendentes. O grupo permanece Traçado.
+
+2026-10-19: o [Registro REP-P](flows/dp-time-recording.md) ganhou a especificação inicial de georreferenciamento; seu estado atual está na entrada de 22/10/2026. O grupo permanece Traçado.
 
 2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, NTP público do Observatório Nacional com quórum/falha fechada e AFD 004 com contrato CAdES. O ensaio é somente local; conectividade do runtime, validação oficial de assinaturas, Coala Go e piloto seguem bloqueados. Nenhum grupo/página foi promovido.
 
@@ -29,7 +31,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
-| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Registro de ponto na barra lateral; [georreferenciamento](time-recording-geolocation.md) especificado, não implementado; validação oficial, gates fiscais e Coala Go pendentes |
+| `dp-time-recording` | 2 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela própria na barra lateral e conferência individual pelo perfil; [georreferenciamento](time-recording-geolocation.md) implementado localmente para web/Coala Go, ainda sem publicação ou piloto; validação oficial, gates fiscais/jurídicos e aparelho real pendentes |
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |

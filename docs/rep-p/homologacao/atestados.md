@@ -40,4 +40,4 @@ O modelo oficial também aceita `N/A` no certificado de registro do INPI e na ve
 
 ## PTRP
 
-Bloqueado: o programa de tratamento (apuração, Fase 3) ainda não existe. Quando existir, usar o mesmo modelo com `Tipo do REP/PTRP: PTRP`, `Identificador do Programa: Coala One PTRP`, registro e certificado do INPI do PTRP (ou `N/A`, se o advogado confirmar que não se aplica), a versão do PTRP e os mesmos campos de destinatário e signatários.
+Pendente de homologação integrada: tratamentos, fechamento, espelho, AEJ e banco de horas já existem, mas o atestado só deve ser emitido depois de congelar e validar a versão candidata completa. Usar o mesmo modelo com `Tipo do REP/PTRP: PTRP`, `Identificador do Programa: Coala One PTRP`, registro e certificado do INPI do PTRP (ou `N/A`, se o advogado confirmar que não se aplica), a versão do PTRP e os mesmos campos de destinatário e signatários.

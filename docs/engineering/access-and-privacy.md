@@ -2,7 +2,7 @@
 
 ## Georreferenciamento planejado do ponto
 
-A [especificação técnica de georreferenciamento](time-recording-geolocation.md) prevê coleta de localização somente quando o trabalhador confirma uma batida, sem rastreamento contínuo e sem bloqueio por posição externa, imprecisa ou indisponível. A evidência ficará fora da ARP, do AFD e do comprovante para possuir acesso e retenção próprios. Coordenadas exatas serão server-only; o titular acessará a própria evidência, e a consulta administrativa exigirá permissão específica, escopo de unidade e auditoria. Nenhuma coleta está implementada ou autorizada para pessoas reais. Base legal, RIPD, aviso, retenção e limites de uso humano são gates anteriores ao piloto.
+A [especificação técnica de georreferenciamento](time-recording-geolocation.md) implementa coleta de localização somente quando o trabalhador confirma uma batida, sem rastreamento contínuo e sem bloqueio por posição externa, imprecisa ou indisponível. A evidência fica fora da ARP, do AFD e do comprovante para possuir acesso e retenção próprios. Coordenadas exatas são server-only e têm TTL fixo de 1.825 dias; ainda não há leitor administrativo publicado. Base legal, cláusula LGPD/aditivo, aviso, parâmetros físicos, participantes nominais e ativação explícita continuam como gates anteriores à coleta com pessoas reais.
 
 No desligamento sob cutover operacional de ausências, Functions revogam Auth, refresh tokens, claims e caches antes de suspender efeitos antigos em turnos/férias. `pending_occupancy_guard` não equivale a efeitos concluídos nem libera o usuário; falha de revogação propaga erro. A sincronização de perfil não restaura claims de conta desligada. O bootstrap que gera readiness continua restrito a demo/emulador e quiescência explícita.
 

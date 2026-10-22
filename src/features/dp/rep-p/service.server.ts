@@ -11,6 +11,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { isValidCpf, normalizeCpf } from '@/lib/hr/employee-document-match';
 import { AppError } from '@/lib/observability/app-error';
+import { reportSystemError } from '@/lib/observability/reporter';
 
 import { generateRepPAfd, signRepPAfd, type RepPAfdEvent, type RepPAfdProfile, type RepPCadesSigner } from './afd';
 import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp, trustedRepPClockInstant,
@@ -21,6 +22,10 @@ import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zon
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
 import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS,
   verifyRepPOfflineEvidence } from './offline';
+import { evaluateRepPLocation, repPLocationEvidenceDigest, repPLocationSummary,
+  REP_P_LOCATION_RETENTION_DAYS, type RepPLocationAttempt, type RepPLocationPolicySnapshot } from './location';
+import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_EVIDENCE,
+  repPLocationPolicyRef, disabledRepPLocationPolicy } from './location-policy.server';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { repPAfdExportSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
@@ -113,12 +118,91 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
 }
+function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
+  return policy.participantUserIds.includes(context.decoded.uid)
+    ? policy : disabledRepPLocationPolicy(context.workspace_id, policy.executionUnitId);
+}
 function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function establishmentKey(workspaceId: string, cnpj: string) { return digest(['establishment', workspaceId, cnpj]); }
 function employeeKey(establishmentId: string, userId: string) { return digest(['employee', establishmentId, userId]); }
 function eventKey(establishmentId: string, nsr: number) { return `${establishmentId}_${String(nsr).padStart(9, '0')}`; }
 function recordedDate(event: RepPAfdEvent) {
   return (event.recordType === '4' ? event.adjustedAt : event.recordedAt).slice(0, 10);
+}
+
+type LocationSummary = ReturnType<typeof repPLocationSummary>;
+function storedLocationSummary(value: unknown): LocationSummary | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (!['captured', 'denied', 'unavailable', 'timeout', 'unsupported', 'error', 'not_requested'].includes(String(raw.captureStatus))
+    || !['inside', 'outside', 'indeterminate', 'not_requested'].includes(String(raw.evaluation))) return null;
+  return { captureStatus: raw.captureStatus as LocationSummary['captureStatus'], evaluation: raw.evaluation as LocationSummary['evaluation'] };
+}
+
+function prepareLocationEvidence(params: {
+  policy: RepPLocationPolicySnapshot; attempt?: RepPLocationAttempt; markedAt: Date;
+  workspaceId: string; employeeId: string; markingId: string; evidenceId: string; executionUnitId: string;
+}) {
+  if (params.policy.mode === 'disabled') return { summary: null, evidence: null, expiresAt: null };
+  const result = evaluateRepPLocation(params.policy, params.attempt, params.markedAt);
+  const location = params.attempt?.status === 'captured' ? {
+    latitude: params.attempt.latitude, longitude: params.attempt.longitude,
+    accuracyMeters: params.attempt.accuracyMeters, capturedAt: params.attempt.capturedAt,
+  } : null;
+  const core = {
+    schemaVersion: 1, workspaceId: params.workspaceId, employeeId: params.employeeId,
+    markingId: params.markingId, evidenceId: params.evidenceId, executionUnitId: params.executionUnitId,
+    channelTrust: 'client_reported', retentionClass: 'time_location_evidence', legalHold: false,
+    policy: {
+      schemaVersion: params.policy.schemaVersion, workspaceId: params.policy.workspaceId,
+      executionUnitId: params.policy.executionUnitId, revision: params.policy.revision, mode: params.policy.mode,
+      center: params.policy.center, radiusMeters: params.policy.radiusMeters,
+      maxAccuracyMeters: params.policy.maxAccuracyMeters, maxAgeSeconds: params.policy.maxAgeSeconds,
+      captureTimeoutMs: params.policy.captureTimeoutMs, privacyNoticeUrl: params.policy.privacyNoticeUrl,
+      legalBasisReference: params.policy.legalBasisReference, retentionDays: params.policy.retentionDays,
+      activatedAt: params.policy.activatedAt, activatedBy: params.policy.activatedBy,
+    }, capture: {
+      captureId: params.attempt?.captureId ?? null, status: params.attempt?.status ?? 'unavailable',
+      elapsedMs: params.attempt?.elapsedMs ?? 0, location,
+    }, result,
+  } as const;
+  const retentionDays = params.policy.retentionDays ?? REP_P_LOCATION_RETENTION_DAYS;
+  return { summary: repPLocationSummary(result), evidence: { ...core, digest: repPLocationEvidenceDigest(core) },
+    expiresAt: new Date(params.markedAt.getTime() + retentionDays * 86_400_000) };
+}
+
+type PreparedLocationEvidence = NonNullable<ReturnType<typeof prepareLocationEvidence>['evidence']>;
+async function persistLocationEvidenceBestEffort(deps: Dependencies, prepared: {
+  evidence: PreparedLocationEvidence; recordedDate: string; recordedAt: Date; expiresAt: Date;
+}) {
+  const target = deps.repDb.collection(REP_P_LOCATION_EVIDENCE).doc(prepared.evidence.evidenceId);
+  try {
+    const existing = await target.get();
+    if (existing.exists) {
+      if (existing.get('digest') !== prepared.evidence.digest) {
+        reportSystemError({
+          error: new AppError({ code: 'REP_P_LOCATION_EVIDENCE_DIGEST_MISMATCH', kind: 'DATA_INTEGRITY',
+            safeMessage: 'A evidência de localização existente não corresponde à marcação.' }),
+          source: 'rep-p', operation: 'persist-location-evidence',
+          metadata: { evidenceId: prepared.evidence.evidenceId, markingId: prepared.evidence.markingId },
+        });
+      }
+      return;
+    }
+    await target.create({
+      ...prepared.evidence, recordedDate: prepared.recordedDate,
+      recordedAt: Timestamp.fromDate(prepared.recordedAt), expiresAt: Timestamp.fromDate(prepared.expiresAt),
+      createdAt: Timestamp.now(),
+    });
+  } catch (cause) {
+    // A localização é acessória e nunca pode desfazer/impedir uma marcação já aceita.
+    reportSystemError({
+      error: cause, source: 'rep-p', operation: 'persist-location-evidence',
+      code: 'REP_P_LOCATION_EVIDENCE_PERSISTENCE_FAILED', kind: 'TRANSIENT_EXTERNAL', severity: 'medium',
+      metadata: { evidenceId: prepared.evidence.evidenceId, markingId: prepared.evidence.markingId },
+      isTerminal: false,
+    });
+  }
 }
 function validEstablishment(value: unknown): value is EstablishmentDocument {
   const item = value as EstablishmentDocument | undefined;
@@ -315,7 +399,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     if (!verifyRepPMarkingCandidate(prior)) {
       throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
     }
-    return { status: 'replayed' as const, marking: prior, ...await settleRepPReceipt(deps, prior) };
+    return { status: 'replayed' as const, marking: prior,
+      location: storedLocationSummary(existingAttempt.get('locationSummary')), ...await settleRepPReceipt(deps, prior) };
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
@@ -347,6 +432,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   }
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
+  const locationPolicyRef = repPLocationPolicyRef(deps.repDb, context.workspace_id, input.executionUnitId);
   const collectorId = input.channel === 'mobile' ? '01' as const : '02' as const;
   const workLocation = String(executionUnit.get('address') ?? '').trim() || null;
   // Cadastro fixo que o comprovante exige: sem ele a batida é recusada antes de consumir NSR,
@@ -358,7 +444,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       'O registro de ponto está indisponível nesta unidade até o cadastro do comprovante ser completado pelo DP.', 'DATA_INTEGRITY');
   }
   const committed = await deps.repDb.runTransaction(async (transaction) => {
-    const [establishment, employee, attempt] = await transaction.getAll(establishmentRef, employeeRef, attemptRef);
+    const [establishment, employee, attempt, locationPolicyDocument] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, locationPolicyRef);
     const current = establishment.data();
     if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
       || !sameProfile(current.profile, establishmentData.profile)
@@ -373,7 +460,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       if (attempt.get('requestDigest') !== requestDigest) throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
       const prior = attempt.get('marking') as RepPMarkingCandidate;
       if (!verifyRepPMarkingCandidate(prior)) throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
-      return { status: 'replayed' as const, marking: prior };
+      return { status: 'replayed' as const, marking: prior,
+        location: storedLocationSummary(attempt.get('locationSummary')), locationEvidence: null };
     }
     const prepared = prepareRepPMarking({ attemptId: input.attemptId, workspaceId: context.workspace_id,
       employeeId: context.decoded.uid, employeeCpf: identity.cpf, employmentHistoryId: reference.historyId,
@@ -386,13 +474,18 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     });
     if (prepared.status !== 'created') throw fail('REP_P_SEQUENCE_INVALID', 'Sequência fiscal inconsistente.', 'DATA_INTEGRITY');
     const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
+    const locationPolicy = locationPolicyForActor(context,
+      effectiveRepPLocationPolicy(locationPolicyDocument.data(), context.workspace_id, input.executionUnitId));
+    const location = prepareLocationEvidence({ policy: locationPolicy, attempt: input.locationAttempt,
+      markedAt: reading.instant, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+      markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
     transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
         verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
         quorum: reading.quorum, observations: reading.observations }, createdAt: Timestamp.now() });
     transaction.create(attemptRef, { workspaceId: context.workspace_id, employeeId: context.decoded.uid,
-      requestDigest, marking: prepared.marking, createdAt: Timestamp.now() });
+      requestDigest, marking: prepared.marking, locationSummary: location.summary, createdAt: Timestamp.now() });
     transaction.update(establishmentRef, { lastNsr: prepared.marking.nsr, lastType7Hash: prepared.marking.hash,
       lastType7Nsr: prepared.marking.nsr });
     // O comprovante nasce pendente na mesma unidade atômica: a batida nunca depende da assinatura,
@@ -408,9 +501,15 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate, status: 'pending', snapshot,
       attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
-    return { status: 'recorded' as const, marking: prepared.marking };
+    return { status: 'recorded' as const, marking: prepared.marking, location: location.summary,
+      locationEvidence: location.evidence && location.expiresAt ? {
+        evidence: location.evidence, recordedDate: input.workDate, recordedAt: reading.instant,
+        expiresAt: location.expiresAt,
+      } : null };
   });
-  return { ...committed, ...await settleRepPReceipt(deps, committed.marking) };
+  if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
+  return { status: committed.status, marking: committed.marking, location: committed.location,
+    ...await settleRepPReceipt(deps, committed.marking) };
 }
 
 /** Sincroniza uma marcação preservada pelo Coala Go; o NSR só nasce nesta transação no servidor. */
@@ -431,7 +530,8 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     if (!verifyRepPMarkingCandidate(prior) || prior.mode !== '1') {
       throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa offline persistida inconsistente.', 'DATA_INTEGRITY');
     }
-    return { status: 'replayed' as const, marking: prior, ...await settleRepPReceipt(deps, prior) };
+    return { status: 'replayed' as const, marking: prior,
+      location: storedLocationSummary(existingAttempt.get('locationSummary')), ...await settleRepPReceipt(deps, prior) };
   }
 
   const permitRef = deps.repDb.collection(OFFLINE_PERMITS).doc(evidence.permitId);
@@ -503,9 +603,10 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
   const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${input.workDate.slice(0, 7)}`);
+  const locationPolicyRef = repPLocationPolicyRef(deps.repDb, context.workspace_id, input.executionUnitId);
   const committed = await deps.repDb.runTransaction(async (transaction) => {
-    const [establishment, employee, attempt, currentPermit, closure] = await transaction.getAll(
-      establishmentRef, employeeRef, attemptRef, permitRef, closureRef);
+    const [establishment, employee, attempt, currentPermit, closure, locationPolicyDocument] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, permitRef, closureRef, locationPolicyRef);
     const current = establishment.data();
     if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
       || !sameProfile(current.profile, establishmentData.profile) || current.timeZone !== establishmentData.timeZone) {
@@ -522,7 +623,8 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       if (attempt.get('requestDigest') !== requestDigest) throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
       const prior = attempt.get('marking') as RepPMarkingCandidate;
       if (!verifyRepPMarkingCandidate(prior) || prior.mode !== '1') throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
-      return { status: 'replayed' as const, marking: prior };
+      return { status: 'replayed' as const, marking: prior,
+        location: storedLocationSummary(attempt.get('locationSummary')), locationEvidence: null };
     }
     const currentPermitData = currentPermit.data() as OfflinePermitDocument | undefined;
     if (!currentPermitData || currentPermitData.status !== 'active'
@@ -544,6 +646,14 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     });
     if (prepared.status !== 'created') throw fail('REP_P_SEQUENCE_INVALID', 'Sequência fiscal inconsistente.', 'DATA_INTEGRITY');
     const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
+    const locationPolicy = locationPolicyForActor(context,
+      effectiveRepPLocationPolicy(locationPolicyDocument.data(), context.workspace_id, input.executionUnitId));
+    // A fila offline atual assina a marcação, mas não a coordenada. Por isso ela registra somente a indisponibilidade,
+    // sem aceitar posição não vinculada à assinatura criptográfica do aparelho.
+    const location = prepareLocationEvidence({ policy: locationPolicy,
+      markedAt: new Date(expectedMarkedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')),
+      workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+      markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
     transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       offlineEvidence: { permitId: permit.permitId, installationId: permit.installationId,
         deviceKeyId: evidence.deviceKeyId, keySecurity: permit.keySecurity, bootCount: evidence.bootCount,
@@ -555,7 +665,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
         quorum: reading.quorum, observations: reading.observations }, createdAt: Timestamp.now() });
     transaction.create(attemptRef, { workspaceId: context.workspace_id, employeeId: context.decoded.uid,
-      requestDigest, marking: prepared.marking, createdAt: Timestamp.now() });
+      requestDigest, marking: prepared.marking, locationSummary: location.summary, createdAt: Timestamp.now() });
     transaction.update(establishmentRef, { lastNsr: prepared.marking.nsr, lastType7Hash: prepared.marking.hash,
       lastType7Nsr: prepared.marking.nsr });
     transaction.update(permitRef, { lastAcceptedSequence: evidence.sequence, lastAcceptedHash: evidence.localHash,
@@ -571,9 +681,16 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate,
       status: 'pending', snapshot, attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
-    return { status: 'recorded' as const, marking: prepared.marking };
+    return { status: 'recorded' as const, marking: prepared.marking, location: location.summary,
+      locationEvidence: location.evidence && location.expiresAt ? {
+        evidence: location.evidence, recordedDate: input.workDate,
+        recordedAt: new Date(recordedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')),
+        expiresAt: location.expiresAt,
+      } : null };
   });
-  return { ...committed, ...await settleRepPReceipt(deps, committed.marking) };
+  if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
+  return { status: committed.status, marking: committed.marking, location: committed.location,
+    ...await settleRepPReceipt(deps, committed.marking) };
 }
 
 /** Depois do commit, a resposta da batida nunca falha por causa do comprovante; o estado fica explícito. */
@@ -773,12 +890,17 @@ function receiptTimestampMillis(value: unknown) {
  * filtrado por pessoa e data no Firestore e limitado; nunca devolve bytes, CPF nem dados de terceiros.
  */
 export async function listOwnRepPMarkings(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
+  return listRepPMarkingsOfPerson(context.workspace_id, context.decoded.uid, raw, injected);
+}
+
+/** Mesma leitura limitada do histórico, para uma pessoa já autorizada pelo chamador. */
+export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid: string, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPOwnHistorySchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_HISTORY_INPUT_INVALID', 'Período de consulta inválido.');
   const input: RepPOwnHistoryRequest = parsed.data;
   const deps = { ...defaults, ...injected };
   const snapshot = await deps.repDb.collection(RECEIPTS)
-    .where('workspaceId', '==', context.workspace_id).where('employeeId', '==', context.decoded.uid)
+    .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeUid)
     .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
     .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
   const markings = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => {
@@ -892,11 +1014,21 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
-  const units = unitIds.length ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
+  const [units, locationPolicies] = await Promise.all([
+    unitIds.length ? deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [],
+    loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds),
+  ]);
   const executionUnits = units.filter((unit) => unit.exists)
-    .map((unit) => ({ id: unit.id, name: String(unit.get('name') ?? unit.id),
-      employer: unit.id === reference.period.employerUnitId,
-      timeZone: isBrazilTimeZone(unit.get('timeZone')) ? String(unit.get('timeZone')) : null }))
+    .map((unit) => {
+      const location = locationPolicies.get(unit.id)!;
+      const collectorLocation = locationPolicyForActor(context, location);
+      return { id: unit.id, name: String(unit.get('name') ?? unit.id),
+        employer: unit.id === reference.period.employerUnitId,
+        timeZone: isBrazilTimeZone(unit.get('timeZone')) ? String(unit.get('timeZone')) : null,
+        locationPolicy: { mode: collectorLocation.mode, revision: collectorLocation.revision,
+          captureTimeoutMs: collectorLocation.captureTimeoutMs, maxAccuracyMeters: collectorLocation.maxAccuracyMeters,
+          privacyNoticeUrl: collectorLocation.privacyNoticeUrl } };
+    })
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
   return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, executionUnits: eligible ? executionUnits : [],
     officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };

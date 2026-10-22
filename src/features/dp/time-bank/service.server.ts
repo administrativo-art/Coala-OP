@@ -7,6 +7,7 @@ import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPMarkingsForMirror } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { competenceRange, sha256, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
+import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
 import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
 import { ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -44,7 +45,8 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT'
 /** O próprio banco é do titular; o de outra pessoa exige a permissão do fechamento e escopo da unidade. */
 async function subject(deps: Dependencies, context: ServerUserContext, employeeUid: string | undefined, need: 'read' | 'close') {
   if (!employeeUid || employeeUid === context.decoded.uid) return context.decoded.uid;
-  assertClosureAccess(context, need);
+  if (need === 'close') assertClosureAccess(context, need);
+  else if (!canReadEmployeeTimeRecording(context)) throw fail('PTRP_BANK_SUBJECT_FORBIDDEN', 'Sem permissão para consultar o banco desta pessoa.', 'NOT_FOUND');
   const employee = await deps.mainDb.collection('users').doc(employeeUid).get();
   if (!employee.exists) throw fail('PTRP_BANK_SUBJECT_INVALID', 'Pessoa não encontrada.', 'NOT_FOUND');
   if (!canAccessUserByUnit(context.userDoc, employee.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {

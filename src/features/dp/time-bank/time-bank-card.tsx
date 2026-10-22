@@ -56,7 +56,12 @@ const parseHm = (value: string) => {
  * Ao abrir, apura (uma vez por versão do fechamento) os meses fechados do ciclo que ainda não têm apuração.
  * No painel do DP (`employeeUid`), mostra o banco da pessoa na data informada.
  */
-export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser: FirebaseUser | null; employeeUid?: string; date?: string }) {
+export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false }: {
+  firebaseUser: FirebaseUser | null;
+  employeeUid?: string;
+  date?: string;
+  canManage?: boolean;
+}) {
   const [data, setData] = useState<StatementResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -79,7 +84,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
       const url = `/api/dp/time-recording/time-bank${query ? `?${query}` : ""}`;
       let response = await request<StatementResponse>(url, { fallbackError: "Não foi possível ler o banco de horas." });
       const pending = (response.statement?.missing ?? []).filter((competence) => response.closures[competence]);
-      if (pending.length) {
+      if (pending.length && (!employeeUid || canManage)) {
         for (const competence of pending) {
           await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "generate", competence, expectedVersion: response.closures[competence], ...(employeeUid ? { employeeUid } : {}) },
             fallbackError: "Não foi possível apurar o banco de horas." });
@@ -90,7 +95,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
     } catch (cause) {
       setError(errorMessageOf(cause, "Não foi possível ler o banco de horas."));
     }
-  }, [employeeUid, query, request]);
+  }, [canManage, employeeUid, query, request]);
   useEffect(() => { void load(); }, [load]);
 
   async function settle() {
@@ -159,7 +164,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
         {statement.cycle ? <StatusPill variant="neutral">Ciclo {dateBR(statement.cycle.start)} a {dateBR(statement.cycle.end)}</StatusPill> : null}
       </div>
       <p className={`font-ds-mono text-2xl font-extrabold ${statement.balanceMinutes < 0 ? "text-ds-danger" : "text-ds-ink"}`}>{hm(statement.balanceMinutes, true)}</p>
-      {data.previewCompetences?.length ? <StatusPill variant="info">Prévia inclui o mês aberto; o saldo ainda pode mudar</StatusPill> : null}
+      {data.previewCompetences?.length ? <StatusPill className="h-auto max-w-full whitespace-normal py-1 leading-tight" variant="info">Prévia inclui o mês aberto; o saldo ainda pode mudar</StatusPill> : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ds-ink-muted">
         {statement.openingMinutes ? <span>Saldo anterior <strong className="font-ds-mono text-ds-ink">{hm(statement.openingMinutes, true)}</strong></span> : null}
         <span>Créditos <strong className="font-ds-mono text-ds-ink">{hm(statement.credit)}</strong></span>
@@ -174,7 +179,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
       {statement.settlement ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo encerrado pelo DP em {dateBR(statement.settlement.settledAt.slice(0, 10))}: {hm(statement.settlement.minutes, true)} · {RESIDUAL_LABELS[statement.settlement.destination]}.</p>
         : statement.residual ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo terminado: {hm(statement.residual.minutes, true)} · {RESIDUAL_LABELS[statement.residual.destination]} (aguarda o DP registrar o encerramento).</p> : null}
       {statement.settlementOutdated ? <StatusPill variant="danger">Encerramento desatualizado: o mês foi refechado depois dele</StatusPill> : null}
-      {employeeUid && statement.residual && !statement.settlement && !confirming ? <Button variant="ds-secondary" size="sm" onClick={() => setConfirming(true)}>Registrar encerramento do ciclo</Button> : null}
+      {employeeUid && canManage && statement.residual && !statement.settlement && !confirming ? <Button variant="ds-secondary" size="sm" onClick={() => setConfirming(true)}>Registrar encerramento do ciclo</Button> : null}
       {confirming && statement.residual ? <InlineConfirm message={`Registrar o encerramento com ${hm(statement.residual.minutes, true)} · ${RESIDUAL_LABELS[statement.residual.destination]}? O registro fica com data e autor e não é desfeito.`}
         confirmLabel="Registrar encerramento" loadingLabel="Registrando…" loading={busy} onConfirm={() => void settle()} onCancel={() => setConfirming(false)} /> : null}
       {statement.reviewDays.some((item) => item.issues.includes("MISSING_DAY")) ? <StatusPill variant="warn">{statement.reviewDays.filter((item) => item.issues.includes("MISSING_DAY")).length} dia(s) escalado(s) sem batida a tratar pelo DP</StatusPill> : null}
@@ -189,14 +194,14 @@ export function TimeBankCard({ firebaseUser, employeeUid, date }: { firebaseUser
               <span className={`shrink-0 font-ds-mono font-semibold ${item.line.nature === "bank_debit" ? "text-ds-danger" : "text-ds-ink"}`}>
                 {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : item.line.nature === "payroll_discount" ? "desconto na folha" : "revisão"}`}
               </span>
-              {employeeUid && item.line.reason === "pending_approval" && item.line.categoryId ? <Button size="sm" variant="ds-secondary" disabled={busy}
+              {employeeUid && canManage && item.line.reason === "pending_approval" && item.line.categoryId ? <Button size="sm" variant="ds-secondary" disabled={busy}
                 onClick={() => void approveOvertime(item.date, item.line.categoryId!, item.line.minutes)}>Aprovar extra</Button> : null}
             </li>
           ))}
         </ul>
       ) : <p className="text-xs text-ds-ink-muted">Nenhum lançamento no ciclo ainda.</p>}
       {lines.length > VISIBLE_LINES ? <Button variant="ds-ghost" size="sm" onClick={() => setExpanded((value) => !value)}>{expanded ? "Mostrar menos" : `Ver os ${lines.length} lançamentos`}</Button> : null}
-      {employeeUid ? <div className="space-y-2 border-t border-ds-divider pt-2">
+      {employeeUid && canManage ? <div className="space-y-2 border-t border-ds-divider pt-2">
         {!movementOpen ? <Button variant="ds-secondary" size="sm" onClick={() => setMovementOpen(true)}>Lançar movimento</Button> : <div className="grid gap-2 md:grid-cols-2">
           <Select value={movementKind} onValueChange={setMovementKind}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
             <SelectItem value="compensation">Compensação (débito)</SelectItem><SelectItem value="adjustment:credit">Ajuste de crédito</SelectItem>

@@ -1,8 +1,10 @@
 package com.coalaone.go.ui
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -30,6 +32,7 @@ import com.coalaone.go.data.*
 import com.coalaone.go.domain.DayPunch
 import com.coalaone.go.domain.TimeRules
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -184,6 +187,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
     var tab by rememberSaveable { mutableStateOf("today") }
     var confirming by rememberSaveable { mutableStateOf(false) }
+    var capturingLocation by remember { mutableStateOf(false) }
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
     var selectedMirror by remember { mutableStateOf(false) }
@@ -194,7 +198,24 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val todayPunches = TimeRules.day(today, state.markings, state.treatments)
     val expected = TimeRules.expectedPunches(todayShift)
     val next = TimeRules.suggestedLabel(todayPunches.count { !it.discarded }, expected)
-    val unitName = units.firstOrNull { it.id == state.unitId }?.name.orEmpty()
+    val selectedUnit = units.firstOrNull { it.id == state.unitId }
+    val unitName = selectedUnit?.name.orEmpty()
+    val locationPolicy = selectedUnit?.locationPolicy ?: LocationPolicy()
+    val screenBusy = feedback.busy || capturingLocation
+    val scope = rememberCoroutineScope()
+    fun captureAndRecord() {
+        capturingLocation = true
+        scope.launch {
+            val attempt = capturePointLocation(context, locationPolicy.captureTimeoutMs ?: 10_000,
+                locationPolicy.maxAccuracyMeters ?: 100.0)
+            capturingLocation = false
+            vm.record(true, attempt)
+        }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true || result[Manifest.permission.ACCESS_COARSE_LOCATION] == true) captureAndRecord()
+        else vm.record(true, failedLocationAttempt(status = "denied"))
+    }
     fun markedAtOf(punch: DayPunch) = state.markings.firstOrNull { it.receiptId == punch.receiptId }?.markedAt ?: today
     receipt?.let { (punch, markedAt) -> ReceiptSheet(punch, markedAt, vm) { receipt = null } }
     if (selectedMirror) FileSheet("Espelho de ponto", "Competência ${state.month} · versão ${state.mirror?.closure?.version ?: "—"}",
@@ -211,16 +232,29 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             Text(if (online) "Registrar a próxima batida (sugerida: $next) em $unitName? Vale a hora oficial do momento do envio."
                 else "Preservar a próxima batida (sugerida: $next) em $unitName neste aparelho? Ela receberá NSR e comprovante quando a internet voltar.",
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-            FooterPair("Voltar", !feedback.busy, { confirming = false }, if (online) "Confirmar registro" else "Preservar no aparelho", !feedback.busy) {
-                confirming = false; vm.record(online)
+            if (online && locationPolicy.mode != "disabled") {
+                Text("Ao confirmar, o Coala Go fará uma única leitura de localização. O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade.",
+                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                locationPolicy.privacyNoticeUrl?.let { url ->
+                    TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
+                        enabled = !screenBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Aviso de privacidade", color = Tokens.wine) }
+                }
             }
-        } else Action(if (online) "Registrar ponto" else "Registrar ponto offline", feedback.busy,
+            FooterPair("Voltar", !screenBusy, { confirming = false }, if (online) "Confirmar registro" else "Preservar no aparelho", !screenBusy) {
+                confirming = false
+                when {
+                    !online || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> vm.record(online)
+                    hasPointLocationPermission(context) -> captureAndRecord()
+                    else -> locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                }
+            }
+        } else Action(if (online) "Registrar ponto" else "Registrar ponto offline", screenBusy,
             enabled = TimeRules.canRecord(state.options, state.unitId)) { confirming = true }
     } }
     Page("Ponto", feedback, onBack, footer = footer, onRefresh = { vm.load() }, header = {
-        TopBar("Ponto", busy = feedback.busy, onBack = onBack)
+        TopBar("Ponto", busy = screenBusy, onBack = onBack)
         // The punch needs one unit: no "Todas as unidades" here.
-        if (units.isNotEmpty()) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), feedback.busy || confirming) { vm.unit(it) }
+        if (units.isNotEmpty()) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), screenBusy || confirming) { vm.unit(it) }
     }) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -261,6 +295,13 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 CardBlock(selected = true) {
                     Text("Ponto registrado · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
                     Text("NSR ${last.marking.nsr}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    last.location?.let { location -> Text(when (location.evaluation) {
+                        "inside" -> "Localização compatível com a unidade."
+                        "outside" -> "Localização indicada fora da área da unidade; o ponto foi registrado normalmente."
+                        "indeterminate" -> "Não foi possível confirmar a localização; o ponto foi registrado normalmente."
+                        else -> "Localização não solicitada para esta unidade."
+                    }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
+                        style = MaterialTheme.typography.bodySmall) }
                     if (last.receiptStatus == "available") Action("Abrir comprovante") { receipt = DayPunch(TimeRules.minuteOf(last.marking.markedAt), last.marking.nsr, last.receiptId, "available") to last.marking.markedAt }
                     else Text("Comprovante em emissão. Puxe a tela para baixo para atualizar a lista.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                     Action("Ok", secondary = true) { vm.dismissLast() }

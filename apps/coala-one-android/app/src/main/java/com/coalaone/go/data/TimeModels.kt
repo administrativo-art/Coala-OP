@@ -4,7 +4,10 @@ import kotlinx.serialization.Serializable
 
 // Ponto: the same answers the web "Registro de ponto" reads (/api/dp/time-recording/*).
 /** `timeZone` null: the unit follows the establishment zone given by the official clock. */
-@Serializable data class ExecutionUnit(val id: String, val name: String, val employer: Boolean = false, val timeZone: String? = null)
+@Serializable data class LocationPolicy(val mode: String = "disabled", val revision: Int = 0,
+    val captureTimeoutMs: Long? = null, val maxAccuracyMeters: Double? = null, val privacyNoticeUrl: String? = null)
+@Serializable data class ExecutionUnit(val id: String, val name: String, val employer: Boolean = false, val timeZone: String? = null,
+    val locationPolicy: LocationPolicy = LocationPolicy())
 /** Official time checked against Hora Legal; unavailable blocks the punch on the server too. */
 @Serializable data class OfficialClock(val available: Boolean, val instant: String? = null, val timeZone: String? = null, val issue: String? = null)
 @Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean, val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null)
@@ -20,9 +23,14 @@ import kotlinx.serialization.Serializable
     val localHash: String, val signature: String)
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class MarkingRequest(val attemptId: String, val workDate: String, val executionUnitId: String, val channel: String = "mobile",
-    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val offline: OfflineMarkingEvidence? = null)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val offline: OfflineMarkingEvidence? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val locationAttempt: LocationAttempt? = null)
+@Serializable data class LocationAttempt(val captureId: String, val status: String, val elapsedMs: Long,
+    val capturedAt: String? = null, val latitude: Double? = null, val longitude: Double? = null, val accuracyMeters: Double? = null)
+@Serializable data class LocationSummary(val captureStatus: String, val evaluation: String)
 @Serializable data class RecordedMarking(val nsr: Long, val markedAt: String, val executionUnitId: String)
-@Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null, val marking: RecordedMarking)
+@Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null,
+    val marking: RecordedMarking, val location: LocationSummary? = null)
 @Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null)
 @Serializable data class OwnMarkings(val startDate: String, val endDate: String, val markings: List<OwnMarking>, val truncated: Boolean = false)
 @Serializable data class BreakSegment(val start: String, val end: String)

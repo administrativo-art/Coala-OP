@@ -754,6 +754,8 @@ export type PermissionSet = {
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     requests: { view: boolean; review: boolean; };
+    /** Consulta somente leitura do registro e banco de horas de terceiros; ausente em perfis antigos (desligado). */
+    timeRecording?: { view: boolean; };
     /** Fechamento do ponto por competência; ausente em perfis antigos (desligado). */
     timeClosure?: { close: boolean; reopen: boolean; };
     responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
@@ -2996,6 +2998,7 @@ export const defaultGuestPermissions: PermissionSet = {
       schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       requests: { view: false, review: false },
+      timeRecording: { view: false },
       timeClosure: { close: false, reopen: false },
       responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
@@ -3111,6 +3114,7 @@ export const defaultAdminPermissions: PermissionSet = {
       schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       requests: { view: true, review: true },
+      timeRecording: { view: true },
       timeClosure: { close: true, reopen: true },
       responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
