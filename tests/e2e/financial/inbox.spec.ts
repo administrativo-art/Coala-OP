@@ -85,7 +85,7 @@ test("separa ruído automático de descarte manual e arquiva só a página visí
   await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
   await page.getByRole("button", { name: "Arquivadas" }).click();
   await page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ }).click();
-  await page.getByRole("button", { name: "Restaurar", exact: true }).click();
+  await page.getByRole("button", { name: "Restaurar cobrança", exact: true }).click();
   await page.getByRole("radio", { name: "Ruídos" }).click();
   await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeVisible();
   await page.getByRole("button", { name: "Descartados manualmente" }).click();
