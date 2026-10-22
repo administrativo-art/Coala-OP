@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **494**
-- Totalmente contratados: **147**
+- Arquivos de rota: **495**
+- Totalmente contratados: **148**
 - Legados congelados: **344**
 - Exceções temporárias: **3**
 - Violações: **0**
@@ -221,6 +221,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/inbox` | GET | `LEGACY_BASELINE` | [src/app/api/financial/inbox/route.ts](../../src/app/api/financial/inbox/route.ts) |
 | `/api/financial/inbox/[id]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/route.ts](../../src/app/api/financial/inbox/[id]/route.ts) |
 | `/api/financial/inbox/[id]/analyze` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/analyze/route.ts](../../src/app/api/financial/inbox/[id]/analyze/route.ts) |
+| `/api/financial/inbox/[id]/case` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/case/route.ts](../../src/app/api/financial/inbox/[id]/case/route.ts) |
 | `/api/financial/inbox/[id]/files/[fileId]` | GET | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/files/[fileId]/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/route.ts) |
 | `/api/financial/inbox/[id]/link` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/[id]/link/route.ts) |
 | `/api/financial/inbox/[id]/payment` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/[id]/payment/route.ts) |

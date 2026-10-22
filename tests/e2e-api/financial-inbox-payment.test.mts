@@ -19,7 +19,7 @@ test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente a
     env: { ...process.env, NODE_ENV: "development" }, stdio: ["ignore", "pipe", "pipe"],
   });
   let logs = "";
-  for (const stream of [server.stdout, server.stderr]) stream.on("data", (chunk) => { logs = (logs + chunk).slice(-4000); });
+  for (const stream of [server.stdout, server.stderr]) stream.on("data", (chunk) => { logs = (logs + chunk).slice(-20000); });
   t.after(async () => { server.kill("SIGTERM"); await new Promise((resolve) => server.once("exit", resolve)); });
   for (let i = 0; i < 90; i++) { try { await fetch(`${origin}/login`); break; } catch { await new Promise((resolve) => setTimeout(resolve, 1000)); } }
 
@@ -52,6 +52,35 @@ test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente a
     workspaceId: "coala", status: "linked", subject: "Cobrança de teste", linkedExpenseId: expenseId,
     classification: { amountCents: 3999, dueDate, barcode }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
+  const casePath = `/api/financial/inbox/${inboxId}/case`;
+  const restrictedCase = await fetch(origin + casePath, { headers: { Authorization: `Bearer ${restricted}` } });
+  assert.equal(restrictedCase.status, 403);
+  const chargeCase = await fetch(origin + casePath, { headers: { Authorization: `Bearer ${token}` } });
+  const chargeCasePayload = await chargeCase.json();
+  assert.equal(chargeCase.status, 200, `${JSON.stringify(chargeCasePayload)}\n${logs}`);
+  assert.equal(chargeCasePayload.expense.id, expenseId);
+  assert.equal(chargeCasePayload.expense.state, "open");
+  const correction = await fetch(origin + casePath, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      supplierName: "Fornecedor corrigido",
+      supplierTaxId: beneficiaryDocument,
+      documentReference: "NF-11841",
+      competence: "2026-10",
+      dueDate,
+      amountCents: 3999,
+    }),
+  });
+  assert.equal(correction.status, 200, `${await correction.text()}\n${logs}`);
+  const [correctedMessage, unchangedExpense] = await Promise.all([
+    financial.collection("financialInboxMessages").doc(inboxId).get(),
+    financial.collection("expenses").doc(expenseId).get(),
+  ]);
+  assert.equal(correctedMessage.get("classification.supplierName"), "Fornecedor corrigido");
+  assert.deepEqual(correctedMessage.get("classification.documentReferences"), ["NF-11841"]);
+  assert.equal(unchangedExpense.get("totalValue"), 39.99);
+  assert.equal((await correctedMessage.ref.collection("events").where("type", "==", "CHARGE_READING_CORRECTED").get()).size, 1);
   const path = `/api/financial/inbox/${inboxId}/payment`;
   const send = (access: string, body: Record<string, unknown>) => fetch(origin + path, {
     method: "POST", headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" }, body: JSON.stringify(body),

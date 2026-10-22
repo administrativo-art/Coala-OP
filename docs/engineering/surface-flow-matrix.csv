@@ -198,6 +198,7 @@ api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,doc
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/import-sessions/[sessionId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/analyze/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/financial-inbox.md,Consulta segura do contexto da cobrança e correção allowlistada da leitura sem alterar a despesa.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/link/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/payment/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.

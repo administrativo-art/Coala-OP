@@ -9,6 +9,8 @@ const listRoute = readFileSync("src/app/api/financial/inbox/route.ts", "utf8");
 const linkRoute = readFileSync("src/app/api/financial/inbox/[id]/link/route.ts", "utf8");
 const settingsRoute = readFileSync("src/app/api/financial/inbox/settings/route.ts", "utf8");
 const workflow = readFileSync("src/features/financial/inbox/workflow.server.ts", "utf8");
+const caseRoute = readFileSync("src/app/api/financial/inbox/[id]/case/route.ts", "utf8");
+const expenseForm = readFileSync("src/features/financial/components/expenses/expense-form.tsx", "utf8");
 
 test("preparação de pagamento declara que autorização, agendamento e execução são etapas posteriores", () => {
   assert.match(page, /Preparar não autoriza, agenda nem executa pagamento\./);
@@ -27,7 +29,7 @@ test("interface separa a caixa operacional da auditoria de cobranças identifica
   assert.match(page, /Caixa de cobranças/);
   assert.match(page, /Cobranças identificadas/);
   assert.match(page, /Para confirmar/);
-  assert.match(page, /Confirmar como já registrada/);
+  assert.match(page, /Vincular à despesa/);
   assert.match(page, /A despesa, o agendamento e o pagamento não serão alterados\./);
   assert.doesNotMatch(page, /const STAGE_OPTIONS/);
 });
@@ -41,7 +43,8 @@ test("ruídos automáticos, descarte manual e arquivo têm filtros e ações dis
   assert.match(page, /Arquivar retira da lista operacional, mas não exclui/);
   assert.match(page, /restoreArchived\(selected\)/);
   assert.match(page, /Selecionar todos desta página/);
-  assert.match(page, /messageGroups\.map\(\(group\) => group\.primary\)/);
+  assert.match(page, /group\.messages\.every\(isFinancialInboxBulkDiscardEligible\)/);
+  assert.match(page, /flatMap\(\(group\) => group\.messages\.map/);
   assert.match(page, /setSelectedIds\(new Set\(\)\);\s*setCursor/);
 });
 
@@ -56,8 +59,28 @@ test("mostra o lançamento sugerido antes da decisão e explicita o vínculo com
 
 test("agrupa mensagens da mesma obrigação sem perder a trilha individual", () => {
   assert.match(page, /groupFinancialInboxMessages/);
-  assert.match(page, /E-mails desta obrigação/);
-  assert.match(page, /permanecem separados para auditoria/);
+  assert.match(page, /E-mails desta cobrança/);
+  assert.match(page, /arquivados ou descartados juntos/);
+});
+
+test("ações da cobrança têm ajuda contextual e não substituem despesa finalizada", () => {
+  assert.match(page, /ExplainedAction/);
+  assert.match(page, /Corrigir leitura da cobrança/);
+  assert.match(page, /Revisar e atualizar despesa/);
+  assert.match(page, /Tratar como nova cobrança/);
+  assert.match(page, /Vincular a outra despesa/);
+  assert.match(page, /O boleto é opcional para a conciliação/);
+  assert.match(page, /Esta cobrança aponta para uma despesa/);
+});
+
+test("correção da leitura é allowlistada, auditada e não atualiza a despesa", () => {
+  assert.match(caseRoute, /correctionSchema = z\.object/);
+  assert.match(caseRoute, /export const PATCH = secureRoute/);
+  assert.match(caseRoute, /financial\.inbox\.link/);
+  assert.doesNotMatch(caseRoute, /collection\("expenses"\).*update/);
+  assert.match(expenseForm, /\/case/);
+  assert.match(expenseForm, /accounting\.accountPlanId/);
+  assert.match(expenseForm, /accounting\.apportionments/);
 });
 
 test("vínculo com previsão preserva a nomenclatura oficial inclusive em telefonia", () => {
@@ -65,6 +88,8 @@ test("vínculo com previsão preserva a nomenclatura oficial inclusive em telefo
   assert.doesNotMatch(workflow, /buildFinancialDescription\("mobile_phone_bill"/);
   assert.match(workflow, /documentIdentity/);
   assert.match(workflow, /inboxMessageIds/);
+  assert.match(workflow, /FieldValue\.arrayRemove\(id\)/);
+  assert.match(workflow, /A cobrança principal não pode ser movida sem revisar toda a obrigação/);
   assert.match(workflow, /aliases: mergeExpenseAliases/);
   assert.doesNotMatch(workflow, /chooseExistingExpenseSuggestion[\s\S]{0,600}aliases/);
 });
