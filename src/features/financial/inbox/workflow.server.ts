@@ -945,8 +945,10 @@ export async function linkInboxChargeToExistingExpense(
     if (resolutionOnly
       && message.resolution?.status === "identified"
       && message.resolution.targetId
-      && message.resolution.targetId !== expenseId) {
-      throw new Error("A cobrança já foi identificada com outro lançamento.");
+      && message.resolution.targetId !== expenseId
+      && (message.linkedExpenseId || message.paymentRequestId
+        || !["reminder", "duplicate"].includes(message.resolution.kind ?? ""))) {
+      throw new Error("A cobrança já possui vínculo financeiro e não pode ser movida para outro lançamento.");
     }
     if (resolutionOnly
       && message.resolution?.status === "identified"
@@ -995,8 +997,30 @@ export async function linkInboxChargeToExistingExpense(
     }
     const obligationId = String(expense.obligationId || `obl_${expenseId}`);
     const obligationRef = financialDbAdmin.collection("financialObligations").doc(obligationId);
-    const obligationSnapshot = await transaction.get(obligationRef);
+    const previousObligationId = message.obligationId && message.obligationId !== obligationId
+      ? message.obligationId
+      : null;
+    const previousObligationRef = previousObligationId
+      ? financialDbAdmin.collection("financialObligations").doc(previousObligationId)
+      : null;
+    const [obligationSnapshot, previousObligationSnapshot] = await Promise.all([
+      transaction.get(obligationRef),
+      previousObligationRef ? transaction.get(previousObligationRef) : Promise.resolve(null),
+    ]);
     const obligation = obligationSnapshot.data() || {};
+    if (previousObligationSnapshot?.exists
+      && String(previousObligationSnapshot.get("primaryInboxMessageId") ?? "") === id) {
+      throw new Error("A cobrança principal não pode ser movida sem revisar toda a obrigação.");
+    }
+    const previousPrimaryMessageId = previousObligationSnapshot?.exists
+      ? String(previousObligationSnapshot.get("primaryInboxMessageId") ?? "").trim()
+      : "";
+    const previousPrimaryMessageRef = previousPrimaryMessageId
+      ? financialDbAdmin.collection("financialInboxMessages").doc(previousPrimaryMessageId)
+      : null;
+    const previousPrimaryMessageSnapshot = previousPrimaryMessageRef
+      ? await transaction.get(previousPrimaryMessageRef)
+      : null;
     const primaryMessageId = String(obligation.primaryInboxMessageId || expense.financialInboxMessageId || id);
     const primaryMessageRef = financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId);
     const primaryMessageSnapshot = primaryMessageId === id ? messageSnapshot : await transaction.get(primaryMessageRef);
@@ -1127,6 +1151,27 @@ export async function linkInboxChargeToExistingExpense(
       [currentThreadMessage],
     );
     const thread = { primaryMessageId, messageCount: threadMessages.length, messages: threadMessages };
+    if (previousObligationRef && previousObligationSnapshot?.exists) {
+      const previousSummaries = Array.isArray(previousObligationSnapshot.get("inboxMessageSummaries"))
+        ? previousObligationSnapshot.get("inboxMessageSummaries") as Array<{ id?: string }>
+        : [];
+      const remainingSummaries = previousSummaries.filter((entry) => entry.id !== id);
+      transaction.set(previousObligationRef, {
+        inboxMessageIds: FieldValue.arrayRemove(id),
+        inboxMessageSummaries: remainingSummaries,
+        updatedAt: now,
+      }, { merge: true });
+      if (previousPrimaryMessageRef && previousPrimaryMessageSnapshot?.exists) {
+        transaction.set(previousPrimaryMessageRef, {
+          thread: {
+            primaryMessageId: previousPrimaryMessageId,
+            messageCount: remainingSummaries.length,
+            messages: remainingSummaries,
+          },
+          updatedAt: now,
+        }, { merge: true });
+      }
+    }
     transaction.set(obligationRef, {
       id: obligationId,
       billingIdentity,

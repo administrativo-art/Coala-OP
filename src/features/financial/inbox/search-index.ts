@@ -38,6 +38,7 @@ export function financialInboxSearchValues(message: SearchableInboxMessage) {
     message.classification.fiscalIdentity?.taxpayerRegistration,
     message.classification.fiscalIdentity?.documentNumber,
     message.classification.fiscalIdentity?.documentKind,
+    ...(message.classification.documentReferences ?? []),
     ...(message.classification.fiscalIdentity?.revenueCodes ?? []),
     ...(message.classification.fiscalIdentity?.revenueDescriptions ?? []),
     ...(message.classification.fiscalIdentity?.revenueItems ?? []).flatMap((item) => [item.code, item.description]),

@@ -10,8 +10,9 @@ import { PageHero } from "@/components/patterns/page-hero";
 import { Segmented } from "@/components/patterns/segmented";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -29,6 +30,7 @@ import {
   Landmark,
   Link2,
   Loader2,
+  PencilLine,
   RefreshCw,
   RotateCcw,
   Search,
@@ -37,6 +39,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import type { FinancialInboxExpenseContext } from "./charge-case";
 
 import {
   financialInboxStageForStatus,
@@ -191,6 +194,7 @@ type Confirmation =
   | { kind: "archive"; ids: string[] }
   | { kind: "link"; message: FinancialInboxMessage; alternative?: FinancialInboxExpenseAlternative; resolutionOnly?: boolean }
   | { kind: "create"; message: FinancialInboxMessage }
+  | { kind: "correct"; message: FinancialInboxMessage }
   | { kind: "payment"; message: FinancialInboxMessage }
   | { kind: "external"; url: string; domain: string; provider: string };
 
@@ -200,6 +204,37 @@ type ComparisonRow = {
   registered: string;
   state: "same" | "different" | "missing" | "enrich";
 };
+
+type CorrectionDraft = {
+  supplierName: string;
+  supplierTaxId: string;
+  documentReference: string;
+  competence: string;
+  dueDate: string;
+  amount: string;
+};
+
+function ExplainedAction({ title, children, help }: { title: string; children: ReactNode; help: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <div className="min-w-0 flex-1">{children}</div>
+      <InfoPopover title={title}>{help}</InfoPopover>
+    </div>
+  );
+}
+
+function correctionDraft(message: FinancialInboxMessage): CorrectionDraft {
+  return {
+    supplierName: message.classification.supplierName ?? "",
+    supplierTaxId: message.classification.billingIdentity?.supplierTaxId ?? "",
+    documentReference: message.classification.documentReferences?.[0] ?? "",
+    competence: message.classification.competence ?? "",
+    dueDate: message.classification.dueDate ?? "",
+    amount: message.classification.amountCents == null
+      ? ""
+      : (message.classification.amountCents / 100).toFixed(2).replace(".", ","),
+  };
+}
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
@@ -377,7 +412,7 @@ function SuggestedPostingCard({
       {message.classification.fiscalIdentity?.documentKind === "das" ? <p className="mt-3 rounded-xl bg-background p-3 text-xs text-muted-foreground"><strong className="text-foreground">Uma única despesa de {formatAmount(message.classification.amountCents)}.</strong> A distribuição entre as unidades é apenas o rateio contábil deste total; não cria novas cobranças.</p> : null}
 
       {!message.linkedExpenseId && message.existingExpenseSuggestion?.status !== "suggested" && (message.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? (
-        <div className="mt-4 space-y-2 border-t pt-4"><p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Alternativas — confirmação manual</p>{message.existingExpenseSuggestion!.alternatives!.map((alternative) => <div key={`${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-3"><div><p className="text-sm font-semibold">{alternative.description}</p><p className="text-xs text-muted-foreground">{[alternative.supplier, alternative.installmentNumber ? `Parcela ${alternative.installmentNumber}${alternative.installmentTotal ? `/${alternative.installmentTotal}` : ""}` : null, formatAmount(alternative.amountCents), formatDate(alternative.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-[11px] text-muted-foreground">{alternative.reasons.join(" · ")}</p></div>{canIdentify ? <Button variant="outline" size="sm" onClick={() => onSelectAlternative(alternative)}>Identificar lançamento</Button> : null}</div>)}</div>
+        <div className="mt-4 space-y-2 border-t pt-4"><p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Alternativas — confirmação manual</p>{message.existingExpenseSuggestion!.alternatives!.map((alternative) => <div key={`${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-3"><div><p className="text-sm font-semibold">{alternative.description}</p><p className="text-xs text-muted-foreground">{[alternative.supplier, alternative.installmentNumber ? `Parcela ${alternative.installmentNumber}${alternative.installmentTotal ? `/${alternative.installmentTotal}` : ""}` : null, formatAmount(alternative.amountCents), formatDate(alternative.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-[11px] text-muted-foreground">{alternative.reasons.join(" · ")}</p></div>{canIdentify ? <ExplainedAction title="Vincular a outra despesa" help={<><p>Relaciona esta cobrança à despesa escolhida sem substituir uma despesa paga ou agendada.</p><p>Confira valor, vencimento, competência e parcela antes de confirmar.</p></>}><Button variant="outline" size="sm" onClick={() => onSelectAlternative(alternative)}>Vincular a esta despesa</Button></ExplainedAction> : null}</div>)}</div>
       ) : null}
 
       {message.linkedExpenseId ? <div className="mt-4 flex gap-2 rounded-xl bg-ds-ok-bg p-3 text-sm text-ds-ok"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Vinculada à despesa {message.linkedExpenseId}{message.linkedExpenseInstallmentNumber ? `, parcela ${message.linkedExpenseInstallmentNumber}` : ""}.</span></div> : null}
@@ -456,6 +491,8 @@ export function FinancialInboxPage() {
   const [customPaymentDate, setCustomPaymentDate] = useState("");
   const [manualBarcode, setManualBarcode] = useState("");
   const [beneficiaryDocument, setBeneficiaryDocument] = useState("");
+  const [expenseContext, setExpenseContext] = useState<FinancialInboxExpenseContext | null>(null);
+  const [correction, setCorrection] = useState<CorrectionDraft | null>(null);
   const [automationSettings, setAutomationSettings] = useState<FinancialInboxAutomationSettings>({
     mode: "manual",
     policyVersion: 1,
@@ -480,9 +517,8 @@ export function FinancialInboxPage() {
     () => messageGroups.find((group) => group.messages.some((message) => message.id === selectedId)) ?? null,
     [messageGroups, selectedId],
   );
-  const selectedThreadMessages = useMemo(() => selected?.thread?.messages?.length
-    ? selected.thread.messages
-    : (selectedGroup?.messages ?? []).map((message) => ({
+  const selectedThreadMessages = useMemo(() => selectedGroup?.messages?.length
+    ? selectedGroup.messages.map((message) => ({
       id: message.id,
       subject: message.subject,
       receivedAt: message.receivedAt,
@@ -492,20 +528,23 @@ export function FinancialInboxPage() {
         || resolutionForDisplay(message).kind === "duplicate"
         ? resolutionForDisplay(message).kind as "new_charge" | "reminder" | "duplicate"
         : null,
-    })), [selected, selectedGroup]);
-  const selectedThreadCount = Math.max(selected?.thread?.messageCount ?? 0, selectedGroup?.messageCount ?? 0);
+    }))
+    : (selected?.thread?.messages ?? []), [selected, selectedGroup]);
+  const selectedThreadCount = selectedGroup?.messageCount ?? selected?.thread?.messageCount ?? 0;
   const selectedForDiscard = useMemo(
-    () => messageGroups.map((group) => group.primary).filter((message) => selectedIds.has(message.id) && isFinancialInboxBulkDiscardEligible(message)),
+    () => messageGroups.filter((group) => selectedIds.has(group.primary.id)
+      && group.messages.every(isFinancialInboxBulkDiscardEligible)),
     [messageGroups, selectedIds],
   );
   const selectedForArchive = useMemo(
-    () => messageGroups.map((group) => group.primary).filter((message) => selectedIds.has(message.id) && isFinancialInboxArchiveCandidate(message)),
+    () => messageGroups.filter((group) => selectedIds.has(group.primary.id)
+      && group.messages.every(isFinancialInboxArchiveCandidate)),
     [messageGroups, selectedIds],
   );
-  const selectableOnPage = useMemo(() => messageGroups.map((group) => group.primary).filter((message) =>
-    canDiscard && (view === "work" ? isFinancialInboxBulkDiscardEligible(message)
+  const selectableOnPage = useMemo(() => messageGroups.filter((group) =>
+    canDiscard && (view === "work" ? group.messages.every(isFinancialInboxBulkDiscardEligible)
       : view === "noise" || view === "discarded" || (view === "identified" && auditFilter !== "archive")
-        ? isFinancialInboxArchiveCandidate(message) : false)),
+        ? group.messages.every(isFinancialInboxArchiveCandidate) : false)).map((group) => group.primary),
     [auditFilter, canDiscard, messageGroups, view],
   );
   const selectedComparison = useMemo(() => selected ? comparisonRows(selected) : [], [selected]);
@@ -551,6 +590,23 @@ export function FinancialInboxPage() {
     }
     return payload;
   }, [firebaseUser]);
+
+  useEffect(() => {
+    if (!selectedId || !firebaseUser) {
+      setExpenseContext(null);
+      return;
+    }
+    setExpenseContext(null);
+    let active = true;
+    void api(`/api/financial/inbox/${encodeURIComponent(selectedId)}/case`)
+      .then((payload) => {
+        if (active) setExpenseContext((payload.expense ?? null) as FinancialInboxExpenseContext | null);
+      })
+      .catch(() => {
+        if (active) setExpenseContext(null);
+      });
+    return () => { active = false; };
+  }, [api, firebaseUser, selectedId]);
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
@@ -743,6 +799,49 @@ export function FinancialInboxPage() {
       await load();
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao analisar a cobrança." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  function openCorrection(message: FinancialInboxMessage) {
+    setCorrection(correctionDraft(message));
+    setConfirmation({ kind: "correct", message });
+  }
+
+  async function saveCorrection(message: FinancialInboxMessage) {
+    if (!correction) return;
+    const rawAmount = correction.amount.trim().replace(/[^\d,.-]/g, "");
+    const normalizedAmount = rawAmount.includes(",")
+      ? rawAmount.replace(/\./g, "").replace(",", ".")
+      : rawAmount;
+    const parsedAmount = normalizedAmount ? Number(normalizedAmount) : null;
+    if (parsedAmount != null && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
+      toast({ variant: "destructive", title: "Informe um valor válido." });
+      return;
+    }
+    setWorking(`correct:${message.id}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/case`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          supplierName: correction.supplierName.trim() || null,
+          supplierTaxId: correction.supplierTaxId.trim() || null,
+          documentReference: correction.documentReference.trim() || null,
+          competence: correction.competence || null,
+          dueDate: correction.dueDate || null,
+          amountCents: parsedAmount == null ? null : Math.round(parsedAmount * 100),
+        }),
+      });
+      setConfirmation(null);
+      setCorrection(null);
+      toast({
+        title: "Leitura da cobrança corrigida.",
+        description: "A despesa não foi alterada. Reanalise para atualizar as correspondências.",
+      });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao corrigir a cobrança." });
     } finally {
       setWorking(null);
     }
@@ -1067,10 +1166,36 @@ export function FinancialInboxPage() {
             <div className="grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência</p><p className="font-semibold">{formatCompetence(selected.classification.competence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento</p><p className="font-semibold">{formatDate(selected.classification.dueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebimento</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
           </div>
                 <div className="space-y-5">
+                  <section className="rounded-2xl border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><h3 className="text-sm font-bold">Dados organizados da cobrança</h3><p className="mt-1 text-xs text-muted-foreground">A cobrança é evidência. Corrigir estes campos não altera a despesa vinculada.</p></div>
+                      <ExplainedAction title="Corrigir leitura da cobrança" help={<><p>Altera somente os campos extraídos do e-mail ou documento.</p><p>Valor, vencimento e classificação da despesa permanecem intactos até uma revisão explícita.</p></>}>
+                        <Button variant="outline" size="sm" onClick={() => openCorrection(selected)} disabled={!canIdentify}><PencilLine className="mr-2 h-4 w-4" />Corrigir leitura</Button>
+                      </ExplainedAction>
+                    </div>
+                    <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                      <div><dt className="text-xs text-muted-foreground">Fornecedor</dt><dd className="font-semibold">{selected.classification.supplierName || "—"}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">CNPJ</dt><dd className="font-semibold">{selected.classification.billingIdentity?.supplierTaxId || "—"}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Documento</dt><dd className="font-semibold">{selected.classification.documentReferences?.join(", ") || "—"}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-mono font-semibold">{formatAmount(selected.classification.amountCents)}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Plano de contas</dt><dd className="font-semibold">{expenseContext?.accounting.accountPlanName || expenseContext?.accounting.accountPlanId || "Não informado"}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Centro de resultado</dt><dd className="font-semibold">{expenseContext?.accounting.referenceResultCenterName || "Não informado"}</dd></div>
+                      <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Rateio</dt><dd className="font-semibold">{expenseContext?.accounting.isApportioned ? expenseContext.accounting.apportionments.map((item) => `${item.resultCenter} ${item.percentage}%`).join(" · ") : "Sem rateio"}</dd></div>
+                    </dl>
+                    <p className="mt-3 rounded-xl bg-ds-muted p-3 text-xs text-ds-ink-muted">O boleto é opcional para a conciliação. Se o financeiro pagar por outro meio, a movimentação do extrato ainda poderá conciliar a despesa.</p>
+                  </section>
+
+                  {expenseContext?.state === "scheduled" || expenseContext?.state === "paid" ? (
+                    <section className="rounded-2xl border border-ds-warn bg-ds-warn-bg p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ds-warn">Despesa preservada</p>
+                      <p className="mt-1 text-sm text-ds-ink">Esta cobrança aponta para uma despesa {expenseContext.state === "paid" ? "já paga" : "já agendada"}. Ela não substituirá o lançamento finalizado.</p>
+                      <p className="mt-1 text-xs text-ds-ink-muted">Arquive ou descarte a cobrança, vincule-a a outro lançamento sugerido ou trate-a como uma nova obrigação.</p>
+                    </section>
+                  ) : null}
                   {selectedThreadCount > 1 ? (
                     <section className="rounded-2xl border border-ds-info bg-ds-info-bg p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div><h3 className="text-sm font-bold">E-mails desta obrigação</h3><p className="mt-1 text-xs text-muted-foreground">Cobrança principal, lembretes e reenvios permanecem separados para auditoria.</p></div>
+                        <div><h3 className="text-sm font-bold">E-mails desta cobrança</h3><p className="mt-1 text-xs text-muted-foreground">A cobrança aparece uma vez na caixa. Os e-mails continuam separados aqui para auditoria e serão arquivados ou descartados juntos.</p></div>
                         <Badge variant="outline" className="border-ds-info bg-background text-ds-info">{selectedThreadCount} e-mails</Badge>
                       </div>
                       <div className="mt-3 divide-y rounded-xl border bg-background">
@@ -1111,14 +1236,14 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">{selected.resolution?.mode === "automatic" ? "Ruído ignorado automaticamente" : "Mensagem descartada manualmente"}</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido. O e-mail pode ser arquivado ou reaberto.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; e-mail, anexos, trilha e vínculos continuam preservados. É possível restaurar.</p></> : null}
                       </div>
-                      <div className="shrink-0">
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Analisar cobrança</Button> : null}
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canIdentify && selected.existingExpenseSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected, resolutionOnly: true })}><CheckCircle2 className="mr-2 h-4 w-4" />Confirmar como já registrada</Button> : null}
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Vincular cobrança à previsão</Button> : null}
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <Button onClick={() => openPaymentPreparation(selected)}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button> : null}
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />Abrir no banco</Link></Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <Button variant="ds-secondary" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir mensagem</Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "archive" && canDiscard ? <Button variant="outline" onClick={() => void restoreArchived(selected)} disabled={working === `restore:${selected.id}`}>{working === `restore:${selected.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Restaurar</Button> : null}
+                      <div className="grid shrink-0 gap-2">
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <ExplainedAction title="Reprocessar documento" help={<><p>Executa novamente a extração determinística e, se necessário, OCR/IA.</p><p>Não cria despesa, não envia ao banco e não altera pagamento.</p></>}><Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Reprocessar documento</Button></ExplainedAction> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canIdentify && selected.existingExpenseSuggestion?.status === "suggested" ? <ExplainedAction title="Vincular à despesa encontrada" help={<><p>Registra esta cobrança como evidência da despesa sugerida.</p><p>Se ela já estiver paga ou agendada, valor, vencimento e pagamento serão preservados.</p></>}><Button onClick={() => setConfirmation({ kind: "link", message: selected, resolutionOnly: true })}><CheckCircle2 className="mr-2 h-4 w-4" />Vincular à despesa</Button></ExplainedAction> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <ExplainedAction title="Vincular cobrança à previsão" help={<><p>Transforma a previsão existente na despesa desta cobrança e mantém sua classificação contábil.</p><p>Nenhum pagamento é autorizado ou executado.</p></>}><Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Vincular à previsão</Button></ExplainedAction> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <ExplainedAction title="Preparar pagamento" help={<><p>Cria uma solicitação para a fila de autorizações.</p><p>Não agenda, autoriza nem executa o pagamento no Banco Inter.</p></>}><Button onClick={() => openPaymentPreparation(selected)}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button></ExplainedAction> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <ExplainedAction title={selected.status === "payment_failed" ? "Revisar e tentar novamente" : "Acompanhar no banco"} help={<><p>Abre a solicitação bancária para consultar o estado e o erro sanitizado.</p><p>Quando houver falha sem agendamento confirmado, o reenvio parte dessa fila e volta a passar pelas verificações de duplicidade.</p></>}><Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />{selected.status === "payment_failed" ? "Revisar tentativa" : "Acompanhar no banco"}</Link></Button></ExplainedAction> : null}
+                        {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <ExplainedAction title="Reabrir cobrança" help={<p>Retorna todos os dados preservados para a fila de revisão; não cria qualquer efeito financeiro.</p>}><Button variant="ds-secondary" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir cobrança</Button></ExplainedAction> : null}
+                        {financialInboxStageForStatus(selected.status) === "archive" && canDiscard ? <ExplainedAction title="Restaurar cobrança" help={<p>Devolve a cobrança à situação tratada anterior com e-mails, anexos e auditoria preservados.</p>}><Button variant="outline" onClick={() => void restoreArchived(selected)} disabled={working === `restore:${selected.id}`}>{working === `restore:${selected.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Restaurar cobrança</Button></ExplainedAction> : null}
                       </div>
                     </div>
                   </section>
@@ -1162,7 +1287,12 @@ export function FinancialInboxPage() {
 
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                     <div className="text-[11px] text-muted-foreground"><p>Mensagem: {selected.id}</p><p>Atualizada em {formatDateTime(selected.updatedAt)} · origem {selected.provider}</p>{selectedResolution?.resolvedAt ? <p>Identificação {selectedResolution.mode === "automatic" ? "automática" : "manual"} em {formatDateTime(selectedResolution.resolvedAt)}</p> : null}{selected.paymentRequestId ? <p>Solicitação de pagamento: {selected.paymentRequestId}</p> : null}{selected.statementTransactionId ? <p>Movimentação conciliada: {selected.statementTransactionId}</p> : null}</div>
-                    <div className="flex flex-wrap gap-2">{view === "work" && canLink && selectedResolution?.status === "pending" && !selected.linkedExpenseId ? <Button variant="outline" onClick={() => setConfirmation({ kind: "create", message: selected })}>Criar nova despesa</Button> : null}{view === "work" && canDiscard && selected.status !== "ignored" && isFinancialInboxBulkDiscardEligible(selected) ? <Button variant="outline" onClick={() => setConfirmation({ kind: "discard", ids: [selected.id] })}><Trash2 className="mr-2 h-4 w-4" />Descartar</Button> : null}</div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {canLink && expenseContext?.editable ? <ExplainedAction title="Revisar e atualizar despesa" help={<><p>Abre o cadastro da despesa para uma revisão explícita.</p><p>A cobrança não substitui automaticamente valor, vencimento, plano de contas, centro ou rateio.</p></>}><Button variant="outline" asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(expenseContext.id)}&returnTo=${encodeURIComponent(FINANCIAL_ROUTES.inbox)}`}><PencilLine className="mr-2 h-4 w-4" />Revisar despesa</Link></Button></ExplainedAction> : null}
+                      {view !== "noise" && view !== "discarded" && canLink && !selected.linkedExpenseId && (selectedResolution?.status === "pending" || expenseContext?.state === "paid" || expenseContext?.state === "scheduled") ? <ExplainedAction title="Tratar como nova cobrança" help={<><p>Abre uma nova despesa com os dados desta cobrança.</p><p>Quando houver uma despesa relacionada, sua classificação contábil será copiada como sugestão; a despesa paga ou agendada não será alterada.</p></>}><Button variant="outline" onClick={() => setConfirmation({ kind: "create", message: selected })}>Tratar como nova cobrança</Button></ExplainedAction> : null}
+                      {view === "work" && canDiscard && selected.status !== "ignored" && selectedGroup?.messages.every(isFinancialInboxBulkDiscardEligible) ? <ExplainedAction title="Descartar cobrança" help={<><p>Marca a cobrança e todos os e-mails agrupados como descartados.</p><p>Não exclui os originais e não é permitido quando existe vínculo ou processamento financeiro.</p></>}><Button variant="outline" onClick={() => setConfirmation({ kind: "discard", ids: selectedGroup.messages.map((message) => message.id) })}><Trash2 className="mr-2 h-4 w-4" />Descartar cobrança</Button></ExplainedAction> : null}
+                      {canDiscard && selectedGroup?.messages.every(isFinancialInboxArchiveCandidate) && selected.status !== "archived" ? <ExplainedAction title="Arquivar cobrança" help={<><p>Retira a cobrança da lista operacional e arquiva juntos todos os e-mails do grupo.</p><p>E-mail, anexos, vínculos e trilha continuam preservados e podem ser restaurados.</p></>}><Button variant="outline" onClick={() => setConfirmation({ kind: "archive", ids: selectedGroup.messages.map((message) => message.id) })}>Arquivar cobrança</Button></ExplainedAction> : null}
+                    </div>
                   </div>
                 </div>
         </SidePanel>
@@ -1170,19 +1300,20 @@ export function FinancialInboxPage() {
 
       <BulkBar
         count={loading || loadError || working ? 0 : view === "work" ? selectedForDiscard.length : selectedForArchive.length}
-        summary={`${view === "work" ? selectedForDiscard.length : selectedForArchive.length} ${(view === "work" ? selectedForDiscard.length : selectedForArchive.length) === 1 ? "selecionada" : "selecionadas"} para ${view === "work" ? "descarte" : "arquivamento"}`}
+        summary={`${view === "work" ? selectedForDiscard.length : selectedForArchive.length} ${(view === "work" ? selectedForDiscard.length : selectedForArchive.length) === 1 ? "cobrança selecionada" : "cobranças selecionadas"} para ${view === "work" ? "descarte" : "arquivamento"}`}
         actions={view === "work"
-          ? [{ label: "Descartar mensagens", isDanger: true, onClick: () => { if (selectedForDiscard.length) setConfirmation({ kind: "discard", ids: selectedForDiscard.map((message) => message.id) }); } }]
-          : [{ label: "Arquivar mensagens", onClick: () => { if (selectedForArchive.length) setConfirmation({ kind: "archive", ids: selectedForArchive.map((message) => message.id) }); } }]}
+          ? [{ label: "Descartar cobranças", isDanger: true, onClick: () => { if (selectedForDiscard.length) setConfirmation({ kind: "discard", ids: selectedForDiscard.flatMap((group) => group.messages.map((message) => message.id)) }); } }]
+          : [{ label: "Arquivar cobranças", onClick: () => { if (selectedForArchive.length) setConfirmation({ kind: "archive", ids: selectedForArchive.flatMap((group) => group.messages.map((message) => message.id)) }); } }]}
         onClear={() => setSelectedIds(new Set())}
       />
 
-      <Dialog open={confirmation !== null} onOpenChange={(open) => { if (!open && !working) setConfirmation(null); }}>
+      <Dialog open={confirmation !== null} onOpenChange={(open) => { if (!open && !working) { setConfirmation(null); setCorrection(null); } }}>
         <DialogContent className="rounded-ds-modal sm:max-w-lg">
           {confirmation?.kind === "discard" ? <><DialogHeader><DialogTitle>Descartar {confirmation.ids.length === 1 ? "esta mensagem" : `${confirmation.ids.length} mensagens`}?</DialogTitle><DialogDescription>O descarte será auditado e não excluirá o e-mail original. Nenhuma despesa ou pagamento será criado. Mensagens já vinculadas ou em processamento são bloqueadas pelo servidor.</DialogDescription></DialogHeader><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="danger" size="md" onClick={confirmAction} disabled={working === "discard:many"}><Trash2 className="mr-2 h-4 w-4" />Confirmar descarte</Button></DialogFooter></> : null}
           {confirmation?.kind === "archive" ? <><DialogHeader><DialogTitle>Arquivar {confirmation.ids.length === 1 ? "esta mensagem" : `${confirmation.ids.length} mensagens`}?</DialogTitle><DialogDescription>Arquivar retira da lista operacional, mas não exclui e-mails, anexos ou vínculos. Você pode restaurar em Arquivadas. O servidor verificará se todas as cobranças estão concluídas; se alguma estiver em andamento, o lote inteiro será recusado.</DialogDescription></DialogHeader><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="primary-modal" size="md" onClick={confirmAction} disabled={working === "archive:many"}>{working === "archive:many" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Arquivar mensagens</Button></DialogFooter></> : null}
           {confirmation?.kind === "link" ? <><DialogHeader><DialogTitle>{confirmation.resolutionOnly ? "Confirmar identificação?" : confirmation.message.provisionSuggestion?.status === "suggested" ? "Vincular esta cobrança à previsão?" : "Confirmar vínculo?"}</DialogTitle><DialogDescription>{confirmation.resolutionOnly ? "A mensagem será registrada como lembrete de uma despesa existente. Nome, valor e pagamento serão preservados; identificadores confirmados do documento poderão ser agregados." : confirmation.message.provisionSuggestion?.status === "suggested" ? <>A cobrança será vinculada à previsão “{confirmation.message.provisionSuggestion.description || "Previsão encontrada"}”. O nome e a classificação oficial serão mantidos, a obrigação não será duplicada e nenhum pagamento será autorizado ou executado.</> : <>Esta ação registra a relação entre a cobrança e {confirmation.alternative ? `“${confirmation.alternative.description}”` : "o lançamento sugerido"}. Ela não autoriza nem executa pagamento.</>}</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="text-xs font-medium text-muted-foreground">Cobrança recebida</p><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{confirmation.message.provisionSuggestion?.status === "suggested" && !confirmation.resolutionOnly ? <><p className="mt-3 border-t pt-3 text-xs font-medium text-muted-foreground">Previsão vinculada</p><p className="font-semibold">{confirmation.message.provisionSuggestion.description || "Previsão encontrada"}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.provisionSuggestion.provisionedAmountCents)}</p></> : null}</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Revisar novamente</Button><Button variant="primary-modal" size="md" onClick={confirmAction}>{confirmation.resolutionOnly ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Link2 className="mr-2 h-4 w-4" />}{confirmation.resolutionOnly ? "Registrar como já existente" : confirmation.message.provisionSuggestion?.status === "suggested" ? "Vincular e atualizar informações" : "Registrar vínculo"}</Button></DialogFooter></> : null}
-          {confirmation?.kind === "create" ? <><DialogHeader><DialogTitle>Criar uma nova despesa?</DialogTitle><DialogDescription>Use esta opção quando a cobrança realmente representar uma nova obrigação. As correspondências encontradas continuarão disponíveis para evitar duplicidade.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{(confirmation.message.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? <p className="mt-2 font-medium text-ds-warn">Há lançamentos semelhantes. Confirme que esta é uma obrigação diferente.</p> : null}</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="primary-modal" size="md" asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(confirmation.message.id)}`}>Continuar e criar</Link></Button></DialogFooter></> : null}
+          {confirmation?.kind === "correct" && correction ? <><DialogHeader><DialogTitle>Corrigir leitura da cobrança</DialogTitle><DialogDescription>Organize os dados extraídos do e-mail. Esta ação não altera a despesa, o boleto armazenado nela ou qualquer solicitação bancária.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1.5 sm:col-span-2"><label htmlFor="charge-supplier" className="text-sm font-medium">Fornecedor</label><Input id="charge-supplier" value={correction.supplierName} onChange={(event) => setCorrection({ ...correction, supplierName: event.target.value })} /></div><div className="space-y-1.5"><label htmlFor="charge-tax-id" className="text-sm font-medium">CNPJ</label><Input id="charge-tax-id" inputMode="numeric" value={correction.supplierTaxId} onChange={(event) => setCorrection({ ...correction, supplierTaxId: event.target.value })} /></div><div className="space-y-1.5"><label htmlFor="charge-document" className="text-sm font-medium">Documento</label><Input id="charge-document" value={correction.documentReference} onChange={(event) => setCorrection({ ...correction, documentReference: event.target.value })} /></div><div className="space-y-1.5"><label htmlFor="charge-competence" className="text-sm font-medium">Competência</label><Input id="charge-competence" type="month" value={correction.competence} onChange={(event) => setCorrection({ ...correction, competence: event.target.value })} /></div><div className="space-y-1.5"><label htmlFor="charge-due-date" className="text-sm font-medium">Vencimento</label><Input id="charge-due-date" type="date" value={correction.dueDate} onChange={(event) => setCorrection({ ...correction, dueDate: event.target.value })} /></div><div className="space-y-1.5 sm:col-span-2"><label htmlFor="charge-amount" className="text-sm font-medium">Valor</label><Input id="charge-amount" inputMode="decimal" value={correction.amount} onChange={(event) => setCorrection({ ...correction, amount: event.target.value })} /></div></div><div className="rounded-xl border border-ds-info bg-ds-info-bg p-3 text-xs text-ds-ink-muted">Depois de salvar, use <strong>Reprocessar documento</strong> para recalcular sugestões e divergências. A despesa só muda se você abrir e revisar seu cadastro.</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => { setConfirmation(null); setCorrection(null); }} disabled={working === `correct:${confirmation.message.id}`}>Cancelar</Button><Button variant="primary-modal" size="md" onClick={() => void saveCorrection(confirmation.message)} disabled={working === `correct:${confirmation.message.id}`}>{working === `correct:${confirmation.message.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PencilLine className="mr-2 h-4 w-4" />}Salvar correção</Button></DialogFooter></> : null}
+          {confirmation?.kind === "create" ? <><DialogHeader><DialogTitle>Criar uma nova despesa?</DialogTitle><DialogDescription>Use esta opção quando a cobrança realmente representar uma nova obrigação. O formulário receberá os dados da cobrança e, quando houver uma despesa relacionada, plano de contas, centro de resultado e rateio como sugestão. A despesa anterior não será alterada.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{(confirmation.message.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? <p className="mt-2 font-medium text-ds-warn">Há lançamentos semelhantes. Confirme que esta é uma obrigação diferente.</p> : null}</div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="primary-modal" size="md" asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(confirmation.message.id)}`}>Abrir nova despesa</Link></Button></DialogFooter></> : null}
           {confirmation?.kind === "payment" ? <><DialogHeader><DialogTitle>Preparar solicitação de pagamento</DialogTitle><DialogDescription><strong>Preparar não autoriza, agenda nem executa pagamento.</strong> A solicitação seguirá para a fila de autorizações financeiras.</DialogDescription></DialogHeader><div className="space-y-4"><div className="rounded-xl border bg-muted/30 p-3"><p className="text-sm font-semibold">{confirmation.message.subject}</p><p className="mt-1 font-mono text-lg font-bold">{formatAmount(confirmation.message.classification.amountCents)}</p></div>{!confirmation.message.classification.barcode ? <div><label htmlFor="payment-barcode" className="text-sm font-medium">Código de barras</label><Input id="payment-barcode" className="mt-1 font-mono" value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} placeholder="Informe o código completo" /></div> : <p className="rounded-xl bg-ds-ok-bg p-3 text-sm text-ds-ok"><CheckCircle2 className="mr-2 inline h-4 w-4" />Código de barras extraído do documento.</p>}<div><label htmlFor="payment-beneficiary-document" className="text-sm font-medium">CNPJ do favorecido</label><Input id="payment-beneficiary-document" className="mt-1 font-mono" value={beneficiaryDocument} onChange={(event) => setBeneficiaryDocument(event.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" /><p className="mt-1 text-xs text-muted-foreground">Confirme o CNPJ que identifica o emissor no documento original.</p></div><fieldset><legend className="text-sm font-medium">Data pretendida</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{([{ value: "due", label: `Vencimento (${formatDate(confirmation.message.classification.dueDate)})` }, { value: "today", label: "Hoje" }, { value: "custom", label: "Outra data" }] as const).map((option) => <button key={option.value} type="button" onClick={() => setPaymentDateMode(option.value)} className={cn("rounded-xl border p-3 text-left text-xs font-semibold", paymentDateMode === option.value ? "border-ds-info bg-ds-info-bg text-ds-info" : "hover:bg-muted")}>{option.label}</button>)}</div></fieldset>{paymentDateMode === "custom" ? <div><label htmlFor="custom-payment-date" className="text-sm font-medium">Data</label><Input id="custom-payment-date" type="date" value={customPaymentDate} max={confirmation.message.classification.dueDate ?? undefined} onChange={(event) => setCustomPaymentDate(event.target.value)} className="mt-1" /></div> : null}<div className="flex gap-2 rounded-xl border border-ds-warn bg-ds-warn-bg p-3 text-xs text-ds-warn"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>A autorização no sistema e a aprovação no Banco Inter continuam sendo etapas separadas.</span></div></div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)} disabled={working === `payment:${confirmation.message.id}`}>Cancelar</Button><Button variant="primary-modal" size="md" onClick={confirmAction} disabled={working === `payment:${confirmation.message.id}`}>{working === `payment:${confirmation.message.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}Enviar para autorização</Button></DialogFooter></> : null}
           {confirmation?.kind === "external" ? <><DialogHeader><DialogTitle>Abrir documento externo verificado?</DialogTitle><DialogDescription>O host e a rota pertencem a um provedor documental autorizado. Essa validação não substitui a conferência do conteúdo e dos dados da cobrança.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Provedor verificado</p><p className="text-sm font-bold text-ds-ok">{confirmation.provider}</p><p className="mt-3 text-xs text-muted-foreground">Domínio</p><p className="font-mono text-sm font-bold">{confirmation.domain}</p><p className="mt-2 break-all text-xs text-muted-foreground">{confirmation.url}</p></div><DialogFooter><Button variant="ds-secondary" size="md" onClick={() => setConfirmation(null)}>Cancelar</Button><Button variant="primary-modal" size="md" onClick={confirmAction}><ExternalLink className="mr-2 h-4 w-4" />Abrir link verificado</Button></DialogFooter></> : null}
         </DialogContent>
