@@ -21,6 +21,7 @@ import {
   Menu,
   Pencil,
   Shirt,
+  TimerReset,
   Umbrella,
   UserX,
 } from "lucide-react";
@@ -2734,6 +2735,14 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     !ownProfileOnly
     && (isDefaultAdmin || permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true)
   );
+  const viewingOwnProfile = firebaseUser?.uid === collaborator.id || currentUser?.id === collaborator.id;
+  const canReadTimeRecording = Boolean(
+    viewingOwnProfile || isDefaultAdmin || permissions.dp?.timeRecording?.view === true
+      || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true
+  );
+  const timeRecordingHref = viewingOwnProfile
+    ? "/dashboard/collaborator/time-recording"
+    : `/dashboard/dp/collaborators/${encodeURIComponent(collaborator.id)}/time-recording`;
   const systemViewerRole: RhRole = permissions.settings?.manageUsers === true
     ? "admin"
     : permissions.dp?.collaborators?.view === true
@@ -3380,6 +3389,24 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <Pencil className="h-4 w-4 text-ds-accent" />
                   Editar dados
                 </button>
+              ) : null}
+              {canReadTimeRecording ? (
+                <>
+                  <Link
+                    href={timeRecordingHref}
+                    className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+                  >
+                    <Clock className="h-4 w-4 text-ds-accent" />
+                    Registro de ponto
+                  </Link>
+                  <Link
+                    href={`${timeRecordingHref}#banco-de-horas`}
+                    className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+                  >
+                    <TimerReset className="h-4 w-4 text-ds-accent" />
+                    Banco de horas
+                  </Link>
+                </>
               ) : null}
               <Link
                 href={`/dashboard/dp/collaborators/${user.id}/documents`}

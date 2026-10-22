@@ -47,14 +47,17 @@ const profileRoute = readFileSync('src/app/api/mobile/profile/route.ts', 'utf8')
 const filePaths = readFileSync('apps/coala-one-android/app/src/main/res/xml/file_paths.xml', 'utf8');
 
 test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e não oferece "Todas as unidades"', () => {
-  assert.match(timeModels, /data class MarkingRequest\([\s\S]*?val channel: String = "mobile"[\s\S]*?val offline: OfflineMarkingEvidence\? = null\)/);
+  assert.match(timeModels, /data class MarkingRequest\([\s\S]*?val channel: String = "mobile"[\s\S]*?val offline: OfflineMarkingEvidence\? = null,[\s\S]*?val locationAttempt: LocationAttempt\? = null\)/);
   // The same attempt and work date are resent until the server answers, kept in saved state; 409 starts over.
   assert.match(timeViewModel, /saved\["attemptId"\] = value\?\.first; saved\["attemptDate"\] = value\?\.second/);
   assert.match(timeViewModel, /api\.mark\(MarkingRequest\(pending\.first, pending\.second,/);
-  assert.match(timeViewModel, /cause\.code\(\) == 409\) \{ attempt = null/);
+  assert.match(timeViewModel, /cause\.code\(\) == 409\) \{ clearAttempt\(\)/);
   assert.match(timeViewModel, /TimeRules\.workDate\(officialNow\(state\), zone\)/);
   assert.match(time, /UnitPickerHeader\(units\.map \{ it\.id to it\.name \}, state\.unitId\.orEmpty\(\)/);
   assert.doesNotMatch(time, /Rules\.unitChoices/);
+  assert.match(time, /capturePointLocation/);
+  assert.match(time, /O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade/);
+  assert.doesNotMatch(time, /ACCESS_BACKGROUND_LOCATION/);
   // Kind of punch is only suggested by order; the summary names who asks before sending an adjustment.
   assert.match(time, /sugerida pela ordem/);
   assert.match(time, /SummaryLine\("Quem pede"/);

@@ -1,15 +1,28 @@
 # Especificação técnica do georreferenciamento no registro de ponto
 
-- **Estado:** proposta para implementação; nenhuma coleta de localização está ativa.
-- **Escopo:** Coala One web e, em etapa posterior, Coala Go.
+- **Estado:** implementação local concluída para Coala One e Coala Go; ainda não publicada nem ativada em produção.
+- **Escopo:** Coala One web e Coala Go, com a mesma avaliação no servidor.
 - **Fluxo relacionado:** [Registro de ponto REP-P](flows/dp-time-recording.md).
-- **Última revisão técnica:** 19/10/2026.
+- **Última revisão técnica:** 22/10/2026.
+
+## Decisões aprovadas em 22/10/2026
+
+- uma leitura somente quando a pessoa confirma cada batida; nunca em carregamento, segundo plano ou rastreamento contínuo;
+- posição ausente, recusada, imprecisa ou externa não bloqueia, invalida, desconta nem pune automaticamente;
+- localização é acessória: não há justificativa especial por batida nem fila disciplinar; os direitos gerais da LGPD continuam pelo canal da empresa;
+- coordenada exata e evidência permanecem por 1.825 dias (cinco anos), com `expiresAt` e TTL do Firestore;
+- acesso direto do cliente às políticas e evidências é negado; qualquer consulta futura de coordenada exata será somente por DP/diretoria expressamente autorizados, escopada e auditada;
+- política central por unidade contém a lista nominal do piloto. Ativar a unidade não coleta de outros colaboradores, e o servidor ignora coordenadas enviadas por cliente fora dessa lista;
+- piloto inicial: Heucilene Ribeiro e Luis, depois de ambos constarem na lista da unidade e receberem o aviso/cláusula aplicável;
+- cláusula LGPD nos documentos da empresa e aditivo para os colaboradores atuais; o aceite informa o tratamento, mas não é usado tecnicamente como consentimento revogável para validar a batida.
+
+A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no `coala-rh`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
 
 ## Objetivo e decisão principal
 
-O registro de ponto poderá coletar uma posição somente no evento em que o trabalhador abre a confirmação da batida. O servidor comparará essa posição com áreas configuradas para a unidade de execução e produzirá uma evidência classificada como `inside`, `outside` ou `indeterminate`.
+O registro de ponto coleta uma posição somente no clique final que confirma a batida. O servidor compara essa posição com a área configurada para a unidade de execução e produz uma evidência classificada como `inside`, `outside` ou `indeterminate`.
 
-A localização não impedirá a marcação. Posição externa, baixa precisão, permissão negada, indisponibilidade do sensor ou cliente antigo devem preservar a batida original e gerar, quando configurado, uma ocorrência para conferência. Essa separação protege o registro fiel previsto para o REP-P e evita transformar falhas de GPS ou de permissão em ausência de ponto.
+A localização não impede a marcação. Posição externa, baixa precisão, permissão negada, indisponibilidade do sensor ou cliente antigo preservam a batida original e geram somente evidência separada. O piloto não possui fila de ocorrência nem consequência automática. Essa separação protege o registro fiel previsto para o REP-P e evita transformar falhas de GPS ou de permissão em ausência de ponto.
 
 A evidência geográfica será persistida fora da ARP fiscal. Ela não integrará o registro tipo 7, seu hash, o AFD ou o comprovante PDF. A separação permite aplicar acesso e retenção próprios ao dado de localização sem alterar ou apagar a marcação original.
 
@@ -18,16 +31,15 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 ### Incluído
 
 - política versionada de localização por unidade de execução;
-- uma ou mais áreas circulares por política, com centro e raio;
+- uma área circular por política, com centro e raio;
 - captura pontual no navegador durante a confirmação da batida;
 - validação e cálculo de distância no servidor;
 - persistência atômica da referência da marcação e da evidência no banco `coala-rh`;
 - replay idempotente da mesma tentativa sem recapturar a posição;
 - classificação conservadora que considera a precisão informada pelo aparelho;
-- ocorrência separada para os resultados que exigirem conferência;
-- consulta da própria evidência pelo trabalhador;
-- consulta administrativa com permissão, escopo de unidade e auditoria;
-- métricas agregadas sem coordenadas;
+- lista nominal de participantes do piloto dentro da política da unidade;
+- coleta equivalente no Android, sem permissão de localização em segundo plano;
+- TTL de cinco anos para a evidência completa;
 - feature flag global e ativação explícita por unidade.
 
 ### Fora do primeiro incremento
@@ -40,7 +52,7 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 - geocodificação reversa de cada batida;
 - inclusão de coordenadas no AFD, AEJ, comprovante, e-mail, push ou aviso do sistema;
 - promessa de prevenção de fraude: a posição informada pelo cliente pode ser simulada;
-- modo off-line; a contingência móvel continua em projeto separado.
+- coordenada no modo off-line: a fila atual assina a batida, não a posição; ao sincronizar, a evidência registra `unavailable` sem aceitar coordenada não vinculada à assinatura do aparelho.
 
 ## Regras de produto
 
@@ -51,18 +63,19 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 5. Ausência de localização não altera `canRecord`. O botão pode aguardar a captura até o timeout, mas deve então permitir a marcação com resultado inconclusivo.
 6. Resultado externo ou inconclusivo não altera a ARP e não cria entrada, saída, falta ou ajuste no PTRP.
 7. Alterações de política não reinterpretam automaticamente evidências antigas. Cada evidência guarda a revisão aplicada.
-8. Um cliente anterior ao novo contrato continua conseguindo marcar. O servidor registra `not_provided` quando uma política ativa esperava uma tentativa de captura.
+8. Um cliente anterior ao novo contrato continua conseguindo marcar. O servidor registra `unavailable` quando uma política ativa esperava uma tentativa de captura.
 9. Coordenadas exatas não aparecem em listas, logs, métricas ou mensagens. Elas são carregadas somente no detalhe autorizado.
-10. A ativação em pessoas reais depende das decisões de privacidade e jurídicas listadas nesta especificação.
+10. A ativação em pessoas reais depende do aviso/cláusula, lista nominal do piloto, parâmetros da unidade e gates jurídicos documentados.
+11. Uma política ausente ou corrompida desliga apenas a coleta; nunca derruba a batida.
 
-## Arquitetura proposta
+## Arquitetura implementada localmente
 
 ```text
-Configuração de Tempo
-  PATCH política da unidade
+Configuração da unidade
+  PUT política da unidade
             │
             ▼
-dp_timeLocationPolicyHeads ──► dp_timeLocationPolicies imutáveis
+repP_locationPolicies ──► subcoleções imutáveis de revisões e auditoria
             │
             │ política ativa, sem expor centro/raio ao coletor
             ▼
@@ -75,19 +88,23 @@ GET options ──► confirmação da batida ──► captura pontual no apare
                                                 │
                                                 ▼
                      transação no coala-rh: ARP original + tentativa
-                        + dp_timeLocationEvidence + revisão opcional
                                                 │
-                     ┌──────────────────────────┴─────────────────────┐
-                     ▼                                                ▼
-             comprovante e AFD                              conferência do DP
-             sem localização                           sem modificar a marcação
+                         commit soberano da batida│
+                                                ▼
+                    gravação acessória de repP_locationEvidence
+                         (melhor esforço, nunca desfaz a batida)
+                                                │
+                                                ▼
+                                  comprovante e AFD sem localização
 ```
 
 As políticas e as evidências ficam no `coala-rh`, que já recebe a transação do REP-P. Assim a política pode ser lida na mesma transação da marcação, sem uma janela entre bancos. O cadastro geral da unidade em `dp_units`, no banco principal, continua sendo a fonte de identidade, nome, endereço e fuso; não receberá coordenadas da política.
 
 ## Modelo de política
 
-### Cabeçalho ativo
+O desenho inicial abaixo é histórico. A implementação consolidou cabeçalho e estado atual em `repP_locationPolicies/{hash(workspaceId, unitId)}` e grava cada versão nas subcoleções `revisions` e `audit`. O contrato executável está em `location-policy.server.ts`: uma área circular, modos `disabled|observe`, lista nominal de até 20 participantes, aviso HTTPS, referência jurídica e retenção fixa de 1.825 dias.
+
+### Cabeçalho ativo — proposta histórica substituída
 
 Coleção proposta: `dp_timeLocationPolicyHeads`.
 
@@ -105,7 +122,7 @@ type TimeLocationPolicyHead = {
 
 O ID deve ser determinístico a partir de `workspaceId` e `unitId`, sem aceitar um ID fornecido pelo cliente. O documento aponta somente para uma revisão já criada.
 
-### Revisão imutável
+### Revisão imutável — proposta histórica substituída
 
 Coleção proposta: `dp_timeLocationPolicies`.
 
@@ -165,27 +182,23 @@ O piloto deve medir a distribuição real de `accuracyMeters` antes de reduzir r
 
 ## Contrato de captura
 
-O corpo estrito de `POST /api/dp/time-recording/markings` passará a aceitar `locationAttempt`. O campo começa opcional para compatibilidade com clientes anteriores.
+O corpo estrito de `POST /api/dp/time-recording/markings` aceita `locationAttempt`. O campo é opcional para compatibilidade com clientes anteriores.
 
 ```ts
 type LocationAttempt =
   | {
-      schemaVersion: 1;
-      source: "browser" | "android";
+      captureId: string;
       status: "captured";
       latitude: number;
       longitude: number;
       accuracyMeters: number;
       capturedAt: string;
+      elapsedMs: number;
     }
   | {
-      schemaVersion: 1;
-      source: "browser" | "android";
-      status:
-        | "permission_denied"
-        | "position_unavailable"
-        | "timeout"
-        | "unsupported";
+      captureId: string;
+      status: "denied" | "unavailable" | "timeout" | "unsupported" | "error";
+      elapsedMs: number;
     };
 ```
 
@@ -193,12 +206,11 @@ Validação mínima do servidor:
 
 - objeto estrito, sem campos desconhecidos;
 - números finitos e dentro das faixas geográficas;
-- precisão finita, positiva e limitada a 5.000 metros no transporte;
-- `capturedAt` em ISO 8601 válido, sem mais de 30 segundos no futuro;
+- precisão finita, positiva e limitada a 100.000 metros no transporte;
+- `capturedAt` em ISO 8601 válido; a avaliação, no servidor, trata leitura com mais de 30 segundos no futuro como inconclusiva;
 - coordenadas presentes somente em `captured`;
-- combinação `channel=browser` com `source=browser` e `channel=mobile` com `source=android`;
-- limite explícito de tamanho do JSON;
-- normalização de coordenadas para E7 antes de persistir.
+- `elapsedMs` entre zero e 60 segundos;
+- marcação offline não aceita `locationAttempt`, pois a assinatura local ainda não cobre a coordenada.
 
 O status de falha é uma declaração do cliente e deve ser armazenado como tal. O servidor não consegue provar que o usuário negou a permissão nem que o sensor estava indisponível.
 
@@ -206,34 +218,23 @@ O status de falha é uma declaração do cliente e deve ser armazenado como tal.
 
 ```ts
 type LocationEvaluationSummary = {
-  evidenceId: string | null;
   captureStatus:
     | "captured"
-    | "permission_denied"
-    | "position_unavailable"
+    | "denied"
+    | "unavailable"
     | "timeout"
     | "unsupported"
-    | "not_provided";
-  evaluation: "inside" | "outside" | "indeterminate" | "not_configured";
-  reason:
-    | "within_zone"
-    | "outside_all_zones"
-    | "accuracy_overlap"
-    | "low_accuracy"
-    | "stale_capture"
-    | "capture_failed"
-    | "client_without_location"
-    | "policy_invalid"
-    | "policy_disabled";
-  reviewCreated: boolean;
+    | "error"
+    | "not_requested";
+  evaluation: "inside" | "outside" | "indeterminate" | "not_requested";
 };
 ```
 
-A resposta não devolve centro, raio, coordenadas ou detalhes de outras pessoas. Em replay, o serviço lê a evidência determinística já gravada e devolve o mesmo resumo.
+A resposta não devolve centro, raio, coordenadas ou detalhes de outras pessoas. Em replay, o serviço lê o resumo guardado em `repP_attempts` e devolve o mesmo resultado sem recapturar.
 
 ## Avaliação geográfica
 
-O servidor calcula a distância de Haversine entre a captura e cada centro configurado. A zona mais próxima orienta a avaliação, mas a precisão declarada pelo aparelho participa da decisão:
+O servidor calcula a distância de Haversine entre a captura e o centro configurado. A precisão declarada pelo aparelho participa da decisão:
 
 ```text
 inside        quando distância + precisão <= raio
@@ -246,14 +247,14 @@ Antes da fórmula:
 - captura ausente ou falha resulta em `indeterminate`;
 - captura mais antiga que `maximumAgeSeconds` resulta em `indeterminate`;
 - precisão superior a `maximumAccuracyMeters` resulta em `indeterminate`;
-- política desligada resulta em `not_configured` e não deve solicitar localização;
-- nenhuma área válida resulta em `indeterminate` com `policy_invalid`, abre alerta operacional e não impede a batida.
+- política desligada resulta em `not_requested` e não solicita localização;
+- política ausente ou inválida é tratada como desligada e não impede a batida.
 
 Essa classificação evita declarar que uma pessoa está fora quando o círculo de incerteza do aparelho ainda alcança a área permitida. O valor de `accuracyMeters` também é informado pelo cliente e não constitui atestação independente.
 
 ## Evidência persistida
 
-Coleção proposta: `dp_timeLocationEvidence`. O documento usa o mesmo ID determinístico do evento REP-P, mas não faz parte da ARP.
+Coleção implementada: `repP_locationEvidence`. O documento usa o mesmo ID determinístico do evento REP-P, mas não faz parte da ARP.
 
 ```ts
 type TimeLocationEvidence = {
@@ -262,67 +263,46 @@ type TimeLocationEvidence = {
   workspaceId: string;
   employeeId: string;
   markingId: string;
-  establishmentId: string;
   executionUnitId: string;
   recordedDate: string;
-  markedAt: string;
-  source: "browser" | "android";
-  captureStatus:
-    | "captured"
-    | "permission_denied"
-    | "position_unavailable"
-    | "timeout"
-    | "unsupported"
-    | "not_provided";
-  coordinates: null | {
-    latitudeE7: number;
-    longitudeE7: number;
-    accuracyMeters: number;
-    capturedAtClient: string;
+  recordedAt: Timestamp;
+  channelTrust: "client_reported";
+  policy: Omit<RepPLocationPolicySnapshot, "participantUserIds">;
+  capture: {
+    captureId: string | null;
+    status: "captured" | "denied" | "unavailable" | "timeout" | "unsupported" | "error";
+    elapsedMs: number;
+    location: null | {
+      latitude: number;
+      longitude: number;
+      accuracyMeters: number;
+      capturedAt: string;
+    };
   };
-  receivedAtServer: Timestamp;
-  policySnapshot: null | {
-    policyId: string;
-    revision: number;
-    contentDigest: string;
-    evaluationMode: "none" | "observe" | "review";
-    maximumAccuracyMeters: number;
-    maximumAgeSeconds: number;
-    zones: Array<{
-      zoneId: string;
-      label: string;
-      latitudeE7: number;
-      longitudeE7: number;
-      radiusMeters: number;
-    }>;
-  };
-  result: {
-    evaluation: "inside" | "outside" | "indeterminate" | "not_configured";
-    reason: string;
-    nearestZoneId: string | null;
-    distanceMeters: number | null;
-  };
-  trust: {
-    level: "client_reported";
-    appAttestationId: string | null;
-  };
-  evidenceDigest: string;
+  result: RepPLocationResult;
+  digest: string;
   createdAt: Timestamp;
   retentionClass: "time_location_evidence";
+  legalHold: false;
+  expiresAt: Timestamp;
 };
 ```
 
-`evidenceDigest` cobre o conteúdo normalizado, o `markingId` e a revisão da política. Ele detecta alteração acidental ou indevida, mas não transforma a posição do cliente em localização certificada.
+`digest` cobre captura, `markingId`, política e resultado. Ele detecta alteração acidental ou indevida, mas não transforma a posição do cliente em localização certificada.
 
-A transação de marcação cria, nesta ordem lógica, o evento fiscal, a tentativa idempotente, o comprovante pendente e a evidência. Todos são confirmados juntos. `repP_attempts` armazena apenas `evidenceId` e o digest do pedido, nunca uma segunda cópia das coordenadas.
+A transação fiscal cria o evento original, a tentativa idempotente e o comprovante pendente. Depois do commit da batida, o servidor tenta gravar a evidência exata em documento separado e determinístico. Falha nessa escrita é registrada sem coordenadas nos logs e **não** desfaz nem impede a marcação. `repP_attempts` armazena somente o resumo `captureStatus/evaluation` e o digest do pedido, nunca uma segunda cópia das coordenadas. A cópia da política dentro da evidência omite `participantUserIds`, para não duplicar a lista das demais pessoas do piloto em cada batida.
 
 ### Separação da ARP
 
 Não adicionar localização a `RepPMarkingCandidate`, `serializeRepPType7HashSource`, `RepPReceiptSnapshot` ou `RepPAfdEvent`. Os vetores existentes de hash, AFD e PDF devem continuar produzindo os mesmos bytes para as mesmas entradas fiscais.
 
-A coleção de evidências precisa de regras `deny all` para clientes, mas não deve receber o prefixo reservado `repP_`: sua retenção poderá terminar antes da ARP. Exclusão por retenção exige serviço específico, auditoria e fence de litígio; não pode usar rotinas genéricas de limpeza.
+A coleção `repP_locationEvidence` tem regras `deny all` para clientes e TTL próprio em `expiresAt`. O prefixo foi mantido para explicitar a origem no registro de ponto, sem tornar a evidência parte da ARP fiscal. A marcação, o comprovante e o AFD não recebem esse vencimento. Suspensão por litígio exige retirar/controlar `expiresAt` antes do descarte automático.
 
 ## Conferência administrativa
+
+**Decisão atual:** não há fila de justificativa ou resolução por batida no piloto em observação. A coleção `repP_locationReviews` permanece reservada e negada ao cliente, mas não recebe documentos. Coordenadas exatas não são expostas em listas nem na interface atual. Se uma consulta administrativa de detalhe for implementada depois, ela deverá exigir autorização expressa do DP/diretoria, escopo de unidade e auditoria de cada acesso.
+
+O modelo abaixo fica como proposta histórica para uma eventual fase de conferência e não descreve função ativa.
 
 Coleção proposta: `dp_timeLocationReviews`. Ela é uma projeção operacional, não parte da ARP nem da evidência original.
 
@@ -357,18 +337,14 @@ A revisão pode mudar de estado, mas nunca modifica a evidência nem a marcaçã
 
 Todas as rotas novas ou alteradas devem usar `secureRoute`, schema estrito, erros sanitizados e auditoria autoritativa.
 
-| Superfície proposta | Autorização | Resposta e efeitos |
+| Superfície | Autorização | Resposta e efeitos |
 | --- | --- | --- |
 | `GET /api/dp/time-recording/options` | Próprio usuário | Acrescenta apenas `locationCapture: off|event`; não expõe áreas |
 | `POST /api/dp/time-recording/markings` | Próprio usuário | Aceita captura, registra batida e evidência; nunca marca por terceiro |
-| `GET /api/dp/time-recording/location-evidence/[evidenceId]` | Próprio titular | Devolve sua evidência e política aplicada, sem dados de terceiros |
-| `GET /api/dp/time-location-policies/[unitId]` | `dp.settings.manageTime` e escopo global | Lê a política atual para configuração |
-| `PATCH /api/dp/time-location-policies/[unitId]` | `dp.settings.manageTime` e escopo global | Cria revisão imutável e move o cabeçalho |
-| `GET /api/dp/time-location-reviews` | Nova permissão `dp.timeRecording.reviewLocation` e unidade | Lista somente resumo, paginado e sem coordenadas |
-| `GET /api/dp/time-location-reviews/[reviewId]` | Mesma permissão e unidade | Lê detalhe e registra acesso à coordenada |
-| `PATCH /api/dp/time-location-reviews/[reviewId]` | Mesma permissão e unidade | Transição validada e auditada |
+| `GET /api/dp/time-recording/location-policies/[unitId]` | `dp.settings.manageTime` e escopo da unidade | Lê a política atual para configuração |
+| `PUT /api/dp/time-recording/location-policies/[unitId]` | `dp.settings.manageTime` e escopo da unidade | Cria revisão imutável da política |
 
-Gestão de unidade não deve conceder automaticamente leitura da localização de pessoas. A nova permissão separa manutenção cadastral de conferência de evidências. Administrador padrão continua sujeito a auditoria de acesso e ao escopo do workspace.
+Não existe rota de leitura de coordenadas no piloto. Gestão de unidade não concede automaticamente leitura da localização de pessoas. Se o detalhe for criado depois, somente DP/diretoria expressamente autorizados poderão ler, sempre com escopo e auditoria. Administrador padrão também deverá ficar sujeito à auditoria.
 
 As consultas administrativas exigem `workspaceId`, conjunto de unidades autorizado, período máximo, paginação e limite. Nenhuma rota lista evidências sem filtro temporal. O detalhe deve gravar auditoria antes de devolver coordenadas exatas.
 
@@ -401,27 +377,27 @@ Nunca usar textos como `ponto inválido`, `fraude detectada` ou `presença compr
 
 A configuração fica em Tempo, ligada à unidade, e exige:
 
-- estado desligado, observação ou conferência;
+- estado desligado ou observação;
 - centro por coordenadas e raio;
 - precisão máxima e idade máxima;
 - prévia da área;
 - aviso de que reduzir o raio pode aumentar falsos alertas;
-- histórico de revisões, autor e instante;
+- revisão, autor e instante persistidos no servidor;
 - confirmação explícita para ativar coleta em uma unidade.
 
 O primeiro incremento pode aceitar latitude e longitude e oferecer `Usar minha localização`. Um mapa interativo é opcional e não deve bloquear a entrega. Se for adotado provedor externo, revisar contrato, chaves, telemetria, transferência e custo antes de habilitá-lo.
 
 ## Coala Go
 
-O aplicativo Android usará o mesmo contrato e o canal `mobile`. A implementação posterior deve:
+O aplicativo Android usa o mesmo contrato e o canal `mobile`. A implementação local:
 
 - solicitar permissão somente quando a pessoa abrir a confirmação;
 - tratar permissão precisa, aproximada, negada temporariamente e negada permanentemente;
 - preservar o payload da tentativa em armazenamento local até a resposta;
-- enviar atestação já disponível do aplicativo como contexto separado;
+- preserva a atestação já disponível do aplicativo como contexto separado;
 - manter `trust.level=client_reported`, pois integridade do app não certifica a coordenada;
 - não ativar serviço de localização em segundo plano;
-- não implementar fila off-line dentro deste incremento.
+- não associa coordenada à fila off-line enquanto a assinatura local não cobrir também esse dado.
 
 Paridade web e Android significa mesma avaliação e mesma regra no servidor, não mensagens ou APIs de sensor idênticas.
 
@@ -435,7 +411,7 @@ Antes de qualquer piloto com pessoas reais:
 2. aprovar finalidade restrita a evidência da marcação e conferência de presença;
 3. elaborar Relatório de Impacto à Proteção de Dados com riscos e salvaguardas;
 4. publicar aviso com finalidade, campos, duração, compartilhamentos, responsáveis e direitos;
-5. definir prazo de guarda da coordenada, da revisão e da auditoria;
+5. registrar o prazo aprovado de cinco anos para a coordenada e a evidência;
 6. definir suspensão de descarte por processo judicial, administrativo ou investigação formal;
 7. estabelecer quem pode consultar coordenadas e por qual motivo;
 8. conferir CCT, ACT e regras aplicáveis aos estabelecimentos e categorias do piloto;
@@ -445,16 +421,7 @@ Não selecionar consentimento como base por conveniência técnica. A base deve 
 
 ### Retenção
 
-O prazo permanece uma decisão obrigatória. Até sua aprovação:
-
-- não configurar TTL;
-- não copiar coordenadas para ARP, recibos, auditorias genéricas ou data warehouse;
-- usar `retentionClass=time_location_evidence` para permitir política específica;
-- manter a revisão operacional sem duplicar coordenadas;
-- impedir deleção manual por UI;
-- preparar descarte idempotente, auditado e suspenso por `legalHold`.
-
-Ao descartar a evidência, a marcação fiscal e seu comprovante permanecem intactos. A revisão pode conservar somente classificação, motivo e decisão pelo período aprovado, sem latitude e longitude.
+O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclusive a coordenada exata. Cada documento recebe `expiresAt` calculado a partir do instante da batida, e `firestore.rh.indexes.json` configura TTL na coleção `repP_locationEvidence`. A marcação fiscal e seu comprovante permanecem fora desse descarte. Coordenadas não são copiadas para ARP, recibos, AFD, AEJ, auditorias genéricas ou data warehouse. Suspensão futura por litígio exigirá remover/controlar o vencimento antes da data; não existe botão de deleção manual na interface.
 
 ## Segurança e limites probatórios
 
@@ -464,9 +431,9 @@ Ao descartar a evidência, a marcação fiscal e seu comprovante permanecem inta
 | Reenvio com outra posição | `requestDigest` cobre `locationAttempt`; mesmo `attemptId` com conteúdo diferente retorna conflito | Novo `attemptId` representa nova tentativa válida |
 | Política alterada durante a batida | Cabeçalho e revisão lidos na transação do `coala-rh`; snapshot e digest na evidência | A política não prova onde o aparelho realmente estava |
 | GPS impreciso | Círculo de precisão e resultado `indeterminate` | `accuracyMeters` também é declarado pelo cliente |
-| Acesso indevido | Coleções server-only, permissão específica, escopo de unidade e auditoria do detalhe | IAM do Admin SDK precisa de revisão operacional |
+| Acesso indevido | Coleções server-only e nenhuma rota de leitura de coordenadas no piloto | IAM do Admin SDK precisa de revisão operacional; futura leitura exigirá permissão, escopo e auditoria |
 | Vazamento em logs | Proibir coordenadas em erro, log, métrica, tracing e analytics | Dumps e ferramentas administrativas exigem controle próprio |
-| Uso disciplinar automatizado | Nenhum efeito de folha, PTRP ou RH; revisão humana separada | Processo humano ainda precisa de política e treinamento |
+| Uso disciplinar automatizado | Nenhum efeito de folha, PTRP ou RH e nenhuma fila disciplinar | Qualquer uso humano futuro ainda dependerá de política e treinamento |
 | Dependência de mapa | Nenhuma API de mapa no caminho da batida | Mapa opcional de configuração cria fornecedor adicional |
 
 O sistema deve chamar o dado de `evidência informada pelo dispositivo`, nunca de prova absoluta de presença. A decisão humana deve poder considerar precisão, ambiente coberto, falha do sensor, atividade externa, unidade escolhida e demais fatos.
@@ -479,7 +446,6 @@ Métricas permitidas, sempre agregadas:
 - distribuição por `captureStatus` e `evaluation`;
 - latência da captura em faixas;
 - precisão em faixas, sem coordenadas;
-- quantidade de revisões abertas e tempo de resolução;
 - erros de integridade de política;
 - clientes sem suporte ao novo contrato.
 
@@ -491,9 +457,6 @@ Códigos de erro propostos:
 - `DP_TIME_LOCATION_POLICY_INVALID`;
 - `DP_TIME_LOCATION_POLICY_CONFLICT`;
 - `DP_TIME_LOCATION_POLICY_NOT_FOUND`;
-- `DP_TIME_LOCATION_REVIEW_FORBIDDEN`;
-- `DP_TIME_LOCATION_REVIEW_NOT_FOUND`;
-- `DP_TIME_LOCATION_REVIEW_TRANSITION_INVALID`;
 - `DP_TIME_LOCATION_EVIDENCE_INCONSISTENT`.
 
 Falha ao interpretar uma captura válida ou política inconsistente não deve ser escondida como `inside`; ela resulta em `indeterminate` com uma evidência mínima. Uma falha transacional do banco aborta toda a operação antes de consumir o NSR, como já ocorre no registrador. Falha posterior apenas na projeção de conferência exige reconciliação; a implementação preferencial cria a projeção na própria transação para evitar esse estado.
@@ -503,11 +466,9 @@ Falha ao interpretar uma captura válida ou política inconsistente não deve se
 Índices previstos no `coala-rh`:
 
 - política: leitura por ID determinístico, sem consulta composta;
-- revisões: `workspaceId + status + recordedDate`;
-- revisões por unidade: `workspaceId + executionUnitId + status + recordedDate`;
-- evidência própria: ID determinístico; consultas administrativas usam a revisão e abrem o detalhe por ID.
+- evidência: ID determinístico igual ao evento e TTL em `expiresAt`; não há consulta administrativa no piloto.
 
-No volume de referência de 50 pessoas, quatro batidas por dia e 26 dias, são cerca de 5.200 batidas mensais. A solução robusta acrescenta por batida até duas leituras de política e uma escrita de evidência; somente resultados sinalizados criam uma escrita de revisão. Com evidências entre 0,8 e 1,5 KiB, o crescimento esperado é de aproximadamente 4 a 8 MiB por mês, antes de índices, backups e PITR.
+No volume de referência de 50 pessoas, quatro batidas por dia e 26 dias, são cerca de 5.200 batidas mensais. Para participantes de unidade ativa, a solução acrescenta uma leitura de política e uma escrita de evidência por batida. Com evidências entre 0,8 e 1,5 KiB, o crescimento esperado é de aproximadamente 4 a 8 MiB por mês, antes de índices, backups e PITR.
 
 Não há cobrança de API para `navigator.geolocation` nem para Haversine local. Um mapa de configuração é opcional. Os custos do Firestore dependem da região, backups e banco elegível à franquia; devem ser medidos no projeto, conforme a [documentação oficial de cobrança](https://firebase.google.com/docs/firestore/pricing), sem transformar esta estimativa em orçamento garantido.
 
@@ -531,7 +492,7 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 
 ## Plano de implementação
 
-### Incremento 0 — decisões e proteção de dados
+### Incremento 0 — decisões e proteção de dados (decisões tomadas; formalização pendente)
 
 - responder às decisões bloqueantes desta especificação;
 - concluir análise jurídica e RIPD;
@@ -539,7 +500,7 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 - confirmar que o piloto não usa geofence como bloqueio;
 - registrar parâmetros de cada unidade piloto.
 
-### Incremento 1 — domínio e política
+### Incremento 1 — domínio e política (implementado localmente)
 
 - criar tipos, schemas e funções puras de normalização, Haversine e avaliação;
 - implementar política versionada no `coala-rh`;
@@ -548,7 +509,7 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 - implementar configuração sem mapa externo;
 - manter feature flag desligada.
 
-### Incremento 2 — coleta web e persistência
+### Incremento 2 — coleta web e persistência (implementado localmente)
 
 - ampliar `repPMarkingSchema` com `locationAttempt` opcional;
 - capturar posição no hook compartilhado da tela e do botão rápido;
@@ -557,15 +518,14 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 - devolver resumo na resposta;
 - apresentar feedback sem alterar comprovante ou histórico fiscal.
 
-### Incremento 3 — conferência e direitos do titular
+### Incremento 3 — direitos do titular (canal geral; fila específica retirada do piloto)
 
-- criar projeção de revisão e máquina de estados;
-- adicionar permissão e escopo de unidade;
-- implementar lista paginada sem coordenadas e detalhe auditado;
-- permitir consulta da própria evidência;
-- integrar os pedidos de privacidade e o futuro descarte.
+- atender solicitações pelos canais gerais de privacidade da empresa;
+- manter coordenadas sem rota de consulta durante o piloto;
+- antes de qualquer tela futura, criar autorização específica, escopo de unidade e auditoria de leitura;
+- documentar suspensão do TTL para litígio ou investigação formal.
 
-### Incremento 4 — piloto em observação
+### Incremento 4 — piloto em observação (aguarda publicação, cláusula/aditivo e parâmetros reais)
 
 - usar somente unidades e pessoas formalmente aprovadas;
 - iniciar em `observe`, sem fila operacional ou consequência;
@@ -574,10 +534,8 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 - executar teste de acesso, backup, restauração e retenção;
 - obter revisão de Doc Brown antes de commit e antes do piloto.
 
-### Incremento 5 — conferência e Coala Go
+### Incremento 5 — Coala Go (implementado localmente; aparelho real pendente)
 
-- promover unidades aprovadas para `review`;
-- treinar revisores e acompanhar decisões;
 - implementar paridade no Android;
 - validar aparelho real, permissão aproximada e atestação;
 - manter offline e rastreamento contínuo fora do escopo.
@@ -592,14 +550,14 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 | Serviço REP-P | `src/features/dp/rep-p/service.server.ts` |
 | Cliente compartilhado | `src/features/dp/rep-p/use-rep-p-marking.ts` |
 | Confirmação web | `record-strip.tsx` e `quick-marking-button.tsx` |
-| Configuração | componentes de Tempo e rota `api/dp/time-location-policies/[unitId]` |
-| Conferência | novos serviço, rotas e componentes `time-location-reviews` |
-| Tipos e permissões | `src/types/index.ts`, perfis e telas de permissão |
+| Configuração | detalhe da unidade, `location-policy-control.tsx` e rota `api/dp/time-recording/location-policies/[unitId]` |
+| Conferência | não implementada nem necessária no piloto em observação |
+| Tipos e permissões | contrato existente `dp.settings.manageTime`, escopado por unidade |
 | Regras e índices | `firestore.rh.rules`, `firestore.rh.indexes.json` |
 | Documentação | este arquivo, guia REP-P, privacidade e matriz de superfícies |
 | Android | `apps/coala-one-android`, somente no incremento 5 |
 
-Os nomes propostos podem ser ajustados para preservar convenções descobertas durante a implementação. A separação entre ARP, evidência e revisão é requisito arquitetural e não deve ser colapsada por conveniência.
+A separação entre ARP e evidência é requisito arquitetural e não deve ser colapsada por conveniência. A proposta histórica de revisão não faz parte do piloto.
 
 ## Estratégia de testes
 
@@ -608,11 +566,10 @@ Os nomes propostos podem ser ajustados para preservar convenções descobertas d
 - coordenadas e limites válidos e inválidos;
 - distância conhecida e estabilidade de arredondamento;
 - dentro, fora, tangência e sobreposição pela precisão;
-- múltiplas áreas e seleção da mais próxima;
 - captura antiga, futura, imprecisa ou ausente;
 - política desabilitada, corrompida e com revisão inconsistente;
 - digest determinístico;
-- transições permitidas da revisão.
+- retenção ativa diferente de 1.825 dias é rejeitada.
 
 ### Serviço e emuladores
 
@@ -621,12 +578,10 @@ Os nomes propostos podem ser ajustados para preservar convenções descobertas d
 - replay devolve a mesma marcação e a mesma evidência;
 - mesmo `attemptId` com outra coordenada retorna conflito;
 - política trocada antes da transação usa a revisão atual;
-- `outside` e `indeterminate` criam revisão somente em modo `review`;
+- pessoa fora da lista nominal não recebe política ativa e coordenada adulterada é ignorada;
 - pessoa sem vínculo ou unidade continua recusada pelos controles atuais;
 - nenhuma coordenada aparece em recibo, AFD, tentativa ou log;
-- titular não acessa evidência de outra pessoa;
-- revisor sem unidade ou permissão recebe resposta sanitizada;
-- acesso ao detalhe administrativo gera auditoria.
+- clientes não acessam evidências diretamente.
 
 ### Contratos e regras
 
@@ -677,10 +632,10 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 1. Nenhuma localização é coletada antes da confirmação nem depois da batida.
 2. Toda tentativa produz marcação normal mesmo quando a localização está externa ou indisponível, desde que os demais requisitos do REP-P sejam satisfeitos.
 3. Cliente não consegue declarar `inside`, distância, política ou unidade autorizada.
-4. Reenvio do mesmo `attemptId` não duplica batida, evidência ou revisão.
+4. Reenvio do mesmo `attemptId` não duplica batida nem evidência.
 5. ARP, AFD, hash e comprovante permanecem sem coordenadas e passam nos testes anteriores.
 6. Evidência registra política, precisão, cálculo, confiança e digest aplicados no instante da transação.
-7. Coordenadas exatas são server-only e cada leitura administrativa é autorizada, limitada por unidade e auditada.
+7. Coordenadas exatas são server-only e não possuem rota de leitura no piloto; qualquer leitura administrativa futura será autorizada, limitada por unidade e auditada.
 8. Nenhum alerta geográfico gera efeito automático em PTRP, folha, escala, ausência ou disciplina.
 9. Feature flag e política por unidade permitem desligamento sem migração ou perda da marcação.
 10. Retenção, aviso, RIPD, base legal e responsáveis estão aprovados antes do primeiro piloto real.
@@ -692,14 +647,12 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 | Decisão | Responsável | Necessária antes de |
 | --- | --- | --- |
 | Finalidade e base legal do tratamento | Controlador, encarregado e jurídico | Coleta com pessoas reais |
-| Prazo de retenção e `legalHold` | Jurídico, DP e privacidade | Persistência em produção |
-| Unidades e população do piloto | DP e operação | Ativação por unidade |
+| Suspensão do TTL em caso de litígio (`legalHold`) | Jurídico, DP e privacidade | Primeiro caso concreto de preservação |
+| IDs, unidades e parâmetros reais de Heucilene Ribeiro e Luis | DP e operação | Ativação por unidade |
 | Raio e precisão máxima por unidade | Operação, DP e desenvolvimento | Política `observe` |
-| Quem pode conferir e quais motivos de decisão | DP e privacidade | Incremento 3 |
 | Acesso do trabalhador às coordenadas e canal de contestação | DP, jurídico e privacidade | Piloto |
-| Uso admissível da evidência em apuração humana | Jurídico e DP | Modo `review` |
 | Necessidade de mapa externo | Produto e desenvolvimento | Configuração visual |
-| Extensão ao Coala Go e atestação | Produto e desenvolvimento | Incremento 5 |
+| Validação do Coala Go em aparelho real e atestação de release | Produto e desenvolvimento | Piloto móvel |
 
 Pergunta preparada para o advogado: **a coleta pontual de geolocalização, sem bloquear a marcação e usada apenas como evidência para conferência humana, atende ao art. 74 da Portaria MTP nº 671/2021 e às regras aplicáveis às categorias e estabelecimentos do piloto? Quais base legal, transparência, prazo de guarda, acesso do trabalhador e limites de uso disciplinar devem constar da política?**
 

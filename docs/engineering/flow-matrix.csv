@@ -5,7 +5,7 @@ src/app/dashboard/collaborator/page.tsx,active,collaborator-dashboard,
 src/app/dashboard/collaborator/documents/page.tsx,active,employee-documents,Pasta do colaborador (macro 02): só documentos publicados para o titular.
 src/app/dashboard/collaborator/requests/page.tsx,active,collaborator-requests,
 src/app/dashboard/collaborator/schedule/page.tsx,active,collaborator-schedule,
-src/app/dashboard/collaborator/time-recording/page.tsx,active,dp-time-recording,Sem link de menu até Hora Legal/assinador reais; ver flows/dp-time-recording.md.
+src/app/dashboard/collaborator/time-recording/page.tsx,active,dp-time-recording,Tela própria com batida e conferência mensal; permanece na barra lateral.
 src/app/dashboard/commercial/page.tsx,active,catalog,
 src/app/dashboard/conversions/page.tsx,active,measure-conversion,
 src/app/dashboard/design/page.tsx,active,design-guide,
@@ -22,6 +22,7 @@ src/app/dashboard/documents/templates/page.tsx,active,document-templates,
 src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/page.tsx,active,people-access,
+src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx,active,dp-time-recording,Conferência somente leitura do ponto e banco de horas de uma pessoa autorizada por unidade.
 src/app/dashboard/dp/collaborators/page.tsx,active,people-access,
 src/app/dashboard/dp/documents/page.tsx,active,employee-documents,
 src/app/dashboard/dp/ferias/[userId]/page.tsx,active,vacations,

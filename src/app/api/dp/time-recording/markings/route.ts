@@ -40,7 +40,7 @@ export const POST = secureRoute({ contract, enforcer }, async ({ security }) => 
   const result = await recordOwnRepPMarking(security.actor, security.input);
   const { marking } = result;
   return NextResponse.json({ status: result.status, receiptId: result.receiptId,
-    receiptStatus: result.receiptStatus, receiptIssue: result.receiptIssue, marking: {
+    receiptStatus: result.receiptStatus, receiptIssue: result.receiptIssue, location: result.location, marking: {
     markingId: marking.markingId, nsr: marking.nsr, markedAt: marking.markedAt, recordedAt: marking.recordedAt,
     employerUnitId: marking.employerUnitId, executionUnitId: marking.executionUnitId,
     establishmentId: marking.establishmentId, collectorId: marking.collectorId, hash: marking.hash,

@@ -89,7 +89,7 @@ export function DPSettingsUnits() {
     updateUnitOrganization,
     deleteUnitOrganization,
   } = useDP();
-  const { permissions, activeUsers } = useAuth();
+  const { permissions, activeUsers, firebaseUser, isDefaultAdmin } = useAuth();
   const { roles, functions } = useHrBootstrap();
   const { units, unitGroups, unitOrganizations, shiftDefinitions, unitsLoading, unitsError } = useDPBootstrap();
   const { kiosks } = useKiosks();
@@ -98,6 +98,7 @@ export function DPSettingsUnits() {
     permissions.settings.manageKiosks ||
     permissions.dp?.settings?.manageUnits
   );
+  const canManageTime = isDefaultAdmin || permissions.dp?.settings?.manageTime === true;
 
   const [tab, setTab] = useState<UnitsTab>("units");
   const [search, setSearch] = useState("");
@@ -247,6 +248,12 @@ export function DPSettingsUnits() {
     });
 
   const selectedUnit = selectedUnitKey ? mergedUnits.find((unit) => unit.key === selectedUnitKey) ?? null : null;
+  const selectedDpUnitId = selectedUnit?.dpUnit?.id;
+  const selectedExternalUnitId = selectedUnit?.dpUnit?.externalId ?? selectedUnit?.kiosk?.id;
+  const locationParticipants = selectedDpUnitId ? directory.users.filter((user) =>
+    user.unitId === selectedDpUnitId || user.unitIds?.includes(selectedDpUnitId)
+    || Boolean(selectedExternalUnitId && user.assignedKioskIds?.includes(selectedExternalUnitId)))
+    .map((user) => ({ id: user.id, name: user.name })) : [];
 
   /* ───────── gravações (mesma regra de antes; só a apresentação mudou) ───────── */
 
@@ -667,6 +674,9 @@ export function DPSettingsUnits() {
         group={selectedUnit ? structureOf(selectedUnit).group : undefined}
         shifts={selectedUnit ? shiftsFor(selectedUnit) : []}
         canManage={canManageUnits}
+        canManageTime={canManageTime}
+        firebaseUser={firebaseUser}
+        locationParticipants={locationParticipants}
         busy={saving === "unit" || saving === "delete"}
         onClose={() => setSelectedUnitKey(null)}
         onEdit={(unit) => { setSelectedUnitKey(null); setUnitDialog({ mode: "edit", unit }); }}

@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -43,6 +46,10 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     private var attempt: Pair<String, String>?
         get() = saved.get<String>("attemptId")?.let { id -> saved.get<String>("attemptDate")?.let { id to it } }
         set(value) { saved["attemptId"] = value?.first; saved["attemptDate"] = value?.second }
+    private var pendingLocation: LocationAttempt?
+        get() = saved.get<String>("attemptLocation")?.let { encoded -> runCatching { Json.decodeFromString<LocationAttempt>(encoded) }.getOrNull() }
+        set(value) { saved["attemptLocation"] = value?.let(Json::encodeToString) }
+    private fun clearAttempt() { attempt = null; pendingLocation = null }
     private fun serverRun(notice: String? = null, work: suspend () -> Unit) = run(notice) { try { work() } catch (cause: Exception) { throw Errors.withServerMessage(cause) } }
     init {
         auth.current?.uid?.let { uid -> viewModelScope.launch { offlineQueue.observe(uid).collect { rows ->
@@ -96,14 +103,15 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         mutable.update { it.copy(month = month, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts, adjustments = adjustments.adjustments, treatments = adjustments.treatments) }
     }
     /** A new unit is a new attempt; the same attempt is resent until the server answers, so a retry never duplicates. */
-    fun unit(id: String) { if (mutable.value.unitId != id) { attempt = null; mutable.update { it.copy(unitId = id) } } }
-    fun record(online: Boolean = true) = serverRun {
+    fun unit(id: String) { if (mutable.value.unitId != id) { clearAttempt(); mutable.update { it.copy(unitId = id) } } }
+    fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
+    fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null) = serverRun {
         var state = mutable.value
         if (!online) {
             val uid = auth.current?.uid ?: error("Sessão expirada.")
             val unitId = state.unitId ?: error("Escolha a unidade.")
             val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime())
-            attempt = null
+            clearAttempt()
             mutable.update { it.copy(lastOffline = captured) }
             offlineScheduler.schedule(uid)
             return@serverRun
@@ -113,13 +121,17 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         require(TimeRules.canRecord(state.options, state.unitId)) { TimeRules.blockedReason(state.options) ?: "Escolha a unidade." }
         val zone = TimeRules.unitZone(state.options, state.unitId)
         val pending = attempt ?: (TimeRules.newAttempt() to TimeRules.workDate(officialNow(state), zone)).also { attempt = it }
-        val result = try { api.mark(MarkingRequest(pending.first, pending.second, state.unitId!!)) }
+        val locationEnabled = state.options?.executionUnits?.firstOrNull { it.id == state.unitId }?.locationPolicy?.mode != "disabled"
+        val location = if (locationEnabled) pendingLocation ?: capturedLocation
+            ?: failedLocationAttempt(status = "unavailable") else null
+        pendingLocation = location
+        val result = try { api.mark(MarkingRequest(pending.first, pending.second, state.unitId!!, locationAttempt = location)) }
         catch (cause: retrofit2.HttpException) {
             // 409: the attempt clashes with one already recorded. Start over from what the server holds.
-            if (cause.code() == 409) { attempt = null; readMonth(YearMonth.now()) }
+            if (cause.code() == 409) { clearAttempt(); readMonth(YearMonth.now()) }
             throw cause
         }
-        attempt = null
+        clearAttempt()
         mutable.update { it.copy(last = result) }
         readMonth(YearMonth.now())
     }

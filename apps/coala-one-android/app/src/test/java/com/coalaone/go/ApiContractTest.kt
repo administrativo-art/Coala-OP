@@ -103,10 +103,14 @@ class ApiContractTest {
     @Test fun pontoUsesTheWebRoutesAndTheMobileCollector() = runTest {
         MockWebServer().use { server ->
             val api = Retrofit.Builder().baseUrl(server.url("/")).addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build().create(ApiService::class.java)
-            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"status":"recorded","receiptId":"r1","receiptStatus":"pending","receiptIssue":"X","marking":{"markingId":"m","nsr":7,"markedAt":"2026-10-19T08:00:00-03:00","recordedAt":"2026-10-19T08:00:00-03:00","executionUnitId":"u","hash":"h"}}"""))
-            assertEquals(7L, api.mark(MarkingRequest("a", "2026-10-19", "u")).marking.nsr)
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"status":"recorded","receiptId":"r1","receiptStatus":"pending","receiptIssue":"X","location":{"captureStatus":"captured","evaluation":"inside"},"marking":{"markingId":"m","nsr":7,"markedAt":"2026-10-19T08:00:00-03:00","recordedAt":"2026-10-19T08:00:00-03:00","executionUnitId":"u","hash":"h"}}"""))
+            val location = LocationAttempt("capture-1", "captured", 450, "2026-10-19T11:00:00Z", -1.4558, -48.4902, 12.0)
+            val marked = api.mark(MarkingRequest("a", "2026-10-19", "u", locationAttempt = location))
+            assertEquals(7L, marked.marking.nsr); assertEquals("inside", marked.location?.evaluation)
             val request = server.takeRequest(); assertEquals("/api/dp/time-recording/markings", request.path)
-            assertTrue(request.body.readUtf8().contains("\"channel\":\"mobile\""))
+            val markingBody = request.body.readUtf8()
+            assertTrue(markingBody.contains("\"channel\":\"mobile\"")); assertTrue(markingBody.contains("\"locationAttempt\""))
+            assertTrue(markingBody.contains("\"latitude\":-1.4558")); assertFalse(markingBody.contains("privacyNoticeUrl"))
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"permit":{"permitId":"p","installationId":"11111111-1111-4111-8111-111111111111","deviceKeyId":"${"a".repeat(64)}","keySecurity":"tee","bootCount":1,"anchorElapsedRealtimeMs":10,"anchorInstant":"2026-10-19T11:00:00Z","issuedAt":"2026-10-19T11:00:00Z","expiresAt":"2026-10-19T23:00:00Z","units":[{"id":"u","name":"Matriz","timeZone":"America/Belem"}]}}"""))
             val permitRequest = OfflinePermitRequest("request", "2026-10-19", "11111111-1111-4111-8111-111111111111",
                 "a".repeat(64), java.util.Base64.getEncoder().encodeToString(ByteArray(80) { 1 }), "tee", 1, 10)

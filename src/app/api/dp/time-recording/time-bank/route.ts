@@ -14,17 +14,17 @@ export const dynamic = 'force-dynamic';
 
 const path = '/api/dp/time-recording/time-bank' as const;
 type Resource = { workspaceId: string };
-// O próprio banco é do titular; o de outra pessoa exige dp.timeClosure, conferido no serviço (encerrar o ciclo exige poder fechar).
+// O próprio banco é do titular; consultar outra pessoa aceita a permissão dedicada, mas escrever continua exigindo fechamento.
 const getContract = defineSecurityContract({
   schemaVersion: 1, id: 'dp.time-recording.time-bank.statement', version: 1,
   surface: { method: 'GET', path }, exposure: 'authenticated', identity: { kind: 'active-user' },
-  authorization: { kind: 'custom', strategy: 'owner-or-time-closure' }, resourceScope: { kind: 'workspace' },
+  authorization: { kind: 'custom', strategy: 'owner-or-time-recording' }, resourceScope: { kind: 'workspace' },
   input: { kind: 'schema', schema: 'dp.time-bank.query', unknownFields: 'reject' },
   effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized',
 });
 const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { employeeUid?: string; date?: string }, Resource>({
   id: 'dp-time-bank-statement-v1',
-  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-recording', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const parsed = timeBankQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
