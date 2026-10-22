@@ -8,7 +8,7 @@ import java.io.IOException
 
 data class ApiCredentials(val uid: String, val token: String, val attestation: String?)
 fun interface CredentialProvider { suspend fun credentials(): ApiCredentials? }
-class AuthenticationInterceptor(private val origin: HttpUrl, private val provider: CredentialProvider) : Interceptor {
+class AuthenticationInterceptor(private val origin: HttpUrl, private val viewAsUserId: () -> String? = { null }, private val provider: CredentialProvider) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val expectedOwner = request.header("X-Coala-Local-Owner")
@@ -20,6 +20,7 @@ class AuthenticationInterceptor(private val origin: HttpUrl, private val provide
             if (expectedOwner != null && credentials.uid != expectedOwner) throw AppFailure(ErrorCategory.AUTHENTICATION, false, "O envio pertence a outra conta. Entre com a conta original.")
             builder.header("Authorization", "Bearer ${credentials.token}")
             credentials.attestation?.let { builder.header("X-Coala-App-Attestation", it) }
+            viewAsUserId()?.takeIf(String::isNotBlank)?.let { builder.header(DEVELOPER_VIEW_AS_HEADER, it) }
         }
         return chain.proceed(builder.build())
     }

@@ -26,6 +26,9 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun release() = Release(4, "0.2.0", 0, "/app/CoalaGo.apk")
     override suspend fun reset(request: ResetRequest) = Unit
     override suspend fun profile() = ProfileResponse(Profile(simulatedUserName, "simulation@invalid.local", "Atendente"), Modules(true, true, true, true, true, true, true, true))
+    override suspend fun developerViewAs() = DeveloperViewAsDirectory(false)
+    override suspend fun startDeveloperViewAs(request: DeveloperViewAsSelection) = DeveloperViewAsSelectionResponse(DeveloperViewAsUser(request.targetUserId, "Simulação", "simulation@invalid.local"))
+    override suspend fun stopDeveloperViewAs() = DeveloperViewAsStopped(true)
     override suspend fun registerPush(request: PushDeviceRegistration, expectedOwner: String) = PushDeviceRegistered(false)
     override suspend fun removePush(request: PushDeviceRemoval, expectedOwner: String) = PushDeviceRemoved(false)
     override suspend fun avatar(photo: MultipartBody.Part) = AvatarResponse("")

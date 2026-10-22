@@ -19,6 +19,27 @@ import {
 const PLAY_INTEGRITY_SCOPE = "https://www.googleapis.com/auth/playintegrity";
 let googleAuth: GoogleAuth | null = null;
 
+function authenticatedUidForAttestation(request: NextRequest, effectiveUid: string) {
+  if (!request.headers.get("x-coala-view-as")?.trim()) return effectiveUid;
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const payload = token?.split(".")[1];
+  if (!payload) return effectiveUid;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      sub?: unknown;
+      user_id?: unknown;
+    };
+    const uid = typeof decoded.sub === "string"
+      ? decoded.sub
+      : typeof decoded.user_id === "string"
+        ? decoded.user_id
+        : "";
+    return uid || effectiveUid;
+  } catch {
+    return effectiveUid;
+  }
+}
+
 function secret() {
   const value = process.env.MOBILE_APP_ATTESTATION_SECRET?.trim();
   if (!value || value.length < 32) {
@@ -29,7 +50,7 @@ function secret() {
 
 /** Só informa: a chamada traz atestação válida do Coala Go para este uid? Sem segredo configurado, não. */
 export function hasValidMobileAttestation(request: NextRequest, uid: string) {
-  try { return verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), uid); } catch { return false; }
+  try { return verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid)); } catch { return false; }
 }
 
 export function currentMobileAttestationMode() {
@@ -44,7 +65,7 @@ export function currentMobileAttestationMode() {
 export function assertMobileAppAttested(request: NextRequest, uid: string) {
   const mode = currentMobileAttestationMode();
   if (mode === "off") return;
-  if (verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), uid)) return;
+  if (verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid))) return;
   if (mode === "monitor") {
     console.info("[mobile-app-attestation] chamada sem atestado válido", { path: request.nextUrl.pathname });
     return;

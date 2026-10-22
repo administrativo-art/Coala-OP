@@ -18,7 +18,8 @@ import {
   type HrLoginAccessPayload,
 } from '@/features/hr/lib/client';
 import { isPublicRecruitmentHost as isRecruitmentHost } from '@/lib/public-recruitment-host';
-import { LockKeyhole, ShieldAlert } from 'lucide-react';
+import { Eye, LockKeyhole, ShieldAlert } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   PageContainer,
   type PageContainerVariant,
@@ -107,7 +108,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { firebaseUser, user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { firebaseUser, user, authenticatedUser, isAuthenticated, loading: authLoading, logout, viewAs, stopViewAs } = useAuth();
   const { taskNotifications } = useAllTasks();
   const { toast } = useToast();
   const router = useRouter();
@@ -278,6 +279,20 @@ export default function DashboardLayout({
       </AlertDescription>
     </Alert>
   ) : null;
+  const viewAsNotice = viewAs ? (
+    <Alert className="border-ds-accent bg-ds-accent-soft text-ds-ink">
+      <Eye className="h-4 w-4" />
+      <AlertTitle>Visualizando como {viewAs.username}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Sessão de {authenticatedUser?.email}. Esta visualização usa o acesso do usuário escolhido e não permite alterações.
+        </span>
+        <Button variant="outline" size="sm" onClick={() => void stopViewAs()}>
+          Voltar ao meu perfil
+        </Button>
+      </AlertDescription>
+    </Alert>
+  ) : null;
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-(--bg)">
@@ -299,11 +314,13 @@ export default function DashboardLayout({
               className="flex min-h-0 flex-1 flex-col gap-4 md:gap-8"
               data-page-container={personalPageContainerVariant}
             >
+              {viewAsNotice}
               {loginAccessNotice}
               {children}
             </PageContainer>
           ) : (
             <>
+              {viewAsNotice}
               {loginAccessNotice}
               {children}
             </>

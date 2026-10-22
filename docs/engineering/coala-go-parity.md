@@ -1,6 +1,6 @@
 # Coala Go — matriz de paridade e homologação
 
-Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.17/code22 acrescenta o ZIP de comprovantes do ponto; APK assinado e testes JVM estão aprovados, sem substituir o aceite em aparelho físico pendente.
+Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.18/code23 acrescenta a visualização assistida exclusiva do desenvolvimento, com ator real preservado e modo somente leitura; APK assinado e testes JVM estão aprovados, sem substituir o aceite em aparelho físico pendente.
 
 ## Push — incremento local de 15/10/2026
 
@@ -18,7 +18,7 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 |---|---|---|---|
 | Login, bloqueio, sair, recuperação | Firebase Auth nativo; `/api/auth/forgot-password`; UID e bloqueio por inatividade | `ViewModelsTest`: login/bloqueio/reauth/reset; `FirebaseAuthInstrumentedTest`: SDK com Auth Emulator | Conta de homologação autorizada |
 | Marca e slogan | Tokens do handoff; Inter Tight embarcada; Brush animado em texto Compose | `ComposeFlowsTest.brandingAndSloganUseRealTextWithoutClipping`; `DesignMotionTest`: animação/redução/fonte 160% | Aparelhos do parque e leitor de tela |
-| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar | Foto/câmera física, permissões reais e gesto em aparelho físico |
+| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça. Para `administrativo@cialashakes.com`, `/api/auth/view-as` permite escolher um usuário ativo em modo somente leitura, preservando o ator real na autenticação/atestação e exibindo aviso persistente. | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação, cabeçalho restrito à origem da API e DTO do modo assistido; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar; `developer-view-as.test.ts`: exclusividade e leitura | Foto/câmera física, permissões reais e gesto em aparelho físico; jornada de visualização em aparelho e conta real |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
 | Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm`; NF-e/DANFE e NFC-e autorizada com classificação alta dispensam comprovante na compra normal; contingência pendente não dispensa; sangria não aceita comprovante; a IA sugere por item vínculo existente, cadastro pendente, possível patrimônio, uso imediato ou revisão; sangrias são agrupadas por unidade e filtradas por organização/grupo e vínculo posterior é retomado no próprio cartão | `ViewModelsTest`: UUID estável, upload offline, preservação da classificação dos itens, retry de estoque, sessão única/retomada e cancelamento da escolha de sangria; `RulesTest`: filtros organização/grupo com contagem e restauração; `local-purchase-units.test.ts`: hierarquia determinística; contrato visual: confirmação dentro da sangria; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod e política de classificação | OCR real, câmera e conciliação financeira integrada |
@@ -205,6 +205,22 @@ cobrem esses limites; Play Integrity real, aparelho físico e piloto com pessoas
 continuam gates separados. O APK 0.3.15/code20 foi assinado pelo certificado
 público esperado e tem SHA-256
 `801a41bf6e785925813480d6769d13b1c7f6329ee7a672233f4fd070f19b67eb`.
+
+### Verificação da 0.3.18 (visualização assistida de usuário)
+
+A conta de desenvolvimento `administrativo@cialashakes.com` pode selecionar
+uma pessoa ativa no menu de perfil e consultar o Coala Go com os dados e as
+permissões efetivas dela. A identidade Firebase real continua sendo usada para
+autenticação, atestação e auditoria; enquanto a visualização está ativa, as
+alterações pelas APIs centrais são bloqueadas e um aviso persistente permite
+voltar imediatamente ao perfil real. A seleção fica somente no armazenamento
+privado do aparelho, é enviada apenas à origem oficial da API e é removida no
+logout ou na troca de conta. Testes JVM e contratos TypeScript cobrem a
+autorização exclusiva, a restrição de origem e o modo somente leitura; Play
+Integrity real, aparelho físico e homologação com conta de produção continuam
+gates separados. O APK 0.3.18/code23 foi assinado pelo certificado público
+esperado e tem SHA-256
+`02ce7e62e569fde4dbfeaa5bf994f7a5dcb55bcd4677d19316b5b1679eb6c7e0`.
 
 ### Verificação da 0.3.14 (etapas por unidade e cancelamento da nota)
 
