@@ -9,6 +9,9 @@ interface ApiService {
     @GET("api/app/version?packageName=coalaone.go") suspend fun release(): Release
     @POST("api/auth/forgot-password") suspend fun reset(@Body request: ResetRequest)
     @GET("api/mobile/profile") suspend fun profile(): ProfileResponse
+    @GET("api/auth/view-as") suspend fun developerViewAs(): DeveloperViewAsDirectory
+    @POST("api/auth/view-as") suspend fun startDeveloperViewAs(@Body request: DeveloperViewAsSelection): DeveloperViewAsSelectionResponse
+    @HTTP(method = "DELETE", path = "api/auth/view-as") suspend fun stopDeveloperViewAs(): DeveloperViewAsStopped
     @POST("api/mobile/push/devices") suspend fun registerPush(@Body request: PushDeviceRegistration, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRegistered
     @HTTP(method = "DELETE", path = "api/mobile/push/devices", hasBody = true) suspend fun removePush(@Body request: PushDeviceRemoval, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRemoved
     @Multipart @POST("api/mobile/profile/photo") suspend fun avatar(@Part photo: MultipartBody.Part): AvatarResponse

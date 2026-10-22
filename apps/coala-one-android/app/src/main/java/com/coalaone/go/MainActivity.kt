@@ -103,9 +103,10 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
 }
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel) {
     val nav = rememberNavController()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val back: () -> Unit = { nav.popBackStack(); Unit }
     val motion = LocalMotionEnabled.current
-    NavHost(nav, startDestination = "home",
+    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName) { NavHost(nav, startDestination = "home",
         enterTransition = { fadeIn(tween(if (motion) 280 else 0)) + slideInVertically(tween(if (motion) 280 else 0)) { if (motion) 6 else 0 } },
         exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
@@ -121,7 +122,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
         composable("signage") { SignageScreen(hiltViewModel(), back) }
         composable("time") { TimeScreen(hiltViewModel(), back) }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
-    }
+    } }
 }
 private fun installUpdate(context: android.content.Context, file: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
@@ -134,9 +135,11 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     val today by vm.today.collectAsStateWithLifecycle()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val owner = LocalOwner.current
     val goalUnit = remember(owner) { context.getSharedPreferences("goals", android.content.Context.MODE_PRIVATE).getString("unit:$owner", null) }
     LaunchedEffect(state?.modules) { state?.modules?.let { vm.loadToday(it, goalUnit) } }
+    LaunchedEffect(developerViewAs.targetUserId) { if (developerViewAs.targetUserId != null || developerViewAs.available) vm.refresh() }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
     Page("Início", feedback, onRefresh = { vm.refresh(); state?.modules?.let { vm.loadToday(it, goalUnit, force = true) } }, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
@@ -180,6 +183,10 @@ private fun installUpdate(context: android.content.Context, file: File) {
     var framing by remember { mutableStateOf<com.coalaone.go.data.Document?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val push by session.push.state.collectAsStateWithLifecycle()
+    val sessionState by session.state.collectAsStateWithLifecycle()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
+    val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
+    LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
     val owner = LocalOwner.current
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)
@@ -190,10 +197,23 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
-        CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
+        if (canDeveloperViewAs) CardBlock(selected = developerViewAs.targetUserId != null) {
+            Text("Visualizar como usuário", style = MaterialTheme.typography.titleMedium)
+            Text("A navegação usa o perfil escolhido, mas alterações ficam bloqueadas. Seu login real continua registrado para auditoria.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (developerViewAs.targetUserId != null) {
+                Text("Visualizando como ${developerViewAs.targetName ?: "usuário selecionado"}", color = Tokens.warning, style = MaterialTheme.typography.bodyMedium)
+                Action("Voltar ao meu perfil", developerViewAs.busy, onClick = session::stopDeveloperViewAs)
+            } else if (developerViewAs.users.isNotEmpty()) {
+                Picker("Usuário", developerViewAs.users.map { user -> user.id to "${user.username} · ${user.jobRoleName ?: user.email}" }, "", !developerViewAs.busy, session::selectDeveloperViewAs)
+            } else if (!developerViewAs.busy) {
+                Text("Nenhum usuário ativo disponível.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
+            developerViewAs.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+        if (developerViewAs.targetUserId == null) CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
         // The chosen photo is framed by the person before it is sent; only the framed square leaves the phone.
         framing?.let { photo -> PhotoCropDialog(photo, { framing = null }) { framed -> framing = null; vm.avatar(framed) } }
-        CardBlock {
+        if (developerViewAs.targetUserId == null) CardBlock {
             Text("Aplicativo", style = MaterialTheme.typography.titleMedium)
             Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             val target = release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
@@ -202,7 +222,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             else Text("Você está na versão mais recente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         }
-        CardBlock {
+        if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)
             val settingsRequired = com.coalaone.go.push.PushPolicy.requiresSystemSettings(Build.VERSION.SDK_INT, push.permitted, session.push.permissionRequested)
             Text(if (push.enabled && !push.permitted) "Autorizadas nesta conta, mas bloqueadas no Android." else if (push.enabled) "Ativadas para esta conta." else "Receba avisos gerais do Coala Go neste aparelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)

@@ -37,6 +37,16 @@ class ApiContractTest {
             assertNull(external.takeRequest().getHeader("Authorization"))
         } }
     }
+    @Test fun developerViewAsHeaderStaysOnTheAuthenticatedApiOrigin() {
+        MockWebServer().use { server -> MockWebServer().use { external ->
+            val client = OkHttpClient.Builder().addInterceptor(AuthenticationInterceptor(server.url("/"), { "target-user" }) { ApiCredentials("developer", "token", "proof") }).build()
+            server.enqueue(MockResponse().setBody("{}")); external.enqueue(MockResponse().setBody("{}"))
+            client.newCall(Request.Builder().url(server.url("/api/mobile/profile")).build()).execute().close()
+            assertEquals("target-user", server.takeRequest().getHeader(DEVELOPER_VIEW_AS_HEADER))
+            client.newCall(Request.Builder().url(external.url("/api/mobile/profile")).build()).execute().close()
+            assertNull(external.takeRequest().getHeader(DEVELOPER_VIEW_AS_HEADER))
+        } }
+    }
     @Test fun ownerMismatchFailsBeforeTheNetworkAndPublicCallsAreUnauthenticated() {
         MockWebServer().use { server ->
             val client = OkHttpClient.Builder().addInterceptor(AuthenticationInterceptor(server.url("/")) { ApiCredentials("other", "token", null) }).build()
