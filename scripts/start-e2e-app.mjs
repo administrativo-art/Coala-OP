@@ -21,7 +21,10 @@ if (!existsSync(nextExecutable)) {
   throw new Error("Next.js local não encontrado. Execute npm ci.");
 }
 
-const child = spawn(nextExecutable, ["dev", "--hostname", "127.0.0.1", "--port", "3100"], {
+const port = process.env.E2E_PORT ?? "3100";
+if (!/^\d{4,5}$/.test(port) || Number(port) > 65535) throw new Error("E2E_PORT inválida.");
+
+const child = spawn(nextExecutable, ["dev", "--hostname", "127.0.0.1", "--port", port], {
   cwd: process.cwd(),
   env: {
     ...process.env,

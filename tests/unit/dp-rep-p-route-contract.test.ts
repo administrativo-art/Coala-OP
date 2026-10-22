@@ -10,6 +10,7 @@ const offlinePermit = readFileSync('src/app/api/dp/time-recording/offline-permit
 const pending = readFileSync('src/app/api/dp/time-recording/pending-receipts/route.ts', 'utf8');
 const signerStatus = readFileSync('src/app/api/dp/time-recording/signer-status/route.ts', 'utf8');
 const receipt = readFileSync('src/app/api/dp/time-recording/receipts/[receiptId]/route.ts', 'utf8');
+const receiptArchive = readFileSync('src/app/api/dp/time-recording/receipts/export/route.ts', 'utf8');
 const mobileAttestation = readFileSync('src/lib/security/mobile-app-attestation.server.ts', 'utf8');
 
 describe('REP-P API route contracts', () => {
@@ -52,6 +53,15 @@ describe('REP-P API route contracts', () => {
     assert.match(receipt, /surface: \{ method: 'GET', path \}, effects: \{ mode: 'read', audit: 'none' \}/);
     assert.doesNotMatch(receipt.split('export const GET', 2)[1].split('export const POST', 1)[0], /retryOwnRepPReceipt/);
     assert.match(receipt, /private, no-store/);
+  });
+
+  it('exports a private receipt archive only to its owner and marks completeness in the response', () => {
+    assert.match(receiptArchive, /authorization: \{ kind: 'owner' \}/);
+    assert.match(receiptArchive, /employeeId: actor\.decoded\.uid/);
+    assert.match(receiptArchive, /export const GET = secureRoute/);
+    assert.match(receiptArchive, /effects: \{ mode: 'read', audit: 'none' \}/);
+    assert.match(receiptArchive, /X-Coala-Archive-Complete/);
+    assert.match(receiptArchive, /private, no-store/);
   });
 
   it('lists own history and options only for the caller, and pending receipts only for the time manager', () => {
