@@ -25,6 +25,48 @@ function axiosFacts(error: unknown) {
   }
 }
 
+const PAYMENT_REJECTION_FIELDS = [
+  ["codBarralinhaDigitavel", "O Banco Inter recusou a linha digitável do boleto."],
+  ["valorPagar", "O Banco Inter recusou o valor informado para o pagamento."],
+  ["dataPagamento", "O Banco Inter recusou a data programada do pagamento."],
+  ["dataVencimento", "O Banco Inter recusou o vencimento informado para o boleto."],
+  ["cpfCnpjBeneficiario", "O Banco Inter recusou o CPF/CNPJ informado para o beneficiário."],
+] as const;
+
+function safePaymentRejectionMessage(error: unknown) {
+  try {
+    if (!axios.isAxiosError(error)) return null;
+    const pending: Array<{ value: unknown; depth: number }> = [{ value: error.response?.data, depth: 0 }];
+    const observed = new Set<string>();
+    let visited = 0;
+    while (pending.length && visited < 100) {
+      const current = pending.shift()!;
+      visited += 1;
+      if (typeof current.value === "string") {
+        for (const [field] of PAYMENT_REJECTION_FIELDS) {
+          if (current.value.toLowerCase().includes(field.toLowerCase())) observed.add(field);
+        }
+        continue;
+      }
+      if (!current.value || typeof current.value !== "object" || current.depth >= 4) continue;
+      const entries = Array.isArray(current.value)
+        ? current.value.map((value) => ["", value] as const)
+        : Object.entries(current.value as Record<string, unknown>);
+      for (const [key, value] of entries) {
+        for (const [field] of PAYMENT_REJECTION_FIELDS) {
+          if (key.toLowerCase() === field.toLowerCase()) observed.add(field);
+        }
+        pending.push({ value, depth: current.depth + 1 });
+      }
+    }
+    if (observed.size !== 1) return null;
+    const field = [...observed][0];
+    return PAYMENT_REJECTION_FIELDS.find(([candidate]) => candidate === field)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function isTransientInterFailure(error: unknown) {
   const { statusCode, networkCode } = axiosFacts(error);
   return statusCode !== null
@@ -85,5 +127,8 @@ export function safeInterApiError(error: unknown, operation: InterOperation) {
     operation,
     statusCode,
     retryable,
+    safeMessage: operation === "api-request" && (statusCode === 400 || statusCode === 422)
+      ? safePaymentRejectionMessage(error) ?? undefined
+      : undefined,
   });
 }

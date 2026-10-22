@@ -191,9 +191,9 @@ test("filtro inicial inclui todos os status não pagos, até os terminais", () =
   assert.equal(requests.filter((item) => matchesPaymentRequestFilter(item, "all")).length, statuses.length);
 });
 
-test("pago divergente sai de Não pagos e continua acessível em Todos e Atenção", () => {
+test("pago com revisão continua visível em Não pagos, Todos e Atenção", () => {
   const divergent = { ...boleto, status: "paid", beneficiaryVerificationStatus: "divergent" } as const;
-  assert.equal(matchesPaymentRequestFilter(divergent, DEFAULT_PAYMENT_REQUEST_FILTER), false);
+  assert.equal(matchesPaymentRequestFilter(divergent, DEFAULT_PAYMENT_REQUEST_FILTER), true);
   assert.equal(matchesPaymentRequestFilter(divergent, "all"), true);
   assert.equal(matchesPaymentRequestFilter(divergent, "risk"), true);
   assert.equal(stageGroup(divergent), "risk");
@@ -205,13 +205,17 @@ test("filtros anteriores preservam acesso por etapa e concluídos", () => {
   assert.equal(matchesPaymentRequestFilter(pix, "you"), true);
   assert.equal(matchesPaymentRequestFilter({ ...pix, status: "scheduled" }, "bank"), true);
   assert.equal(matchesPaymentRequestFilter({ ...pix, status: "failed" }, "risk"), true);
-  for (const beneficiaryVerificationStatus of ["verified", "unavailable", undefined] as const) {
+  for (const beneficiaryVerificationStatus of ["verified", undefined] as const) {
     const paid = { ...pix, status: "paid", beneficiaryVerificationStatus } as const;
     assert.equal(matchesPaymentRequestFilter(paid, "done"), true);
     assert.equal(matchesPaymentRequestFilter(paid, "risk"), false);
     assert.equal(matchesPaymentRequestFilter(paid, "all"), true);
     assert.equal(matchesPaymentRequestFilter(paid, "unpaid"), false);
   }
+  const unavailable = { ...pix, status: "paid", beneficiaryVerificationStatus: "unavailable" } as const;
+  assert.equal(matchesPaymentRequestFilter(unavailable, "done"), false);
+  assert.equal(matchesPaymentRequestFilter(unavailable, "risk"), true);
+  assert.equal(matchesPaymentRequestFilter(unavailable, "unpaid"), true);
 });
 
 test("pagos destacam a data efetiva e deixam de exibir previsão, vencimento ou envio imediato", () => {

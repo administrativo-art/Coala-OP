@@ -22,7 +22,8 @@ const STATUS_GROUP: Record<BankPaymentRequestStatus, StageGroup> = {
 };
 
 export function requiresBeneficiaryReview(item: BankPaymentRequest) {
-  return item.status === "paid" && item.beneficiaryVerificationStatus === "divergent";
+  return item.status === "paid"
+    && ["divergent", "unavailable"].includes(item.beneficiaryVerificationStatus ?? "");
 }
 
 export function stageGroup(item: BankPaymentRequest): StageGroup {
@@ -31,7 +32,7 @@ export function stageGroup(item: BankPaymentRequest): StageGroup {
 
 export function matchesPaymentRequestFilter(item: BankPaymentRequest, filter: PaymentRequestFilter) {
   if (filter === "all") return true;
-  if (filter === "unpaid") return item.status !== "paid";
+  if (filter === "unpaid") return item.status !== "paid" || requiresBeneficiaryReview(item);
   return stageGroup(item) === filter;
 }
 
