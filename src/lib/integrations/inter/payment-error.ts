@@ -8,9 +8,13 @@ function object(value: unknown): Record<string, unknown> {
 
 export function safeInterPaymentError(error: unknown, now = new Date().toISOString()) {
   if (error instanceof InterApiError) {
+    const rejected = error.statusCode === 400 || error.statusCode === 422;
+    const genericInterMessage = 'Não foi possível concluir a comunicação com o Banco Inter.';
     return {
       code: error.code,
-      safeMessage: error.safeMessage,
+      safeMessage: rejected && error.safeMessage === genericInterMessage
+        ? 'O Banco Inter recusou os dados do pagamento. Revise os dados antes de tentar novamente.'
+        : error.safeMessage,
       occurredAt: now,
     };
   }

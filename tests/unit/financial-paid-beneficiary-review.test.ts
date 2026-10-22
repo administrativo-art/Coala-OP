@@ -26,6 +26,19 @@ test("favorecido comprovado pelo extrato remove apenas o alerta e registra a evi
   assert.ok(!JSON.stringify(plan).includes(request.beneficiarySnapshot.documentHash!));
 });
 
+test("extrato completo também confirma pagamento antes pendente por documento mascarado", () => {
+  const unavailable = {
+    ...request,
+    beneficiaryVerificationStatus: "unavailable" as const,
+    beneficiaryVerificationWarning: "Documento mascarado no status.",
+    bankReconciliationDivergenceField: null,
+  };
+  const plan = planPaidBeneficiaryReview({ ...input, request: unavailable });
+  assert.ok(plan);
+  assert.equal(plan.patch.beneficiaryVerificationStatus, "verified");
+  assert.equal(plan.event.previousVerificationStatus, "unavailable");
+});
+
 test("documento ausente, mascarado, parcial, inválido ou diferente preserva a revisão", () => {
   for (const cpfCnpjRecebedor of [undefined, null, "", "***.***.***-01", "8901", 12345678901, "outro 12345678901", "10987654321"]) {
     const raw = { ...statement, bankStatementData: { ...statement.bankStatementData,
