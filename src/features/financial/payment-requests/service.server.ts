@@ -1663,8 +1663,9 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     return finishPaidPaymentRequest(current);
   }
   if (!current.interRequestId) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
+  const interRequestId = current.interRequestId;
   if (!current.beneficiaryReference || !current.beneficiarySnapshot) throw new Error("Os dados do favorecido não estão disponíveis.");
-  const bank = await getInterPixStatus(current.interRequestId);
+  const bank = await getInterPixStatus(interRequestId);
   const transaction = bank.transacaoPix ?? {};
   const rawStatus = String(transaction.status ?? "");
   const next = mapInterPixStatus(rawStatus, current.scheduledFor);
@@ -1726,7 +1727,7 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
       const receiverDocument = findExactPixReceiverDocument(
         await listInterStatementEntries(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
         {
-          interRequestId: current.interRequestId,
+          interRequestId,
           endToEndId: transaction.endToEnd,
           amount: current.amount,
         },
