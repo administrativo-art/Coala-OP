@@ -1,4 +1,5 @@
 import { type DecodedIdToken } from "firebase-admin/auth";
+import { type DocumentData, type DocumentSnapshot } from "firebase-admin/firestore";
 import { type NextRequest } from "next/server";
 
 import {
@@ -12,6 +13,8 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { verifyAuthWithUser } from "@/lib/verify-auth";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { requiresProfileCompliance } from "@/features/hr/profile-compliance-access.server";
+import { isDeveloperViewAsEmail, isDeveloperViewAsReadMethod } from "@/features/auth/developer-view-as";
+import { requestedDeveloperViewAsUserId } from "@/features/auth/developer-view-as.server";
 
 function mergeRecursive(
   target: Record<string, unknown>,
@@ -101,10 +104,25 @@ export type ServerUserContext = {
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
   workspace_id: string;
+  authenticatedActor?: {
+    uid: string;
+    email: string | null;
+    username: string;
+  };
+  viewAs?: {
+    targetUserId: string;
+    targetUsername: string;
+    readOnly: true;
+  } | null;
 };
 
-export async function requireUser(req: NextRequest): Promise<ServerUserContext> {
-  const { decoded, userSnap } = await verifyAuthWithUser(req, { enforceProfileCompliance: false });
+async function buildServerUserContext(
+  decoded: DecodedIdToken,
+  userSnap: DocumentSnapshot<DocumentData>,
+  request: NextRequest,
+  authenticatedActor?: NonNullable<ServerUserContext["authenticatedActor"]>,
+  options: { enforceProfileCompliance?: boolean } = {},
+): Promise<ServerUserContext> {
   if (!decoded.uid) {
     throw new Error("Usuário inválido.");
   }
@@ -113,7 +131,7 @@ export async function requireUser(req: NextRequest): Promise<ServerUserContext> 
   if (userData.isActive === false) {
     throw new Error("Conta inativa.");
   }
-  if (requiresProfileCompliance(userData, req)) {
+  if (options.enforceProfileCompliance !== false && requiresProfileCompliance(userData, request)) {
     throw new Error("Atualização cadastral obrigatória pendente.");
   }
   const isTokenDefaultAdmin = decoded.isDefaultAdmin === true;
@@ -137,16 +155,100 @@ export async function requireUser(req: NextRequest): Promise<ServerUserContext> 
   }
 
   const isDefaultAdmin = isTokenDefaultAdmin || isProfileDefaultAdmin;
+  const userDoc = {
+    id: userSnap.id,
+    ...(userData as Omit<User, "id">),
+  };
+  const actualActor = authenticatedActor ?? {
+    uid: decoded.uid,
+    email: typeof userDoc.email === "string"
+      ? userDoc.email.trim().toLowerCase()
+      : typeof decoded.email === "string"
+        ? decoded.email.trim().toLowerCase()
+        : null,
+    username: userDoc.username || decoded.name || "Usuário",
+  };
 
   return {
     decoded,
-    userDoc: {
-      id: userSnap.id,
-      ...(userData as Omit<User, "id">),
-    },
+    userDoc,
     profileId,
     permissions: buildPermissionSet(profilePermissions, isDefaultAdmin),
     isDefaultAdmin,
     workspace_id: WORKSPACE_ID,
+    authenticatedActor: actualActor,
+    viewAs: null,
+  };
+}
+
+/** Identidade real do token, sem aplicar a visualização de suporte. */
+export async function requireAuthenticatedUser(req: NextRequest): Promise<ServerUserContext> {
+  const { decoded, userSnap } = await verifyAuthWithUser(req, { enforceProfileCompliance: false });
+  return buildServerUserContext(decoded, userSnap, req);
+}
+
+/** UID que deve ser usado em controles ligados ao token/aparelho, não ao usuário visualizado. */
+export function authenticatedActorId(context: ServerUserContext) {
+  return authenticatedActorIdentity(context).uid;
+}
+
+export function authenticatedActorIdentity(context: ServerUserContext) {
+  return context.authenticatedActor ?? {
+    uid: context.decoded.uid,
+    email: typeof context.userDoc.email === "string"
+      ? context.userDoc.email.trim().toLowerCase()
+      : typeof context.decoded.email === "string"
+        ? context.decoded.email.trim().toLowerCase()
+        : null,
+    username: context.userDoc.username || context.decoded.name || "Usuário",
+  };
+}
+
+export async function requireUser(req: NextRequest): Promise<ServerUserContext> {
+  const authenticated = await requireAuthenticatedUser(req);
+  const targetUserId = requestedDeveloperViewAsUserId(req);
+  if (!targetUserId || targetUserId === authenticated.userDoc.id) return authenticated;
+
+  const realActor = authenticatedActorIdentity(authenticated);
+  const actorEmail = realActor.email ?? authenticated.decoded.email;
+  if (!isDeveloperViewAsEmail(actorEmail)) {
+    return authenticated;
+  }
+
+  if (!isDeveloperViewAsReadMethod(req.method)) {
+    throw new Error("O modo Visualizar como é somente leitura. Volte ao seu perfil para alterar dados.");
+  }
+
+  const targetSnap = await dbAdmin.collection("users").doc(targetUserId).get();
+  if (!targetSnap.exists || targetSnap.get("isActive") === false) {
+    throw new Error("Usuário selecionado não está disponível.");
+  }
+  const targetData = targetSnap.data() ?? {};
+  const targetProfileId = typeof targetData.profileId === "string" && targetData.profileId
+    ? targetData.profileId
+    : null;
+  const effectiveDecoded = {
+    ...authenticated.decoded,
+    uid: targetSnap.id,
+    email: typeof targetData.email === "string" ? targetData.email : undefined,
+    name: typeof targetData.username === "string" ? targetData.username : undefined,
+    profileId: targetProfileId ?? undefined,
+    isDefaultAdmin: false,
+  } as DecodedIdToken;
+  const effective = await buildServerUserContext(
+    effectiveDecoded,
+    targetSnap,
+    req,
+    realActor,
+    { enforceProfileCompliance: false },
+  );
+
+  return {
+    ...effective,
+    viewAs: {
+      targetUserId: targetSnap.id,
+      targetUsername: effective.userDoc.username,
+      readOnly: true,
+    },
   };
 }
