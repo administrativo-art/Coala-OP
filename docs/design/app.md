@@ -368,6 +368,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Voltar** da barra e do sistema fazem o mesmo. Dentro de fluxos em níveis (Signage, etapas), voltar recua um nível antes de sair da tela.
 - Voltar fica bloqueado enquanto a tela está ocupada.
 - Tarefas de conta ficam no **perfil**, fora do início: foto, versão do app, atualização e "Sair da conta".
+- Para o único login de desenvolvimento autorizado, o perfil inclui **Visualizar como usuário**, com busca e seleção de contas ativas. A seleção troca os dados e permissões apresentados, nunca a identidade autenticada. Enquanto ativa, todas as páginas exibem uma faixa persistente "Visualizando como … · somente leitura"; o perfil oferece retorno ao usuário real e oculta ações de foto, atualização e notificações.
 - **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; as notificações de solicitações continuam abrindo na web. Pedir ausência e vale-transporte já é nativo (Solicitações); acompanhar a análise completa e anexar depois do envio seguem no Coala One. Simulação não registra dispositivos.
 
 ## Estados e mensagens

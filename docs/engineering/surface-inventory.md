@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **496 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **497 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -51,6 +51,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/auth/forgot-password` | POST | [src/app/api/auth/forgot-password/route.ts](../../src/app/api/auth/forgot-password/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/auth/last-login` | POST | [src/app/api/auth/last-login/route.ts](../../src/app/api/auth/last-login/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/auth/password-changed` | POST | [src/app/api/auth/password-changed/route.ts](../../src/app/api/auth/password-changed/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/auth/view-as` | GET, POST, DELETE | [src/app/api/auth/view-as/route.ts](../../src/app/api/auth/view-as/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/catalogo` | GET | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) | [catalog](flows/catalog.md) |
 | `/api/client/bootstrap` | GET | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/collaborator/absence-requests` | GET, POST | [src/app/api/collaborator/absence-requests/route.ts](../../src/app/api/collaborator/absence-requests/route.ts) | [dp-absences](flows/dp-absences.md) |

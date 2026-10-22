@@ -51,6 +51,7 @@ import java.util.Locale
 
 val LocalImages = staticCompositionLocalOf<ImageLoader> { error("ImageLoader unavailable") }
 val LocalOwner = staticCompositionLocalOf { "anonymous" }
+val LocalDeveloperViewAsName = staticCompositionLocalOf<String?> { null }
 fun money(cents: Long) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(cents / 100.0)
 fun moneyValue(value: Double) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(value)
 
@@ -105,6 +106,10 @@ fun shortDate(value: String?): String? {
             // The dark bar runs under the status bar, so no strip of page colour shows above it.
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Tokens.dark).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp)) {
                 if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack)
+            }
+            LocalDeveloperViewAsName.current?.let { targetName ->
+                Text("Visualizando como $targetName · somente leitura", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.fillMaxWidth().background(Tokens.warningBg).padding(horizontal = 20.dp, vertical = 10.dp))
             }
             // What survives without a connection is said in words, not left for the person to guess.
             if (!online) Text("Sem conexão. Rascunhos, notas de compra e o ponto previamente autorizado ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
