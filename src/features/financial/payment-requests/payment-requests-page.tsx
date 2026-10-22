@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, CircleHelp, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ import {
   type PaymentRequestFilter,
   type StageGroup,
 } from "./presentation";
+import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 
 /* -------------------------------------------------------------------------- */
 /*  Estágios                                                                    */
@@ -72,7 +73,13 @@ const STATUS_LABEL: Record<BankPaymentRequestStatus, string> = {
 const GROUP_ORDER: Record<StageGroup, number> = { you: 0, risk: 1, bank: 2, done: 3 };
 
 function statusLabel(item: BankPaymentRequest) {
-  return requiresBeneficiaryReview(item) ? "Pago · revisar favorecido" : STATUS_LABEL[item.status];
+  if (item.status === "paid" && item.beneficiaryVerificationStatus === "divergent") {
+    return "Pago · revisar favorecido";
+  }
+  if (item.status === "paid" && item.beneficiaryVerificationStatus === "unavailable") {
+    return "Pago · validação pendente";
+  }
+  return STATUS_LABEL[item.status];
 }
 
 const GROUP_PILL: Record<StageGroup, StatusPillVariant> = {
@@ -181,8 +188,7 @@ function rowAction(
     return { kind: "authorize", label: combined ? "Autorizar e enviar" : "Autorizar", primary: true };
   }
   if (
-    item.status === "failed"
-    && item.lastError?.code !== "BANK_RECONCILIATION_DIVERGENCE"
+    canRetryDefinitivelyRejectedPayment(item)
     && pr.submit
   ) {
     return { kind: "submit", label: "Reenviar ao Inter", primary: true };
@@ -200,6 +206,10 @@ function rowAction(
     return { kind: "proof", label: "Ver comprovante", primary: false };
   }
   return null;
+}
+
+function hasConsultableIssue(item: BankPaymentRequest) {
+  return Boolean(item.lastError || requiresBeneficiaryReview(item));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -752,7 +762,7 @@ function RequestRow({
         </div>
 
         {/* próxima ação */}
-        <div className="relative z-1 hidden min-w-0 justify-end lg:flex">
+        <div className="relative z-1 hidden min-w-0 flex-col items-end justify-center gap-1.5 lg:flex">
           {action ? (
             <Button
               size="xs"
@@ -764,24 +774,44 @@ function RequestRow({
               {action.label === "Ver comprovante" ? <ExternalLink aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" /> : null}
               {action.label}
             </Button>
-          ) : (
+          ) : !hasConsultableIssue(item) ? (
             <span className="text-[11px] text-ds-ink-faint">—</span>
-          )}
+          ) : null}
+          {hasConsultableIssue(item) ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-ds-accent-ink underline-offset-2 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+            >
+              <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
+              Ver motivo
+            </button>
+          ) : null}
         </div>
 
         {/* ação no mobile */}
-        {action ? (
+        {action || hasConsultableIssue(item) ? (
           <div className="relative z-1 col-span-2 lg:hidden">
-            <Button
-              size="xs"
-              variant={action.primary ? "primary-page" : "ds-secondary"}
-              disabled={busy}
-              className="w-full"
-              onClick={() => onAction(action.kind)}
-            >
-              {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              {action.label}
-            </Button>
+            <div className="flex gap-2">
+              {action ? (
+                <Button
+                  size="xs"
+                  variant={action.primary ? "primary-page" : "ds-secondary"}
+                  disabled={busy}
+                  className="flex-1"
+                  onClick={() => onAction(action.kind)}
+                >
+                  {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  {action.label}
+                </Button>
+              ) : null}
+              {hasConsultableIssue(item) ? (
+                <Button size="xs" variant="ds-secondary" className="flex-1" onClick={onOpen}>
+                  <CircleHelp aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
+                  Ver motivo
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </LiftRow>
@@ -831,6 +861,10 @@ function DetailDrawer({
       : due.date
         ? `Programado · ${formatFinancialDate(due.date) ?? "—"}`
         : "—";
+  const retryAttempts = paymentSubmissionAttemptCount(item);
+  const rejectedByInter = item.lastError?.code === "INTER_HTTP_400" || item.lastError?.code === "INTER_HTTP_422";
+  const historicalGenericRejection = rejectedByInter
+    && item.lastError?.safeMessage.startsWith("Não foi possível concluir a comunicação com o Banco Inter");
 
   return (
     <>
@@ -917,16 +951,39 @@ function DetailDrawer({
 
         {item.lastError ? (
           <div className="mt-4 rounded-ds-btn-lg bg-ds-danger-bg p-3.5">
-            <p className="text-[11.5px] font-extrabold text-ds-danger">Último erro do banco</p>
+            <p className="text-[11.5px] font-extrabold text-ds-danger">
+              {rejectedByInter ? "Envio recusado pelo Banco Inter" : "Último erro do banco"}
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-ds-danger">{item.lastError.safeMessage}</p>
+            {historicalGenericRejection ? (
+              <p className="mt-2 text-xs leading-relaxed text-ds-danger">
+                Este registro histórico preservou a recusa HTTP, mas não o campo específico recusado pelo contrato antigo.
+              </p>
+            ) : null}
+            <div className="mt-3 space-y-1 border-t border-ds-danger/15 pt-2.5">
+              <InfoRow label="Código" value={item.lastError.code} valueClassName="font-mono text-ds-danger" />
+              <InfoRow label="Registrado em" value={formatFinancialDateTime(item.lastError.occurredAt)} valueClassName="font-mono text-ds-danger" />
+              <InfoRow label="Tentativas de envio" value={String(retryAttempts)} valueClassName="font-mono text-ds-danger" />
+            </div>
+            {rejectedByInter && retryAttempts >= 2 ? (
+              <p className="mt-3 text-xs font-semibold leading-relaxed text-ds-danger">
+                O reenvio está bloqueado após duas recusas definitivas para evitar duplicidade. Revise os dados da cobrança antes de criar uma nova solicitação.
+              </p>
+            ) : null}
           </div>
         ) : null}
-        {item.beneficiaryVerificationStatus === "divergent" ? (
+        {requiresBeneficiaryReview(item) ? (
           <div className="mt-4 rounded-ds-btn-lg bg-ds-warn-bg p-3.5">
-            <p className="text-[11.5px] font-extrabold text-ds-warn">Pagamento confirmado · favorecido em revisão</p>
+            <p className="text-[11.5px] font-extrabold text-ds-warn">
+              {item.beneficiaryVerificationStatus === "divergent"
+                ? "Pagamento confirmado · favorecido em revisão"
+                : "Pagamento confirmado · validação documental pendente"}
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-ds-warn">
               {item.beneficiaryVerificationWarning
-                ?? "O extrato confirmou a liquidação, mas o documento retornado pelo banco divergiu do cadastro."}
+                ?? (item.beneficiaryVerificationStatus === "divergent"
+                  ? "O extrato confirmou a liquidação, mas o documento completo retornado pelo banco divergiu do cadastro."
+                  : "O retorno consultado trouxe o documento mascarado. O extrato completo fará a confirmação sem classificar isso como divergência.")}
             </p>
           </div>
         ) : null}
