@@ -35,6 +35,8 @@ A continuação da remediação migrou Tailwind CSS 3 para 4, substituiu o runti
 
 Exceções ficam em `config/vulnerability-exceptions.json`. Cada exceção deve identificar exatamente o `findingKey`, ter justificativa e data de expiração. Exceção expirada, duplicada ou incompleta invalida a execução. Alterar baseline ou exceção exige revisão humana explícita; o CI nunca os regenera.
 
+Em 2026-10-23, uma publicação emergencial autorizada adicionou exceções com expiração em 2026-10-30 para os novos advisories de `body-parser` e `zod`, publicados após o baseline e não introduzidos pela mudança funcional. A remediação definitiva deve atualizar as dependências transitivas e migrar o Zod em trabalho dedicado antes da expiração; o baseline não foi ampliado.
+
 Uma falha de rede ou resposta inválida do registry é falha operacional distinta, não aprovação silenciosa.
 
 ## Ratchet de contratos de API
