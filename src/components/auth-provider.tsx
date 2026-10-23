@@ -21,6 +21,7 @@ import {
   type DeveloperViewAsDirectory,
   type DeveloperViewAsUser,
 } from '@/features/auth/developer-view-as';
+import { resolveAuthenticatedEmail } from '@/features/auth/authenticated-email';
 
 export interface TerminateUserPayload {
   uid: string;
@@ -205,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           setAuthenticatedAppUser(userData);
-          if (isDeveloperViewAsEmail(userData.email)) {
+          if (isDeveloperViewAsEmail(resolveAuthenticatedEmail(user.email, userData.email))) {
             try {
               const token = await user.getIdToken();
               const response = await fetch('/api/auth/view-as', {
@@ -424,7 +425,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     const current = auth.currentUser;
-    if (current && isDeveloperViewAsEmail(authenticatedAppUser?.email)) {
+    if (current && isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) {
       const token = await current.getIdToken().catch(() => null);
       if (token) {
         await fetch('/api/auth/view-as', {
@@ -439,7 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startViewAs = useCallback(async (targetUserId: string) => {
     const current = auth.currentUser;
-    if (!current || !isDeveloperViewAsEmail(authenticatedAppUser?.email)) {
+    if (!current || !isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) {
       throw new Error('Esta ferramenta não está disponível para este usuário.');
     }
     const token = await current.getIdToken();
@@ -460,7 +461,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const stopViewAs = useCallback(async () => {
     const current = auth.currentUser;
-    if (!current || !isDeveloperViewAsEmail(authenticatedAppUser?.email)) return;
+    if (!current || !isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) return;
     const token = await current.getIdToken();
     const response = await fetch('/api/auth/view-as', {
       method: 'DELETE',
@@ -630,7 +631,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading: loading || profilesLoading || !permissionsReady,
     isDefaultAdmin,
     permissions,
-    canViewAs: isDeveloperViewAsEmail(authenticatedAppUser?.email),
+    canViewAs: isDeveloperViewAsEmail(resolveAuthenticatedEmail(firebaseUser?.email, authenticatedAppUser?.email)),
     viewAs: viewAsDirectory?.targetUser ?? null,
     viewAsUsers: viewAsDirectory?.users ?? [],
     startViewAs,

@@ -15,6 +15,7 @@ import { WORKSPACE_ID } from "@/lib/workspace";
 import { requiresProfileCompliance } from "@/features/hr/profile-compliance-access.server";
 import { isDeveloperViewAsEmail, isDeveloperViewAsReadMethod } from "@/features/auth/developer-view-as";
 import { requestedDeveloperViewAsUserId } from "@/features/auth/developer-view-as.server";
+import { resolveAuthenticatedEmail } from "@/features/auth/authenticated-email";
 
 function mergeRecursive(
   target: Record<string, unknown>,
@@ -161,11 +162,7 @@ async function buildServerUserContext(
   };
   const actualActor = authenticatedActor ?? {
     uid: decoded.uid,
-    email: typeof userDoc.email === "string"
-      ? userDoc.email.trim().toLowerCase()
-      : typeof decoded.email === "string"
-        ? decoded.email.trim().toLowerCase()
-        : null,
+    email: resolveAuthenticatedEmail(decoded.email, userDoc.email),
     username: userDoc.username || decoded.name || "Usuário",
   };
 
@@ -195,11 +192,7 @@ export function authenticatedActorId(context: ServerUserContext) {
 export function authenticatedActorIdentity(context: ServerUserContext) {
   return context.authenticatedActor ?? {
     uid: context.decoded.uid,
-    email: typeof context.userDoc.email === "string"
-      ? context.userDoc.email.trim().toLowerCase()
-      : typeof context.decoded.email === "string"
-        ? context.decoded.email.trim().toLowerCase()
-        : null,
+    email: resolveAuthenticatedEmail(context.decoded.email, context.userDoc.email),
     username: context.userDoc.username || context.decoded.name || "Usuário",
   };
 }

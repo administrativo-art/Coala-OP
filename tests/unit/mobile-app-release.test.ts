@@ -9,6 +9,7 @@ test('default version and download now select the only mobile app, Coala Go', ()
   assert.deepEqual(mobileReleaseForPackage(), expected);
   assert.deepEqual(mobileReleaseForPackage('coalaone.go'), expected);
   assert.equal(expected.packagePath, '/app/CoalaGo.apk');
+  assert.equal(expected.minVersionCode, expected.versionCode);
 });
 
 test('withdrawn legacy package never receives the Go installer', () => {

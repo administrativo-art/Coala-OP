@@ -7,6 +7,7 @@ import {
   isDeveloperViewAsEmail,
   isDeveloperViewAsReadMethod,
 } from "../../src/features/auth/developer-view-as";
+import { resolveAuthenticatedEmail } from "../../src/features/auth/authenticated-email";
 
 test("Visualizar como fica restrito ao login DEV aprovado", () => {
   assert.equal(DEVELOPER_VIEW_AS_EMAIL, "administrativo@coalashakes.com");
@@ -24,6 +25,15 @@ test("sessão de visualização permite apenas métodos de leitura", () => {
   }
 });
 
+test("e-mail verificado do Firebase prevalece sobre cadastro desatualizado", () => {
+  assert.equal(
+    resolveAuthenticatedEmail(" ADMINISTRATIVO@COALASHAKES.COM ", "administrativo@coalas.com"),
+    DEVELOPER_VIEW_AS_EMAIL,
+  );
+  assert.equal(resolveAuthenticatedEmail(null, " Pessoa@Example.com "), "pessoa@example.com");
+  assert.equal(resolveAuthenticatedEmail(" ", " "), null);
+});
+
 test("Sistema e APP expõem seleção, aviso, auditoria e identidade real", () => {
   const authServer = readFileSync("src/lib/auth-server.ts", "utf8");
   const route = readFileSync("src/app/api/auth/view-as/route.ts", "utf8");
@@ -33,6 +43,7 @@ test("Sistema e APP expõem seleção, aviso, auditoria e identidade real", () =
   const interceptor = readFileSync("apps/coala-one-android/app/src/main/java/com/coalaone/go/data/AuthenticationInterceptor.kt", "utf8");
 
   assert.match(authServer, /authenticatedActorIdentity/);
+  assert.match(authServer, /resolveAuthenticatedEmail\(decoded\.email, userDoc\.email\)/);
   assert.match(authServer, /isDeveloperViewAsReadMethod\(req\.method\)/);
   assert.match(route, /developer_view_as_started/);
   assert.match(route, /developer_view_as_stopped/);
