@@ -5,7 +5,7 @@ O responsável confirmou que ninguém utiliza o app antigo e autorizou sua remo�
 ## Instalação inicial
 
 1. Integrar/publicar backend, metadados e APK somente após autorização específica; alterações atuais são locais.
-2. Baixar pela página `/app`, botão "Baixar Coala Go"; caminho preparado `/app/CoalaGo.apk`, versão 0.3.20/code25.
+2. Baixar pela página `/app`, botão "Baixar Coala Go"; caminho preparado `/app/CoalaGo.apk`, versão 0.3.21/code26.
 3. Instalar em aparelho piloto Android8+ e fazer login com conta de homologação autorizada.
 4. Conferir permissões, fotos, contagem, recebimento, compra/revisão/offline, escala, metas e Signage. Ensaiar câmera, biometria e reinício sem perda da fila.
 5. Homologar Play Integrity: o cadastro Firebase não comprova reconhecimento Play nem libera enforcement. Não enfraquecer o gate para contornar essa configuração.

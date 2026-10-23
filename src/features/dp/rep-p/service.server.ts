@@ -1392,7 +1392,8 @@ export async function listPendingRepPReceipts(context: ServerUserContext, inject
 
 /**
  * Unidades em que o colaborador pode registrar na data, pela abrangência do vínculo histórico.
- * Só leitura: não consulta hora, não toca a ARP e não antecipa se o estabelecimento está habilitado.
+ * Só leitura: consulta a HLB para o relógio informativo, não toca a ARP e não antecipa se o
+ * estabelecimento está habilitado. Hora disponível nunca substitui vínculo, gate ou unidade.
  */
 export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPOwnOptionsSchema.safeParse(raw);
@@ -1403,12 +1404,13 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   if (mode === 'disabled' || !markingAllowedForProfile(context)
     || mode === 'pilot' && !deps.pilotUserIds.has(context.decoded.uid)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
-      mode, journeyLocationEnabled, executionUnits: [], officialClock: null };
+      mode, journeyLocationEnabled, executionUnits: [], officialClock: await readInformationalClock(deps) };
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const,
-    markingEnabled: true as const, mode, journeyLocationEnabled, executionUnits: [], officialClock: null };
+    markingEnabled: true as const, mode, journeyLocationEnabled, executionUnits: [],
+    officialClock: await readInformationalClock(deps) };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
@@ -1431,9 +1433,15 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
   return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, mode, journeyLocationEnabled,
     executionUnits: eligible ? executionUnits : [],
-    officialClock: eligible ? (mode === 'pilot'
+    officialClock: eligible && executionUnits.length ? (mode === 'pilot'
       ? await readPilotClock(deps, executionUnits.find((unit) => unit.timeZone)?.timeZone ?? null)
-      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj)) : null };
+      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj))
+      : await readInformationalClock(deps) };
+}
+
+/** Relógio visual de quem consulta Ponto sem poder bater; nunca participa de uma marcação. */
+async function readInformationalClock(deps: Dependencies) {
+  return readPilotClock(deps, 'America/Belem');
 }
 
 async function readPilotClock(deps: Dependencies, timeZone: string | null) {

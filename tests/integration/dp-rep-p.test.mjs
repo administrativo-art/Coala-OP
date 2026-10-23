@@ -92,7 +92,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.deepEqual(await listOwnRepPExecutionUnits(profileWithoutPoint, { workDate: '2026-10-18' }, {
       ...dependencies, mainDb: { collection() { throw new Error('profile gate touched database'); } },
     }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, mode: 'official', journeyLocationEnabled: false,
-      executionUnits: [], officialClock: null });
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' } });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.
@@ -141,8 +141,11 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       [[employerUnitId, true, 'America/Belem'], [executionUnitId, false, 'America/Manaus']]);
     assert.equal(options.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'observe');
     assert.equal(options.executionUnits.find((unit) => unit.id === employerUnitId).locationPolicy.mode, 'disabled');
-    assert.deepEqual((await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
-      { workDate: '2026-10-18' }, dependencies)).executionUnits, []);
+    assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
+      { workDate: '2026-10-18' }, dependencies), {
+      workDate: '2026-10-18', eligible: false, markingEnabled: true, mode: 'official', journeyLocationEnabled: false,
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' },
+    });
 
     const mobileLocation = { captureId: 'capture-mobile', status: 'captured', capturedAt: '2026-10-18T11:15:40.000Z',
       latitude: -1.4558, longitude: -48.4902, accuracyMeters: 12, elapsedMs: 420 };
@@ -402,6 +405,11 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     ] }; } };
   const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
     markingEnabled: false, pilotEnabled: true, pilotUserIds: new Set([userId]) };
+  assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
+    { workDate: '2026-10-22' }, dependencies), {
+    workDate: '2026-10-22', eligible: false, markingEnabled: false, mode: 'pilot', journeyLocationEnabled: false,
+    executionUnits: [], officialClock: { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Belem' },
+  });
   const activeLocationPolicy = repPLocationPolicyRef(hrDbAdmin, workspaceId, unitId);
   const pilotDayGuard = hrDbAdmin.collection('repP_pilotDayGuards')
     .doc(repPPilotDayGuardId(workspaceId, userId, '2026-10-22'));
@@ -428,6 +436,12 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(options.executionUnits[0].locationPolicy.mode, 'disabled',
       'o ensaio ignora até uma política anterior ativa para o participante');
     assert.deepEqual(options.officialClock, { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Fortaleza' });
+    await unit.delete();
+    assert.deepEqual(await listOwnRepPExecutionUnits(context, { workDate: '2026-10-22' }, dependencies), {
+      workDate: '2026-10-22', eligible: true, markingEnabled: true, mode: 'pilot', journeyLocationEnabled: false,
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Belem' },
+    });
+    await unit.set({ name: 'Unidade Piloto', address: 'Rua do Ensaio, 10', cnpj: '14276603000125', timeZone: 'America/Fortaleza' });
 
     const request = { attemptId: 'pilot-attempt-1', workDate: '2026-10-22', executionUnitId: unitId,
       channel: 'browser', declaredPurpose: 'journey_start', locationAttempt: { captureId: 'ignored-pilot-location',

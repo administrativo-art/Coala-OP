@@ -23,10 +23,12 @@ import com.coalaone.go.R
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import java.time.LocalTime
 
 /**
  * Palette of the prototype with a dark counterpart. The dark header, the brand colours and the
- * "on dark" greys are the same in both themes; surfaces, text and status tints follow the system.
+ * "on dark" greys are the same in both themes; surfaces, text and status tints follow local civil time.
  */
 object Tokens {
     var isDark by mutableStateOf(false)
@@ -53,8 +55,22 @@ val InterfaceFont = FontFamily(listOf(400, 500, 600, 700, 800, 900).map { weight
 })
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 val CodeFont = FontFamily(Font(R.font.jetbrains_mono, variationSettings = FontVariation.Settings(FontVariation.weight(500))))
+fun timeBasedDarkTheme(hour: Int) = hour !in 6..17
+
+@Composable private fun rememberTimeBasedDarkTheme(): Boolean {
+    var hour by remember { mutableIntStateOf(LocalTime.now().hour) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val untilNextMinute = 60_000L - System.currentTimeMillis() % 60_000L
+            delay(untilNextMinute)
+            hour = LocalTime.now().hour
+        }
+    }
+    return timeBasedDarkTheme(hour)
+}
+
 @Composable fun CoalaTheme(content: @Composable () -> Unit) {
-    val night = androidx.compose.foundation.isSystemInDarkTheme()
+    val night = rememberTimeBasedDarkTheme()
     if (Tokens.isDark != night) Tokens.isDark = night
     val scheme = if (night) darkColorScheme(primary = Tokens.accent, onPrimary = Color.White, secondary = Tokens.indigo, background = Tokens.page, onBackground = Tokens.ink, surface = Tokens.surface, onSurface = Tokens.ink, surfaceVariant = Tokens.soft, onSurfaceVariant = Tokens.muted, surfaceContainer = Tokens.surface, surfaceContainerHigh = Tokens.surface, surfaceContainerHighest = Tokens.soft, surfaceContainerLow = Tokens.surface, error = Tokens.danger, outline = Tokens.fieldBorder, outlineVariant = Tokens.border, secondaryContainer = Tokens.accentSoft, onSecondaryContainer = Tokens.ink)
         else lightColorScheme(primary = Tokens.accent, secondary = Tokens.indigo, background = Tokens.page, surface = Color.White, onSurface = Tokens.ink, error = Tokens.danger, outline = Tokens.fieldBorder)

@@ -1,6 +1,6 @@
 # Coala Go — matriz de paridade e homologação
 
-Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.20/code25 mantém a visualização assistida exclusiva do desenvolvimento, com ator real preservado e modo somente leitura, reorganiza Jornada, Registro de ponto, ajustes, detalhe diário, espelhos e solicitações e identifica de forma explícita o ensaio nominal pré-homologação; o acompanhamento periódico Entre unidades permanece desligado por gate jurídico. APK assinado e testes JVM não substituem o aceite em aparelho físico pendente.
+Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.21/code26 mantém a visualização assistida exclusiva do desenvolvimento, com ator real preservado e modo somente leitura, reorganiza Jornada, Registro de ponto, ajustes, detalhe diário, espelhos e solicitações, identifica de forma explícita o ensaio nominal pré-homologação e isola perfil, escala e resumo diário ao alternar a identidade visualizada; o acompanhamento periódico Entre unidades permanece desligado por gate jurídico. APK assinado e testes JVM não substituem o aceite em aparelho físico pendente.
 
 ## Push — incremento local de 15/10/2026
 
@@ -30,7 +30,7 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 | Solicitações (Etapa 7) | `/api/collaborator/absence-requests/options`, `/preview`, `/preparations` (anexos), `POST` rascunho + `PATCH` envio; `/api/collaborator/requests` (vale-transporte); `/api/collaborator/requests/shift-swaps` (opções, lista, proposta e decisão), pelo mesmo contrato central da web; visível com `app.requests.create` + colaborador | `TimeRulesTest`: período, motivo, anexos, VT; `ApiContractTest` e `coala-go-ui-contract.test.ts`: troca central | Câmera/arquivo físico, envio com anexo e troca de turno entre duas contas em ambiente real |
 | Biometria | BiometricPrompt forte; opt-in por UID, cifrado e sem prazo de validade (decisão do responsável em 2026-10-11); pedido automaticamente ao abrir o app bloqueado | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
 | Atestação | `/api/mobile/app-attestation`; package opcional, nonce local e Play Integrity nativo | `mobile-app-attestation.test.ts`: Go/legado/cross-package; `ApiContractTest`: DTO/transporte | Play Integrity com certificado de release e políticas do servidor |
-| Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android. A 0.3.20/code25 é a versão mínima aceita durante o piloto, para impedir que uma instalação antiga oculte recursos já liberados. | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
+| Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android. A 0.3.21/code26 é a versão mínima aceita durante o piloto, para impedir que uma instalação antiga oculte recursos já liberados ou reutilize dados diários de outra identidade visualizada. | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
 
 As suítes JVM ficam em `apps/coala-one-android/app/src/test`; instrumentação em `app/src/androidTest`. Fotos privadas usam o mesmo interceptor autenticado. Header interno de UID esperado é removido antes da rede; teste impede envio de outro usuário e vazamento de token a origem externa. Documentos não passam por backup Android; não há permissão de microfone.
 
@@ -221,6 +221,21 @@ Integrity real, aparelho físico e homologação com conta de produção continu
 gates separados. O APK 0.3.18/code23 foi assinado pelo certificado público
 esperado e tem SHA-256
 `02ce7e62e569fde4dbfeaa5bf994f7a5dcb55bcd4677d19316b5b1679eb6c7e0`.
+
+### Verificação da 0.3.21 (relógio, tema e isolamento da identidade)
+
+O início recarrega a Hora Legal e o turno do dia ao entrar, retomar o app ou
+alternar a identidade visualizada. Perfil, módulos, foto, resumo diário e
+feedback da foto usam a mesma geração de contexto; respostas atrasadas são
+descartadas e pendências locais do ator real não aparecem durante a
+visualização assistida. A identidade persistida é restaurada antes da primeira
+requisição do início. Falha de escala não é apresentada como “sem turno”. O
+tema acompanha a hora local do aparelho: claro das 06:00 às 17:59 e escuro das
+18:00 às 05:59. O APK 0.3.21/code26 foi assinado pelo certificado público
+esperado e tem SHA-256
+`6425a0d7611280892219c06b29e2c45ca201fbe3aae97352928a66719b0040f9`.
+O mesmo release define `minVersionCode=26`, substituindo obrigatoriamente a
+versão que ainda podia reaproveitar o resumo diário de outra identidade.
 
 ### Verificação da 0.3.20 (ensaio nominal identificado)
 

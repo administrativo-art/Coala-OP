@@ -26,12 +26,16 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
 @HiltViewModel class SessionViewModel @Inject constructor(private val auth: AuthGateway, private val gate: SessionGate, val mode: RuntimeMode, private val biometric: BiometricPreferences, private val api: ApiService, private val attestation: AppAttestation, val push: PushController, private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(), private val demoApi: com.coalaone.go.data.DemoApi = com.coalaone.go.data.DemoApi()) : ViewModel() {
     private val mutable = MutableStateFlow(SessionState())
     val state = mutable.asStateFlow()
-    private val developerViewAsMutable = MutableStateFlow(DeveloperViewAsState())
+    // The interceptor restores this same persisted target before the first request. Mirror it in
+    // UI state synchronously so Home never labels target data as belonging to the real actor.
+    private val developerViewAsMutable = MutableStateFlow(DeveloperViewAsState(targetUserId = developerViewAsStore.current()))
     val developerViewAs = developerViewAsMutable.asStateFlow()
     private var stoppedAt = 0L
     init { viewModelScope.launch { auth.identities.collect { identity -> if (!mode.simulation) {
-        if (identity?.email?.trim()?.lowercase() != DEVELOPER_VIEW_AS_EMAIL) { developerViewAsStore.clear(); developerViewAsMutable.value = DeveloperViewAsState() }
+        val developerIdentity = identity?.email?.trim()?.lowercase() == DEVELOPER_VIEW_AS_EMAIL
+        if (!developerIdentity) { developerViewAsStore.clear(); developerViewAsMutable.value = DeveloperViewAsState() }
         mutable.update { it.copy(identity = identity, loading = false, locked = identity == null || !gate.permits(identity.uid)) }; push.reflect(identity?.uid)
+        if (developerIdentity) loadDeveloperViewAs()
     } } } }
     fun login(email: String, password: String) = perform {
         require(BuildConfig.FIREBASE_API_KEY.isNotBlank()) { "Configure o Firebase público deste build antes de entrar." }
@@ -59,6 +63,7 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
         viewModelScope.launch {
             try {
                 val directory = sessionApi().developerViewAs()
+                directory.targetUserId?.let(developerViewAsStore::select) ?: developerViewAsStore.clear()
                 developerViewAsMutable.value = DeveloperViewAsState(true, directory.users, directory.targetUserId, directory.targetUser?.username)
             } catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
             catch (cause: Exception) { developerViewAsMutable.update { it.copy(busy = false, error = Errors.classify(cause).message) } }

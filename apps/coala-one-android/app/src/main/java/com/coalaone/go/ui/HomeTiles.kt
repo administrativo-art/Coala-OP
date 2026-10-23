@@ -85,7 +85,8 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
     }
 }
 
-@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, badge: String? = null, badgeWarm: Boolean = false, onClick: () -> Unit) {
+@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, badge: String? = null,
+    badgeWarm: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
     val visibleBadge = badge ?: pending.takeIf { it > 0 }?.let { if (it == 1) "1 nota" else "$it notas" }
     Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, Tokens.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), colors = CardDefaults.cardColors(containerColor = Tokens.surface)) {
@@ -97,7 +98,7 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
                 visibleBadge?.let { StatusChip(it, if (badgeWarm) Tokens.warning else Tokens.info, if (badgeWarm) Tokens.warningBg else Tokens.infoBg) }
             }
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-            Text(when (route) { "purchase" -> "Notas e compras da unidade"; "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Turnos, folgas e trocas"; "goals" -> "O que falta e o placar da equipe"; "time" -> "Bater ponto e ver registros"; "requests" -> "Ausências, trocas e benefícios"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
+            Text(subtitle ?: when (route) { "purchase" -> "Notas e compras da unidade"; "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Turnos, folgas e trocas"; "goals" -> "O que falta e o placar da equipe"; "time" -> "Bater ponto e ver registros"; "requests" -> "Ausências, trocas e benefícios"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         }
     }
 }
