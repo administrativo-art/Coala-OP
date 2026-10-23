@@ -110,7 +110,7 @@ export function useRepPMarking({ onRecorded, enabled = true }: { onRecorded?: (r
     setRecordError(null);
   }, []);
 
-  const record = useCallback(async () => {
+  const record = useCallback(async (declaredPurpose: "journey_start" | "break_start" | "break_end" | "journey_end") => {
     if (!unitId) return;
     const clock = options?.officialClock;
     const unit = options?.executionUnits.find((candidate) => candidate.id === unitId);
@@ -131,7 +131,7 @@ export function useRepPMarking({ onRecorded, enabled = true }: { onRecorded?: (r
       const result = await request<RepPMarkingPayload>("/api/dp/time-recording/markings", {
         // A data vai no fuso da unidade, o mesmo que o servidor confere; o do aparelho recusaria batidas perto da meia-noite.
         method: "POST", json: { attemptId, workDate: zone ? repPDateInZone(zone) : repPLocalDate(), executionUnitId: unitId,
-          channel: "browser", ...(captured ? { locationAttempt: captured } : {}) },
+          channel: "browser", declaredPurpose, ...(captured ? { locationAttempt: captured } : {}) },
         fallbackError: "Não foi possível registrar o ponto.",
       });
       setLastMarking(result);

@@ -23,7 +23,7 @@ import javax.inject.Inject
 
 data class SessionState(val identity: Identity? = null, val loading: Boolean = true, val locked: Boolean = true, val busy: Boolean = false, val error: String? = null, val resetSent: Boolean = false, val simulation: Boolean = false)
 data class DeveloperViewAsState(val available: Boolean = false, val users: List<DeveloperViewAsUser> = emptyList(), val targetUserId: String? = null, val targetName: String? = null, val busy: Boolean = false, val error: String? = null)
-@HiltViewModel class SessionViewModel @Inject constructor(private val auth: AuthGateway, private val gate: SessionGate, val mode: RuntimeMode, private val biometric: BiometricPreferences, private val api: ApiService, private val attestation: AppAttestation, val push: PushController, private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore()) : ViewModel() {
+@HiltViewModel class SessionViewModel @Inject constructor(private val auth: AuthGateway, private val gate: SessionGate, val mode: RuntimeMode, private val biometric: BiometricPreferences, private val api: ApiService, private val attestation: AppAttestation, val push: PushController, private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(), private val demoApi: com.coalaone.go.data.DemoApi = com.coalaone.go.data.DemoApi()) : ViewModel() {
     private val mutable = MutableStateFlow(SessionState())
     val state = mutable.asStateFlow()
     private val developerViewAsMutable = MutableStateFlow(DeveloperViewAsState())
@@ -54,11 +54,11 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
     fun reset(email: String) = perform { require(email.contains('@')) { "Informe seu e-mail." }; api.reset(ResetRequest(email.trim())); mutable.update { it.copy(resetSent = true) } }
     fun simulate() { mode.simulate(); mutable.value = SessionState(mode.identity(), loading = false, locked = false, simulation = true) }
     fun loadDeveloperViewAs() {
-        if (auth.current?.email?.trim()?.lowercase() != DEVELOPER_VIEW_AS_EMAIL || developerViewAsMutable.value.busy) return
+        if (mutable.value.identity?.email?.trim()?.lowercase() != DEVELOPER_VIEW_AS_EMAIL || developerViewAsMutable.value.busy) return
         developerViewAsMutable.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
-                val directory = api.developerViewAs()
+                val directory = sessionApi().developerViewAs()
                 developerViewAsMutable.value = DeveloperViewAsState(true, directory.users, directory.targetUserId, directory.targetUser?.username)
             } catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
             catch (cause: Exception) { developerViewAsMutable.update { it.copy(busy = false, error = Errors.classify(cause).message) } }
@@ -70,7 +70,7 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
         developerViewAsMutable.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
-                api.startDeveloperViewAs(DeveloperViewAsSelection(user.id))
+                sessionApi().startDeveloperViewAs(DeveloperViewAsSelection(user.id))
                 developerViewAsStore.select(user.id)
                 developerViewAsMutable.update { it.copy(targetUserId = user.id, targetName = user.username, busy = false) }
             } catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
@@ -82,7 +82,7 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
         developerViewAsMutable.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
-                api.stopDeveloperViewAs()
+                sessionApi().stopDeveloperViewAs()
                 developerViewAsStore.clear()
                 developerViewAsMutable.update { it.copy(targetUserId = null, targetName = null, busy = false) }
             } catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
@@ -98,6 +98,7 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
         stoppedAt = 0
         if (!mode.simulation) { push.reflect(auth.current?.uid); push.foreground(auth.current?.uid) }
     }
+    private fun sessionApi() = if (mode.simulation) demoApi else api
     private fun perform(work: suspend () -> Unit) {
         if (mutable.value.busy) return
         mutable.update { it.copy(busy = true, error = null) }

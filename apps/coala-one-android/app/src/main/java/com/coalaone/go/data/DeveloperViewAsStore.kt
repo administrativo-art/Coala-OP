@@ -5,7 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val DEVELOPER_VIEW_AS_EMAIL = "administrativo@cialashakes.com"
+const val DEVELOPER_VIEW_AS_EMAIL = "administrativo@coalashakes.com"
 const val DEVELOPER_VIEW_AS_HEADER = "X-Coala-View-As"
 
 interface DeveloperViewAsSelectionStore {

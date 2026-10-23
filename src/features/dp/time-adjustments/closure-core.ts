@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 export type ClosureAdjustment = {
   id: string; workDate: string; kind: 'include' | 'discard' | 'correct'; status: 'in_review' | 'approved' | 'rejected' | 'cancelled';
   original: { nsr: number; markedAt: string } | null; inclusion: { markedAt: string } | null; reason: string;
+  operations?: Array<{ kind: 'include' | 'discard' | 'correct'; original: { nsr: number; markedAt: string } | null; inclusion: { markedAt: string } | null }>;
   requestedBy: string; requestedAt: string; decidedBy: string | null; decidedAt: string | null; decisionReason: string | null;
 };
 /** Sem motivo nem anexo: a declaração referencia o pedido sem reproduzir dado de saúde. */

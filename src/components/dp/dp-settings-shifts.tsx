@@ -89,7 +89,7 @@ function breakDescription(def: DPShiftDefinition) {
     const window = def.breakWindowStart && def.breakWindowEnd ? ` · janela ${def.breakWindowStart}–${def.breakWindowEnd}` : '';
     return `${BREAK_MODALITY_LABELS[modality]} · ${def.breakDurationMinutes ?? 0} min${window}${pauses}`;
   }
-  return 'Sem intervalo';
+  return 'Configuração antiga sem intervalo · requer ajuste';
 }
 
 const optionalMinutes = (min: number, max: number, message: string) => z.string().refine((value) => {
@@ -125,7 +125,11 @@ const shiftDefSchema = z.object({
     return Number.isInteger(parsed) && parsed >= 2 && parsed <= 12;
   }, 'Informe um número inteiro entre 2 e 12.').optional(),
   executionUnitPolicy: z.enum(['scheduled', 'free']),
+  locationTrackingPolicy: z.enum(['disabled', 'punch_only', 'workday']),
 }).superRefine((value, context) => {
+  if (value.breakModality === 'none') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakModality'], message: 'Todo turno precisa ter um intervalo configurado.' });
+  }
   if (value.breakModality === 'fixed_single' && (!value.breakStart || !value.breakEnd)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe início e fim do intervalo.' });
   }
@@ -149,6 +153,9 @@ const shiftDefSchema = z.object({
   if ((value.breakModality === 'window' || value.breakModality === 'window_multi') && (!value.breakWindowStart || !value.breakWindowEnd)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakWindowStart'], message: 'Informe o início e o fim da janela.' });
   }
+  if (value.locationTrackingPolicy === 'workday' && value.executionUnitPolicy !== 'free') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['locationTrackingPolicy'], message: 'Durante a jornada só pode ser usado no trabalho entre unidades.' });
+  }
 });
 
 type ShiftDefForm = z.infer<typeof shiftDefSchema>;
@@ -163,11 +170,11 @@ function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
     endTime: def?.endTime ?? '',
     breakStart: def?.breakStart ?? '',
     breakEnd: def?.breakEnd ?? '',
-    breakModality: breakModalityOf(def),
+    breakModality: def ? breakModalityOf(def) : 'free',
     breakSegments: def?.breakSegments?.map((segment) => ({ ...segment })) ?? [{ start: '', end: '' }, { start: '', end: '' }],
     breakPauseCount: minutesText(def?.breakPauseCount),
     breakMinPauseMinutes: minutesText(def?.breakMinPauseMinutes),
-    breakDurationMinutes: def?.breakDurationMinutes == null ? '' : String(def.breakDurationMinutes),
+    breakDurationMinutes: def?.breakDurationMinutes == null ? (def ? '' : '60') : String(def.breakDurationMinutes),
     breakWindowStart: def?.breakWindowStart ?? '',
     breakWindowEnd: def?.breakWindowEnd ?? '',
     unitIds: getShiftDefinitionUnitIds(def),
@@ -179,6 +186,7 @@ function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
     overnight: def?.overnight ?? false,
     expectedPunches: def?.expectedPunches == null ? '' : String(def.expectedPunches),
     executionUnitPolicy: def?.executionUnitPolicy ?? 'scheduled',
+    locationTrackingPolicy: def?.locationTrackingPolicy ?? 'punch_only',
   };
 }
 
@@ -246,6 +254,7 @@ export function DPSettingsShifts() {
   const editing = panel?.mode === 'edit' || panel?.mode === 'create';
   const def = panel && panel.mode !== 'create' ? panel.def : null;
   const selectedModality = watch('breakModality');
+  const selectedExecutionUnitPolicy = watch('executionUnitPolicy');
   const segmentFields = useFieldArray({ control, name: 'breakSegments' });
 
   useEffect(() => {
@@ -632,7 +641,7 @@ export function DPSettingsShifts() {
               <div className="flex items-center gap-2">
                 <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Intervalo intrajornada</h3>
                 <InfoTooltip title="Modalidades de intervalo">
-                  <p><strong>Sem intervalo:</strong> o turno não prevê pausa.</p>
+                  <p><strong>Intervalo obrigatório:</strong> todo turno deve ter uma pausa configurada. Se ela não ocorrer excepcionalmente, as batidas continuam válidas e o dia fica para conferência.</p>
                   <p><strong>Fixo único:</strong> um horário definido de início e fim (ex.: 13:00–13:15). A batida avisa a proximidade do início e do fim.</p>
                   <p><strong>Fixo intercalado:</strong> vários horários definidos (ex.: 11:00–11:10 e 15:00–15:10). Cada pausa tem seu aviso.</p>
                   <p><strong>Livre:</strong> só a duração; a pessoa escolhe quando. A batida mostra até que horas o intervalo precisa começar para caber antes do fim do turno.</p>
@@ -642,9 +651,10 @@ export function DPSettingsShifts() {
                   <p><strong>Tolerância:</strong> não fica no turno; vale a tolerância da jornada da pessoa. O mínimo legal continua valendo.</p>
                 </InfoTooltip>
               </div>
-              <Field label="Modalidade" htmlFor="shift-break-modality">
+              <Field label="Modalidade" htmlFor="shift-break-modality" error={errors.breakModality?.message}>
                 <select id="shift-break-modality" className={fieldInputClass} {...register('breakModality')}>
-                  {(Object.keys(BREAK_MODALITY_LABELS) as BreakModality[]).map((key) => <option key={key} value={key}>{BREAK_MODALITY_LABELS[key]}</option>)}
+                  {selectedModality === 'none' ? <option value="none" disabled>Configuração antiga · defina o intervalo</option> : null}
+                  {(Object.keys(BREAK_MODALITY_LABELS) as BreakModality[]).filter((key) => key !== 'none').map((key) => <option key={key} value={key}>{BREAK_MODALITY_LABELS[key]}</option>)}
                 </select>
               </Field>
               {selectedModality === 'fixed_single' ? (
@@ -800,11 +810,19 @@ export function DPSettingsShifts() {
                 </div>
               </Field>
             </div>
-            <Field label="Unidade da batida de ponto" htmlFor="shift-unit-policy"
-              hint="Fixa: a batida já vem com a unidade da escala e a pessoa pode indicar outra, sem bloqueio; o DP confere a troca. Livre: a pessoa escolhe entre as unidades do vínculo (volante).">
+            <Field label="Local de trabalho" htmlFor="shift-unit-policy"
+              hint="Unidade definida usa a unidade da escala. Entre unidades permite escolher somente entre as unidades autorizadas do vínculo.">
               <select id="shift-unit-policy" className={fieldInputClass} {...register('executionUnitPolicy')}>
-                <option value="scheduled">Fixa da escala</option>
-                <option value="free">Livre entre as unidades do vínculo</option>
+                <option value="scheduled">Unidade definida</option>
+                <option value="free">Entre unidades</option>
+              </select>
+            </Field>
+            <Field label="Uso da localização" htmlFor="shift-location-policy" error={errors.locationTrackingPolicy?.message}
+              hint="A localização nunca impede a batida. Durante a jornada é exclusivo do trabalho entre unidades e mantém um indicador técnico silencioso enquanto estiver ativo.">
+              <select id="shift-location-policy" className={fieldInputClass} aria-invalid={!!errors.locationTrackingPolicy} {...register('locationTrackingPolicy')}>
+                <option value="disabled">Não coletar</option>
+                <option value="punch_only">Somente nas batidas</option>
+                <option value="workday" disabled={selectedExecutionUnitPolicy !== 'free'}>Durante a jornada</option>
               </select>
             </Field>
             <Field label="Observações da configuração" htmlFor="shift-notes" requirement="opcional">

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { adjustmentActHash, aejReason, applyTreatments, zonedFiscalTimestamp } from '../../src/features/dp/time-adjustments/core';
+import { createAdjustmentSchema } from '../../src/features/dp/time-adjustments/schemas';
 
 describe('Ajuste de ponto: núcleo', () => {
   it('monta o horário fiscal no fuso da unidade', () => {
@@ -28,5 +29,19 @@ describe('Ajuste de ponto: núcleo', () => {
       { type: 'inclusion', markedAt: '2026-10-19T13:30:00-0300', adjustmentId: 'aj1' },
     ], (item) => ({ receiptId: `inc-${item.adjustmentId}`, markedAt: item.markedAt }));
     assert.deepEqual(result.map((item) => [item.receiptId, item.treatment]), [['a', 'original'], ['b', 'discarded'], ['inc-aj1', 'included']]);
+  });
+
+  it('aceita várias operações do mesmo tipo e mantém o payload antigo compatível', () => {
+    const attemptId = '11111111-1111-4111-8111-111111111111';
+    const multi = createAdjustmentSchema.parse({ attemptId, workDate: '2026-10-19', reason: 'Esqueci duas batidas.', operations: [
+      { kind: 'include', newTime: '08:00', executionUnitId: 'slz' },
+      { kind: 'include', newTime: '12:00', executionUnitId: 'slz' },
+    ] });
+    assert.deepEqual(multi.operations.map((item) => 'newTime' in item ? item.newTime : null), ['08:00', '12:00']);
+    const legacy = createAdjustmentSchema.parse({ attemptId, workDate: '2026-10-19', reason: 'Bati duas vezes.', kind: 'discard', targetReceiptId: 'r1' });
+    assert.deepEqual(legacy.operations, [{ kind: 'discard', targetReceiptId: 'r1' }]);
+    assert.equal(createAdjustmentSchema.safeParse({ attemptId, workDate: '2026-10-19', reason: 'Misturei operações.', operations: [
+      { kind: 'discard', targetReceiptId: 'r1' }, { kind: 'correct', targetReceiptId: 'r2', newTime: '12:00' },
+    ] }).success, false);
   });
 });

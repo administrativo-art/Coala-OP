@@ -1,4 +1,4 @@
-export const DEVELOPER_VIEW_AS_EMAIL = "administrativo@cialashakes.com";
+export const DEVELOPER_VIEW_AS_EMAIL = "administrativo@coalashakes.com";
 export const DEVELOPER_VIEW_AS_HEADER = "x-coala-view-as";
 export const DEVELOPER_VIEW_AS_COOKIE = "coala_dev_view_as";
 export const DEVELOPER_VIEW_AS_MAX_USERS = 250;

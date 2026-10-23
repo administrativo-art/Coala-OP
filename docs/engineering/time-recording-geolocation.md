@@ -1,9 +1,9 @@
 # Especificação técnica do georreferenciamento no registro de ponto
 
-- **Estado:** implementação local concluída para Coala One e Coala Go; ainda não publicada nem ativada em produção.
+- **Estado:** captura pontual implementada; complemento Entre unidades preparado, mas tecnicamente desligado por padrão e proibido para pessoas reais até a decisão formal de privacidade.
 - **Escopo:** Coala One web e Coala Go, com a mesma avaliação no servidor.
 - **Fluxo relacionado:** [Registro de ponto REP-P](flows/dp-time-recording.md).
-- **Última revisão técnica:** 22/10/2026.
+- **Última revisão técnica:** 23/10/2026.
 
 ## Decisões aprovadas em 22/10/2026
 
@@ -17,6 +17,16 @@
 - cláusula LGPD nos documentos da empresa e aditivo para os colaboradores atuais; o aceite informa o tratamento, mas não é usado tecnicamente como consentimento revogável para validar a batida.
 
 A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no `coala-rh`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
+
+## Complemento Entre unidades — preparado e não ativado
+
+A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi preparado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Esse modo não está autorizado para uso real: o backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão é falso, além da política nominal da unidade. Não há ativação automática pela configuração do turno.
+
+Quando e somente quando todos os gates forem aprovados, o Android poderá manter um serviço em primeiro plano durante a jornada, com amostras periódicas no intervalo operacional definido. A pessoa recebe a explicação antes da permissão contextual; o aplicativo não pede localização ao abrir. O ciclo começa após a finalidade declarada `Início da jornada`, pausa em `Início do intervalo`, retoma em `Volta do intervalo` e encerra em `Fim da jornada`, por ação manual sempre disponível, por revogação da política ou por limite de segurança. Alterar uma classificação reconcilia o ciclo; uma sequência ambígua encerra a coleta. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
+
+O servidor é a autoridade da sessão: exige fuso brasileiro explícito na unidade, congela fuso, início e fim escalados, aceita chegada antecipada somente dentro da janela limitada de quatro horas, encerra a tolerância duas horas após o turno, rejeita amostras fora da janela, ordenação invertida, amostra sem início ou durante pausa e qualquer evento depois do encerramento. Cada lote revalida a política. Revogação ou kill switch devolvem instrução terminal: o Android interrompe sensores e indicador sem enfileirar outro evento e elimina os eventos posteriores daquela sessão. Sessões e eventos ficam separados em `dp_journeyLocationSessions` e `dp_journeyLocationEvents`, fora da ARP/PTRP, e só podem apoiar revisão humana.
+
+Antes de mudar o gate para verdadeiro, controlador, encarregado e jurídico precisam aprovar e registrar: finalidade específica; base legal; frequência efetiva; retenção de cinco anos; aviso e transparência; acesso pelo titular; perfis de consulta e auditoria; eliminação e `legalHold`; canal de contestação; e RIPD. Até isso ocorrer, telas e contratos podem demonstrar a opção, mas nenhuma coleta periódica real deve iniciar.
 
 ## Objetivo e decisão principal
 
@@ -42,9 +52,9 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 - TTL de cinco anos para a evidência completa;
 - feature flag global e ativação explícita por unidade.
 
-### Fora do primeiro incremento
+### Fora do primeiro incremento pontual
 
-- rastreamento contínuo, em segundo plano ou fora da ação de bater ponto;
+- rastreamento contínuo, em segundo plano ou fora da ação de bater ponto; o complemento Entre unidades descrito acima pertence a uma rodada posterior e continua desativado;
 - bloqueio da batida por localização;
 - advertência, desconto, falta, ajuste de jornada ou decisão disciplinar automática;
 - biometria, fotografia, reconhecimento facial ou coleta de redes Wi-Fi próximas;
@@ -629,7 +639,7 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 
 ## Critérios de aceite
 
-1. Nenhuma localização é coletada antes da confirmação nem depois da batida.
+1. Na captura pontual, nenhuma localização é coletada antes da confirmação nem depois da batida; no complemento Entre unidades, nenhuma amostra é aceita antes do `start`, durante pausa, depois do `stop` ou fora da janela congelada da escala.
 2. Toda tentativa produz marcação normal mesmo quando a localização está externa ou indisponível, desde que os demais requisitos do REP-P sejam satisfeitos.
 3. Cliente não consegue declarar `inside`, distância, política ou unidade autorizada.
 4. Reenvio do mesmo `attemptId` não duplica batida nem evidência.
@@ -638,7 +648,7 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 7. Coordenadas exatas são server-only e não possuem rota de leitura no piloto; qualquer leitura administrativa futura será autorizada, limitada por unidade e auditada.
 8. Nenhum alerta geográfico gera efeito automático em PTRP, folha, escala, ausência ou disciplina.
 9. Feature flag e política por unidade permitem desligamento sem migração ou perda da marcação.
-10. Retenção, aviso, RIPD, base legal e responsáveis estão aprovados antes do primeiro piloto real.
+10. Retenção, frequência, aviso, acesso do titular, auditoria, eliminação, RIPD, base legal e responsáveis estão aprovados antes do primeiro piloto real; até lá, `DP_JOURNEY_LOCATION_ENABLED` permanece falso.
 11. Doc Brown não identifica requisito não conforme antes do commit da implementação.
 12. O piloto mede precisão e falsos alertas antes de qualquer promoção para conferência.
 
@@ -646,15 +656,15 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 
 | Decisão | Responsável | Necessária antes de |
 | --- | --- | --- |
-| Finalidade e base legal do tratamento | Controlador, encarregado e jurídico | Coleta com pessoas reais |
+| Finalidade, frequência e base legal do tratamento | Controlador, encarregado e jurídico | Coleta com pessoas reais |
 | Suspensão do TTL em caso de litígio (`legalHold`) | Jurídico, DP e privacidade | Primeiro caso concreto de preservação |
 | IDs, unidades e parâmetros reais de Heucilene Ribeiro e Luis | DP e operação | Ativação por unidade |
 | Raio e precisão máxima por unidade | Operação, DP e desenvolvimento | Política `observe` |
-| Acesso do trabalhador às coordenadas e canal de contestação | DP, jurídico e privacidade | Piloto |
+| Acesso do trabalhador às coordenadas, auditoria, eliminação e canal de contestação | DP, jurídico e privacidade | Piloto |
 | Necessidade de mapa externo | Produto e desenvolvimento | Configuração visual |
 | Validação do Coala Go em aparelho real e atestação de release | Produto e desenvolvimento | Piloto móvel |
 
-Pergunta preparada para o advogado: **a coleta pontual de geolocalização, sem bloquear a marcação e usada apenas como evidência para conferência humana, atende ao art. 74 da Portaria MTP nº 671/2021 e às regras aplicáveis às categorias e estabelecimentos do piloto? Quais base legal, transparência, prazo de guarda, acesso do trabalhador e limites de uso disciplinar devem constar da política?**
+Pergunta preparada para o advogado: **a captura pontual e, separadamente, a coleta periódica durante turnos Entre unidades — ambas sem bloquear a marcação e usadas apenas para conferência humana — atendem ao art. 74 da Portaria MTP nº 671/2021 e às regras das categorias e estabelecimentos do piloto? Quais finalidade, base legal, frequência, transparência, prazo de guarda, acesso do trabalhador, auditoria, eliminação e limites de uso disciplinar devem constar da política e do RIPD?**
 
 ## Referências
 

@@ -31,7 +31,7 @@ import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_E
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
-import { repPAfdExportSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
+import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
 const ESTABLISHMENTS = 'repP_establishments';
@@ -501,10 +501,16 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       developerCnpj: current.profile.developerCnpj, employeeName: identity.name, employeeCpf: identity.cpf,
       collectorId, establishmentId, executionUnitId: input.executionUnitId };
     const createdAt = Timestamp.now();
+    const organizationalClassification = input.declaredPurpose ? {
+      classification: { purpose: input.declaredPurpose, source: 'declared', status: 'confirmed', updatedAt: createdAt,
+        updatedBy: context.decoded.uid },
+      classificationHistory: [{ purpose: input.declaredPurpose, source: 'declared', status: 'confirmed', at: createdAt,
+        actorUid: context.decoded.uid }],
+    } : {};
     transaction.create(deps.repDb.collection(RECEIPTS).doc(eventRef.id), { schemaVersion: 1,
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate, status: 'pending', snapshot,
-      attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
+      attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt, ...organizationalClassification });
     return { status: 'recorded' as const, marking: prepared.marking, location: location.summary,
       locationEvidence: location.evidence && location.expiresAt ? {
         evidence: location.evidence, recordedDate: input.workDate, recordedAt: reading.instant,
@@ -681,10 +687,17 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       developerCnpj: current.profile.developerCnpj, employeeName: identity.name, employeeCpf: identity.cpf,
       collectorId: '01', establishmentId, executionUnitId: input.executionUnitId };
     const createdAt = Timestamp.now();
+    const organizationalClassification = input.declaredPurpose ? {
+      classification: { purpose: input.declaredPurpose, source: 'declared', status: 'confirmed', updatedAt: createdAt,
+        updatedBy: context.decoded.uid },
+      classificationHistory: [{ purpose: input.declaredPurpose, source: 'declared', status: 'confirmed', at: createdAt,
+        actorUid: context.decoded.uid }],
+    } : {};
     transaction.create(deps.repDb.collection(RECEIPTS).doc(eventRef.id), { schemaVersion: 1,
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate,
-      status: 'pending', snapshot, attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
+      status: 'pending', snapshot, attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt,
+      ...organizationalClassification });
     return { status: 'recorded' as const, marking: prepared.marking, location: location.summary,
       locationEvidence: location.evidence && location.expiresAt ? {
         evidence: location.evidence, recordedDate: input.workDate,
@@ -911,6 +924,76 @@ export async function listOwnRepPMarkings(context: ServerUserContext, raw: unkno
   return listRepPMarkingsOfPerson(context.workspace_id, context.decoded.uid, raw, injected);
 }
 
+/** Classificação organizacional: nunca altera a marcação fiscal. Em competência fechada vira pedido pendente. */
+export async function classifyOwnRepPMarking(context: ServerUserContext, receiptId: string, raw: unknown,
+  injected: Partial<Dependencies> = {}) {
+  const parsed = repPMarkingClassificationSchema.safeParse(raw);
+  if (!parsed.success) throw fail('REP_P_CLASSIFICATION_INPUT_INVALID', 'Escolha uma classificação válida.');
+  const deps = { ...defaults, ...injected };
+  const receiptRef = deps.repDb.collection(RECEIPTS).doc(receiptId);
+  const now = Timestamp.now();
+  const classification = { purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', updatedAt: now,
+    updatedBy: context.decoded.uid };
+  // Recibo e fechamento são decididos na mesma transação. Assim o mês não pode fechar entre a
+  // conferência e a alteração direta da classificação.
+  return deps.hrDb.runTransaction(async (tx) => {
+    const receipt = await tx.get(receiptRef);
+    if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid) {
+      throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
+    }
+    const workDate = String(receipt.get('recordedDate'));
+    const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${workDate.slice(0, 7)}`);
+    const closure = await tx.get(closureRef);
+    const closureVersion = Number(closure.get('version') ?? 0);
+    const headId = digest([context.workspace_id, context.decoded.uid, receiptId, closureVersion]);
+    const headRef = deps.hrDb.collection('ptrp_markingClassificationRequestHeads').doc(headId);
+    const head = await tx.get(headRef);
+    const activeRequestId = typeof head.get('activeRequestId') === 'string' ? String(head.get('activeRequestId')) : null;
+    const activeRef = activeRequestId ? deps.hrDb.collection('ptrp_markingClassificationRequests').doc(activeRequestId) : null;
+    const active = activeRef ? await tx.get(activeRef) : null;
+    const activePending = Boolean(active?.exists && active.get('status') === 'in_review');
+    const supersedeActive = () => {
+      if (!activeRef || !active || !activePending) return;
+      tx.update(activeRef, { status: 'superseded', version: Number(active.get('version') ?? 0) + 1,
+        updatedAt: now, supersededAt: now, supersededBy: context.decoded.uid });
+    };
+    const currentClassification = receipt.get('classification') as { purpose?: string } | null | undefined;
+    if (currentClassification?.purpose === parsed.data.purpose) {
+      supersedeActive();
+      if (head.exists && activePending) tx.set(headRef, { activeRequestId: null, activePurpose: null, updatedAt: now }, { merge: true });
+      return { classification: receipt.get('classification'), changeStatus: 'applied' as const };
+    }
+    if (closure.exists && closure.get('status') === 'closed') {
+      if (activePending && active?.get('requestedPurpose') === parsed.data.purpose) {
+        return { classification, changeStatus: 'in_review' as const };
+      }
+      supersedeActive();
+      const sequence = Number(head.get('sequence') ?? 0) + 1;
+      const requestRef = deps.hrDb.collection('ptrp_markingClassificationRequests')
+        .doc(digest([headId, sequence, parsed.data.purpose]));
+      const snapshot = receipt.get('snapshot') as RepPReceiptSnapshot;
+      tx.create(requestRef, { id: requestRef.id, headId, requestSequence: sequence,
+        workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+        employeeName: typeof context.userDoc.username === 'string' ? context.userDoc.username.slice(0, 120) : null,
+        receiptId, workDate, competence: workDate.slice(0, 7), unitId: snapshot.executionUnitId,
+        markedAt: snapshot.markedAt, nsr: snapshot.nsr, closureVersion, requestedPurpose: parsed.data.purpose,
+        currentClassification: receipt.get('classification') ?? null, status: 'in_review', version: 1,
+        createdAt: now, updatedAt: now, createdBy: context.decoded.uid });
+      tx.set(headRef, { id: headId, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+        receiptId, workDate, closureVersion, sequence, activeRequestId: requestRef.id,
+        activePurpose: parsed.data.purpose, updatedAt: now }, { merge: false });
+      return { classification, changeStatus: 'in_review' as const };
+    }
+    supersedeActive();
+    if (head.exists && activePending) tx.set(headRef, { activeRequestId: null, activePurpose: null, updatedAt: now }, { merge: true });
+    const history = Array.isArray(receipt.get('classificationHistory')) ? receipt.get('classificationHistory') as unknown[] : [];
+    tx.update(receiptRef, { classification, classificationHistory: [...history.slice(-99), {
+      purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', at: now, actorUid: context.decoded.uid,
+    }] });
+    return { classification, changeStatus: 'applied' as const };
+  });
+}
+
 /** Exporta os comprovantes assinados da própria pessoa e relaciona pendências sem fingir que o pacote está completo. */
 export async function exportOwnRepPReceipts(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPOwnHistorySchema.safeParse(raw);
@@ -958,7 +1041,8 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
     return { receiptId: document.id, workDate: String(document.get('recordedDate')), nsr: receipt.nsr,
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
-      receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null };
+      receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null,
+      classification: document.get('classification') ?? null };
   }).sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
   return { startDate: input.startDate, endDate: input.endDate, markings, truncated: snapshot.size > MAX_HISTORY_MARKINGS };
 }
@@ -1054,13 +1138,15 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const parsed = repPOwnOptionsSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
+  const journeyLocationEnabled = process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
   if (!deps.markingEnabled || !markingAllowedForProfile(context)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
-      executionUnits: [], officialClock: null };
+      journeyLocationEnabled, executionUnits: [], officialClock: null };
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
-  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: true as const, executionUnits: [], officialClock: null };
+  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: true as const,
+    journeyLocationEnabled, executionUnits: [], officialClock: null };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
@@ -1080,7 +1166,8 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
           privacyNoticeUrl: collectorLocation.privacyNoticeUrl } };
     })
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, executionUnits: eligible ? executionUnits : [],
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, journeyLocationEnabled,
+    executionUnits: eligible ? executionUnits : [],
     officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };
 }
 

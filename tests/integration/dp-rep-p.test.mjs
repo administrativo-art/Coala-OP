@@ -90,7 +90,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     { code: 'REP_P_MARKING_PROFILE_DISABLED' });
     assert.deepEqual(await listOwnRepPExecutionUnits(profileWithoutPoint, { workDate: '2026-10-18' }, {
       ...dependencies, mainDb: { collection() { throw new Error('profile gate touched database'); } },
-    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, executionUnits: [], officialClock: null });
+    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, journeyLocationEnabled: false, executionUnits: [], officialClock: null });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.
@@ -315,7 +315,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
     assert.equal(exportAudit.size, 7);
     assert.ok(exportAudit.docs.some((doc) => doc.get('status') === 'archive_failed'));
-    const storedAfd = exportAudit.docs.find((doc) => doc.get('status') === 'exported' && doc.get('sha256') === afd.sha256).data();
+    const expectedSignatureSha = createHash('sha256').update(Buffer.from(afd.signatureBase64, 'base64')).digest('hex');
+    const storedAfd = exportAudit.docs.find((doc) => doc.get('status') === 'exported' && doc.get('sha256') === afd.sha256
+      && doc.get('artifacts.signature.sha256') === expectedSignatureSha).data();
     assert.equal(storedAfd.schemaVersion, 2);
     const afdBundle = fiscalObjects.get(storedAfd.artifacts.bundle.storagePath).bytes;
     const afdEntries = zipEntries(afdBundle);

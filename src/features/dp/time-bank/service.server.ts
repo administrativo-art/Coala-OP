@@ -6,10 +6,10 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPMarkingsForMirror } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
-import { competenceRange, sha256, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
+import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
 import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
 import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
-import { ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
+import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -112,7 +112,10 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
     adjustments: adjustments.docs.map((doc) => doc.data() as AdjustmentRecord).filter((item) => item.status === 'approved').map((item) => ({
       id: item.id, workDate: item.workDate, kind: item.kind, status: item.status,
       original: item.target ? { nsr: item.target.nsr, markedAt: item.target.markedAt } : null,
-      inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null, reason: item.reason,
+      inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null,
+      operations: adjustmentOperations(item).map((operation) => ({ kind: operation.kind,
+        original: operation.target ? { nsr: operation.target.nsr, markedAt: operation.target.markedAt } : null,
+        inclusion: operation.inclusion ? { markedAt: operation.inclusion.markedAt } : null })), reason: item.reason,
       requestedBy: item.employeeUid, requestedAt: item.createdAt, decidedBy: item.decidedBy ?? null, decidedAt: item.decidedAt ?? null, decisionReason: null,
     })),
     absences: absences.docs.map((doc) => doc.data() as AbsenceRequestRecord)
@@ -141,7 +144,9 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
   if (arp.truncated || month.truncated) throw fail('PTRP_BANK_MONTH_TRUNCATED', 'O mês tem batidas ou turnos demais para apurar com segurança. Fale com o desenvolvimento.', 'CONFLICT');
   // Ajustes aprovados da declaração: desconsideram originais e incluem batidas, como no espelho.
   const approved = (declaration?.adjustments ?? []).filter((item) => item.status === 'approved');
-  const discarded = new Set(approved.filter((item) => item.original && item.kind !== 'include').map((item) => `${item.original!.nsr}|${item.original!.markedAt}`));
+  const operations = (item: ClosureAdjustment) => item.operations?.length ? item.operations : [{ kind: item.kind, original: item.original, inclusion: item.inclusion }];
+  const discarded = new Set(approved.flatMap((item) => operations(item).filter((operation) => operation.original && operation.kind !== 'include')
+    .map((operation) => `${operation.original!.nsr}|${operation.original!.markedAt}`)));
   // Efeito da ausência vem do tipo congelado no pedido; a declaração não guarda motivo nem anexo.
   const absenceIds = (declaration?.absences ?? []).filter((item) => item.status === 'approved').map((item) => item.id).slice(0, 200);
   const absenceDocs = absenceIds.length ? await deps.hrDb.getAll(...absenceIds.map((id) => deps.hrDb.collection(ABSENCES).doc(id))) : [];
@@ -165,7 +170,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     } : null;
     const markings = [
       ...datedMarkings.filter((item) => item.bankWorkDate === date && !discarded.has(`${item.nsr}|${item.markedAt}`)).map((item) => item.markedAt),
-      ...approved.filter((item) => item.workDate === date && item.inclusion).map((item) => item.inclusion!.markedAt),
+      ...approved.filter((item) => item.workDate === date).flatMap((item) => operations(item))
+        .filter((operation) => operation.inclusion).map((operation) => operation.inclusion!.markedAt),
     ].sort((left, right) => fiscalMs(left) - fiscalMs(right));
     const policy = policyOn(date);
     if (policy) usedPolicies.set(`${policy.id}:${policy.version}`, { id: policy.id, version: policy.version });

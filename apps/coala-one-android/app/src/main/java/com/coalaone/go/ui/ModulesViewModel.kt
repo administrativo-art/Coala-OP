@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.update
 import java.time.LocalDate
 import javax.inject.Inject
 
-data class ModulesState(val schedules: Map<String, MonthSchedule> = emptyMap(), val day: LocalDate = LocalDate.now(), val selectedScheduleUnit: String = Rules.ALL_UNITS, val onlyMine: Boolean = false, val goalUnits: List<UnitRef> = emptyList(), val goals: UnitGoals? = null, val goalsOverview: GoalsOverview? = null, val signage: SignageUnits? = null, val paired: PairResponse? = null)
+data class ModulesState(val schedules: Map<String, MonthSchedule> = emptyMap(), val day: LocalDate = LocalDate.now(), val selectedScheduleUnit: String = Rules.ALL_UNITS, val onlyMine: Boolean = false,
+    val absenceOptions: AbsenceOptions? = null, val absences: List<AbsenceRequestRow> = emptyList(), val shiftSwapOptions: ShiftSwapOptions? = null, val shiftSwaps: List<ShiftSwapRequest> = emptyList(), val scheduleContextLoaded: Boolean = false,
+    val goalUnits: List<UnitRef> = emptyList(), val goals: UnitGoals? = null, val goalsOverview: GoalsOverview? = null, val signage: SignageUnits? = null, val paired: PairResponse? = null)
 @HiltViewModel class ModulesViewModel @Inject constructor(private val repository: ApiRepository) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(ModulesState())
     val state = mutable.asStateFlow()
@@ -20,7 +22,15 @@ data class ModulesState(val schedules: Map<String, MonthSchedule> = emptyMap(), 
             val key = "%04d-%02d".format(year, month)
             if (key !in schedules) schedules = schedules + (key to repository.api.schedule(year, month))
         }
-        mutable.update { it.copy(schedules = schedules, day = day) }
+        var next = mutable.value.copy(schedules = schedules, day = day)
+        if (!next.scheduleContextLoaded) {
+            val absenceOptions = try { repository.api.absenceOptions() } catch (_: Exception) { null }
+            val absences = try { repository.api.absences().requests } catch (_: Exception) { emptyList() }
+            val swapOptions = try { repository.api.shiftSwapOptions() } catch (_: Exception) { null }
+            val swaps = try { repository.api.shiftSwaps().requests } catch (_: Exception) { emptyList() }
+            next = next.copy(absenceOptions = absenceOptions, absences = absences, shiftSwapOptions = swapOptions, shiftSwaps = swaps, scheduleContextLoaded = true)
+        }
+        mutable.value = next
     }
     fun refreshSchedule() { mutable.update { it.copy(schedules = emptyMap()) }; schedule() }
     fun scheduleFilter(unitId: String, onlyMine: Boolean) { mutable.update { it.copy(selectedScheduleUnit = unitId, onlyMine = onlyMine) } }

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.coalaone.go.BuildConfig
 import com.coalaone.go.domain.Rules
+import com.coalaone.go.domain.TimeRules
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -46,7 +47,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         Box(Modifier.size(34.dp).background(Tokens.surface, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
     }
 }
-@Composable fun ScheduleScreen(vm: ModulesViewModel, onBack: () -> Unit) {
+@Composable fun ScheduleScreen(vm: ModulesViewModel, onBack: () -> Unit, onRequestAbsence: (String) -> Unit, onRequestSwap: (String) -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     // Every visit starts on "Todas as unidades"; a rotation keeps the unit picked during the visit.
     var opened by rememberSaveable { mutableStateOf(false) }
@@ -153,6 +154,40 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                         Text(scheduleShiftDisplayName(shift.shiftName), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp), textAlign = TextAlign.End, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
+            }
+            val date = day.toString()
+            val ownShift = mine(day)
+            val absences = state.absences.filter { it.input.startDate <= date && it.input.endDate >= date }
+            val swaps = state.shiftSwaps.filter { it.offeredShift.date == date || it.requestedShift.date == date }
+            val absenceOptions = state.absenceOptions
+            val canAskAbsence = absenceOptions?.capabilities?.canCreate == true && absenceOptions.absenceTypes.isNotEmpty()
+            val canAskSwap = ownShift?.type == "work" && state.shiftSwapOptions?.ownShifts.orEmpty().any { offered ->
+                offered.date == date && state.shiftSwapOptions?.candidateShifts.orEmpty().any { candidate ->
+                    candidate.scheduleId == offered.scheduleId && candidate.unitId == offered.unitId && candidate.date == offered.date
+                }
+            }
+            CardBlock(selected = absences.isNotEmpty() || swaps.isNotEmpty()) {
+                Text("Solicitações deste dia", style = MaterialTheme.typography.titleMedium)
+                Text("Ausências e trocas ficam ligadas ao dia escolhido. Vale-transporte permanece em Solicitações.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                absences.forEach { request ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(request.typeName, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        StatusChip(TimeRules.ABSENCE_STATUS[request.status] ?: request.status,
+                            if (request.status == "approved") Tokens.okInk else Tokens.warning,
+                            if (request.status == "approved") Tokens.okBg else Tokens.warningBg)
+                    }
+                }
+                swaps.forEach { request ->
+                    val label = when (request.status) { "pending" -> "Troca em análise"; "accepted" -> "Troca aceita"; "rejected" -> "Troca recusada"; "cancelled" -> "Troca cancelada"; else -> "Troca atualizada" }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("${request.offeredShift.startTime}–${request.offeredShift.endTime} ⇄ ${request.requestedShift.startTime}–${request.requestedShift.endTime}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        StatusChip(label, if (request.status == "accepted") Tokens.okInk else Tokens.warning,
+                            if (request.status == "accepted") Tokens.okBg else Tokens.warningBg)
+                    }
+                }
+                Action("Solicitar ausência", secondary = true, enabled = canAskAbsence && !feedback.busy) { onRequestAbsence(date) }
+                if (ownShift?.type == "work") Action("Solicitar troca de turno", secondary = true, enabled = canAskSwap && !feedback.busy) { onRequestSwap(date) }
+                if (ownShift?.type == "work" && !canAskSwap) Text("Não há outro turno elegível para troca neste dia.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

@@ -18,9 +18,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 import { buildMonthView, type DayAbsence, type DayMarking, type DayShift, type DayView, type DayIncident } from "./day-model";
-import { AbsencesAndAlerts, DAY_GRID, DayCard, DayPanel, INCIDENTS, type ReceiptActions } from "./day-list";
+import { AbsencesAndAlerts, DAY_GRID, DayCard, DayPanel, INCIDENTS, type ClassificationActions, type ReceiptActions } from "./day-list";
 import { saveFile } from "./marking-ui";
-import { hm, RecordStrip } from "./record-strip";
+import { hm, RecordStrip, type MarkingPurpose } from "./record-strip";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
 
 type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
@@ -238,6 +238,15 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
   }
   const receipts: ReceiptActions = { busyReceipt, canShare, error: receiptError, open: (item) => void openReceipt(item),
     share: (item) => void shareReceipt(item), retry: (id) => void retryReceipt(id) };
+  const classifications: ClassificationActions = {
+    async change(receiptId: string, purpose: MarkingPurpose) {
+      const result = await request<{ changeStatus: "applied" | "in_review" }>(
+        `/api/dp/time-recording/markings/${encodeURIComponent(receiptId)}/classification`,
+        { method: "PATCH", json: { purpose }, fallbackError: "Não foi possível alterar a classificação." });
+      setReloadKey((current) => current + 1);
+      return result;
+    },
+  };
 
   if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para consultar este registro de ponto.</p>;
 
@@ -359,7 +368,7 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
         </div>
       </div>
       <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
-        today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} onClose={() => setOpenDate(null)}
+        today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications} onClose={() => setOpenDate(null)}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
