@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, Info } from "lucide-react";
+import Link from "next/link";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { BackButton } from "@/components/navigation/back-button";
@@ -52,7 +53,10 @@ function addDays(date: string, days: number) {
   return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = {}) {
+export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
+  employeeUid?: string;
+  initialView?: "records" | "time-bank";
+} = {}) {
   const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const readOnly = Boolean(employeeUid);
   const canReadOthers = isDefaultAdmin || permissions.dp?.timeRecording?.view === true
@@ -247,6 +251,9 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
       return result;
     },
   };
+  const baseHref = employeeUid
+    ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}/time-recording`
+    : "/dashboard/collaborator/time-recording";
 
   if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para consultar este registro de ponto.</p>;
 
@@ -256,17 +263,49 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
         <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
           label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="ghost" size="sm" className="-ml-2" />
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Registro de ponto</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">{initialView === "time-bank" ? "Banco de horas" : "Registro de ponto"}</h1>
           {readOnly ? <p className="text-sm font-semibold text-ds-ink-muted">{employeeName ?? "Colaborador"}</p> : null}
         </div>
       </header>
 
+      <nav className="flex w-fit items-center gap-1 rounded-ds-md border border-ds-border bg-ds-surface p-1" aria-label="Ponto e banco de horas">
+        <Link href={baseHref} className={cn("rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors",
+          initialView === "records" ? "bg-ds-ink text-white" : "text-ds-ink-muted hover:bg-ds-warm hover:text-ds-ink")}>Registro de ponto</Link>
+        <Link href={`${baseHref}?view=time-bank`} className={cn("rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors",
+          initialView === "time-bank" ? "bg-ds-ink text-white" : "text-ds-ink-muted hover:bg-ds-warm hover:text-ds-ink")}>Banco de horas</Link>
+      </nav>
+
+      {initialView === "time-bank" ? (
+        <>
+          {readOnly ? (
+            <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
+              <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
+              <p><strong className="text-ds-ink">Modo de conferência.</strong> O DP pode consultar e analisar o extrato, mas não registra batidas em nome do colaborador.</p>
+            </div>
+          ) : null}
+          <section id="banco-de-horas" className="scroll-mt-28 space-y-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-ds-ink">Resumo e extrato detalhado</h2>
+              <p className="text-sm text-ds-ink-muted">Saldo, créditos, débitos, dias em revisão, ciclo vigente e cada lançamento que compõe o banco.</p>
+            </div>
+            <TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} detailed />
+          </section>
+        </>
+      ) : (
+        <>
       {readOnly ? (
         <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
           <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
           <p><strong className="text-ds-ink">Modo de conferência.</strong> Esta tela permite analisar escala, batidas, ausências, ajustes, alertas e saldo. Ela não registra ponto em nome do colaborador.</p>
         </div>
-      ) : <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />}
+      ) : <>
+        {options?.mode === "pilot" ? (
+          <div className="rounded-ds-card border border-ds-warn/20 bg-ds-warn-bg px-4 py-3 text-sm text-ds-warn">
+            <strong>Ensaio controlado.</strong> As batidas aparecem aqui e na prévia do banco de horas, mas ficam fora do fechamento, do AFD e do AEJ.
+          </div>
+        ) : null}
+        <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />
+      </>}
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
@@ -373,7 +412,7 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
         onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} />
-      {adjustDate && !readOnly ? (
+      {adjustDate && !readOnly && !days.find((day) => day.date === adjustDate)?.allMarkings.some((item) => item.pilot) ? (
         <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
           originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
           onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />
@@ -389,6 +428,8 @@ export function MyTimeRecordingPage({ employeeUid }: { employeeUid?: string } = 
       })() : null}
       {!readOnly ? <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
         firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} /> : null}
+        </>
+      )}
     </PageContainer>
   );
 }

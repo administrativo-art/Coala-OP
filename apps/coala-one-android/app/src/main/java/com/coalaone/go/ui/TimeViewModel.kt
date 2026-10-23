@@ -60,10 +60,14 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         } } }
     }
 
-    private suspend fun refreshPermit(workDate: String, elapsed: Long) {
+    private suspend fun refreshPermit(options: TimeOptions, elapsed: Long) {
+        if (options.mode == "pilot") {
+            mutable.update { it.copy(offlineIssue = null) }
+            return
+        }
         val uid = auth.current?.uid ?: return
         try {
-            val request = offlineQueue.permitRequest(uid, workDate, elapsed) ?: return
+            val request = offlineQueue.permitRequest(uid, options.workDate, elapsed) ?: return
             offlineQueue.savePermit(uid, api.offlinePermit(request).permit)
             mutable.update { it.copy(offlineIssue = null) }
         } catch (cause: CancellationException) { throw cause }
@@ -81,7 +85,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
             mutable.update { state -> state.copy(options = options, clockOffset = offset, today = today,
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
             reconcileJourneyAvailability(options)
-            refreshPermit(options.workDate, elapsed)
+            refreshPermit(options, elapsed)
             readMonth(mutable.value.month)
         } catch (cause: IOException) {
             val uid = auth.current?.uid ?: throw cause
@@ -99,7 +103,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val elapsed = android.os.SystemClock.elapsedRealtime()
         mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, elapsed)) }
         reconcileJourneyAvailability(options)
-        refreshPermit(options.workDate, elapsed)
+        refreshPermit(options, elapsed)
     }
     private suspend fun readMonth(month: YearMonth) {
         val (start, end) = TimeRules.monthRange(month)
@@ -118,6 +122,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
         var state = mutable.value
         if (!online) {
+            require(state.options?.mode != "pilot") { "O ensaio pré-homologação exige conexão com a internet." }
             val uid = auth.current?.uid ?: error("Sessão expirada.")
             val unitId = state.unitId ?: error("Escolha a unidade.")
             val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
@@ -189,19 +194,21 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     fun dismissLast() { mutable.update { it.copy(last = null) } }
     fun dismissOffline() { mutable.update { it.copy(lastOffline = null) } }
     /** Downloads the PDF into the app cache (never shared storage) and hands the file to the screen to open or share. */
-    fun receipt(receiptId: String, markedAt: String, nsr: Long, directory: File, then: (File) -> Unit) = serverRun {
+    fun receipt(receiptId: String, markedAt: String, nsr: Long, pilot: Boolean, directory: File, then: (File) -> Unit) = serverRun {
         val file = withContext(Dispatchers.IO) {
             val folder = File(directory, "receipts").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
-            File(folder, TimeRules.receiptFileName(markedAt, nsr)).also { target -> api.receipt(receiptId).use { body -> target.outputStream().use { body.byteStream().copyTo(it) } } }
+            File(folder, TimeRules.receiptFileName(markedAt, nsr, pilot)).also { target -> api.receipt(receiptId).use { body -> target.outputStream().use { body.byteStream().copyTo(it) } } }
         }
         then(file)
     }
-    /** Exports the selected month's original signed receipts plus the server-generated completeness index. */
+    /** Exports only official signed receipts; pilot receipts remain individually available and visibly non-official. */
     fun receiptArchive(directory: File, then: (File) -> Unit) = serverRun {
         val state = mutable.value
         require(!state.truncated) { "O mês tem registros demais. Escolha um período menor no Coala One." }
+        val officialMarkings = state.markings.filterNot { it.pilot }
+        require(officialMarkings.isNotEmpty()) { "Não há comprovantes oficiais neste mês. Os comprovantes do ensaio são baixados em cada batida." }
         val (start, end) = TimeRules.monthRange(state.month)
-        val complete = state.markings.all { it.receiptStatus == "available" }
+        val complete = officialMarkings.all { it.receiptStatus == "available" }
         val fileName = "comprovantes-ponto-$start-a-$end-${if (complete) "completo" else "incompleto"}.zip"
         then(cacheFile(directory, "time-documents", fileName, api.receiptArchive(start, end)))
     }

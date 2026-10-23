@@ -7,7 +7,8 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 import { resolveEmploymentReferenceForSystem } from '@/features/dp/employment-reference/service.server';
 import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
-import { readOwnRepPReceiptForAdjustment, repPEstablishmentForEmployer } from '@/features/dp/rep-p/service.server';
+import { readOwnRepPReceiptForAdjustment, REP_P_PILOT_DAY_GUARDS, repPEstablishmentForEmployer,
+  repPPilotDayGuardId } from '@/features/dp/rep-p/service.server';
 import { repPMarkingTimeZone } from '@/features/dp/rep-p/time-zones';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -30,6 +31,7 @@ export const CLOSURES = 'ptrp_competenceClosures';
 export const AEJ_EXPORTS = 'ptrp_aejExports';
 const REVIEW_LIMIT = 50;
 const MONTH_LIMIT = 200;
+const PILOT_MARKINGS = 'repP_pilotMarkings';
 
 export type AdjustmentOperationRecord = {
   kind: AdjustmentKind;
@@ -85,6 +87,22 @@ async function hasActiveDiscard(hrDb: Firestore, workspaceId: string, receiptId:
   return !found.empty;
 }
 
+function pilotMarkingsOnDay(repDb: Firestore, workspaceId: string, employeeUid: string, workDate: string) {
+  return repDb.collection(PILOT_MARKINGS).where('workspaceId', '==', workspaceId)
+    .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(1);
+}
+
+function guardReservesPilotDomain(snapshot: FirebaseFirestore.DocumentSnapshot) {
+  return snapshot.exists && snapshot.get('domain') !== 'adjustment';
+}
+
+async function assertNoPilotMarkingForDay(repDb: Firestore, workspaceId: string, employeeUid: string, workDate: string) {
+  if (!(await pilotMarkingsOnDay(repDb, workspaceId, employeeUid, workDate).get()).empty) {
+    throw fail('PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
+      'Batidas de ensaio não aceitam ajuste formal. Altere somente a classificação da batida.', 'CONFLICT');
+  }
+}
+
 function canReview(context: ServerUserContext) {
   return context.isDefaultAdmin || context.permissions.dp?.requests?.review === true;
 }
@@ -129,6 +147,7 @@ function comparableOperations(value: AdjustmentRecord) {
 /** Pedido do próprio titular: valida vínculo, batida alvo e competência aberta; grava o primeiro ato encadeado. */
 export async function createOwnAdjustment(context: ServerUserContext, input: CompatibleAdjustmentInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
+  await assertNoPilotMarkingForDay(deps.repDb, context.workspace_id, context.decoded.uid, input.workDate);
   const requestedOperations = inputOperations(input);
   const requestDigest = digest({ workDate: input.workDate, operations: requestedOperations, reason: input.reason });
   const docId = digest(['adjustment', context.workspace_id, context.decoded.uid, input.attemptId]);
@@ -208,7 +227,15 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Com
     createdAt: at, updatedAt: at,
   };
   const saved = await deps.hrDb.runTransaction(async (tx) => {
-    const [again, closure] = await Promise.all([tx.get(ref), tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.workDate)))]);
+    const pilotQuery = pilotMarkingsOnDay(deps.repDb, context.workspace_id, context.decoded.uid, input.workDate);
+    const pilotDayGuard = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+      .doc(repPPilotDayGuardId(context.workspace_id, context.decoded.uid, input.workDate));
+    const [again, closure, pilotMarkings, pilotGuard] = await Promise.all([
+      tx.get(ref),
+      tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.workDate))),
+      tx.get(pilotQuery),
+      tx.get(pilotDayGuard),
+    ]);
     if (again.exists) {
       const stored = again.data() as AdjustmentRecord;
       if (stored.workspaceId === context.workspace_id && stored.employeeUid === context.decoded.uid
@@ -216,6 +243,13 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Com
       throw fail('PTRP_ADJUSTMENT_ATTEMPT_CONFLICT', 'Pedido já registrado.', 'CONFLICT');
     }
     if (closure.exists && closure.get('status') === 'closed') throw fail('PTRP_COMPETENCE_CLOSED', 'Esta competência já foi fechada; não aceita pedido de ajuste.', 'CONFLICT');
+    if (!pilotMarkings.empty || guardReservesPilotDomain(pilotGuard)) {
+      throw fail('PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
+        'Batidas de ensaio não aceitam ajuste formal. Altere somente a classificação da batida.', 'CONFLICT');
+    }
+    tx.set(pilotDayGuard, { schemaVersion: 1, mode: 'exclusion', domain: 'adjustment',
+      workspaceId: context.workspace_id, employeeId: context.decoded.uid, workDate: input.workDate,
+      updatedAt: Timestamp.fromDate(new Date(at)) }, { merge: true });
     tx.create(ref, value);
     return value;
   });
@@ -358,7 +392,14 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
   }
   if (discardTaken) throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por outro ajuste aprovado.', 'CONFLICT');
   const result = await deps.hrDb.runTransaction(async (tx) => {
-    const [snapshot, closure] = await Promise.all([tx.get(ref), tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, current.workDate)))]);
+    const pilotDayGuard = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+      .doc(repPPilotDayGuardId(context.workspace_id, current.employeeUid, current.workDate));
+    const [snapshot, closure, pilotMarkings, pilotGuard] = await Promise.all([
+      tx.get(ref),
+      tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, current.workDate))),
+      tx.get(pilotMarkingsOnDay(deps.repDb, context.workspace_id, current.employeeUid, current.workDate)),
+      tx.get(pilotDayGuard),
+    ]);
     const value = snapshot.data() as AdjustmentRecord;
     if (input.action !== 'cancel' && closure.exists && closure.get('status') === 'closed') {
       throw fail('PTRP_COMPETENCE_CLOSED', 'Esta competência já foi fechada.', 'CONFLICT');
@@ -366,6 +407,10 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
     if (value.status !== 'in_review') throw fail('PTRP_ADJUSTMENT_NOT_PENDING', 'Este pedido já foi decidido.', 'CONFLICT');
     if (value.version !== input.expectedVersion) throw fail('PTRP_ADJUSTMENT_VERSION_CONFLICT', 'O pedido mudou. Atualize e tente de novo.', 'CONFLICT');
     const action = input.action === 'approve' ? 'approved' as const : input.action === 'reject' ? 'rejected' as const : 'cancelled' as const;
+    if (action === 'approved' && (!pilotMarkings.empty || guardReservesPilotDomain(pilotGuard))) {
+      throw fail('PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
+        'Batidas de ensaio não aceitam ajuste formal. Recuse este pedido e trate o registro oficial vigente.', 'CONFLICT');
+    }
     const act = { action, actorUid: context.decoded.uid, role: isOwner ? 'titular' as const : 'reviewer' as const, at, clockSource,
       ...('reason' in input ? { reason: input.reason } : {}) };
     const previousHash = value.acts.at(-1)?.hash ?? null;

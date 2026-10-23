@@ -177,10 +177,64 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
   // Pedido pendente numa competência que fecha não pode mais ser decidido.
   const pending = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-10-15', kind: 'include', newTime: '08:00',
     reason: 'Esqueci de bater a entrada.' }, deps);
+  const pilotOnPendingDay = hrDbAdmin.collection('repP_pilotMarkings').doc(`${prefix}-pilot-pending`);
+  await pilotOnPendingDay.set({ workspaceId, employeeId: userId, recordedDate: '2026-10-15' });
+  await assert.rejects(decideAdjustment(reviewer, pending.id, { action: 'approve', expectedVersion: 1, reason: 'Conferido com a gerente.' }, deps),
+    { code: 'PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN' });
+  await pilotOnPendingDay.delete();
   await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-10`).set({ status: 'closed' });
   await assert.rejects(decideAdjustment(reviewer, pending.id, { action: 'approve', expectedVersion: 1, reason: 'Conferido com a gerente.' }, deps),
     { code: 'PTRP_COMPETENCE_CLOSED' });
   await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-10`).delete();
+
+  const pilotDay = hrDbAdmin.collection('repP_pilotMarkings').doc(`${prefix}-pilot-create`);
+  await pilotDay.set({ workspaceId, employeeId: userId, recordedDate: '2026-10-14' });
+  await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-10-14', kind: 'include', newTime: '08:00',
+    reason: 'A API também deve bloquear inclusão sem alvo no dia de ensaio.' }, deps),
+  { code: 'PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN' });
+  await pilotDay.delete();
+
+  // Uma batida que entra depois da consulta inicial ainda é percebida dentro da transação de criação.
+  let releaseClock;
+  let announceClock;
+  const clockReleased = new Promise((resolve) => { releaseClock = resolve; });
+  const clockReached = new Promise((resolve) => { announceClock = resolve; });
+  const concurrentPilotDay = hrDbAdmin.collection('repP_pilotMarkings').doc(`${prefix}-pilot-concurrent-create`);
+  const concurrentCreation = createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-10-13', kind: 'include', newTime: '08:00',
+    reason: 'A transação deve perceber a batida criada durante a solicitação.' }, { ...deps, clock: { async read() {
+      announceClock();
+      await clockReleased;
+      return { instant: new Date('2026-10-17T12:00:00.000Z') };
+    } } });
+  await clockReached;
+  await concurrentPilotDay.set({ workspaceId, employeeId: userId, recordedDate: '2026-10-13' });
+  releaseClock();
+  await assert.rejects(concurrentCreation, { code: 'PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN' });
+  await concurrentPilotDay.delete();
+
+  // A aprovação também relê a trava: uma reserva concorrente do domínio piloto vence a decisão formal.
+  const approvalRaceDate = '2026-10-12';
+  const approvalRace = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: approvalRaceDate,
+    kind: 'include', newTime: '08:00', reason: 'Pedido usado para provar exclusão mútua na aprovação.' }, deps);
+  const { repPPilotDayGuardId } = await import('../../src/features/dp/rep-p/service.server.ts');
+  const approvalRaceGuard = hrDbAdmin.collection('repP_pilotDayGuards')
+    .doc(repPPilotDayGuardId(workspaceId, userId, approvalRaceDate));
+  let releaseApprovalClock;
+  let announceApprovalClock;
+  const approvalClockReleased = new Promise((resolve) => { releaseApprovalClock = resolve; });
+  const approvalClockReached = new Promise((resolve) => { announceApprovalClock = resolve; });
+  const concurrentApproval = decideAdjustment(reviewer, approvalRace.id,
+    { action: 'approve', expectedVersion: 1, reason: 'A aprovação deve perder para o domínio piloto.' }, { ...deps, clock: { async read() {
+      announceApprovalClock();
+      await approvalClockReleased;
+      return { instant: new Date('2026-10-17T12:00:00.000Z') };
+    } } });
+  await approvalClockReached;
+  await approvalRaceGuard.set({ schemaVersion: 1, mode: 'pilot', domain: 'pilot', workspaceId,
+    employeeId: userId, workDate: approvalRaceDate, updatedAt: new Date().toISOString() });
+  releaseApprovalClock();
+  await assert.rejects(concurrentApproval, { code: 'PTRP_PILOT_DAY_ADJUSTMENT_FORBIDDEN' });
+  await approvalRaceGuard.delete();
 
   // Competência fechada não aceita pedido.
   await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-09`).set({ status: 'closed' });

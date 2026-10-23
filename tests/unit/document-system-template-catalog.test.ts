@@ -27,7 +27,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 17);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 18);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Financeiro e recibos", "Uniformes"].sort(),
@@ -36,6 +36,10 @@ test("catálogo reúne base institucional, uniformes, kit admissional e comprova
   assert.equal(repPReceipt?.renderer, "rep_p_receipt");
   assert.equal(repPReceipt?.generationMode, "contextual");
   assert.equal(repPReceipt?.sourceModule, "time_recording");
+  const pilotReceipt = systemDocumentTemplateById("system-rep-p-pilot-receipt");
+  assert.equal(pilotReceipt?.renderer, "rep_p_pilot_receipt");
+  assert.equal(pilotReceipt?.generationMode, "contextual");
+  assert.equal(pilotReceipt?.sourceModulePath, "src/features/dp/rep-p/pilot-receipt.ts");
   const mirror = systemDocumentTemplateById("system-ptrp-time-mirror");
   assert.equal(mirror?.renderer, "time_mirror");
   assert.equal(mirror?.generationMode, "contextual");
@@ -215,7 +219,7 @@ test("identificadores do catálogo são únicos e só os documentos de ponto dis
   assert.deepEqual(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.letterheadVersion !== "coala-letterhead-v2")
       .map((template) => template.id),
-    ["system-rep-p-marking-receipt", "system-ptrp-time-mirror"],
+    ["system-rep-p-marking-receipt", "system-rep-p-pilot-receipt", "system-ptrp-time-mirror"],
   );
 });
 

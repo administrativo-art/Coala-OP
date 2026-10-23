@@ -261,7 +261,8 @@ export function DayPanel({ day, today, unitNames, receipts, classifications, onC
                   <strong className="font-ds-mono text-base">{fiscalClock(marking.markedAt)}</strong>
                   <span className="text-ds-ink-muted"> · {marking.classification ? purposeLabel(marking.classification.purpose) : suggestedLabel(index, expected)}</span>
                 </p>
-                <p className="text-xs text-ds-ink-muted">NSR {marking.nsr} · {unitNames.get(marking.executionUnitId) ?? "Unidade do registro"}</p>
+                <p className="text-xs text-ds-ink-muted">{marking.pilot ? `Ensaio · sequência ${marking.nsr}` : `NSR ${marking.nsr}`} · {unitNames.get(marking.executionUnitId) ?? "Unidade do registro"}</p>
+                {marking.pilot ? <p className="text-xs font-semibold text-ds-warn">Não entra no fechamento oficial.</p> : null}
                 <div className="flex flex-wrap items-center gap-2">
                   <ReceiptPill status={marking.receiptStatus} />
                   {marking.receiptStatus === "available" && receipts ? (
