@@ -544,6 +544,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   );
 
   const sharedPayload = {
+    workspaceId: WORKSPACE_ID,
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
