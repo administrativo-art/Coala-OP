@@ -1,9 +1,9 @@
 /**
  * Aviso de intervalo da faixa de registro (plano mestre 3.6.1). Calculado na tela com a hora oficial e o turno
- * escalado de hoje, pela ordem das batidas: 1ª entrada; depois pares saída/volta; ímpar = trabalhando, par = em pausa.
- * Só orienta: nunca bloqueia a batida (art. 74) e não é apuração.
+ * escalado de hoje e pelas classificações declaradas pelo colaborador. A sugestão nunca reclassifica uma batida,
+ * nunca bloqueia o registro (art. 74) e não é apuração.
  */
-import { fiscalClock, minutesOf, toleranceOf, type DayMarking, type DayShift } from "./day-model";
+import { fiscalClock, minutesOf, plannedBreakMinutesOf, toleranceOf, type DayMarking, type DayShift } from "./day-model";
 
 // Antecedência dos avisos: provisória até decisão do programador.
 export const BREAK_INFO_AHEAD_MINUTES = 15;
@@ -32,15 +32,26 @@ export function plannedPausesOf(shift: DayShift) {
   return 1;
 }
 
-export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt">[], now: number): BreakStatus | null {
+export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt" | "classification">[], now: number): BreakStatus | null {
   if (!shift || shift.type !== "work" || shift.breakType === "none" || !shift.endTime) return null;
-  const total = shift.breakDurationMinutes ?? 0;
+  const total = plannedBreakMinutesOf(shift);
   if (!total) return null;
-  const times = markings.map((marking) => minutesOf(fiscalClock(marking.markedAt)));
+  const classified = markings.filter((marking) => marking.classification?.purpose);
+  if (classified.length !== markings.length) {
+    return { level: "neutral", headline: "Classifique as batidas para acompanhar o intervalo", detail: "A classificação organiza os avisos e pode ser alterada sem modificar o horário registrado.",
+      usedMinutes: 0, totalMinutes: total, pausesDone: 0, plannedPauses: plannedPausesOf(shift), inPause: false };
+  }
   const closed: { start: number; end: number }[] = [];
-  for (let index = 1; index + 1 < times.length; index += 2) closed.push({ start: times[index], end: times[index + 1] });
-  const inPause = times.length >= 2 && times.length % 2 === 0;
-  const pauseStart = inPause ? times[times.length - 1] : null;
+  let pauseStart: number | null = null;
+  for (const marking of classified) {
+    const time = minutesOf(fiscalClock(marking.markedAt));
+    if (marking.classification?.purpose === "break_start") pauseStart = time;
+    if (marking.classification?.purpose === "break_end" && pauseStart !== null) {
+      closed.push({ start: pauseStart, end: time });
+      pauseStart = null;
+    }
+  }
+  const inPause = pauseStart !== null;
   const closedUsed = closed.reduce((sum, pause) => sum + pause.end - pause.start, 0);
   const used = closedUsed + (pauseStart !== null ? Math.max(0, now - pauseStart) : 0);
   const remaining = Math.max(0, total - used);
@@ -49,6 +60,10 @@ export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "
   const progress = planned === 1 ? null
     : `Usados ${used} de ${total} min · ${closed.length}${planned ? ` de ${planned}` : ""} ${closed.length === 1 && !planned ? "pausa" : "pausas"}`;
   const above = toleranceOf(shift);
+  const journeyEnded = classified.at(-1)?.classification?.purpose === "journey_end";
+  if (journeyEnded && used < total) {
+    return { ...base, level: "danger", headline: "Jornada finalizada sem o intervalo completo", detail: `Foram classificados ${used} de ${total} min de intervalo. A batida continua válida e o dia segue para conferência.` };
+  }
   if (used > total + above) {
     return { ...base, level: "danger", headline: `Intervalo passou de ${total} min (${used} min)`, detail: above ? `Tolerância de ${above} min da jornada excedida.` : "A jornada não tem tolerância." };
   }

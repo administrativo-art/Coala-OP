@@ -24,6 +24,14 @@ import { useToast } from '@/hooks/use-toast';
 import { ChangePasswordModal } from './change-password-modal';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import type { DeveloperViewAsUser } from '@/features/auth/developer-view-as';
+
+const LOCAL_VIEW_AS_PREVIEW: DeveloperViewAsUser[] = [
+  { id: 'preview-heucilene', username: 'Heucilene Oliveira Ribeiro', email: 'heucilene@coalashakes.com', jobRoleName: 'Atendente', profileId: 'profile-attendant' },
+  { id: 'preview-edna', username: 'Maria Edna Gois Ribeiro', email: 'edna@coalashakes.com', jobRoleName: 'Administrativo', profileId: 'profile-administrative' },
+  { id: 'preview-edwilson', username: 'Edwilson Lobato', email: 'edwilson@coalashakes.com', jobRoleName: 'Líder', profileId: 'profile-leader' },
+  { id: 'preview-samila', username: 'Samila Santos', email: 'samila@coalashakes.com', jobRoleName: 'Atendente', profileId: 'profile-attendant' },
+];
 
 function getAvatarUploadErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
@@ -55,6 +63,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
   const [isViewAsOpen, setIsViewAsOpen] = useState(false);
   const [viewAsQuery, setViewAsQuery] = useState('');
   const [viewAsBusy, setViewAsBusy] = useState(false);
+  const [localViewAs, setLocalViewAs] = useState<DeveloperViewAsUser | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
@@ -66,16 +75,24 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
 
   const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
   const profileName = profile ? profile.name : 'Perfil não encontrado';
+  const usesLocalPreview = process.env.NODE_ENV === 'development' && canViewAs && viewAsUsers.length === 0;
+  const displayedViewAs = viewAs ?? localViewAs;
+  const displayedViewAsUsers = usesLocalPreview ? LOCAL_VIEW_AS_PREVIEW : viewAsUsers;
   const normalizedViewAsQuery = viewAsQuery.trim().toLocaleLowerCase('pt-BR');
   const filteredViewAsUsers = normalizedViewAsQuery
-    ? viewAsUsers.filter((candidate) =>
+    ? displayedViewAsUsers.filter((candidate) =>
         `${candidate.username} ${candidate.email} ${candidate.jobRoleName ?? ''}`
           .toLocaleLowerCase('pt-BR')
           .includes(normalizedViewAsQuery)
       )
-    : viewAsUsers;
+    : displayedViewAsUsers;
 
   const handleStartViewAs = async (targetUserId: string) => {
+    if (usesLocalPreview) {
+      setLocalViewAs(LOCAL_VIEW_AS_PREVIEW.find((candidate) => candidate.id === targetUserId) ?? null);
+      setIsViewAsOpen(false);
+      return;
+    }
     setViewAsBusy(true);
     try {
       await startViewAs(targetUserId);
@@ -90,6 +107,10 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
   };
 
   const handleStopViewAs = async () => {
+    if (localViewAs) {
+      setLocalViewAs(null);
+      return;
+    }
     setViewAsBusy(true);
     try {
       await stopViewAs();
@@ -203,9 +224,9 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{user.username}</p>
               <p className="text-xs leading-none text-muted-foreground">{profileName}</p>
-              {viewAs && (
+              {displayedViewAs && (
                 <p className="text-xs font-semibold text-ds-accent-ink">
-                  Visualização somente leitura
+                  Visualizando como {displayedViewAs.username} · somente leitura
                 </p>
               )}
             </div>
@@ -216,7 +237,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
             <span>Quiosque(s): {kioskNames || 'N/A'}</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          {canViewAs && (viewAs ? (
+          {canViewAs && (displayedViewAs ? (
             <DropdownMenuItem disabled={viewAsBusy} onSelect={handleStopViewAs}>
               <RotateCcw className="mr-2 h-4 w-4" />
               <span>Voltar ao meu perfil</span>
@@ -227,7 +248,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
               <span>Visualizar como usuário</span>
             </DropdownMenuItem>
           ))}
-          {!viewAs && (
+          {!displayedViewAs && (
             <>
               <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>
                 <Camera className="mr-2 h-4 w-4" />
@@ -278,6 +299,11 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
               Você continua autenticado como {authenticatedUser?.email}. As alterações ficam bloqueadas até voltar ao seu perfil.
             </DialogDescription>
           </DialogHeader>
+          {usesLocalPreview && (
+            <p className="rounded-ds-card border border-ds-accent/30 bg-ds-accent-soft px-3 py-2 text-xs text-ds-accent-ink">
+              Prévia local preenchida: nenhuma troca de identidade será enviada ao servidor.
+            </p>
+          )}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

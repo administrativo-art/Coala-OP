@@ -297,16 +297,16 @@ class ViewModelsTest {
         val saved = androidx.lifecycle.SavedStateHandle()
         val repository = repository(auth, api)
         val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
-        vm.record(); advanceUntilIdle()
+        vm.record(declaredPurpose = "journey_start"); advanceUntilIdle()
         assertNotNull(vm.feedback.value.error)
         // A new view model over the same saved state (process killed) resends the same attempt and date.
         val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
-        revived.record(); advanceUntilIdle()
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
         assertEquals(sent[0], sent[1]); assertEquals("mobile", sent[1].channel)
         assertNotNull(revived.state.value.last); assertNull(saved.get<String>("attemptId"))
         failures = mutableListOf(retrofit2.HttpException(retrofit2.Response.error<Any>(409, "{}".toResponseBody())))
-        revived.record(); advanceUntilIdle(); assertNull(saved.get<String>("attemptId"))
-        revived.record(); advanceUntilIdle()
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle(); assertNull(saved.get<String>("attemptId"))
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
         assertNotEquals(sent[2].attemptId, sent[3].attemptId)
     }
     @Test fun locationIsPreservedWithThePunchAcrossNetworkFailureAndProcessRestart() = runTest {
@@ -327,9 +327,9 @@ class ViewModelsTest {
         val saved = androidx.lifecycle.SavedStateHandle(); val repository = repository(auth, api)
         val location = LocationAttempt("capture-1", "captured", 300, "2026-10-19T11:00:00Z", -1.4558, -48.4902, 15.0)
         val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
-        vm.record(true, location); advanceUntilIdle(); assertTrue(vm.hasPendingLocationAttempt())
+        vm.record(true, location, "journey_start"); advanceUntilIdle(); assertTrue(vm.hasPendingLocationAttempt())
         val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
-        revived.record(); advanceUntilIdle()
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
         assertEquals(sent[0].attemptId, sent[1].attemptId); assertEquals(location, sent[1].locationAttempt)
         assertFalse(revived.hasPendingLocationAttempt()); assertNull(saved.get<String>("attemptLocation"))
     }
@@ -340,7 +340,7 @@ class ViewModelsTest {
         } }
         val queue = MemoryTimeOfflineQueue(); val repository = repository(auth, api)
         val vm = timeViewModel(auth, repository, androidx.lifecycle.SavedStateHandle(), queue)
-        vm.load(); advanceUntilIdle(); vm.record(false); advanceUntilIdle()
+        vm.load(); advanceUntilIdle(); vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
         assertEquals(0, sends); assertEquals(1, queue.rows.value.size)
         assertNotNull(vm.state.value.lastOffline); assertNull(vm.state.value.last)
     }

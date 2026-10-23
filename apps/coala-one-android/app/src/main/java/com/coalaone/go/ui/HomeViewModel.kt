@@ -3,6 +3,7 @@ package com.coalaone.go.ui
 import androidx.lifecycle.viewModelScope
 import com.coalaone.go.auth.RuntimeMode
 import com.coalaone.go.data.*
+import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.offline.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,7 @@ import javax.inject.Inject
 
 /** What the home screen says about today; every field is optional because each module may be off or fail on its own. */
 data class HomeToday(val loaded: Boolean = false, val hasSchedule: Boolean = false, val shift: String? = null, val shiftShort: String? = null, val shiftUnit: String? = null,
+    val timeOptions: TimeOptions? = null, val timeClockOffset: Long? = null, val timePunches: List<OwnMarking> = emptyList(), val timeShift: OwnShift? = null,
     val goalUnit: String? = null, val goalToday: Double? = null, val goalDaily: Double? = null, val goalPercent: Double? = null, val openCounts: List<String> = emptyList(), val repositions: Int? = null)
 @HiltViewModel class HomeViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val scheduler: WorkScheduler) : FeedbackViewModel() {
     private val mutable = MutableStateFlow<ProfileResponse?>(null)
@@ -40,9 +42,19 @@ data class HomeToday(val loaded: Boolean = false, val hasSchedule: Boolean = fal
         todayLoadedAt = System.currentTimeMillis()
         viewModelScope.launch {
             var next = HomeToday(loaded = true)
+            val now = java.time.LocalDate.now()
             if (modules.stockCount) quiet { repository.countContext().openSessions.map { it.kioskName } }?.let { next = next.copy(openCounts = it) }
             if (modules.repositionReceipt) quiet { repository.repositions().activities.size }?.let { next = next.copy(repositions = it) }
-            if (modules.schedule) quiet { val now = java.time.LocalDate.now(); repository.api.schedule(now.year, now.monthValue).units.firstNotNullOfOrNull { unit -> unit.shifts.firstOrNull { it.date == now.toString() && unit.people.getOrNull(it.person)?.isMe == true }?.let { unit.name to it } } to true }?.let { (found, _) ->
+            if (modules.timeRecording) {
+                val elapsed = android.os.SystemClock.elapsedRealtime()
+                val options = quiet { repository.api.timeOptions(now.toString()) }
+                val markings = quiet { repository.api.markings(now.toString(), now.toString()).markings }.orEmpty()
+                val ownShift = quiet { repository.api.timeMonth(now.toString().take(7)).shifts.firstOrNull { it.date == now.toString() } }
+                next = next.copy(timeOptions = options, timeClockOffset = TimeRules.clockOffset(options?.officialClock, elapsed),
+                    timePunches = markings, timeShift = ownShift, hasSchedule = ownShift != null,
+                    shiftUnit = ownShift?.unitName, shift = TimeRules.shiftText(ownShift),
+                    shiftShort = ownShift?.let { if (it.type == "day_off") "Folga" else "${it.startTime?.take(2)}h–${it.endTime?.take(2)}h" })
+            } else if (modules.schedule) quiet { repository.api.schedule(now.year, now.monthValue).units.firstNotNullOfOrNull { unit -> unit.shifts.firstOrNull { it.date == now.toString() && unit.people.getOrNull(it.person)?.isMe == true }?.let { unit.name to it } } to true }?.let { (found, _) ->
                 val shift = found?.second
                 next = next.copy(hasSchedule = true, shiftUnit = found?.first, shift = shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime}–${it.endTime} · ${it.shiftName}" }, shiftShort = shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime.take(2)}h–${it.endTime.take(2)}h" })
             }

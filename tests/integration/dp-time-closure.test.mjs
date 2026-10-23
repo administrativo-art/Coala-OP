@@ -9,6 +9,7 @@ const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
+const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
@@ -17,6 +18,40 @@ const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
+
+test('fechamento concorrente com classificação converge sem editar diretamente um mês já fechado', async () => {
+  const prefix = `closure-classification-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const employeeId = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const competence = '2026-08';
+  const workDate = `${competence}-12`;
+  const receiptId = `${prefix}-receipt`;
+  const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
+  const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin`, unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const owner = { decoded: { uid: employeeId }, userDoc: { id: employeeId, username: 'Maria', unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock, readRoster: async () => [] };
+  const classificationDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
+  const receiptRef = hrDbAdmin.collection('repP_receipts').doc(receiptId);
+  await receiptRef.set({ workspaceId, employeeId, recordedDate: workDate, status: 'issued', snapshot: {
+    nsr: 21, markedAt: `${workDate}T08:00:00-0300`, executionUnitId: unitId,
+  } });
+  const [closed, classified] = await Promise.allSettled([
+    closeCompetence(admin, { competence, expectedVersion: 0 }, closureDeps),
+    classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_start' }, classificationDeps),
+  ]);
+  assert.equal(classified.status, 'fulfilled');
+  const closure = await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).get();
+  if (closed.status === 'fulfilled') assert.equal(closure.get('status'), 'closed');
+  if (classified.value.changeStatus === 'in_review') {
+    assert.equal(closure.get('status'), 'closed');
+    assert.equal((await receiptRef.get()).get('classification'), undefined);
+  } else {
+    assert.equal((await receiptRef.get()).get('classification').purpose, 'journey_start');
+  }
+});
 
 function zipEntries(zip) {
   const entries = new Map();

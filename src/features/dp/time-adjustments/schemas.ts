@@ -8,7 +8,7 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Horário inválido.'
 /** Justificativa obrigatória: 10 a 1000 caracteres; os primeiros 150 vão para o AEJ. */
 const reason = z.string().trim().min(10, 'A justificativa precisa ter ao menos 10 caracteres.').max(1000);
 
-export const createAdjustmentSchema = z.object({
+const legacyAdjustmentSchema = z.object({
   attemptId: z.string().uuid(),
   workDate: civilDate,
   kind: z.enum(['include', 'discard', 'correct']),
@@ -29,6 +29,33 @@ export const createAdjustmentSchema = z.object({
   if (value.kind === 'discard' && value.newTime) {
     context.addIssue({ code: 'custom', path: ['newTime'], message: 'Desconsiderar não informa horário novo.' });
   }
+});
+
+const adjustmentOperationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('include'), newTime: time, executionUnitId: id.optional() }).strict(),
+  z.object({ kind: z.literal('discard'), targetReceiptId: id }).strict(),
+  z.object({ kind: z.literal('correct'), targetReceiptId: id, newTime: time, executionUnitId: id.optional() }).strict(),
+]);
+const multiAdjustmentSchema = z.object({
+  attemptId: z.string().uuid(), workDate: civilDate,
+  operations: z.array(adjustmentOperationSchema).min(1, 'Inclua ao menos uma alteração.').max(8, 'Um pedido aceita até oito alterações.'),
+  reason,
+}).strict().superRefine((value, context) => {
+  const kinds = new Set(value.operations.map((item) => item.kind));
+  if (kinds.size > 1) context.addIssue({ code: 'custom', path: ['operations'], message: 'Um pedido reúne apenas alterações do mesmo tipo.' });
+  const targets = value.operations.flatMap((item) => 'targetReceiptId' in item ? [item.targetReceiptId] : []);
+  if (new Set(targets).size !== targets.length) context.addIssue({ code: 'custom', path: ['operations'], message: 'A mesma batida foi escolhida mais de uma vez.' });
+  const inclusions = value.operations.flatMap((item) => 'newTime' in item ? [item.newTime] : []);
+  if (new Set(inclusions).size !== inclusions.length) context.addIssue({ code: 'custom', path: ['operations'], message: 'O mesmo horário foi informado mais de uma vez.' });
+});
+
+export const createAdjustmentSchema = z.union([multiAdjustmentSchema, legacyAdjustmentSchema]).transform((value) => {
+  if ('operations' in value) return value;
+  return {
+    attemptId: value.attemptId, workDate: value.workDate, reason: value.reason,
+    operations: [{ kind: value.kind, ...(value.targetReceiptId ? { targetReceiptId: value.targetReceiptId } : {}),
+      ...(value.newTime ? { newTime: value.newTime } : {}), ...(value.executionUnitId ? { executionUnitId: value.executionUnitId } : {}) }],
+  };
 });
 
 export const adjustmentDecisionSchema = z.discriminatedUnion('action', [

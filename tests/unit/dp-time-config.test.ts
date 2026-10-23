@@ -191,11 +191,12 @@ test('abrangência só é ambígua no mesmo nível quando filtros e vigências s
   );
 });
 
-test('turno mantém o contrato Bizneo e aceita somente metadados opcionais do Coala', () => {
+test('turno mantém o contrato Bizneo, exige intervalo e aceita somente metadados opcionais do Coala', () => {
   const parsed = createShiftDefinitionSchema.parse({
     code: '#1234', name: 'Manhã Bizneo', bizneoTemplateId: '9988',
     startTime: '08:00', endTime: '16:00', daysOfWeek: [1, 2, 3, 4, 5, 6],
     journeyIds: ['jornada-44h'], description: 'Turno operacional padrão', expectedPunches: 4,
+    breakType: 'flexible', breakDurationMinutes: 60,
   });
   assert.equal(parsed.code, '#1234');
   assert.equal(parsed.name, 'Manhã Bizneo');
@@ -217,8 +218,13 @@ test('turno mantém o contrato Bizneo e aceita somente metadados opcionais do Co
     breakType: 'staggered', breakDurationMinutes: 60, breakWindowStart: '11:00', breakWindowEnd: '14:00',
   }).success, true);
   assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: 'fixed' }).success, false);
-  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: 'flexible' }).success, false);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: 'flexible', breakDurationMinutes: undefined }).success, false);
   assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: 'staggered', breakDurationMinutes: 60 }).success, false);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: 'none' }).success, false);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, breakType: undefined, breakDurationMinutes: undefined }).success, false);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, executionUnitPolicy: 'scheduled', locationTrackingPolicy: 'punch_only' }).success, true);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, executionUnitPolicy: 'free', locationTrackingPolicy: 'workday' }).success, true);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, executionUnitPolicy: 'scheduled', locationTrackingPolicy: 'workday' }).success, false);
   assert.deepEqual(changedShiftBizneoIdentity(parsed, { code: '#1234', name: 'Manhã Bizneo', bizneoTemplateId: '9988' }), []);
   assert.deepEqual(changedShiftBizneoIdentity(parsed, { name: 'Outro nome', bizneoTemplateId: null }), ['name', 'bizneoTemplateId']);
 });

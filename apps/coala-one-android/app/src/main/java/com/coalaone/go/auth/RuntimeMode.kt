@@ -8,5 +8,5 @@ import javax.inject.Singleton
         private set
     fun simulate() { check(com.coalaone.go.BuildConfig.DEBUG); simulation = true }
     fun reset() { simulation = false }
-    fun identity() = if (simulation) Identity("simulation", "simulation@invalid.local") else auth.current ?: error("Entre novamente.")
+    fun identity() = if (simulation) Identity("simulation-admin", "administrativo@coalashakes.com") else auth.current ?: error("Entre novamente.")
 }

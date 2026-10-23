@@ -3,6 +3,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 
 import type { Firestore } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 
 import { resolveEmploymentReferenceForSystem } from '@/features/dp/employment-reference/service.server';
 import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
@@ -22,6 +23,7 @@ import type { AdjustmentDecisionInput, AdjustmentMonthInput, CreateAdjustmentInp
 
 export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const TREATMENTS = 'ptrp_treatments';
+export const CLASSIFICATION_REQUESTS = 'ptrp_markingClassificationRequests';
 /** Documento da competência fechada, gravado por `closure.server.ts`. Período fechado não aceita pedido nem decisão. */
 export const CLOSURES = 'ptrp_competenceClosures';
 /** Auditoria de cada AEJ gerado (quem, quando, período, carimbo e versões dos fechamentos usados). */
@@ -29,12 +31,19 @@ export const AEJ_EXPORTS = 'ptrp_aejExports';
 const REVIEW_LIMIT = 50;
 const MONTH_LIMIT = 200;
 
+export type AdjustmentOperationRecord = {
+  kind: AdjustmentKind;
+  target: { receiptId: string; nsr: number; markedAt: string; executionUnitId: string } | null;
+  inclusion: { markedAt: string; executionUnitId: string } | null;
+};
 export type AdjustmentRecord = {
   id: string; workspaceId: string; employeeUid: string; employeeName: string | null; workDate: string;
   kind: AdjustmentKind; status: AdjustmentStatus; version: number;
-  establishmentId: string; unitId: string;
+  establishmentId: string; unitId: string; requestDigest?: string;
+  unitIds?: string[];
   target: { receiptId: string; nsr: number; markedAt: string; executionUnitId: string } | null;
   inclusion: { markedAt: string; executionUnitId: string } | null;
+  operations?: AdjustmentOperationRecord[];
   reason: string; aejReason: string;
   acts: AdjustmentAct[];
   createdAt: string; updatedAt: string; decidedAt?: string; decidedBy?: string;
@@ -86,17 +95,55 @@ export function adjustmentDto(value: AdjustmentRecord) {
   return rest;
 }
 
+function timestampIso(value: unknown) {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  return typeof value === 'string' ? value : new Date(0).toISOString();
+}
+
+function classificationRequestDto(document: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
+  const value = document.data()!;
+  return { id: document.id, employeeId: String(value.employeeId), employeeName: typeof value.employeeName === 'string' ? value.employeeName : null,
+    receiptId: String(value.receiptId), workDate: String(value.workDate), markedAt: String(value.markedAt), nsr: Number(value.nsr),
+    unitId: String(value.unitId), closureVersion: Number(value.closureVersion), version: Number(value.version),
+    requestedPurpose: value.requestedPurpose, currentClassification: value.currentClassification ?? null, status: value.status,
+    createdAt: timestampIso(value.createdAt), updatedAt: timestampIso(value.updatedAt) };
+}
+
+export function adjustmentOperations(value: Pick<AdjustmentRecord, 'kind' | 'target' | 'inclusion' | 'operations'>): AdjustmentOperationRecord[] {
+  return value.operations?.length ? value.operations : [{ kind: value.kind, target: value.target, inclusion: value.inclusion }];
+}
+
+type CompatibleAdjustmentInput = CreateAdjustmentInput | {
+  attemptId: string; workDate: string; kind: AdjustmentKind; targetReceiptId?: string; newTime?: string; executionUnitId?: string; reason: string;
+};
+function inputOperations(input: CompatibleAdjustmentInput) {
+  return 'operations' in input ? input.operations : [{ kind: input.kind,
+    ...(input.targetReceiptId ? { targetReceiptId: input.targetReceiptId } : {}), ...(input.newTime ? { newTime: input.newTime } : {}),
+    ...(input.executionUnitId ? { executionUnitId: input.executionUnitId } : {}) }];
+}
+function comparableOperations(value: AdjustmentRecord) {
+  return adjustmentOperations(value).map((item) => ({ kind: item.kind, targetReceiptId: item.target?.receiptId ?? null,
+    newTime: item.inclusion?.markedAt.slice(11, 16) ?? null, executionUnitId: item.inclusion?.executionUnitId ?? null }));
+}
+
 /** Pedido do próprio titular: valida vínculo, batida alvo e competência aberta; grava o primeiro ato encadeado. */
-export async function createOwnAdjustment(context: ServerUserContext, input: CreateAdjustmentInput, injected: Partial<Dependencies> = {}) {
+export async function createOwnAdjustment(context: ServerUserContext, input: CompatibleAdjustmentInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
+  const requestedOperations = inputOperations(input);
+  const requestDigest = digest({ workDate: input.workDate, operations: requestedOperations, reason: input.reason });
   const docId = digest(['adjustment', context.workspace_id, context.decoded.uid, input.attemptId]);
   const ref = deps.hrDb.collection(ADJUSTMENTS).doc(docId);
   const existing = await ref.get();
   if (existing.exists) {
     const stored = existing.data() as AdjustmentRecord;
-    if (stored.employeeUid !== context.decoded.uid || stored.workDate !== input.workDate || stored.kind !== input.kind
-      || stored.reason !== input.reason || (stored.target?.receiptId ?? null) !== (input.targetReceiptId ?? null)
-      || (stored.inclusion?.markedAt.slice(11, 16) ?? null) !== (input.newTime ?? null)) {
+    const comparableInput = requestedOperations.map((item) => ({ kind: item.kind,
+      targetReceiptId: 'targetReceiptId' in item ? item.targetReceiptId : null,
+      newTime: 'newTime' in item ? item.newTime : null,
+      executionUnitId: 'executionUnitId' in item ? item.executionUnitId ?? null : null }));
+    if (stored.employeeUid !== context.decoded.uid || (stored.requestDigest
+      ? stored.requestDigest !== requestDigest
+      : stored.workDate !== input.workDate || stored.reason !== input.reason
+        || JSON.stringify(comparableOperations(stored)) !== JSON.stringify(comparableInput))) {
       throw fail('PTRP_ADJUSTMENT_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
     }
     return adjustmentDto(stored);
@@ -106,57 +153,73 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Cre
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') throw fail('PTRP_EMPLOYMENT_UNRESOLVED', 'Não há vínculo válido para a data do ajuste.');
 
-  let target: AdjustmentRecord['target'] = null;
-  if (input.targetReceiptId) {
-    target = await readOwnRepPReceiptForAdjustment(context, input.targetReceiptId, input.workDate, { repDb: deps.repDb });
-    if (!target) throw fail('PTRP_ADJUSTMENT_TARGET_INVALID', 'Batida não encontrada neste dia.', 'NOT_FOUND');
-  }
-
   const establishment = await repPEstablishmentForEmployer(context.workspace_id, reference.period.employer.cnpj, { repDb: deps.repDb });
-  let inclusion: AdjustmentRecord['inclusion'] = null;
-  if (input.newTime) {
-    const unitId = input.executionUnitId ?? target?.executionUnitId ?? reference.period.employerUnitId;
-    if (!reference.period.unitIds.includes(unitId)) {
-      throw fail('PTRP_ADJUSTMENT_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence ao vínculo nesta data.', 'AUTHORIZATION');
+  const operations: AdjustmentOperationRecord[] = [];
+  for (const item of requestedOperations) {
+    let target: AdjustmentOperationRecord['target'] = null;
+    if ('targetReceiptId' in item && item.targetReceiptId) {
+      target = await readOwnRepPReceiptForAdjustment(context, item.targetReceiptId, input.workDate, { repDb: deps.repDb });
+      if (!target) throw fail('PTRP_ADJUSTMENT_TARGET_INVALID', 'Batida não encontrada neste dia.', 'NOT_FOUND');
     }
-    const unit = await deps.mainDb.collection('dp_units').doc(unitId).get();
-    const zone = repPMarkingTimeZone(unit.get('timeZone'), establishment.timeZone ?? 'America/Fortaleza');
-    inclusion = { markedAt: zonedFiscalTimestamp(input.workDate, input.newTime, zone), executionUnitId: unitId };
-    // Dia e horário futuros pelo fuso da unidade: não se inclui batida que ainda não aconteceu.
-    if (Date.parse(inclusion.markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.now()) {
-      throw fail('PTRP_ADJUSTMENT_FUTURE', 'Não é possível incluir um horário que ainda não aconteceu.');
+    let inclusion: AdjustmentOperationRecord['inclusion'] = null;
+    if ('newTime' in item && item.newTime) {
+      const unitId = ('executionUnitId' in item ? item.executionUnitId : null) ?? target?.executionUnitId ?? reference.period.employerUnitId;
+      if (!reference.period.unitIds.includes(unitId)) {
+        throw fail('PTRP_ADJUSTMENT_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence ao vínculo nesta data.', 'AUTHORIZATION');
+      }
+      const unit = await deps.mainDb.collection('dp_units').doc(unitId).get();
+      const zone = repPMarkingTimeZone(unit.get('timeZone'), establishment.timeZone ?? 'America/Fortaleza');
+      inclusion = { markedAt: zonedFiscalTimestamp(input.workDate, item.newTime, zone), executionUnitId: unitId };
+      if (Date.parse(inclusion.markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.now()) {
+        throw fail('PTRP_ADJUSTMENT_FUTURE', 'Não é possível incluir um horário que ainda não aconteceu.');
+      }
     }
+    operations.push({ kind: item.kind, target, inclusion });
   }
 
   const pending = await deps.hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', context.workspace_id)
     .where('employeeUid', '==', context.decoded.uid).where('workDate', '==', input.workDate).where('status', '==', 'in_review').limit(10).get();
-  if (target && pending.docs.some((doc) => (doc.get('target') as AdjustmentRecord['target'])?.receiptId === target!.receiptId)) {
+  const targetIds = new Set(operations.map((item) => item.target?.receiptId).filter((value): value is string => Boolean(value)));
+  if (pending.docs.some((doc) => adjustmentOperations(doc.data() as AdjustmentRecord).some((item) => item.target?.receiptId && targetIds.has(item.target.receiptId)))) {
     throw fail('PTRP_ADJUSTMENT_DUPLICATE', 'Já existe um pedido em análise para esta batida.', 'CONFLICT');
   }
-  if (target && await hasActiveDiscard(deps.hrDb, context.workspace_id, target.receiptId)) {
-    throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por um ajuste aprovado.', 'CONFLICT');
+  for (const targetId of targetIds) {
+    if (await hasActiveDiscard(deps.hrDb, context.workspace_id, targetId)) {
+      throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por um ajuste aprovado.', 'CONFLICT');
+    }
   }
 
   const { at, clockSource } = await actInstant(deps.clock);
-  const payload = { kind: input.kind, workDate: input.workDate, target, inclusion, reason: input.reason };
+  const kind = operations[0].kind;
+  const target = operations.length === 1 ? operations[0].target : null;
+  const inclusion = operations.length === 1 ? operations[0].inclusion : null;
+  const payload = { kind, workDate: input.workDate, operations, reason: input.reason };
   const firstAct = { action: 'requested' as const, actorUid: context.decoded.uid, role: 'titular' as const, at, clockSource };
-  const value: AdjustmentRecord = {
+  const unitIds = [...new Set(operations.flatMap((operation) => [operation.target?.executionUnitId, operation.inclusion?.executionUnitId])
+    .filter((unitId): unitId is string => Boolean(unitId)))];
+  const value: AdjustmentRecord & { requestDigest: string } = {
     id: docId, workspaceId: context.workspace_id, employeeUid: context.decoded.uid,
     employeeName: typeof context.userDoc.username === 'string' ? context.userDoc.username.slice(0, 120) : null,
-    workDate: input.workDate, kind: input.kind, status: 'in_review', version: 1,
-    establishmentId: establishment.establishmentId,
-    unitId: inclusion?.executionUnitId ?? target?.executionUnitId ?? reference.period.employerUnitId,
-    target, inclusion, reason: input.reason, aejReason: aejReason(input.reason),
+    workDate: input.workDate, kind, status: 'in_review', version: 1,
+    establishmentId: establishment.establishmentId, requestDigest,
+    unitId: unitIds[0] ?? reference.period.employerUnitId, unitIds: unitIds.length ? unitIds : [reference.period.employerUnitId],
+    target, inclusion, operations, reason: input.reason, aejReason: aejReason(input.reason),
     acts: [{ ...firstAct, previousHash: null, hash: adjustmentActHash(null, firstAct, adjustmentPayloadDigest(payload)) }],
     createdAt: at, updatedAt: at,
   };
-  await deps.hrDb.runTransaction(async (tx) => {
+  const saved = await deps.hrDb.runTransaction(async (tx) => {
     const [again, closure] = await Promise.all([tx.get(ref), tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.workDate)))]);
-    if (again.exists) throw fail('PTRP_ADJUSTMENT_ATTEMPT_CONFLICT', 'Pedido já registrado.', 'CONFLICT');
+    if (again.exists) {
+      const stored = again.data() as AdjustmentRecord;
+      if (stored.workspaceId === context.workspace_id && stored.employeeUid === context.decoded.uid
+        && stored.requestDigest === requestDigest) return stored;
+      throw fail('PTRP_ADJUSTMENT_ATTEMPT_CONFLICT', 'Pedido já registrado.', 'CONFLICT');
+    }
     if (closure.exists && closure.get('status') === 'closed') throw fail('PTRP_COMPETENCE_CLOSED', 'Esta competência já foi fechada; não aceita pedido de ajuste.', 'CONFLICT');
     tx.create(ref, value);
+    return value;
   });
-  return adjustmentDto(value);
+  return adjustmentDto(saved);
 }
 
 /** Pedidos e tratamentos do próprio titular no mês, para o Registro de ponto. */
@@ -200,14 +263,69 @@ export async function listAdjustmentsForReview(context: ServerUserContext, injec
     scanned += page.size;
     for (const doc of page.docs) {
       const value = doc.data() as AdjustmentRecord;
-      if (value.employeeUid !== context.decoded.uid && canAccessUnit(context.userDoc, value.unitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+      const units = value.unitIds?.length ? value.unitIds : [value.unitId];
+      if (value.employeeUid !== context.decoded.uid
+        && units.every((unitId) => canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin }))) {
         visible.push(value);
       }
     }
     if (page.size < REVIEW_LIMIT) break;
     cursor = page.docs[page.docs.length - 1];
   }
-  return { adjustments: visible.slice(0, REVIEW_LIMIT).map(adjustmentDto) };
+  const classificationSnapshot = await deps.hrDb.collection(CLASSIFICATION_REQUESTS).where('workspaceId', '==', context.workspace_id)
+    .where('status', '==', 'in_review').orderBy('createdAt', 'asc').limit(REVIEW_LIMIT * 2).get();
+  const classificationRequests = classificationSnapshot.docs.filter((document) => {
+    const value = document.data();
+    return value.employeeId !== context.decoded.uid && canAccessUnit(context.userDoc, String(value.unitId), { isDefaultAdmin: context.isDefaultAdmin });
+  }).slice(0, REVIEW_LIMIT).map(classificationRequestDto);
+  return { adjustments: visible.slice(0, REVIEW_LIMIT).map(adjustmentDto), classificationRequests };
+}
+
+async function decideClassificationRequest(context: ServerUserContext, requestId: string, input: AdjustmentDecisionInput,
+  deps: Dependencies) {
+  const ref = deps.hrDb.collection(CLASSIFICATION_REQUESTS).doc(requestId);
+  const before = await ref.get();
+  if (!before.exists || before.get('workspaceId') !== context.workspace_id) throw fail('PTRP_ADJUSTMENT_NOT_FOUND', 'Pedido não encontrado.', 'NOT_FOUND');
+  const owner = before.get('employeeId') === context.decoded.uid;
+  if (input.action === 'cancel') {
+    if (!owner) throw fail('PTRP_ADJUSTMENT_FORBIDDEN', 'Só o titular cancela o próprio pedido.', 'AUTHORIZATION');
+  } else if (owner || !canReview(context) || !canAccessUnit(context.userDoc, String(before.get('unitId')), { isDefaultAdmin: context.isDefaultAdmin })) {
+    throw fail(owner ? 'PTRP_ADJUSTMENT_SELF_DECISION' : 'PTRP_ADJUSTMENT_REVIEW_FORBIDDEN',
+      owner ? 'Quem pediu não pode decidir o próprio ajuste.' : 'Sem permissão para decidir este ajuste.', 'AUTHORIZATION');
+  }
+  const status = input.action === 'approve' ? 'approved' : input.action === 'reject' ? 'rejected' : 'cancelled';
+  const now = Timestamp.now();
+  const receiptRef = deps.hrDb.collection('repP_receipts').doc(String(before.get('receiptId')));
+  const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, String(before.get('workDate'))));
+  const result = await deps.hrDb.runTransaction(async (tx) => {
+    const [requestSnapshot, receiptSnapshot, closureSnapshot] = await Promise.all([
+      tx.get(ref), tx.get(receiptRef), tx.get(closureRef),
+    ]);
+    if (!requestSnapshot.exists || requestSnapshot.get('status') !== 'in_review') throw fail('PTRP_ADJUSTMENT_NOT_PENDING', 'Este pedido já foi decidido.', 'CONFLICT');
+    if (Number(requestSnapshot.get('version')) !== input.expectedVersion) throw fail('PTRP_ADJUSTMENT_VERSION_CONFLICT', 'O pedido mudou. Atualize e tente de novo.', 'CONFLICT');
+    if (status === 'approved') {
+      if (!closureSnapshot.exists || closureSnapshot.get('status') !== 'closed'
+        || Number(closureSnapshot.get('version')) !== Number(requestSnapshot.get('closureVersion'))) {
+        throw fail('PTRP_CLASSIFICATION_CLOSURE_CHANGED', 'O fechamento mudou desde este pedido. Atualize a classificação e envie uma nova solicitação.', 'CONFLICT');
+      }
+      if (!receiptSnapshot.exists || receiptSnapshot.get('workspaceId') !== context.workspace_id
+        || receiptSnapshot.get('employeeId') !== requestSnapshot.get('employeeId')) {
+        throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
+      }
+      const classification = { purpose: requestSnapshot.get('requestedPurpose'), source: 'reviewed', status: 'confirmed',
+        updatedAt: now, updatedBy: context.decoded.uid };
+      if (receiptSnapshot.get('classification')?.purpose !== requestSnapshot.get('requestedPurpose')) {
+        const history = Array.isArray(receiptSnapshot.get('classificationHistory'))
+          ? receiptSnapshot.get('classificationHistory') as unknown[] : [];
+        tx.update(receiptRef, { classification, classificationHistory: [...history.slice(-99), { ...classification, at: now,
+          actorUid: context.decoded.uid, requestId }] });
+      }
+    }
+    tx.update(ref, { status, version: input.expectedVersion + 1, updatedAt: now, decidedAt: now,
+      decidedBy: context.decoded.uid, decisionReason: 'reason' in input ? input.reason : null });
+    return { ...classificationRequestDto(requestSnapshot), status, version: input.expectedVersion + 1, updatedAt: now.toDate().toISOString() };
+  });
+  return result;
 }
 
 /**
@@ -218,21 +336,26 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
   const deps = { ...defaults, ...injected };
   const ref = deps.hrDb.collection(ADJUSTMENTS).doc(adjustmentId);
   const before = await ref.get();
-  if (!before.exists || before.get('workspaceId') !== context.workspace_id) throw fail('PTRP_ADJUSTMENT_NOT_FOUND', 'Pedido não encontrado.', 'NOT_FOUND');
+  if (!before.exists) return decideClassificationRequest(context, adjustmentId, input, deps);
+  if (before.get('workspaceId') !== context.workspace_id) throw fail('PTRP_ADJUSTMENT_NOT_FOUND', 'Pedido não encontrado.', 'NOT_FOUND');
   const current = before.data() as AdjustmentRecord;
   const isOwner = current.employeeUid === context.decoded.uid;
   if (input.action === 'cancel') {
     if (!isOwner) throw fail('PTRP_ADJUSTMENT_FORBIDDEN', 'Só o titular cancela o próprio pedido.', 'AUTHORIZATION');
   } else {
     if (isOwner) throw fail('PTRP_ADJUSTMENT_SELF_DECISION', 'Quem pediu não pode decidir o próprio ajuste.', 'AUTHORIZATION');
-    if (!canReview(context) || !canAccessUnit(context.userDoc, current.unitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+    const units = current.unitIds?.length ? current.unitIds : [current.unitId];
+    if (!canReview(context) || !units.every((unitId) => canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin }))) {
       throw fail('PTRP_ADJUSTMENT_REVIEW_FORBIDDEN', 'Sem permissão para decidir este ajuste.', 'AUTHORIZATION');
     }
     await assertOpenCompetence(deps.hrDb, context.workspace_id, current.workDate);
   }
   const { at, clockSource } = await actInstant(deps.clock);
-  const discardTaken = input.action === 'approve' && current.target && current.kind !== 'include'
-    ? await hasActiveDiscard(deps.hrDb, context.workspace_id, current.target.receiptId) : false;
+  const currentOperations = adjustmentOperations(current);
+  let discardTaken = false;
+  if (input.action === 'approve') for (const operation of currentOperations) {
+    if (operation.target && operation.kind !== 'include' && await hasActiveDiscard(deps.hrDb, context.workspace_id, operation.target.receiptId)) discardTaken = true;
+  }
   if (discardTaken) throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por outro ajuste aprovado.', 'CONFLICT');
   const result = await deps.hrDb.runTransaction(async (tx) => {
     const [snapshot, closure] = await Promise.all([tx.get(ref), tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, current.workDate)))]);
@@ -256,14 +379,18 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
         establishmentId: value.establishmentId, adjustmentId: value.id, motivo: value.aejReason,
         requesterUid: value.employeeUid, decidedBy: context.decoded.uid, decidedAt: at, status: 'active',
         decisionReason: 'reason' in input ? input.reason : null, approvalActHash: next.acts.at(-1)!.hash };
-      if (value.target && value.kind !== 'include') {
-        tx.create(deps.hrDb.collection(TREATMENTS).doc(`${value.id}_discard`), { ...common, type: 'discard',
-          originalReceiptId: value.target.receiptId, originalNsr: value.target.nsr, originalMarkedAt: value.target.markedAt,
-          markedAt: null, executionUnitId: value.target.executionUnitId });
-      }
-      if (value.inclusion && value.kind !== 'discard') {
-        tx.create(deps.hrDb.collection(TREATMENTS).doc(`${value.id}_inclusion`), { ...common, type: 'inclusion',
-          originalReceiptId: null, markedAt: value.inclusion.markedAt, executionUnitId: value.inclusion.executionUnitId });
+      const operations = adjustmentOperations(value);
+      for (const [index, operation] of operations.entries()) {
+        const suffix = operations.length === 1 ? '' : `_${index + 1}`;
+        if (operation.target && operation.kind !== 'include') {
+          tx.create(deps.hrDb.collection(TREATMENTS).doc(`${value.id}${suffix}_discard`), { ...common, type: 'discard', operationIndex: index,
+            originalReceiptId: operation.target.receiptId, originalNsr: operation.target.nsr, originalMarkedAt: operation.target.markedAt,
+            markedAt: null, executionUnitId: operation.target.executionUnitId });
+        }
+        if (operation.inclusion && operation.kind !== 'discard') {
+          tx.create(deps.hrDb.collection(TREATMENTS).doc(`${value.id}${suffix}_inclusion`), { ...common, type: 'inclusion', operationIndex: index,
+            originalReceiptId: null, markedAt: operation.inclusion.markedAt, executionUnitId: operation.inclusion.executionUnitId });
+        }
       }
     }
     return next;

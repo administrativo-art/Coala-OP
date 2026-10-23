@@ -53,9 +53,27 @@ export function AdjustmentComparison({ originals, kind, targetReceiptId, newMark
   );
 }
 
+function AdjustmentOperationsComparison({ originals, adjustment }: { originals: Marking[]; adjustment: AdjustmentView }) {
+  const operations = adjustment.operations?.length ? adjustment.operations : [{ kind: adjustment.kind, target: adjustment.target, inclusion: adjustment.inclusion }];
+  const before = originals.filter((item) => item.treatment !== "included");
+  const discarded = new Set(operations.flatMap((item) => item.target && item.kind !== "include" ? [item.target.receiptId] : []));
+  const included = operations.flatMap((item) => item.inclusion && item.kind !== "discard" ? [item.inclusion.markedAt] : []);
+  const after = [...before.filter((item) => !discarded.has(item.receiptId) && item.treatment !== "discarded").map((item) => clock(item.markedAt)), ...included.map(clock)].sort();
+  const chips = (items: Array<{ time: string; state?: "discarded" | "included" }>) => <div className="flex flex-wrap gap-1.5">{items.map((item, index) => (
+    <span key={`${item.time}-${index}`} className={cn("rounded-full border px-2 py-0.5 font-ds-mono text-[13px] font-bold",
+      item.state === "discarded" ? "border-ds-danger/30 bg-ds-danger-bg text-ds-danger line-through" : item.state === "included" ? "border-ds-ok/30 bg-ds-ok-bg text-ds-ok" : "border-ds-border bg-ds-surface text-ds-ink")}>{item.time}</span>
+  ))}</div>;
+  return <div className="space-y-3">
+    <Field label="Antes">{chips(before.map((item) => ({ time: clock(item.markedAt) })))}</Field>
+    <Field label="Pedido">{chips(operations.flatMap((item) => [...(item.target ? [{ time: clock(item.target.markedAt), state: "discarded" as const }] : []), ...(item.inclusion ? [{ time: clock(item.inclusion.markedAt), state: "included" as const }] : [])]))}</Field>
+    <Field label="Depois, se aprovado">{chips(after.map((time) => ({ time })))}</Field>
+  </div>;
+}
+
 /** Relatório do pedido: antigo × novo, justificativa e trilha de autoria com códigos encadeados. */
 export function AdjustmentReport({ adjustment, originals, names }: { adjustment: AdjustmentView; originals: Marking[]; names?: Map<string, string> }) {
   const who = (uid: string, role: string) => role === "titular" ? `${adjustment.employeeName ?? "Titular"} (titular)` : `${names?.get(uid) ?? "Responsável"} (análise)`;
+  const operations = adjustment.operations?.length ? adjustment.operations : [{ kind: adjustment.kind, target: adjustment.target, inclusion: adjustment.inclusion }];
   return (
     <>
       <div className="flex items-center justify-between gap-2">
@@ -63,12 +81,12 @@ export function AdjustmentReport({ adjustment, originals, names }: { adjustment:
         <span className="font-ds-mono text-[11px] text-ds-ink-faint">{adjustment.id.slice(0, 10)}</span>
       </div>
       <PanelSection title="Antigo × novo">
-        <AdjustmentComparison originals={originals} kind={adjustment.kind} targetReceiptId={adjustment.target?.receiptId ?? null} newMarkedAt={adjustment.inclusion?.markedAt ?? null} />
+        <AdjustmentOperationsComparison originals={originals} adjustment={adjustment} />
       </PanelSection>
       <PanelSection title="Dados do pedido">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Batida original">{adjustment.target ? `${clock(adjustment.target.markedAt)} · NSR ${adjustment.target.nsr}` : "— (inclusão)"}</Field>
-          <Field label="Horário novo">{adjustment.inclusion ? clock(adjustment.inclusion.markedAt) : "— (só desconsiderar)"}</Field>
+          <Field label="Batidas originais">{operations.flatMap((item) => item.target ? [`${clock(item.target.markedAt)} · NSR ${item.target.nsr}`] : []).join("; ") || "— (inclusão)"}</Field>
+          <Field label="Horários novos">{operations.flatMap((item) => item.inclusion ? [clock(item.inclusion.markedAt)] : []).join("; ") || "— (só desconsiderar)"}</Field>
           <Field label="Tratamento">{adjustment.kind === "include" ? "Inclusão" : adjustment.kind === "discard" ? "Desconsideração" : "Desconsideração + inclusão"}</Field>
           <Field label="Dia">{adjustment.workDate.split("-").reverse().join("/")}</Field>
           <div className="col-span-2"><Field label="Justificativa"><span className="whitespace-pre-wrap font-normal">{adjustment.reason}</span></Field></div>

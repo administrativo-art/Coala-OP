@@ -835,6 +835,8 @@ test('preserva identidade Bizneo e impede excluir turno vinculado a jornada', as
       bizneoTemplateId: 'bizneo-integration-123',
       startTime: '08:00',
       endTime: '16:00',
+      breakType: 'flexible',
+      breakDurationMinutes: 60,
       daysOfWeek: [1, 2, 3, 4, 5, 6],
       description: 'Configuração inicial',
       expectedPunches: 4,

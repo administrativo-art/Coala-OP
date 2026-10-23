@@ -7,7 +7,9 @@ import type { DayShift } from '../../src/features/dp/rep-p/day-model';
 const base: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: null, breakType: 'staggered',
   breakStart: null, breakEnd: null, breakDurationMinutes: 15, breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4 };
 const at = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
-const marks = (...times: string[]) => times.map((time) => ({ markedAt: `2026-10-19T${time}:00-0300` }));
+const purposes = ['journey_start', 'break_start', 'break_end', 'journey_end'] as const;
+const marks = (...times: string[]) => times.map((time, index) => ({ markedAt: `2026-10-19T${time}:00-0300`,
+  classification: { purpose: purposes[index], source: 'declared', status: 'confirmed' } }));
 
 describe('Aviso de intervalo na faixa de registro', () => {
   it('janela livre: abre em breve, limite para iniciar = fim da janela − duração, janela fechada', () => {
@@ -43,5 +45,31 @@ describe('Aviso de intervalo na faixa de registro', () => {
     assert.equal(breakStatus({ ...base, breakType: 'none' }, [], at('10:00')), null);
     assert.equal(breakStatus(null, [], at('10:00')), null);
     assert.equal(breakStatus({ ...base, type: 'day_off' }, [], at('10:00')), null);
+  });
+
+  it('não presume intervalo pela paridade quando falta classificação', () => {
+    const status = breakStatus(base, [{ markedAt: '2026-10-19T09:57:00-0300' }], at('13:00'));
+    assert.equal(status?.level, 'neutral');
+    assert.match(status?.headline ?? '', /Classifique/);
+  });
+
+  it('jornada pode terminar sem bloqueio e segue para conferência quando o intervalo ficou incompleto', () => {
+    const status = breakStatus(base, [
+      { markedAt: '2026-10-19T09:57:00-0300', classification: { purpose: 'journey_start', source: 'declared', status: 'confirmed' } },
+      { markedAt: '2026-10-19T16:00:00-0300', classification: { purpose: 'journey_end', source: 'declared', status: 'confirmed' } },
+    ], at('16:00'));
+    assert.equal(status?.level, 'danger');
+    assert.match(status?.headline ?? '', /sem o intervalo completo/);
+  });
+
+  it('usa os horários do intervalo fixo quando a duração explícita está ausente', () => {
+    const fixed = { ...base, breakType: 'fixed' as const, breakDurationMinutes: null,
+      breakWindowStart: null, breakWindowEnd: null, breakStart: '12:00', breakEnd: '12:20' };
+    const status = breakStatus(fixed, [
+      { markedAt: '2026-10-19T09:57:00-0300', classification: { purpose: 'journey_start' as const, source: 'declared', status: 'confirmed' } },
+      { markedAt: '2026-10-19T16:00:00-0300', classification: { purpose: 'journey_end' as const, source: 'declared', status: 'confirmed' } },
+    ], at('16:00'));
+    assert.equal(status?.totalMinutes, 20);
+    assert.equal(status?.level, 'danger');
   });
 });
