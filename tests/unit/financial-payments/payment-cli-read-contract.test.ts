@@ -9,6 +9,11 @@ test("lookup fixa campo, igualdade, limite e recusa consultas arbitrárias", () 
   assert.deepEqual(query.from, [{ collectionId: "expenses" }]);
   assert.deepEqual(query.where.fieldFilter?.value, { doubleValue: 3000 });
   assert.equal(paymentLookupQuery("expense-account", "account_1").where.fieldFilter?.field.fieldPath, "accountPlan");
+  assert.equal(paymentLookupQuery("expense-purchase-order", "purchase_1").where.fieldFilter?.field.fieldPath, "purchaseOrderId");
+  const exactDueDate = paymentLookupQuery("expense-due-date", "2026-11-20");
+  assert.match(JSON.stringify(exactDueDate), /2026-11-20T03:00:00.000Z/);
+  assert.match(JSON.stringify(exactDueDate), /2026-11-21T03:00:00.000Z/);
+  assert.throws(() => paymentLookupQuery("expense-due-date", "2026-02-30"));
   assert.equal(paymentLookupQuery("expense-account-center", "account_1:center_1").where.compositeFilter?.filters.length, 2);
   assert.equal(paymentLookupQuery("expense-unit-month", "unit_1:center_1:2026-10").limit, 26);
   assert.throws(() => paymentLookupQuery("expense-unit-month", "unit_1:center_1:2026-13"));

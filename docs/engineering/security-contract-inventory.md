@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **499**
-- Totalmente contratados: **152**
-- Legados congelados: **344**
+- Totalmente contratados: **154**
+- Legados congelados: **342**
 - Exceções temporárias: **3**
 - Violações: **0**
 
@@ -216,8 +216,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/dre/source-data` | GET | `LEGACY_BASELINE` | [src/app/api/financial/dre/source-data/route.ts](../../src/app/api/financial/dre/source-data/route.ts) |
 | `/api/financial/dre/stock-cmv` | GET | `LEGACY_BASELINE` | [src/app/api/financial/dre/stock-cmv/route.ts](../../src/app/api/financial/dre/stock-cmv/route.ts) |
 | `/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts](../../src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts) |
-| `/api/financial/expenses/[expenseId]/boleto` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/boleto/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/route.ts) |
-| `/api/financial/expenses/[expenseId]/boleto/payment` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts) |
+| `/api/financial/expenses/[expenseId]/boleto` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/boleto/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/route.ts) |
+| `/api/financial/expenses/[expenseId]/boleto/payment` | POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts) |
 | `/api/financial/expenses/[expenseId]/payments` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/payments/route.ts](../../src/app/api/financial/expenses/[expenseId]/payments/route.ts) |
 | `/api/financial/expenses/[expenseId]/reconcile-provision` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts](../../src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts) |
 | `/api/financial/expenses/[expenseId]/settlement` | GET | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/settlement/route.ts](../../src/app/api/financial/expenses/[expenseId]/settlement/route.ts) |
