@@ -16,4 +16,4 @@ Os caminhos abaixo apontam o primeiro fluxo a inspecionar. Operações financeir
 
 Orçamentos por categoria/projeto, [consulta orçamento × despesas](../../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](../flows/financial-budgets.md).
 
-Pepper Potts e CLI local de boletos, sem agente autônomo no produto: [operação assistida](../pepper-payment-operations.md), [sessão no Chaves](../coala-keychain-payment-cli.md) e [fronteiras do pagamento](../flows/payment-requests.md#operação-assistida-por-cli).
+Pepper Potts e CLI local de boletos, sem agente autônomo no produto: [operação assistida](../pepper-payment-operations.md), [sessão autenticada](../coala-keychain-payment-cli.md) e [fronteiras do pagamento](../flows/payment-requests.md#operação-assistida-por-cli).

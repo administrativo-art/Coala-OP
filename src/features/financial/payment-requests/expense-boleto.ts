@@ -7,6 +7,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 });
 export const expenseBoletoSchema = z.object({
+  installmentNumber: z.coerce.number().int().positive().max(1000).optional(),
   barcode: z.string().transform(value => value.replace(/[.\s-]/g, "")).pipe(z.string().regex(/^\d{47}$/)),
   amountCents: z.coerce.number().int().positive().max(100_000_000),
   dueDate: isoDate,
@@ -15,7 +16,7 @@ export const expenseBoletoSchema = z.object({
   documentReference: z.string().trim().min(1).max(100),
   confirmed: z.literal(true),
 }).strict();
-export const expenseBoletoPaymentSchema = z.object({ scheduledFor: isoDate, confirmed: z.literal(true) }).strict();
+export const expenseBoletoPaymentSchema = z.object({ scheduledFor: isoDate, installmentNumber: z.number().int().positive().max(1000).optional(), confirmed: z.literal(true) }).strict();
 export type ExpenseBoletoInput = z.infer<typeof expenseBoletoSchema>;
 
 function mod10(value: string) {
@@ -48,13 +49,31 @@ export function validateExpenseBoleto(input: ExpenseBoletoInput) {
 export function assertExpenseBoletoTarget(expense: Record<string, any>, input: ExpenseBoletoInput, workspaceId: string) {
   if (expense.workspaceId !== workspaceId) throw new Error("Despesa fora do workspace.");
   if (!["pending", "provisioned"].includes(expense.status) || expense.paymentState === "paid" || expense.paidAt || expense.linkedBankTransactionId) throw new Error("A despesa não está disponível para pagamento.");
-  if (expense.paymentMethod !== "single" || (expense.installments?.length ?? 0) > 1 || expense.financialInboxMessageId) throw new Error("Use o fluxo original para parcelas, cartão ou cobrança recebida.");
-  if (Math.round(Number(expense.totalValue) * 100) !== input.amountCents) throw new Error("O valor do boleto difere da despesa.");
-  const due = expense.dueDate?.toDate?.() ?? new Date(expense.dueDate);
+  if (expense.financialInboxMessageId) throw new Error("Use o fluxo original para cobrança recebida.");
+  const installments = Array.isArray(expense.installments) ? expense.installments : [];
+  const isInstallmentExpense = expense.paymentMethod === "installments" && installments.length > 1;
+  if (!isInstallmentExpense && (expense.paymentMethod !== "single" || installments.length > 1 || input.installmentNumber != null)) {
+    throw new Error("Use o fluxo original para cartão ou cobrança recebida.");
+  }
+  const target = isInstallmentExpense
+    ? installments.find((item: any, index: number) => Number(item.number ?? index + 1) === input.installmentNumber)
+    : null;
+  if (isInstallmentExpense && !target) throw new Error("Parcela da despesa não encontrada.");
+  if (target && (!["pending", "provisioned"].includes(String(target.status)) || target.paidAt || target.linkedBankTransactionId || target.financialInboxMessageId)) {
+    throw new Error("A parcela não está disponível para pagamento.");
+  }
+  const targetValue = target ? target.value : expense.totalValue;
+  if (Math.round(Number(targetValue) * 100) !== input.amountCents) throw new Error("O valor do boleto difere da despesa.");
+  const targetDueDate = target ? target.dueDate : expense.dueDate;
+  const due = targetDueDate?.toDate?.() ?? new Date(targetDueDate);
   if (Number.isNaN(due.getTime()) || due.toISOString().slice(0, 10) !== input.dueDate) throw new Error("O vencimento difere da despesa.");
   if (financialExpenseCompetenceMonth(expense) !== input.competenceMonth) throw new Error("A competência difere da despesa.");
-  const current = expense.documentIdentity?.barcode;
+  const current = (target?.documentIdentity ?? expense.documentIdentity)?.barcode;
   if (current && current !== input.barcode) throw new Error("A despesa possui outro boleto.");
-  if (expense.installments?.some((item: any) => item.status === "paid" || item.paidAt || item.financialInboxMessageId)) throw new Error("A parcela já possui pagamento ou cobrança vinculada.");
+  if (!target && installments.some((item: any) => item.status === "paid" || item.paidAt || item.financialInboxMessageId)) throw new Error("A parcela já possui pagamento ou cobrança vinculada.");
   validateExpenseBoleto(input);
+}
+
+export function expenseBoletoAttachmentId(expenseId: string, installmentNumber?: number) {
+  return installmentNumber == null ? expenseId : `${expenseId}_installment_${installmentNumber}`;
 }

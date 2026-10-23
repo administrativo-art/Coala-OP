@@ -60,7 +60,7 @@ export function summarizePaymentRead(command: string, body: RecordValue) {
     "unitId", "unit", "accountPlan", "accountId", "resultCenter", "resultCenterId", "sourceType", "sourceId", "expenseId",
     "paymentRequestId", "paymentRail", "barcodeSnapshot", "interRequestId", "bankStatus", "bankObservation", "submissionStartedAt",
     "financialDocumentIdentity", "installments", "isForecast", "provisionStatus", "paidAt", "resultCenterName", "accountPlanName",
-    "unitName", "apportionments", "accountAllocations", "provisionSeriesKey", "provisionKind", "provisionType", "provisionCompetence", "provisionReconciliationStatus", "reconciledExpenseId", "reconciledProvisionId", "name", "notes",
+    "unitName", "purchaseOrderId", "purchaseExpenseRole", "apportionments", "accountAllocations", "provisionSeriesKey", "provisionKind", "provisionType", "provisionCompetence", "provisionReconciliationStatus", "reconciledExpenseId", "reconciledProvisionId", "name", "notes",
     "statementTransactionId", "bankTransactionId", "linkedTransactionId", "importedFrom", "documentNumber", "documentReference",
     "externalReference", "receiptNumber", "legalEntitySnapshot", "statementReconciliationStatus", "bankLiquidationObservedAt",
     "lastError", "submissionAttemptCount", "settlementRevision", "requestedSettlementAmount", "requestedLateChargeAmount",
