@@ -43,6 +43,8 @@ const timeModels = readFileSync(`${native}data/TimeModels.kt`, 'utf8');
 const timeOfflineStore = readFileSync(`${native}offline/TimeOfflineStore.kt`, 'utf8');
 const timeOfflineWorker = readFileSync(`${native}offline/TimeOfflineWorker.kt`, 'utf8');
 const timeDeviceIdentity = readFileSync(`${native}offline/TimeDeviceIdentity.kt`, 'utf8');
+const journeyLocationService = readFileSync(`${native}location/JourneyLocationService.kt`, 'utf8');
+const journeyLocationQueue = readFileSync(`${native}location/JourneyLocationQueue.kt`, 'utf8');
 const profileRoute = readFileSync('src/app/api/mobile/profile/route.ts', 'utf8');
 const filePaths = readFileSync('apps/coala-one-android/app/src/main/res/xml/file_paths.xml', 'utf8');
 
@@ -58,19 +60,24 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
   assert.match(time, /capturePointLocation/);
   assert.match(time, /O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade/);
   assert.doesNotMatch(time, /ACCESS_BACKGROUND_LOCATION/);
-  // Kind of punch is only suggested by order; the summary names who asks before sending an adjustment.
-  assert.match(time, /sugerida pela ordem/);
+  // A finalidade é declarada na batida, a sugestão continua editável e também pode ser corrigida no detalhe.
+  assert.match(timeModels, /val declaredPurpose: String\? = null/);
+  assert.match(time, /mutableStateOf\(if \(suggestionReliable\) suggestedPurpose else null\)/);
+  assert.match(time, /O que este registro representa\?/);
+  assert.match(time, /Alterar classificação/);
+  assert.match(timeViewModel, /api\.classifyMarking/);
   assert.match(time, /SummaryLine\("Quem pede"/);
   assert.match(time, /A batida original nunca é apagada/);
   // Receipts live in the app cache and leave only through the system viewer, share sheet or save dialog.
   assert.match(timeViewModel, /File\(directory, "receipts"\)/);
   assert.match(time, /ActivityResultContracts\.CreateDocument\("application\/pdf"\)/);
-  // Banco e espelho são sob demanda; a pasta de documentos não existe no Go.
+  // Banco e espelhos mensais são sob demanda; a pasta de documentos não existe no Go.
   assert.match(time, /"bank" ->[\s\S]*?vm\.loadBank\(\)/);
-  assert.match(time, /"mirror" ->[\s\S]*?vm\.loadMirror\(\)/);
+  assert.match(time, /"mirror" ->[\s\S]*?vm\.loadMirrorYear\(state\.month\.year\)/);
   assert.doesNotMatch(timeViewModel.split('fun load()')[1]?.split('fun month(')[0] ?? '', /timeBank|ownDocuments|mirror\(/);
-  assert.match(time, /PillChoice\("Banco de horas"/);
-  assert.match(time, /PillChoice\("Espelho"/);
+  assert.match(time, /Triple\("bank", "Banco de horas"/);
+  assert.match(time, /Triple\("mirror", "Espelhos mensais"/);
+  assert.match(time, /fun MirrorYearTab/);
   assert.match(time, /ActivityResultContracts\.CreateDocument\(mimeType\)/);
   for (const folder of ['time-documents']) {
     assert.match(filePaths, new RegExp(`path="${folder.replace('-', '\\-')}\\/"`));
@@ -92,6 +99,7 @@ test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovant
   assert.match(timeOfflineStore, /MAX_PENDING_MARKINGS = 20/);
   assert.match(timeOfflineStore, /12 \* 60 \* 60 \* 1000L/);
   assert.match(timeOfflineStore, /TimeOfflineRules\.markedAt/);
+  assert.match(timeOfflineStore, /declaredPurpose = declaredPurpose/);
   assert.match(timeOfflineStore, /identity\.sign/);
   assert.match(timeDeviceIdentity, /AndroidKeyStore/);
   assert.match(timeDeviceIdentity, /ECGenParameterSpec\("secp256r1"\)/);
@@ -99,8 +107,31 @@ test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovant
   assert.doesNotMatch(timeOfflineStore, /nsr|receiptId/);
 });
 
+test('Detalhe do dia é único e o acompanhamento entre unidades respeita início, intervalo e fim', () => {
+  assert.match(time, /"day" -> "Detalhe do dia"/);
+  assert.match(time, /RecordsTab[\s\S]*?onDay = \{ openDay\(it, "records"\) \}/);
+  assert.match(time, /AdjustmentHistoryTab[\s\S]*?openDay\(it, "adjustments"\)/);
+  assert.match(time, /BankTab[\s\S]*?openDay\(it, "bank"\)/);
+  assert.match(time, /Text\("Memória de cálculo"/);
+  assert.match(time, /Text\("Ajustes e ocorrências"/);
+  assert.match(time, /Permitir localização/);
+  assert.match(journeyLocationService, /300_000L, 100f/);
+  assert.match(journeyLocationService, /ACTION_PAUSE/);
+  assert.match(journeyLocationService, /ACTION_STOP/);
+  assert.match(journeyLocationService, /ACTION_ABORT/);
+  assert.match(journeyLocationService, /abortTracking\(\)/);
+  assert.match(journeyLocationQueue, /vault\.seal/);
+  assert.match(journeyLocationQueue, /response\.stopRequested/);
+  assert.match(journeyLocationQueue, /controller\.stopFromServer\(\)/);
+  assert.match(journeyLocationQueue, /NetworkType\.CONNECTED/);
+  assert.match(journeyLocationQueue, /setInitialDelay\(15, TimeUnit\.MINUTES\)/);
+  assert.doesNotMatch(time, /POST_NOTIFICATIONS/);
+});
+
 test('Troca de turno permanece em Solicitações e consome o contrato central', () => {
-  assert.match(time, /PillChoice\("Troca de turno"/);
+  assert.match(time, /TimeSectionCard\("Trocas de turno"/);
+  assert.match(time, /Text\("Resumo da proposta"/);
+  assert.match(time, /ShiftOptionCard/);
   assert.match(time, /vm\.requestShiftSwap/);
   assert.match(time, /vm\.decideShiftSwap\(request, "accept"\)/);
   assert.match(timeViewModel, /api\.requestShiftSwap\(ShiftSwapCreate/);
@@ -108,10 +139,24 @@ test('Troca de turno permanece em Solicitações e consome o contrato central', 
   assert.match(timeModels, /data class ShiftSwapViewerActions/);
 });
 
+test('Jornada fica direta no início e separa consultas, escala e benefícios', () => {
+  assert.match(activity, /HomeTimeSummary\(today\)/);
+  assert.match(home, /JORNADA DE TRABALHO/);
+  assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);
+  assert.match(time, /Triple\("records", "Registros"/);
+  assert.match(time, /Triple\("adjustments", "Histórico de ajustes"/);
+  assert.match(time, /Text\("BENEFÍCIOS"/);
+  assert.match(time, /TimeSectionCard\("Vale-transporte"/);
+  assert.match(time, /Ajustes de ponto ficam em Ponto/);
+  assert.match(schedule, /Solicitações deste dia/);
+  assert.match(schedule, /Vale-transporte permanece em Solicitações/);
+});
+
 test('Ponto e Solicitações aparecem só com a liberação do grupo app e a permissão de colaborador', () => {
   assert.match(profileRoute, /timeRecording: collaborator && app\?\.timeRecording\?\.mark === true/);
   assert.match(profileRoute, /requests: collaborator && app\?\.requests\?\.create === true/);
-  assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.requests, "Solicitações", "requests"\)/);
+  assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);
+  assert.match(home, /Triple\(modules\.requests, "Solicitações", "requests"\)/);
 });
 
 test('Compra local abre por unidade, retoma vínculo e nota no cartão da sangria e filtra só por organização e grupo', () => {

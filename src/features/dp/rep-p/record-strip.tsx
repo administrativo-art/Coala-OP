@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 
 import { breakStatus, plannedPausesOf, type BreakLevel } from "./break-status";
-import { fiscalClock, workedMinutes, type DayShift, type DayView } from "./day-model";
+import { fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import type { useRepPMarking } from "./use-rep-p-marking";
 
@@ -94,6 +94,39 @@ export function suggestedLabel(index: number, expected: number | null) {
   return index % 2 === 1 ? "Saída p/ intervalo" : "Volta do intervalo";
 }
 
+export const MARKING_PURPOSES = [
+  ["journey_start", "Início da jornada"], ["break_start", "Início do intervalo"],
+  ["break_end", "Volta do intervalo"], ["journey_end", "Fim da jornada"],
+] as const;
+export type MarkingPurpose = typeof MARKING_PURPOSES[number][0];
+export function purposeLabel(value: string | null | undefined) {
+  return MARKING_PURPOSES.find(([id]) => id === value)?.[1] ?? "Classificação pendente";
+}
+export function suggestedPurpose(markings: DayView["markings"], shift?: DayShift | null): MarkingPurpose {
+  const last = markings.at(-1)?.classification?.purpose;
+  if (!last) return "journey_start";
+  if (last === "journey_start") return "break_start";
+  if (last === "break_start") return "break_end";
+  if (last === "break_end") {
+    const completedPauses = markings.filter((marking) => marking.classification?.purpose === "break_end").length;
+    const plannedPauses = shift?.type === "work" ? plannedPausesOf(shift) : 1;
+    if (plannedPauses !== null && completedPauses < plannedPauses) return "break_start";
+    if (plannedPauses === null && shift?.breakDurationMinutes) {
+      let start: number | null = null;
+      let used = 0;
+      for (const marking of markings) {
+        const purpose = marking.classification?.purpose;
+        const time = minutesOf(fiscalClock(marking.markedAt));
+        if (purpose === "break_start") start = time;
+        if (purpose === "break_end" && start !== null) { used += Math.max(0, time - start); start = null; }
+      }
+      if (used < shift.breakDurationMinutes) return "break_start";
+    }
+    return "journey_end";
+  }
+  return "journey_start";
+}
+
 /** Sequência numerada das batidas do dia; a que falta num dia passado aparece em vermelho. */
 export function MarkingSequence({ day, today, dark }: { day: DayView; today: string; dark?: boolean }) {
   const expected = expectedPunchesOf(day);
@@ -131,7 +164,8 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
   const [dialogOpen, setDialogOpen] = useState(false);
   const expected = expectedPunchesOf(day);
   const nextIndex = day.markings.length;
-  const next = suggestedLabel(nextIndex, expected);
+  const nextPurpose = suggestedPurpose(day.markings, day.shift);
+  const suggestionReliable = day.markings.length === 0 || day.markings.every((marking) => marking.classification?.purpose);
   const units = options?.executionUnits ?? [];
   const unitName = units.find((unit) => unit.id === unitId)?.name;
   // Turno com unidade fixa: a unidade da escala vem escolhida; trocar é possível e não bloqueia a batida.
@@ -192,24 +226,27 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
             <Clock3 className="h-4 w-4" aria-hidden /> {action}
           </Button>
           <p className="mt-1 text-[11px] text-ds-on-dark-muted">
-            {blocked ? "Registro pelo sistema ainda não liberado" : ineligible ? "Vínculo de hoje sem registro de ponto" : `Próxima: ${nextIndex + 1}ª batida (sugestão: ${next.toLowerCase()})`}
+            {blocked ? "Registro pelo sistema ainda não liberado" : ineligible ? "Vínculo de hoje sem registro de ponto"
+              : suggestionReliable ? `Sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Escolha a finalidade; há batida anterior sem classificação"}
           </p>
         </div>
       </div>
       <RecordDialog open={dialogOpen} onOpenChange={setDialogOpen} marking={marking} unitName={unitName ?? ""}
-        label={next} index={nextIndex} onRecorded={onRecorded} />
+        suggestedPurpose={nextPurpose} suggestionReliable={suggestionReliable} index={nextIndex} onRecorded={onRecorded} />
     </ControlPanel>
   );
 }
 
 /** Confirmação antes de registrar e, depois, NSR e comprovante. Não fecha com a batida em andamento. */
-function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onRecorded }: {
-  open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; unitName: string; label: string; index: number; onRecorded: () => void;
+function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose, suggestionReliable, index, onRecorded }: {
+  open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; unitName: string; suggestedPurpose: MarkingPurpose; suggestionReliable: boolean; index: number; onRecorded: () => void;
 }) {
   const { recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile, unitClock,
     locationCaptureState, unitLocationPolicy } = marking;
   const [downloading, setDownloading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState<MarkingPurpose | null>(suggestionReliable ? suggestedPurpose : null);
+  useEffect(() => setPurpose(suggestionReliable ? suggestedPurpose : null), [suggestedPurpose, suggestionReliable, open]);
 
   function changeOpen(next: boolean) {
     if (!next && recording) return;
@@ -217,7 +254,8 @@ function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onR
     onOpenChange(next);
   }
   async function confirm() {
-    await record();
+    if (!purpose) return;
+    await record(purpose);
     onRecorded();
   }
   async function download() {
@@ -269,14 +307,19 @@ function RecordDialog({ open, onOpenChange, marking, unitName, label, index, onR
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               <dt className="text-ds-ink-muted">Unidade</dt><dd className="font-bold text-ds-ink">{unitName}</dd>
-              <dt className="text-ds-ink-muted">Sugestão</dt>
-              <dd className="font-bold text-ds-ink">{label} <span className="font-normal text-ds-ink-muted">(sugerida pela ordem das batidas)</span></dd>
             </dl>
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-bold text-ds-ink">O que este registro representa?</legend>
+              {MARKING_PURPOSES.map(([id, label]) => <label key={id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-ds-sm border border-ds-border px-3 py-2 text-sm">
+                <input type="radio" name="marking-purpose" value={id} checked={purpose === id} onChange={() => setPurpose(id)} />
+                <span className="font-semibold">{label}</span>{suggestionReliable && id === suggestedPurpose ? <span className="ml-auto text-xs text-ds-accent">Sugerida</span> : null}
+              </label>)}
+            </fieldset>
             <LocationCaptureNotice policy={unitLocationPolicy} state={locationCaptureState} />
             {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ds-ghost" onClick={() => changeOpen(false)} disabled={recording}>Cancelar</Button>
-              <Button type="button" variant="primary-modal" loading={recording} loadingLabel="Registrando…" disabled={!canRecord} onClick={() => void confirm()}>
+              <Button type="button" variant="primary-modal" loading={recording} loadingLabel="Registrando…" disabled={!canRecord || !purpose} onClick={() => void confirm()}>
                 <Clock3 className="h-4 w-4" aria-hidden /> Confirmar registro
               </Button>
             </div>

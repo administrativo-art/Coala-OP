@@ -9,6 +9,7 @@ import { AppError } from '@/lib/observability/app-error';
 import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
 
 import { repPOwnMonthSchema } from './schemas';
+import { isBrazilTimeZone } from './time-zones';
 
 /** Turno escalado da própria pessoa num dia, com o intervalo do cadastro do turno e a tolerância da jornada; nunca dado fiscal. */
 export type RepPOwnScheduledShift = {
@@ -19,6 +20,7 @@ export type RepPOwnScheduledShift = {
   overnight: boolean;
   unitId: string | null;
   unitName: string | null;
+  unitTimeZone: string | null;
   shiftName: string | null;
   breakType: 'none' | 'fixed' | 'flexible' | 'staggered';
   breakStart: string | null;
@@ -28,6 +30,7 @@ export type RepPOwnScheduledShift = {
   breakWindowEnd: string | null;
   expectedPunches: number | null;
   executionUnitPolicy: 'scheduled' | 'free';
+  locationTrackingPolicy: 'disabled' | 'punch_only' | 'workday';
   breakSegments: { start: string; end: string }[] | null;
   breakSplit: 'single' | 'multiple';
   breakPauseCount: number | null;
@@ -119,6 +122,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
   const holidays = [...new Set(holidaySnapshots.flatMap((snapshot) => snapshot.docs.filter((doc) => doc.get('type') !== 'optional').map((doc) => civilDateOf(doc.get('date')))).filter((date): date is string => Boolean(date) && date! >= start && date! <= end))].sort();
   const definitionById = new Map(definitions.filter((doc) => doc.exists).map((doc) => [doc.id, doc]));
   const unitNameById = new Map(units.filter((doc) => doc.exists).map((doc) => [doc.id, text(doc.get('name'))]));
+  const unitTimeZoneById = new Map(units.filter((doc) => doc.exists && isBrazilTimeZone(doc.get('timeZone')))
+    .map((doc) => [doc.id, String(doc.get('timeZone'))]));
 
   const result: RepPOwnScheduledShift[] = ownShifts.map((doc) => {
     const definition = definitionById.get(text(doc.get('shiftDefinitionId')) ?? '');
@@ -141,6 +146,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       overnight: doc.get('overnight') === true,
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
+      unitTimeZone: unitId ? unitTimeZoneById.get(unitId) ?? null : null,
       shiftName: text(definition?.get('name')),
       breakType,
       breakStart: breakType === 'fixed' ? breakStart : null,
@@ -154,6 +160,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakWindowEnd: breakType === 'staggered' ? text(definition?.get('breakWindowEnd')) : null,
       expectedPunches: minutes(definition?.get('expectedPunches')),
       executionUnitPolicy: definition?.get('executionUnitPolicy') === 'free' ? 'free' : 'scheduled',
+      locationTrackingPolicy: (['disabled', 'punch_only', 'workday'] as const).find((value) => value === definition?.get('locationTrackingPolicy')) ?? 'punch_only',
       breakSegments: segments?.length ? segments : null,
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),

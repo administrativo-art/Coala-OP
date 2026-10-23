@@ -33,7 +33,7 @@ Nenhuma tela foi conferida em emulador ou aparelho neste levantamento. Medidas, 
 
 ## Princípios
 
-1. **Decidido — a barra escura mostra dados, não gestos.** A barra do início traz marca, saudação, função e avatar, e nada mais: sem alça, sem deslize, sem resumo que abre. O que há para hoje aparece nos selos dos cartões. Protegido por `coala-go-ui-contract.test.ts` (proíbe `TodayHeader`, `draggable` e "Deslize para").
+1. **Decidido — a barra escura mostra dados, não gestos.** A barra do início traz marca, saudação, função e avatar, e nada mais: sem alça, sem deslize, sem resumo que abre. Para quem registra ponto, a hora oficial, o turno e as batidas do dia ficam num cartão informativo imediatamente abaixo; registrar continua exigindo abrir **Ponto**. Protegido por `coala-go-ui-contract.test.ts` (proíbe `TodayHeader`, `draggable` e "Deslize para").
 2. **Decidido — toda seta de lista ou de seção que abre é a seta desenhada `DropdownChevron`.** Nunca um caractere (`⌄`, `⌃`, `▾`, `▼`). Detalhes em [Seta de dropdown](#seta-de-dropdown).
 3. **Decidido — a Escala abre em "Todas as unidades".** Detalhes em [Comportamento de abertura das telas](#comportamento-de-abertura-das-telas).
 4. **Decidido — "Todas as unidades" vem de `Rules.unitChoices`**, nunca de uma entrada montada à mão, e só existe quando a pessoa tem mais de uma unidade.
@@ -124,7 +124,6 @@ Padrões recorrentes:
 | Elemento | Raio |
 | --- | --- |
 | Barra escura (só cantos de baixo) | 28 dp |
-| Cartão de destaque do início (Compra local) | 22 dp |
 | Cartão de módulo do início | 20 dp |
 | `CardBlock`, `ListRow`, estado vazio, passo do guia | 18 dp |
 | Blocos de Escala e Metas, seção da revisão, opção de orientação | 16 dp |
@@ -139,7 +138,7 @@ Padrões recorrentes:
 - **Espaço entre blocos:** 10 dp no corpo da página; 8 dp dentro do rodapé; 10–12 dp dentro de cartões.
 - **Área de toque mínima:** 44 dp (botões da barra, navegação de semana) e 48 dp (botões, caixas de marcar, olho da senha, passos − / +). Um desenho menor fica dentro de uma área de toque maior — o quadrado de 38 dp da barra fica numa área de 44 dp.
 - **Bordas:** 1 dp; 2 dp quando o item está selecionado ou aberto.
-- **Sombra:** só o cartão de Compra local do início tem elevação (6 dp). O resto é plano com borda.
+- **Sombra:** os cartões de módulo do início são planos com borda; Compra local segue o mesmo tamanho e hierarquia dos demais serviços.
 
 ## Ícones
 
@@ -151,7 +150,7 @@ Padrões recorrentes:
 
 ### Ícones dos módulos (`ModuleIcon`, `ui/Motion.kt`)
 
-Desenhados numa grade de 44 × 44, traço de 2, e escalados para o tamanho pedido (34 dp nos cartões do início, 64 dp no cartão de Compra local). Cada um tem um movimento próprio em laço:
+Desenhados numa grade de 44 × 44, traço de 2, e escalados para 34 dp nos cartões do início. Cada um tem um movimento próprio em laço:
 
 | Módulo | Desenho | Movimento | Ciclo |
 | --- | --- | --- | --- |
@@ -338,10 +337,10 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 
 ### Cartões do início (`HomeTile`)
 
-- **Compra local** (quando liberada): cartão de largura total, com sombra, título, descrição, selo "N notas no aparelho" e ilustração grande à direita.
-- **Demais módulos:** grade de duas colunas com cartões de mesma altura; ícone num quadro de 44 dp, selo de estado no canto superior direito, título e uma linha de descrição.
+- **Jornada de trabalho:** **Ponto** e **Escala** são cartões diretos na primeira grade; Ponto nunca fica escondido em submenu. Acima deles, quando liberado, o cartão informativo mostra hora oficial, turno e sequência do dia, mas não registra batida.
+- **Outros serviços:** Solicitações, Compra local e os demais módulos usam a mesma grade de duas colunas, com cartões de mesma altura; ícone num quadro de 44 dp, selo de estado no canto superior direito, título e uma linha de descrição.
 - **Selos:** "Em curso" (contagem aberta, cor de aviso), número de reposições a receber, horário do turno de hoje, percentual da meta.
-- **Ponto** e **Solicitações** entram na grade antes dos demais módulos e aparecem só com a liberação do grupo `app` do perfil (`app.timeRecording.mark`, `app.requests.create`) somada à permissão de colaborador do sistema.
+- **Liberação:** Ponto, Escala e Solicitações respeitam separadamente os módulos do grupo `app` somados à permissão de colaborador do sistema.
 - Só aparecem os módulos que o perfil libera. Sem nenhum: "Nenhum módulo liberado".
 
 ## Comportamento de abertura das telas
@@ -350,10 +349,10 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 | --- | --- | --- |
 | Escala | Em **"Todas as unidades"**, visão "Equipe", semana atual, dia de hoje. Toda vez que a pessoa entra na tela, volta para "Todas as unidades"; a unidade escolhida vale até sair (e sobrevive a girar o aparelho). Com uma unidade só, abre nela, sem seletor ativo | **Decidido** (2026-10-14) |
 | Metas | Na última escolha da pessoa neste aparelho — unidade ou "Todas as unidades" —, guardada por conta. Sem escolha guardada, na primeira unidade | Como está hoje |
-| Início | Saudação e cartões dos módulos liberados; os selos carregam em seguida | Como está hoje |
+| Início | Saudação; resumo informativo da jornada; Ponto e Escala diretos; depois os demais serviços | Decidido (2026-10-22) |
 | Signage | Lista de unidades; depois o painel da unidade; depois o guia em passos | Como está hoje |
-| Ponto | Aba "Hoje", na unidade de trabalho principal do vínculo (a empregadora primeiro). Sem "Todas as unidades": a batida precisa de uma unidade | Etapa 7 (2026-10-19) |
-| Solicitações | Aba "Ausência", com a lista dos próprios pedidos; o botão do rodapé abre o pedido novo | Etapa 7 (2026-10-19) |
+| Ponto | Operação de hoje; cartões abrem Registros, Histórico de ajustes, Banco de horas e Espelhos mensais. Os três primeiros reutilizam Detalhe do dia. Sem "Todas as unidades": a batida precisa de uma unidade; turno Entre unidades permite escolher a unidade atual | Decidido (2026-10-23) |
+| Solicitações | A entrada usa cartões: Jornada contém ausência e troca de turno; Benefícios contém vale-transporte. Ausência e troca também podem começar no dia escolhido da Escala. Ajuste de ponto fica exclusivamente em Ponto, ligado ao dia e às batidas | Decidido (2026-10-22) |
 | Aplicativo | Bloqueado com conta conhecida: pede a biometria sozinho, se a pessoa ativou. Sem conta: entrada | Como está hoje |
 
 A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `Rules.ALL_UNITS`) e no reinício a cada visita em `ScheduleScreen`; `coala-go-ui-contract.test.ts` e `ViewModelsTest` protegem as duas partes.
@@ -369,7 +368,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - Voltar fica bloqueado enquanto a tela está ocupada.
 - Tarefas de conta ficam no **perfil**, fora do início: foto, versão do app, atualização e "Sair da conta".
 - Para o único login de desenvolvimento autorizado, o perfil inclui **Visualizar como usuário**, com busca e seleção de contas ativas. A seleção troca os dados e permissões apresentados, nunca a identidade autenticada. Enquanto ativa, todas as páginas exibem uma faixa persistente "Visualizando como … · somente leitura"; o perfil oferece retorno ao usuário real e oculta ações de foto, atualização e notificações.
-- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; as notificações de solicitações continuam abrindo na web. Pedir ausência e vale-transporte já é nativo (Solicitações); acompanhar a análise completa e anexar depois do envio seguem no Coala One. Simulação não registra dispositivos.
+- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação; o app não solicita notificações gerais ao abrir. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; as notificações de solicitações continuam abrindo na web. O indicador técnico do Android para o acompanhamento de localização em primeiro plano não é um aviso geral e existe somente durante a jornada ativa. Pedir ausência e vale-transporte já é nativo (Solicitações); acompanhar a análise completa e anexar depois do envio seguem no Coala One. Simulação não registra dispositivos.
 
 ## Estados e mensagens
 
@@ -389,12 +388,12 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 **Como está hoje.**
 
 - **Entrada e bloqueio:** aurora ao fundo, marca grande com slogan, campos sobre o escuro, botão principal escuro. Olho para mostrar a senha.
-- **Escala:** faixa de sete dias sempre na largura da tela, cada dia com a hora de início da pessoa, "folga" ou "—"; dia escolhido em `pillFill`, hoje em `wine`. "Ver mês" troca para a grade do mês. Linhas de turno com avatar, nome, cargo e horário com o relógio.
+- **Escala:** faixa de sete dias sempre na largura da tela, cada dia com a hora de início da pessoa, "folga" ou "—"; dia escolhido em `pillFill`, hoje em `wine`. "Ver mês" troca para a grade do mês. Linhas de turno com avatar, nome, cargo e horário com o relógio. O detalhe do dia mostra ausências e trocas existentes e permite pedir apenas **ausência** ou **troca de turno** daquele dia; vale-transporte continua na área central de Solicitações.
 - **Metas:** número grande, selo de ritmo, barra de 12 dp em degradê `accent` → `pink` com marcas brancas nos níveis. Abas Dias, Equipe e Prêmio. Gráfico de barras por dia: verde bateu, `accent` abaixo, `pink` hoje, linha tracejada na meta do dia, com legenda.
 - **Signage:** guia em passos numerados (círculo `accentSoft` com o número), monitor com o endereço sendo digitado, escolha de orientação em cartões, leitor de QR em tela cheia.
 - **Recorte da foto:** tela cheia escura; a foto num quadrado de cantos de 20 dp com tudo fora do círculo escurecido a 72%. Arrastar posiciona, dois dedos ou a barra aproximam.
 - **Compra local:** revisão em seções numeradas que abrem e fecham; a aberta ganha borda de 2 dp `accent` e a [seta](#seta-de-dropdown) para cima. Na captura, comprovante é opcional somente quando o servidor identifica NF-e/DANFE ou NFC-e autorizada; cupom comum, recibo ou contingência pendente exige o anexo. A IA mostra em cada item uma destinação sugerida: item existente, item não encontrado, possível patrimônio, uso imediato ou revisão necessária. Essas opções não viram um seletor manual adicional no app; produto, quantidade e validade continuam revisáveis. A seleção de sangria pode ser cancelada antes do envio. A primeira etapa filtra por organização e grupo e abre cartões de unidade; não há um terceiro filtro por unidade. O vínculo posterior de compra aguardando sangria usa confirmação inline **dentro do cartão da própria sangria**: enquanto a escolha local estiver aberta, o cartão mostra “Retomar vinculação”, volta automaticamente para a área visível e não abre uma segunda captura. Cancelar ou voltar limpa a escolha sem chamar a API.
-- **Ponto (`ui/TimeScreens.kt`):** cartão `dark` "HORA OFICIAL" com relógio de segundos em `CodeFont`, no fuso da unidade escolhida e com o rótulo `UTC−03:00`; o relógio soma a leitura oficial ao tempo monotônico do aparelho. Batidas numeradas ("1ª", "2ª") com o tipo **sugerido pela ordem**; batida desconsiderada pelo DP fica riscada em `faint`, incluída leva "incluída pelo DP". On-line, a confirmação mostra NSR e comprovante do servidor. Sem conexão e com autorização ainda válida, a ação vira "Registrar ponto offline" e a confirmação avisa que a marcação fica guardada no aparelho, sem NSR nem comprovante até sincronizar. A tela mostra quantidade pendente e caso bloqueado sem apagar a evidência. Comprovante abre numa folha com "Abrir comprovante", "Compartilhar" (folha nativa) e "Salvar no aparelho" (seletor do sistema); comprovante pendente mostra só o aviso de indisponibilidade.
+- **Ponto (`ui/TimeScreens.kt`):** os cartões `dark` do início e de Registro de ponto usam o rótulo "HORA LEGAL BRASILEIRA", relógio de segundos em `CodeFont` e hierarquia sem pílulas: fuso discreto no título e unidade abaixo. Quando existe unidade definida na escala ela já vem selecionada e o seletor não é exibido; **Entre unidades** permite informar a unidade atual. A confirmação destaca a hora exata e exige uma finalidade entre início da jornada, início do intervalo, volta do intervalo e fim da jornada. A opção sugerida vem da última finalidade declarada, mas é organizacional: qualquer opção continua permitida e nunca bloqueia a batida. Cada batida exibe a finalidade e oferece **Alterar classificação** no mesmo painel do comprovante, sem mudar horário, NSR ou documento fiscal. A finalidade pode apenas coordenar o acompanhamento operacional Entre unidades; sua edição reconcilia esse estado, e uma sequência ambígua o encerra. Todo turno novo exige intervalo; jornada finalizada sem ele continua registrada e fica para conferência. A página principal preserva a ação frequente e abre as consultas por cartões. O ajuste escolhe o dia numa faixa semanal com navegação e calendário para outras semanas. Batida desconsiderada pelo DP fica riscada em `faint`, incluída leva "incluída pelo DP". On-line, a confirmação mostra registro oficial e comprovante do servidor. Sem conexão e com autorização ainda válida, a finalidade escolhida e a marcação ficam cifradas no aparelho, sem registro oficial nem comprovante até sincronizar. A tela mostra quantidade pendente e caso bloqueado sem apagar a evidência. Histórico de ajustes é condensado por dia. Registros, Histórico e Banco abrem a mesma tela **Detalhe do dia**, com previsto, trabalhado, intervalo, resultado, memória de cálculo, batidas e ajustes. Banco de horas expande cada crédito ou débito para explicar motivo, competência e versão da apuração. Espelhos aparecem em cartões de ano e mês; somente competências fechadas abrem o PDF. Comprovante abre numa folha com "Abrir comprovante", "Compartilhar" e "Salvar no aparelho"; comprovante pendente mostra só o aviso de indisponibilidade. No turno Entre unidades, a permissão de localização é contextual e nunca pedida na abertura do app; a explicação vem antes do pedido. Falta de permissão ou GPS nunca bloqueia a batida. Enquanto o gate jurídico da coleta contínua estiver desligado, nenhum serviço periódico é iniciado.
 - **Pedidos em duas etapas (ajuste de ponto, ausência, vale-transporte):** formulário → "Revisar …" → resumo em `SummaryLine` (rótulo `muted` sobre o valor) → `FooterPair` "Editar" / "Enviar …". O resumo do ajuste diz quem pede e que a batida original nunca é apagada. Textos longos usam `NoteInput` com contador do limite do servidor.
 
 ## Acessibilidade

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildDayView, buildMonthView, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
+import { buildDayView, buildMonthView, plannedBreakMinutesOf, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
 
 const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: 'Quiosque', breakType: 'fixed',
   breakStart: '13:00', breakEnd: '13:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null, expectedPunches: 4,
@@ -89,5 +89,25 @@ describe('Leitura do dia no Registro de ponto', () => {
 
   it('dia em andamento soma até agora', () => {
     assert.equal(workedMinutes([{ markedAt: '2026-10-19T09:57:00-0300' }], 10 * 60 + 57), 60);
+  });
+
+  it('fim de jornada sem intervalo declarado não bloqueia e deixa o dia para conferência', () => {
+    const classified = [
+      { ...mark('2026-10-12', '10:00', 1), classification: { purpose: 'journey_start' as const, source: 'declared', status: 'confirmed' } },
+      { ...mark('2026-10-12', '16:15', 2), classification: { purpose: 'journey_end' as const, source: 'declared', status: 'confirmed' } },
+    ];
+    const day = buildDayView({ date: '2026-10-12', today: '2026-10-19', shift, absences: [], markings: classified });
+    assert.ok(day.incidents.includes('missing_break'));
+    assert.equal(day.markings.length, 2);
+  });
+
+  it('calcula o intervalo fixo pelos horários quando a duração legada não foi persistida', () => {
+    const legacyFixed = { ...shift, breakDurationMinutes: null, breakStart: '13:00', breakEnd: '13:15' };
+    assert.equal(plannedBreakMinutesOf(legacyFixed), 15);
+    const classified = [
+      { ...mark('2026-10-12', '10:00', 1), classification: { purpose: 'journey_start' as const, source: 'declared', status: 'confirmed' } },
+      { ...mark('2026-10-12', '16:15', 2), classification: { purpose: 'journey_end' as const, source: 'declared', status: 'confirmed' } },
+    ];
+    assert.ok(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: legacyFixed, absences: [], markings: classified }).incidents.includes('missing_break'));
   });
 });

@@ -33,6 +33,7 @@ export type DayShift = {
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";
+  classification?: { purpose: "journey_start" | "break_start" | "break_end" | "journey_end"; source: string; status: string } | null;
   /** Tratamento aprovado (PTRP): original, desconsiderada (continua listada) ou incluída por ajuste. */
   treatment?: "original" | "discarded" | "included"; adjustmentId?: string };
 
@@ -41,7 +42,7 @@ export type DayTreatment = { type: "discard" | "inclusion"; workDate: string; ad
 
 export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string; approvedByInaction?: boolean };
 
-export type DayIncident = "missing" | "odd" | "late_exit" | "short_break" | "long_break" | "other_unit";
+export type DayIncident = "missing" | "odd" | "missing_break" | "late_exit" | "short_break" | "long_break" | "other_unit";
 
 export type DayView = {
   date: string;
@@ -69,6 +70,20 @@ const ACTIVE_ABSENCE = new Set(["approved", "in_review", "submitted"]);
 
 export function minutesOf(time: string) {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+}
+
+function clockSpan(start: string, end: string) {
+  const span = minutesOf(end) - minutesOf(start);
+  return span < 0 ? span + 1440 : span;
+}
+
+/** Duração prevista, inclusive para turnos fixos legados que guardam somente os horários. */
+export function plannedBreakMinutesOf(shift: DayShift | null) {
+  if (!shift || shift.type !== "work" || shift.breakType === "none") return 0;
+  if (typeof shift.breakDurationMinutes === "number" && shift.breakDurationMinutes > 0) return shift.breakDurationMinutes;
+  if (shift.breakType !== "fixed") return 0;
+  if (shift.breakSegments?.length) return shift.breakSegments.reduce((sum, segment) => sum + clockSpan(segment.start, segment.end), 0);
+  return shift.breakStart && shift.breakEnd ? clockSpan(shift.breakStart, shift.breakEnd) : 0;
 }
 
 /** HH:MM do instante fiscal (AAAA-MM-DDThh:mm:00±hhmm), já no fuso do estabelecimento. */
@@ -109,7 +124,7 @@ export function pauseLengths(markings: Pick<DayMarking, "markedAt">[]) {
 function shiftMinutes(shift: DayShift) {
   if (!shift.startTime || !shift.endTime) return 0;
   const span = minutesOf(shift.endTime) - minutesOf(shift.startTime);
-  return Math.max(0, (span < 0 ? span + 1440 : span) - (shift.breakDurationMinutes ?? 0));
+  return Math.max(0, (span < 0 ? span + 1440 : span) - plannedBreakMinutesOf(shift));
 }
 
 export function buildDayView(input: { date: string; today: string; shift: DayShift | null; markings: DayMarking[]; absences: DayAbsence[]; treatments?: DayTreatment[] }): DayView {
@@ -140,7 +155,13 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
     else if (Math.abs(startDiff) > tolerance) deviation = { edge: "start", minutes: startDiff };
     if (endDiff > tolerance) incidents.push("late_exit");
   }
-  const expectedBreak = shift?.breakDurationMinutes ?? null;
+  const expectedBreakValue = plannedBreakMinutesOf(shift);
+  const expectedBreak = expectedBreakValue > 0 ? expectedBreakValue : null;
+  const classificationsComplete = markings.length > 0 && markings.every((marking) => marking.classification?.purpose);
+  const journeyEnded = markings.at(-1)?.classification?.purpose === "journey_end";
+  const hasBreakStart = markings.some((marking) => marking.classification?.purpose === "break_start");
+  const hasBreakEnd = markings.some((marking) => marking.classification?.purpose === "break_end");
+  if (shift && expectedBreak && classificationsComplete && journeyEnded && (!hasBreakStart || !hasBreakEnd)) incidents.push("missing_break");
   if (breakMinutes !== null && expectedBreak) {
     if (breakMinutes < expectedBreak - tolerance) incidents.push("short_break");
     if (breakMinutes > expectedBreak + tolerance) incidents.push("long_break");
@@ -174,5 +195,5 @@ export function buildMonthView(input: { month: string; today: string; shifts: (D
 }
 
 export const INCIDENT_SEVERITY: Record<DayIncident, "danger" | "warn"> = {
-  missing: "danger", odd: "danger", short_break: "danger", late_exit: "warn", long_break: "warn", other_unit: "warn",
+  missing: "danger", odd: "danger", missing_break: "danger", short_break: "danger", late_exit: "warn", long_break: "warn", other_unit: "warn",
 };

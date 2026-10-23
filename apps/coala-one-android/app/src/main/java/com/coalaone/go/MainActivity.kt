@@ -34,12 +34,16 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
+import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.ui.*
 import android.Manifest
 import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import java.io.File
 import javax.inject.Inject
 
@@ -117,17 +121,52 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
-        composable("schedule") { ScheduleScreen(hiltViewModel(), back) }
+        composable("schedule") { ScheduleScreen(hiltViewModel(), back,
+            onRequestAbsence = { date -> nav.navigate("requests/absence/$date") },
+            onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
         composable("time") { TimeScreen(hiltViewModel(), back) }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
+        composable("requests/{tab}/{date}", arguments = listOf(
+            navArgument("tab") { type = NavType.StringType }, navArgument("date") { type = NavType.StringType }
+        )) { entry -> RequestsScreen(hiltViewModel(), back, entry.arguments?.getString("tab") ?: "absence", entry.arguments?.getString("date")) }
     } }
 }
 private fun installUpdate(context: android.content.Context, file: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
+}
+@Composable private fun HomeTimeSummary(today: HomeToday) {
+    val options = today.timeOptions
+    val clock = options?.officialClock
+    val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
+    val zone = TimeRules.unitZone(options, unitId)
+    var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)) }
+    LaunchedEffect(today.timeClockOffset) {
+        while (true) {
+            official = android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)
+            delay(1000 - official % 1000)
+        }
+    }
+    val times = today.timePunches.sortedBy { it.markedAt }.joinToString(" · ") { TimeRules.minuteOf(it.markedAt) }
+    Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            if (clock?.available == true && today.timeClockOffset != null) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+        }
+        if (clock?.available == true && today.timeClockOffset != null) {
+            Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
+                style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+            Text(today.shiftUnit ?: "Unidade da escala não informada", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+            Text(if (times.isBlank()) "Nenhuma batida hoje" else "${today.timePunches.size} ${if (today.timePunches.size == 1) "batida" else "batidas"} hoje", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text(if (options == null) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
+            Text("Abra Ponto para consultar a situação e tentar novamente.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
     val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
@@ -160,13 +199,25 @@ private fun installUpdate(context: android.content.Context, file: File) {
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
         state?.modules?.let { modules ->
-            if (modules.localPurchase) HomeTile("Compra local", "purchase", Modifier.fillMaxWidth(), pending.size) { navigate("purchase") }
-            val tiles = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.requests, "Solicitações", "requests"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            if (modules.timeRecording) HomeTimeSummary(today)
+            val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
+            if (journey.isNotEmpty()) {
+                Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    journey.forEach { (_, title, route) ->
+                        val badge = if (route == "time") today.timePunches.takeIf { it.isNotEmpty() }?.size?.let { "$it batida${if (it == 1) "" else "s"}" } else today.shiftShort
+                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge) { navigate(route) }
+                    }
+                    if (journey.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            val tiles = listOf(Triple(modules.requests, "Solicitações", "requests"), Triple(modules.localPurchase, "Compra local", "purchase"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            if (tiles.isNotEmpty()) Text("OUTROS SERVIÇOS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             tiles.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { (_, title, route) ->
-                        val badge = when (route) { "count" -> "Em curso".takeIf { today.openCounts.isNotEmpty() }; "receive" -> today.repositions?.takeIf { it > 0 }?.toString(); "schedule" -> today.shiftShort; "goals" -> today.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
-                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge, badgeWarm = route == "count") { navigate(route) }
+                        val badge = when (route) { "count" -> "Em curso".takeIf { today.openCounts.isNotEmpty() }; "receive" -> today.repositions?.takeIf { it > 0 }?.toString(); "goals" -> today.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
+                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), pending = if (route == "purchase") pending.size else 0, badge = badge, badgeWarm = route == "count") { navigate(route) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -187,6 +238,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
     LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
+    LaunchedEffect(developerViewAs.targetUserId) { if (canDeveloperViewAs && developerViewAs.available) vm.refresh() }
     val owner = LocalOwner.current
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)

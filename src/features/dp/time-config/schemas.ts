@@ -264,12 +264,16 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   overnight: z.boolean().optional(),
   expectedPunches: z.number().int().min(2).max(12).nullable().optional(),
   executionUnitPolicy: z.enum(['scheduled', 'free']).optional(),
+  locationTrackingPolicy: z.enum(['disabled', 'punch_only', 'workday']).optional(),
 }).strict();
 
 function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObjectSchema>, context: z.RefinementCtx) {
   const hasBreakStart = typeof value.breakStart === 'string';
   const hasBreakEnd = typeof value.breakEnd === 'string';
   const effectiveBreakType = value.breakType ?? (hasBreakStart && hasBreakEnd ? 'fixed' : 'none');
+  if (effectiveBreakType === 'none') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakType'], message: 'Todo turno de trabalho precisa ter um intervalo configurado.' });
+  }
   const segments = value.breakSegments ?? null;
   if (segments) {
     if (effectiveBreakType !== 'fixed') {
@@ -319,6 +323,9 @@ function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObject
   }
   if (value.unitIds && value.unitNames && value.unitIds.length !== value.unitNames.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['unitNames'], message: 'Unidades e nomes precisam ter o mesmo tamanho.' });
+  }
+  if (value.locationTrackingPolicy === 'workday' && value.executionUnitPolicy !== 'free') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['locationTrackingPolicy'], message: 'O acompanhamento durante a jornada só pode ser usado no trabalho entre unidades.' });
   }
 }
 

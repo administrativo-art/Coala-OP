@@ -5,6 +5,9 @@ export type AdjustmentView = {
   establishmentId: string; unitId: string;
   target: { receiptId: string; nsr: number; markedAt: string; executionUnitId: string } | null;
   inclusion: { markedAt: string; executionUnitId: string } | null;
+  operations?: Array<{ kind: 'include' | 'discard' | 'correct';
+    target: { receiptId: string; nsr: number; markedAt: string; executionUnitId: string } | null;
+    inclusion: { markedAt: string; executionUnitId: string } | null }>;
   reason: string;
   acts: Array<{ action: 'requested' | 'approved' | 'rejected' | 'cancelled'; actorUid: string; role: 'titular' | 'reviewer';
     at: string; clockSource: 'hora_legal' | 'server'; reason?: string; previousHash: string | null; hash: string }>;
@@ -13,6 +16,14 @@ export type AdjustmentView = {
 
 export type TreatmentView = { id: string; adjustmentId: string; workDate: string; type: 'discard' | 'inclusion';
   originalReceiptId: string | null; markedAt: string | null; executionUnitId: string | null };
+
+export type MarkingClassificationRequestView = {
+  id: string; employeeId: string; employeeName: string | null; receiptId: string; workDate: string;
+  markedAt: string; nsr: number; unitId: string; closureVersion: number; version: number;
+  requestedPurpose: 'journey_start' | 'break_start' | 'break_end' | 'journey_end';
+  currentClassification: { purpose?: string } | null; status: 'in_review' | 'approved' | 'rejected' | 'cancelled';
+  createdAt: string; updatedAt: string;
+};
 
 export const ADJUSTMENT_KIND_LABELS: Record<AdjustmentView['kind'], { title: string; hint: string }> = {
   include: { title: 'Esqueci de bater', hint: 'Inclui um horário que faltou. Você informa a hora.' },

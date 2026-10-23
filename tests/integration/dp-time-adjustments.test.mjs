@@ -11,6 +11,90 @@ const { defaultAdminPermissions, defaultGuestPermissions } = await import('../..
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { createOwnAdjustment, decideAdjustment, listAdjustmentsForReview, listOwnAdjustments, TREATMENTS, CLOSURES }
   = await import('../../src/features/dp/time-adjustments/service.server.ts');
+const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
+
+test('ajuste agrupado só aparece e só pode ser decidido por quem acessa todas as unidades', async () => {
+  const prefix = `multiunit-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const reviewerId = `${prefix}-reviewer`;
+  const unitA = `${prefix}-a`; const unitB = `${prefix}-b`;
+  const adjustmentId = `${prefix}-adjustment`;
+  const permissions = structuredClone(defaultGuestPermissions); permissions.dp.requests.review = true;
+  const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitA] }, profileId: null,
+    permissions, isDefaultAdmin: false, workspace_id: workspaceId };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
+  await hrDbAdmin.collection('ptrp_adjustmentRequests').doc(adjustmentId).set({
+    id: adjustmentId, workspaceId, employeeUid: `${prefix}-employee`, employeeName: 'Maria', workDate: '2026-08-12',
+    kind: 'include', status: 'in_review', version: 1, establishmentId: `${prefix}-establishment`, unitId: unitA,
+    unitIds: [unitA, unitB], target: null, inclusion: null,
+    operations: [{ kind: 'include', target: null, inclusion: { markedAt: '2026-08-12T08:00:00-0300', executionUnitId: unitA } },
+      { kind: 'include', target: null, inclusion: { markedAt: '2026-08-12T12:00:00-0300', executionUnitId: unitB } }],
+    reason: 'Duas inclusões em unidades diferentes.', aejReason: 'Duas inclusões em unidades diferentes.', acts: [],
+    createdAt: '2026-08-13T12:00:00.000Z', updatedAt: '2026-08-13T12:00:00.000Z',
+  });
+  assert.equal((await listAdjustmentsForReview(reviewer, deps)).adjustments.some((item) => item.id === adjustmentId), false);
+  await assert.rejects(() => decideAdjustment(reviewer, adjustmentId,
+    { action: 'reject', expectedVersion: 1, reason: 'Não deveria poder decidir este pedido.' }, deps),
+  { code: 'PTRP_ADJUSTMENT_REVIEW_FORBIDDEN' });
+});
+
+test('classificação é idempotente, respeita a versão fechada e nunca aprova pedido de outra versão', async () => {
+  const prefix = `classification-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const employeeId = `${prefix}-employee`;
+  const reviewerId = `${prefix}-reviewer`;
+  const unitId = `${prefix}-unit`;
+  const workDate = '2026-08-12';
+  const receiptId = `${prefix}-receipt`;
+  const closureRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-08`);
+  const receiptRef = hrDbAdmin.collection('repP_receipts').doc(receiptId);
+  const owner = { decoded: { uid: employeeId }, userDoc: { id: employeeId, username: 'Maria', unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  const permissions = structuredClone(defaultGuestPermissions); permissions.dp.requests.review = true;
+  const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitId] }, profileId: null,
+    permissions, isDefaultAdmin: false, workspace_id: workspaceId };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
+  await Promise.all([
+    receiptRef.set({ workspaceId, employeeId, recordedDate: workDate, status: 'issued', snapshot: {
+      nsr: 17, markedAt: `${workDate}T08:00:00-0300`, executionUnitId: unitId,
+    } }),
+    closureRef.set({ workspaceId, competence: '2026-08', status: 'closed', version: 2 }),
+  ]);
+
+  assert.equal((await classifyOwnRepPMarking(owner, receiptId, { purpose: 'break_start' }, deps)).changeStatus, 'in_review');
+  assert.equal((await classifyOwnRepPMarking(owner, receiptId, { purpose: 'break_start' }, deps)).changeStatus, 'in_review');
+  let queue = await listAdjustmentsForReview(reviewer, deps);
+  let request = queue.classificationRequests.find((item) => item.receiptId === receiptId);
+  assert.equal(request?.version, 1, 'retry idêntico não cria outro ato');
+  const firstRequestId = request.id;
+  await decideAdjustment(reviewer, request.id, { action: 'approve', expectedVersion: request.version, reason: 'Classificação conferida com o colaborador.' }, deps);
+  assert.equal((await receiptRef.get()).get('classification').purpose, 'break_start');
+
+  await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps);
+  await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps);
+  queue = await listAdjustmentsForReview(reviewer, deps);
+  request = queue.classificationRequests.find((item) => item.receiptId === receiptId);
+  assert.equal(request?.version, 1, 'nova finalidade cria uma versão imutável uma vez');
+  assert.notEqual(request?.id, firstRequestId);
+  const firstRequest = await hrDbAdmin.collection('ptrp_markingClassificationRequests').doc(firstRequestId).get();
+  assert.equal(firstRequest.get('status'), 'approved');
+  assert.equal(firstRequest.get('decisionReason'), 'Classificação conferida com o colaborador.');
+  const supersededRequestId = request.id;
+  assert.equal((await classifyOwnRepPMarking(owner, receiptId, { purpose: 'break_start' }, deps)).changeStatus, 'applied');
+  assert.equal((await hrDbAdmin.collection('ptrp_markingClassificationRequests').doc(supersededRequestId).get()).get('status'), 'superseded');
+  await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps);
+  queue = await listAdjustmentsForReview(reviewer, deps);
+  request = queue.classificationRequests.find((item) => item.receiptId === receiptId);
+  await closureRef.set({ status: 'open', version: 2 }, { merge: true });
+  await assert.rejects(() => decideAdjustment(reviewer, request.id,
+    { action: 'approve', expectedVersion: request.version, reason: 'Tentativa contra fechamento reaberto.' }, deps), /fechamento mudou/i);
+  await receiptRef.set({ classificationHistory: Array.from({ length: 105 }, (_, index) => ({ purpose: 'journey_start', index })) }, { merge: true });
+  assert.equal((await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps)).changeStatus, 'applied');
+  const finalReceipt = await receiptRef.get();
+  assert.equal(finalReceipt.get('classification').purpose, 'journey_end');
+  assert.equal(finalReceipt.get('classificationHistory').length, 100, 'histórico fica limitado');
+  assert.equal((await hrDbAdmin.collection('ptrp_markingClassificationRequests').doc(request.id).get()).get('status'), 'superseded');
+});
 
 test('ajuste de ponto: titular pede, outro decide com justificativa, original fica e o tratamento é criado', async () => {
   const prefix = `ptrp-${randomUUID().slice(0, 6)}`;
@@ -43,8 +127,12 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
 
   // Horário errado: desconsidera a 13:14 e inclui 13:30, com justificativa.
   const attemptId = randomUUID();
-  const created = await createOwnAdjustment(titular, { attemptId, workDate, kind: 'correct', targetReceiptId: receiptId,
-    newTime: '13:30', reason: 'Bati antes de voltar do intervalo; voltei às 13:30.' }, deps);
+  const payload = { attemptId, workDate, kind: 'correct', targetReceiptId: receiptId,
+    newTime: '13:30', reason: 'Bati antes de voltar do intervalo; voltei às 13:30.' };
+  const [created, concurrentReplay] = await Promise.all([
+    createOwnAdjustment(titular, payload, deps), createOwnAdjustment(titular, payload, deps),
+  ]);
+  assert.equal(concurrentReplay.id, created.id, 'duas requisições idênticas concorrentes convergem no mesmo pedido');
   assert.equal(created.status, 'in_review');
   assert.equal(created.inclusion.markedAt, `${workDate}T13:30:00-0300`);
   assert.equal(created.acts[0].role, 'titular');

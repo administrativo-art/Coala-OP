@@ -8,7 +8,7 @@ import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-
 const PROJECT_ID = "demo-coala-e2e";
 const DEV = {
   uid: "developer-view-as-e2e",
-  email: "administrativo@cialashakes.com",
+  email: "administrativo@coalashakes.com",
   password: "coala-view-as-e2e-2026",
 };
 const TARGET = {

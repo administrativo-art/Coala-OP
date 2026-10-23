@@ -9,9 +9,9 @@ import {
 } from "../../src/features/auth/developer-view-as";
 
 test("Visualizar como fica restrito ao login DEV aprovado", () => {
-  assert.equal(DEVELOPER_VIEW_AS_EMAIL, "administrativo@cialashakes.com");
-  assert.equal(isDeveloperViewAsEmail(" ADMINISTRATIVO@CIALASHAKES.COM "), true);
-  assert.equal(isDeveloperViewAsEmail("administrativo@coalashakes.com"), false);
+  assert.equal(DEVELOPER_VIEW_AS_EMAIL, "administrativo@coalashakes.com");
+  assert.equal(isDeveloperViewAsEmail(" ADMINISTRATIVO@COALASHAKES.COM "), true);
+  assert.equal(isDeveloperViewAsEmail("administrativo@cialashakes.com"), false);
   assert.equal(isDeveloperViewAsEmail("outro@cialashakes.com"), false);
 });
 
