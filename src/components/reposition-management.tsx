@@ -68,7 +68,7 @@ function RepositionActivityCard({
   isSeparated: boolean;
   onToggleSeparated: (activity: RepositionActivity) => void;
   onToggleSeparationItem: (activity: RepositionActivity, checklistKey: string, checked: boolean) => void;
-  onConfirmDispatch: (activity: RepositionActivity, transporterName: string, signatureDataUrl: string) => void;
+  onConfirmDispatch: (activity: RepositionActivity, transporterName: string, signatureDataUrl: string) => Promise<void>;
   onConfirmReceipt: (
     activity: RepositionActivity,
     rows: Record<string, { receivedQuantity: number; receiptNotes?: string }>
@@ -87,10 +87,13 @@ function RepositionActivityCard({
     const signatureRef = useRef<SignatureCanvas | null>(null);
     const [transporterName, setTransporterName] = useState(activity.transportSignature?.signedBy ?? "");
     const [signatureDataUrl, setSignatureDataUrl] = useState(activity.transportSignature?.dataUrl ?? "");
+    const [dispatching, setDispatching] = useState(false);
+    const [dispatchError, setDispatchError] = useState<string | null>(null);
 
     useEffect(() => {
         setTransporterName(activity.transportSignature?.signedBy ?? "");
         setSignatureDataUrl(activity.transportSignature?.dataUrl ?? "");
+        setDispatchError(null);
     }, [activity.id, activity.transportSignature?.signedBy, activity.transportSignature?.dataUrl]);
 
     const handleDownloadFile = async (url: string, fileName: string) => {
@@ -178,6 +181,26 @@ function RepositionActivityCard({
         if (step === 3) return canReceive;
         if (step === 4) return canFinalizeStep;
         return false;
+    };
+    const dispatchBlockedReason = !canEditStep(2)
+        ? "Seu perfil não pode confirmar este despacho."
+        : !transporterName.trim()
+          ? "Informe o nome do transportador."
+          : !signatureDataUrl
+            ? "Salve a assinatura do transportador."
+            : null;
+
+    const confirmDispatch = async () => {
+        if (dispatchBlockedReason || dispatching) return;
+        setDispatchError(null);
+        setDispatching(true);
+        try {
+            await onConfirmDispatch(activity, transporterName.trim(), signatureDataUrl);
+        } catch (error) {
+            setDispatchError(error instanceof Error ? error.message : "Não foi possível confirmar o despacho.");
+        } finally {
+            setDispatching(false);
+        }
     };
     const receiptHasDivergence = separationRows.some(({ key, lot }) => (receiptRows[key]?.receivedQuantity ?? 0) !== lot.quantityToMove);
     const receiptHasMissingDivergenceNotes = separationRows.some(({ key, lot }) => {
@@ -496,7 +519,10 @@ function RepositionActivityCard({
                                     <Input
                                         id={`transporter-${activity.id}`}
                                         value={transporterName}
-                                        onChange={(event) => setTransporterName(event.target.value)}
+                                        onChange={(event) => {
+                                            setTransporterName(event.target.value);
+                                            setDispatchError(null);
+                                        }}
                                         placeholder="Nome completo"
                                         disabled={!canEditStep(2)}
                                     />
@@ -523,6 +549,7 @@ function RepositionActivityCard({
                                         {signatureDataUrl ? (
                                             <Button type="button" variant="outline" size="sm" onClick={() => {
                                                 setSignatureDataUrl("");
+                                                setDispatchError(null);
                                                 signatureRef.current?.clear();
                                             }} disabled={!canEditStep(2)}>
                                                 Refazer assinatura
@@ -547,6 +574,7 @@ function RepositionActivityCard({
                                                             return;
                                                         }
                                                         setSignatureDataUrl(signatureRef.current.toDataURL("image/png"));
+                                                        setDispatchError(null);
                                                     }}
                                                 >
                                                     <PenLine className="mr-2 h-4 w-4" />
@@ -558,13 +586,21 @@ function RepositionActivityCard({
                                 </div>
 
                                 <Button
+                                    type="button"
                                     className="w-full"
-                                    disabled={!canEditStep(2) || !transporterName.trim() || !signatureDataUrl}
-                                    onClick={() => onConfirmDispatch(activity, transporterName.trim(), signatureDataUrl)}
+                                    disabled={Boolean(dispatchBlockedReason)}
+                                    loading={dispatching}
+                                    loadingLabel="Confirmando despacho…"
+                                    onClick={() => void confirmDispatch()}
                                 >
                                     <Send className="mr-2 h-4 w-4" />
                                     Confirmar despacho
                                 </Button>
+                                {dispatchError ? (
+                                    <p role="alert" className="text-sm font-medium text-destructive">{dispatchError}</p>
+                                ) : dispatchBlockedReason ? (
+                                    <p className="text-sm text-muted-foreground">{dispatchBlockedReason}</p>
+                                ) : null}
                             </div>
                         </div>
                     </div>

@@ -71,6 +71,9 @@ class RulesTest {
         assertFalse(Rules.updateRequired(release, 0))
         assertFalse(Rules.updateRequired(null, 3))
         assertFalse(Rules.updateRequired(release, 4))
+        val pilotRelease = Release(25, "0.3.20", 25, "/app/CoalaGo.apk")
+        assertTrue(Rules.updateRequired(pilotRelease, 24))
+        assertFalse(Rules.updateRequired(pilotRelease, 25))
     }
     @Test fun profilePhotoFramingStaysInsideThePhoto() {
         // A landscape photo at zoom 1 shows its centred square; dragging right reveals the left edge and stops there.
