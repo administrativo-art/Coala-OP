@@ -69,6 +69,7 @@ class TimeRulesTest {
         assertEquals(listOf("08:00", "08:01", "16:00"), day.map { it.time })
         assertTrue(day[1].discarded); assertTrue(day[2].included); assertNull(day[2].receiptId)
         assertEquals("comprovante-ponto-2026-10-18-nsr-2.pdf", TimeRules.receiptFileName(markings[1].markedAt, 2))
+        assertEquals("comprovante-ponto-2026-10-18-ensaio-sequencia-2.pdf", TimeRules.receiptFileName(markings[1].markedAt, 2, true))
     }
     @Test fun bankAmountsAndDestinationsAreExplicit() {
         assertEquals("+1h20", TimeRules.durationText(80, true))

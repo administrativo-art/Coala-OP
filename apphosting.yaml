@@ -108,6 +108,14 @@ env:
   # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
   - variable: REP_P_MARKING_ENABLED
     value: "false"
+  # Ensaio nominal pré-homologação: grava fora da ARP e nunca participa do fechamento/AFD/AEJ.
+  - variable: REP_P_PILOT_ENABLED
+    value: "true"
+  - variable: REP_P_PILOT_USER_IDS
+    value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+  # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
+  - variable: DP_JOURNEY_LOCATION_ENABLED
+    value: "false"
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET

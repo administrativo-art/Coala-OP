@@ -34,6 +34,8 @@ export type DayShift = {
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";
   classification?: { purpose: "journey_start" | "break_start" | "break_end" | "journey_end"; source: string; status: string } | null;
+  /** Ensaio pré-homologação: visível na conferência e prévia, mas fora do fechamento oficial. */
+  pilot?: boolean;
   /** Tratamento aprovado (PTRP): original, desconsiderada (continua listada) ou incluída por ajuste. */
   treatment?: "original" | "discarded" | "included"; adjustmentId?: string };
 

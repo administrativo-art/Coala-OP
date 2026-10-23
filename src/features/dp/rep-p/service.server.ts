@@ -31,6 +31,7 @@ import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_E
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
+import { REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt, type RepPPilotReceiptSnapshot } from './pilot-receipt';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -41,6 +42,11 @@ const ATTEMPTS = 'repP_attempts';
 const EXPORT_AUDIT = 'repP_exportAudit';
 const RECEIPTS = 'repP_receipts';
 const OFFLINE_PERMITS = 'repP_offlinePermits';
+const PILOT_HEADS = 'repP_pilotHeads';
+const PILOT_MARKINGS = 'repP_pilotMarkings';
+const ADJUSTMENT_REQUESTS = 'ptrp_adjustmentRequests';
+export const REP_P_PILOT_CLASSIFICATION_EVENTS = 'repP_pilotClassificationEvents';
+export const REP_P_PILOT_DAY_GUARDS = 'repP_pilotDayGuards';
 // Leitura em páginas para o AFD sair inteiro e de pronto (art. 81 §2º); o teto só protege memória.
 const AFD_PAGE_SIZE = 2_500;
 // Medido em 18/10/2026: 100 mil eventos somam ~340 MB ao processo (instância de 1 GiB); 50 mil deixam margem.
@@ -56,7 +62,8 @@ const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; fiscalStore: FiscalArtifactStore;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>;
+  fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
 
@@ -96,7 +103,10 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
 const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
-  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true', fiscalStore: fiscalArtifactStore };
+  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true',
+  pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
+  pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
+  fiscalStore: fiscalArtifactStore };
 
 export type RepPReceiptState = Readonly<{
   receiptId: string; receiptStatus: 'available' | 'pending'; receiptIssue: string | null;
@@ -116,6 +126,18 @@ type OfflinePermitDocument = {
   status: 'active' | 'revoked'; lastAcceptedSequence: number; lastAcceptedHash: string | null;
 };
 
+type PilotMarkingDocument = {
+  schemaVersion: 1; mode: 'pilot'; workspaceId: string; employeeId: string; requestDigest: string;
+  markingId: string; receiptId: string; sequence: number; nsr: number; workDate: string; recordedDate: string;
+  markedAt: string; recordedAt: string; employerUnitId: string; executionUnitId: string;
+  establishmentId: string; collectorId: '01' | '02'; hash: string; employeeName: string;
+  unitName: string; workLocation: string; status: 'pending' | 'issued';
+  snapshot: RepPPilotReceiptSnapshot; locationSummary: LocationSummary | null;
+  classification?: { purpose: 'journey_start' | 'break_start' | 'break_end' | 'journey_end';
+    source: 'declared'; status: 'confirmed'; updatedAt: Timestamp; updatedBy: string };
+  classificationRevision?: number;
+};
+
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND' | 'CONFLICT' | 'DATA_INTEGRITY' | 'AUTHORIZATION' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
 }
@@ -130,6 +152,13 @@ function digest(value: unknown) { return createHash('sha256').update(JSON.string
 function establishmentKey(workspaceId: string, cnpj: string) { return digest(['establishment', workspaceId, cnpj]); }
 function employeeKey(establishmentId: string, userId: string) { return digest(['employee', establishmentId, userId]); }
 function eventKey(establishmentId: string, nsr: number) { return `${establishmentId}_${String(nsr).padStart(9, '0')}`; }
+function pilotHeadKey(workspaceId: string, employeeId: string) { return digest(['pilot-head', workspaceId, employeeId]); }
+export function repPPilotDayGuardId(workspaceId: string, employeeId: string, workDate: string) {
+  return digest(['pilot-day', workspaceId, employeeId, workDate]);
+}
+function pilotReceiptKey(workspaceId: string, employeeId: string, attemptId: string) {
+  return `pilot_${digest(['pilot-marking', workspaceId, employeeId, attemptId])}`;
+}
 function recordedDate(event: RepPAfdEvent) {
   return (event.recordType === '4' ? event.adjustedAt : event.recordedAt).slice(0, 10);
 }
@@ -376,19 +405,178 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   return offlinePermitDto(permit);
 }
 
+function validPilotMarking(value: unknown): value is PilotMarkingDocument {
+  const item = value as PilotMarkingDocument | undefined;
+  return Boolean(item && item.schemaVersion === 1 && item.mode === 'pilot' && item.workspaceId?.trim()
+    && item.employeeId?.trim() && /^pilot_[a-f0-9]{64}$/.test(item.receiptId)
+    && item.markingId === item.receiptId && Number.isSafeInteger(item.sequence) && item.sequence >= 1
+    && /^\d{4}-\d{2}-\d{2}$/.test(item.workDate) && item.recordedDate === item.workDate
+    && item.nsr === item.sequence && /^[a-f0-9]{64}$/.test(item.hash)
+    && (!item.classification || Number.isSafeInteger(item.classificationRevision) && Number(item.classificationRevision) >= 1)
+    && ['pending', 'issued'].includes(item.status));
+}
+
+async function issuePilotReceipt(deps: Dependencies, marking: PilotMarkingDocument): Promise<RepPReceiptState> {
+  const ref = deps.repDb.collection(PILOT_MARKINGS).doc(marking.receiptId);
+  const current = await ref.get();
+  const stored = current.data();
+  if (!current.exists || !validPilotMarking(stored) || stored.requestDigest !== marking.requestDigest) {
+    throw fail('REP_P_PILOT_RECEIPT_CORRUPT', 'O comprovante do ensaio não corresponde à marcação.', 'DATA_INTEGRITY');
+  }
+  if (stored.status === 'issued') return { receiptId: stored.receiptId, receiptStatus: 'available', receiptIssue: null };
+  try {
+    const rendered = await renderRepPPilotReceipt(stored.snapshot);
+    return deps.repDb.runTransaction(async (transaction) => {
+      const latest = await transaction.get(ref);
+      const latestData = latest.data();
+      if (!latest.exists || !validPilotMarking(latestData) || latestData.requestDigest !== marking.requestDigest) {
+        throw fail('REP_P_PILOT_RECEIPT_CORRUPT', 'O comprovante do ensaio não corresponde à marcação.', 'DATA_INTEGRITY');
+      }
+      if (latestData.status === 'issued') return { receiptId: latestData.receiptId, receiptStatus: 'available' as const, receiptIssue: null };
+      transaction.update(ref, { status: 'issued', filename: rendered.filename, pdf: rendered.bytes,
+        sha256: rendered.sha256, issuedAt: Timestamp.now(), lastIssue: null });
+      return { receiptId: latestData.receiptId, receiptStatus: 'available' as const, receiptIssue: null };
+    });
+  } catch (cause) {
+    await ref.update({ lastIssue: 'REP_P_PILOT_RECEIPT_RENDER_FAILED', lastAttemptAt: Timestamp.now() }).catch(() => undefined);
+    reportSystemError({ error: cause, source: 'rep-p', operation: 'issue-pilot-receipt',
+      code: 'REP_P_PILOT_RECEIPT_RENDER_FAILED', kind: 'UNEXPECTED_APPLICATION', severity: 'medium',
+      metadata: { receiptId: marking.receiptId }, isTerminal: false });
+    return { receiptId: marking.receiptId, receiptStatus: 'pending', receiptIssue: 'REP_P_PILOT_RECEIPT_RENDER_FAILED' };
+  }
+}
+
+/**
+ * Ensaio nominal anterior à homologação: usa Hora Legal, vínculo e unidade reais, mas fica fora da ARP.
+ * Não produz NSR fiscal, AFD, AEJ, espelho ou fechamento e o PDF traz aviso ostensivo de ausência de validade.
+ */
+async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMarkingRequest, deps: Dependencies) {
+  if (input.offline) throw fail('REP_P_PILOT_OFFLINE_UNAVAILABLE', 'O modo de ensaio exige conexão com a internet.', 'VALIDATION');
+  const { locationAttempt: _ignoredLocationAttempt, ...pilotInput } = input;
+  void _ignoredLocationAttempt;
+  const requestDigest = digest([context.workspace_id, context.decoded.uid, pilotInput]);
+  const receiptId = pilotReceiptKey(context.workspace_id, context.decoded.uid, input.attemptId);
+  const markingRef = deps.repDb.collection(PILOT_MARKINGS).doc(receiptId);
+  const existing = await markingRef.get();
+  const existingData = existing.data();
+  if (existing.exists) {
+    if (!validPilotMarking(existingData) || existingData.workspaceId !== context.workspace_id
+      || existingData.employeeId !== context.decoded.uid || existingData.requestDigest !== requestDigest) {
+      throw fail('REP_P_PILOT_ATTEMPT_CONFLICT', 'Tentativa de ensaio reutilizada com conteúdo diferente.', 'CONFLICT');
+    }
+    return { status: 'replayed' as const, marking: existingData, pilot: true as const,
+      location: storedLocationSummary(existingData.locationSummary), ...await issuePilotReceipt(deps, existingData) };
+  }
+  const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
+    userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
+  if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há fotografia inicial do vínculo válida para a data do ensaio.', 'DATA_INTEGRITY');
+  if (!['clt', 'apprenticeship'].includes(reference.period.employmentRelationshipType)) {
+    throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
+  }
+  if (!reference.period.unitIds.includes(input.executionUnitId)) {
+    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
+  }
+  const executionUnit = await deps.mainDb.collection('dp_units').doc(input.executionUnitId).get();
+  if (!executionUnit.exists) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
+  const timeZone = String(executionUnit.get('timeZone') ?? '');
+  if (!isBrazilTimeZone(timeZone)) throw fail('REP_P_PILOT_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade antes do ensaio.', 'DATA_INTEGRITY');
+  const employeeName = String(context.userDoc.username ?? '').trim();
+  const unitName = String(executionUnit.get('name') ?? '').trim();
+  const workLocation = String(executionUnit.get('address') ?? '').trim();
+  if (!employeeName || !unitName || !workLocation) throw fail('REP_P_PILOT_IDENTITY_INCOMPLETE', 'Nome da pessoa ou cadastro da unidade incompleto.', 'DATA_INTEGRITY');
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  const markedAt = formatRepPAfdTimestamp(reading.instant, timeZone);
+  if (civilDateFromRepPTimestamp(markedAt) !== input.workDate) {
+    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data do ensaio não corresponde à Hora Legal da unidade.', 'VALIDATION');
+  }
+  const headRef = deps.repDb.collection(PILOT_HEADS).doc(pilotHeadKey(context.workspace_id, context.decoded.uid));
+  const dayGuardRef = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+    .doc(repPPilotDayGuardId(context.workspace_id, context.decoded.uid, input.workDate));
+  const adjustmentQuery = deps.repDb.collection(ADJUSTMENT_REQUESTS)
+    .where('workspaceId', '==', context.workspace_id).where('employeeUid', '==', context.decoded.uid)
+    .where('workDate', '==', input.workDate).limit(1);
+  const collectorId = input.channel === 'mobile' ? '01' as const : '02' as const;
+  const establishmentId = `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`;
+  const committed = await deps.repDb.runTransaction(async (transaction) => {
+    const [[prior, head, dayGuard], adjustments] = await Promise.all([
+      transaction.getAll(markingRef, headRef, dayGuardRef),
+      transaction.get(adjustmentQuery),
+    ]);
+    const raced = prior.data();
+    if (prior.exists) {
+      if (!validPilotMarking(raced) || raced.workspaceId !== context.workspace_id
+        || raced.employeeId !== context.decoded.uid || raced.requestDigest !== requestDigest) {
+        throw fail('REP_P_PILOT_ATTEMPT_CONFLICT', 'Tentativa de ensaio reutilizada com conteúdo diferente.', 'CONFLICT');
+      }
+      return { status: 'replayed' as const, marking: raced, locationEvidence: null };
+    }
+    if (!adjustments.empty || dayGuard.get('domain') === 'adjustment') {
+      throw fail('REP_P_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
+        'Este dia já possui solicitação formal de ajuste e não pode receber batida de ensaio.', 'CONFLICT');
+    }
+    const lastSequence = head.exists ? Number(head.get('lastSequence')) : 0;
+    if (!Number.isSafeInteger(lastSequence) || lastSequence < 0) {
+      throw fail('REP_P_PILOT_SEQUENCE_CORRUPT', 'A sequência do ensaio está inconsistente.', 'DATA_INTEGRITY');
+    }
+    const sequence = lastSequence + 1;
+    const hash = digest(['rep-p-pilot-v1', context.workspace_id, context.decoded.uid, input.attemptId,
+      sequence, markedAt, reference.historyId, reference.revision, reference.period.employerUnitId,
+      input.executionUnitId, collectorId]);
+    const snapshot: RepPPilotReceiptSnapshot = { schemaVersion: 1, title: REP_P_PILOT_RECEIPT_TITLE,
+      sequence, markedAt, hash, employeeName, unitName, workLocation, collectorId };
+    const classifiedAt = Timestamp.now();
+    const organizationalClassification = input.declaredPurpose ? {
+      classification: { purpose: input.declaredPurpose, source: 'declared' as const, status: 'confirmed' as const,
+        updatedAt: classifiedAt, updatedBy: context.decoded.uid },
+      classificationRevision: 1,
+    } : {};
+    const marking: PilotMarkingDocument = { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
+      employeeId: context.decoded.uid, requestDigest, markingId: receiptId, receiptId, sequence, nsr: sequence,
+      workDate: input.workDate, recordedDate: input.workDate, markedAt, recordedAt: markedAt,
+      employerUnitId: reference.period.employerUnitId,
+      executionUnitId: input.executionUnitId, establishmentId, collectorId, hash, employeeName, unitName,
+      workLocation, status: 'pending', snapshot, locationSummary: null, ...organizationalClassification };
+    transaction.create(markingRef, { ...marking, employmentHistoryId: reference.historyId,
+      employmentRevision: reference.revision, trustedClock: { source: reading.source, assurance: reading.assurance,
+        observedOffsetMs: reading.observedOffsetMs, verifiedAt: reading.verifiedAt.toISOString(),
+        serverInstant: reading.instant.toISOString(), attestationId: reading.attestationId,
+        attestationMode: reading.attestationMode, quorum: reading.quorum, observations: reading.observations },
+      createdAt: Timestamp.now() });
+    if (input.declaredPurpose) {
+      const classificationEventRef = deps.repDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
+        .doc(digest([receiptId, 'classification', 1]));
+      transaction.create(classificationEventRef, { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
+        employeeId: context.decoded.uid, markingId: receiptId, receiptId, revision: 1, previousPurpose: null,
+        purpose: input.declaredPurpose, source: 'declared', status: 'confirmed', at: classifiedAt,
+        actorUid: context.decoded.uid });
+    }
+    transaction.set(headRef, { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
+      employeeId: context.decoded.uid, lastSequence: sequence, updatedAt: Timestamp.now() });
+    transaction.set(dayGuardRef, { schemaVersion: 1, mode: 'pilot', domain: 'pilot', workspaceId: context.workspace_id,
+      employeeId: context.decoded.uid, workDate: input.workDate, updatedAt: Timestamp.now() }, { merge: true });
+    return { status: 'recorded' as const, marking, locationEvidence: null };
+  });
+  if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
+  return { status: committed.status, marking: committed.marking, pilot: true as const,
+    location: storedLocationSummary(committed.marking.locationSummary), ...await issuePilotReceipt(deps, committed.marking) };
+}
+
 export async function recordOwnRepPMarking(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPMarkingSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_MARKING_INPUT_INVALID', 'Solicitação de marcação inválida.');
   const input: RepPMarkingRequest = parsed.data;
   const deps = { ...defaults, ...injected };
-  if (!deps.markingEnabled) {
+  if (!deps.markingEnabled && !deps.pilotEnabled) {
     throw new AppError({ code: 'REP_P_MARKING_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
   }
-  if (!markingAllowedForProfile(context)) {
+  if (!markingAllowedForProfile(context)
+    || !deps.markingEnabled && deps.pilotEnabled && !deps.pilotUserIds.has(context.decoded.uid)) {
     throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
   }
+  if (!deps.markingEnabled) return recordOwnPilotMarking(context, input, deps);
   if (input.offline) return recordOwnOfflineRepPMarking(context, input, deps);
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
@@ -770,18 +958,24 @@ async function issueRepPReceipt(deps: Dependencies, marking: RepPMarkingCandidat
 
 async function loadOwnReceipt(context: ServerUserContext, receiptId: string, deps: Dependencies) {
   const notFound = () => fail('REP_P_RECEIPT_NOT_FOUND', 'Comprovante não encontrado.', 'NOT_FOUND');
+  if (/^pilot_[a-f0-9]{64}$/.test(receiptId)) {
+    const receipt = await deps.repDb.collection(PILOT_MARKINGS).doc(receiptId).get();
+    if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id
+      || receipt.get('employeeId') !== context.decoded.uid || !validPilotMarking(receipt.data())) throw notFound();
+    return { receipt, pilot: true as const };
+  }
   if (!/^[a-f0-9]{64}_\d{9}$/.test(receiptId)) throw notFound();
   const receipt = await deps.repDb.collection(RECEIPTS).doc(receiptId).get();
   // Documento alheio e inexistente respondem igual para não permitir descoberta.
   if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id
     || receipt.get('employeeId') !== context.decoded.uid) throw notFound();
-  return receipt;
+  return { receipt, pilot: false as const };
 }
 
 /** Leitura sem efeitos: devolve os bytes assinados gravados na emissão, sem regenerar. */
 export async function getOwnRepPReceipt(context: ServerUserContext, receiptId: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const receipt = await loadOwnReceipt(context, receiptId, deps);
+  const { receipt } = await loadOwnReceipt(context, receiptId, deps);
   if (receipt.get('status') !== 'issued') {
     throw new AppError({ code: 'REP_P_RECEIPT_PENDING', kind: 'CONFLICT', retryable: true,
       safeMessage: 'O ponto foi registrado, mas o comprovante ainda não foi emitido.' });
@@ -796,7 +990,9 @@ export async function getOwnRepPReceipt(context: ServerUserContext, receiptId: s
 /** Recupera um comprovante pendente da própria marcação sem registrar nova batida. */
 export async function retryOwnRepPReceipt(context: ServerUserContext, receiptId: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const receipt = await loadOwnReceipt(context, receiptId, deps);
+  const loaded = await loadOwnReceipt(context, receiptId, deps);
+  const { receipt } = loaded;
+  if (loaded.pilot) return issuePilotReceipt(deps, receipt.data() as PilotMarkingDocument);
   const event = await deps.repDb.collection(EVENTS).doc(receiptId).get();
   const marking = event.data() as RepPMarkingCandidate | undefined;
   if (!marking || marking.workspaceId !== context.workspace_id
@@ -930,6 +1126,36 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
   const parsed = repPMarkingClassificationSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_CLASSIFICATION_INPUT_INVALID', 'Escolha uma classificação válida.');
   const deps = { ...defaults, ...injected };
+  if (/^pilot_[a-f0-9]{64}$/.test(receiptId)) {
+    const receiptRef = deps.repDb.collection(PILOT_MARKINGS).doc(receiptId);
+    const now = Timestamp.now();
+    const classification = { purpose: parsed.data.purpose, source: 'declared' as const, status: 'confirmed' as const,
+      updatedAt: now, updatedBy: context.decoded.uid };
+    return deps.repDb.runTransaction(async (tx) => {
+      const receipt = await tx.get(receiptRef);
+      const stored = receipt.data();
+      if (!receipt.exists || !validPilotMarking(stored) || stored.workspaceId !== context.workspace_id
+        || stored.employeeId !== context.decoded.uid) {
+        throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
+      }
+      if (stored.classification?.purpose === parsed.data.purpose) {
+        return { classification: stored.classification, changeStatus: 'applied' as const };
+      }
+      const currentRevision = stored.classification ? Number(stored.classificationRevision) : 0;
+      if (!Number.isSafeInteger(currentRevision) || currentRevision < 0) {
+        throw fail('REP_P_PILOT_CLASSIFICATION_CORRUPT', 'A trilha de classificação do ensaio está inconsistente.', 'DATA_INTEGRITY');
+      }
+      const revision = currentRevision + 1;
+      const classificationEventRef = deps.repDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
+        .doc(digest([receiptId, 'classification', revision]));
+      tx.create(classificationEventRef, { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
+        employeeId: context.decoded.uid, markingId: receiptId, receiptId, revision,
+        previousPurpose: stored.classification?.purpose ?? null, purpose: parsed.data.purpose,
+        source: 'declared', status: 'confirmed', at: now, actorUid: context.decoded.uid });
+      tx.update(receiptRef, { classification, classificationRevision: revision, updatedAt: now });
+      return { classification, changeStatus: 'applied' as const };
+    });
+  }
   const receiptRef = deps.repDb.collection(RECEIPTS).doc(receiptId);
   const now = Timestamp.now();
   const classification = { purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', updatedAt: now,
@@ -1032,19 +1258,53 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
   if (!parsed.success) throw fail('REP_P_HISTORY_INPUT_INVALID', 'Período de consulta inválido.');
   const input: RepPOwnHistoryRequest = parsed.data;
   const deps = { ...defaults, ...injected };
-  const snapshot = await deps.repDb.collection(RECEIPTS)
+  const baseFilters = (collection: string) => deps.repDb.collection(collection)
     .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeUid)
     .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
-    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
-  const markings = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => {
+    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1);
+  const [snapshot, pilotSnapshot] = await Promise.all([
+    baseFilters(RECEIPTS).get(),
+    baseFilters(PILOT_MARKINGS).get(),
+  ]);
+  const official = snapshot.docs.map((document) => {
     const receipt = document.get('snapshot') as RepPReceiptSnapshot;
     return { receiptId: document.id, workDate: String(document.get('recordedDate')), nsr: receipt.nsr,
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null,
-      classification: document.get('classification') ?? null };
-  }).sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
-  return { startDate: input.startDate, endDate: input.endDate, markings, truncated: snapshot.size > MAX_HISTORY_MARKINGS };
+      classification: document.get('classification') ?? null, pilot: false as const };
+  });
+  const pilot = pilotSnapshot.docs.flatMap((document) => {
+    const data = document.data();
+    if (!validPilotMarking(data)) return [];
+    return [{ receiptId: document.id, workDate: data.workDate, nsr: data.sequence,
+      markedAt: data.markedAt, executionUnitId: data.executionUnitId, collectorId: data.collectorId,
+      hash: data.hash, receiptStatus: data.status === 'issued' ? 'available' as const : 'pending' as const,
+      receiptIssue: data.status === 'issued' ? null : String(document.get('lastIssue') ?? '') || null,
+      classification: document.get('classification') ?? null, pilot: true as const }];
+  });
+  const combined = [...official, ...pilot]
+    .sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
+  return { startDate: input.startDate, endDate: input.endDate, markings: combined.slice(0, MAX_HISTORY_MARKINGS),
+    truncated: snapshot.size > MAX_HISTORY_MARKINGS || pilotSnapshot.size > MAX_HISTORY_MARKINGS || combined.length > MAX_HISTORY_MARKINGS };
+}
+
+/** Batidas de ensaio que podem compor somente a prévia do mês aberto. Nunca é usada no fechamento. */
+export async function readRepPPilotMarkingsForBank(workspaceId: string, employeeId: string, startDate: string, endDate: string,
+  injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const snapshot = await deps.repDb.collection(PILOT_MARKINGS)
+    .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeId)
+    .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate)
+    .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
+  return {
+    markings: snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).flatMap((document) => {
+      const data = document.data();
+      return validPilotMarking(data) ? [{ workDate: data.workDate, nsr: data.sequence, markedAt: data.markedAt,
+        executionUnitId: data.executionUnitId, collectorId: data.collectorId }] : [];
+    }),
+    truncated: snapshot.size > MAX_HISTORY_MARKINGS,
+  };
 }
 
 /**
@@ -1138,22 +1398,25 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const parsed = repPOwnOptionsSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
-  const journeyLocationEnabled = process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
-  if (!deps.markingEnabled || !markingAllowedForProfile(context)) {
+  const mode = deps.markingEnabled ? 'official' as const : deps.pilotEnabled ? 'pilot' as const : 'disabled' as const;
+  const journeyLocationEnabled = mode === 'official' && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
+  if (mode === 'disabled' || !markingAllowedForProfile(context)
+    || mode === 'pilot' && !deps.pilotUserIds.has(context.decoded.uid)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
-      journeyLocationEnabled, executionUnits: [], officialClock: null };
+      mode, journeyLocationEnabled, executionUnits: [], officialClock: null };
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
-  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: true as const,
-    journeyLocationEnabled, executionUnits: [], officialClock: null };
+  if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const,
+    markingEnabled: true as const, mode, journeyLocationEnabled, executionUnits: [], officialClock: null };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
   const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
-  const [units, locationPolicies] = await Promise.all([
-    unitIds.length ? deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [],
-    loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds),
-  ]);
+  const units = unitIds.length
+    ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
+  const locationPolicies = mode === 'pilot'
+    ? new Map(unitIds.map((unitId) => [unitId, disabledRepPLocationPolicy(context.workspace_id, unitId)]))
+    : await loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds);
   const executionUnits = units.filter((unit) => unit.exists)
     .map((unit) => {
       const location = locationPolicies.get(unit.id)!;
@@ -1166,9 +1429,22 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
           privacyNoticeUrl: collectorLocation.privacyNoticeUrl } };
     })
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, journeyLocationEnabled,
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, mode, journeyLocationEnabled,
     executionUnits: eligible ? executionUnits : [],
-    officialClock: eligible ? await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj) : null };
+    officialClock: eligible ? (mode === 'pilot'
+      ? await readPilotClock(deps, executionUnits.find((unit) => unit.timeZone)?.timeZone ?? null)
+      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj)) : null };
+}
+
+async function readPilotClock(deps: Dependencies, timeZone: string | null) {
+  if (!timeZone || !isBrazilTimeZone(timeZone)) return { available: false as const, issue: 'REP_P_PILOT_UNIT_TIME_ZONE_MISSING' };
+  try {
+    const reading = await deps.clock.read();
+    assertTrustedRepPClockReading(reading);
+    return { available: true as const, instant: reading.instant.toISOString(), timeZone };
+  } catch (cause) {
+    return { available: false as const, issue: cause instanceof AppError ? cause.code : 'REP_P_TIME_UNAVAILABLE' };
+  }
 }
 
 /**

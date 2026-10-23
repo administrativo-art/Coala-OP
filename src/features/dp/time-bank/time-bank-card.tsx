@@ -15,7 +15,8 @@ import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import type { BankLineReason, BankStatement } from "./core";
 import { RESIDUAL_LABELS } from "./cycle";
 
-type StatementResponse = { policy: { name: string; enabled: boolean } | null; statement: BankStatement | null; closures: Record<string, number>; previewCompetences?: string[] };
+type StatementResponse = { policy: { name: string; enabled: boolean } | null; statement: BankStatement | null;
+  closures: Record<string, number>; previewCompetences?: string[]; pilotPreview?: boolean };
 
 const REASON_LABELS: Record<BankLineReason, string> = {
   worked_less: "Trabalhou menos que a jornada",
@@ -56,15 +57,16 @@ const parseHm = (value: string) => {
  * Ao abrir, apura (uma vez por versão do fechamento) os meses fechados do ciclo que ainda não têm apuração.
  * No painel do DP (`employeeUid`), mostra o banco da pessoa na data informada.
  */
-export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false }: {
+export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false }: {
   firebaseUser: FirebaseUser | null;
   employeeUid?: string;
   date?: string;
   canManage?: boolean;
+  detailed?: boolean;
 }) {
   const [data, setData] = useState<StatementResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(detailed);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [movementOpen, setMovementOpen] = useState(false);
@@ -77,6 +79,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
   const query = new URLSearchParams({ ...(employeeUid ? { employeeUid } : {}), ...(date ? { date } : {}) }).toString();
   const request = useCallback(<T,>(input: string, init: { method?: string; json?: unknown; fallbackError: string }) =>
     authenticatedApiRequest<T>(input, { ...init, getIdToken: () => firebaseUser?.getIdToken() ?? Promise.resolve(null) }), [firebaseUser]);
+  useEffect(() => { if (detailed) setExpanded(true); }, [detailed]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -157,14 +160,18 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
   const open = statement.missing.filter((competence) => !data.closures[competence]);
   const lines = [...statement.lines].reverse();
   return (
-    <div className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-3">
+    <div className={detailed ? "space-y-4 rounded-ds-card border border-ds-border bg-ds-surface p-5" : "space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-3"}>
       {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-extrabold text-ds-ink">Banco de horas</p>
+        <div>
+          <p className="text-sm font-extrabold text-ds-ink">Banco de horas</p>
+          {detailed ? <p className="text-xs text-ds-ink-muted">Política: {data.policy.name}</p> : null}
+        </div>
         {statement.cycle ? <StatusPill variant="neutral">Ciclo {dateBR(statement.cycle.start)} a {dateBR(statement.cycle.end)}</StatusPill> : null}
       </div>
       <p className={`font-ds-mono text-2xl font-extrabold ${statement.balanceMinutes < 0 ? "text-ds-danger" : "text-ds-ink"}`}>{hm(statement.balanceMinutes, true)}</p>
-      {data.previewCompetences?.length ? <StatusPill className="h-auto max-w-full whitespace-normal py-1 leading-tight" variant="info">Prévia inclui o mês aberto; o saldo ainda pode mudar</StatusPill> : null}
+      {data.previewCompetences?.length ? <StatusPill className="h-auto w-full max-w-full justify-center whitespace-normal py-1 text-center leading-tight" variant="info">Prévia inclui o mês aberto; o saldo ainda pode mudar</StatusPill> : null}
+      {data.pilotPreview ? <StatusPill className="h-auto w-full max-w-full justify-center whitespace-normal py-1 text-center leading-tight" variant="warn">Ensaio: estas batidas ajudam no teste, mas não entram no fechamento oficial</StatusPill> : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ds-ink-muted">
         {statement.openingMinutes ? <span>Saldo anterior <strong className="font-ds-mono text-ds-ink">{hm(statement.openingMinutes, true)}</strong></span> : null}
         <span>Créditos <strong className="font-ds-mono text-ds-ink">{hm(statement.credit)}</strong></span>
@@ -189,8 +196,9 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
       {lines.length ? (
         <ul className="divide-y divide-ds-divider text-xs">
           {(expanded ? lines : lines.slice(0, VISIBLE_LINES)).map((item, index) => (
-            <li key={`${item.date}-${index}`} className="flex items-center justify-between gap-2 py-1.5">
-              <span className="min-w-0 truncate"><span className="font-semibold text-ds-ink">{dateBR(item.date).slice(0, 5)}</span> · {REASON_LABELS[item.line.reason]}</span>
+            <li key={`${item.date}-${index}`} className={detailed ? "grid gap-1 py-2 sm:grid-cols-[90px_1fr_auto] sm:items-center sm:gap-3" : "flex items-center justify-between gap-2 py-1.5"}>
+              <span className={detailed ? "font-semibold text-ds-ink" : "min-w-0 truncate"}><span className="font-semibold text-ds-ink">{dateBR(item.date).slice(0, 5)}</span>{detailed ? null : " · "}{detailed ? null : REASON_LABELS[item.line.reason]}</span>
+              {detailed ? <span className="text-ds-ink-muted">{REASON_LABELS[item.line.reason]}</span> : null}
               <span className={`shrink-0 font-ds-mono font-semibold ${item.line.nature === "bank_debit" ? "text-ds-danger" : "text-ds-ink"}`}>
                 {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : item.line.nature === "payroll_discount" ? "desconto na folha" : "revisão"}`}
               </span>

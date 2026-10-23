@@ -179,6 +179,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
   const showSelect = units.length > 1 && (!scheduledUnitId || otherUnit);
   const nowMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
   const blocked = options && !options.markingEnabled;
+  const pilot = options?.mode === "pilot";
   const ineligible = options && options.markingEnabled && units.length === 0;
   const action = expected === null ? `Registrar ${nextIndex + 1}ª batida` : nextIndex < expected ? `Registrar ${nextIndex + 1}ª de ${expected}` : "Registrar batida extra";
 
@@ -227,7 +228,9 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
           </Button>
           <p className="mt-1 text-[11px] text-ds-on-dark-muted">
             {blocked ? "Registro pelo sistema ainda não liberado" : ineligible ? "Vínculo de hoje sem registro de ponto"
-              : suggestionReliable ? `Sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Escolha a finalidade; há batida anterior sem classificação"}
+              : pilot
+                ? suggestionReliable ? `Ensaio controlado · sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Ensaio controlado · escolha a finalidade"
+                : suggestionReliable ? `Sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Escolha a finalidade; há batida anterior sem classificação"}
           </p>
         </div>
       </div>
@@ -278,11 +281,12 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
           <div className="space-y-4 text-center" role="status">
             <CheckCircle2 className="mx-auto h-12 w-12 text-ds-ok" aria-hidden />
             <DialogHeader className="items-center text-center sm:text-center">
-              <DialogTitle>Ponto registrado</DialogTitle>
+              <DialogTitle>{lastMarking.pilot ? "Ensaio registrado" : "Ponto registrado"}</DialogTitle>
               <DialogDescription>{index + 1}ª batida de hoje{lastMarking.status === "replayed" ? " (já estava gravada)" : ""}</DialogDescription>
             </DialogHeader>
             <p className="font-ds-mono text-[44px] font-extrabold leading-none text-ds-ink">{fiscalClock(lastMarking.marking.markedAt)}</p>
-            <p className="text-sm text-ds-ink-muted">{brDate(lastMarking.marking.markedAt)} · {unitName} · NSR {lastMarking.marking.nsr}</p>
+            <p className="text-sm text-ds-ink-muted">{brDate(lastMarking.marking.markedAt)} · {unitName} · {lastMarking.pilot ? "Sequência do ensaio" : "NSR"} {lastMarking.marking.nsr}</p>
+            {lastMarking.pilot ? <p className="rounded-ds-md border border-ds-warn/20 bg-ds-warn-bg px-3 py-2 text-xs font-semibold text-ds-warn">Teste sem validade como REP-P. Não entra no fechamento oficial.</p> : null}
             <LocationResultNotice location={lastMarking.location} />
             <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-3">
               <ReceiptPill status={lastMarking.receiptStatus} />
@@ -299,7 +303,9 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle>Registrar {index + 1}ª batida</DialogTitle>
-              <DialogDescription>Confira antes de registrar. A batida não pode ser apagada depois.</DialogDescription>
+              <DialogDescription>{marking.options?.mode === "pilot"
+                ? "Confira antes de registrar. Este ensaio fica separado do ponto oficial e não entra no fechamento."
+                : "Confira antes de registrar. A batida não pode ser apagada depois."}</DialogDescription>
             </DialogHeader>
             <div className="rounded-ds-md border border-ds-border bg-ds-warm p-4 text-center">
               <OfficialClockDisplay clock={unitClock} />

@@ -67,7 +67,9 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Bater ponto</DialogTitle>
-            <DialogDescription>Confira a unidade e registre. O comprovante também fica em Registro de ponto.</DialogDescription>
+            <DialogDescription>{options.mode === "pilot"
+              ? "Ensaio controlado: confira a unidade. A batida fica visível, mas não entra no fechamento oficial."
+              : "Confira a unidade e registre. O comprovante também fica em Registro de ponto."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {optionsError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{optionsError}</p> : null}
@@ -75,9 +77,10 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
             {lastMarking ? (
               <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-4" role="status">
                 <p className="text-sm text-ds-ink">
-                  Ponto registrado em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · NSR {lastMarking.marking.nsr}
+                  {lastMarking.pilot ? "Ensaio registrado" : "Ponto registrado"} em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · {lastMarking.pilot ? "sequência" : "NSR"} {lastMarking.marking.nsr}
                   {lastMarking.status === "replayed" ? " (já estava gravado)" : ""}
                 </p>
+                {lastMarking.pilot ? <p className="text-xs font-semibold text-ds-warn">Sem validade como REP-P e fora do fechamento oficial.</p> : null}
                 <LocationResultNotice location={lastMarking.location} />
                 <ReceiptPill status={lastMarking.receiptStatus} />
                 {lastMarking.receiptStatus === "available" ? (
