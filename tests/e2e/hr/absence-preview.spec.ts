@@ -38,7 +38,7 @@ test('colaborador calcula prévia sem criar solicitação e edição limpa o res
   });
 
   await page.goto('/dashboard/collaborator/requests?new=absence_preview', { waitUntil: 'domcontentloaded' });
-  const panel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Prévia de ausência' }) });
+  const panel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Solicitar ausência' }) });
   try { await expect(panel).toBeVisible(); }
   finally { releaseHistory(); }
   await panel.getByRole('combobox', { name: 'Tipo de ausência' }).click();
@@ -54,6 +54,7 @@ test('colaborador calcula prévia sem criar solicitação e edição limpa o res
   await expect(panel.getByRole('button', { name: /Enviar|Salvar/ })).toHaveCount(0);
   expect(previewCalls).toBe(1);
 
+  await panel.getByRole('button', { name: 'Voltar e editar' }).click();
   await panel.getByLabel('Data de término').fill('2026-11-13');
   await expect(panel.getByText('3 dias')).toHaveCount(0);
 });

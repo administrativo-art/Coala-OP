@@ -64,6 +64,28 @@ function dateOnly(offsetDays = 0) {
   return isoDate(offsetDays).slice(0, 10);
 }
 
+function upcomingVacationWindow() {
+  let start = new Date();
+  start.setHours(12, 0, 0, 0);
+  start.setDate(start.getDate() + 30);
+
+  const candidateEnd = new Date(start);
+  candidateEnd.setDate(candidateEnd.getDate() + 29);
+  if (candidateEnd.getFullYear() !== start.getFullYear()) {
+    start = new Date(start.getFullYear() + 1, 0, 15, 12, 0, 0, 0);
+  }
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 29);
+  const returnDate = new Date(end);
+  returnDate.setDate(returnDate.getDate() + 1);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+    returnDate: returnDate.toISOString().slice(0, 10),
+  };
+}
+
 // A listagem de despesas abre em "Mês atual"; datas relativas a hoje ou fixas saem do filtro na virada do mês.
 function currentMonthDate(day: number) {
   const date = new Date();
@@ -167,8 +189,9 @@ export default async function seedE2E() {
       [E2E_STOCK_MIN.storeKioskId]: { min: 20, safetyStock: 0, leadTime: 0, override: true },
     },
   });
-  const vacationStart = dateOnly(45);
-  const vacationEnd = dateOnly(74);
+  const vacationWindow = upcomingVacationWindow();
+  const vacationStart = vacationWindow.start;
+  const vacationEnd = vacationWindow.end;
   const vacationYear = Number(vacationStart.slice(0, 4));
   const weeklyRestDay = (new Date(`${vacationStart}T12:00:00Z`).getUTCDay() + 3) % 7;
   batch.set(mainDb.collection("users").doc(E2E_VACATION.employeeId), {
@@ -194,7 +217,7 @@ export default async function seedE2E() {
     recordType: "gozo",
     startDate: vacationStart,
     endDate: vacationEnd,
-    returnDate: dateOnly(75),
+    returnDate: vacationWindow.returnDate,
     days: 30,
     unjustifiedAbsences: 0,
     entitledDays: 30,
