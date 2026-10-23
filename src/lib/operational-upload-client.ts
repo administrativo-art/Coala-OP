@@ -33,7 +33,10 @@ export async function uploadOperationalFile(params: {
     "/api/uploads/operations",
     {
       method: "POST",
-      getIdToken: params.user.getIdToken,
+      // Firebase's getIdToken reads internal state from `this`. Passing the
+      // method by reference drops the User instance and makes the SDK try to
+      // read stsTokenManager from undefined.
+      getIdToken: () => params.user.getIdToken(),
       body: formData,
       fallbackError: "Falha ao enviar arquivo.",
     }
