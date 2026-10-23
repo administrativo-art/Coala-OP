@@ -11,7 +11,8 @@ import kotlinx.serialization.Serializable
 /** Official time checked against Hora Legal; unavailable blocks the punch on the server too. */
 @Serializable data class OfficialClock(val available: Boolean, val instant: String? = null, val timeZone: String? = null, val issue: String? = null)
 @Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean,
-    val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null, val journeyLocationEnabled: Boolean = false)
+    val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null, val journeyLocationEnabled: Boolean = false,
+    val mode: String = "official")
 @Serializable data class OfflinePermitRequest(val permitRequestId: String, val workDate: String, val installationId: String,
     val deviceKeyId: String, val devicePublicKey: String, val keySecurity: String, val bootCount: Int, val anchorElapsedRealtimeMs: Long)
 @Serializable data class OfflinePermitUnit(val id: String, val name: String, val timeZone: String)
@@ -32,10 +33,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class LocationSummary(val captureStatus: String, val evaluation: String)
 @Serializable data class RecordedMarking(val nsr: Long, val markedAt: String, val executionUnitId: String)
 @Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null,
-    val marking: RecordedMarking, val location: LocationSummary? = null)
+    val marking: RecordedMarking, val location: LocationSummary? = null, val pilot: Boolean = false)
 @Serializable data class MarkingClassification(val purpose: String, val source: String = "declared", val status: String = "confirmed")
 @Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null,
-    val classification: MarkingClassification? = null)
+    val classification: MarkingClassification? = null, val pilot: Boolean = false)
 @Serializable data class ClassificationUpdate(val purpose: String)
 @Serializable data class ClassificationResult(val classification: MarkingClassification, val changeStatus: String = "applied")
 @Serializable data class OwnMarkings(val startDate: String, val endDate: String, val markings: List<OwnMarking>, val truncated: Boolean = false)

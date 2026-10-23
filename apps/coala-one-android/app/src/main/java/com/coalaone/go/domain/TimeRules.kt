@@ -12,7 +12,7 @@ import java.util.UUID
 
 /** One line of a day's sequence: an original punch, a punch the DP discarded, or one it included. */
 data class DayPunch(val time: String, val nsr: Long?, val receiptId: String?, val receiptStatus: String?, val discarded: Boolean = false, val included: Boolean = false, val unitId: String? = null,
-    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null)
+    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false)
 
 /**
  * Rules of the Ponto and Solicitações screens, kept off the UI so they run in unit tests. They follow the web
@@ -197,11 +197,12 @@ object TimeRules {
         val ofDay = treatments.filter { it.workDate == date }
         val discarded = ofDay.filter { it.type == "discard" }.mapNotNull { it.originalReceiptId }.toSet()
         val originals = markings.filter { it.workDate == date }.map { DayPunch(minuteOf(it.markedAt), it.nsr, it.receiptId, it.receiptStatus, discarded = it.receiptId in discarded, unitId = it.executionUnitId,
-            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt) }
+            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt, pilot = it.pilot) }
         val included = ofDay.filter { it.type == "inclusion" && it.markedAt != null }.map { DayPunch(minuteOf(it.markedAt!!), null, null, null, included = true, unitId = it.executionUnitId, markedAt = it.markedAt) }
         return (originals + included).sortedWith(compareBy<DayPunch> { instantOf(it) ?: java.time.Instant.MAX }.thenBy { it.time })
     }
-    fun receiptFileName(markedAt: String, nsr: Long) = "comprovante-ponto-${markedAt.take(10)}-nsr-$nsr.pdf"
+    fun receiptFileName(markedAt: String, nsr: Long, pilot: Boolean = false) =
+        "comprovante-ponto-${markedAt.take(10)}-${if (pilot) "ensaio-sequencia" else "nsr"}-$nsr.pdf"
     fun durationText(minutes: Int, signed: Boolean = false): String {
         val sign = if (signed && minutes > 0) "+" else if (minutes < 0) "−" else ""
         val absolute = Math.abs(minutes)

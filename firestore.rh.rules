@@ -204,6 +204,10 @@ service cloud.firestore {
     match /repP_attempts/{id} { allow read, write: if false; }
     match /repP_receipts/{id} { allow read, write: if false; }
     match /repP_offlinePermits/{id} { allow read, write: if false; }
+    match /repP_pilotHeads/{id} { allow read, write: if false; }
+    match /repP_pilotMarkings/{id} { allow read, write: if false; }
+    match /repP_pilotClassificationEvents/{id} { allow read, write: if false; }
+    match /repP_pilotDayGuards/{id} { allow read, write: if false; }
     match /repP_exportAudit/{id} { allow read, write: if false; }
     match /repP_locationPolicies/{id} { allow read, write: if false; }
     match /repP_locationPolicies/{id}/{document=**} { allow read, write: if false; }

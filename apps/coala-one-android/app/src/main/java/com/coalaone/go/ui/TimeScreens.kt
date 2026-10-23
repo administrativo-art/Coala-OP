@@ -118,13 +118,15 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         val file = pending ?: return@rememberLauncherForActivityResult
         if (uri != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } }.onFailure { problem = "Não foi possível salvar o arquivo." }
     }
-    fun fetch(then: (File) -> Unit) { val id = punch.receiptId ?: return; vm.receipt(id, markedAt, punch.nsr ?: 0, context.cacheDir, then) }
+    fun fetch(then: (File) -> Unit) { val id = punch.receiptId ?: return; vm.receipt(id, markedAt, punch.nsr ?: 0, punch.pilot, context.cacheDir, then) }
     // The copy lives only while the sheet is open; sign-out also clears the folder.
     DisposableEffect(Unit) { onDispose { File(context.cacheDir, "receipts").deleteRecursively() } }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Batida · ${punch.time}", style = MaterialTheme.typography.titleLarge)
-            Text("Registro oficial ${punch.nsr ?: "—"} · PDF assinado pelo sistema de ponto.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Text(if (punch.pilot) "Sequência do ensaio ${punch.nsr ?: "—"} · comprovante sem validade como REP-P."
+                else "Registro oficial ${punch.nsr ?: "—"} · PDF assinado pelo sistema de ponto.",
+                color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             CardBlock(selected = editingPurpose) {
                 Text("Classificação", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 Text(TimeRules.purposeLabel(purpose), style = MaterialTheme.typography.titleMedium)
@@ -224,6 +226,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     var detailSource by rememberSaveable { mutableStateOf("records") }
     asking?.let { date -> AdjustmentScreen(vm, date) { asking = null; vm.clearAdjustment() }; return }
     val units = state.options?.executionUnits.orEmpty()
+    val pilotMode = state.options?.mode == "pilot"
     val today = state.today.toString()
     val todayShift = state.shifts.firstOrNull { it.date == today }
     val todayMarkings = state.markings.filter { it.workDate == today }
@@ -268,11 +271,12 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         "espelho-ponto-${state.month}.pdf", "application/pdf", { _, then -> vm.mirrorPdf(context.cacheDir, then) }) { selectedMirror = false }
     if (selectedReceiptArchive) {
         val (start, end) = TimeRules.monthRange(state.month)
-        val complete = !state.truncated && state.markings.all { it.receiptStatus == "available" }
-        val unavailable = state.markings.count { it.receiptStatus != "available" }
-        FileSheet("Comprovantes do mês",
-            if (complete) "${state.markings.size} comprovante(s) original(is) · pacote completo"
-            else "$unavailable comprovante(s) ainda indisponível(is) · o índice identificará o pacote como incompleto",
+        val officialMarkings = state.markings.filterNot { it.pilot }
+        val complete = !state.truncated && officialMarkings.isNotEmpty() && officialMarkings.all { it.receiptStatus == "available" }
+        val unavailable = officialMarkings.count { it.receiptStatus != "available" }
+        FileSheet("Comprovantes oficiais do mês",
+            if (complete) "${officialMarkings.size} comprovante(s) oficial(is) · pacote oficial completo; ensaios ficam fora deste arquivo"
+            else "$unavailable comprovante(s) oficial(is) ainda indisponível(is) · ensaios ficam fora deste arquivo",
             "comprovantes-ponto-$start-a-$end-${if (complete) "completo" else "incompleto"}.zip", "application/zip",
             { _, then -> vm.receiptArchive(context.cacheDir, then) }) { selectedReceiptArchive = false }
     }
@@ -306,7 +310,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 }
             }
             FooterPair("Voltar", !screenBusy, { confirming = false }, if (online) "Confirmar ponto" else "Preservar no aparelho",
-                !screenBusy && declaredPurpose != null) {
+                !screenBusy && declaredPurpose != null && (!pilotMode || online)) {
                 confirming = false
                 when {
                     !online || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> declaredPurpose?.let { vm.record(online, declaredPurpose = it) }
@@ -314,8 +318,12 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     else -> locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
             }
-        } else Action(if (online) "Registrar ponto" else "Registrar ponto offline", screenBusy,
-            enabled = TimeRules.canRecord(state.options, state.unitId)) { confirming = true }
+        } else {
+            if (!online && pilotMode) Text("O ensaio pré-homologação exige internet; nenhuma batida será simulada ou guardada como oficial.",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            Action(when { online -> "Registrar ponto"; pilotMode -> "Conecte-se para registrar"; else -> "Registrar ponto offline" }, screenBusy,
+                enabled = TimeRules.canRecord(state.options, state.unitId) && (!pilotMode || online)) { confirming = true }
+        }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
     val leave: () -> Unit = { when (section) { "today" -> onBack(); "day" -> section = detailSource; else -> section = "today" } }
@@ -385,8 +393,9 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             }
             state.last?.let { last ->
                 CardBlock(selected = true) {
-                    Text("Ponto registrado · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
-                    Text("Registro oficial ${last.marking.nsr} · ${units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    Text("${if (last.pilot) "Ensaio registrado" else "Ponto registrado"} · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
+                    Text("${if (last.pilot) "Sequência do ensaio" else "Registro oficial"} ${last.marking.nsr} · ${units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    if (last.pilot) Text("Teste sem validade como REP-P e fora do fechamento oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                     last.location?.let { location -> Text(when (location.evaluation) {
                         "inside" -> "Localização compatível com a unidade."
                         "outside" -> "Localização indicada fora da área da unidade; o ponto foi registrado normalmente."
@@ -394,7 +403,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                         else -> "Localização não solicitada para esta unidade."
                     }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
                         style = MaterialTheme.typography.bodySmall) }
-                    if (last.receiptStatus == "available") Action("Abrir comprovante") { receipt = DayPunch(TimeRules.minuteOf(last.marking.markedAt), last.marking.nsr, last.receiptId, "available") to last.marking.markedAt }
+                    if (last.receiptStatus == "available") Action("Abrir comprovante") { receipt = DayPunch(TimeRules.minuteOf(last.marking.markedAt), last.marking.nsr, last.receiptId, "available", pilot = last.pilot) to last.marking.markedAt }
                     else Text("Comprovante em emissão. Puxe a tela para baixo para atualizar a lista.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                     Action("Ok", secondary = true) { vm.dismissLast() }
                 }
@@ -407,7 +416,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 if (todayPunches.isEmpty()) Text("Nenhuma batida hoje.", color = Tokens.muted)
                 PunchList(todayPunches, !feedback.busy, units) { receipt = it to markedAtOf(it) }
             }
-            Action("Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
+            if (todayMarkings.any { it.pilot }) Text("Ajustes formais ficam indisponíveis no ensaio; a classificação de cada batida continua editável.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            else Action("Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
             Text("CONSULTAS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             listOf(
                 Triple("records", "Registros", "Batidas e detalhes de cada dia"),
@@ -547,14 +557,18 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 @Composable private fun RecordsTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit,
     onAdjust: (String) -> Unit, onDay: (String) -> Unit, onArchive: () -> Unit) {
     val first = state.month.atDay(1)
+    val officialMarkings = state.markings.filterNot { it.pilot }
+    val hasPilotMarkings = state.markings.any { it.pilot }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         NavSquare("‹", "Mês anterior", !busy) { vm.month(state.month.minusMonths(1)) }
         Text(first.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
         NavSquare("›", "Próximo mês", !busy && state.month.isBefore(java.time.YearMonth.from(state.today))) { vm.month(state.month.plusMonths(1)) }
     }
     if (state.truncated) Text("O mês tem mais registros do que esta lista mostra; o espelho completo fica no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-    Action("Exportar comprovantes do mês", secondary = true,
-        enabled = !busy && !state.truncated && state.markings.isNotEmpty(), onClick = onArchive)
+    Action("Exportar comprovantes oficiais do mês", secondary = true,
+        enabled = !busy && !state.truncated && officialMarkings.isNotEmpty(), onClick = onArchive)
+    if (hasPilotMarkings) Text("Os comprovantes do ensaio ficam fora do pacote oficial. Abra cada batida para salvar ou compartilhar o comprovante identificado como ensaio.",
+        color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
     val last = if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     val days = generateSequence(last) { it.minusDays(1) }.takeWhile { !it.isBefore(first) }.toList()
         .filter { date -> state.markings.any { it.workDate == date.toString() } || state.shifts.any { it.date == date.toString() } || state.treatments.any { it.workDate == date.toString() } }
@@ -577,7 +591,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 TimeRules.shiftText(shift)?.let { Text("Escala: $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
                 PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
                 Action("Detalhar dia", enabled = !busy) { onDay(key) }
-                Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) }
+                if (state.markings.any { it.workDate == key && it.pilot }) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                else Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) }
             }
         }
     }
@@ -626,6 +641,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val date = runCatching { LocalDate.parse(workDate) }.getOrNull() ?: return
     val shift = state.shifts.firstOrNull { it.date == workDate }
     val punches = TimeRules.day(workDate, state.markings, state.treatments)
+    val pilotDay = state.markings.any { it.workDate == workDate && it.pilot }
     val adjustments = state.adjustments.filter { it.workDate == workDate }.sortedByDescending { it.createdAt }
     val lines = state.bank?.statement?.lines.orEmpty().filter { it.date == workDate }
     val planned = TimeRules.plannedWorkMinutes(shift)
@@ -680,7 +696,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             }
         }
     }
-    Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(workDate) }
+    if (pilotDay) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    else Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(workDate) }
 }
 
 @Composable private fun AdjustmentWeekPicker(value: String, today: LocalDate, enabled: Boolean, onChange: (String) -> Unit) {

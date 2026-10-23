@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "time_mirror";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -446,6 +446,27 @@ const timeRecordingTemplates: SystemDocumentTemplate[] = [{
   isSystem: true,
   previewUrl: "/api/documents/templates/system-rep-p-marking-receipt/preview",
   updatedAt: "2026-10-18T00:00:00.000Z",
+}, {
+  id: "system-rep-p-pilot-receipt",
+  name: "Comprovante de ensaio do ponto",
+  documentTitle: "Ensaio de registro de ponto",
+  category: "Controle de ponto",
+  description: "PDF individual de cada batida do ensaio pré-homologação, identificado sem NSR, sem assinatura ICP-Brasil e sem validade como comprovante REP-P.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "rep_p_pilot_receipt",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/rep-p/pilot-receipt.ts",
+  variables: [],
+  letterheadVersion: "none",
+  signatureScope: "none",
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-rep-p-pilot-receipt/preview",
+  updatedAt: "2026-10-23T00:00:00.000Z",
 }, {
   id: "system-ptrp-time-mirror",
   name: "Espelho de ponto",
