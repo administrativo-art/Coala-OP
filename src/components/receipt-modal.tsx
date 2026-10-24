@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useReposition } from '@/hooks/use-reposition';
 import { type RepositionActivity } from '@/types';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

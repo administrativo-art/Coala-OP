@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDoc, deleteDoc, setDoc } from "firebase/firestore";
 import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/lib/zod-resolver";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { auth } from "@/lib/firebase";
 import { fetchWithTimeout } from "@/lib/fetch-utils";

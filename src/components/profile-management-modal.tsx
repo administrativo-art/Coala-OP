@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useProfiles } from '@/hooks/use-profiles';
 import { Button } from '@/components/ui/button';

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
