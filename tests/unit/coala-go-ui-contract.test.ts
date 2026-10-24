@@ -8,6 +8,9 @@ const components = readFileSync(`${native}ui/Components.kt`, 'utf8');
 const modulesViewModel = readFileSync(`${native}ui/ModulesViewModel.kt`, 'utf8');
 const purchase = readFileSync(`${native}ui/PurchaseScreens.kt`, 'utf8');
 const activity = readFileSync(`${native}MainActivity.kt`, 'utf8');
+const homeViewModel = readFileSync(`${native}ui/HomeViewModel.kt`, 'utf8');
+const sessionViewModel = readFileSync(`${native}ui/SessionViewModel.kt`, 'utf8');
+const theme = readFileSync(`${native}ui/Theme.kt`, 'utf8');
 const schedule = screens.split('@Composable fun ScheduleScreen')[1]?.split('@Composable fun GoalsScreen')[0] ?? '';
 const goals = screens.split('@Composable fun GoalsScreen')[1]?.split('@Composable fun SignageScreen')[0] ?? '';
 const home = activity.split('@Composable private fun HomeScreen')[1]?.split('@Composable private fun ProfileScreen')[0] ?? '';
@@ -35,6 +38,33 @@ test('Subtítulo inicial usa a função ou cargo do perfil sem mostrar e-mail', 
 
 test('Barra do início não tem resumo deslizante: só os dados da própria barra', () => {
   assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
+});
+
+test('Início relê relógio e turno por pessoa, e o tema visual segue a hora do dia', () => {
+  assert.match(home, /val dataOwner = developerViewAs\.targetUserId \?: owner/);
+  assert.match(home, /val state = profileState\.visibleFor\(dataOwner\)/);
+  assert.match(home, /val visibleToday = today\.visibleFor\(dataOwner\)/);
+  assert.match(home, /val visiblePendingCount = if \(developerViewAs\.targetUserId == null\) pending\.size else 0/);
+  assert.match(home, /pending = if \(route == "purchase"\) visiblePendingCount else 0/);
+  assert.match(home, /vm\.loadToday\(it, goalUnit, dataOwner, force = true\)/);
+  assert.match(home, /Lifecycle\.Event\.ON_STOP\) paused = true/);
+  assert.match(home, /Lifecycle\.Event\.ON_START && paused[\s\S]*?vm\.refresh\(currentDataOwner\)[\s\S]*?vm\.loadToday\(it, goalUnit, currentDataOwner, force = true\)/);
+  assert.match(home, /visibleToday\.scheduleAvailable == false -> "Turno de hoje indisponível · atualizar"/);
+  assert.match(home, /visibleToday\.shift != null -> "Hoje · \$\{visibleToday\.shift\}"/);
+  assert.match(homeViewModel, /fun HomeToday\.visibleFor\(contextKey: String\)[\s\S]*?it\.contextKey == contextKey/);
+  assert.match(homeViewModel, /fun HomeProfile\.visibleFor\(contextKey: String\)[\s\S]*?this\.contextKey == contextKey/);
+  assert.match(homeViewModel, /refresh\(developerViewAsStore\.current\(\) \?: mode\.identity\(\)\.uid\)/);
+  assert.match(homeViewModel, /profileContextKey == contextKey && profileGeneration == generation/);
+  assert.match(homeViewModel, /if \(profileContextKey == contextKey\)[\s\S]*?Feedback\(notice = "Foto atualizada\."\)/);
+  assert.match(homeViewModel, /todayContextKey != contextKey[\s\S]*?todayMutable\.value = HomeToday\(contextKey = contextKey\)/);
+  assert.match(homeViewModel, /todayContextKey == contextKey && todayGeneration == generation/);
+  assert.doesNotMatch(homeViewModel, /queue\.list\(uid\)[^\n]*feedbackMutable/);
+  assert.match(homeViewModel, /scheduleAvailable = month != null/);
+  assert.match(sessionViewModel, /DeveloperViewAsState\(targetUserId = developerViewAsStore\.current\(\)\)/);
+  assert.match(sessionViewModel, /if \(developerIdentity\) loadDeveloperViewAs\(\)/);
+  assert.match(sessionViewModel, /directory\.targetUserId\?\.let\(developerViewAsStore::select\) \?: developerViewAsStore\.clear\(\)/);
+  assert.match(theme, /fun timeBasedDarkTheme\(hour: Int\) = hour !in 6\.\.17/);
+  assert.doesNotMatch(theme, /isSystemInDarkTheme/);
 });
 
 const time = readFileSync(`${native}ui/TimeScreens.kt`, 'utf8');
@@ -155,7 +185,7 @@ test('Troca de turno permanece em Solicitações e consome o contrato central', 
 });
 
 test('Jornada fica direta no início e separa consultas, escala e benefícios', () => {
-  assert.match(activity, /HomeTimeSummary\(today\)/);
+  assert.match(activity, /HomeTimeSummary\(visibleToday\)/);
   assert.match(home, /JORNADA DE TRABALHO/);
   assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);
   assert.match(time, /Triple\("records", "Registros"/);

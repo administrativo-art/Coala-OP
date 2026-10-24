@@ -3,7 +3,7 @@
 
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { 

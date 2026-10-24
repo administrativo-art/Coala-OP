@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
     val captureTimeoutMs: Long? = null, val maxAccuracyMeters: Double? = null, val privacyNoticeUrl: String? = null)
 @Serializable data class ExecutionUnit(val id: String, val name: String, val employer: Boolean = false, val timeZone: String? = null,
     val locationPolicy: LocationPolicy = LocationPolicy())
-/** Official time checked against Hora Legal; unavailable blocks the punch on the server too. */
+/** Official time checked against Hora Legal; it may be display-only, while a punch still requires every other gate. */
 @Serializable data class OfficialClock(val available: Boolean, val instant: String? = null, val timeZone: String? = null, val issue: String? = null)
 @Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean,
     val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null, val journeyLocationEnabled: Boolean = false,

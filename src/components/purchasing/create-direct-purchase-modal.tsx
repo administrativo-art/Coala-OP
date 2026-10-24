@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { Check, ChevronsUpDown, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';

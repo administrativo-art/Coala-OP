@@ -44,7 +44,7 @@ Nenhuma tela foi conferida em emulador ou aparelho neste levantamento. Medidas, 
 
 ## Cores
 
-Fonte: objeto `Tokens` em `ui/Theme.kt`. O tema segue o sistema (claro ou escuro) via `isSystemInDarkTheme()`; não há chave manual no app.
+Fonte: objeto `Tokens` em `ui/Theme.kt`. **Decidido (23/10/2026):** o tema é claro das 06h às 17h59 e escuro das 18h às 05h59, pelo horário civil local do aparelho. A regra é somente visual, é reavaliada a cada virada de minuto e não autoriza, bloqueia nem data uma batida; a Hora Legal do cartão e o servidor continuam sendo a referência do ponto. Não há chave manual no app.
 
 **Como está hoje — fixas nos dois temas** (a barra escura e a marca não mudam):
 
@@ -337,7 +337,7 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 
 ### Cartões do início (`HomeTile`)
 
-- **Jornada de trabalho:** **Ponto** e **Escala** são cartões diretos na primeira grade; Ponto nunca fica escondido em submenu. Acima deles, quando liberado, o cartão informativo mostra hora oficial, turno e sequência do dia, mas não registra batida.
+- **Jornada de trabalho:** **Ponto** e **Escala** são cartões diretos na primeira grade; Ponto nunca fica escondido em submenu. Acima deles, quando liberado, o cartão informativo mostra hora oficial, turno e sequência do dia, mas não registra batida. O cartão Escala escreve também o turno de hoje na descrição e repete o horário no selo; falha de leitura aparece como indisponibilidade, não como ausência de turno. Ao voltar de Ponto ou trocar o alvo DEV, perfil, módulos e resumo são relidos; o contexto da tela oculta sincronamente qualquer snapshot da pessoa anterior e descarta respostas atrasadas antes de renderizar nome, foto, permissões ou jornada. Ao reiniciar o app, um alvo DEV persistido é restaurado no estado da tela antes da primeira leitura e reconciliado com o servidor. Contagens e retornos de operações guardadas localmente no aparelho, como notas pendentes e atualização de foto, nunca são apresentados no contexto de outro usuário.
 - **Outros serviços:** Solicitações, Compra local e os demais módulos usam a mesma grade de duas colunas, com cartões de mesma altura; ícone num quadro de 44 dp, selo de estado no canto superior direito, título e uma linha de descrição.
 - **Selos:** "Em curso" (contagem aberta, cor de aviso), número de reposições a receber, horário do turno de hoje, percentual da meta.
 - **Liberação:** Ponto, Escala e Solicitações respeitam separadamente os módulos do grupo `app` somados à permissão de colaborador do sistema.

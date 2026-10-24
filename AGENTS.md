@@ -147,10 +147,12 @@
 ## Verificação antes de concluir
 
 - Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
-- Mudanças comuns devem manter `npm run check` verde.
-- Mudanças que afetem build, importações, fronteiras server/client ou geração de rotas devem manter `npm run verify` verde.
-- Mudanças em regras de acesso ao Firestore exigem `npm run check:rules` verde.
-- Mudanças cobertas por teste de integração exigem o respectivo comando verde.
+- Durante a implementação, execute o menor teste capaz de reproduzir a alteração ou regressão. Antes do push, complemente apenas com os contratos diretamente afetados e `git diff --check`; não use a suíte completa como substituto de testes dirigidos.
+- Em PR para `main`, o job obrigatório `quality` é a fonte final para `npm run check:vulnerabilities`, mapas de engenharia, `npm run check:rules`, `npm run verify` e build das Functions. Não execute localmente os mesmos comandos completos em paralelo nem depois do push apenas para duplicar o CI.
+- Execute `npm run check` ou `npm run verify` localmente antes do CI somente quando: o CI estiver indisponível; for preciso reproduzir uma falha; a mudança alterar o próprio pipeline, build, dependências ou toolchain e uma verificação dirigida não bastar; ou o programador pedir expressamente. Um resultado verde permanece válido para o mesmo SHA, dependências, configuração e ambiente; não o repita sem mudança relevante.
+- Quando o CI falhar, reproduza localmente primeiro apenas o comando ou teste que falhou. Depois da correção, rode o subconjunto afetado e deixe o `quality` validar novamente a suíte integral no novo SHA.
+- Acompanhe uma única execução do CI, em intervalos de 30–60 segundos. Para merge, espere somente os checks exigidos pela proteção da branch; jobs de observação não bloqueiam entrega e não justificam repetir testes localmente.
+- Mudanças cobertas por teste de integração exigem o respectivo comando dirigido verde antes do push. Mudanças de regras ou Functions continuam cobertas pelo `quality`, sem jobs obrigatórios paralelos com instalações duplicadas.
 - A IA não afirma que algo funciona sem ter executado a verificação. Não descreva como resultado aquilo que não rodou.
 - Falhas preexistentes devem ser identificadas como preexistentes; não podem ser omitidas nem atribuídas à mudança sem evidência.
 
@@ -161,6 +163,7 @@
 - Correção de regressão deve deixar um teste permanente no menor nível capaz de reproduzir a falha. Adicione E2E quando a regressão depender da integração entre navegador, rota e persistência.
 - E2E nunca executa contra produção nem usa credenciais reais. Use projeto Firebase com prefixo `demo-`, emuladores locais e dados determinísticos criados pelo próprio teste.
 - Um E2E novo entra no CI primeiro em observação. Ele só vira gate bloqueante depois de permanecer estável e de não depender de tempo arbitrário, ordem de execução ou estado compartilhado.
+- A varredura geral dos E2E em observação roda semanalmente e sob acionamento manual em workflow próprio, com uma única preparação de ambiente. PR não dispara essa varredura geral; a mudança executa localmente apenas o E2E do fluxo crítico afetado.
 
 ## CLI e navegador
 

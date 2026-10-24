@@ -2,7 +2,7 @@
 
 import React, { useCallback, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { z } from 'zod';
 import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
