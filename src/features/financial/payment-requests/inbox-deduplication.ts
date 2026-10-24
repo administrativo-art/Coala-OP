@@ -48,6 +48,7 @@ export function localRequestDuplicateCheck(params: {
   const conflicting = params.requests.find(({ id, data }) => {
     if (id === params.currentRequestId) return false;
     const status = String(data.status ?? "").trim();
+    if (status === "failed" && data.supersededByPaymentRequestId === params.currentRequestId) return false;
     return !DEFINITIVELY_INACTIVE_REQUEST_STATUSES.has(status)
       || Boolean(data.interRequestId)
       || Boolean(data.submissionStartedAt);

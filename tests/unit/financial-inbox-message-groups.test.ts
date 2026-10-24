@@ -111,6 +111,16 @@ test("agrupa mensagens do mesmo pedido bancário mesmo quando vieram em conversa
   assert.equal(groups.length, 1);
 });
 
+test("linha digitável prevalece quando registros legados criaram obrigações diferentes", () => {
+  const barcode = "8".repeat(48);
+  const groups = groupFinancialInboxMessages([
+    message({ id: "one", obligationId: "obligation-1", classification: { ...message({}).classification, barcode } }),
+    message({ id: "two", obligationId: "obligation-2", receivedAt: "2026-09-09T12:00:00.000Z", classification: { ...message({}).classification, barcode } }),
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].messageCount, 2);
+});
+
 test("não agrupa cobranças do mesmo fornecedor por valor, competência ou vencimento", () => {
   const groups = groupFinancialInboxMessages([
     message({ id: "september" }),

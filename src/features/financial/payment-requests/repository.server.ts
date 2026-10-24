@@ -46,6 +46,15 @@ export async function findPaymentRequestBySource(sourceType: string, sourceId: s
   return snapshot.empty ? null : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as BankPaymentRequest);
 }
 
+/** Leitura de compatibilidade para solicitações antigas sem workspaceId. */
+export async function findPaymentRequestBySourceAnyWorkspace(sourceType: string, sourceId: string) {
+  const snapshot = await financialDbAdmin.collection(COLLECTION)
+    .where("sourceType", "==", sourceType)
+    .where("sourceId", "==", sourceId)
+    .limit(1).get();
+  return snapshot.empty ? null : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as BankPaymentRequest);
+}
+
 export async function findPaymentRequestByInterId(interRequestId: string) {
   const snapshot = await financialDbAdmin.collection(COLLECTION).where("interRequestId", "==", interRequestId).limit(1).get();
   return snapshot.empty ? null : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as BankPaymentRequest);

@@ -6,6 +6,13 @@ export type PaymentSubmissionRetrySnapshot = {
   lastError?: { code?: string | null } | null;
 };
 
+export type PaymentBankPreflightSnapshot = {
+  bankPreflight?: {
+    checkedAt?: string | null;
+    outcome?: string | null;
+  } | null;
+};
+
 export function paymentSubmissionAttemptCount(input: PaymentSubmissionRetrySnapshot) {
   const stored = Number(input.submissionAttemptCount);
   if (Number.isSafeInteger(stored) && stored >= 0) return stored;
@@ -38,4 +45,15 @@ export function canCreateCorrectedPaymentRequest(input: PaymentSubmissionRetrySn
     && !input.supersededByPaymentRequestId
     && input.lastError?.code === "INTER_HTTP_400"
     && paymentSubmissionAttemptCount(input) >= 2;
+}
+
+export function hasFreshClearBankPreflight(
+  input: PaymentBankPreflightSnapshot,
+  now = Date.now(),
+  maximumAgeMs = 5 * 60_000,
+) {
+  if (input.bankPreflight?.outcome !== "clear") return false;
+  const checkedAt = Date.parse(String(input.bankPreflight.checkedAt ?? ""));
+  const age = now - checkedAt;
+  return Number.isFinite(checkedAt) && age >= 0 && age <= maximumAgeMs;
 }

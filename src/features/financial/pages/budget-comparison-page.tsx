@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/layout/page-header";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,11 +69,13 @@ function BudgetComparisonContent() {
 
   const expensesHref = `${FINANCIAL_ROUTES.expenses}?competence=${month}`;
 
-  return <PageContainer variant="wide" surface className="space-y-6 pb-10">
-    <PageHeader
+  return <PageContainer variant="wide" className="space-y-5 pb-10 font-ds">
+    <PageHero
+      compact
+      kicker="Financeiro · Despesas"
       title="Orçamento × despesas"
-      description="Compare o planejamento com os boletos e despesas da mesma competência."
-      back={{ fallbackHref: expensesHref, parentLabel: "Despesas" }}
+      subtitle="Compare o planejamento com os boletos e despesas da mesma competência."
+      actions={<HeroBackButton fallbackHref={expensesHref} parentLabel="Despesas" />}
     />
     <div className="grid gap-4 rounded-[18px] border border-[#e3e1dc] bg-white p-4 shadow-xs sm:grid-cols-[176px_minmax(240px,360px)_auto] sm:items-end">
       <div className="space-y-1.5"><Label htmlFor="comparison-month" className="text-[13px] font-bold">Competência</Label><Input id="comparison-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 w-full rounded-[11px]" /></div>

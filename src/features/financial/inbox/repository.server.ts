@@ -37,6 +37,7 @@ import {
 } from "./resolution-contract";
 import { financialInboxArchiveEligibility } from "./archive-policy";
 import { financialInboxManualArchivePlan, FINANCIAL_INBOX_RETENTION_POLICY_VERSION } from "./retention-policy";
+import { classificationWithPaymentSnapshot } from "./payment-snapshot";
 
 const COLLECTION = "financialInboxMessages";
 const SEARCH_SCAN_LIMIT = 500;
@@ -321,8 +322,10 @@ export async function listFinancialInboxMessages(params: {
     const indexReady = await financialInboxSearchIndexReady().catch(() => false);
     if (indexReady) {
       try {
+        const indexed = await listIndexedFinancialInboxSearch({ query, search, pageSize, cursor: params.cursor ?? null });
         return {
-          ...await listIndexedFinancialInboxSearch({ query, search, pageSize, cursor: params.cursor ?? null }),
+          ...indexed,
+          messages: await enrichFinancialInboxMessages(indexed.messages),
           summary: await summaryPromise,
         };
       } catch {
@@ -340,7 +343,7 @@ export async function listFinancialInboxMessages(params: {
         ...serializeFinancialValue(document.data()) as Omit<FinancialInboxMessage, "id">,
       }))
       .filter((message) => matchesFinancialInboxSearch(message, search));
-    const messages = matched.slice(offset, offset + pageSize);
+    const messages = await enrichFinancialInboxMessages(matched.slice(offset, offset + pageSize));
     const nextOffset = offset + messages.length;
     return {
       messages,
@@ -358,10 +361,10 @@ export async function listFinancialInboxMessages(params: {
   const documents = snapshot.docs.slice(0, pageSize);
   const last = documents.at(-1);
   return {
-    messages: documents.map((document) => ({
+    messages: await enrichFinancialInboxMessages(documents.map((document) => ({
       id: document.id,
       ...serializeFinancialValue(document.data()) as Omit<FinancialInboxMessage, "id">,
-    })),
+    }))),
     nextCursor: hasMore && last ? encodeCursor(String(last.get("receivedAt")), last.id) : null,
     searchTruncated: false,
     searchIndexed: null,
@@ -372,7 +375,31 @@ export async function listFinancialInboxMessages(params: {
 export async function getFinancialInboxMessage(id: string) {
   const snapshot = await financialDbAdmin.collection(COLLECTION).doc(id).get();
   if (!snapshot.exists) throw new Error("Mensagem financeira não encontrada.");
-  return { id: snapshot.id, ...snapshot.data() } as FinancialInboxMessage;
+  const [message] = await enrichFinancialInboxMessages([{
+    id: snapshot.id,
+    ...snapshot.data(),
+  } as FinancialInboxMessage]);
+  return message!;
+}
+
+async function enrichFinancialInboxMessages(messages: FinancialInboxMessage[]) {
+  const paymentIds = [...new Set(messages
+    .map((message) => String(message.paymentRequestId ?? "").trim())
+    .filter((id) => id && !id.includes("/")))];
+  if (!paymentIds.length) return messages;
+  const snapshots = await financialDbAdmin.getAll(
+    ...paymentIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)),
+  );
+  const payments = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]));
+  return messages.map((message) => {
+    const paymentId = String(message.paymentRequestId ?? "").trim();
+    const payment = paymentId ? payments.get(paymentId) : null;
+    if (!payment?.exists || payment.get("workspaceId") !== message.workspaceId) return message;
+    return {
+      ...message,
+      classification: classificationWithPaymentSnapshot(message.classification, payment.data() ?? {}),
+    };
+  });
 }
 
 export async function reviewFinancialInboxMessage(params: {

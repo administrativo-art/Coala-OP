@@ -4,8 +4,8 @@ Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autentic
 
 - Arquivos de rota: **500**
 - Totalmente contratados: **155**
-- Legados congelados: **342**
-- Exceções temporárias: **3**
+- Legados congelados: **337**
+- Exceções temporárias: **8**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -30,7 +30,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/auth/password-changed` | POST ✓ | `CONTRACTED` | [src/app/api/auth/password-changed/route.ts](../../src/app/api/auth/password-changed/route.ts) |
 | `/api/auth/view-as` | DELETE ✓, GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/auth/view-as/route.ts](../../src/app/api/auth/view-as/route.ts) |
 | `/api/catalogo` | GET | `LEGACY_BASELINE` | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) |
-| `/api/client/bootstrap` | GET | `LEGACY_BASELINE` | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) |
+| `/api/client/bootstrap` | GET | `EXCEPTION` | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) |
 | `/api/collaborator/absence-requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/collaborator/absence-requests/route.ts](../../src/app/api/collaborator/absence-requests/route.ts) |
 | `/api/collaborator/absence-requests/[requestId]` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/collaborator/absence-requests/[requestId]/route.ts](../../src/app/api/collaborator/absence-requests/[requestId]/route.ts) |
 | `/api/collaborator/absence-requests/[requestId]/attachments/[fileId]` | DELETE ✓, GET ✓ | `CONTRACTED` | [src/app/api/collaborator/absence-requests/[requestId]/attachments/[fileId]/route.ts](../../src/app/api/collaborator/absence-requests/[requestId]/attachments/[fileId]/route.ts) |
@@ -235,12 +235,12 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/inbox/mobile-upload/cancel` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/mobile-upload/cancel/route.ts](../../src/app/api/financial/inbox/mobile-upload/cancel/route.ts) |
 | `/api/financial/inbox/settings` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/financial/inbox/settings/route.ts](../../src/app/api/financial/inbox/settings/route.ts) |
 | `/api/financial/management-analysis` | POST | `LEGACY_BASELINE` | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) |
-| `/api/financial/payment-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) |
+| `/api/financial/payment-requests` | GET, POST | `EXCEPTION` | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) |
 | `/api/financial/payment-requests/[id]/authorize` | POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/authorize/route.ts](../../src/app/api/financial/payment-requests/[id]/authorize/route.ts) |
 | `/api/financial/payment-requests/[id]/proof` | GET | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/proof/route.ts](../../src/app/api/financial/payment-requests/[id]/proof/route.ts) |
 | `/api/financial/payment-requests/[id]/recover` | POST ✓ | `CONTRACTED` | [src/app/api/financial/payment-requests/[id]/recover/route.ts](../../src/app/api/financial/payment-requests/[id]/recover/route.ts) |
 | `/api/financial/payment-requests/[id]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/refresh/route.ts](../../src/app/api/financial/payment-requests/[id]/refresh/route.ts) |
-| `/api/financial/payment-requests/[id]/submit` | POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/submit/route.ts](../../src/app/api/financial/payment-requests/[id]/submit/route.ts) |
+| `/api/financial/payment-requests/[id]/submit` | POST | `EXCEPTION` | [src/app/api/financial/payment-requests/[id]/submit/route.ts](../../src/app/api/financial/payment-requests/[id]/submit/route.ts) |
 | `/api/financial/pdv-stone-review` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) |
 | `/api/financial/stone-agenda` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-agenda/route.ts](../../src/app/api/financial/stone-agenda/route.ts) |
 | `/api/financial/stone-anticipations` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-anticipations/route.ts](../../src/app/api/financial/stone-anticipations/route.ts) |
@@ -356,8 +356,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/public-stats` | GET | `LEGACY_BASELINE` | [src/app/api/hr/public-stats/route.ts](../../src/app/api/hr/public-stats/route.ts) |
 | `/api/hr/recruitment/forms/talent-pool` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/recruitment/forms/talent-pool/route.ts](../../src/app/api/hr/recruitment/forms/talent-pool/route.ts) |
 | `/api/hr/recruitment/forms/talent-pool/public` | GET | `LEGACY_BASELINE` | [src/app/api/hr/recruitment/forms/talent-pool/public/route.ts](../../src/app/api/hr/recruitment/forms/talent-pool/public/route.ts) |
-| `/api/hr/roles` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/roles/route.ts](../../src/app/api/hr/roles/route.ts) |
-| `/api/hr/roles/[roleId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/roles/[roleId]/route.ts](../../src/app/api/hr/roles/[roleId]/route.ts) |
+| `/api/hr/roles` | GET, POST | `EXCEPTION` | [src/app/api/hr/roles/route.ts](../../src/app/api/hr/roles/route.ts) |
+| `/api/hr/roles/[roleId]` | PATCH | `EXCEPTION` | [src/app/api/hr/roles/[roleId]/route.ts](../../src/app/api/hr/roles/[roleId]/route.ts) |
 | `/api/hr/roles/[roleId]/sync-profile` | POST | `LEGACY_BASELINE` | [src/app/api/hr/roles/[roleId]/sync-profile/route.ts](../../src/app/api/hr/roles/[roleId]/sync-profile/route.ts) |
 | `/api/hr/talent` | POST | `LEGACY_BASELINE` | [src/app/api/hr/talent/route.ts](../../src/app/api/hr/talent/route.ts) |
 | `/api/hr/termination-accountant/[token]` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/termination-accountant/[token]/route.ts](../../src/app/api/hr/termination-accountant/[token]/route.ts) |

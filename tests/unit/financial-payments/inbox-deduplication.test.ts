@@ -22,6 +22,14 @@ test("solicitação local ativa, paga ou com tentativa anterior bloqueia; rejei�
     currentRequestId: "current",
     requests: [{ id: "other", data: { status: "failed", submissionStartedAt: "2026-10-21" } }],
   }).state, "duplicate");
+  assert.equal(localRequestDuplicateCheck({
+    currentRequestId: "replacement",
+    requests: [{ id: "original", data: {
+      status: "failed",
+      submissionStartedAt: "2026-10-21",
+      supersededByPaymentRequestId: "replacement",
+    } }],
+  }).state, "clear");
 });
 
 test("despesa, obrigação, pagamento e baixa parcial são tratados como duplicidade", () => {

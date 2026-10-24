@@ -28,7 +28,7 @@ import {
 } from "./barcode-amounts";
 import { comparePaymentReceiverToSnapshot, findExactPixReceiverDocument } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
-import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
+import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, hasFreshClearBankPreflight, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
 import {
   FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
@@ -386,7 +386,9 @@ export async function createCorrectedInboxBarcodePaymentRequest(id: string, acto
 
   const code = normalizePaymentBarcode(String(messageSnapshot.get("classification.barcode") || initial.barcodeSnapshot.code));
   const dueDate = String(messageSnapshot.get("classification.dueDate") || initial.barcodeSnapshot.dueDate);
-  const amountCents = Number(messageSnapshot.get("classification.amountCents"));
+  const amountCents = Number(
+    messageSnapshot.get("classification.amountCents") ?? Math.round(Number(initial.amount) * 100),
+  );
   const beneficiaryDocument = String(
     messageSnapshot.get("classification.billingIdentity.supplierTaxId")
       || initial.barcodeSnapshot.beneficiaryDocument
@@ -399,7 +401,19 @@ export async function createCorrectedInboxBarcodePaymentRequest(id: string, acto
   }
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new PaymentRequestRecoveryError("Revise o valor da cobrança antes de criar a nova tentativa.");
 
-  const bankCandidates = await findInterBarcodePaymentsByCode(code);
+  let bankCandidates: Awaited<ReturnType<typeof findInterBarcodePaymentsByCode>> = [];
+  if (!hasFreshClearBankPreflight(initial)) {
+    try {
+      bankCandidates = await findInterBarcodePaymentsByCode(code);
+    } catch (cause) {
+      const safe = safeInterPaymentError(cause);
+      throw new PaymentRequestRecoveryError(
+        safe.code === "INTER_REQUEST_FAILED"
+          ? "Não foi possível consultar o Banco Inter para validar a nova tentativa. Verifique a configuração da integração e tente novamente."
+          : `Não foi possível consultar o Banco Inter para validar a nova tentativa. ${safe.safeMessage}`,
+      );
+    }
+  }
   const activeBankPayment = bankCandidates.find((candidate) =>
     !["rejected", "approval_expired"].includes(mapInterBarcodeStatus(candidate.statusPagamento, scheduledFor)));
   if (activeBankPayment) {

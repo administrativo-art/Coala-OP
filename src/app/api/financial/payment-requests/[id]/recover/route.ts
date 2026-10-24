@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getPaymentRequest } from "@/features/financial/payment-requests/repository.server";
+import { findPaymentRequestBySource, findPaymentRequestBySourceAnyWorkspace, getPaymentRequest, paymentRequestRef } from "@/features/financial/payment-requests/repository.server";
 import { createCorrectedInboxBarcodePaymentRequest, PaymentRequestRecoveryError } from "@/features/financial/payment-requests/service.server";
 import type { BankPaymentRequest } from "@/features/financial/payment-requests/types";
+import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { requireUser } from "@/lib/auth-server";
 import { AppError } from "@/lib/observability/app-error";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
@@ -54,13 +55,29 @@ const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Acto
     if (!id || id.length > 250) {
       throw new AppError({ code: "PAYMENT_RECOVERY_ID_INVALID", kind: "VALIDATION", safeMessage: "Solicitação inválida." });
     }
-    const payment = await getPaymentRequest(id).catch((cause) => {
-      throw new AppError({ code: "PAYMENT_RECOVERY_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Solicitação não encontrada.", cause });
-    });
-    if (payment.workspaceId !== actor.workspace_id) {
+    // Solicitações antigas de cobranças podem ter sido criadas com um ID
+    // diferente do contrato atual (`inbox_<mensagem>`). Resolva pela origem
+    // antes de rejeitar, mantendo a validação de ambiente abaixo.
+    let payment = await getPaymentRequest(id).catch(() => null);
+    if ((!payment || payment.workspaceId !== actor.workspace_id) && id.startsWith("inbox_")) {
+      const sourceId = id.slice("inbox_".length);
+      payment = await findPaymentRequestBySource("financial_inbox", sourceId, actor.workspace_id);
+      if (!payment) {
+        const legacy = await findPaymentRequestBySourceAnyWorkspace("financial_inbox", sourceId);
+        if (legacy && !legacy.workspaceId) {
+          const message = await financialDbAdmin.collection("financialInboxMessages").doc(sourceId).get();
+          if (message.exists && message.get("workspaceId") === actor.workspace_id) {
+            const updatedAt = new Date().toISOString();
+            await paymentRequestRef(legacy.id).set({ workspaceId: actor.workspace_id, updatedAt }, { merge: true });
+            payment = { ...legacy, workspaceId: actor.workspace_id, updatedAt } as BankPaymentRequest;
+          }
+        }
+      }
+    }
+    if (!payment || payment.workspaceId !== actor.workspace_id) {
       throw new AppError({ code: "PAYMENT_RECOVERY_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Solicitação não encontrada." });
     }
-    return { actor, input: { id }, resource: { id, payment } };
+    return { actor, input: { id }, resource: { id: payment.id, payment } };
   },
 });
 
