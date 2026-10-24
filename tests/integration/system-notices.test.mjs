@@ -7,6 +7,7 @@ assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
 const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const { repPDbAdmin } = await import('../../src/lib/firebase-rep-p-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monitor.server.ts');
 const { listSystemNotices } = await import('../../src/features/system-notices/service.server.ts');
@@ -31,7 +32,7 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
   const viewerProfile = dbAdmin.collection('profiles').doc(`${prefix}-viewer`);
   const manager = dbAdmin.collection('users').doc(`${prefix}-manager-user`);
   const viewer = dbAdmin.collection('users').doc(`${prefix}-viewer-user`);
-  const pendingReceipt = hrDbAdmin.collection('repP_receipts').doc(`${prefix}-receipt`);
+  const pendingReceipt = repPDbAdmin.collection('repP_receipts').doc(`${prefix}-receipt`);
   const permissions = (manageTime) => ({ settings: { view: true, viewSystemNotices: true }, dp: { settings: { manageTime } } });
   const context = (overrides) => ({ workspace_id: workspaceId, decoded: { uid: 'x' }, profileId: null,
     userDoc: { id: 'x', unitAccessScope: 'all' }, ...overrides });

@@ -10,6 +10,7 @@ const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
+const { assertRepPCompetenceAcceptsMarking, repPCompetenceFenceRef } = await import('../../src/features/dp/rep-p/competence-fence.server.ts');
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
@@ -32,7 +33,7 @@ test('fechamento concorrente com classificação converge sem editar diretamente
     permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
   const owner = { decoded: { uid: employeeId }, userDoc: { id: employeeId, username: 'Maria', unitIds: [unitId] }, profileId: null,
     permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
-  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock, readRoster: async () => [] };
+  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock, readRoster: async () => [] };
   const classificationDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
   const receiptRef = hrDbAdmin.collection('repP_receipts').doc(receiptId);
   await receiptRef.set({ workspaceId, employeeId, recordedDate: workDate, status: 'issued', snapshot: {
@@ -49,7 +50,8 @@ test('fechamento concorrente com classificação converge sem editar diretamente
     assert.equal(closure.get('status'), 'closed');
     assert.equal((await receiptRef.get()).get('classification'), undefined);
   } else {
-    assert.equal((await receiptRef.get()).get('classification').purpose, 'journey_start');
+    assert.equal((await hrDbAdmin.collection('ptrp_markingClassifications').doc(receiptId).get()).get('classification.purpose'), 'journey_start');
+    assert.equal((await receiptRef.get()).get('classification'), undefined);
   }
 });
 
@@ -78,7 +80,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
   const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
   const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
   const roster = [{ uid: userId, name: 'Maria' }];
-  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock, readRoster: async () => [...roster] };
+  const closureDeps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock, readRoster: async () => [...roster] };
   const actor = (uid, permissions, extra = {}) => ({ decoded: { uid }, userDoc: { id: uid, unitIds: [unitId], ...extra }, profileId: null,
     permissions, isDefaultAdmin: false, workspace_id: workspaceId });
   const admin = { ...actor(`${prefix}-admin`, structuredClone(defaultAdminPermissions)), isDefaultAdmin: true };
@@ -91,6 +93,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
   const closer = actor(`${prefix}-closer`, closerPermissions);
   const absenceRef = hrDbAdmin.collection('dp_absenceRequests').doc(`${prefix}-absence`);
   const shiftSwapRef = dbAdmin.collection('dp_shiftSwapRequests').doc(`${prefix}-shift-swap`);
+  const fenceRef = repPCompetenceFenceRef(hrDbAdmin, workspaceId, competence);
 
   try {
     await Promise.all([
@@ -132,7 +135,19 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       events: [{ action: 'submitted', at: '2026-08-10T12:00:00.000Z', actorUid: userId, actorName: 'Maria', declaration: 'Solicito a troca.', evidence: { authenticatedUid: userId } },
         { action: 'accepted', at: '2026-08-10T13:00:00.000Z', actorUid: otherUserId, actorName: 'Outra pessoa', declaration: 'Aceito a troca.', evidence: { authenticatedUid: otherUserId } }] });
     await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 3 }, closureDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
-    const first = await closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps);
+    let releaseFence;
+    let confirmFence;
+    const fenceAcquired = new Promise((resolve) => { confirmFence = resolve; });
+    const continueClosure = new Promise((resolve) => { releaseFence = resolve; });
+    const closing = closeCompetence(closer, { competence, expectedVersion: 0 }, { ...closureDeps,
+      afterFenceAcquired: async () => { confirmFence(); await continueClosure; } });
+    await fenceAcquired;
+    assert.equal((await fenceRef.get()).get('status'), 'closing');
+    await assert.rejects(hrDbAdmin.runTransaction(async (tx) => {
+      assertRepPCompetenceAcceptsMarking(await tx.get(fenceRef), workspaceId, competence);
+    }), { code: 'REP_P_COMPETENCE_CLOSED' });
+    releaseFence();
+    const first = await closing;
     assert.equal(first.status, 'closed');
     assert.equal(first.version, 1);
     assert.deepEqual(first.counts, { adjustments: 1, absences: 1, shiftSwaps: 1 });
@@ -140,6 +155,8 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.equal(first.clockSource, 'hora_legal');
     assert.match(first.manifestHash, /^[a-f0-9]{64}$/);
     assert.equal(first.changes, null);
+    assert.equal((await fenceRef.get()).get('status'), 'closed');
+    assert.equal((await fenceRef.get()).get('closureVersion'), 1);
 
     const frozen = await readCompetenceClosure(closer, competence, closureDeps);
     assert.equal(frozen.people[0].adjustments[0].decidedBy, reviewer.decoded.uid);
@@ -153,6 +170,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const reopened = await reopenCompetence(admin, competence, { action: 'reopen', expectedVersion: 1, reason: 'Atestado entregue depois do fechamento.' }, closureDeps);
     assert.equal(reopened.status, 'open');
     assert.equal(reopened.reopenings[0].fromVersion, 1);
+    assert.equal((await fenceRef.get()).get('status'), 'open');
 
     const late = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-08-20', kind: 'include', newTime: '08:00',
       reason: 'Esqueci de bater a entrada.' }, deps);

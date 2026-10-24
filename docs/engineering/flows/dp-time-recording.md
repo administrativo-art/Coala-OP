@@ -19,7 +19,7 @@
 - `POST /api/dp/time-recording/afd`: exportação administrativa por estabelecimento e período, limitada a gestor global de Tempo.
 - `GET /api/dp/time-recording/fiscal-options`: lista os estabelecimentos fiscais do workspace para a tela administrativa de exportação.
 - [`service.server.ts`](../../../src/features/dp/rep-p/service.server.ts): único escritor operacional da ARP; resolve vínculo, identidade e hora, transaciona NSR/original e gera o pacote AFD.
-- coleções `repP_*` no banco `coala-rh` (escolha do programador em 18/10/2026 em vez de banco dedicado): `firestore.rh.rules` nega toda leitura e escrita de clientes nessas coleções, inclusive administrador, e o teste de regras comprova. O Admin SDK do serviço é a única fronteira. Em 18/10/2026 foram ligados no `coala-rh` PITR, proteção contra exclusão e backup diário com retenção de 14 semanas. O piloto ainda exige revisão de IAM, ensaio de restauração, retenção longa e contingência.
+- ARP oficial no banco dedicado `coala-rep-p` (decisão de 24/10/2026): `firestore.rep.rules` nega toda leitura e escrita de clientes, inclusive administrador, e o teste de regras comprova. PITR, proteção contra exclusão e backup diário com retenção de 14 semanas estão ligados. Piloto nominal e PTRP continuam no `coala-rh`; reclassificações ficam em `ptrp_markingClassifications` e nunca atualizam a ARP. A tag `rep-p-arp=protected` está aplicada; falta um administrador com `roles/iam.denyAdmin` ativar a negação das contas genéricas.
 
 CPF, CNPJ, `employerUnitId`, estabelecimento, NSR, instante e hash nunca vêm do aparelho. A API deriva o empregado do token, lê CPF/nome no RH e resolve o empregador na revisão histórica de vínculo vigente na data. `executionUnitId` precisa constar em `unitIds`; cobertura excepcional mantém `employerUnitId` e CNPJ originais.
 
@@ -34,7 +34,7 @@ usuário autenticado + attemptId + data + unidade de execução
                              │
              transação: tentativa + NSR + tipo 7 + head
                              │
-                 original imutável na ARP (coala-rh)
+               original imutável na ARP (coala-rep-p)
 ```
 
 ## Etapa 1 — ARP e transação
@@ -42,6 +42,8 @@ usuário autenticado + attemptId + data + unidade de execução
 `repP_establishments` mantém o cabeçalho de sequência por estabelecimento; `repP_events` guarda eventos; `repP_attempts` faz idempotência; `repP_employees` contém a identidade cadastral congelada. A criação da marcação e a atualização de `lastNsr`/`lastType7Hash` ocorrem na mesma transação. O mesmo `attemptId` e conteúdo devolve o original; conteúdo diferente conflita. Tentativas distintas simultâneas recebem NSRs distintos.
 
 Eventos 2 e 5 são produzidos pelo provisionamento administrativo interno. Os serializadores também cobrem 4 e 6. O tipo 3 é exclusivo de outras categorias de REP e permanece com contagem zero no AFD REP-P. A sequência NSR é global por estabelecimento; o hash de um tipo 7 aponta para a marcação tipo 7 anterior, mesmo quando eventos cadastrais ocupam NSRs intermediários.
+
+Eventos tipo 6 de indisponibilidade e retorno continuam pendentes. Uma lacuna do Scheduler, isoladamente, não prova que o coletor esteve indisponível e não pode consumir NSR como fato fiscal. A implementação futura precisa observar o serviço por uma fronteira externa, distinguir falha da sonda de falha real da coleta e registrar somente transições confirmadas enquanto a coleta oficial estiver habilitada.
 
 As regras de cliente são `deny all`. Isso não elimina acesso privilegiado de projeto: IAM do serviço, backups, retenção, detecção de alteração e ensaio de restauração continuam gates operacionais anteriores ao piloto.
 
@@ -71,7 +73,7 @@ Não há polling. Uma pessoa conectada normalmente renova no máximo uma autoriz
 
 Revogar essa permissão interrompe imediatamente novas batidas e também o replay pelo endpoint de marcação. Comprovantes já vinculados continuam acessíveis e sua reemissão usa a rota própria de comprovante; suporte não deve religar a permissão apenas para consultar uma batida anterior.
 
-A fonte é o serviço público gratuito do ON, não o ReSinc certificado. A página oficial foi conferida em 18/10/2026: [acerte seu computador via internet](https://www.gov.br/observatorio/pt-br/assuntos/areas-de-atuacao/tempo-e-frequencia/acerte-seu-computador-via-internet). ReSinc/HLB certificada continua decisão pendente, sem conclusão de necessidade jurídica. Em 18/10/2026, a rotina publicada no App Hosting exigiu consulta nova, alcançou quórum pela saída UDP/123 e respondeu `clockState: ok`. A simulação publicada de perda e retomada continua pendente; falha apenas mantém o bloqueio.
+A fonte é o serviço público gratuito do ON, não o ReSinc certificado. A página oficial foi conferida em 18/10/2026: [acerte seu computador via internet](https://www.gov.br/observatorio/pt-br/assuntos/areas-de-atuacao/tempo-e-frequencia/acerte-seu-computador-via-internet). ReSinc/HLB certificada não foi adotada como requisito; permanece a Hora Legal implementada. Em 18/10/2026, a rotina publicada no App Hosting exigiu consulta nova, alcançou quórum pela saída UDP/123 e respondeu `clockState: ok`. A simulação publicada de perda e retomada continua pendente; falha apenas mantém o bloqueio.
 
 ## Etapa 4 — AFD 004 e CAdES
 
@@ -137,10 +139,10 @@ Testes unitários cobrem CRC, larguras, encoding, cabeçalho/trailer, hash adult
 
 O acompanhamento formal está no [pacote de homologação](../../rep-p/homologacao/README.md): relatório de gates, modelos dos atestados, roteiro de assinatura com e-CPF, gerador de amostras AFD/CAdES e PDF/PAdES não oficiais, checklist de validação no ITI, inventário IAM e roteiro de restauração.
 
-- simular no ambiente publicado a perda/retomada da HLB; a conectividade UDP/123 e o quórum real já foram confirmados, e ReSinc certificada permanece pendência não obrigatória por enquanto;
+- simular no ambiente publicado a perda/retomada da HLB; a conectividade UDP/123 e o quórum real já foram confirmados, e ReSinc certificada não é requisito adotado;
 - criar registro INPI, atestados e cadastro fiscal aprovado de cada estabelecimento;
-- validar AFD/CAdES e comprovante/PAdES reais no VALIDAR/ITI; carimbo de tempo ACT permanece pendência separada;
-- aprovar IAM, retenção, backup imutável, restauração, alertas e contingência;
+- validar AFD/CAdES e comprovante/PAdES reais no VALIDAR/ITI; ACT não é gate, e os vencimentos do e-CNPJ/e-CPFs devem ser monitorados para renovação antecipada;
+- publicar a configuração do bucket fiscal e do banco `coala-rep-p`; a restauração do `coala-rh` passou em banco descartável, e o banco da ARP já tem PITR, proteção e backup. Falta aplicar a negação IAM condicionada à tag com uma conta que tenha `roles/iam.denyAdmin`;
 - validar em aparelho físico o registro, a contingência e a abertura/compartilhamento do ZIP de comprovantes;
 - executar simulação fiscal independente e piloto paralelo ao Bizneo.
 
