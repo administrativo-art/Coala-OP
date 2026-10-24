@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { BulkBar } from "@/components/patterns/bulk-bar";
 import { ControlSearch } from "@/components/patterns/control-panel";
 import { FilterChips } from "@/components/patterns/filter-chips";
@@ -468,6 +469,8 @@ function StageChip(props: {
 export function FinancialInboxPage() {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const requestedSourceId = searchParams.get("sourceId")?.trim() || null;
   const [messages, setMessages] = useState<FinancialInboxMessage[]>([]);
   const [summary, setSummary] = useState<FinancialInboxSummary>(EMPTY_SUMMARY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -509,6 +512,9 @@ export function FinancialInboxPage() {
     && permissions.financial?.expenses?.edit === true;
   const canDiscard = permissions.financial?.inbox?.discard === true;
   const canPreparePayment = permissions.financial?.expenses?.edit === true
+    && permissions.financial?.paymentRequests?.view === true
+    && permissions.financial?.paymentRequests?.create === true;
+  const canRecoverPayment = (canAnalyze || canIdentify)
     && permissions.financial?.paymentRequests?.view === true
     && permissions.financial?.paymentRequests?.create === true;
   const messageGroups = useMemo(() => groupFinancialInboxMessages(messages), [messages]);
@@ -625,14 +631,21 @@ export function FinancialInboxPage() {
       if (cursor) query.set("cursor", cursor);
       const payload = await api(`/api/financial/inbox?${query.toString()}`);
       if (requestNumber !== loadSequence.current) return;
-      const nextMessages = (payload.messages ?? []) as FinancialInboxMessage[];
+      let nextMessages = (payload.messages ?? []) as FinancialInboxMessage[];
+      if (requestedSourceId && !nextMessages.some((message) => message.id === requestedSourceId)) {
+        const requested = await api(`/api/financial/inbox/${encodeURIComponent(requestedSourceId)}`);
+        if (requestNumber !== loadSequence.current) return;
+        if (requested.message) nextMessages = [requested.message as FinancialInboxMessage, ...nextMessages];
+      }
       setMessages(nextMessages);
       setSummary((payload.summary ?? EMPTY_SUMMARY) as FinancialInboxSummary);
       setNextCursor(payload.nextCursor ?? null);
       setSearchTruncated(payload.searchTruncated === true);
       setLastLoadedAt(new Date().toISOString());
       setSelectedIds(new Set());
-      setSelectedId((current) => nextMessages.some((message) => message.id === current) ? current : null);
+      setSelectedId((current) => requestedSourceId && nextMessages.some((message) => message.id === requestedSourceId)
+        ? requestedSourceId
+        : nextMessages.some((message) => message.id === current) ? current : null);
     } catch (error) {
       if (requestNumber !== loadSequence.current) return;
       setMessages([]);
@@ -641,7 +654,7 @@ export function FinancialInboxPage() {
     } finally {
       if (requestNumber === loadSequence.current) setLoading(false);
     }
-  }, [api, auditFilter, cursor, firebaseUser, search, stage, view]);
+  }, [api, auditFilter, cursor, firebaseUser, requestedSourceId, search, stage, view]);
 
   const loadAutomationSettings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -799,6 +812,23 @@ export function FinancialInboxPage() {
       await load();
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao analisar a cobrança." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function recoverPayment(message: FinancialInboxMessage) {
+    if (!message.paymentRequestId) return;
+    setWorking(`recover:${message.id}`);
+    try {
+      await api(`/api/financial/payment-requests/${encodeURIComponent(message.paymentRequestId)}/recover`, { method: "POST" });
+      toast({
+        title: "Nova solicitação criada para autorização.",
+        description: "A tentativa recusada foi preservada e nenhum pagamento foi enviado automaticamente.",
+      });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao criar a nova tentativa." });
     } finally {
       setWorking(null);
     }
@@ -1237,7 +1267,8 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; e-mail, anexos, trilha e vínculos continuam preservados. É possível restaurar.</p></> : null}
                       </div>
                       <div className="grid shrink-0 gap-2">
-                        {view === "work" && financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <ExplainedAction title="Reprocessar documento" help={<><p>Executa novamente a extração determinística e, se necessário, OCR/IA.</p><p>Não cria despesa, não envia ao banco e não altera pagamento.</p></>}><Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Reprocessar documento</Button></ExplainedAction> : null}
+                        {view === "work" && (financialInboxStageForStatus(selected.status) === "classify" || selected.status === "payment_failed") && canAnalyze ? <ExplainedAction title="Reprocessar documento" help={<><p>Executa novamente a extração determinística e, se necessário, OCR/IA.</p><p>Não cria despesa, não envia ao banco e não altera pagamento.</p></>}><Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Reprocessar documento</Button></ExplainedAction> : null}
+                        {view === "work" && selected.status === "payment_failed" && selected.paymentRequestId && canRecoverPayment ? <ExplainedAction title="Criar nova tentativa" help={<><p>Use após corrigir os campos ou reprocessar o documento.</p><p>O backend consulta o Inter, preserva a tentativa recusada e cria uma nova versão para autorização. Não envia ao banco nesta ação.</p></>}><Button onClick={() => void recoverPayment(selected)} disabled={working === `recover:${selected.id}`}><ShieldCheck className="mr-2 h-4 w-4" />Criar nova tentativa</Button></ExplainedAction> : null}
                         {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canIdentify && selected.existingExpenseSuggestion?.status === "suggested" ? <ExplainedAction title="Vincular à despesa encontrada" help={<><p>Registra esta cobrança como evidência da despesa sugerida.</p><p>Se ela já estiver paga ou agendada, valor, vencimento e pagamento serão preservados.</p></>}><Button onClick={() => setConfirmation({ kind: "link", message: selected, resolutionOnly: true })}><CheckCircle2 className="mr-2 h-4 w-4" />Vincular à despesa</Button></ExplainedAction> : null}
                         {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <ExplainedAction title="Vincular cobrança à previsão" help={<><p>Transforma a previsão existente na despesa desta cobrança e mantém sua classificação contábil.</p><p>Nenhum pagamento é autorizado ou executado.</p></>}><Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Vincular à previsão</Button></ExplainedAction> : null}
                         {view === "work" && financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <ExplainedAction title="Preparar pagamento" help={<><p>Cria uma solicitação para a fila de autorizações.</p><p>Não agenda, autoriza nem executa o pagamento no Banco Inter.</p></>}><Button onClick={() => openPaymentPreparation(selected)}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button></ExplainedAction> : null}

@@ -25,3 +25,17 @@ export function canRetryDefinitivelyRejectedPayment(input: PaymentSubmissionRetr
     && input.lastError?.code === "INTER_HTTP_400"
     && paymentSubmissionAttemptCount(input) === 1;
 }
+
+export function canCreateCorrectedPaymentRequest(input: PaymentSubmissionRetrySnapshot & {
+  sourceType?: string | null;
+  paymentRail?: string | null;
+  supersededByPaymentRequestId?: string | null;
+}) {
+  return input.sourceType === "financial_inbox"
+    && input.paymentRail === "barcode"
+    && input.status === "failed"
+    && !input.interRequestId
+    && !input.supersededByPaymentRequestId
+    && input.lastError?.code === "INTER_HTTP_400"
+    && paymentSubmissionAttemptCount(input) >= 2;
+}

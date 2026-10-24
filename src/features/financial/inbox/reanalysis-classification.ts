@@ -4,6 +4,7 @@ const MUTABLE_ANALYSIS_STATUSES = new Set<FinancialInboxStatus>([
   "pending_review",
   "document_pending",
   "suggestion_available",
+  "payment_failed",
 ]);
 
 export function classificationForFinancialInboxReanalysis(input: {

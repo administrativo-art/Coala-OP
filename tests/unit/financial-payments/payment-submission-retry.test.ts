@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canCreateCorrectedPaymentRequest,
   canRetryDefinitivelyRejectedPayment,
   paymentSubmissionAttemptCount,
 } from "../../../src/features/financial/payment-requests/submission-retry";
@@ -16,6 +17,20 @@ test("permite uma única retomada após rejeição HTTP 400 sem ID bancário", (
   assert.equal(paymentSubmissionAttemptCount(rejected), 1);
   assert.equal(canRetryDefinitivelyRejectedPayment(rejected), true);
   assert.equal(canRetryDefinitivelyRejectedPayment({ ...rejected, submissionAttemptCount: 2 }), false);
+});
+
+test("após duas recusas exige nova versão da cobrança em vez de novo POST no mesmo registro", () => {
+  const exhausted = {
+    ...rejected,
+    sourceType: "financial_inbox",
+    paymentRail: "barcode",
+    submissionAttemptCount: 2,
+  };
+  assert.equal(canRetryDefinitivelyRejectedPayment(exhausted), false);
+  assert.equal(canCreateCorrectedPaymentRequest(exhausted), true);
+  assert.equal(canCreateCorrectedPaymentRequest({ ...exhausted, interRequestId: "bank_1" }), false);
+  assert.equal(canCreateCorrectedPaymentRequest({ ...exhausted, supersededByPaymentRequestId: "request_v3" }), false);
+  assert.equal(canCreateCorrectedPaymentRequest({ ...exhausted, sourceType: "expense_boleto" }), false);
 });
 
 test("bloqueia retomada de resultado ambíguo ou já identificado no banco", () => {
