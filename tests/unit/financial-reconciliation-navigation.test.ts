@@ -193,9 +193,9 @@ test("páginas contextuais mantêm o item pai selecionado sem conceder visibilid
 test("orçamento × despesas segue o padrão contextual de Despesas", () => {
   const page = read("src/features/financial/pages/budget-comparison-page.tsx");
   const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
-  assert.match(page, /<PageContainer variant="wide" surface/);
-  assert.match(page, /<PageHeader/);
-  assert.match(page, /back=\{\{ fallbackHref: expensesHref, parentLabel: "Despesas" \}\}/);
+  assert.match(page, /<PageContainer variant="wide"/);
+  assert.match(page, /<PageHero/);
+  assert.match(page, /<HeroBackButton fallbackHref=\{expensesHref\} parentLabel="Despesas"/);
   assert.match(expensesPage, /FINANCIAL_ROUTES\.budgetComparison/);
 });
 

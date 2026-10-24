@@ -22,15 +22,18 @@ function installmentKey(message: FinancialInboxMessage) {
  */
 export function financialInboxChargeGroupKey(message: FinancialInboxMessage) {
   const installment = installmentKey(message);
+  // A linha digitável identifica o boleto de forma mais precisa que um
+  // obligationId legado. Se duas mensagens chegaram a gerar obrigações
+  // diferentes, ainda assim devem aparecer como uma única cobrança.
+  const barcode = message.classification.barcode?.replace(/\D/g, "");
+  if (barcode && (barcode.length === 44 || barcode.length === 46 || barcode.length === 47 || barcode.length === 48)) {
+    return `barcode:${barcode}`;
+  }
   if (message.obligationId) return `obligation:${message.obligationId}:${installment}`;
   if (message.paymentRequestId) return `payment-request:${message.paymentRequestId}:${installment}`;
   if (message.linkedExpenseId) return `expense:${message.linkedExpenseId}:${installment}`;
   if (message.resolution?.targetType === "expense" && message.resolution.targetId) {
     return `expense:${message.resolution.targetId}:${installment}`;
-  }
-  const barcode = message.classification.barcode?.replace(/\D/g, "");
-  if (barcode && (barcode.length === 44 || barcode.length === 47)) {
-    return `barcode:${barcode}`;
   }
   if (message.thread?.primaryMessageId) return `thread:${message.thread.primaryMessageId}`;
   return `message:${message.id}`;

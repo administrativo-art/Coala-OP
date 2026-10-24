@@ -26,6 +26,7 @@ export type FinancialInboxExpenseContext = {
   status: string | null;
   description: string | null;
   supplier: string | null;
+  supplierTaxId: string | null;
   amountCents: number | null;
   dueDate: string | null;
   competence: string | null;
@@ -80,6 +81,12 @@ export function buildFinancialInboxExpenseContext(
   );
   const allocations = Array.isArray(expense.accountAllocations) ? expense.accountAllocations : [];
   const apportionments = Array.isArray(expense.apportionments) ? expense.apportionments : [];
+  const billingIdentity = expense.billingIdentity && typeof expense.billingIdentity === "object"
+    ? expense.billingIdentity as Record<string, unknown>
+    : null;
+  const boletoAttachment = expense.boletoAttachment && typeof expense.boletoAttachment === "object"
+    ? expense.boletoAttachment as Record<string, unknown>
+    : null;
   return {
     id,
     source,
@@ -87,6 +94,12 @@ export function buildFinancialInboxExpenseContext(
     status: normalizedStatus,
     description: text(expense.description),
     supplier: text(expense.supplier),
+    supplierTaxId: text(
+      billingIdentity?.supplierTaxId
+      ?? expense.supplierTaxId
+      ?? expense.beneficiaryDocument
+      ?? boletoAttachment?.beneficiaryDocument,
+    )?.replace(/\D/g, "") || null,
     amountCents: amountCents(expense),
     dueDate: isoDate(expense.dueDate)?.slice(0, 10) ?? null,
     competence: isoDate(expense.competenceDate)?.slice(0, 7) ?? text(expense.competence),

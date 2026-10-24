@@ -1166,6 +1166,7 @@ export function ExpensesPage() {
   return (
     <PageContainer variant="wide" className="space-y-5 pb-10">
       <PageHero
+        compact
         kicker="Financeiro"
         title="Despesas"
         subtitle={activePeriodLabel}

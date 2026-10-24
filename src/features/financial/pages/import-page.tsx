@@ -4086,6 +4086,7 @@ export function FinancialImportPage({
     <div className={cn("mx-auto w-full max-w-[1460px] space-y-4", embedded && "max-w-none")}>
       {!embedded || (showImportControls && !uploadOnly) ? (
         !embedded ? <PageHero
+          compact
           kicker="Financeiro · Importações"
           title="Importar extrato bancário"
           subtitle="Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API."
@@ -4882,7 +4883,7 @@ export function FinancialImportPage({
                   "flex h-full flex-col gap-0 overflow-hidden border-l p-0 transition-[width,border-radius] duration-200 sm:max-w-none!",
                   auditDrawerExpanded
                     ? "w-screen! rounded-none"
-                    : "w-[min(1006px,calc(100vw-24px))]! rounded-l-[20px]"
+                    : "w-[min(860px,calc(100vw-24px))]! rounded-l-[20px]"
                 )}
               >
                 <SheetHeader className="relative border-b bg-background px-7 py-[18px] pr-24">

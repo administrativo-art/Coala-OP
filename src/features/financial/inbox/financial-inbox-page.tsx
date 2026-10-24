@@ -52,6 +52,7 @@ import { resolutionForDisplay } from "./resolution-contract";
 import { equivalentSupplier } from "./expense-suggestions";
 import { groupFinancialInboxMessages } from "./message-groups";
 import { trustedFinancialDocumentProvider } from "./trusted-document-providers";
+import { htmlToPlainText } from "./parser";
 import type {
   FinancialInboxAutomationSettings,
   FinancialInboxBillingIdentity,
@@ -264,6 +265,50 @@ function formatCompetence(value: string | null | undefined) {
 function formatAmount(value: number | null | undefined) {
   if (value == null) return "—";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value / 100);
+}
+
+function attachmentAnalysis(attachment: FinancialInboxMessage["attachments"][number]) {
+  if (attachment.extractionStatus === "extracted" || attachment.extractionStatus === "ocr_extracted") {
+    return {
+      label: attachment.extractionStatus === "ocr_extracted" ? "◌ Analisado por OCR" : "✓ Analisado",
+      description: attachment.extractionStatus === "ocr_extracted"
+        ? "O conteúdo foi lido por OCR e entrou na extração da cobrança."
+        : "O texto do documento foi extraído e entrou na análise da cobrança.",
+      tone: "text-ds-ok",
+      icon: <Check className="ml-2 h-3.5 w-3.5 text-ds-ok" />,
+    } as const;
+  }
+  if (attachment.extractionStatus === "needs_ocr") {
+    return {
+      label: "⚠ Leitura incompleta",
+      description: "O documento precisa de OCR para que valor, vencimento e identificadores possam ser extraídos.",
+      tone: "text-ds-warn",
+      icon: <AlertTriangle className="ml-2 h-3.5 w-3.5 text-ds-warn" />,
+    } as const;
+  }
+  if (attachment.extractionStatus === "failed") {
+    return {
+      label: "× Não analisado",
+      description: "Não foi possível abrir ou analisar este documento. O arquivo continua preservado para revisão manual.",
+      tone: "text-ds-danger",
+      icon: <XCircle className="ml-2 h-3.5 w-3.5 text-ds-danger" />,
+    } as const;
+  }
+  return {
+    label: "○ Ainda não analisado",
+    description: "Este documento foi arquivado, mas ainda não passou por uma extração concluída.",
+    tone: "text-muted-foreground",
+    icon: <AlertTriangle className="ml-2 h-3.5 w-3.5 text-muted-foreground" />,
+  } as const;
+}
+
+function plainEmailText(value: string | null | undefined) {
+  if (!value?.trim()) return "O e-mail não possui conteúdo textual.";
+  return htmlToPlainText(value);
+}
+
+function visibleArchiveWarnings(warnings: string[]) {
+  return [...new Set(warnings.filter((warning) => !/^Não foi possível analisar \d+ documento|^\d+ documento\(s\) exige/.test(warning)))];
 }
 
 function senderLabel(message: FinancialInboxMessage) {
@@ -519,6 +564,14 @@ export function FinancialInboxPage() {
     && permissions.financial?.paymentRequests?.create === true;
   const messageGroups = useMemo(() => groupFinancialInboxMessages(messages), [messages]);
   const selected = useMemo(() => messages.find((message) => message.id === selectedId) ?? null, [messages, selectedId]);
+  const selectedAmountCents = selected?.classification.amountCents ?? expenseContext?.amountCents ?? null;
+  const selectedCompetence = selected?.classification.competence ?? expenseContext?.competence ?? null;
+  const selectedDueDate = selected?.classification.dueDate ?? expenseContext?.dueDate ?? null;
+  const selectedSupplierTaxId = selected?.classification.billingIdentity?.supplierTaxId
+    ?? selected?.existingExpenseSuggestion?.billingIdentity?.supplierTaxId
+    ?? selected?.provisionSuggestion?.billingIdentity?.supplierTaxId
+    ?? expenseContext?.supplierTaxId
+    ?? null;
   const selectedGroup = useMemo(
     () => messageGroups.find((group) => group.messages.some((message) => message.id === selectedId)) ?? null,
     [messageGroups, selectedId],
@@ -1037,6 +1090,7 @@ export function FinancialInboxPage() {
   return (
     <PageContainer variant="default" className="space-y-5 pb-28">
       <PageHero
+        compact
         kicker="Financeiro · Despesas"
         title={view === "work" ? "Caixa de cobranças" : view === "identified" ? "Cobranças identificadas" : "Ruídos"}
         subtitle={view === "work" ? "Analise, confirme e prepare somente o que ainda exige ação." : view === "identified" ? "Acompanhe cobranças identificadas e arquive apenas as que já foram tratadas." : "Revise mensagens ignoradas automaticamente e descartes feitos por pessoas."}
@@ -1187,13 +1241,13 @@ export function FinancialInboxPage() {
           kicker={`Cobrança · ${STATUS_LABEL[selected.status]}`}
           title={senderLabel(selected)}
           subtitle={selected.subject}
-          highlights={<span className="font-mono">{formatAmount(selected.classification.amountCents)}</span>}
+          highlights={<span className="font-mono">{formatAmount(selectedAmountCents)}</span>}
           className="sm:w-[560px]"
         >
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2"><StatusChip status={selected.status} bankState={selected.bankState} /><ResolutionChips message={selected} /><StatusPill variant="neutral">{TYPE_LABEL[selected.classification.documentType]}</StatusPill></div>
             <p className="break-all text-sm text-ds-ink-muted"><span className="font-semibold text-ds-ink">Remetente do e-mail:</span> {selected.from}</p>
-            <div className="grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência</p><p className="font-semibold">{formatCompetence(selected.classification.competence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento</p><p className="font-semibold">{formatDate(selected.classification.dueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebimento</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
+            <div className="grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência da cobrança</p><p className="font-semibold">{formatCompetence(selectedCompetence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento da cobrança</p><p className="font-semibold">{formatDate(selectedDueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebido no e-mail</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
           </div>
                 <div className="space-y-5">
                   <section className="rounded-2xl border p-4">
@@ -1205,9 +1259,9 @@ export function FinancialInboxPage() {
                     </div>
                     <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                       <div><dt className="text-xs text-muted-foreground">Fornecedor</dt><dd className="font-semibold">{selected.classification.supplierName || "—"}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">CNPJ</dt><dd className="font-semibold">{selected.classification.billingIdentity?.supplierTaxId || "—"}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">CNPJ</dt><dd className="font-semibold">{selectedSupplierTaxId || "—"}</dd></div>
                       <div><dt className="text-xs text-muted-foreground">Documento</dt><dd className="font-semibold">{selected.classification.documentReferences?.join(", ") || "—"}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-mono font-semibold">{formatAmount(selected.classification.amountCents)}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-mono font-semibold">{formatAmount(selectedAmountCents)}</dd></div>
                       <div><dt className="text-xs text-muted-foreground">Plano de contas</dt><dd className="font-semibold">{expenseContext?.accounting.accountPlanName || expenseContext?.accounting.accountPlanId || "Não informado"}</dd></div>
                       <div><dt className="text-xs text-muted-foreground">Centro de resultado</dt><dd className="font-semibold">{expenseContext?.accounting.referenceResultCenterName || "Não informado"}</dd></div>
                       <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Rateio</dt><dd className="font-semibold">{expenseContext?.accounting.isApportioned ? expenseContext.accounting.apportionments.map((item) => `${item.resultCenter} ${item.percentage}%`).join(" · ") : "Sem rateio"}</dd></div>
@@ -1308,13 +1362,13 @@ export function FinancialInboxPage() {
                     <section className="rounded-2xl border p-4"><h3 className="text-sm font-bold">Identificadores da cobrança</h3><div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">{selected.classification.billingIdentity.customerAccount ? <div><p className="text-xs text-muted-foreground">Conta</p><p className="font-semibold">{selected.classification.billingIdentity.customerAccount}</p></div> : null}{selected.classification.billingIdentity.contractNumber ? <div><p className="text-xs text-muted-foreground">Contrato</p><p className="font-semibold">{selected.classification.billingIdentity.contractNumber}</p></div> : null}{selected.classification.billingIdentity.serviceNumbers.map((number) => <div key={number}><p className="text-xs text-muted-foreground">Linha / telefone</p><p className="font-semibold">{number}</p></div>)}{selected.classification.billingIdentity.supplierTaxId ? <div><p className="text-xs text-muted-foreground">CNPJ do fornecedor</p><p className="font-semibold">{selected.classification.billingIdentity.supplierTaxId}</p></div> : null}</div></section>
                   ) : null}
 
-                  <Accordion type="multiple" defaultValue={["documents"]} className="rounded-2xl border px-4">
-                    <AccordionItem value="email"><AccordionTrigger className="text-sm">Conteúdo do e-mail</AccordionTrigger><AccordionContent><p className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-muted/30 p-4 leading-6">{selected.textContent || "O e-mail não possui conteúdo textual."}</p></AccordionContent></AccordionItem>
-                    <AccordionItem value="documents"><AccordionTrigger className="text-sm">Documentos arquivados ({selected.attachments.filter((attachment) => attachment.storagePath).length + (selected.rawStoragePath ? 1 : 0)})</AccordionTrigger><AccordionContent><div className="flex flex-wrap gap-2">{selected.attachments.filter((attachment) => attachment.storagePath).map((attachment) => <Button key={attachment.id} variant="outline" size="sm" onClick={() => void openFile(selected, attachment.id)} disabled={working === `file:${attachment.id}`}>{working === `file:${attachment.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{attachment.filename}{attachment.extractionStatus === "failed" ? <XCircle className="ml-2 h-3.5 w-3.5 text-ds-danger" /> : attachment.extractionStatus === "needs_ocr" ? <AlertTriangle className="ml-2 h-3.5 w-3.5 text-ds-warn" /> : attachment.extractionStatus === "extracted" || attachment.extractionStatus === "ocr_extracted" ? <Check className="ml-2 h-3.5 w-3.5 text-ds-ok" /> : null}</Button>)}{selected.rawStoragePath ? <Button variant="ghost" size="sm" onClick={() => void openFile(selected, "raw")} disabled={working === "file:raw"}><Download className="mr-2 h-4 w-4" />E-mail original (.eml)</Button> : null}{!selected.rawStoragePath && !selected.attachments.some((attachment) => attachment.storagePath) ? <p className="text-sm text-muted-foreground">Nenhum documento foi arquivado.</p> : null}</div>{selected.linkResolution?.message ? <p className={cn("mt-3 text-xs", selected.linkResolution.status === "resolved" ? "text-ds-ok" : selected.linkResolution.status === "requires_login" ? "text-ds-warn" : "text-muted-foreground")}>{selected.linkResolution.message}</p> : null}</AccordionContent></AccordionItem>
+                  <Accordion type="multiple" defaultValue={[]} className="rounded-2xl border px-4">
+                    <AccordionItem value="email"><AccordionTrigger className="text-sm">Conteúdo do e-mail</AccordionTrigger><AccordionContent><p className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-muted/30 p-4 leading-6">{plainEmailText(selected.textContent)}</p></AccordionContent></AccordionItem>
+                    <AccordionItem value="documents"><AccordionTrigger className="text-sm">Documentos arquivados ({selected.attachments.filter((attachment) => attachment.storagePath).length + (selected.rawStoragePath ? 1 : 0)})</AccordionTrigger><AccordionContent><div className="grid gap-2">{selected.attachments.filter((attachment) => attachment.storagePath).map((attachment) => { const analysis = attachmentAnalysis(attachment); return <div key={attachment.id} className="flex items-center gap-2"><Button className="min-w-0 flex-1 justify-start" variant="outline" size="sm" onClick={() => void openFile(selected, attachment.id)} disabled={working === `file:${attachment.id}`} title={`${attachment.filename} · ${analysis.label}`}>{working === `file:${attachment.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{attachment.filename}<span className={cn("ml-auto text-[11px] font-semibold", analysis.tone)}>{analysis.label}</span></Button><InfoPopover title={`Análise de ${attachment.filename}`}><p>{analysis.description}</p><p>Clique no nome do arquivo para abrir o documento preservado.</p></InfoPopover></div>; })}{selected.rawStoragePath ? <div className="flex items-center gap-2"><Button className="flex-1 justify-start" variant="ghost" size="sm" onClick={() => void openFile(selected, "raw")} disabled={working === "file:raw"}><Download className="mr-2 h-4 w-4" />E-mail original (.eml)</Button><InfoPopover title="E-mail original"><p>O arquivo original foi preservado, mas não é um documento financeiro individual.</p></InfoPopover></div> : null}{!selected.rawStoragePath && !selected.attachments.some((attachment) => attachment.storagePath) ? <p className="text-sm text-muted-foreground">Nenhum documento foi arquivado.</p> : null}</div>{selected.linkResolution?.message ? <p className={cn("mt-3 text-xs", selected.linkResolution.status === "resolved" ? "text-ds-ok" : selected.linkResolution.status === "requires_login" ? "text-ds-warn" : "text-muted-foreground")}>{selected.linkResolution.message}</p> : null}</AccordionContent></AccordionItem>
                     {selected.classification.links.length > 0 ? <AccordionItem value="links"><AccordionTrigger className="text-sm">Links enviados pelo fornecedor ({selected.classification.links.length})</AccordionTrigger><AccordionContent><p className="mb-3 text-xs text-muted-foreground">Somente provedores e rotas documentais verificados podem ser abertos. A validação independe do endereço do remetente.</p><div className="grid gap-2">{selected.classification.links.map((link) => { const provider = trustedFinancialDocumentProvider(link); return <button key={link} type="button" onClick={() => openExternalConfirmation(link)} disabled={!provider} className={cn("flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm", provider ? "text-ds-info hover:bg-ds-muted" : "cursor-not-allowed bg-muted/30 text-muted-foreground")}><span className="min-w-0"><span className="block truncate">{link}</span><span className={cn("mt-1 block text-[10px] font-semibold", provider ? "text-ds-ok" : "text-ds-warn")}>{provider?.name ?? "Destino não verificado — abertura bloqueada"}</span></span>{provider ? <ShieldCheck className="h-4 w-4 shrink-0 text-ds-ok" /> : <XCircle className="h-4 w-4 shrink-0" />}</button>; })}</div></AccordionContent></AccordionItem> : null}
                   </Accordion>
 
-                  {selected.archiveWarnings.length > 0 ? <div className="flex gap-2 rounded-xl border border-ds-warn bg-ds-warn-bg p-3 text-sm text-ds-warn"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>{selected.archiveWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div> : null}
+                  {visibleArchiveWarnings(selected.archiveWarnings).length > 0 ? <div className="flex gap-2 rounded-xl border border-ds-warn bg-ds-warn-bg p-3 text-sm text-ds-warn"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>{visibleArchiveWarnings(selected.archiveWarnings).map((warning) => <p key={warning}>{warning}</p>)}</div></div> : null}
 
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                     <div className="text-[11px] text-muted-foreground"><p>Mensagem: {selected.id}</p><p>Atualizada em {formatDateTime(selected.updatedAt)} · origem {selected.provider}</p>{selectedResolution?.resolvedAt ? <p>Identificação {selectedResolution.mode === "automatic" ? "automática" : "manual"} em {formatDateTime(selectedResolution.resolvedAt)}</p> : null}{selected.paymentRequestId ? <p>Solicitação de pagamento: {selected.paymentRequestId}</p> : null}{selected.statementTransactionId ? <p>Movimentação conciliada: {selected.statementTransactionId}</p> : null}</div>

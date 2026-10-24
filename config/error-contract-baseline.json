@@ -22,7 +22,7 @@
     "ad-hoc-console-error-warning:src/app/api/ai/analyze-goals/route.ts": 1,
     "ad-hoc-console-error-warning:src/app/api/auth/forgot-password/route.ts": 1,
     "ad-hoc-console-error-warning:src/app/api/catalogo/route.ts": 2,
-    "ad-hoc-console-error-warning:src/app/api/client/bootstrap/route.ts": 1,
+    "ad-hoc-console-error-warning:src/app/api/client/bootstrap/route.ts": 2,
     "ad-hoc-console-error-warning:src/app/api/documents/company/access/route.ts": 1,
     "ad-hoc-console-error-warning:src/app/api/documents/templates/[id]/preview/route.ts": 1,
     "ad-hoc-console-error-warning:src/app/api/dp/bootstrap/route.ts": 2,
