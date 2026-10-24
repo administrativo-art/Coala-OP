@@ -1,6 +1,8 @@
 name: E2E observation
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "37 8 * * 2"
@@ -14,7 +16,7 @@ concurrency:
 
 jobs:
   observation:
-    name: weekly E2E observation
+    name: E2E observation
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

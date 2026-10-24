@@ -75,11 +75,16 @@ test("quality concentra os gates obrigatórios sem instalações root duplicadas
   assert.doesNotMatch(workflow, /name: firestore-rules|name: functions/);
 });
 
-test("E2E de observação usa uma preparação semanal ou manual, fora dos PRs", () => {
+test("E2E de observação cobre PRs para main, semanal e manual com uma preparação", () => {
   const workflow = readFileSync(join(workflowRoot, "e2e-observation.yml"), "utf8");
   assert.match(workflow, /^\s*workflow_dispatch:\s*$/m);
   assert.match(workflow, /^\s*schedule:\s*$/m);
-  assert.doesNotMatch(workflow, /^\s*pull_request:\s*$/m);
+  assert.match(workflow, /^  pull_request:\n    branches: \[main\]$/m);
+  assert.doesNotMatch(workflow, /pull_request_target|paths-ignore:|paths:|branches-ignore:|production/);
+  assert.doesNotMatch(workflow, /^\s*push:\s*$/m);
+  assert.match(workflow, /cancel-in-progress: true/);
+  assert.equal([...workflow.matchAll(/continue-on-error: true/g)].length, 4);
+  assert.match(workflow, /name: Observation summary\n\s+if: always\(\)/);
   assert.equal([...workflow.matchAll(/^\s+run: npm ci\s*$/gm)].length, 1);
   assert.equal([...workflow.matchAll(/playwright install --with-deps chromium/g)].length, 1);
   for (const command of [
