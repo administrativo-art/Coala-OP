@@ -3952,8 +3952,10 @@ export type DPShiftDefinition = {
   configurationNotes?: string;
   overnight?: boolean;
   expectedPunches?: number;
-  /** Unidade da batida: fixa da escala (padrão) ou livre entre as do vínculo (volante). Nunca bloqueia a batida. */
+  /** Local de trabalho: unidade definida na escala (padrão) ou atuação entre as unidades autorizadas. */
   executionUnitPolicy?: 'scheduled' | 'free';
+  /** Coleta operacional separada do registro fiscal do ponto. */
+  locationTrackingPolicy?: 'disabled' | 'punch_only' | 'workday';
   isArchived?: boolean;
   archivedAt?: Timestamp;
   archivedBy?: string;

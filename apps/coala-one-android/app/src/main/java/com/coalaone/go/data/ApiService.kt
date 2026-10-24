@@ -9,6 +9,9 @@ interface ApiService {
     @GET("api/app/version?packageName=coalaone.go") suspend fun release(): Release
     @POST("api/auth/forgot-password") suspend fun reset(@Body request: ResetRequest)
     @GET("api/mobile/profile") suspend fun profile(): ProfileResponse
+    @GET("api/auth/view-as") suspend fun developerViewAs(): DeveloperViewAsDirectory
+    @POST("api/auth/view-as") suspend fun startDeveloperViewAs(@Body request: DeveloperViewAsSelection): DeveloperViewAsSelectionResponse
+    @HTTP(method = "DELETE", path = "api/auth/view-as") suspend fun stopDeveloperViewAs(): DeveloperViewAsStopped
     @POST("api/mobile/push/devices") suspend fun registerPush(@Body request: PushDeviceRegistration, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRegistered
     @HTTP(method = "DELETE", path = "api/mobile/push/devices", hasBody = true) suspend fun removePush(@Body request: PushDeviceRemoval, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRemoved
     @Multipart @POST("api/mobile/profile/photo") suspend fun avatar(@Part photo: MultipartBody.Part): AvatarResponse
@@ -34,14 +37,17 @@ interface ApiService {
     @GET("api/dp/time-recording/options") suspend fun timeOptions(@Query("workDate") workDate: String): TimeOptions
     @POST("api/dp/time-recording/offline-permits") suspend fun offlinePermit(@Body request: OfflinePermitRequest): OfflinePermitResponse
     @POST("api/dp/time-recording/markings") suspend fun mark(@Body request: MarkingRequest): MarkingResponse
+    @PATCH("api/dp/time-recording/markings/{receiptId}/classification") suspend fun classifyMarking(@Path("receiptId") receiptId: String, @Body request: ClassificationUpdate): ClassificationResult
     @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
     @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
+    @POST("api/dp/time-recording/journey-location") suspend fun journeyLocation(@Body request: JourneyLocationBatch): JourneyLocationAccepted
     @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody
     @Streaming @GET("api/dp/time-recording/receipts/export") suspend fun receiptArchive(@Query("startDate") startDate: String, @Query("endDate") endDate: String): ResponseBody
     @GET("api/dp/time-recording/adjustments") suspend fun adjustments(@Query("month") month: String): OwnAdjustments
     @POST("api/dp/time-recording/adjustments") suspend fun requestAdjustment(@Body request: AdjustmentRequest): AdjustmentCreated
     @GET("api/dp/time-recording/time-bank") suspend fun timeBank(@Query("date") date: String): TimeBankResponse
     @GET("api/dp/time-recording/mirrors") suspend fun mirror(@Query("competence") competence: String): MirrorStatus
+    @POST("api/dp/time-recording/mirrors") suspend fun generateMirror(@Body request: MirrorGenerateRequest): MirrorGenerated
     @Streaming @GET("api/dp/time-recording/mirrors/pdf") suspend fun mirrorPdf(@Query("competence") competence: String): ResponseBody
     @GET("api/collaborator/absence-requests/options") suspend fun absenceOptions(): AbsenceOptions
     @POST("api/collaborator/absence-requests/preview") suspend fun absencePreview(@Body request: AbsencePeriod): AbsencePreviewResponse

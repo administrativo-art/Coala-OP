@@ -19,7 +19,7 @@ describe('Relógio do coletor REP-P', () => {
     for (const file of ['record-strip.tsx', 'quick-marking-button.tsx']) {
       const screen = readFileSync(`src/features/dp/rep-p/${file}`, 'utf8');
       assert.match(screen, /<OfficialClockDisplay clock=\{unitClock\}/, file);
-      assert.match(screen, /disabled=\{!canRecord\}/, file);
+      assert.match(screen, /disabled=\{!canRecord(?: \|\| !purpose)?\}/, file);
     }
     // A janela rápida não fecha com a batida em voo, senão a confirmação do servidor se perde e a pessoa bate de novo.
     const quick = readFileSync('src/features/dp/rep-p/quick-marking-button.tsx', 'utf8');

@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import Image from 'next/image';
 import { format, parseISO } from 'date-fns';

@@ -34,12 +34,16 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
+import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.ui.*
 import android.Manifest
 import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import java.io.File
 import javax.inject.Inject
 
@@ -103,9 +107,10 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
 }
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel) {
     val nav = rememberNavController()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val back: () -> Unit = { nav.popBackStack(); Unit }
     val motion = LocalMotionEnabled.current
-    NavHost(nav, startDestination = "home",
+    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName) { NavHost(nav, startDestination = "home",
         enterTransition = { fadeIn(tween(if (motion) 280 else 0)) + slideInVertically(tween(if (motion) 280 else 0)) { if (motion) 6 else 0 } },
         exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
@@ -116,29 +121,89 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
-        composable("schedule") { ScheduleScreen(hiltViewModel(), back) }
+        composable("schedule") { ScheduleScreen(hiltViewModel(), back,
+            onRequestAbsence = { date -> nav.navigate("requests/absence/$date") },
+            onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
         composable("time") { TimeScreen(hiltViewModel(), back) }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
-    }
+        composable("requests/{tab}/{date}", arguments = listOf(
+            navArgument("tab") { type = NavType.StringType }, navArgument("date") { type = NavType.StringType }
+        )) { entry -> RequestsScreen(hiltViewModel(), back, entry.arguments?.getString("tab") ?: "absence", entry.arguments?.getString("date")) }
+    } }
 }
 private fun installUpdate(context: android.content.Context, file: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
 }
+@Composable private fun HomeTimeSummary(today: HomeToday) {
+    val options = today.timeOptions
+    val clock = options?.officialClock
+    val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
+    val zone = TimeRules.unitZone(options, unitId)
+    var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)) }
+    LaunchedEffect(today.timeClockOffset) {
+        while (true) {
+            official = android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)
+            delay(1000 - official % 1000)
+        }
+    }
+    val times = today.timePunches.sortedBy { it.markedAt }.joinToString(" · ") { TimeRules.minuteOf(it.markedAt) }
+    Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            if (clock?.available == true && today.timeClockOffset != null) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+        }
+        if (clock?.available == true && today.timeClockOffset != null) {
+            Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
+                style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+            val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
+            unitName?.let { Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall) }
+            Text(if (times.isBlank()) "Nenhuma batida hoje" else "${today.timePunches.size} ${if (today.timePunches.size == 1) "batida" else "batidas"} hoje", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
+            Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
-    val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
+    val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle(); val release by update.release.collectAsStateWithLifecycle()
     val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     val today by vm.today.collectAsStateWithLifecycle()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val owner = LocalOwner.current
+    val dataOwner = developerViewAs.targetUserId ?: owner
+    // A recomposição ocorre antes do LaunchedEffect: filtre perfil e resumo antigos de forma síncrona.
+    val state = profileState.visibleFor(dataOwner)
+    val visibleToday = today.visibleFor(dataOwner)
+    val visiblePendingCount = if (developerViewAs.targetUserId == null) pending.size else 0
     val goalUnit = remember(owner) { context.getSharedPreferences("goals", android.content.Context.MODE_PRIVATE).getString("unit:$owner", null) }
-    LaunchedEffect(state?.modules) { state?.modules?.let { vm.loadToday(it, goalUnit) } }
+    // A entrada e o retorno de qualquer módulo refazem o resumo; o contexto impede vazamento entre alvo DEV e ator real.
+    LaunchedEffect(state?.modules, dataOwner) { state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }
+    LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
+    val currentModules by rememberUpdatedState(state?.modules)
+    val currentDataOwner by rememberUpdatedState(dataOwner)
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, vm) {
+        var paused = false
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) paused = true
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START && paused) {
+                paused = false
+                vm.refresh(currentDataOwner)
+                currentModules?.let { vm.loadToday(it, goalUnit, currentDataOwner, force = true) }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
-    Page("Início", feedback, onRefresh = { vm.refresh(); state?.modules?.let { vm.loadToday(it, goalUnit, force = true) } }, header = {
+    Page("Início", feedback, onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -157,13 +222,31 @@ private fun installUpdate(context: android.content.Context, file: File) {
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
         state?.modules?.let { modules ->
-            if (modules.localPurchase) HomeTile("Compra local", "purchase", Modifier.fillMaxWidth(), pending.size) { navigate("purchase") }
-            val tiles = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.requests, "Solicitações", "requests"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            if (modules.timeRecording) HomeTimeSummary(visibleToday)
+            val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
+            if (journey.isNotEmpty()) {
+                Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    journey.forEach { (_, title, route) ->
+                        val badge = if (route == "time") visibleToday.timePunches.takeIf { it.isNotEmpty() }?.size?.let { "$it batida${if (it == 1) "" else "s"}" } else visibleToday.shiftShort
+                        val subtitle = if (route == "schedule") when {
+                            !visibleToday.loaded -> "Carregando turno de hoje"
+                            visibleToday.scheduleAvailable == false -> "Turno de hoje indisponível · atualizar"
+                            visibleToday.shift != null -> "Hoje · ${visibleToday.shift}"
+                            else -> "Sem turno hoje · ver escala"
+                        } else null
+                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge, subtitle = subtitle) { navigate(route) }
+                    }
+                    if (journey.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            val tiles = listOf(Triple(modules.requests, "Solicitações", "requests"), Triple(modules.localPurchase, "Compra local", "purchase"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            if (tiles.isNotEmpty()) Text("OUTROS SERVIÇOS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             tiles.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { (_, title, route) ->
-                        val badge = when (route) { "count" -> "Em curso".takeIf { today.openCounts.isNotEmpty() }; "receive" -> today.repositions?.takeIf { it > 0 }?.toString(); "schedule" -> today.shiftShort; "goals" -> today.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
-                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge, badgeWarm = route == "count") { navigate(route) }
+                        val badge = when (route) { "count" -> "Em curso".takeIf { visibleToday.openCounts.isNotEmpty() }; "receive" -> visibleToday.repositions?.takeIf { it > 0 }?.toString(); "goals" -> visibleToday.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
+                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), pending = if (route == "purchase") visiblePendingCount else 0, badge = badge, badgeWarm = route == "count") { navigate(route) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -174,26 +257,46 @@ private fun installUpdate(context: android.content.Context, file: File) {
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
 @Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit) {
-    val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
+    val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
     var framing by remember { mutableStateOf<com.coalaone.go.data.Document?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val push by session.push.state.collectAsStateWithLifecycle()
+    val sessionState by session.state.collectAsStateWithLifecycle()
+    val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
+    val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
+    LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
     val owner = LocalOwner.current
+    val dataOwner = developerViewAs.targetUserId ?: owner
+    val state = profileState.visibleFor(dataOwner)
+    LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)
         else session.push.reflect(owner)
     }
-    Page("Perfil", feedback, onBack, onRefresh = { vm.refresh() }) {
+    Page("Perfil", feedback, onBack, onRefresh = { vm.refresh(dataOwner) }) {
         CardBlock {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
-        CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
+        if (canDeveloperViewAs) CardBlock(selected = developerViewAs.targetUserId != null) {
+            Text("Visualizar como usuário", style = MaterialTheme.typography.titleMedium)
+            Text("A navegação usa o perfil escolhido, mas alterações ficam bloqueadas. Seu login real continua registrado para auditoria.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (developerViewAs.targetUserId != null) {
+                Text("Visualizando como ${developerViewAs.targetName ?: "usuário selecionado"}", color = Tokens.warning, style = MaterialTheme.typography.bodyMedium)
+                Action("Voltar ao meu perfil", developerViewAs.busy, onClick = session::stopDeveloperViewAs)
+            } else if (developerViewAs.users.isNotEmpty()) {
+                Picker("Usuário", developerViewAs.users.map { user -> user.id to "${user.username} · ${user.jobRoleName ?: user.email}" }, "", !developerViewAs.busy && !feedback.busy, session::selectDeveloperViewAs)
+            } else if (!developerViewAs.busy) {
+                Text("Nenhum usuário ativo disponível.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
+            developerViewAs.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+        if (developerViewAs.targetUserId == null) CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
         // The chosen photo is framed by the person before it is sent; only the framed square leaves the phone.
         framing?.let { photo -> PhotoCropDialog(photo, { framing = null }) { framed -> framing = null; vm.avatar(framed) } }
-        CardBlock {
+        if (developerViewAs.targetUserId == null) CardBlock {
             Text("Aplicativo", style = MaterialTheme.typography.titleMedium)
             Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             val target = release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
@@ -202,7 +305,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             else Text("Você está na versão mais recente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         }
-        CardBlock {
+        if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)
             val settingsRequired = com.coalaone.go.push.PushPolicy.requiresSystemSettings(Build.VERSION.SDK_INT, push.permitted, session.push.permissionRequested)
             Text(if (push.enabled && !push.permitted) "Autorizadas nesta conta, mas bloqueadas no Android." else if (push.enabled) "Ativadas para esta conta." else "Receba avisos gerais do Coala Go neste aparelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)

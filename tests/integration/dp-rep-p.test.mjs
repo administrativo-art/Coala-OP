@@ -10,8 +10,9 @@ const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
-const { exportOwnRepPReceipts, exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
-  recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
+const { classifyOwnRepPMarking, exportOwnRepPReceipts, exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData, REP_P_PILOT_CLASSIFICATION_EVENTS,
+  readRepPPilotMarkingsForBank, recordOwnRepPMarking, repPIdentifiersForTest, repPPilotDayGuardId,
+  retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { REP_P_LOCATION_EVIDENCE, repPLocationPolicyRef, saveRepPLocationPolicy }
   = await import('../../src/features/dp/rep-p/location-policy.server.ts');
 const { readEmployeeTimeRecordingMonth } = await import('../../src/features/dp/rep-p/employee-month.server.ts');
@@ -90,7 +91,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     { code: 'REP_P_MARKING_PROFILE_DISABLED' });
     assert.deepEqual(await listOwnRepPExecutionUnits(profileWithoutPoint, { workDate: '2026-10-18' }, {
       ...dependencies, mainDb: { collection() { throw new Error('profile gate touched database'); } },
-    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, executionUnits: [], officialClock: null });
+    }), { workDate: '2026-10-18', eligible: false, markingEnabled: false, mode: 'official', journeyLocationEnabled: false,
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' } });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       // Unidade de execução em outro fuso: a batida grava o fuso dela, não o do estabelecimento.
@@ -128,6 +130,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const options = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
     assert.equal(options.eligible, true);
     assert.equal(options.markingEnabled, true);
+    assert.equal(options.mode, 'official');
     // Com a coleta desligada, o atalho da barra superior some: as opções avisam sem esconder o vínculo.
     assert.equal((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, { ...dependencies, markingEnabled: false })).markingEnabled, false);
     assert.deepEqual(options.officialClock, { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' });
@@ -138,8 +141,11 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       [[employerUnitId, true, 'America/Belem'], [executionUnitId, false, 'America/Manaus']]);
     assert.equal(options.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'observe');
     assert.equal(options.executionUnits.find((unit) => unit.id === employerUnitId).locationPolicy.mode, 'disabled');
-    assert.deepEqual((await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
-      { workDate: '2026-10-18' }, dependencies)).executionUnits, []);
+    assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
+      { workDate: '2026-10-18' }, dependencies), {
+      workDate: '2026-10-18', eligible: false, markingEnabled: true, mode: 'official', journeyLocationEnabled: false,
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' },
+    });
 
     const mobileLocation = { captureId: 'capture-mobile', status: 'captured', capturedAt: '2026-10-18T11:15:40.000Z',
       latitude: -1.4558, longitude: -48.4902, accuracyMeters: 12, elapsedMs: 420 };
@@ -315,7 +321,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
     assert.equal(exportAudit.size, 7);
     assert.ok(exportAudit.docs.some((doc) => doc.get('status') === 'archive_failed'));
-    const storedAfd = exportAudit.docs.find((doc) => doc.get('status') === 'exported' && doc.get('sha256') === afd.sha256).data();
+    const expectedSignatureSha = createHash('sha256').update(Buffer.from(afd.signatureBase64, 'base64')).digest('hex');
+    const storedAfd = exportAudit.docs.find((doc) => doc.get('status') === 'exported' && doc.get('sha256') === afd.sha256
+      && doc.get('artifacts.signature.sha256') === expectedSignatureSha).data();
     assert.equal(storedAfd.schemaVersion, 2);
     const afdBundle = fiscalObjects.get(storedAfd.artifacts.bundle.storagePath).bytes;
     const afdEntries = zipEntries(afdBundle);
@@ -377,5 +385,126 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       .map((collection) => dbAdmin.collection(collection).where('userId', '==', userId).get()));
     await Promise.all([...cleanup.flatMap((snapshot) => snapshot.docs.map((doc) => doc.ref)),
       dbAdmin.collection('dp_employmentReferenceHeads').doc(headId)].map((ref) => ref.delete().catch(() => undefined)));
+  }
+});
+
+test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento oficial', async () => {
+  const workspaceId = 'coala-one-pilot';
+  const userId = 'rep-p-pilot-employee';
+  const unitId = 'rep-p-pilot-unit';
+  const context = { decoded: { uid: userId }, userDoc: { id: userId, username: 'Pessoa Piloto' }, profileId: 'pilot-profile',
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  context.permissions.app.timeRecording.mark = true;
+  const unit = dbAdmin.collection('dp_units').doc(unitId);
+  const user = dbAdmin.collection('users').doc(userId);
+  const clock = { async read() { return { instant: new Date('2026-10-22T12:15:42.000Z'), source: 'synthetic-hlb-test',
+    assurance: 'hlb_verified', observedOffsetMs: 8, verifiedAt: new Date(), attestationId: 'b'.repeat(64),
+    attestationMode: 'fresh', quorum: 2, observations: [
+      { server: '200.20.186.75', status: 'accepted', offsetMs: 6, roundTripMs: 20, stratum: 1 },
+      { server: '200.20.186.94', status: 'accepted', offsetMs: 10, roundTripMs: 22, stratum: 1 },
+    ] }; } };
+  const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
+    markingEnabled: false, pilotEnabled: true, pilotUserIds: new Set([userId]) };
+  assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
+    { workDate: '2026-10-22' }, dependencies), {
+    workDate: '2026-10-22', eligible: false, markingEnabled: false, mode: 'pilot', journeyLocationEnabled: false,
+    executionUnits: [], officialClock: { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Belem' },
+  });
+  const activeLocationPolicy = repPLocationPolicyRef(hrDbAdmin, workspaceId, unitId);
+  const pilotDayGuard = hrDbAdmin.collection('repP_pilotDayGuards')
+    .doc(repPPilotDayGuardId(workspaceId, userId, '2026-10-22'));
+  const formalAdjustment = hrDbAdmin.collection('ptrp_adjustmentRequests').doc('pilot-existing-formal-adjustment');
+  try {
+    await Promise.all([
+      unit.set({ name: 'Unidade Piloto', address: 'Rua do Ensaio, 10', cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
+      user.set({ isActive: true, username: 'Pessoa Piloto', unitId, unitIds: [unitId] }),
+      activeLocationPolicy.set({ schemaVersion: 1, workspaceId, executionUnitId: unitId, revision: 7, mode: 'observe',
+        center: { latitude: -1.4558, longitude: -48.4902 }, radiusMeters: 150, maxAccuracyMeters: 100,
+        maxAgeSeconds: 60, captureTimeoutMs: 10_000, privacyNoticeUrl: 'https://example.test/privacidade',
+        legalBasisReference: 'Política antiga que não pode alcançar o ensaio nominal', retentionDays: 1_825,
+        participantUserIds: [userId], activatedAt: '2026-10-20T12:00:00.000Z', activatedBy: 'legacy-admin' }),
+    ]);
+    await publishEmploymentReference({ ...context, isDefaultAdmin: true }, {
+      userId, expectedRevision: 0, requestId: 'pilot-employment-1', periods: [{ validFrom: '2026-10-01',
+        employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId], jobFunctionIds: [],
+        sourceDocumentId: 'pilot-source-1', sourceReason: 'Identidade nominal de ensaio autorizada.' }],
+    });
+    const options = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-22' }, dependencies);
+    assert.equal(options.mode, 'pilot');
+    assert.equal(options.markingEnabled, true);
+    assert.equal(options.journeyLocationEnabled, false);
+    assert.equal(options.executionUnits[0].locationPolicy.mode, 'disabled',
+      'o ensaio ignora até uma política anterior ativa para o participante');
+    assert.deepEqual(options.officialClock, { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Fortaleza' });
+    await unit.delete();
+    assert.deepEqual(await listOwnRepPExecutionUnits(context, { workDate: '2026-10-22' }, dependencies), {
+      workDate: '2026-10-22', eligible: true, markingEnabled: true, mode: 'pilot', journeyLocationEnabled: false,
+      executionUnits: [], officialClock: { available: true, instant: '2026-10-22T12:15:42.000Z', timeZone: 'America/Belem' },
+    });
+    await unit.set({ name: 'Unidade Piloto', address: 'Rua do Ensaio, 10', cnpj: '14276603000125', timeZone: 'America/Fortaleza' });
+
+    const request = { attemptId: 'pilot-attempt-1', workDate: '2026-10-22', executionUnitId: unitId,
+      channel: 'browser', declaredPurpose: 'journey_start', locationAttempt: { captureId: 'ignored-pilot-location',
+        status: 'captured', elapsedMs: 280, latitude: -1.4558, longitude: -48.4902, accuracyMeters: 12,
+        capturedAt: '2026-10-22T12:15:40.000Z' } };
+    await formalAdjustment.set({ workspaceId, employeeUid: userId, workDate: '2026-10-22', status: 'approved' });
+    await assert.rejects(recordOwnRepPMarking(context, { ...request, attemptId: 'blocked-by-formal-adjustment' }, dependencies),
+      { code: 'REP_P_PILOT_DAY_ADJUSTMENT_FORBIDDEN' });
+    await formalAdjustment.delete();
+    const recorded = await recordOwnRepPMarking(context, request, dependencies);
+    assert.equal(recorded.status, 'recorded');
+    assert.equal(recorded.pilot, true);
+    assert.equal(recorded.marking.sequence, 1);
+    assert.equal(recorded.marking.markedAt, '2026-10-22T09:15:00-0300');
+    assert.equal(recorded.location, null);
+    assert.equal((await hrDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 0,
+      'o servidor não persiste localização no ensaio, mesmo se um cliente adulterado a enviar');
+    assert.equal((await pilotDayGuard.get()).exists, true, 'o dia do ensaio recebe trava transacional para ajustes formais');
+    assert.equal((await pilotDayGuard.get()).get('domain'), 'pilot');
+    assert.match(recorded.receiptId, /^pilot_[a-f0-9]{64}$/);
+    assert.equal(recorded.receiptStatus, 'available');
+    assert.equal((await recordOwnRepPMarking(context, request, dependencies)).status, 'replayed');
+
+    const receipt = await getOwnRepPReceipt(context, recorded.receiptId, dependencies);
+    assert.equal(receipt.bytes.subarray(0, 5).toString(), '%PDF-');
+    assert.match(receipt.filename, /^ensaio-ponto-/);
+    const history = await listOwnRepPMarkings(context, { startDate: '2026-10-22', endDate: '2026-10-22' }, dependencies);
+    assert.deepEqual(history.markings.map((item) => [item.pilot, item.nsr]), [[true, 1]]);
+    assert.equal(history.markings[0].classification.purpose, 'journey_start');
+    assert.equal((await classifyOwnRepPMarking(context, recorded.receiptId, { purpose: 'break_start' }, dependencies)).changeStatus, 'applied');
+    const reclassified = await listOwnRepPMarkings(context, { startDate: '2026-10-22', endDate: '2026-10-22' }, dependencies);
+    assert.equal(reclassified.markings[0].classification.purpose, 'break_start');
+    for (let index = 0; index < 104; index += 1) {
+      await classifyOwnRepPMarking(context, recorded.receiptId,
+        { purpose: index % 2 === 0 ? 'journey_start' : 'break_start' }, dependencies);
+    }
+    const classificationEvents = await hrDbAdmin.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
+      .where('markingId', '==', recorded.receiptId).get();
+    assert.equal(classificationEvents.size, 106, 'a trilha somente de inclusão preserva mais de cem alterações');
+    assert.deepEqual(classificationEvents.docs.map((doc) => doc.get('revision')).sort((left, right) => left - right),
+      Array.from({ length: 106 }, (_, index) => index + 1));
+    assert.equal((await hrDbAdmin.collection('repP_pilotMarkings').doc(recorded.receiptId).get()).get('classificationRevision'), 106);
+    const bankPreview = await readRepPPilotMarkingsForBank(workspaceId, userId, '2026-10-22', '2026-10-22', dependencies);
+    assert.equal(bankPreview.markings.length, 1);
+    assert.equal((await hrDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0);
+    assert.equal((await hrDbAdmin.collection('repP_receipts').where('workspaceId', '==', workspaceId).get()).size, 0);
+
+    await assert.rejects(recordOwnRepPMarking({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
+      { ...request, attemptId: 'not-allowed' }, { ...dependencies, pilotUserIds: new Set([userId]) }),
+    { code: 'REP_P_MARKING_PROFILE_DISABLED' });
+  } finally {
+    const [markings, heads, classificationEvents, histories, requests] = await Promise.all([
+      hrDbAdmin.collection('repP_pilotMarkings').where('employeeId', '==', userId).get(),
+      hrDbAdmin.collection('repP_pilotHeads').where('employeeId', '==', userId).get(),
+      hrDbAdmin.collection(REP_P_PILOT_CLASSIFICATION_EVENTS).where('employeeId', '==', userId).get(),
+      dbAdmin.collection('dp_employmentReferenceHistories').where('userId', '==', userId).get(),
+      dbAdmin.collection('dp_employmentReferenceRequests').where('userId', '==', userId).get(),
+    ]);
+    await Promise.all([...markings.docs, ...heads.docs, ...classificationEvents.docs, ...histories.docs, ...requests.docs]
+      .map((doc) => doc.ref.delete().catch(() => undefined)));
+    const employmentHeadId = createHash('sha256').update(JSON.stringify([workspaceId, userId])).digest('hex');
+    await Promise.all([dbAdmin.collection('dp_employmentReferenceHeads').doc(employmentHeadId), activeLocationPolicy,
+      formalAdjustment, pilotDayGuard, unit, user]
+      .map((ref) => ref.delete().catch(() => undefined)));
   }
 });

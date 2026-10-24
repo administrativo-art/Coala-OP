@@ -20,6 +20,14 @@
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "ASCENDING" }
     ] },
+    { "collectionGroup": "ptrp_markingClassificationRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "ptrp_markingClassificationRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "ptrp_treatments", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "originalReceiptId", "order": "ASCENDING" },
       { "fieldPath": "status", "order": "ASCENDING" }
@@ -351,6 +359,9 @@
     { "collectionGroup": "repP_receipts", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "recordedDate", "order": "ASCENDING" }
     ] },
+    { "collectionGroup": "repP_pilotMarkings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "recordedDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "employeeDocuments", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "publication.status", "order": "ASCENDING" }
     ] },
@@ -363,6 +374,8 @@
   ],
   "fieldOverrides": [
     { "collectionGroup": "repP_locationEvidence", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "dp_journeyLocationEvents", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "dp_journeyLocationSessions", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_timeRecordingAccessAudit", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "packages", "fieldPath": "status", "indexes": [
       { "order": "ASCENDING", "queryScope": "COLLECTION" },

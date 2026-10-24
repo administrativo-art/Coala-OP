@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-22: implementação local da visualização assistida no Sistema e no Coala Go, exclusiva de `administrativo@cialashakes.com`. O ator Firebase real permanece responsável por autenticação, atestação e auditoria; o usuário escolhido fornece dados e permissões apenas para métodos de leitura, com aviso persistente e saída imediata. Sistema e app mantêm seleções separadas. Testes locais cobrem autorização exata, leitura e cabeçalho Android restrito à origem; conta/aparelho reais e superfícies legadas de escrita ainda exigem homologação. Nenhum grupo foi promovido.
+
 2026-10-22: o [Registro REP-P](flows/dp-time-recording.md) ganhou implementação local da [geolocalização pontual](time-recording-geolocation.md) na web e no Coala Go: política por unidade e participante, cálculo no servidor, evidência fora da ARP, TTL fixo de cinco anos e nenhuma consequência automática. O perfil do colaborador também passou a abrir Registro de ponto e Banco de horas; a visão de terceiros é somente leitura, usa permissão dedicada com compatibilidade para fechamento e aplica escopo de unidade no servidor. Código ainda não publicado; cláusula/aditivo, parâmetros reais, Doc Brown, aparelho físico e piloto continuam pendentes. O grupo permanece Traçado.
 
 2026-10-19: o [Registro REP-P](flows/dp-time-recording.md) ganhou a especificação inicial de georreferenciamento; seu estado atual está na entrada de 22/10/2026. O grupo permanece Traçado.

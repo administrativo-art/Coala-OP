@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { brDate, fiscalTime, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
+import { MARKING_PURPOSES, type MarkingPurpose } from "./record-strip";
 import { useRepPMarking } from "./use-rep-p-marking";
 
 const MY_TIME_RECORDING_PATH = "/dashboard/collaborator/time-recording";
@@ -21,6 +22,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState<MarkingPurpose | null>(null);
   const marking = useRepPMarking();
   const {
     options, optionsError, loadOptions, unitId, setUnitId, recording, recordError, record, lastMarking, setLastMarking, canRecord,
@@ -37,6 +39,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
     if (next) {
       setLastMarking(null);
       setReceiptError(null);
+      setPurpose(null);
       void loadOptions();
     }
   }
@@ -64,7 +67,9 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Bater ponto</DialogTitle>
-            <DialogDescription>Confira a unidade e registre. O comprovante também fica em Registro de ponto.</DialogDescription>
+            <DialogDescription>{options.mode === "pilot"
+              ? "Ensaio controlado: confira a unidade. A batida fica visível, mas não entra no fechamento oficial."
+              : "Confira a unidade e registre. O comprovante também fica em Registro de ponto."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {optionsError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{optionsError}</p> : null}
@@ -72,9 +77,10 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
             {lastMarking ? (
               <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-4" role="status">
                 <p className="text-sm text-ds-ink">
-                  Ponto registrado em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · NSR {lastMarking.marking.nsr}
+                  {lastMarking.pilot ? "Ensaio registrado" : "Ponto registrado"} em {brDate(lastMarking.marking.markedAt)} às <strong>{fiscalTime(lastMarking.marking.markedAt)}</strong> · {lastMarking.pilot ? "sequência" : "NSR"} {lastMarking.marking.nsr}
                   {lastMarking.status === "replayed" ? " (já estava gravado)" : ""}
                 </p>
+                {lastMarking.pilot ? <p className="text-xs font-semibold text-ds-warn">Sem validade como REP-P e fora do fechamento oficial.</p> : null}
                 <LocationResultNotice location={lastMarking.location} />
                 <ReceiptPill status={lastMarking.receiptStatus} />
                 {lastMarking.receiptStatus === "available" ? (
@@ -93,6 +99,17 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
               <p className="text-sm text-ds-ink-2">Unidade: <strong>{options.executionUnits[0]?.name}</strong></p>
             )}
             {!lastMarking ? <LocationCaptureNotice policy={unitLocationPolicy} state={locationCaptureState} /> : null}
+            {!lastMarking ? (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-bold text-ds-ink">O que este registro representa?</legend>
+                {MARKING_PURPOSES.map(([id, label]) => (
+                  <label key={id} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-ds-sm border border-ds-border px-3 py-2 text-sm">
+                    <input type="radio" name="quick-marking-purpose" value={id} checked={purpose === id} onChange={() => setPurpose(id)} />
+                    <span className="font-semibold text-ds-ink">{label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
             {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Button asChild variant="ds-ghost" size="sm">
@@ -102,7 +119,7 @@ export function QuickMarkingButton({ chipClassName }: { chipClassName: string })
                 <Button type="button" variant="ds-secondary" onClick={() => changeOpen(false)}>Fechar</Button>
               ) : (
                 <Button type="button" variant="primary-page" loading={recording} loadingLabel="Registrando…"
-                  disabled={!canRecord} onClick={() => void record()}>
+                  disabled={!canRecord || !purpose} onClick={() => { if (purpose) void record(purpose); }}>
                   <Clock3 className="h-4 w-4" aria-hidden />
                   Registrar ponto
                 </Button>

@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, CalendarPlus, Clock3, Coffee, FileText, Info, MapPin, RefreshCw, Share2, TimerOff } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, CalendarPlus, Clock3, Coffee, FileText, Info, MapPin, Pencil, RefreshCw, Share2, TimerOff } from "lucide-react";
 
 import { LiftRow } from "@/components/patterns/lift-row";
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
@@ -13,13 +14,14 @@ import { TACIT_APPROVAL_LABEL } from "@/features/dp/absences/requests/tacit-appr
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "@/features/dp/time-adjustments/types";
 
 import { ReceiptPill } from "./marking-ui";
-import { hm, MarkingSequence, suggestedLabel, expectedPunchesOf } from "./record-strip";
+import { hm, MARKING_PURPOSES, MarkingSequence, suggestedLabel, purposeLabel, expectedPunchesOf, type MarkingPurpose } from "./record-strip";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export const INCIDENTS: Record<DayIncident, { label: string; detail: string; icon: typeof AlertTriangle }> = {
   missing: { label: "Dia sem batidas", detail: "Nenhuma batida num dia de escala. Se houve motivo, justifique com uma ausência.", icon: TimerOff },
   odd: { label: "Número ímpar de batidas", detail: "O dia tem número ímpar de batidas: um período ficou sem fechamento.", icon: AlertTriangle },
+  missing_break: { label: "Jornada sem intervalo classificado", detail: "A jornada foi finalizada sem um início e uma volta de intervalo. As batidas permanecem válidas e o dia segue para conferência.", icon: Coffee },
   late_exit: { label: "Saída após o previsto", detail: "Última batida depois do horário da escala além da tolerância da jornada.", icon: Clock3 },
   short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto além da tolerância da jornada, ou pausa menor que o mínimo (aviso de conferência).", icon: Coffee },
   other_unit: { label: "Batida em outra unidade", detail: "Batida feita numa unidade diferente da escala. Não foi bloqueada; o DP confere a troca.", icon: MapPin },
@@ -121,8 +123,59 @@ export type ReceiptActions = {
   retry: (receiptId: string) => void;
 };
 
-export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment, readOnly = false }: {
+export type ClassificationActions = {
+  change: (receiptId: string, purpose: MarkingPurpose) => Promise<{ changeStatus: "applied" | "in_review" }>;
+};
+
+function MarkingClassificationEditor({ marking, actions }: { marking: DayMarking; actions: ClassificationActions }) {
+  const current = (marking.classification?.purpose ?? "journey_start") as MarkingPurpose;
+  const [editing, setEditing] = useState(false);
+  const [purpose, setPurpose] = useState<MarkingPurpose>(current);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await actions.change(marking.receiptId, purpose);
+      setMessage(result.changeStatus === "in_review" ? "Mês fechado: alteração enviada para revisão." : "Classificação atualizada.");
+      setEditing(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível alterar a classificação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <Button type="button" variant="ds-ghost" size="sm" onClick={() => { setPurpose(current); setEditing((value) => !value); }}>
+        <Pencil className="h-3.5 w-3.5" aria-hidden /> Alterar classificação
+      </Button>
+      {editing ? (
+        <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-warm p-3">
+          <fieldset className="space-y-1.5">
+            <legend className="mb-1 text-xs font-bold text-ds-ink">O que esta batida representa?</legend>
+            {MARKING_PURPOSES.map(([id, label]) => (
+              <label key={id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-ds-sm bg-ds-surface px-2.5 py-1.5 text-xs">
+                <input type="radio" name={`classification-${marking.receiptId}`} value={id} checked={purpose === id} onChange={() => setPurpose(id)} />
+                <span className="font-semibold text-ds-ink">{label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ds-ghost" size="sm" disabled={busy} onClick={() => setEditing(false)}>Cancelar</Button>
+            <Button type="button" variant="ds-secondary" size="sm" loading={busy} loadingLabel="Salvando…" onClick={() => void save()}>Salvar classificação</Button>
+          </div>
+        </div>
+      ) : null}
+      {message ? <p role="status" className="text-xs font-semibold text-ds-ink-muted">{message}</p> : null}
+    </div>
+  );
+}
+
+export function DayPanel({ day, today, unitNames, receipts, classifications, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment, readOnly = false }: {
   day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null; onClose: () => void;
+  classifications: ClassificationActions | null;
   onRequestAbsence: (date: string) => void;
   adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void; onOpenAdjustment: (id: string) => void; readOnly?: boolean;
 }) {
@@ -206,9 +259,10 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
               <div className="min-w-0 flex-1 space-y-1.5">
                 <p className="text-sm text-ds-ink">
                   <strong className="font-ds-mono text-base">{fiscalClock(marking.markedAt)}</strong>
-                  <span className="text-ds-ink-muted"> · {suggestedLabel(index, expected)}</span>
+                  <span className="text-ds-ink-muted"> · {marking.classification ? purposeLabel(marking.classification.purpose) : suggestedLabel(index, expected)}</span>
                 </p>
-                <p className="text-xs text-ds-ink-muted">NSR {marking.nsr} · {unitNames.get(marking.executionUnitId) ?? "Unidade do registro"}</p>
+                <p className="text-xs text-ds-ink-muted">{marking.pilot ? `Ensaio · sequência ${marking.nsr}` : `NSR ${marking.nsr}`} · {unitNames.get(marking.executionUnitId) ?? "Unidade do registro"}</p>
+                {marking.pilot ? <p className="text-xs font-semibold text-ds-warn">Não entra no fechamento oficial.</p> : null}
                 <div className="flex flex-wrap items-center gap-2">
                   <ReceiptPill status={marking.receiptStatus} />
                   {marking.receiptStatus === "available" && receipts ? (
@@ -228,13 +282,14 @@ export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAb
                     </Button>
                   ) : null}
                 </div>
+                {classifications ? <MarkingClassificationEditor marking={marking} actions={classifications} /> : null}
                 {receipts?.error?.id === marking.receiptId ? <p role="alert" className="text-xs font-semibold text-ds-danger">{receipts.error.message}</p> : null}
               </div>
             </div>
           );
         })}
         <p className="flex items-start gap-1.5 text-xs text-ds-ink-muted">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Entrada, intervalo e saída são só uma leitura pela ordem das batidas; a batida guarda apenas o horário.
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> A classificação organiza a jornada e os avisos. Alterá-la não muda o horário nem o registro fiscal da batida.
         </p>
         {day.date <= today && !readOnly ? (
           <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Pedir ajuste de ponto</Button>

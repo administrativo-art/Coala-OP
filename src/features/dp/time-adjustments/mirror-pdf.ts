@@ -100,7 +100,8 @@ export async function renderMirrorPdf(snapshot: MirrorSnapshot, snapshotHash: st
   paragraph('Ajustes de ponto (todos, inclusive recusados e cancelados)', 9, bold);
   if (!snapshot.adjustments.length) paragraph('Nenhum pedido de ajuste no mês.', 8.5);
   for (const item of snapshot.adjustments) {
-    const change = `${item.original ? `original ${item.original.markedAt.slice(11, 16)} (NSR ${item.original.nsr})` : 'sem batida original'}${item.inclusion ? `, incluída ${item.inclusion.markedAt.slice(11, 16)}` : ''}`;
+    const operations = item.operations?.length ? item.operations : [{ kind: item.kind, original: item.original, inclusion: item.inclusion }];
+    const change = operations.map((operation) => `${operation.original ? `original ${operation.original.markedAt.slice(11, 16)} (NSR ${operation.original.nsr})` : 'sem batida original'}${operation.inclusion ? `, incluída ${operation.inclusion.markedAt.slice(11, 16)}` : ''}`).join('; ');
     paragraph(`${dateBR(item.workDate)} · ${KIND[item.kind]} · ${ADJUSTMENT_STATUS[item.status]} · ${change}. Pedido por ${actor(item.requestedBy)} em ${whenBR(item.requestedAt)}: ${item.reason}${item.decidedBy ? ` Decidido por ${actor(item.decidedBy)} em ${whenBR(item.decidedAt)}${item.decisionReason ? `: ${item.decisionReason}` : ''}.` : ''}`, 8.5);
   }
   paragraph('Ausências (sem motivo nem anexo)', 9, bold);

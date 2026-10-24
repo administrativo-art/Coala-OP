@@ -54,15 +54,17 @@ export function buildMirrorSnapshot(input: MirrorInputs): MirrorSnapshot {
   const absences = input.declaration?.absences ?? [];
   const shiftSwaps = input.declaration?.shiftSwaps ?? [];
   const approved = adjustments.filter((item) => item.status === 'approved');
-  const discarded = new Set(approved.filter((item) => item.original && item.kind !== 'include').map((item) => `${item.original!.nsr}|${item.original!.markedAt}`));
+  const operations = (item: ClosureAdjustment) => item.operations?.length ? item.operations : [{ kind: item.kind, original: item.original, inclusion: item.inclusion }];
+  const discarded = new Set(approved.flatMap((item) => operations(item).filter((operation) => operation.original && operation.kind !== 'include')
+    .map((operation) => `${operation.original!.nsr}|${operation.original!.markedAt}`)));
   const days: MirrorDay[] = [];
   for (let cursor = Date.parse(`${start}T00:00:00Z`); cursor <= Date.parse(`${end}T00:00:00Z`); cursor += 86_400_000) {
     const date = new Date(cursor).toISOString().slice(0, 10);
     const shift = input.shifts.find((item) => item.date === date) ?? null;
     const originals: MirrorPunch[] = input.markings.filter((item) => item.workDate === date)
       .map((item) => ({ time: clock(item.markedAt), at: item.markedAt, nsr: item.nsr, mark: discarded.has(`${item.nsr}|${item.markedAt}`) ? 'discarded' as const : 'original' as const }));
-    const included: MirrorPunch[] = approved.filter((item) => item.workDate === date && item.inclusion)
-      .map((item) => ({ time: clock(item.inclusion!.markedAt), at: item.inclusion!.markedAt, nsr: null, mark: 'included' as const }));
+    const included: MirrorPunch[] = approved.filter((item) => item.workDate === date).flatMap((item) => operations(item))
+      .filter((operation) => operation.inclusion).map((operation) => ({ time: clock(operation.inclusion!.markedAt), at: operation.inclusion!.markedAt, nsr: null, mark: 'included' as const }));
     const punches = [...originals, ...included].sort((left, right) => fiscalMs(left.at) - fiscalMs(right.at) || (left.nsr ?? 0) - (right.nsr ?? 0));
     const dayAbsences = absences.filter((item) => item.status === 'approved' && item.startDate <= date && item.endDate >= date)
       .map((item) => `${item.typeName}${item.approval === 'tacit_timeout' ? ' (aprovada por decurso de prazo)' : ''}`);

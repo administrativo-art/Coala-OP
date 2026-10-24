@@ -85,26 +85,20 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
     }
 }
 
-@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, badge: String? = null, badgeWarm: Boolean = false, onClick: () -> Unit) {
-    val hero = route == "purchase"
-    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(if (hero) 22.dp else 20.dp), border = BorderStroke(1.dp, Tokens.border),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (hero) 6.dp else 0.dp), colors = CardDefaults.cardColors(containerColor = Tokens.surface)) {
-        if (hero) Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
-                Text("Nota de sangria ou de compra paga pela empresa.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                if (pending > 0) Box(Modifier.padding(top = 4.dp)) { StatusChip(if (pending == 1) "1 nota no aparelho" else "$pending notas no aparelho", Tokens.info, Tokens.infoBg) }
-            }
-            Box(Modifier.size(84.dp, 104.dp).background(Tokens.accentSoft, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(64.dp)) }
-        } else Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, badge: String? = null,
+    badgeWarm: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
+    val visibleBadge = badge ?: pending.takeIf { it > 0 }?.let { if (it == 1) "1 nota" else "$it notas" }
+    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, Tokens.border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), colors = CardDefaults.cardColors(containerColor = Tokens.surface)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(44.dp).background(Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(34.dp)) }
                 Spacer(Modifier.weight(1f))
                 // Status of the module at a glance, as in the prototype.
-                badge?.let { StatusChip(it, if (badgeWarm) Tokens.warning else Tokens.info, if (badgeWarm) Tokens.warningBg else Tokens.infoBg) }
+                visibleBadge?.let { StatusChip(it, if (badgeWarm) Tokens.warning else Tokens.info, if (badgeWarm) Tokens.warningBg else Tokens.infoBg) }
             }
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-            Text(when (route) { "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Quem trabalha e suas folgas"; "goals" -> "O que falta e o placar da equipe"; "time" -> "Bater ponto e ver comprovantes"; "requests" -> "Ausência e vale-transporte"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
+            Text(subtitle ?: when (route) { "purchase" -> "Notas e compras da unidade"; "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Turnos, folgas e trocas"; "goals" -> "O que falta e o placar da equipe"; "time" -> "Bater ponto e ver registros"; "requests" -> "Ausências, trocas e benefícios"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         }
     }
 }

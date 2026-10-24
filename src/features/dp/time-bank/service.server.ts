@@ -4,12 +4,12 @@ import { createHash } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
-import { readRepPMarkingsForMirror } from '@/features/dp/rep-p/service.server';
+import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
-import { competenceRange, sha256, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
+import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
 import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
 import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
-import { ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
+import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -112,7 +112,10 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
     adjustments: adjustments.docs.map((doc) => doc.data() as AdjustmentRecord).filter((item) => item.status === 'approved').map((item) => ({
       id: item.id, workDate: item.workDate, kind: item.kind, status: item.status,
       original: item.target ? { nsr: item.target.nsr, markedAt: item.target.markedAt } : null,
-      inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null, reason: item.reason,
+      inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null,
+      operations: adjustmentOperations(item).map((operation) => ({ kind: operation.kind,
+        original: operation.target ? { nsr: operation.target.nsr, markedAt: operation.target.markedAt } : null,
+        inclusion: operation.inclusion ? { markedAt: operation.inclusion.markedAt } : null })), reason: item.reason,
       requestedBy: item.employeeUid, requestedAt: item.createdAt, decidedBy: item.decidedBy ?? null, decidedAt: item.decidedAt ?? null, decisionReason: null,
     })),
     absences: absences.docs.map((doc) => doc.data() as AbsenceRequestRecord)
@@ -134,14 +137,18 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     closureRef ? closureRef.collection('people').doc(uid).get().then((doc) => (doc.data() as ClosurePerson | undefined) ?? null)
       : liveDeclaration(deps, workspaceId, competence, uid),
   ]);
-  const [arp, month] = await Promise.all([
+  const [arp, pilot, month] = await Promise.all([
     readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb }),
+    closure ? Promise.resolve({ markings: [], truncated: false })
+      : readRepPPilotMarkingsForBank(workspaceId, uid, start, end, { repDb: deps.repDb }),
     readRepPMonthOfPerson([uid, text(user.get('hrEmployeeId'))], competence, { db: deps.mainDb }, { holidays: true }),
   ]);
-  if (arp.truncated || month.truncated) throw fail('PTRP_BANK_MONTH_TRUNCATED', 'O mês tem batidas ou turnos demais para apurar com segurança. Fale com o desenvolvimento.', 'CONFLICT');
+  if (arp.truncated || pilot.truncated || month.truncated) throw fail('PTRP_BANK_MONTH_TRUNCATED', 'O mês tem batidas ou turnos demais para apurar com segurança. Fale com o desenvolvimento.', 'CONFLICT');
   // Ajustes aprovados da declaração: desconsideram originais e incluem batidas, como no espelho.
   const approved = (declaration?.adjustments ?? []).filter((item) => item.status === 'approved');
-  const discarded = new Set(approved.filter((item) => item.original && item.kind !== 'include').map((item) => `${item.original!.nsr}|${item.original!.markedAt}`));
+  const operations = (item: ClosureAdjustment) => item.operations?.length ? item.operations : [{ kind: item.kind, original: item.original, inclusion: item.inclusion }];
+  const discarded = new Set(approved.flatMap((item) => operations(item).filter((operation) => operation.original && operation.kind !== 'include')
+    .map((operation) => `${operation.original!.nsr}|${operation.original!.markedAt}`)));
   // Efeito da ausência vem do tipo congelado no pedido; a declaração não guarda motivo nem anexo.
   const absenceIds = (declaration?.absences ?? []).filter((item) => item.status === 'approved').map((item) => item.id).slice(0, 200);
   const absenceDocs = absenceIds.length ? await deps.hrDb.getAll(...absenceIds.map((id) => deps.hrDb.collection(ABSENCES).doc(id))) : [];
@@ -151,7 +158,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     minutes: item.unit === 'hour' ? (item.startTime && item.endTime ? Math.max(0, toMinutes(item.endTime) - toMinutes(item.startTime)) : Math.round(item.quantity * 60)) : null,
   }));
   const holidays = new Set(month.holidays);
-  const datedMarkings = arp.markings.map((item) => ({ ...item, bankWorkDate: overnightWorkDate(item.workDate, item.markedAt, month.shifts) }));
+  const sourceMarkings = [...arp.markings, ...pilot.markings];
+  const datedMarkings = sourceMarkings.map((item) => ({ ...item, bankWorkDate: overnightWorkDate(item.workDate, item.markedAt, month.shifts) }));
   const usedPolicies = new Map<string, { id: string; version: number }>();
   const days: BankDay[] = [];
   for (let cursor = Date.parse(`${start}T00:00:00Z`); cursor <= Date.parse(`${end}T00:00:00Z`); cursor += 86_400_000) {
@@ -165,7 +173,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     } : null;
     const markings = [
       ...datedMarkings.filter((item) => item.bankWorkDate === date && !discarded.has(`${item.nsr}|${item.markedAt}`)).map((item) => item.markedAt),
-      ...approved.filter((item) => item.workDate === date && item.inclusion).map((item) => item.inclusion!.markedAt),
+      ...approved.filter((item) => item.workDate === date).flatMap((item) => operations(item))
+        .filter((operation) => operation.inclusion).map((operation) => operation.inclusion!.markedAt),
     ].sort((left, right) => fiscalMs(left) - fiscalMs(right));
     const policy = policyOn(date);
     if (policy) usedPolicies.set(`${policy.id}:${policy.version}`, { id: policy.id, version: policy.version });
@@ -179,7 +188,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
   }
   const limitedDays = applyWeeklyOvertimeLimits(days);
   return { days: limitedDays, totals: monthTotals(limitedDays), policies: [...usedPolicies.values()],
-    inputHash: sha256({ markings: arp.markings, shifts: month.shifts, holidays: month.holidays, declaration, absences }) };
+    pilotPreview: pilot.markings.length > 0,
+    inputHash: sha256({ markings: sourceMarkings, shifts: month.shifts, holidays: month.holidays, declaration, absences }) };
 }
 
 /** Lê a apuração gravada para a versão vigente do fechamento ou, no mês fechado, apura uma vez e grava. */
@@ -280,9 +290,11 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
     throw fail('PTRP_BANK_ALGORITHM_OUTDATED', 'Há apuração feita por uma regra anterior. Reabra e feche novamente a competência.', 'CONFLICT');
   }
   const months: BankMonthRecord[] = storedMonths;
+  let pilotPreview = false;
   const previewCompetence = date.slice(0, 7);
   if (!closed.has(previewCompetence) && previewCompetence <= today.slice(0, 7)) {
     const preview = await computeBankMonth(deps, workspaceId, previewCompetence, null, uid);
+    pilotPreview = preview.pilotPreview;
     months.push({ competence: previewCompetence, closureVersion: 0, days: preview.days, totals: preview.totals });
   }
   const periodCompetences = competencesBetween(start, end);
@@ -295,6 +307,7 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
   const statement = buildStatement({ period, today, months, missing, openingMinutes: 0, carryFrom, settlement, movements, timeBank: policy.timeBank });
   return { policy: { id: policy.id, version: policy.version, name: policy.name, enabled: policy.timeBank.enabled, cycle: cycle ?? null },
     statement, previewCompetences: months.filter((month) => month.closureVersion === 0).map((month) => month.competence),
+    pilotPreview,
     closures: Object.fromEntries([...closed].filter(([competence]) => missing.includes(competence) || periodCompetences.includes(competence))) };
 }
 

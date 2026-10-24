@@ -263,7 +263,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx), [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx).
 
-Arquivos locais percorridos: 71.
+Arquivos locais percorridos: 77.
 
 Chamadas candidatas encontradas:
 
@@ -499,6 +499,7 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/adjustments` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/employees/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/employees/[employeeUid]/route.ts`](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
+- `/api/dp/time-recording/markings/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/mirrors` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/route.ts`](../../src/app/api/dp/time-recording/mirrors/route.ts)
 - `/api/dp/time-recording/mirrors/pdf` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/pdf/route.ts`](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts)
 - `/api/dp/time-recording/month` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/month/route.ts`](../../src/app/api/dp/time-recording/month/route.ts)
@@ -1532,6 +1533,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/source` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-rep-p-marking-receipt/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-rep-p-pilot-receipt/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/dp/responsibility-coverages` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-coverages/route.ts`](../../src/app/api/dp/responsibility-coverages/route.ts)
 - `/api/dp/responsibility-tasks` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/route.ts`](../../src/app/api/dp/responsibility-tasks/route.ts)
 - `/api/dp/responsibility-tasks/` — interface [`src/features/dp/responsibility-coverage/client.ts`](../../src/features/dp/responsibility-coverage/client.ts); rota candidata [`src/app/api/dp/responsibility-tasks/[taskId]/route.ts`](../../src/app/api/dp/responsibility-tasks/%5BtaskId%5D/route.ts)

@@ -11,7 +11,7 @@ import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/inte
 import { listInterStatementEntries } from "@/lib/integrations/inter/statements.server";
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
-import { assertExpenseBoletoTarget, expenseBoletoSchema } from "./expense-boleto";
+import { assertExpenseBoletoTarget, expenseBoletoAttachmentId, expenseBoletoSchema } from "./expense-boleto";
 import { inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
 import { assertSalaryPaymentTarget } from "./salary-payment";
 import { WORKSPACE_ID } from "@/lib/workspace";
@@ -731,8 +731,11 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       if (current.interRequestId || (current.submissionStartedAt && !retryingDefinitiveRejection)) throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
       const expense = await transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId));
       const data = expense.data();
-      if (!data || data.paymentRequestId !== id) throw new Error("A despesa mudou após a preparação.");
-      const stored = await transaction.get(financialDbAdmin.collection("expenseBoletoAttachments").doc(current.sourceId));
+      const targetInstallment = data && Array.isArray(data.installments) && data.installments.length > 1
+        ? data.installments.find((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === current.installmentNumber)
+        : null;
+      if (!data || (targetInstallment ? targetInstallment.paymentRequestId : data.paymentRequestId) !== id) throw new Error("A despesa mudou após a preparação.");
+      const stored = await transaction.get(financialDbAdmin.collection("expenseBoletoAttachments").doc(expenseBoletoAttachmentId(current.sourceId, targetInstallment ? current.installmentNumber ?? undefined : undefined)));
       if (!stored.exists || stored.get("workspaceId") !== WORKSPACE_ID) throw new Error("Anexo não encontrado.");
       const input = expenseBoletoSchema.parse(Object.fromEntries(Object.keys(expenseBoletoSchema.shape).map(key => [key, stored.data()?.[key]])));
       assertExpenseBoletoTarget(data, input, WORKSPACE_ID);
@@ -1098,6 +1101,7 @@ async function completeSource(request: BankPaymentRequest) {
   }
   if (request.expenseId) {
     const now = new Date().toISOString();
+    const paymentMethodLabel = request.paymentRail === "barcode" ? "Boleto Banco Inter" : "Pix Banco Inter";
     const expenseRef = financialDbAdmin.collection("expenses").doc(request.expenseId);
     const paymentRef = financialDbAdmin.collection("payments").doc(`inter_${request.id}`);
     await financialDbAdmin.runTransaction(async (transaction) => {
@@ -1105,15 +1109,31 @@ async function completeSource(request: BankPaymentRequest) {
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
       transaction.set(paymentRef, {
         workspaceId: request.workspaceId ?? WORKSPACE_ID,
-        expenseId: request.expenseId, paymentRequestId: request.id, paidAt: request.paidAt,
-        totalPaid: request.amount, paymentMethodLabel: "Pix Banco Inter", proofStoragePath: request.proofStoragePath,
+        expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id, paidAt: request.paidAt,
+        totalPaid: request.amount, paymentMethodLabel, proofStoragePath: request.proofStoragePath,
         createdAt: now, createdBy: "bank-reconciliation",
       }, { merge: false });
-      transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: now }, { merge: true });
+      const expenseData = expense.data()!;
+      const installments = Array.isArray(expenseData.installments) ? expenseData.installments : [];
+      const isInstallmentBoleto = request.sourceType === "expense_boleto" && installments.length > 1 && request.installmentNumber != null;
+      if (isInstallmentBoleto) {
+        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === request.installmentNumber
+          ? { ...item, status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath ?? null }
+          : item);
+        const allPaid = nextInstallments.every((item: Record<string, unknown>) => item.status === "paid" || Boolean(item.paidAt));
+        transaction.set(expenseRef, {
+          installments: nextInstallments,
+          status: allPaid ? "paid" : expenseData.status,
+          ...(allPaid ? { paidAt: request.paidAt } : {}),
+          updatedAt: now,
+        }, { merge: true });
+      } else {
+        transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: now }, { merge: true });
+      }
       transaction.set(financialDbAdmin.collection("transactions").doc(`inter_${request.id}`), {
-        type: "expense", expenseId: request.expenseId, paymentRequestId: request.id,
+        type: "expense", expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id,
         description: request.description, amount: request.amount, date: request.paidAt,
-        paymentMethodLabel: "Pix Banco Inter", createdAt: now, createdBy: "bank-reconciliation",
+        paymentMethodLabel, createdAt: now, createdBy: "bank-reconciliation",
       }, { merge: false });
     });
   }
@@ -1130,7 +1150,7 @@ async function attachFinancialInboxProof(request: BankPaymentRequest) {
     paymentProofStoragePath: request.proofStoragePath,
     updatedAt: now,
   }, { merge: true });
-  if (request.expenseId) {
+  if (request.expenseId && !(request.sourceType === "expense_boleto" && request.installmentNumber != null)) {
     batch.set(financialDbAdmin.collection("expenses").doc(request.expenseId), {
       paymentProofStoragePath: request.proofStoragePath,
       updatedAt: now,

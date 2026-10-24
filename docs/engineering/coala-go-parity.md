@@ -1,6 +1,6 @@
 # Coala Go — matriz de paridade e homologação
 
-Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.17/code22 acrescenta o ZIP de comprovantes do ponto; APK assinado e testes JVM estão aprovados, sem substituir o aceite em aparelho físico pendente.
+Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. A candidata 0.3.21/code26 mantém a visualização assistida exclusiva do desenvolvimento, com ator real preservado e modo somente leitura, reorganiza Jornada, Registro de ponto, ajustes, detalhe diário, espelhos e solicitações, identifica de forma explícita o ensaio nominal pré-homologação e isola perfil, escala e resumo diário ao alternar a identidade visualizada; o acompanhamento periódico Entre unidades permanece desligado por gate jurídico. APK assinado e testes JVM não substituem o aceite em aparelho físico pendente.
 
 ## Push — incremento local de 15/10/2026
 
@@ -18,7 +18,7 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 |---|---|---|---|
 | Login, bloqueio, sair, recuperação | Firebase Auth nativo; `/api/auth/forgot-password`; UID e bloqueio por inatividade | `ViewModelsTest`: login/bloqueio/reauth/reset; `FirebaseAuthInstrumentedTest`: SDK com Auth Emulator | Conta de homologação autorizada |
 | Marca e slogan | Tokens do handoff; Inter Tight embarcada; Brush animado em texto Compose | `ComposeFlowsTest.brandingAndSloganUseRealTextWithoutClipping`; `DesignMotionTest`: animação/redução/fonte 160% | Aparelhos do parque e leitor de tela |
-| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar | Foto/câmera física, permissões reais e gesto em aparelho físico |
+| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` (a foto escolhida é enquadrada no aparelho — arrastar e aproximar no círculo — e só o quadrado de até 720 px é enviado); resumo abre/fecha por arrasto vertical da alça. Para `administrativo@coalashakes.com`, `/api/auth/view-as` permite escolher um usuário ativo em modo somente leitura, preservando o ator real na autenticação/atestação e exibindo aviso persistente. | `ViewModelsTest`: módulos, avatar, saída; `RulesTest`: limites do enquadramento; `ApiContractTest`: autenticação, cabeçalho restrito à origem da API e DTO do modo assistido; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar; `developer-view-as.test.ts`: exclusividade e leitura | Foto/câmera física, permissões reais e gesto em aparelho físico; jornada de visualização em aparelho e conta real |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
 | Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm`; NF-e/DANFE e NFC-e autorizada com classificação alta dispensam comprovante na compra normal; contingência pendente não dispensa; sangria não aceita comprovante; a IA sugere por item vínculo existente, cadastro pendente, possível patrimônio, uso imediato ou revisão; sangrias são agrupadas por unidade e filtradas por organização/grupo e vínculo posterior é retomado no próprio cartão | `ViewModelsTest`: UUID estável, upload offline, preservação da classificação dos itens, retry de estoque, sessão única/retomada e cancelamento da escolha de sangria; `RulesTest`: filtros organização/grupo com contagem e restauração; `local-purchase-units.test.ts`: hierarquia determinística; contrato visual: confirmação dentro da sangria; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod e política de classificação | OCR real, câmera e conciliação financeira integrada |
@@ -26,11 +26,11 @@ Preflight de custo da infraestrutura geral de push: cada registro de dispositivo
 | Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária, Equipe/Só minha e Todas as unidades | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
 | Metas | `/api/goals/mobile`, filtro `kioskId` ou `scope=all` (Todas as unidades); abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
 | Signage | `/api/signage/mobile`, `/api/signage/mobile/screens`; CameraX/QR `COALA-SIGNAGE` | `RulesTest`, `ViewModelsTest`, `signage-tizen-app.test.ts`; payload Zod | Scanner físico e TV Tizen ponta a ponta |
-| Ponto (Etapa 7) | `/api/dp/time-recording/options`, `/offline-permits`, `/markings` (canal `mobile`, coletor 01; modo 1 após sincronização), `/month`, `/receipts/{id}`, `/receipts/export`, `/adjustments`, `/time-bank`, `/mirrors` e `/mirrors/pdf`; offline em Room cifrado, chave P-256 TEE/StrongBox e WorkManager; comprovantes, ZIP e espelho no cache privado; visível com `app.timeRecording.mark` + colaborador. A implementação solicita localização somente na confirmação on-line para participantes nominais da unidade, sem permissão em segundo plano e sem bloquear; offline registra localização indisponível, pois a fila ainda não assina coordenadas. O ZIP limitado do mês selecionado preserva PDFs originais e índice de completude. A pasta de documentos permanece somente no Coala One. | `TimeRulesTest`: fuso/data e canônico offline; `ViewModelsTest`: queda de rede preserva sem fingir NSR e tentativa de localização acompanha o retry; `ApiContractTest`: rotas e payload; `dp-rep-p-receipt-archive`: ZIP, bytes e incompletude; `verify-android-contracts.mts`; `dp-rep-p-offline` no servidor; `coala-go-ui-contract.test.ts`; testes JVM e E2E web de separação titular/DP aprovados em 22/10/2026 | Batida, localização, sincronização e exportação/compartilhamento em aparelho físico, permissão precisa/aproximada/negada, reinício/bateria/rede real e Play Integrity de release `enforce` |
+| Ponto (Etapa 7) | `/api/dp/time-recording/options`, `/offline-permits`, `/markings` (canal `mobile`, coletor 01; modo 1 após sincronização), `/month`, `/journey-location`, `/receipts/{id}`, `/receipts/export`, `/adjustments`, `/time-bank`, `/mirrors` e `/mirrors/pdf`; offline em Room cifrado, chave P-256 TEE/StrongBox e WorkManager; comprovantes, ZIP e espelho no cache privado; visível com `app.timeRecording.mark` + colaborador. Localização pontual permanece acessória. Turno **Entre unidades** prepara acompanhamento durante a jornada: buffer cifrado, serviço Android em primeiro plano, pausa no intervalo, encerramento manual, ao fim ou por limite de segurança e trilha separada sem efeito fiscal/financeiro. O servidor impõe estado e janela da escala. A funcionalidade contínua permanece desligada por `DP_JOURNEY_LOCATION_ENABLED` até a decisão formal de privacidade. Notificações gerais continuam opt-in no Perfil. O ZIP limitado do mês selecionado preserva somente os PDFs oficiais e calcula o índice de completude sobre eles; comprovantes de ensaio são individuais e explicitamente ficam fora do pacote oficial. A pasta de documentos permanece somente no Coala One. | `TimeRulesTest`: fuso/data, totais do detalhe, turno noturno e canônico offline; `ViewModelsTest`: queda de rede preserva sem fingir NSR e tentativa de localização acompanha o retry; `ApiContractTest`: rotas e payload; `dp-rep-p-journey-location`: estado, replay, janela e revogação; `dp-rep-p-receipt-archive`: ZIP, bytes e incompletude; `verify-android-contracts.mts`; `dp-rep-p-offline` no servidor; `coala-go-ui-contract.test.ts`; testes JVM e E2E web de separação titular/DP | Batida, acompanhamento entre unidades, sincronização e exportação/compartilhamento em aparelho físico, permissões precisa/aproximada/negada, reinício/bateria/rede real e Play Integrity de release `enforce` |
 | Solicitações (Etapa 7) | `/api/collaborator/absence-requests/options`, `/preview`, `/preparations` (anexos), `POST` rascunho + `PATCH` envio; `/api/collaborator/requests` (vale-transporte); `/api/collaborator/requests/shift-swaps` (opções, lista, proposta e decisão), pelo mesmo contrato central da web; visível com `app.requests.create` + colaborador | `TimeRulesTest`: período, motivo, anexos, VT; `ApiContractTest` e `coala-go-ui-contract.test.ts`: troca central | Câmera/arquivo físico, envio com anexo e troca de turno entre duas contas em ambiente real |
 | Biometria | BiometricPrompt forte; opt-in por UID, cifrado e sem prazo de validade (decisão do responsável em 2026-10-11); pedido automaticamente ao abrir o app bloqueado | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
 | Atestação | `/api/mobile/app-attestation`; package opcional, nonce local e Play Integrity nativo | `mobile-app-attestation.test.ts`: Go/legado/cross-package; `ApiContractTest`: DTO/transporte | Play Integrity com certificado de release e políticas do servidor |
-| Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
+| Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android. A 0.3.21/code26 é a versão mínima aceita durante o piloto, para impedir que uma instalação antiga oculte recursos já liberados ou reutilize dados diários de outra identidade visualizada. | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
 
 As suítes JVM ficam em `apps/coala-one-android/app/src/test`; instrumentação em `app/src/androidTest`. Fotos privadas usam o mesmo interceptor autenticado. Header interno de UID esperado é removido antes da rede; teste impede envio de outro usuário e vazamento de token a origem externa. Documentos não passam por backup Android; não há permissão de microfone.
 
@@ -197,7 +197,7 @@ efetivas da pessoa liberam cada módulo. A marcação on-line reutiliza as rotas
 REP-P, exibe a Hora Legal no fuso da unidade e recebe NSR e comprovante somente
 do servidor. A contingência offline exige autorização recente, identidade do
 aparelho e fila cifrada/assinada, sem inventar NSR ou comprovante antes da
-sincronização. Solicitações incluem ajuste, ausência, vale-transporte e troca
+sincronização. Ajustes ficam no detalhe do dia em Ponto; Solicitações inclui ausência, vale-transporte e troca
 de turno pelo contrato central, com aceite documentado das duas pessoas. Banco
 de horas e espelho são consultados sob demanda; a pasta de documentos continua
 somente no Coala One. Testes JVM, contratos TypeScript e integrações em emulador
@@ -205,6 +205,66 @@ cobrem esses limites; Play Integrity real, aparelho físico e piloto com pessoas
 continuam gates separados. O APK 0.3.15/code20 foi assinado pelo certificado
 público esperado e tem SHA-256
 `801a41bf6e785925813480d6769d13b1c7f6329ee7a672233f4fd070f19b67eb`.
+
+### Verificação da 0.3.18 (visualização assistida de usuário)
+
+A conta de desenvolvimento `administrativo@coalashakes.com` pode selecionar
+uma pessoa ativa no menu de perfil e consultar o Coala Go com os dados e as
+permissões efetivas dela. A identidade Firebase real continua sendo usada para
+autenticação, atestação e auditoria; enquanto a visualização está ativa, as
+alterações pelas APIs centrais são bloqueadas e um aviso persistente permite
+voltar imediatamente ao perfil real. A seleção fica somente no armazenamento
+privado do aparelho, é enviada apenas à origem oficial da API e é removida no
+logout ou na troca de conta. Testes JVM e contratos TypeScript cobrem a
+autorização exclusiva, a restrição de origem e o modo somente leitura; Play
+Integrity real, aparelho físico e homologação com conta de produção continuam
+gates separados. O APK 0.3.18/code23 foi assinado pelo certificado público
+esperado e tem SHA-256
+`02ce7e62e569fde4dbfeaa5bf994f7a5dcb55bcd4677d19316b5b1679eb6c7e0`.
+
+### Verificação da 0.3.21 (relógio, tema e isolamento da identidade)
+
+O início recarrega a Hora Legal e o turno do dia ao entrar, retomar o app ou
+alternar a identidade visualizada. Perfil, módulos, foto, resumo diário e
+feedback da foto usam a mesma geração de contexto; respostas atrasadas são
+descartadas e pendências locais do ator real não aparecem durante a
+visualização assistida. A identidade persistida é restaurada antes da primeira
+requisição do início. Falha de escala não é apresentada como “sem turno”. O
+tema acompanha a hora local do aparelho: claro das 06:00 às 17:59 e escuro das
+18:00 às 05:59. O APK 0.3.21/code26 foi assinado pelo certificado público
+esperado e tem SHA-256
+`6425a0d7611280892219c06b29e2c45ca201fbe3aae97352928a66719b0040f9`.
+O mesmo release define `minVersionCode=26`, substituindo obrigatoriamente a
+versão que ainda podia reaproveitar o resumo diário de outra identidade.
+
+### Verificação da 0.3.20 (ensaio nominal identificado)
+
+O aplicativo passou a consumir `mode: official|pilot|disabled` nas opções e o
+marcador `pilot` nas batidas. No ensaio, confirmação, detalhe, comprovante e
+nome de arquivo dizem **Sequência do ensaio** e **sem validade como REP-P**, sem
+apresentar NSR ou registro oficial. A finalidade declarada continua editável e
+as alterações ficam na trilha do documento de ensaio. Contingência offline e
+ajuste formal permanecem bloqueados nesse modo; o ensaio exige conexão e nunca
+entra na ARP, no fechamento ou nos espelhos. O APK 0.3.20/code25 foi assinado
+pelo certificado público esperado e tem SHA-256
+`93986b8ecc1a8252be26dca500a64b7f4fd5123a3f300c5557585f95e8728da2`.
+O mesmo release define `minVersionCode=25`: versões anteriores entram no fluxo
+de atualização obrigatória antes de acessar os módulos do piloto.
+
+### Verificação da 0.3.19 (Jornada e Registro de ponto)
+
+Ponto e Escala permanecem acessíveis diretamente no início; o relógio é apenas
+informativo e a batida continua dentro de Registro de ponto. Registros,
+Histórico de ajustes e Banco de horas convergem para o Detalhe do dia; espelhos
+fechados são apresentados por ano e mês. A finalidade organizacional é escolhida
+e editável, sem alterar NSR, horário, hash ou documentos, e os totais Android
+usam o instante completo para jornadas noturnas. O modo Entre unidades prepara
+uma trilha operacional separada com estado e janela validados no servidor,
+encerramento explícito e reconciliação após edição. `DP_JOURNEY_LOCATION_ENABLED`
+permanece falso até decisão jurídica e de privacidade. Testes JVM, TypeScript,
+contratos e integração cobrem os limites; aparelho físico e coleta real seguem
+como gates separados. O APK 0.3.19/code24 foi assinado pelo certificado público
+esperado e tem SHA-256 `244b0ff48e74cc269e7615eb0d71e2909d951f914d04b6e8ad5cce6995ccf246`.
 
 ### Verificação da 0.3.14 (etapas por unidade e cancelamento da nota)
 

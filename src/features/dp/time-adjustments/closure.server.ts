@@ -15,7 +15,7 @@ import {
   type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson, type ClosureRosterPerson, type ClosureShiftSwap,
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
-import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, type AdjustmentRecord } from './service.server';
+import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
 
 const ABSENCES = 'dp_absenceRequests';
 /** Acima disso o fechamento é recusado: lista truncada não pode virar documento de fechamento. */
@@ -62,7 +62,10 @@ function adjustmentItem(record: AdjustmentRecord): ClosureAdjustment & { employe
   return {
     id: record.id, employeeUid: record.employeeUid, employeeName: record.employeeName, workDate: record.workDate, kind: record.kind, status: record.status,
     original: record.target ? { nsr: record.target.nsr, markedAt: record.target.markedAt } : null,
-    inclusion: record.inclusion ? { markedAt: record.inclusion.markedAt } : null, reason: record.reason,
+    inclusion: record.inclusion ? { markedAt: record.inclusion.markedAt } : null,
+    operations: adjustmentOperations(record).map((item) => ({ kind: item.kind,
+      original: item.target ? { nsr: item.target.nsr, markedAt: item.target.markedAt } : null,
+      inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null })), reason: record.reason,
     requestedBy: requested?.actorUid ?? record.employeeUid, requestedAt: requested?.at ?? record.createdAt,
     decidedBy: decision?.actorUid ?? null, decidedAt: decision?.at ?? null, decisionReason: decision?.reason ?? null,
   };
@@ -170,8 +173,11 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
   // para um estado terminal, então uma leitura concorrente no máximo bloqueia conservadoramente esta tentativa.
   const swaps = await readShiftSwaps(deps.mainDb, context.workspace_id, input.competence);
   const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
+  const classificationPendingQuery = deps.hrDb.collection('ptrp_markingClassificationRequests')
+    .where('workspaceId', '==', context.workspace_id).where('status', '==', 'in_review')
+    .where('workDate', '>=', `${input.competence}-01`).where('workDate', '<=', `${input.competence}-31`).limit(1);
   return deps.hrDb.runTransaction(async (tx: Transaction) => {
-    const snapshot = await tx.get(ref);
+    const [snapshot, classificationPending] = await Promise.all([tx.get(ref), tx.get(classificationPendingQuery)]);
     const current = snapshot.exists ? snapshot.data() as ClosureRecord : null;
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
     if ((current?.version ?? 0) !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
@@ -180,8 +186,8 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     const truncated = declaration.truncated || swaps.truncated;
     if (truncated || people.length > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.', 'CONFLICT');
     const pending = pendingOf(people);
-    if (pending.adjustments || pending.absences || pending.shiftSwaps) {
-      throw fail('PTRP_CLOSURE_PENDING', `Há pedidos sem decisão (${pending.adjustments} de ajuste, ${pending.absences} de ausência, ${pending.shiftSwaps} de troca de turno). Decida-os antes de fechar.`, 'CONFLICT');
+    if (pending.adjustments || pending.absences || pending.shiftSwaps || !classificationPending.empty) {
+      throw fail('PTRP_CLOSURE_PENDING', `Há pedidos sem decisão (${pending.adjustments} de ajuste, ${pending.absences} de ausência, ${pending.shiftSwaps} de troca de turno${classificationPending.empty ? '' : ', classificação de batida pendente'}). Decida-os antes de fechar.`, 'CONFLICT');
     }
     const version = (current?.version ?? 0) + 1;
     const digests = itemDigests(people);

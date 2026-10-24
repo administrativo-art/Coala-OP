@@ -20,9 +20,10 @@ export type RepPLocationAttemptPayload = {
 };
 export type RepPExecutionUnit = { id: string; name: string; employer: boolean; timeZone: string | null; locationPolicy: RepPLocationPolicyForCollector };
 export type RepPOfficialClock = { available: true; instant: string; timeZone: string } | { available: false; issue: string };
-export type RepPOptionsPayload = { workDate: string; eligible: boolean; markingEnabled: boolean; executionUnits: RepPExecutionUnit[]; officialClock: RepPOfficialClock | null };
+export type RepPOptionsPayload = { workDate: string; eligible: boolean; markingEnabled: boolean;
+  mode: "official" | "pilot" | "disabled"; executionUnits: RepPExecutionUnit[]; officialClock: RepPOfficialClock | null };
 export type RepPMarkingPayload = {
-  status: "recorded" | "replayed"; receiptId: string; receiptStatus: RepPReceiptStatus; receiptIssue: string | null;
+  status: "recorded" | "replayed"; pilot: boolean; receiptId: string; receiptStatus: RepPReceiptStatus; receiptIssue: string | null;
   location: { captureStatus: string; evaluation: "inside" | "outside" | "indeterminate" | "not_requested" } | null;
   marking: { nsr: number; markedAt: string; executionUnitId: string };
 };
@@ -110,7 +111,7 @@ export function useRepPMarking({ onRecorded, enabled = true }: { onRecorded?: (r
     setRecordError(null);
   }, []);
 
-  const record = useCallback(async () => {
+  const record = useCallback(async (declaredPurpose: "journey_start" | "break_start" | "break_end" | "journey_end") => {
     if (!unitId) return;
     const clock = options?.officialClock;
     const unit = options?.executionUnits.find((candidate) => candidate.id === unitId);
@@ -131,7 +132,7 @@ export function useRepPMarking({ onRecorded, enabled = true }: { onRecorded?: (r
       const result = await request<RepPMarkingPayload>("/api/dp/time-recording/markings", {
         // A data vai no fuso da unidade, o mesmo que o servidor confere; o do aparelho recusaria batidas perto da meia-noite.
         method: "POST", json: { attemptId, workDate: zone ? repPDateInZone(zone) : repPLocalDate(), executionUnitId: unitId,
-          channel: "browser", ...(captured ? { locationAttempt: captured } : {}) },
+          channel: "browser", declaredPurpose, ...(captured ? { locationAttempt: captured } : {}) },
         fallbackError: "Não foi possível registrar o ponto.",
       });
       setLastMarking(result);
@@ -148,8 +149,9 @@ export function useRepPMarking({ onRecorded, enabled = true }: { onRecorded?: (r
   const fetchReceiptFile = useCallback(async (receiptId: string, nsr: number, markedAt: string) => {
     const blob = await request<Blob>(`/api/dp/time-recording/receipts/${receiptId}`,
       { responseType: "blob", fallbackError: "Não foi possível abrir o comprovante." });
-    return new File([blob], `comprovante-ponto-${markedAt.slice(0, 10)}-nsr-${nsr}.pdf`, { type: "application/pdf" });
-  }, [request]);
+    const suffix = options?.mode === "pilot" ? `ensaio-sequencia-${nsr}` : `nsr-${nsr}`;
+    return new File([blob], `comprovante-ponto-${markedAt.slice(0, 10)}-${suffix}.pdf`, { type: "application/pdf" });
+  }, [options?.mode, request]);
 
   // O relógio mostra a hora no fuso da unidade escolhida, o mesmo que a batida vai gravar.
   const unitClock = useMemo<RepPOfficialClock | null>(() => {

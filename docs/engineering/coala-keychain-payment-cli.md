@@ -1,23 +1,43 @@
 # CLI autenticada de pagamentos Inter
 
-Esta CLI usa a conta Coala do operador. O comando `login` pede a senha no terminal
-interativo e guarda somente o refresh token no Chaves do macOS. Os comandos seguintes
-renovam o token e verificam se ele pertence ao mesmo e-mail. Nem senha nem tokens
-devem ser passados como argumentos ou enviados por chat.
+Esta CLI usa a conta Coala do operador. O modo recomendado é uma sessão reutilizável
+somente em memória: a senha é digitada uma vez no terminal, o token fica no processo
+e os comandos seguintes usam um socket local `0600`. O modo legado `login` guarda
+somente o refresh token no Chaves do macOS. Nem senha nem tokens devem ser passados
+como argumentos ou enviados por chat.
 
 ```sh
 npx tsx scripts/financial/coala-authenticated-payment.mts login
+node --import tsx scripts/financial/coala-authenticated-payment.mts session --email EMAIL --memory-session NOME --minutes 60
 node --import tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
 node --import tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query FORNECEDOR --view work
 node --import tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount --value CENTAVOS
+node --import tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-due-date --value AAAA-MM-DD
+node --import tsx scripts/financial/coala-authenticated-payment.mts main-lookup --email EMAIL --kind entity-document --value CNPJ
 node --import tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
 node --import tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
 ```
+
+Acrescente `--memory-session NOME` a cada comando executado enquanto o processo
+`session` estiver aberto. O fluxo de compra assistida oferece `purchase-create`,
+`purchase-fiscal-link`, `purchase-confirm`, `purchase-sync-expense` e
+`purchase-document-attach`; todos escrevem somente pelas APIs autenticadas do Coala,
+exigem confirmação explícita e fazem preflight/validação posterior sem retry automático.
+`expense-boleto-attach` e `expense-boleto-prepare` exigem `--installment-number` para
+despesas parceladas.
 
 Sem `--email`, o login pede o endereço no terminal antes da senha. `--email EMAIL`
 continua aceito para uso não interativo do endereço; a senha sempre é digitada
 no terminal interativo. O login valida a conta também na API do Coala antes de
 salvar o refresh token.
+
+Quando o Chaves não deve ser usado, `session --email EMAIL --memory-session NOME`
+pede a senha uma única vez e mantém o ID token somente na memória do processo por
+até 60 minutos (30 por padrão). O socket local tem permissão `0600`, fica no diretório
+temporário do usuário e só devolve o token para o mesmo e-mail. Comandos seguintes
+usam `--memory-session NOME`; encerrar o processo fecha a sessão e remove o socket.
+Senha e tokens não são gravados em arquivo. `--temporary-session` continua disponível
+para um único comando isolado.
 
 `prepare` lê a cobrança por ID exato e, antes da escrita, confere estado vinculado,
 ausência de pedido/pagamento, despesa, valor, código completo, data e CNPJ válido.

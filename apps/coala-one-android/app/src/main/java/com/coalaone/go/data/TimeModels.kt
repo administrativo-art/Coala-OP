@@ -8,9 +8,11 @@ import kotlinx.serialization.Serializable
     val captureTimeoutMs: Long? = null, val maxAccuracyMeters: Double? = null, val privacyNoticeUrl: String? = null)
 @Serializable data class ExecutionUnit(val id: String, val name: String, val employer: Boolean = false, val timeZone: String? = null,
     val locationPolicy: LocationPolicy = LocationPolicy())
-/** Official time checked against Hora Legal; unavailable blocks the punch on the server too. */
+/** Official time checked against Hora Legal; it may be display-only, while a punch still requires every other gate. */
 @Serializable data class OfficialClock(val available: Boolean, val instant: String? = null, val timeZone: String? = null, val issue: String? = null)
-@Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean, val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null)
+@Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean,
+    val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null, val journeyLocationEnabled: Boolean = false,
+    val mode: String = "official")
 @Serializable data class OfflinePermitRequest(val permitRequestId: String, val workDate: String, val installationId: String,
     val deviceKeyId: String, val devicePublicKey: String, val keySecurity: String, val bootCount: Int, val anchorElapsedRealtimeMs: Long)
 @Serializable data class OfflinePermitUnit(val id: String, val name: String, val timeZone: String)
@@ -23,6 +25,7 @@ import kotlinx.serialization.Serializable
     val localHash: String, val signature: String)
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class MarkingRequest(val attemptId: String, val workDate: String, val executionUnitId: String, val channel: String = "mobile",
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val declaredPurpose: String? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val offline: OfflineMarkingEvidence? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val locationAttempt: LocationAttempt? = null)
 @Serializable data class LocationAttempt(val captureId: String, val status: String, val elapsedMs: Long,
@@ -30,27 +33,41 @@ import kotlinx.serialization.Serializable
 @Serializable data class LocationSummary(val captureStatus: String, val evaluation: String)
 @Serializable data class RecordedMarking(val nsr: Long, val markedAt: String, val executionUnitId: String)
 @Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null,
-    val marking: RecordedMarking, val location: LocationSummary? = null)
-@Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null)
+    val marking: RecordedMarking, val location: LocationSummary? = null, val pilot: Boolean = false)
+@Serializable data class MarkingClassification(val purpose: String, val source: String = "declared", val status: String = "confirmed")
+@Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null,
+    val classification: MarkingClassification? = null, val pilot: Boolean = false)
+@Serializable data class ClassificationUpdate(val purpose: String)
+@Serializable data class ClassificationResult(val classification: MarkingClassification, val changeStatus: String = "applied")
 @Serializable data class OwnMarkings(val startDate: String, val endDate: String, val markings: List<OwnMarking>, val truncated: Boolean = false)
 @Serializable data class BreakSegment(val start: String, val end: String)
 @Serializable data class OwnShift(val date: String, val type: String, val startTime: String? = null, val endTime: String? = null, val overnight: Boolean = false, val unitId: String? = null, val unitName: String? = null, val shiftName: String? = null,
     val breakType: String? = null, val breakStart: String? = null, val breakEnd: String? = null, val breakDurationMinutes: Int? = null, val breakWindowStart: String? = null, val breakWindowEnd: String? = null,
-    val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val expectedPunches: Int? = null)
+    val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val expectedPunches: Int? = null,
+    val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "punch_only", val unitTimeZone: String? = null)
 @Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val truncated: Boolean = false)
+
+/** Privacy-separated journey trail. It never changes a punch, NSR, receipt, AFD or payroll result. */
+@Serializable data class JourneyLocationEvent(val eventId: String, val sessionId: String, val workDate: String,
+    val executionUnitId: String, val eventType: String, val capturedAt: String,
+    val latitude: Double? = null, val longitude: Double? = null, val accuracyMeters: Double? = null)
+@Serializable data class JourneyLocationBatch(val events: List<JourneyLocationEvent>)
+@Serializable data class JourneyLocationAccepted(val acceptedEventIds: List<String>, val stopRequested: Boolean = false)
 
 @Serializable data class AdjustmentTarget(val receiptId: String, val nsr: Long, val markedAt: String, val executionUnitId: String)
 @Serializable data class AdjustmentInclusion(val markedAt: String, val executionUnitId: String)
 @Serializable data class AdjustmentAct(val action: String, val role: String, val at: String, val reason: String? = null)
-@Serializable data class Adjustment(val id: String, val workDate: String, val kind: String, val status: String, val version: Int, val target: AdjustmentTarget? = null, val inclusion: AdjustmentInclusion? = null, val reason: String, val acts: List<AdjustmentAct> = emptyList(), val createdAt: String, val decidedAt: String? = null)
+@Serializable data class AdjustmentOperation(val kind: String, val target: AdjustmentTarget? = null, val inclusion: AdjustmentInclusion? = null)
+@Serializable data class Adjustment(val id: String, val workDate: String, val kind: String, val status: String, val version: Int, val target: AdjustmentTarget? = null, val inclusion: AdjustmentInclusion? = null,
+    val operations: List<AdjustmentOperation> = emptyList(), val reason: String, val acts: List<AdjustmentAct> = emptyList(), val createdAt: String, val decidedAt: String? = null)
 @Serializable data class Treatment(val id: String, val adjustmentId: String, val workDate: String, val type: String, val originalReceiptId: String? = null, val markedAt: String? = null, val executionUnitId: String? = null)
 @Serializable data class OwnAdjustments(val adjustments: List<Adjustment>, val treatments: List<Treatment> = emptyList())
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-@Serializable data class AdjustmentRequest(val attemptId: String, val workDate: String, val kind: String,
+@Serializable data class AdjustmentRequestOperation(val kind: String,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val targetReceiptId: String? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val newTime: String? = null,
-    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val executionUnitId: String? = null,
-    val reason: String)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val executionUnitId: String? = null)
+@Serializable data class AdjustmentRequest(val attemptId: String, val workDate: String, val operations: List<AdjustmentRequestOperation>, val reason: String)
 @Serializable data class AdjustmentCreated(val adjustment: Adjustment)
 
 // Banco e espelho: consultas pessoais, sem ações de DP no aplicativo.
@@ -70,6 +87,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class ClosingPackageStatus(val status: String, val sentAt: String? = null, val signedAt: String? = null)
 @Serializable data class MirrorStatus(val competence: String, val closure: ClosureStatus? = null, val mirror: MirrorFileStatus? = null,
     val `package`: ClosingPackageStatus? = null)
+@Serializable data class MirrorGenerateRequest(val action: String = "generate", val competence: String, val expectedVersion: Int)
+@Serializable data class MirrorGenerated(val mirror: MirrorFileStatus)
 
 // Solicitações: ausência, vale-transporte e troca de turno usam os mesmos contratos centrais da web.
 @Serializable data class AbsenceOption(val id: String, val name: String, val units: List<String>, val attachmentRequired: Boolean = false, val validFrom: String? = null, val validTo: String? = null)

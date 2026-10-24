@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { Timestamp } from 'firebase/firestore';
 import { startOfMonth, endOfMonth } from 'date-fns';

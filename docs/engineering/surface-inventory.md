@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **497 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **500 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -51,6 +51,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/auth/forgot-password` | POST | [src/app/api/auth/forgot-password/route.ts](../../src/app/api/auth/forgot-password/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/auth/last-login` | POST | [src/app/api/auth/last-login/route.ts](../../src/app/api/auth/last-login/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/auth/password-changed` | POST | [src/app/api/auth/password-changed/route.ts](../../src/app/api/auth/password-changed/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/auth/view-as` | GET, POST, DELETE | [src/app/api/auth/view-as/route.ts](../../src/app/api/auth/view-as/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/catalogo` | GET | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) | [catalog](flows/catalog.md) |
 | `/api/client/bootstrap` | GET | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/collaborator/absence-requests` | GET, POST | [src/app/api/collaborator/absence-requests/route.ts](../../src/app/api/collaborator/absence-requests/route.ts) | [dp-absences](flows/dp-absences.md) |
@@ -139,8 +140,10 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/closures/[competence]` | PATCH | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/employees/[employeeUid]` | POST | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/fiscal-options` | GET | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/journey-location` | POST | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/location-policies/[unitId]` | GET, PUT | [src/app/api/dp/time-recording/location-policies/[unitId]/route.ts](../../src/app/api/dp/time-recording/location-policies/%5BunitId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/markings` | POST, GET | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/markings/[receiptId]/classification` | PATCH | [src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts](../../src/app/api/dp/time-recording/markings/%5BreceiptId%5D/classification/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/mirrors` | GET, POST | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/mirrors/pdf` | GET | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/month` | GET | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |

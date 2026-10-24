@@ -5,7 +5,7 @@ import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
 import { type RepositionActivity, type RepositionItem, type SignatureData } from '@/types';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import {
   Dialog,

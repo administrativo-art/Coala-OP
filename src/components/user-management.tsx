@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useForm, Controller, type FieldErrors } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { differenceInDays, format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';

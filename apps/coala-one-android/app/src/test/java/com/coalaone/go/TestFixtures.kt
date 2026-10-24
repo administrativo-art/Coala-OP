@@ -51,7 +51,7 @@ class MemoryTimeOfflineQueue : TimeOfflineQueue {
     override suspend fun savePermit(uid: String, permit: OfflinePermit) { savedPermit = permit }
     override suspend fun permit(uid: String) = savedPermit
     override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? = null
-    override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long): CapturedOfflineMarking {
+    override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String): CapturedOfflineMarking {
         val id = java.util.UUID.randomUUID().toString(); rows.value += TimeMarkingRow(uid, id, "permit", rows.value.size + 1, 0, sealed = byteArrayOf())
         return CapturedOfflineMarking(id, "2026-10-19T08:00:00-0300", "2026-10-19")
     }

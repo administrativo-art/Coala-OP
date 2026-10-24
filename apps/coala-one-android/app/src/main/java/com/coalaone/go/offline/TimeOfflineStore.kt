@@ -23,7 +23,7 @@ interface TimeOfflineQueue {
     suspend fun savePermit(uid: String, permit: OfflinePermit)
     suspend fun permit(uid: String): OfflinePermit?
     suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions?
-    suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long): CapturedOfflineMarking
+    suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String): CapturedOfflineMarking
     suspend fun ready(uid: String): List<Pair<TimeMarkingRow, MarkingRequest>>
     suspend fun synced(uid: String, id: String)
     suspend fun failed(uid: String, id: String, failure: AppFailure)
@@ -65,7 +65,7 @@ interface TimeOfflineQueue {
             permit.units.map { ExecutionUnit(it.id, it.name, timeZone = it.timeZone) },
             OfficialClock(true, instant.toString(), first.timeZone))
     }
-    override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long) = withContext(Dispatchers.IO) { mutex.withLock {
+    override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String) = withContext(Dispatchers.IO) { mutex.withLock {
         val permit = permit(uid) ?: error("Conecte o aparelho antes de usar o ponto offline.")
         val bootCount = identity.bootCount()
         require(bootCount >= 0 && permit.bootCount == bootCount) { "O aparelho foi reiniciado. Conecte-o antes de registrar outro ponto." }
@@ -87,7 +87,7 @@ interface TimeOfflineQueue {
         val hash = TimeOfflineRules.hash(canonical)
         val evidence = OfflineMarkingEvidence(permit.permitId, permit.deviceKeyId, elapsedRealtimeMs, bootCount,
             sequence, previousHash, markedAt, hash, identity.sign(uid, canonical))
-        val request = MarkingRequest(attemptId, workDate, executionUnitId, offline = evidence)
+        val request = MarkingRequest(attemptId, workDate, executionUnitId, declaredPurpose = declaredPurpose, offline = evidence)
         val sealed = vault.seal(uid, "time-marking:$attemptId", json.encodeToString(request).toByteArray())
         database.timeOffline().insert(TimeMarkingRow(owner(uid), attemptId, permit.permitId, sequence,
             System.currentTimeMillis(), sealed = sealed))

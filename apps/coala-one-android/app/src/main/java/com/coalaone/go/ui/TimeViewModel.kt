@@ -4,6 +4,7 @@ import com.coalaone.go.data.*
 import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.auth.AuthGateway
 import com.coalaone.go.offline.*
+import com.coalaone.go.location.JourneyLocationController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -30,12 +31,14 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val today: LocalDate = LocalDate.now(), val month: YearMonth = YearMonth.now(), val markings: List<OwnMarking> = emptyList(), val shifts: List<OwnShift> = emptyList(),
     val adjustments: List<Adjustment> = emptyList(), val treatments: List<Treatment> = emptyList(), val truncated: Boolean = false, val last: MarkingResponse? = null, val sentAdjustment: Adjustment? = null,
     val bank: TimeBankResponse? = null, val bankDate: String? = null, val mirror: MirrorStatus? = null, val mirrorCompetence: String? = null,
-    val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null, val offlineIssue: String? = null)
+    val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
+    val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null, val offlineIssue: String? = null,
+    val journeyTrackingActive: Boolean = false)
 
 /** Ponto: punch, today, history, receipts and adjustment requests, all through the web routes. Nothing is polled. */
 @HiltViewModel class TimeViewModel @Inject constructor(private val repository: ApiRepository, private val saved: androidx.lifecycle.SavedStateHandle,
     private val auth: AuthGateway, private val offlineQueue: TimeOfflineQueue, private val offlineSync: TimeOfflineSync,
-    private val offlineScheduler: TimeOfflineWorkScheduler) : FeedbackViewModel() {
+    private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState())
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -57,10 +60,14 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         } } }
     }
 
-    private suspend fun refreshPermit(workDate: String, elapsed: Long) {
+    private suspend fun refreshPermit(options: TimeOptions, elapsed: Long) {
+        if (options.mode == "pilot") {
+            mutable.update { it.copy(offlineIssue = null) }
+            return
+        }
         val uid = auth.current?.uid ?: return
         try {
-            val request = offlineQueue.permitRequest(uid, workDate, elapsed) ?: return
+            val request = offlineQueue.permitRequest(uid, options.workDate, elapsed) ?: return
             offlineQueue.savePermit(uid, api.offlinePermit(request).permit)
             mutable.update { it.copy(offlineIssue = null) }
         } catch (cause: CancellationException) { throw cause }
@@ -77,7 +84,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
             val offset = TimeRules.clockOffset(options.officialClock, elapsed)
             mutable.update { state -> state.copy(options = options, clockOffset = offset, today = today,
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
-            refreshPermit(options.workDate, elapsed)
+            reconcileJourneyAvailability(options)
+            refreshPermit(options, elapsed)
             readMonth(mutable.value.month)
         } catch (cause: IOException) {
             val uid = auth.current?.uid ?: throw cause
@@ -94,25 +102,33 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val options = api.timeOptions(LocalDate.now().toString())
         val elapsed = android.os.SystemClock.elapsedRealtime()
         mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, elapsed)) }
-        refreshPermit(options.workDate, elapsed)
+        reconcileJourneyAvailability(options)
+        refreshPermit(options, elapsed)
     }
     private suspend fun readMonth(month: YearMonth) {
         val (start, end) = TimeRules.monthRange(month)
         val key = month.toString()
         val markings = api.markings(start, end); val shifts = api.timeMonth(key); val adjustments = api.adjustments(key)
-        mutable.update { it.copy(month = month, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts, adjustments = adjustments.adjustments, treatments = adjustments.treatments) }
+        mutable.update { current ->
+            val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
+            current.copy(month = month, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
+                adjustments = adjustments.adjustments, treatments = adjustments.treatments,
+                unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true } ?: current.unitId)
+        }
     }
     /** A new unit is a new attempt; the same attempt is resent until the server answers, so a retry never duplicates. */
     fun unit(id: String) { if (mutable.value.unitId != id) { clearAttempt(); mutable.update { it.copy(unitId = id) } } }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
-    fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null) = serverRun {
+    fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
         var state = mutable.value
         if (!online) {
+            require(state.options?.mode != "pilot") { "O ensaio pré-homologação exige conexão com a internet." }
             val uid = auth.current?.uid ?: error("Sessão expirada.")
             val unitId = state.unitId ?: error("Escolha a unidade.")
-            val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime())
+            val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
             clearAttempt()
             mutable.update { it.copy(lastOffline = captured) }
+            updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose)
             offlineScheduler.schedule(uid)
             return@serverRun
         }
@@ -125,7 +141,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val location = if (locationEnabled) pendingLocation ?: capturedLocation
             ?: failedLocationAttempt(status = "unavailable") else null
         pendingLocation = location
-        val result = try { api.mark(MarkingRequest(pending.first, pending.second, state.unitId!!, locationAttempt = location)) }
+        val result = try { api.mark(MarkingRequest(pending.first, pending.second, state.unitId!!, declaredPurpose = declaredPurpose, locationAttempt = location)) }
         catch (cause: retrofit2.HttpException) {
             // 409: the attempt clashes with one already recorded. Start over from what the server holds.
             if (cause.code() == 409) { clearAttempt(); readMonth(YearMonth.now()) }
@@ -133,43 +149,101 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         }
         clearAttempt()
         mutable.update { it.copy(last = result) }
+        updateJourneyLocation(state, pending.second, result.marking.executionUnitId, declaredPurpose)
         readMonth(YearMonth.now())
+    }
+    private fun updateJourneyLocation(state: TimeState, workDate: String, unitId: String, purpose: String) {
+        val shift = state.shifts.firstOrNull { it.date == workDate && it.type == "work" }
+        val policyActive = state.options?.executionUnits?.firstOrNull { it.id == unitId }?.locationPolicy?.mode == "observe"
+        journeyLocation?.afterPunch(shift, workDate, unitId, TimeRules.unitZone(state.options, unitId), purpose, policyActive,
+            state.options?.journeyLocationEnabled == true)
+        mutable.update { it.copy(journeyTrackingActive = journeyLocation?.isActive() == true) }
+    }
+    fun classify(receiptId: String, purpose: String) = serverRun {
+        val before = mutable.value.markings.firstOrNull { it.receiptId == receiptId }
+        val result = api.classifyMarking(receiptId, ClassificationUpdate(purpose))
+        feedbackMutable.update { it.copy(notice = if (result.changeStatus == "in_review") "Mês fechado: alteração enviada para revisão." else "Classificação atualizada.") }
+        readMonth(mutable.value.month)
+        if (result.changeStatus == "applied" && before != null) {
+            val state = mutable.value
+            val shift = state.shifts.firstOrNull { it.date == before.workDate && it.type == "work" }
+            val policyActive = state.options?.executionUnits?.firstOrNull { it.id == before.executionUnitId }?.locationPolicy?.mode == "observe"
+            journeyLocation?.reconcile(shift, before.workDate, before.executionUnitId,
+                TimeRules.unitZone(state.options, before.executionUnitId), state.markings, policyActive,
+                state.options?.journeyLocationEnabled == true)
+            mutable.update { it.copy(journeyTrackingActive = journeyLocation?.isActive() == true) }
+        }
+    }
+    private fun reconcileJourneyAvailability(options: TimeOptions) {
+        val activeUnits = options.executionUnits.filter { it.locationPolicy.mode == "observe" }.mapTo(mutableSetOf()) { it.id }
+        journeyLocation?.stopIfUnavailable(options.journeyLocationEnabled, activeUnits)
+        mutable.update { it.copy(journeyTrackingActive = journeyLocation?.isActive() == true) }
+    }
+    fun stopJourneyLocation() {
+        journeyLocation?.stop()
+        mutable.update { it.copy(journeyTrackingActive = false) }
+        feedbackMutable.update { it.copy(notice = "Acompanhamento encerrado neste aparelho.") }
     }
     /** Official time from the monotonic clock: changing the phone's hour does not move it. Phone time only without a reading. */
     private fun officialNow(state: TimeState) = state.clockOffset?.let { android.os.SystemClock.elapsedRealtime() + it } ?: System.currentTimeMillis()
     private suspend fun refreshOptions() {
         val options = api.timeOptions(LocalDate.now().toString())
         mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime())) }
+        reconcileJourneyAvailability(options)
     }
     fun dismissLast() { mutable.update { it.copy(last = null) } }
     fun dismissOffline() { mutable.update { it.copy(lastOffline = null) } }
     /** Downloads the PDF into the app cache (never shared storage) and hands the file to the screen to open or share. */
-    fun receipt(receiptId: String, markedAt: String, nsr: Long, directory: File, then: (File) -> Unit) = serverRun {
+    fun receipt(receiptId: String, markedAt: String, nsr: Long, pilot: Boolean, directory: File, then: (File) -> Unit) = serverRun {
         val file = withContext(Dispatchers.IO) {
             val folder = File(directory, "receipts").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
-            File(folder, TimeRules.receiptFileName(markedAt, nsr)).also { target -> api.receipt(receiptId).use { body -> target.outputStream().use { body.byteStream().copyTo(it) } } }
+            File(folder, TimeRules.receiptFileName(markedAt, nsr, pilot)).also { target -> api.receipt(receiptId).use { body -> target.outputStream().use { body.byteStream().copyTo(it) } } }
         }
         then(file)
     }
-    /** Exports the selected month's original signed receipts plus the server-generated completeness index. */
+    /** Exports only official signed receipts; pilot receipts remain individually available and visibly non-official. */
     fun receiptArchive(directory: File, then: (File) -> Unit) = serverRun {
         val state = mutable.value
         require(!state.truncated) { "O mês tem registros demais. Escolha um período menor no Coala One." }
+        val officialMarkings = state.markings.filterNot { it.pilot }
+        require(officialMarkings.isNotEmpty()) { "Não há comprovantes oficiais neste mês. Os comprovantes do ensaio são baixados em cada batida." }
         val (start, end) = TimeRules.monthRange(state.month)
-        val complete = state.markings.all { it.receiptStatus == "available" }
+        val complete = officialMarkings.all { it.receiptStatus == "available" }
         val fileName = "comprovantes-ponto-$start-a-$end-${if (complete) "completo" else "incompleto"}.zip"
         then(cacheFile(directory, "time-documents", fileName, api.receiptArchive(start, end)))
     }
     private fun dateInSelectedMonth(state: TimeState) = if (state.month == YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     /** Banco é carregado só quando a aba é aberta: não acrescenta leituras ao registro diário. */
-    fun loadBank() = serverRun {
-        val date = dateInSelectedMonth(mutable.value).toString()
+    fun loadBank(dateOverride: String? = null) = serverRun {
+        val date = dateOverride ?: dateInSelectedMonth(mutable.value).toString()
         mutable.update { it.copy(bank = api.timeBank(date), bankDate = date) }
     }
     /** Espelho é consultado por competência e nunca é gerado por esta leitura. */
     fun loadMirror() = serverRun {
         val competence = mutable.value.month.toString()
         mutable.update { it.copy(mirror = api.mirror(competence), mirrorCompetence = competence) }
+    }
+    /** Um acesso de rede por competência existente no ano, somente ao abrir ou trocar o ano dos espelhos. */
+    fun loadMirrorYear(year: Int) = serverRun {
+        val current = YearMonth.from(mutable.value.today)
+        val months = (1..12).map { YearMonth.of(year, it) }.filter { !it.isAfter(current) }
+        val statuses = linkedMapOf<String, MirrorStatus>()
+        for (month in months) statuses[month.toString()] = api.mirror(month.toString())
+        mutable.update { it.copy(mirrorYear = year, mirrors = statuses) }
+    }
+    /** Fechamento disponível torna o espelho acessível: a primeira abertura gera o instantâneo idempotente. */
+    fun openMirror(competence: String, then: () -> Unit) = serverRun {
+        var status = api.mirror(competence)
+        val closure = status.closure ?: error("Esta competência ainda não foi fechada.")
+        require(closure.status == "closed") { "Esta competência ainda não foi fechada." }
+        if (status.mirror == null) {
+            api.generateMirror(MirrorGenerateRequest(competence = competence, expectedVersion = closure.version))
+            status = api.mirror(competence)
+        }
+        require(status.mirror != null) { "Não foi possível preparar o espelho." }
+        mutable.update { state -> state.copy(month = YearMonth.parse(competence), mirror = status, mirrorCompetence = competence,
+            mirrors = state.mirrors + (competence to status)) }
+        then()
     }
     private suspend fun cacheFile(directory: File, folderName: String, fileName: String, body: okhttp3.ResponseBody): File = withContext(Dispatchers.IO) {
         val folder = File(directory, folderName).apply { mkdirs(); listFiles()?.forEach { it.delete() } }
@@ -179,10 +253,10 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val competence = mutable.value.month.toString()
         then(cacheFile(directory, "time-documents", "espelho-ponto-$competence.pdf", api.mirrorPdf(competence)))
     }
-    fun requestAdjustment(attemptId: String, workDate: String, kind: String, targetReceiptId: String?, newTime: String, reason: String) = serverRun("Pedido de ajuste enviado ao DP.") {
+    fun requestAdjustment(attemptId: String, workDate: String, operations: List<AdjustmentRequestOperation>, reason: String) = serverRun("Pedido de ajuste enviado ao DP.") {
         val state = mutable.value
         val unitToday = LocalDate.parse(TimeRules.workDate(officialNow(state), TimeRules.unitZone(state.options, state.unitId)))
-        val request = TimeRules.adjustmentRequest(attemptId, workDate, kind, targetReceiptId, newTime, state.unitId, reason, unitToday)
+        val request = TimeRules.adjustmentRequest(attemptId, workDate, operations.map { operation -> operation.copy(executionUnitId = operation.executionUnitId ?: state.unitId) }, reason, unitToday)
         val created = api.requestAdjustment(request).adjustment
         mutable.update { it.copy(sentAdjustment = created) }
         readMonth(YearMonth.from(LocalDate.parse(workDate)))

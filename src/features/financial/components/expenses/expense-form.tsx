@@ -6,7 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { addDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/lib/zod-resolver";
 import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleHelp, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";

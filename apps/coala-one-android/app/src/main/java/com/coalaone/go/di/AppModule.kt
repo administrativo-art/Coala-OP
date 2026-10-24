@@ -35,10 +35,11 @@ import javax.inject.Singleton
     @Provides @Singleton fun attestation(impl: Attestation): AppAttestation = impl
     @Provides @Singleton fun updater(impl: AppUpdater): InstallerDownloader = impl
     @Provides @Singleton fun push(impl: PushManager): PushController = impl
-    @Provides @Singleton fun client(auth: AuthGateway, attestation: Attestation): OkHttpClient {
+    @Provides @Singleton fun developerViewAsStore(store: DeveloperViewAsStore): DeveloperViewAsSelectionStore = store
+    @Provides @Singleton fun client(auth: AuthGateway, attestation: Attestation, viewAs: DeveloperViewAsSelectionStore): OkHttpClient {
         val base = BuildConfig.API_BASE_URL.toHttpUrl()
         require(base.isHttps || BuildConfig.DEBUG && BuildConfig.LOCAL_TEST) { "API de release exige HTTPS" }
-        return OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(150, TimeUnit.SECONDS).writeTimeout(150, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).addInterceptor(AuthenticationInterceptor(base) {
+        return OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(150, TimeUnit.SECONDS).writeTimeout(150, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).addInterceptor(AuthenticationInterceptor(base, viewAs::current) {
             val uid = auth.current?.uid
             if (uid == null) null else {
                 val token = auth.token(); val proof = attestation.token()

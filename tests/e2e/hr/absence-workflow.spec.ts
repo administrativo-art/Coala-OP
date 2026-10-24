@@ -40,7 +40,7 @@ test('cria rascunho com comprovante, envia e analisa pedido atribuído', async (
 
   await page.route('**/api/collaborator/requests', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ requests: [] }) }));
   await page.route(/\/api\/collaborator\/absence-requests\/options(?:\?.*)?$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-    absenceTypes: [{ id: 'e2e-absence', name: 'Ausência E2E', units: ['day'], calculation: 'calendar_days', validFrom: '1900-01-01', validTo: null, color: 'blue' }],
+    absenceTypes: [{ id: 'e2e-absence', name: 'Ausência E2E', units: ['day'], calculation: 'calendar_days', attachmentRequired: true, validFrom: '1900-01-01', validTo: null, color: 'blue' }],
     capabilities: { canCreate: true, catalogDatabase: 'coala-rh' },
   }) }));
   await page.route('**/api/collaborator/absence-requests/preview', (route) => {
@@ -124,20 +124,20 @@ test('cria rascunho com comprovante, envia e analisa pedido atribuído', async (
   });
 
   await page.goto('/dashboard/collaborator/requests?new=absence_preview', { waitUntil: 'domcontentloaded' });
-  const previewPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Prévia de ausência' }) });
+  const previewPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Solicitar ausência' }) });
   await previewPanel.getByRole('combobox', { name: 'Tipo de ausência' }).click();
   await page.getByRole('option', { name: 'Ausência E2E' }).click();
   await previewPanel.getByLabel('Data de início').fill(input.startDate);
   await previewPanel.getByLabel('Data de término').fill(input.endDate);
-  await previewPanel.getByRole('button', { name: 'Calcular prévia' }).click();
-  await previewPanel.getByLabel('Comprovantes (obrigatórios)').setInputFiles({ name: 'comprovante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n') });
+  await previewPanel.locator('input[type="file"]').setInputFiles({ name: 'comprovante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n') });
+  await previewPanel.getByRole('button', { name: 'Concluir' }).click();
   await previewPanel.getByRole('button', { name: 'Salvar rascunho' }).click();
   await expect(page.getByRole('heading', { name: 'Meus pedidos de ausência' })).toBeVisible();
   await page.getByRole('button', { name: /Ausência E2E.*10\/11\/2026/ }).click();
   const detail = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Ausência E2E' }) });
   await detail.getByRole('button', { name: 'Editar rascunho' }).click();
   const editPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Editar rascunho de ausência' }) });
-  await editPanel.getByRole('button', { name: 'Calcular prévia' }).click();
+  await editPanel.getByRole('button', { name: 'Concluir' }).click();
   await editPanel.getByRole('button', { name: 'Salvar revisão' }).click();
   await expect(editPanel).toBeHidden();
   expect(edited).toBe(1);
@@ -165,14 +165,14 @@ test('cria rascunho com comprovante, envia e analisa pedido atribuído', async (
   await page.getByRole('combobox', { name: 'Colaborador para novo pedido' }).click();
   await page.getByRole('option', { name: E2E_ABSENCE_BENEFICIARY.name }).click();
   await page.getByRole('button', { name: 'Preparar ausência para colaborador' }).click();
-  const thirdPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Prévia de ausência' }) });
+  const thirdPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Solicitar ausência' }) });
   await expect(thirdPanel.getByText(`Solicitação para ${E2E_ABSENCE_BENEFICIARY.name}`)).toBeVisible();
   await thirdPanel.getByRole('combobox', { name: 'Tipo de ausência' }).click();
   await page.getByRole('option', { name: 'Ausência E2E' }).click();
   await thirdPanel.getByLabel('Data de início').fill(input.startDate);
   await thirdPanel.getByLabel('Data de término').fill(input.endDate);
-  await thirdPanel.getByRole('button', { name: 'Calcular prévia' }).click();
-  await thirdPanel.getByLabel('Comprovantes (obrigatórios)').setInputFiles({ name: 'comprovante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n') });
+  await thirdPanel.locator('input[type="file"]').setInputFiles({ name: 'comprovante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n') });
+  await thirdPanel.getByRole('button', { name: 'Concluir' }).click();
   await thirdPanel.getByRole('button', { name: 'Salvar rascunho' }).click();
   await expect.poll(() => thirdPartyCreated).toBe(true);
   expect(thirdPartyPreviewed).toBe(true);

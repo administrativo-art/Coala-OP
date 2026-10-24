@@ -2304,28 +2304,28 @@ function EmployeeProfileHeaderSummary({
   const completionPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : employee.profile_completion;
 
   return (
-    <div className="min-w-[320px] rounded-2xl border border-ds-divider bg-ds-input px-4 py-3">
+    <div className="min-w-[320px] rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3">
       <div className="flex items-center gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div
             className="grid h-11 w-11 shrink-0 place-items-center rounded-full"
             style={{ background: `conic-gradient(#df2f78 ${completionPct * 3.6}deg, #ececf0 0deg)` }}
           >
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-ds-ink">
+            <div className="grid h-8 w-8 place-items-center rounded-full bg-ds-ink text-xs font-black text-white">
               {completionPct}%
             </div>
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-ds-ink">Perfil completo</p>
+              <p className="text-sm font-black text-white">Perfil completo</p>
               <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${completionPct >= 80 ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger"}`}>
                 {completionPct >= 80 ? "Completo" : "Incompleto"}
               </span>
             </div>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-ink-muted">
+            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
               {filledFields}/{totalFields} campos preenchidos
             </p>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-ink-muted">
+            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
               Cadastro local do Coala
             </p>
           </div>
@@ -3315,7 +3315,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           </h1>
         </div>
 
-        <section className="sticky top-[72px] z-10 rounded-xl border border-ds-border bg-white/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
+        <section className="sticky top-[72px] z-10 rounded-xl border border-white/10 bg-ds-ink/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
         <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(0,1fr)_320px_auto] xl:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
@@ -3332,7 +3332,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-ds-ink">{user.username}</h2>
+                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-white">{user.username}</h2>
                 <span
                   className="inline-flex max-w-full items-center rounded-full bg-ds-ok-bg px-2 py-0.5 text-[10px] font-black text-ds-ok sm:max-w-[220px]"
                   title={roleFunctionLabel}
@@ -3353,21 +3353,21 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   Cor na escala
                 </span>
               </div>
-              <div className="mt-2 grid gap-x-5 gap-y-1.5 text-[10px] font-black text-ds-ink md:grid-cols-4">
+              <div className="mt-2 grid gap-x-5 gap-y-1.5 text-[10px] font-black text-white md:grid-cols-4">
                 <span>
-                  <span className="block text-xs uppercase text-ds-ink-faint">E-mail</span>
+                  <span className="block text-xs uppercase text-ds-on-dark-muted">E-mail</span>
                   <span className="mt-1 block max-w-[180px] truncate">{user.email}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-ds-ink-faint">Telefone</span>
+                  <span className="block text-xs uppercase text-ds-on-dark-muted">Telefone</span>
                   <span className="mt-1 block">{(user as any).phone || "-"}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-ds-ink-faint">Último acesso</span>
+                  <span className="block text-xs uppercase text-ds-on-dark-muted">Último acesso</span>
                   <span className="mt-1 block">{fmtDate((user as any).lastLoginAt)}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-ds-ink-faint">Tempo de casa</span>
+                  <span className="block text-xs uppercase text-ds-on-dark-muted">Tempo de casa</span>
                   <span className="mt-1 block">{tenure(user.admissionDate)}</span>
                 </span>
               </div>
@@ -3379,38 +3379,21 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               profileState={employeeProfileState}
             />
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
+          <div className="grid shrink-0 gap-2 xl:justify-items-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               {canManageSystemFieldVisibility ? (
                 <button
                   type="button"
                   onClick={() => setEditDrawerInUrl(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
                 >
                   <Pencil className="h-4 w-4 text-ds-accent" />
                   Editar dados
                 </button>
               ) : null}
-              {canReadTimeRecording ? (
-                <>
-                  <Link
-                    href={timeRecordingHref}
-                    className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
-                  >
-                    <Clock className="h-4 w-4 text-ds-accent" />
-                    Registro de ponto
-                  </Link>
-                  <Link
-                    href={`${timeRecordingHref}#banco-de-horas`}
-                    className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
-                  >
-                    <TimerReset className="h-4 w-4 text-ds-accent" />
-                    Banco de horas
-                  </Link>
-                </>
-              ) : null}
               <Link
                 href={`/dashboard/dp/collaborators/${user.id}/documents`}
-                className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+                className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
               >
                 <FileText className="h-4 w-4 text-ds-accent" />
                 Documentos
@@ -3419,7 +3402,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-ds-border bg-white text-ds-ink-muted shadow-xs hover:text-ds-accent-ink"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-white/15 bg-white/[0.07] text-ds-on-dark-2 shadow-xs hover:border-ds-accent hover:text-white"
                     title="Ações do colaborador"
                   >
                     <Menu className="h-5 w-5" />
@@ -3459,6 +3442,25 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   </div>
                 </PopoverContent>
               </Popover>
+            </div>
+            {canReadTimeRecording ? (
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                <Link
+                  href={timeRecordingHref}
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
+                >
+                  <Clock className="h-4 w-4 text-ds-accent" />
+                  Registro de ponto
+                </Link>
+                <Link
+                  href={`${timeRecordingHref}?view=time-bank`}
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
+                >
+                  <TimerReset className="h-4 w-4 text-ds-accent" />
+                  Banco de horas
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
