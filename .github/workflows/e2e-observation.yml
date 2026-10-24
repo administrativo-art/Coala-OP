@@ -1,0 +1,70 @@
+name: E2E observation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 8 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-observation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observation:
+    name: weekly E2E observation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Setup Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install dependencies once
+        run: npm ci
+      - name: Install Chromium once
+        run: npx playwright install --with-deps chromium
+      - name: Critical flows
+        id: critical
+        continue-on-error: true
+        run: npm run test:e2e
+      - name: Upload Playwright failure report
+        if: steps.critical.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: critical-flows-e2e-report-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Reconciliation API
+        id: reconciliation
+        continue-on-error: true
+        run: node scripts/test-reconciliation-api-e2e.mjs
+      - name: Barcode payment API
+        id: barcode
+        continue-on-error: true
+        run: node scripts/test-expense-boleto-e2e.mjs
+      - name: Instagram schedule API
+        id: instagram
+        continue-on-error: true
+        run: node scripts/test-instagram-schedule-e2e.mjs
+      - name: Observation summary
+        if: always()
+        run: |
+          echo "## E2E observation" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Critical flows: ${{ steps.critical.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reconciliation API: ${{ steps.reconciliation.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Barcode payment API: ${{ steps.barcode.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Instagram schedule API: ${{ steps.instagram.outcome }}" >> "$GITHUB_STEP_SUMMARY"

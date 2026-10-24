@@ -14,7 +14,7 @@ jobs:
   quality:
     name: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
@@ -30,6 +30,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Setup Java
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Install dependencies
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm ci
@@ -44,9 +53,20 @@ jobs:
           python3 scripts/check-flow-matrix.py
           python3 scripts/generate-flow-entrypoints.py --check
           python3 scripts/check-engineering-docs.py
+      - name: Verify Firebase rules
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        run: npm run check:rules
       - name: Verify application
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run verify
+      - name: Install Functions dependencies
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        run: npm ci
+        working-directory: functions
+      - name: Build Functions
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        run: npm run build
+        working-directory: functions
       - name: Verify production promotion
         if: github.event_name == 'pull_request' && github.base_ref == 'production'
         env:
@@ -56,153 +76,3 @@ jobs:
           git fetch --no-tags origin main
           git show origin/main:scripts/verify-production-promotion.mjs > "$RUNNER_TEMP/verify-production-promotion.mjs"
           node "$RUNNER_TEMP/verify-production-promotion.mjs" --base "$BASE_SHA" --head "$HEAD_SHA" --main origin/main
-
-  firestore-rules:
-    name: firestore-rules
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Reuse main verification for production
-        if: github.event_name == 'pull_request' && github.base_ref == 'production'
-        run: echo "Regras já verificadas no commit protegido de main."
-      - name: Checkout
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Setup Node.js
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - name: Setup Java
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - name: Install dependencies
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        run: npm ci
-      - name: Verify Firebase rules
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        run: npm run check:rules
-
-  functions:
-    name: functions
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Reuse main verification for production
-        if: github.event_name == 'pull_request' && github.base_ref == 'production'
-        run: echo "Functions já verificadas no commit protegido de main."
-      - name: Checkout
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Setup Node.js
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: functions/package-lock.json
-      - name: Install dependencies
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        run: npm ci
-        working-directory: functions
-      - name: Build functions
-        if: github.event_name != 'pull_request' || github.base_ref != 'production'
-        run: npm run build
-        working-directory: functions
-
-  critical-flows-e2e:
-    name: critical-flows-e2e (observation)
-    if: github.base_ref != 'production'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - name: Setup Java
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run critical-flow E2E
-        run: npm run test:e2e
-      - name: Upload Playwright failure report
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: critical-flows-e2e-report-${{ github.run_attempt }}
-          path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 3
-
-  reconciliation-api-e2e:
-    name: reconciliation-api-e2e (observation)
-    if: github.base_ref != 'production'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-      - run: node scripts/test-reconciliation-api-e2e.mjs
-
-  expense-boleto-api-e2e:
-    name: barcode-payment-api-e2e (observation)
-    if: github.base_ref != 'production'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-      - run: node scripts/test-expense-boleto-e2e.mjs
-
-  instagram-schedule-api-e2e:
-    name: instagram-schedule-api-e2e (observation)
-    if: github.base_ref != 'production'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-      - run: node scripts/test-instagram-schedule-e2e.mjs
