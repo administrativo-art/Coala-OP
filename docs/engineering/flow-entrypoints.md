@@ -115,7 +115,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 103.
+Arquivos locais percorridos: 102.
 
 Chamadas candidatas encontradas:
 
@@ -945,11 +945,15 @@ Arquivos locais percorridos: 26.
 
 Chamadas candidatas encontradas:
 
+- `/api/financial/inbox/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/payment-requests` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `financial.inbox.analyze` — [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx)
+- `financial.inbox.link` — [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx)
+- `financial.inbox.view` — [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx)
 - `financial.paymentRequests` — [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx)
 
 ## `pdv-sync`
