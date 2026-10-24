@@ -41,14 +41,16 @@ import {
 
 import {
   DEFAULT_PAYMENT_REQUEST_FILTER,
+  bankReportsPaymentSettled,
   matchesPaymentRequestFilter,
+  paymentRequestDisplayStatus,
   paymentSchedulePresentation,
   requiresBeneficiaryReview,
   stageGroup,
   type PaymentRequestFilter,
   type StageGroup,
 } from "./presentation";
-import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
+import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 
 /* -------------------------------------------------------------------------- */
 /*  Estágios                                                                    */
@@ -73,13 +75,7 @@ const STATUS_LABEL: Record<BankPaymentRequestStatus, string> = {
 const GROUP_ORDER: Record<StageGroup, number> = { you: 0, risk: 1, bank: 2, done: 3 };
 
 function statusLabel(item: BankPaymentRequest) {
-  if (item.status === "paid" && item.beneficiaryVerificationStatus === "divergent") {
-    return "Pago · revisar favorecido";
-  }
-  if (item.status === "paid" && item.beneficiaryVerificationStatus === "unavailable") {
-    return "Pago · validação pendente";
-  }
-  return STATUS_LABEL[item.status];
+  return paymentRequestDisplayStatus(item) ?? STATUS_LABEL[item.status];
 }
 
 const GROUP_PILL: Record<StageGroup, StatusPillVariant> = {
@@ -173,7 +169,7 @@ function dueInfo(item: BankPaymentRequest): DueInfo {
 /*  Ação por linha                                                              */
 /* -------------------------------------------------------------------------- */
 
-type RowActionKind = "authorize" | "submit" | "refresh" | "proof";
+type RowActionKind = "authorize" | "submit" | "refresh" | "proof" | "review";
 type RowAction = { kind: RowActionKind; label: string; primary: boolean } | null;
 
 function rowAction(
@@ -193,14 +189,25 @@ function rowAction(
   ) {
     return { kind: "submit", label: "Reenviar ao Inter", primary: true };
   }
+  if (canCreateCorrectedPaymentRequest(item)
+    && pr.create
+    && perms.financial?.inbox?.view
+    && (perms.financial?.inbox?.analyze || perms.financial?.inbox?.link)) {
+    return { kind: "review", label: "Revisar cobrança", primary: true };
+  }
   if (item.status === "ready_to_submit" && pr.submit) {
     return { kind: "submit", label: "Enviar ao Inter", primary: true };
   }
   if (
-    ["submitting", "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(item.status) &&
+    (["submitting", "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(item.status)
+      || requiresBeneficiaryReview(item)) &&
     pr.refresh
   ) {
-    return { kind: "refresh", label: "Atualizar situação", primary: false };
+    return {
+      kind: "refresh",
+      label: requiresBeneficiaryReview(item) ? "Revalidar favorecido" : "Atualizar situação",
+      primary: false,
+    };
   }
   if (item.status === "paid" && item.proofStoragePath && pr.viewProof) {
     return { kind: "proof", label: "Ver comprovante", primary: false };
@@ -280,6 +287,10 @@ export function PaymentRequestsPage() {
     if (kind === "authorize") return setAuthorizeTarget(item);
     if (kind === "submit") return setSubmitTarget(item);
     if (kind === "proof") return void openProof(item.id);
+    if (kind === "review" && item.sourceType === "financial_inbox") {
+      window.location.assign(`${FINANCIAL_ROUTES.inbox}?sourceId=${encodeURIComponent(item.sourceId)}`);
+      return;
+    }
 
     setWorking(`${item.id}:${kind}`);
     try {
@@ -683,7 +694,7 @@ function RequestRow({
   onAction: (kind: RowActionKind) => void;
 }) {
   const schedule = paymentSchedulePresentation(item);
-  const paid = item.status === "paid";
+  const paid = item.status === "paid" || bankReportsPaymentSettled(item);
 
   return (
     <li>
@@ -967,7 +978,7 @@ function DetailDrawer({
             </div>
             {rejectedByInter && retryAttempts >= 2 ? (
               <p className="mt-3 text-xs font-semibold leading-relaxed text-ds-danger">
-                O reenvio está bloqueado após duas recusas definitivas para evitar duplicidade. Revise os dados da cobrança antes de criar uma nova solicitação.
+                O mesmo registro não pode ser reenviado após duas recusas definitivas. Revise ou reprocesse a cobrança; o sistema consultará o Inter e criará uma nova versão para autorização, preservando esta tentativa.
               </p>
             ) : null}
           </div>

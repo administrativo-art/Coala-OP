@@ -674,6 +674,7 @@ Chamadas candidatas encontradas:
 - `/api/financial/inbox/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/inbox/bulk-review` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/bulk-review/route.ts`](../../src/app/api/financial/inbox/bulk-review/route.ts)
 - `/api/financial/inbox/settings` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/settings/route.ts`](../../src/app/api/financial/inbox/settings/route.ts)
+- `/api/financial/payment-requests/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 

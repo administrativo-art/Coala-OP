@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   DEFAULT_PAYMENT_REQUEST_FILTER,
+  bankReportsPaymentSettled,
   matchesPaymentRequestFilter,
+  paymentRequestDisplayStatus,
   paymentSchedulePresentation,
   stageGroup,
 } from "../../src/features/financial/payment-requests/presentation";
@@ -199,6 +201,67 @@ test("pago com revisão continua visível em Não pagos, Todos e Atenção", () 
   assert.equal(stageGroup(divergent), "risk");
   // Preserve the existing attention grouping for a paid request requiring review.
   assert.equal(matchesPaymentRequestFilter(divergent, "done"), false);
+});
+
+test("divergência histórica não esconde que o banco já confirmou o pagamento", () => {
+  const legacy = {
+    ...pix,
+    status: "failed",
+    bankStatus: "PAGO",
+    statementReconciliationStatus: "divergent",
+    bankReconciliationDivergenceField: "receiver",
+    lastError: {
+      code: "BANK_RECONCILIATION_DIVERGENCE",
+      safeMessage: "Documento divergente.",
+      occurredAt: "2026-09-26T15:00:00.000Z",
+    },
+  } as const;
+  assert.equal(bankReportsPaymentSettled(legacy), true);
+  assert.equal(paymentRequestDisplayStatus(legacy), "Pago · revisar favorecido");
+  assert.equal(stageGroup(legacy), "risk");
+  assert.equal(matchesPaymentRequestFilter(legacy, "unpaid"), true);
+  assert.equal(paymentSchedulePresentation(legacy, now).label, "Pago no banco");
+});
+
+test("boleto realizado fica aguardando conciliação, sem parecer em processamento bancário", () => {
+  const realized = {
+    ...boleto,
+    status: "awaiting_statement",
+    bankStatus: "REALIZADO",
+    bankLiquidationObservedAt: "2026-09-26T15:00:00.000Z",
+  } as const;
+  assert.equal(paymentRequestDisplayStatus(realized), "Pago no banco · aguardando extrato");
+  assert.deepEqual(paymentSchedulePresentation(realized, now), {
+    label: "Pago no banco",
+    date: "26/09/2026",
+    timing: "Aguardando conciliação no extrato",
+    dueDate: null,
+  });
+});
+
+test("boleto legado em processamento com REALIZADO já mostra liquidação bancária", () => {
+  const realized = {
+    ...boleto,
+    status: "processing",
+    bankStatus: "REALIZADO",
+    bankLiquidationObservedAt: "2026-09-26T15:00:00.000Z",
+  } as const;
+  assert.equal(paymentRequestDisplayStatus(realized), "Pago no banco · aguardando extrato");
+  assert.deepEqual(paymentSchedulePresentation(realized, now), {
+    label: "Pago no banco",
+    date: "26/09/2026",
+    timing: "Aguardando conciliação no extrato",
+    dueDate: null,
+  });
+});
+
+test("pagamento concluído continua rotulado como pago mesmo com status bancário liquidado", () => {
+  assert.equal(paymentRequestDisplayStatus({
+    ...pix,
+    status: "paid",
+    bankStatus: "PAGO",
+    paidAt: "2026-09-26T15:00:00.000Z",
+  }), null);
 });
 
 test("filtros anteriores preservam acesso por etapa e concluídos", () => {

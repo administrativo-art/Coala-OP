@@ -44,3 +44,10 @@ test("atualiza a classificação enquanto a cobrança ainda está em análise", 
   assert.equal(result.supplierName, "Supplymidia");
   assert.deepEqual(result.links, current.links);
 });
+
+test("falha definitiva pode ser reprocessada sem alterar a solicitação bancária antiga", () => {
+  const result = classificationForFinancialInboxReanalysis({ status: "payment_failed", current, reparsed });
+  assert.equal(result.barcode, null);
+  assert.equal(result.supplierName, "Supplymidia");
+  assert.deepEqual(result.links, current.links);
+});

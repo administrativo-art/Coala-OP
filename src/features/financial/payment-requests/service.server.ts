@@ -28,7 +28,7 @@ import {
 } from "./barcode-amounts";
 import { comparePaymentReceiverToSnapshot, findExactPixReceiverDocument } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
-import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
+import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
 import {
   FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
@@ -48,6 +48,7 @@ import { planFinancialInboxPaymentProjection } from "@/features/financial/inbox/
 import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 
 export class FinancialServiceApprovalIneligibleError extends Error {}
+export class PaymentRequestRecoveryError extends Error {}
 
 const financialServiceApprover: PaymentActor = {
   uid: FINANCIAL_SERVICE_APPROVER_ID,
@@ -173,6 +174,11 @@ function todayInBelem() {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
+function recoveryScheduledFor(value: string) {
+  const today = todayInBelem();
+  return isValidIsoDate(value) && value >= today ? value : today;
+}
+
 function isValidIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
@@ -253,7 +259,7 @@ export async function createInboxBarcodePaymentRequest(input: {
       : null,
     paymentRail: "barcode",
     barcodeSnapshot: {
-      type: "barcode",
+      type: "barcode" as const,
       code,
       codeHash: paymentBarcodeHash(code),
       maskedCode: maskPaymentBarcode(code)!,
@@ -356,6 +362,141 @@ function assertMatchingInboxBarcodeRequest(existing: BankPaymentRequest, expecte
     throw new Error("A solicitação bancária existente diverge dos dados confirmados. Faça a conferência antes de continuar.");
   }
   return existing;
+}
+
+export async function createCorrectedInboxBarcodePaymentRequest(id: string, actor: PaymentActor) {
+  const initial = await getPaymentRequest(id);
+  if (!canCreateCorrectedPaymentRequest(initial) || initial.sourceType !== "financial_inbox" || initial.paymentRail !== "barcode") {
+    throw new PaymentRequestRecoveryError("Esta solicitação não aceita uma nova versão. Consulte o motivo e a situação bancária atual.");
+  }
+  if (!initial.workspaceId) throw new PaymentRequestRecoveryError("A solicitação não possui ambiente financeiro confirmado.");
+  if (!initial.expenseId) throw new PaymentRequestRecoveryError("A solicitação não possui despesa vinculada.");
+  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(initial.sourceId);
+  const expenseRef = financialDbAdmin.collection("expenses").doc(initial.expenseId);
+  const [messageSnapshot, expenseSnapshot] = await Promise.all([messageRef.get(), expenseRef.get()]);
+  if (!messageSnapshot.exists || !expenseSnapshot.exists) throw new PaymentRequestRecoveryError("A cobrança ou a despesa vinculada não foi encontrada.");
+  if (messageSnapshot.get("workspaceId") !== initial.workspaceId || expenseSnapshot.get("workspaceId") !== initial.workspaceId) {
+    throw new PaymentRequestRecoveryError("A cobrança, a despesa e a solicitação não pertencem ao mesmo ambiente financeiro.");
+  }
+  const revisedAt = new Date(String(messageSnapshot.get("updatedAt") || ""));
+  const failedAt = new Date(String(initial.lastError?.occurredAt || initial.updatedAt));
+  if (Number.isNaN(revisedAt.getTime()) || Number.isNaN(failedAt.getTime()) || revisedAt <= failedAt) {
+    throw new PaymentRequestRecoveryError("Corrija os dados ou reprocesse o documento antes de criar uma nova tentativa.");
+  }
+
+  const code = normalizePaymentBarcode(String(messageSnapshot.get("classification.barcode") || initial.barcodeSnapshot.code));
+  const dueDate = String(messageSnapshot.get("classification.dueDate") || initial.barcodeSnapshot.dueDate);
+  const amountCents = Number(messageSnapshot.get("classification.amountCents"));
+  const beneficiaryDocument = String(
+    messageSnapshot.get("classification.billingIdentity.supplierTaxId")
+      || initial.barcodeSnapshot.beneficiaryDocument
+      || "",
+  ).replace(/\D/g, "");
+  const scheduledFor = recoveryScheduledFor(initial.barcodeSnapshot.scheduledFor);
+  if (!code) throw new PaymentRequestRecoveryError("A cobrança revisada não possui linha digitável válida.");
+  if (!isValidIsoDate(dueDate) || !isValidIsoDate(scheduledFor)) {
+    throw new PaymentRequestRecoveryError("Revise o vencimento e a data programada antes de criar a nova tentativa.");
+  }
+  if (!Number.isInteger(amountCents) || amountCents <= 0) throw new PaymentRequestRecoveryError("Revise o valor da cobrança antes de criar a nova tentativa.");
+
+  const bankCandidates = await findInterBarcodePaymentsByCode(code);
+  const activeBankPayment = bankCandidates.find((candidate) =>
+    !["rejected", "approval_expired"].includes(mapInterBarcodeStatus(candidate.statusPagamento, scheduledFor)));
+  if (activeBankPayment) {
+    throw new PaymentRequestRecoveryError("O Banco Inter já possui um pagamento para esta linha digitável. Atualize a situação antes de tentar novamente.");
+  }
+
+  const barcodeHash = paymentBarcodeHash(code);
+  const duplicates = await financialDbAdmin.collection("bankPaymentRequests")
+    .where("workspaceId", "==", initial.workspaceId)
+    .where("barcodeSnapshot.codeHash", "==", barcodeHash)
+    .limit(26)
+    .get();
+  const conflicting = duplicates.docs.find((document) => document.id !== initial.id
+    && !["failed", "rejected", "approval_expired", "cancelled"].includes(String(document.get("status") || "")));
+  if (conflicting) throw new PaymentRequestRecoveryError("Já existe outra solicitação ativa para este boleto.");
+
+  const now = new Date().toISOString();
+  const replacementRef = paymentRequestRef(`${initial.id}_v${paymentSubmissionAttemptCount(initial) + 1}`);
+  const replacement: BankPaymentRequest = {
+    id: replacementRef.id,
+    workspaceId: initial.workspaceId,
+    sourceType: "financial_inbox",
+    sourceId: initial.sourceId,
+    expenseId: initial.expenseId,
+    installmentNumber: initial.installmentNumber ?? null,
+    paymentRail: "barcode",
+    barcodeSnapshot: {
+      type: "barcode" as const,
+      code,
+      codeHash: barcodeHash,
+      maskedCode: maskPaymentBarcode(code)!,
+      dueDate,
+      scheduledFor,
+      ...(beneficiaryDocument ? { beneficiaryDocument } : {}),
+    },
+    amount: amountCents / 100,
+    description: initial.description,
+    status: "awaiting_financial_authorization",
+    idempotencyKey: randomUUID(),
+    submissionAttemptCount: 0,
+    lastError: null,
+    statementReconciliationStatus: "not_expected",
+    supersedesPaymentRequestId: initial.id,
+    supersededByPaymentRequestId: null,
+    createdAt: now,
+    createdBy: actor.uid,
+    updatedAt: now,
+  };
+
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const [currentSnapshot, currentMessage, currentExpense, existingReplacement] = await Promise.all([
+      transaction.get(paymentRequestRef(initial.id)),
+      transaction.get(messageRef),
+      transaction.get(expenseRef),
+      transaction.get(replacementRef),
+    ]);
+    if (!currentSnapshot.exists) throw new PaymentRequestRecoveryError("A solicitação original não foi encontrada.");
+    const current = { id: currentSnapshot.id, ...currentSnapshot.data() } as BankPaymentRequest;
+    if (current.supersededByPaymentRequestId) {
+      if (existingReplacement.exists && current.supersededByPaymentRequestId === existingReplacement.id) {
+        return { id: existingReplacement.id, ...existingReplacement.data() } as BankPaymentRequest;
+      }
+      throw new PaymentRequestRecoveryError("A solicitação original já foi substituída por outra versão.");
+    }
+    if (!canCreateCorrectedPaymentRequest(current)) throw new PaymentRequestRecoveryError("A solicitação mudou durante a revisão.");
+    if (!currentMessage.exists || !currentExpense.exists
+      || currentMessage.get("paymentRequestId") !== current.id
+      || currentExpense.get("paymentRequestId") !== current.id) {
+      throw new PaymentRequestRecoveryError("O vínculo entre cobrança, despesa e solicitação mudou durante a revisão.");
+    }
+    if (existingReplacement.exists) return { id: existingReplacement.id, ...existingReplacement.data() } as BankPaymentRequest;
+    transaction.create(replacementRef, Object.fromEntries(Object.entries(replacement).filter(([key, value]) => key !== "id" && value !== undefined)));
+    transaction.set(paymentRequestRef(initial.id), { supersededByPaymentRequestId: replacement.id, updatedAt: now }, { merge: true });
+    transaction.set(messageRef, {
+      paymentRequestId: replacement.id,
+      status: "awaiting_authorization",
+      bankState: "awaiting_authorization",
+      "resolution.status": "identified",
+      "resolution.financialState": "payment_prepared",
+      updatedAt: now,
+    }, { merge: true });
+    transaction.set(expenseRef, { paymentRequestId: replacement.id, updatedAt: now }, { merge: true });
+    transaction.create(paymentRequestRef(initial.id).collection("events").doc(), {
+      type: "PAYMENT_REQUEST_SUPERSEDED", at: now, actorId: actor.uid,
+      actorEmail: actor.email ?? null, replacementPaymentRequestId: replacement.id,
+    });
+    transaction.create(replacementRef.collection("events").doc(), {
+      type: "PAYMENT_REQUEST_RECREATED_AFTER_REVIEW", at: now, actorId: actor.uid,
+      actorEmail: actor.email ?? null, supersedesPaymentRequestId: initial.id,
+    });
+    transaction.create(messageRef.collection("events").doc(), {
+      type: "BANK_PAYMENT_REQUEST_RECREATED", at: now, actorId: actor.uid,
+      actorEmail: actor.email ?? null, paymentRequestId: replacement.id,
+      supersedesPaymentRequestId: initial.id,
+    });
+    return replacement;
+  });
 }
 
 export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
@@ -750,6 +891,9 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           dueDate: pending.barcodeSnapshot.dueDate,
           bankTransactionCode: interRequestId,
           barcodeLastDigits: pending.barcodeSnapshot.code.slice(-8),
+          counterpartyName: pending.sourceType === "financial_inbox"
+            ? String(currentMessageSnapshot?.get("classification.supplierName") || "").trim() || null
+            : null,
           createdAt: submittedAt,
           updatedAt: submittedAt,
         }, { merge: true });
@@ -1347,6 +1491,9 @@ async function persistBarcodeBankObservation(params: {
         dueDate: current.barcodeSnapshot.dueDate,
         bankTransactionCode: current.interRequestId ?? null,
         barcodeLastDigits: current.barcodeSnapshot.code.slice(-8),
+        counterpartyName: current.sourceType === "financial_inbox"
+          ? String(messageSnapshot?.get("classification.supplierName") || "").trim() || null
+          : null,
         createdAt: current.submittedAt ?? current.createdAt,
         updatedAt: params.observedAt,
       }, { merge: true });
