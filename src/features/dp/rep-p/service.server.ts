@@ -9,6 +9,7 @@ import { resolveEmploymentReferenceForSystem } from '@/features/dp/employment-re
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { isValidCpf, normalizeCpf } from '@/lib/hr/employee-document-match';
 import { AppError } from '@/lib/observability/app-error';
 import { reportSystemError } from '@/lib/observability/reporter';
@@ -16,6 +17,7 @@ import { reportSystemError } from '@/lib/observability/reporter';
 import { generateRepPAfd, signRepPAfd, type RepPAfdEvent, type RepPAfdProfile, type RepPCadesSigner } from './afd';
 import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp, trustedRepPClockInstant,
   unconfiguredRepPClock, type RepPClock } from './clock';
+import { assertRepPCompetenceAcceptsMarking, repPCompetenceFenceRef } from './competence-fence.server';
 import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } from './icp-signer';
 import { configuredRepPClock } from './hlb-ntp-clock.server';
 import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zones';
@@ -45,6 +47,7 @@ const OFFLINE_PERMITS = 'repP_offlinePermits';
 const PILOT_HEADS = 'repP_pilotHeads';
 const PILOT_MARKINGS = 'repP_pilotMarkings';
 const ADJUSTMENT_REQUESTS = 'ptrp_adjustmentRequests';
+const CLASSIFICATIONS = 'ptrp_markingClassifications';
 export const REP_P_PILOT_CLASSIFICATION_EVENTS = 'repP_pilotClassificationEvents';
 export const REP_P_PILOT_DAY_GUARDS = 'repP_pilotDayGuards';
 // Leitura em páginas para o AFD sair inteiro e de pronto (art. 81 §2º); o teto só protege memória.
@@ -61,7 +64,7 @@ const MAX_PENDING_RECEIPTS = 100;
 const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
-  repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
+  repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
   receiptSigner: RepPPadesSigner; markingEnabled: boolean; pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
@@ -100,7 +103,7 @@ const environmentCadesSigner: RepPCadesSigner = Object.freeze({
 const environmentPadesSigner: RepPPadesSigner = Object.freeze({
   signPdf: (content: Buffer) => (environmentIcpSigners()?.pades ?? unavailableReceiptSigner).signPdf(content),
 });
-const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
+const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true',
@@ -417,7 +420,7 @@ function validPilotMarking(value: unknown): value is PilotMarkingDocument {
 }
 
 async function issuePilotReceipt(deps: Dependencies, marking: PilotMarkingDocument): Promise<RepPReceiptState> {
-  const ref = deps.repDb.collection(PILOT_MARKINGS).doc(marking.receiptId);
+  const ref = deps.pilotDb.collection(PILOT_MARKINGS).doc(marking.receiptId);
   const current = await ref.get();
   const stored = current.data();
   if (!current.exists || !validPilotMarking(stored) || stored.requestDigest !== marking.requestDigest) {
@@ -426,7 +429,7 @@ async function issuePilotReceipt(deps: Dependencies, marking: PilotMarkingDocume
   if (stored.status === 'issued') return { receiptId: stored.receiptId, receiptStatus: 'available', receiptIssue: null };
   try {
     const rendered = await renderRepPPilotReceipt(stored.snapshot);
-    return deps.repDb.runTransaction(async (transaction) => {
+    return deps.pilotDb.runTransaction(async (transaction) => {
       const latest = await transaction.get(ref);
       const latestData = latest.data();
       if (!latest.exists || !validPilotMarking(latestData) || latestData.requestDigest !== marking.requestDigest) {
@@ -456,7 +459,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   void _ignoredLocationAttempt;
   const requestDigest = digest([context.workspace_id, context.decoded.uid, pilotInput]);
   const receiptId = pilotReceiptKey(context.workspace_id, context.decoded.uid, input.attemptId);
-  const markingRef = deps.repDb.collection(PILOT_MARKINGS).doc(receiptId);
+  const markingRef = deps.pilotDb.collection(PILOT_MARKINGS).doc(receiptId);
   const existing = await markingRef.get();
   const existingData = existing.data();
   if (existing.exists) {
@@ -490,15 +493,15 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   if (civilDateFromRepPTimestamp(markedAt) !== input.workDate) {
     throw fail('REP_P_WORK_DATE_MISMATCH', 'A data do ensaio não corresponde à Hora Legal da unidade.', 'VALIDATION');
   }
-  const headRef = deps.repDb.collection(PILOT_HEADS).doc(pilotHeadKey(context.workspace_id, context.decoded.uid));
-  const dayGuardRef = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+  const headRef = deps.pilotDb.collection(PILOT_HEADS).doc(pilotHeadKey(context.workspace_id, context.decoded.uid));
+  const dayGuardRef = deps.pilotDb.collection(REP_P_PILOT_DAY_GUARDS)
     .doc(repPPilotDayGuardId(context.workspace_id, context.decoded.uid, input.workDate));
-  const adjustmentQuery = deps.repDb.collection(ADJUSTMENT_REQUESTS)
+  const adjustmentQuery = deps.pilotDb.collection(ADJUSTMENT_REQUESTS)
     .where('workspaceId', '==', context.workspace_id).where('employeeUid', '==', context.decoded.uid)
     .where('workDate', '==', input.workDate).limit(1);
   const collectorId = input.channel === 'mobile' ? '01' as const : '02' as const;
   const establishmentId = `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`;
-  const committed = await deps.repDb.runTransaction(async (transaction) => {
+  const committed = await deps.pilotDb.runTransaction(async (transaction) => {
     const [[prior, head, dayGuard], adjustments] = await Promise.all([
       transaction.getAll(markingRef, headRef, dayGuardRef),
       transaction.get(adjustmentQuery),
@@ -544,7 +547,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
         attestationMode: reading.attestationMode, quorum: reading.quorum, observations: reading.observations },
       createdAt: Timestamp.now() });
     if (input.declaredPurpose) {
-      const classificationEventRef = deps.repDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
+      const classificationEventRef = deps.pilotDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
         .doc(digest([receiptId, 'classification', 1]));
       transaction.create(classificationEventRef, { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
         employeeId: context.decoded.uid, markingId: receiptId, receiptId, revision: 1, previousPurpose: null,
@@ -624,6 +627,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   }
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
+  const competenceFenceRef = repPCompetenceFenceRef(deps.repDb, context.workspace_id, input.workDate.slice(0, 7));
   const locationPolicyRef = repPLocationPolicyRef(deps.repDb, context.workspace_id, input.executionUnitId);
   const collectorId = input.channel === 'mobile' ? '01' as const : '02' as const;
   const workLocation = String(executionUnit.get('address') ?? '').trim() || null;
@@ -636,8 +640,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       'O registro de ponto está indisponível nesta unidade até o cadastro do comprovante ser completado pelo DP.', 'DATA_INTEGRITY');
   }
   const committed = await deps.repDb.runTransaction(async (transaction) => {
-    const [establishment, employee, attempt, locationPolicyDocument] = await transaction.getAll(
-      establishmentRef, employeeRef, attemptRef, locationPolicyRef);
+    const [establishment, employee, attempt, competenceFence, locationPolicyDocument] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, competenceFenceRef, locationPolicyRef);
     const current = establishment.data();
     if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
       || !sameProfile(current.profile, establishmentData.profile)
@@ -655,6 +659,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       return { status: 'replayed' as const, marking: prior,
         location: storedLocationSummary(attempt.get('locationSummary')), locationEvidence: null };
     }
+    assertRepPCompetenceAcceptsMarking(competenceFence, context.workspace_id, input.workDate.slice(0, 7));
     const prepared = prepareRepPMarking({ attemptId: input.attemptId, workspaceId: context.workspace_id,
       employeeId: context.decoded.uid, employeeCpf: identity.cpf, employmentHistoryId: reference.historyId,
       employmentRevision: reference.revision, employerUnitId: reference.period.employerUnitId,
@@ -800,11 +805,11 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
 
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
-  const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${input.workDate.slice(0, 7)}`);
+  const competenceFenceRef = repPCompetenceFenceRef(deps.repDb, context.workspace_id, input.workDate.slice(0, 7));
   const locationPolicyRef = repPLocationPolicyRef(deps.repDb, context.workspace_id, input.executionUnitId);
   const committed = await deps.repDb.runTransaction(async (transaction) => {
-    const [establishment, employee, attempt, currentPermit, closure, locationPolicyDocument] = await transaction.getAll(
-      establishmentRef, employeeRef, attemptRef, permitRef, closureRef, locationPolicyRef);
+    const [establishment, employee, attempt, currentPermit, competenceFence, locationPolicyDocument] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, permitRef, competenceFenceRef, locationPolicyRef);
     const current = establishment.data();
     if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
       || !sameProfile(current.profile, establishmentData.profile) || current.timeZone !== establishmentData.timeZone) {
@@ -814,9 +819,6 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       || employee.get('name') !== identity.name || employee.get('userId') !== context.decoded.uid) {
       throw fail('REP_P_EMPLOYEE_NOT_READY', 'A identidade do empregado ainda não está habilitada na ARP.', 'DATA_INTEGRITY');
     }
-    if (closure.exists && closure.get('status') === 'closed') {
-      throw fail('REP_P_OFFLINE_COMPETENCE_CLOSED', 'O mês já foi fechado. A marcação preservada precisa ser conferida pelo DP.', 'CONFLICT');
-    }
     if (attempt.exists) {
       if (attempt.get('requestDigest') !== requestDigest) throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
       const prior = attempt.get('marking') as RepPMarkingCandidate;
@@ -824,6 +826,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       return { status: 'replayed' as const, marking: prior,
         location: storedLocationSummary(attempt.get('locationSummary')), locationEvidence: null };
     }
+    assertRepPCompetenceAcceptsMarking(competenceFence, context.workspace_id, input.workDate.slice(0, 7));
     const currentPermitData = currentPermit.data() as OfflinePermitDocument | undefined;
     if (!currentPermitData || currentPermitData.status !== 'active'
       || currentPermitData.deviceKeyId !== evidence.deviceKeyId || currentPermitData.bootCount !== evidence.bootCount) {
@@ -959,7 +962,7 @@ async function issueRepPReceipt(deps: Dependencies, marking: RepPMarkingCandidat
 async function loadOwnReceipt(context: ServerUserContext, receiptId: string, deps: Dependencies) {
   const notFound = () => fail('REP_P_RECEIPT_NOT_FOUND', 'Comprovante não encontrado.', 'NOT_FOUND');
   if (/^pilot_[a-f0-9]{64}$/.test(receiptId)) {
-    const receipt = await deps.repDb.collection(PILOT_MARKINGS).doc(receiptId).get();
+    const receipt = await deps.pilotDb.collection(PILOT_MARKINGS).doc(receiptId).get();
     if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id
       || receipt.get('employeeId') !== context.decoded.uid || !validPilotMarking(receipt.data())) throw notFound();
     return { receipt, pilot: true as const };
@@ -1127,11 +1130,11 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
   if (!parsed.success) throw fail('REP_P_CLASSIFICATION_INPUT_INVALID', 'Escolha uma classificação válida.');
   const deps = { ...defaults, ...injected };
   if (/^pilot_[a-f0-9]{64}$/.test(receiptId)) {
-    const receiptRef = deps.repDb.collection(PILOT_MARKINGS).doc(receiptId);
+    const receiptRef = deps.pilotDb.collection(PILOT_MARKINGS).doc(receiptId);
     const now = Timestamp.now();
     const classification = { purpose: parsed.data.purpose, source: 'declared' as const, status: 'confirmed' as const,
       updatedAt: now, updatedBy: context.decoded.uid };
-    return deps.repDb.runTransaction(async (tx) => {
+    return deps.pilotDb.runTransaction(async (tx) => {
       const receipt = await tx.get(receiptRef);
       const stored = receipt.data();
       if (!receipt.exists || !validPilotMarking(stored) || stored.workspaceId !== context.workspace_id
@@ -1146,7 +1149,7 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
         throw fail('REP_P_PILOT_CLASSIFICATION_CORRUPT', 'A trilha de classificação do ensaio está inconsistente.', 'DATA_INTEGRITY');
       }
       const revision = currentRevision + 1;
-      const classificationEventRef = deps.repDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
+      const classificationEventRef = deps.pilotDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
         .doc(digest([receiptId, 'classification', revision]));
       tx.create(classificationEventRef, { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
         employeeId: context.decoded.uid, markingId: receiptId, receiptId, revision,
@@ -1157,19 +1160,22 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
     });
   }
   const receiptRef = deps.repDb.collection(RECEIPTS).doc(receiptId);
+  const receipt = await receiptRef.get();
+  if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid) {
+    throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
+  }
+  const snapshot = receipt.get('snapshot') as RepPReceiptSnapshot;
+  const workDate = String(receipt.get('recordedDate'));
   const now = Timestamp.now();
   const classification = { purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', updatedAt: now,
     updatedBy: context.decoded.uid };
-  // Recibo e fechamento são decididos na mesma transação. Assim o mês não pode fechar entre a
-  // conferência e a alteração direta da classificação.
+  // A classificação pertence ao PTRP e não altera a ARP. Assim ela e o fechamento continuam
+  // coordenados na mesma transação mesmo com a ARP em banco dedicado.
   return deps.hrDb.runTransaction(async (tx) => {
-    const receipt = await tx.get(receiptRef);
-    if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid) {
-      throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
-    }
-    const workDate = String(receipt.get('recordedDate'));
     const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${workDate.slice(0, 7)}`);
+    const classificationRef = deps.hrDb.collection(CLASSIFICATIONS).doc(receiptId);
     const closure = await tx.get(closureRef);
+    const classificationDocument = await tx.get(classificationRef);
     const closureVersion = Number(closure.get('version') ?? 0);
     const headId = digest([context.workspace_id, context.decoded.uid, receiptId, closureVersion]);
     const headRef = deps.hrDb.collection('ptrp_markingClassificationRequestHeads').doc(headId);
@@ -1183,11 +1189,11 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
       tx.update(activeRef, { status: 'superseded', version: Number(active.get('version') ?? 0) + 1,
         updatedAt: now, supersededAt: now, supersededBy: context.decoded.uid });
     };
-    const currentClassification = receipt.get('classification') as { purpose?: string } | null | undefined;
+    const currentClassification = (classificationDocument.get('classification') ?? receipt.get('classification')) as { purpose?: string } | null | undefined;
     if (currentClassification?.purpose === parsed.data.purpose) {
       supersedeActive();
       if (head.exists && activePending) tx.set(headRef, { activeRequestId: null, activePurpose: null, updatedAt: now }, { merge: true });
-      return { classification: receipt.get('classification'), changeStatus: 'applied' as const };
+      return { classification: currentClassification, changeStatus: 'applied' as const };
     }
     if (closure.exists && closure.get('status') === 'closed') {
       if (activePending && active?.get('requestedPurpose') === parsed.data.purpose) {
@@ -1197,13 +1203,12 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
       const sequence = Number(head.get('sequence') ?? 0) + 1;
       const requestRef = deps.hrDb.collection('ptrp_markingClassificationRequests')
         .doc(digest([headId, sequence, parsed.data.purpose]));
-      const snapshot = receipt.get('snapshot') as RepPReceiptSnapshot;
       tx.create(requestRef, { id: requestRef.id, headId, requestSequence: sequence,
         workspaceId: context.workspace_id, employeeId: context.decoded.uid,
         employeeName: typeof context.userDoc.username === 'string' ? context.userDoc.username.slice(0, 120) : null,
         receiptId, workDate, competence: workDate.slice(0, 7), unitId: snapshot.executionUnitId,
         markedAt: snapshot.markedAt, nsr: snapshot.nsr, closureVersion, requestedPurpose: parsed.data.purpose,
-        currentClassification: receipt.get('classification') ?? null, status: 'in_review', version: 1,
+        currentClassification: currentClassification ?? null, status: 'in_review', version: 1,
         createdAt: now, updatedAt: now, createdBy: context.decoded.uid });
       tx.set(headRef, { id: headId, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
         receiptId, workDate, closureVersion, sequence, activeRequestId: requestRef.id,
@@ -1212,10 +1217,11 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
     }
     supersedeActive();
     if (head.exists && activePending) tx.set(headRef, { activeRequestId: null, activePurpose: null, updatedAt: now }, { merge: true });
-    const history = Array.isArray(receipt.get('classificationHistory')) ? receipt.get('classificationHistory') as unknown[] : [];
-    tx.update(receiptRef, { classification, classificationHistory: [...history.slice(-99), {
-      purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', at: now, actorUid: context.decoded.uid,
-    }] });
+    const history = Array.isArray(classificationDocument.get('history')) ? classificationDocument.get('history') as unknown[] : [];
+    tx.set(classificationRef, { schemaVersion: 1, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
+      receiptId, workDate, classification, history: [...history.slice(-99), {
+        purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', at: now, actorUid: context.decoded.uid,
+      }], updatedAt: now }, { merge: true });
     return { classification, changeStatus: 'applied' as const };
   });
 }
@@ -1258,21 +1264,23 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
   if (!parsed.success) throw fail('REP_P_HISTORY_INPUT_INVALID', 'Período de consulta inválido.');
   const input: RepPOwnHistoryRequest = parsed.data;
   const deps = { ...defaults, ...injected };
-  const baseFilters = (collection: string) => deps.repDb.collection(collection)
+  const baseFilters = (database: Firestore, collection: string) => database.collection(collection)
     .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeUid)
     .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
     .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1);
   const [snapshot, pilotSnapshot] = await Promise.all([
-    baseFilters(RECEIPTS).get(),
-    baseFilters(PILOT_MARKINGS).get(),
+    baseFilters(deps.repDb, RECEIPTS).get(),
+    baseFilters(deps.pilotDb, PILOT_MARKINGS).get(),
   ]);
-  const official = snapshot.docs.map((document) => {
+  const overlays = snapshot.docs.length ? await deps.hrDb.getAll(...snapshot.docs
+    .map((document) => deps.hrDb.collection(CLASSIFICATIONS).doc(document.id))) : [];
+  const official = snapshot.docs.map((document, index) => {
     const receipt = document.get('snapshot') as RepPReceiptSnapshot;
     return { receiptId: document.id, workDate: String(document.get('recordedDate')), nsr: receipt.nsr,
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null,
-      classification: document.get('classification') ?? null, pilot: false as const };
+      classification: overlays[index]?.get('classification') ?? document.get('classification') ?? null, pilot: false as const };
   });
   const pilot = pilotSnapshot.docs.flatMap((document) => {
     const data = document.data();
@@ -1293,7 +1301,7 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
 export async function readRepPPilotMarkingsForBank(workspaceId: string, employeeId: string, startDate: string, endDate: string,
   injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const snapshot = await deps.repDb.collection(PILOT_MARKINGS)
+  const snapshot = await deps.pilotDb.collection(PILOT_MARKINGS)
     .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeId)
     .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate)
     .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();

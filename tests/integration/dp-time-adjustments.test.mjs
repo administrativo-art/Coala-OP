@@ -7,6 +7,7 @@ import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-saf
 assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const { repPDbAdmin } = await import('../../src/lib/firebase-rep-p-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { createOwnAdjustment, decideAdjustment, listAdjustmentsForReview, listOwnAdjustments, TREATMENTS, CLOSURES }
@@ -22,7 +23,7 @@ test('ajuste agrupado só aparece e só pode ser decidido por quem acessa todas 
   const permissions = structuredClone(defaultGuestPermissions); permissions.dp.requests.review = true;
   const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitA] }, profileId: null,
     permissions, isDefaultAdmin: false, workspace_id: workspaceId };
-  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
   await hrDbAdmin.collection('ptrp_adjustmentRequests').doc(adjustmentId).set({
     id: adjustmentId, workspaceId, employeeUid: `${prefix}-employee`, employeeName: 'Maria', workDate: '2026-08-12',
     kind: 'include', status: 'in_review', version: 1, establishmentId: `${prefix}-establishment`, unitId: unitA,
@@ -47,13 +48,14 @@ test('classificação é idempotente, respeita a versão fechada e nunca aprova 
   const workDate = '2026-08-12';
   const receiptId = `${prefix}-receipt`;
   const closureRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-08`);
-  const receiptRef = hrDbAdmin.collection('repP_receipts').doc(receiptId);
+  const receiptRef = repPDbAdmin.collection('repP_receipts').doc(receiptId);
+  const classificationRef = hrDbAdmin.collection('ptrp_markingClassifications').doc(receiptId);
   const owner = { decoded: { uid: employeeId }, userDoc: { id: employeeId, username: 'Maria', unitIds: [unitId] }, profileId: null,
     permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
   const permissions = structuredClone(defaultGuestPermissions); permissions.dp.requests.review = true;
   const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitId] }, profileId: null,
     permissions, isDefaultAdmin: false, workspace_id: workspaceId };
-  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock: { async read() { return { instant: new Date() }; } } };
   await Promise.all([
     receiptRef.set({ workspaceId, employeeId, recordedDate: workDate, status: 'issued', snapshot: {
       nsr: 17, markedAt: `${workDate}T08:00:00-0300`, executionUnitId: unitId,
@@ -68,7 +70,8 @@ test('classificação é idempotente, respeita a versão fechada e nunca aprova 
   assert.equal(request?.version, 1, 'retry idêntico não cria outro ato');
   const firstRequestId = request.id;
   await decideAdjustment(reviewer, request.id, { action: 'approve', expectedVersion: request.version, reason: 'Classificação conferida com o colaborador.' }, deps);
-  assert.equal((await receiptRef.get()).get('classification').purpose, 'break_start');
+  assert.equal((await classificationRef.get()).get('classification').purpose, 'break_start');
+  assert.equal((await receiptRef.get()).get('classification'), undefined, 'a reclassificação não altera a ARP');
 
   await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps);
   await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps);
@@ -88,11 +91,11 @@ test('classificação é idempotente, respeita a versão fechada e nunca aprova 
   await closureRef.set({ status: 'open', version: 2 }, { merge: true });
   await assert.rejects(() => decideAdjustment(reviewer, request.id,
     { action: 'approve', expectedVersion: request.version, reason: 'Tentativa contra fechamento reaberto.' }, deps), /fechamento mudou/i);
-  await receiptRef.set({ classificationHistory: Array.from({ length: 105 }, (_, index) => ({ purpose: 'journey_start', index })) }, { merge: true });
+  await classificationRef.set({ history: Array.from({ length: 105 }, (_, index) => ({ purpose: 'journey_start', index })) }, { merge: true });
   assert.equal((await classifyOwnRepPMarking(owner, receiptId, { purpose: 'journey_end' }, deps)).changeStatus, 'applied');
-  const finalReceipt = await receiptRef.get();
-  assert.equal(finalReceipt.get('classification').purpose, 'journey_end');
-  assert.equal(finalReceipt.get('classificationHistory').length, 100, 'histórico fica limitado');
+  const finalClassification = await classificationRef.get();
+  assert.equal(finalClassification.get('classification').purpose, 'journey_end');
+  assert.equal(finalClassification.get('history').length, 100, 'histórico fica limitado');
   assert.equal((await hrDbAdmin.collection('ptrp_markingClassificationRequests').doc(request.id).get()).get('status'), 'superseded');
 });
 
@@ -104,7 +107,7 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
   const unitId = `${prefix}-unit`;
   const workDate = '2026-10-16';
   const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00.000Z') }; } };
-  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock };
   const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin` }, profileId: null,
     permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
   const titular = { decoded: { uid: userId }, userDoc: { id: userId, username: 'Maria', unitIds: [unitId] }, profileId: null,
@@ -122,7 +125,7 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
     validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId],
     jobFunctionIds: [], sourceDocumentId: 'admission', sourceReason: 'Admissão conferida para o ensaio' }] });
   const receiptId = `${prefix}-receipt`;
-  await hrDbAdmin.collection('repP_receipts').doc(receiptId).set({ workspaceId, employeeId: userId, recordedDate: workDate,
+  await repPDbAdmin.collection('repP_receipts').doc(receiptId).set({ workspaceId, employeeId: userId, recordedDate: workDate,
     status: 'issued', snapshot: { nsr: 7, markedAt: `${workDate}T13:14:00-0300`, executionUnitId: unitId } });
 
   // Horário errado: desconsidera a 13:14 e inclui 13:30, com justificativa.
@@ -159,7 +162,7 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
   const treatments = (await hrDbAdmin.collection(TREATMENTS).where('adjustmentId', '==', created.id).get()).docs.map((doc) => doc.data());
   assert.deepEqual(treatments.map((item) => item.type).sort(), ['discard', 'inclusion']);
   assert.equal(treatments.find((item) => item.type === 'discard').originalNsr, 7);
-  assert.equal((await hrDbAdmin.collection('repP_receipts').doc(receiptId).get()).get('snapshot').markedAt, `${workDate}T13:14:00-0300`);
+  assert.equal((await repPDbAdmin.collection('repP_receipts').doc(receiptId).get()).get('snapshot').markedAt, `${workDate}T13:14:00-0300`);
   const own = await listOwnAdjustments(titular, { month: '2026-10' }, deps);
   assert.equal(own.treatments.length, 2);
   assert.equal(treatments[0].approvalActHash, approved.acts[1].hash);

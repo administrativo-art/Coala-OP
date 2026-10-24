@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 /**
- * A ARP do REP-P mora em coleções `repP_*` do coala-rh, banco compartilhado com o RH.
+ * A ARP oficial do REP-P mora no banco dedicado coala-rep-p. Piloto e PTRP continuam no coala-rh.
  * A norma exige que os originais não sejam apagados nem alterados, direta ou indiretamente
  * (Anexo IX, item 7). Este teste impede os caminhos estáticos de exclusão que o banco
  * compartilhado abriria.
  */
 const ARP_WRITERS = [
+  'src/features/dp/rep-p/competence-fence.server.ts',
   'src/features/dp/rep-p/location-policy.server.ts',
   'src/features/dp/rep-p/monitor.server.ts',
   'src/features/dp/rep-p/service.server.ts',
@@ -25,7 +26,7 @@ function sources(directory: string): string[] {
 }
 const files = [...sources('src'), ...sources('functions/src')].map((path) => ({ path, text: readFileSync(path, 'utf8') }));
 
-describe('ARP do REP-P protegida contra exclusão no banco compartilhado', () => {
+describe('ARP do REP-P protegida contra exclusão no banco dedicado', () => {
   it('only the bounded REP-P services reference repP_ collections', () => {
     assert.deepEqual(files.filter((file) => file.text.includes('repP_')).map((file) => file.path).sort(), [...ARP_WRITERS].sort());
   });

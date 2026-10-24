@@ -14,6 +14,7 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import type { DPAbsenceType, DPOvertimePolicy } from '@/types';
@@ -35,7 +36,7 @@ const POLICY_LIMIT = 100;
 const CARRY_LOOKBACK_MONTHS = 36;
 
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore; now: () => Date };
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date() };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, now: () => new Date() };
 export type BankMonthDocument = BankMonthRecord & { schemaVersion: 1; algorithmVersion: string; uid: string; inputHash: string;
   policies: Array<{ id: string; version: number }>; generatedAt: string; createdBy: string };
 

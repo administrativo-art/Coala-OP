@@ -14,8 +14,15 @@ Use as amostras geradas por `scripts/rep-p-homologation-samples.mts`. Os serviç
 
 - [ ] Enviar `AMOSTRA_AFD….txt` com o `.p7s` correspondente (assinatura destacada).
 - [ ] Assinatura ICP-Brasil íntegra sobre o conteúdo exato do arquivo.
-- [ ] Conferir a política. O sistema gera CAdES-BES sem `sigPolicyId`. Se o Verificador exigir AD-RB, registrar como "não conforme" para o Doc Brown e implementar a política antes do piloto.
+- [ ] Conferir a política reportada: o sistema declara a AD-RB vigente no CAdES, com `sigPolicyId` e `signing-certificate-v2`, ancorada na cópia oficial preservada no repositório. Divergência no Verificador bloqueia o piloto.
 - [ ] Salvar o relatório em PDF.
+
+## Responsável técnico (e-CPF)
+
+- [ ] Assinar `AMOSTRA_assinatura-eCPF.pdf` no computador do titular, sem enviar o `.pfx` ou a senha ao sistema.
+- [ ] Enviar somente o PDF assinado ao Validar.
+- [ ] Conferir cadeia ICP-Brasil, integridade, nome/CPF do titular, qualificação e validade do certificado na data da assinatura.
+- [ ] Salvar o relatório em PDF e remover a amostra assinada depois da conferência; o atestado definitivo será assinado separadamente quando estiver preenchido.
 
 ## Fechamento
 
