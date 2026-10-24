@@ -57,7 +57,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `measure-conversion` | 1 | Traçado | [Conversão local](flows/conversions.md) — cálculo, acesso e ausência de escrita conferidos; renderização visual não testada |
 | `operations` | 1 | Traçado | [Agregação do painel](flows/operations-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `organization` | 1 | Traçado | [Organograma](flows/organization.md) — percurso complementado; verificação integrada pendente |
-| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — documento mascarado não gera divergência, revalidação pelo extrato e política única de retry possuem cobertura unitária; demais fronteiras bancárias pendentes |
+| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — `REALIZADO`, divergência histórica apresentada como pago/revisão, recuperação versionada após duas recusas e conciliação conservadora por conjunto possuem cobertura unitária; fronteiras bancárias e gravação integrada permanecem pendentes |
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |

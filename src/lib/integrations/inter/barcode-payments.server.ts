@@ -46,7 +46,7 @@ export function interBarcodePaymentPayload(input: {
 
 export function mapInterBarcodeStatus(rawStatus: string | undefined, scheduledFor?: string | null) {
   const status = String(rawStatus ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
-  if (["PAGO", "EFETIVADO", "PROCESSADO", "CONCLUIDO", "LIQUIDADO"].includes(status)) return "paid" as const;
+  if (["PAGO", "EFETIVADO", "PROCESSADO", "CONCLUIDO", "LIQUIDADO", "REALIZADO"].includes(status)) return "paid" as const;
   if (["REJEITADO", "RECUSADO", "CANCELADO"].includes(status)) return "rejected" as const;
   if (["EXPIRADO", "PRAZOEXPIRADO"].includes(status)) return "approval_expired" as const;
   if (["AGUARDANDOAPROVACAO", "EMAPROVACAO", "PENDENTEAPROVACAO"].includes(status)) return "awaiting_bank_approval" as const;
