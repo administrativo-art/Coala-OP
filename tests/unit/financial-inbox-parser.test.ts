@@ -220,6 +220,15 @@ test("não preserva scripts nem links com protocolos inseguros", () => {
   assert.deepEqual(extractExternalLinks("", html), ["https://seguro.example/doc"]);
 });
 
+test("remove CSS cru de Outlook quando o provedor o envia no texto do e-mail", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Boleto Bizneo",
+    text: "#outlook a { padding: 0; }\nbody { margin: 0; padding: 0; }\nOlá, segue o boleto.",
+  });
+  assert.equal(parsed.textContent, "Olá, segue o boleto.");
+  assert.doesNotMatch(parsed.textContent, /padding|margin|#outlook/);
+});
+
 test("extrai o endereço real de remetentes com nome de exibição", () => {
   assert.equal(extractEmailAddress("Urania | Maximus <urania.silva@grupomse.com>"), "urania.silva@grupomse.com");
 });

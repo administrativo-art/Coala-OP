@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth-server";
 import { createPaymentRequestSchema } from "@/features/financial/payment-requests/schemas";
 import { createPaymentRequest } from "@/features/financial/payment-requests/service.server";
 import { listPaymentRequests } from "@/features/financial/payment-requests/repository.server";
+import { getInterBankingStatusProxyUrl, isInterConfigured } from "@/lib/integrations/inter/config.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,12 @@ export async function GET(request: NextRequest) {
     if (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.paymentRequests?.view)) {
       return NextResponse.json({ error: "Sem permissão para visualizar solicitações de pagamento." }, { status: 403 });
     }
-    return NextResponse.json({ requests: await listPaymentRequests() }, { headers: { "Cache-Control": "private, no-store" } });
+    const submissionAvailable = isInterConfigured();
+    return NextResponse.json({
+      requests: await listPaymentRequests(),
+      submissionAvailable,
+      submissionBaseUrl: submissionAvailable ? null : getInterBankingStatusProxyUrl(),
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao carregar solicitações." }, { status: 400 });
   }

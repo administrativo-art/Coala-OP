@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CircleHelp, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleHelp, ExternalLink, FileText, Loader2, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -169,25 +169,31 @@ function dueInfo(item: BankPaymentRequest): DueInfo {
 /*  Ação por linha                                                              */
 /* -------------------------------------------------------------------------- */
 
-type RowActionKind = "authorize" | "submit" | "refresh" | "proof" | "review";
+type RowActionKind = "authorize" | "submit" | "refresh" | "proof" | "review" | "continue_published";
 type RowAction = { kind: RowActionKind; label: string; primary: boolean } | null;
 
 function rowAction(
   item: BankPaymentRequest,
   perms: ReturnType<typeof useAuth>["permissions"],
+  submissionAvailable: boolean,
+  submissionBaseUrl: string | null,
 ): RowAction {
   const pr = perms.financial?.paymentRequests;
   if (!pr) return null;
 
   if (item.status === "awaiting_financial_authorization" && pr.authorize) {
-    const combined = item.sourceType === "financial_inbox" && pr.submit;
+    const combined = item.sourceType === "financial_inbox" && pr.submit && submissionAvailable;
     return { kind: "authorize", label: combined ? "Autorizar e enviar" : "Autorizar", primary: true };
   }
   if (
     canRetryDefinitivelyRejectedPayment(item)
     && pr.submit
   ) {
-    return { kind: "submit", label: "Reenviar ao Inter", primary: true };
+    return submissionAvailable
+      ? { kind: "submit", label: "Reenviar ao Inter", primary: true }
+      : submissionBaseUrl
+        ? { kind: "continue_published", label: "Continuar no ambiente publicado", primary: true }
+        : null;
   }
   if (canCreateCorrectedPaymentRequest(item)
     && pr.create
@@ -196,7 +202,11 @@ function rowAction(
     return { kind: "review", label: "Revisar cobrança", primary: true };
   }
   if (item.status === "ready_to_submit" && pr.submit) {
-    return { kind: "submit", label: "Enviar ao Inter", primary: true };
+    return submissionAvailable
+      ? { kind: "submit", label: "Enviar ao Inter", primary: true }
+      : submissionBaseUrl
+        ? { kind: "continue_published", label: "Continuar no ambiente publicado", primary: true }
+        : null;
   }
   if (
     (["submitting", "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(item.status)
@@ -236,6 +246,10 @@ export function PaymentRequestsPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<BankPaymentRequest | null>(null);
+  const [reviewWorking, setReviewWorking] = useState<"analyze" | "recover" | null>(null);
+  const [submissionAvailable, setSubmissionAvailable] = useState(false);
+  const [submissionBaseUrl, setSubmissionBaseUrl] = useState<string | null>(null);
 
   const [authorizeTarget, setAuthorizeTarget] = useState<BankPaymentRequest | null>(null);
   const [submitTarget, setSubmitTarget] = useState<BankPaymentRequest | null>(null);
@@ -262,7 +276,10 @@ export function PaymentRequestsPage() {
     if (!firebaseUser) return;
     setLoading(true);
     try {
-      setItems((await api("/api/financial/payment-requests")).requests ?? []);
+      const payload = await api("/api/financial/payment-requests");
+      setItems(payload.requests ?? []);
+      setSubmissionAvailable(payload.submissionAvailable === true);
+      setSubmissionBaseUrl(typeof payload.submissionBaseUrl === "string" ? payload.submissionBaseUrl : null);
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar." });
     } finally {
@@ -278,17 +295,26 @@ export function PaymentRequestsPage() {
 
   async function authorizeOne(item: BankPaymentRequest) {
     await api(`/api/financial/payment-requests/${item.id}/authorize`, { method: "POST" });
-    if (item.sourceType === "financial_inbox" && pr?.submit) {
+    if (item.sourceType === "financial_inbox" && pr?.submit && submissionAvailable) {
       await api(`/api/financial/payment-requests/${item.id}/submit`, { method: "POST" });
     }
+  }
+
+  function openReview(item: BankPaymentRequest) {
+    setDrawerId(null);
+    setReviewTarget(item);
   }
 
   async function runAction(item: BankPaymentRequest, kind: RowActionKind) {
     if (kind === "authorize") return setAuthorizeTarget(item);
     if (kind === "submit") return setSubmitTarget(item);
     if (kind === "proof") return void openProof(item.id);
+    if (kind === "continue_published" && submissionBaseUrl) {
+      window.open(`${submissionBaseUrl}${FINANCIAL_ROUTES.paymentRequests}`, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (kind === "review" && item.sourceType === "financial_inbox") {
-      window.location.assign(`${FINANCIAL_ROUTES.inbox}?sourceId=${encodeURIComponent(item.sourceId)}`);
+      void openReview(item);
       return;
     }
 
@@ -305,7 +331,7 @@ export function PaymentRequestsPage() {
   }
 
   async function confirmAuthorize(item: BankPaymentRequest) {
-    const combined = item.sourceType === "financial_inbox" && pr?.submit;
+    const combined = item.sourceType === "financial_inbox" && pr?.submit && submissionAvailable;
     setWorking(`${item.id}:authorize`);
     try {
       await authorizeOne(item);
@@ -329,6 +355,36 @@ export function PaymentRequestsPage() {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha na operação." });
     } finally {
       setWorking(null);
+    }
+  }
+
+  async function reprocessReview() {
+    if (!reviewTarget) return;
+    setReviewWorking("analyze");
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(reviewTarget.sourceId)}/analyze`, { method: "POST" });
+      toast({ title: "Cobrança reprocessada.", description: "A extração foi atualizada sem autorizar ou enviar o pagamento." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao reprocessar a cobrança." });
+    } finally {
+      setReviewWorking(null);
+    }
+  }
+
+  async function recoverReview() {
+    if (!reviewTarget) return;
+    setReviewWorking("recover");
+    try {
+      await api(`/api/financial/payment-requests/${encodeURIComponent(reviewTarget.id)}/refresh`, { method: "POST" });
+      await api(`/api/financial/payment-requests/${encodeURIComponent(reviewTarget.id)}/recover`, { method: "POST" });
+      toast({ title: "Nova tentativa criada.", description: "A tentativa recusada foi preservada e a nova solicitação voltou para autorização." });
+      setReviewTarget(null);
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao criar a nova tentativa." });
+    } finally {
+      setReviewWorking(null);
     }
   }
 
@@ -455,6 +511,7 @@ export function PaymentRequestsPage() {
   return (
     <PageContainer variant="compact" className="space-y-5 pb-24">
       <PageHero
+        compact
         kicker="Financeiro · Despesas"
         title="Autorizações bancárias"
         subtitle="Autorização, aprovação bancária, conciliação e comprovantes Pix."
@@ -528,7 +585,7 @@ export function PaymentRequestsPage() {
                 selected={selected.includes(item.id)}
                 selectable={selectable(item)}
                 busy={working?.startsWith(`${item.id}:`) ?? false}
-                action={rowAction(item, permissions)}
+                action={rowAction(item, permissions, submissionAvailable, submissionBaseUrl)}
                 onOpen={() => setDrawerId(item.id)}
                 onToggle={() => toggleSelect(item)}
                 onAction={(kind) => void runAction(item, kind)}
@@ -558,7 +615,7 @@ export function PaymentRequestsPage() {
         >
           <DetailDrawer
             item={drawerItem}
-            action={rowAction(drawerItem, permissions)}
+            action={rowAction(drawerItem, permissions, submissionAvailable, submissionBaseUrl)}
             busy={working?.startsWith(`${drawerItem.id}:`) ?? false}
             canViewProof={!!pr?.viewProof}
             onAction={(kind) => void runAction(drawerItem, kind)}
@@ -567,12 +624,30 @@ export function PaymentRequestsPage() {
         </SidePanel>
       ) : null}
 
+      {reviewTarget ? (
+        <ChargeReviewDrawer
+          item={reviewTarget}
+          working={reviewWorking}
+          canAnalyze={permissions.financial?.inbox?.analyze === true}
+          canRecover={canCreateCorrectedPaymentRequest(reviewTarget)
+            && pr?.create === true
+            && permissions.financial?.inbox?.view === true
+            && (permissions.financial?.inbox?.analyze === true || permissions.financial?.inbox?.link === true)}
+          onClose={() => {
+            if (reviewWorking) return;
+            setReviewTarget(null);
+          }}
+          onReprocess={() => void reprocessReview()}
+          onRecover={() => void recoverReview()}
+        />
+      ) : null}
+
       {/* Confirmação — autorizar uma */}
       <AlertDialog open={Boolean(authorizeTarget)} onOpenChange={(open) => !open && setAuthorizeTarget(null)}>
         <AlertDialogContent className="rounded-ds-modal border-ds-border bg-ds-surface font-ds shadow-ds-modal">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[17px] font-extrabold text-ds-ink">
-              {authorizeTarget?.sourceType === "financial_inbox" && pr?.submit
+              {authorizeTarget?.sourceType === "financial_inbox" && pr?.submit && submissionAvailable
                 ? "Autorizar e enviar ao Banco Inter?"
                 : "Autorizar este pagamento?"}
             </AlertDialogTitle>
@@ -580,9 +655,11 @@ export function PaymentRequestsPage() {
               {authorizeTarget
                 ? `${authorizeTarget.description} · ${formatCurrency(authorizeTarget.amount)}.`
                 : ""}
-              {authorizeTarget?.sourceType === "financial_inbox" && pr?.submit
+              {authorizeTarget?.sourceType === "financial_inbox" && pr?.submit && submissionAvailable
                 ? " Ao confirmar, o Coala enviará a solicitação ao Banco Inter. Dependendo da conta, ainda poderá haver aprovação final no aplicativo ou Internet Banking."
-                : " A confirmação registra a autorização financeira no Coala."}
+                : submissionBaseUrl
+                  ? " A confirmação registra a autorização financeira no Coala. O envio deverá ser concluído no ambiente publicado."
+                  : " A confirmação registra a autorização financeira no Coala."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -638,7 +715,8 @@ export function PaymentRequestsPage() {
                 sumOf(selectedItems),
               )}.`}{" "}
               Cada pagamento é autorizado individualmente. Os que vierem de cobranças recebidas também são enviados ao
-              Banco Inter, quando você tem permissão para isso.
+              Banco Inter quando você tem permissão e este ambiente possui a integração bancária; caso contrário, ficam
+              prontos para conclusão no ambiente publicado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -658,6 +736,99 @@ export function PaymentRequestsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </PageContainer>
+  );
+}
+
+type ChargeReviewDrawerProps = {
+  item: BankPaymentRequest;
+  working: "analyze" | "recover" | null;
+  canAnalyze: boolean;
+  canRecover: boolean;
+  onClose: () => void;
+  onReprocess: () => void;
+  onRecover: () => void;
+};
+
+function ChargeReviewDrawer({
+  item,
+  working,
+  canAnalyze,
+  canRecover,
+  onClose,
+  onReprocess,
+  onRecover,
+}: ChargeReviewDrawerProps) {
+  const amount = formatCurrency(item.amount);
+  const supplierTaxId = item.paymentRail === "barcode"
+    ? item.barcodeSnapshot.beneficiaryDocument ?? "—"
+    : item.beneficiarySnapshot?.document ?? "—";
+  const dueDate = item.paymentRail === "barcode" ? item.barcodeSnapshot.dueDate : null;
+  const scheduledFor = item.paymentRail === "barcode" ? item.barcodeSnapshot.scheduledFor : item.scheduledFor;
+  const sourceDescription = item.description || partyName(item);
+  const hasAction = canAnalyze || canRecover;
+
+  return (
+    <SidePanel
+      open
+      onOpenChange={(open) => { if (!open && !working) onClose(); }}
+      kicker="Revisão da cobrança"
+      title={sourceDescription}
+      subtitle={`${sourceLabel(item.sourceType)} · revisão rápida da tentativa bancária`}
+      highlights={<span className="font-mono">{amount}</span>}
+      className="sm:w-[560px]"
+    >
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip item={item} />
+          <StatusPill variant="neutral">Cobrança recebida</StatusPill>
+        </div>
+
+        <section className="rounded-2xl border p-4">
+          <div className="flex items-start gap-3">
+            <FileText className="mt-0.5 h-5 w-5 shrink-0 text-ds-info" />
+            <div><h3 className="text-sm font-bold">Dados extraídos para a tentativa</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">Esta revisão usa somente os dados já preparados para o banco. E-mail e anexos ficam na Caixa de cobranças.</p></div>
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-xs text-muted-foreground">Descrição</dt><dd className="font-semibold">{item.description || "—"}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">CNPJ do favorecido</dt><dd className="font-semibold">{supplierTaxId}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-mono font-semibold">{amount}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Vencimento</dt><dd className="font-semibold">{formatFinancialDate(dueDate) ?? "—"}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Pagamento pretendido</dt><dd className="font-semibold">{formatFinancialDate(scheduledFor) ?? "Imediato"}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Trilho</dt><dd className="font-semibold">{railLabel(item, true)}</dd></div>
+            {item.paymentRail === "barcode" ? <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Código de barras / linha digitável</dt><dd className="break-all font-mono text-xs font-semibold">{item.barcodeSnapshot.maskedCode || "—"}</dd></div> : null}
+          </dl>
+        </section>
+
+        {item.lastError ? (
+          <section className="rounded-2xl border border-ds-danger bg-ds-danger-bg p-4">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-ds-danger">Erro registrado pelo Banco Inter</p>
+            <p className="mt-2 text-sm font-semibold text-ds-danger">{item.lastError.safeMessage}</p>
+            <p className="mt-2 text-xs text-ds-danger">Código {item.lastError.code} · {formatFinancialDateTime(item.lastError.occurredAt)}</p>
+          </section>
+        ) : null}
+
+        <section className="rounded-2xl border border-ds-info bg-ds-info-bg p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-ds-info" />
+            <div><h3 className="text-sm font-bold">Resolver nesta tela</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">A autorização permanece aqui. Você pode reprocessar a cobrança ou criar uma nova tentativa sem perder a tentativa recusada.</p></div>
+          </div>
+          {hasAction ? (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {canAnalyze ? <Button onClick={onReprocess} disabled={working !== null}>{working === "analyze" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Reprocessar documento</Button> : null}
+              {canRecover ? <Button onClick={onRecover} disabled={working !== null}>{working === "recover" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Criar nova tentativa</Button> : null}
+            </div>
+          ) : <p className="mt-3 text-xs text-muted-foreground">Seu perfil pode consultar o erro, mas não possui permissão para reprocessar ou criar uma tentativa.</p>}
+        </section>
+
+        <section className="rounded-2xl border p-4 text-sm">
+          <p className="text-xs text-muted-foreground">Validação aprofundada</p>
+          <p className="mt-1 text-sm leading-5 text-ds-ink-muted">Para conferir o e-mail original, anexos, documentos e toda a trilha de análise, abra a cobrança na Caixa.</p>
+          <Button className="mt-4 w-full" variant="ds-secondary" asChild>
+            <Link href={`${FINANCIAL_ROUTES.inbox}?sourceId=${encodeURIComponent(item.sourceId)}`}>Abrir cobrança na Caixa</Link>
+          </Button>
+        </section>
+      </div>
+    </SidePanel>
   );
 }
 
@@ -782,7 +953,9 @@ function RequestRow({
               onClick={() => onAction(action.kind)}
             >
               {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              {action.label === "Ver comprovante" ? <ExternalLink aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" /> : null}
+              {action.kind === "proof" || action.kind === "continue_published"
+                ? <ExternalLink aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
+                : null}
               {action.label}
             </Button>
           ) : !hasConsultableIssue(item) ? (
