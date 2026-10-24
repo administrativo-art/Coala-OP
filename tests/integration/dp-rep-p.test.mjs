@@ -8,6 +8,7 @@ assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
 const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const { repPDbAdmin } = await import('../../src/lib/firebase-rep-p-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { classifyOwnRepPMarking, exportOwnRepPReceipts, exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData, REP_P_PILOT_CLASSIFICATION_EVENTS,
@@ -69,7 +70,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       return { bucket: 'fiscal-test', generation, retainUntilTime, retentionMode: 'Locked' };
     },
   };
-  const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
+  const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
     markingEnabled: true, fiscalStore,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
@@ -118,13 +119,13 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
       privacyNoticeUrl: 'https://example.test/privacidade', legalBasisReference: 'Aditivo LGPD aprovado pelo controlador',
       retentionDays: 365, participantUserIds: [userId], activationConfirmation: true,
-    }, { mainDb: dbAdmin, repDb: hrDbAdmin }), { code: 'DP_TIME_LOCATION_POLICY_INPUT_INVALID' });
+    }, { mainDb: dbAdmin, repDb: repPDbAdmin }), { code: 'DP_TIME_LOCATION_POLICY_INPUT_INVALID' });
     const savedLocationPolicy = await saveRepPLocationPolicy(context, executionUnitId, {
       expectedRevision: 0, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
       privacyNoticeUrl: 'https://example.test/privacidade', legalBasisReference: 'Aditivo LGPD aprovado pelo controlador',
       retentionDays: 1_825, participantUserIds: [userId], activationConfirmation: true,
-    }, { mainDb: dbAdmin, repDb: hrDbAdmin, now: () => new Date('2026-10-18T10:00:00.000Z') });
+    }, { mainDb: dbAdmin, repDb: repPDbAdmin, now: () => new Date('2026-10-18T10:00:00.000Z') });
     assert.equal(savedLocationPolicy.policy.revision, 1);
 
     const options = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
@@ -162,7 +163,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.ok(first.marking.executionUnitId === executionUnitId && second.marking.executionUnitId === executionUnitId);
     assert.deepEqual(first.location, { captureStatus: 'captured', evaluation: 'inside' });
     assert.deepEqual(second.location, { captureStatus: 'denied', evaluation: 'indeterminate' });
-    const locationEvidence = await hrDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get();
+    const locationEvidence = await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get();
     assert.equal(locationEvidence.size, 2);
     const capturedEvidence = locationEvidence.docs.find((doc) => doc.get('capture.status') === 'captured');
     assert.equal(capturedEvidence.get('capture.location.latitude'), mobileLocation.latitude);
@@ -213,16 +214,16 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(pendingReceipts.receipts.find((item) => item.receiptId === second.receiptId).lastIssue, 'REP_P_RECEIPT_SIGNATURE_REJECTED');
 
     // Reemissão automática: emite os pendentes sem registrar batida nem mexer no NSR.
-    const nsrBeforeRetry = (await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
-    const arpSnapshot = async () => (await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get())
+    const nsrBeforeRetry = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
+    const arpSnapshot = async () => (await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get())
       .docs.map((doc) => [doc.id, doc.get('nsr'), doc.get('hash') ?? null]).sort((a, b) => a[1] - b[1]);
     const arpBeforeRetry = await arpSnapshot();
     const at = (minutes) => () => new Date(Date.now() + minutes * 60_000);
-    const secondRef = hrDbAdmin.collection('repP_receipts').doc(second.receiptId);
+    const secondRef = repPDbAdmin.collection('repP_receipts').doc(second.receiptId);
     // A falha na batida adiou a próxima tentativa em 15 min; antes disso a rotina não insiste.
     assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, dependencies), { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
     // Fila justa: um pendente antigo que falha sempre é adiado e não ocupa o lote dos seguintes.
-    const stuckRef = hrDbAdmin.collection('repP_receipts').doc(repPIdentifiersForTest.receiptKey(establishmentId, 999_999_999));
+    const stuckRef = repPDbAdmin.collection('repP_receipts').doc(repPIdentifiersForTest.receiptKey(establishmentId, 999_999_999));
     await stuckRef.set({ schemaVersion: 1, workspaceId, establishmentId, employeeId: userId, status: 'pending', attempts: 3,
       lastIssue: null, createdAt: Timestamp.fromMillis(Date.now() - 86_400_000), nextAttemptAt: Timestamp.fromMillis(Date.now() - 86_400_000) });
     assert.deepEqual(await retryPendingRepPReceipts({ workspaceId, limit: 1 }, { ...dependencies, now: at(16) }),
@@ -246,7 +247,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     await Promise.all(monitorNotices.docs.filter((doc) => monitored.opened.includes(doc.get('dedupeKey'))).map((doc) => doc.ref.delete()));
     assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner, now: at(47) }),
       { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
-    assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
     assert.deepEqual(await arpSnapshot(), arpBeforeRetry);
     assert.equal(verifyRepPSignedPdf((await getOwnRepPReceipt(context, second.receiptId, dependencies)).bytes).valid, true);
     const receiptArchive = await exportOwnRepPReceipts(context,
@@ -258,21 +259,21 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { startDate: '2026-10-18', endDate: '2026-10-18' }, dependencies)).total, 0);
 
     // Acesso do próprio trabalhador sem prazo de expiração: um comprovante de 3 dias segue disponível (mínimo legal: 48 h).
-    const receiptRef = hrDbAdmin.collection('repP_receipts').doc(first.receiptId);
+    const receiptRef = repPDbAdmin.collection('repP_receipts').doc(first.receiptId);
     await receiptRef.update({ createdAt: Timestamp.fromMillis(Date.now() - 72 * 3_600_000) });
     assert.equal((await getOwnRepPReceipt(context, first.receiptId, dependencies)).sha256, receipt.sha256);
 
-    const receiptSnapshot = await hrDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
+    const receiptSnapshot = await repPDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
     assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
 
     // Sem endereço da unidade de execução, o comprovante não poderia ser emitido: recusa sem consumir NSR.
-    const nsrBefore = (await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
+    const nsrBefore = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
     await execution.update({ address: '' });
     await assert.rejects(recordOwnRepPMarking(context,
       { attemptId: 'attempt-no-address', workDate: '2026-10-18', executionUnitId, channel: 'browser' }, dependencies),
     { code: 'REP_P_RECEIPT_PREREQUISITES_MISSING' });
-    assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBefore);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBefore);
     await execution.update({ address: 'Rua operacional, 2' });
 
     const replay = await recordOwnRepPMarking(context,
@@ -318,7 +319,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { establishmentId, startDate: '2026-10-18', endDate: '2026-10-18' }, { ...dependencies, fiscalStore: {
         async put() { throw new Error('storage unavailable'); },
       } }), { code: 'REP_P_AFD_ARCHIVE_FAILED' });
-    const exportAudit = await hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
+    const exportAudit = await repPDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get();
     assert.equal(exportAudit.size, 7);
     assert.ok(exportAudit.docs.some((doc) => doc.get('status') === 'archive_failed'));
     const expectedSignatureSha = createHash('sha256').update(Buffer.from(afd.signatureBase64, 'base64')).digest('hex');
@@ -339,16 +340,16 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
       privacyNoticeUrl: 'https://example.test/privacidade', legalBasisReference: 'Aditivo LGPD aprovado pelo controlador',
       retentionDays: 1_825, participantUserIds: [anotherUser.id], activationConfirmation: true,
-    }, { mainDb: dbAdmin, repDb: hrDbAdmin, now: () => new Date('2026-10-18T12:00:00.000Z') });
+    }, { mainDb: dbAdmin, repDb: repPDbAdmin, now: () => new Date('2026-10-18T12:00:00.000Z') });
     const excludedOptions = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
     assert.equal(excludedOptions.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'disabled');
     const excluded = await recordOwnRepPMarking(context, { attemptId: 'attempt-excluded-location', workDate: '2026-10-18',
       executionUnitId, channel: 'mobile', locationAttempt: { ...mobileLocation, captureId: 'capture-excluded' } }, dependencies);
     assert.equal(excluded.location, null);
-    assert.equal((await hrDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 2);
+    assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 2);
 
-    const eventSnapshot = await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
-    const attemptSnapshot = await hrDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get();
+    const eventSnapshot = await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
+    const attemptSnapshot = await repPDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get();
     assert.equal(eventSnapshot.size, 5);
     assert.equal(attemptSnapshot.size, 3);
     const markingEvents = eventSnapshot.docs.filter((doc) => doc.get('recordType') === '7');
@@ -360,16 +361,16 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     allRefs.push(...eventSnapshot.docs.map((doc) => doc.ref), ...attemptSnapshot.docs.map((doc) => doc.ref),
       ...exportAudit.docs.map((doc) => doc.ref), ...locationEvidence.docs.map((doc) => doc.ref));
   } finally {
-    const referenceEmployee = hrDbAdmin.collection('repP_employees')
+    const referenceEmployee = repPDbAdmin.collection('repP_employees')
       .doc(repPIdentifiersForTest.employeeKey(establishmentId, userId));
-    const referenceEstablishment = hrDbAdmin.collection('repP_establishments').doc(establishmentId);
-    const locationPolicyRef = repPLocationPolicyRef(hrDbAdmin, workspaceId, executionUnitId);
+    const referenceEstablishment = repPDbAdmin.collection('repP_establishments').doc(establishmentId);
+    const locationPolicyRef = repPLocationPolicyRef(repPDbAdmin, workspaceId, executionUnitId);
     const [eventsToDelete, attemptsToDelete, exportsToDelete, receiptsToDelete, evidenceToDelete, policyRevisions, policyAudit, accessAudit] = await Promise.all([
-      hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get(),
-      hrDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get(),
-      hrDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get(),
-      hrDbAdmin.collection('repP_receipts').where('establishmentId', '==', establishmentId).get(),
-      hrDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get(),
+      repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get(),
+      repPDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get(),
+      repPDbAdmin.collection('repP_exportAudit').where('establishmentId', '==', establishmentId).get(),
+      repPDbAdmin.collection('repP_receipts').where('establishmentId', '==', establishmentId).get(),
+      repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get(),
       locationPolicyRef.collection('revisions').get(),
       locationPolicyRef.collection('audit').get(),
       hrDbAdmin.collection('dp_timeRecordingAccessAudit').where('employeeUid', '==', userId).get(),
@@ -403,7 +404,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
       { server: '200.20.186.75', status: 'accepted', offsetMs: 6, roundTripMs: 20, stratum: 1 },
       { server: '200.20.186.94', status: 'accepted', offsetMs: 10, roundTripMs: 22, stratum: 1 },
     ] }; } };
-  const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
+  const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
     markingEnabled: false, pilotEnabled: true, pilotUserIds: new Set([userId]) };
   assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
     { workDate: '2026-10-22' }, dependencies), {
@@ -457,7 +458,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(recorded.marking.sequence, 1);
     assert.equal(recorded.marking.markedAt, '2026-10-22T09:15:00-0300');
     assert.equal(recorded.location, null);
-    assert.equal((await hrDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 0,
+    assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 0,
       'o servidor não persiste localização no ensaio, mesmo se um cliente adulterado a enviar');
     assert.equal((await pilotDayGuard.get()).exists, true, 'o dia do ensaio recebe trava transacional para ajustes formais');
     assert.equal((await pilotDayGuard.get()).get('domain'), 'pilot');
@@ -486,8 +487,8 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal((await hrDbAdmin.collection('repP_pilotMarkings').doc(recorded.receiptId).get()).get('classificationRevision'), 106);
     const bankPreview = await readRepPPilotMarkingsForBank(workspaceId, userId, '2026-10-22', '2026-10-22', dependencies);
     assert.equal(bankPreview.markings.length, 1);
-    assert.equal((await hrDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0);
-    assert.equal((await hrDbAdmin.collection('repP_receipts').where('workspaceId', '==', workspaceId).get()).size, 0);
+    assert.equal((await repPDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0);
+    assert.equal((await repPDbAdmin.collection('repP_receipts').where('workspaceId', '==', workspaceId).get()).size, 0);
 
     await assert.rejects(recordOwnRepPMarking({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
       { ...request, attemptId: 'not-allowed' }, { ...dependencies, pilotUserIds: new Set([userId]) }),

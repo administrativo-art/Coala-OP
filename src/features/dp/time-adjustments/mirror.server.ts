@@ -9,6 +9,7 @@ import { readRepPMarkingsForMirror } from '@/features/dp/rep-p/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 
@@ -22,7 +23,7 @@ import { actInstant, CLOSURES, closureKey } from './service.server';
 type Clock = { read(): Promise<{ instant: Date }> };
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore; clock: Clock };
 const unavailableClock: Clock = { async read() { throw new Error('Hora Legal não configurada.'); } };
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock: configuredRepPClock() ?? unavailableClock };
 type MirrorRecord = { snapshot: MirrorSnapshot; snapshotHash: string; rendererVersion: string; createdAt: string; createdBy: string; agreement: MirrorAgreement | null };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'AUTHORIZATION' | 'NOT_FOUND' = 'VALIDATION') {

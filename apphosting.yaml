@@ -98,6 +98,12 @@ env:
   # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
   - variable: REP_P_ICP_SIGNER_PEM
     secret: REP_P_ICP_SIGNER_PEM
+  # Bucket exclusivo dos pacotes AFD/AEJ. Cada objeto é gravado já com retenção Locked por 20 anos.
+  - variable: REP_P_FISCAL_STORAGE_BUCKET
+    value: "smart-converter-752gf-rep-p-fiscal"
+  # ARP oficial isolada do RH/PTRP; ensaios e dados acessórios continuam no coala-rh.
+  - variable: REP_P_FIRESTORE_DATABASE_ID
+    value: "coala-rep-p"
   # Contato da CT Sorvetes LTDA, identificada como desenvolvedora do PTRP no AEJ.
   - variable: PTRP_DEVELOPER_EMAIL
     value: "administrativo@coalashakes.com"

@@ -11,6 +11,7 @@ import { bankLinesWithMovements, overnightWorkDate, type BankManualMovement } fr
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import { aejShiftOf, generateAej, type AejAbsence, type AejEmployee, type AejShift } from './aej';
@@ -23,11 +24,11 @@ export const PTRP_VERSION = '1.0.0';
 const DEVELOPER_NAME = 'CT SORVETES LTDA';
 const MAX_DAYS = 62;
 
-type Dependencies = { mainDb: Firestore; hrDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached;
+type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore; developerEmail: string | undefined; readArp: typeof readRepPForAej; readIdentity: typeof readRepPEmployeeIdentity; sign: typeof signPtrpDetached;
   fiscalStore: FiscalArtifactStore;
   readBank?: (workspaceId: string, competence: string, uid: string, actorUid: string) => ReturnType<typeof bankMonthForAej>;
   readMovements?: (workspaceId: string, uid: string, competences: string[]) => Promise<BankManualMovement[]> };
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(),
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, developerEmail: process.env.PTRP_DEVELOPER_EMAIL?.trim(),
   readArp: readRepPForAej, readIdentity: readRepPEmployeeIdentity, sign: signPtrpDetached, fiscalStore: fiscalArtifactStore };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' = 'VALIDATION') {
@@ -59,11 +60,11 @@ function generateAejSafely(input: Parameters<typeof generateAej>[0]) {
  */
 export async function exportAej(context: ServerUserContext, input: AejExportInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  // Banco apurado nos mesmos bancos de dados do AEJ (o REP-P e o PTRP moram no coala-rh).
+  // Banco apurado combina a ARP dedicada com os tratamentos do PTRP no coala-rh.
   const readBank = deps.readBank ?? ((workspaceId: string, competence: string, uid: string, actorUid: string) =>
-    bankMonthForAej(workspaceId, competence, uid, actorUid, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.hrDb }));
+    bankMonthForAej(workspaceId, competence, uid, actorUid, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.repDb }));
   const readMovements = deps.readMovements ?? ((workspaceId: string, uid: string, competences: string[]) =>
-    bankMovementsForAej(workspaceId, uid, competences, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.hrDb }));
+    bankMovementsForAej(workspaceId, uid, competences, { mainDb: deps.mainDb, hrDb: deps.hrDb, repDb: deps.repDb }));
   const days = (Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`)) / 86_400_000 + 1;
   if (days < 1 || days > MAX_DAYS) throw fail('PTRP_AEJ_RANGE_INVALID', `Escolha um período de 1 a ${MAX_DAYS} dias.`);
   if (!deps.developerEmail) throw fail('PTRP_AEJ_DEVELOPER_EMAIL_MISSING', 'Configure o e-mail da desenvolvedora do PTRP (PTRP_DEVELOPER_EMAIL) antes de gerar o AEJ.', 'CONFLICT');

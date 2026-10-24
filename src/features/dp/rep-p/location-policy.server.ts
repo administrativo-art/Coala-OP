@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { canAccessUnit } from '@/lib/unit-access';
 import { AppError } from '@/lib/observability/app-error';
 
@@ -56,7 +56,7 @@ export const repPLocationPolicyInputSchema = repPLocationPolicyFieldsSchema.exte
 export type RepPLocationPolicyInput = z.infer<typeof repPLocationPolicyInputSchema>;
 
 type Dependencies = Readonly<{ mainDb: Firestore; repDb: Firestore; now: () => Date }>;
-const defaults: Dependencies = { mainDb: dbAdmin, repDb: hrDbAdmin, now: () => new Date() };
+const defaults: Dependencies = { mainDb: dbAdmin, repDb: repPDbAdmin, now: () => new Date() };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND' | 'CONFLICT' | 'DATA_INTEGRITY' | 'AUTHORIZATION' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
