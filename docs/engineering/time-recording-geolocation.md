@@ -1,6 +1,6 @@
 # Especificação técnica do georreferenciamento no registro de ponto
 
-- **Estado:** captura pontual implementada; complemento Entre unidades preparado, mas tecnicamente desligado por padrão e proibido para pessoas reais até a decisão formal de privacidade.
+- **Estado:** captura pontual e complemento Entre unidades implementados; ativação real pendente de documentos de privacidade, configuração por unidade/turno, consulta autorizada, teste físico e liberação do kill switch.
 - **Escopo:** Coala One web e Coala Go, com a mesma avaliação no servidor.
 - **Fluxo relacionado:** [Registro de ponto REP-P](flows/dp-time-recording.md).
 - **Última revisão técnica:** 23/10/2026.
@@ -16,17 +16,17 @@
 - piloto inicial: Heucilene Ribeiro e Luis, depois de ambos constarem na lista da unidade e receberem o aviso/cláusula aplicável;
 - cláusula LGPD nos documentos da empresa e aditivo para os colaboradores atuais; o aceite informa o tratamento, mas não é usado tecnicamente como consentimento revogável para validar a batida.
 
-A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no `coala-rh`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
+A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no banco dedicado `coala-rep-p`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
 
-## Complemento Entre unidades — preparado e não ativado
+## Complemento Entre unidades — implementado e não ativado
 
-A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi preparado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Esse modo não está autorizado para uso real: o backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão é falso, além da política nominal da unidade. Não há ativação automática pela configuração do turno.
+A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. O backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão é falso, além da política nominal da unidade. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`.
 
 Quando e somente quando todos os gates forem aprovados, o Android poderá manter um serviço em primeiro plano durante a jornada, com amostras periódicas no intervalo operacional definido. A pessoa recebe a explicação antes da permissão contextual; o aplicativo não pede localização ao abrir. O ciclo começa após a finalidade declarada `Início da jornada`, pausa em `Início do intervalo`, retoma em `Volta do intervalo` e encerra em `Fim da jornada`, por ação manual sempre disponível, por revogação da política ou por limite de segurança. Alterar uma classificação reconcilia o ciclo; uma sequência ambígua encerra a coleta. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
 
 O servidor é a autoridade da sessão: exige fuso brasileiro explícito na unidade, congela fuso, início e fim escalados, aceita chegada antecipada somente dentro da janela limitada de quatro horas, encerra a tolerância duas horas após o turno, rejeita amostras fora da janela, ordenação invertida, amostra sem início ou durante pausa e qualquer evento depois do encerramento. Cada lote revalida a política. Revogação ou kill switch devolvem instrução terminal: o Android interrompe sensores e indicador sem enfileirar outro evento e elimina os eventos posteriores daquela sessão. Sessões e eventos ficam separados em `dp_journeyLocationSessions` e `dp_journeyLocationEvents`, fora da ARP/PTRP, e só podem apoiar revisão humana.
 
-Antes de mudar o gate para verdadeiro, controlador, encarregado e jurídico precisam aprovar e registrar: finalidade específica; base legal; frequência efetiva; retenção de cinco anos; aviso e transparência; acesso pelo titular; perfis de consulta e auditoria; eliminação e `legalHold`; canal de contestação; e RIPD. Até isso ocorrer, telas e contratos podem demonstrar a opção, mas nenhuma coleta periódica real deve iniciar.
+Antes de mudar o gate para verdadeiro, concluir e publicar: cláusula LGPD e aditivo dos atuais; finalidade específica e base legal já decididas; frequência efetiva; retenção de cinco anos; aviso e transparência; acesso pelo titular; perfis de consulta e auditoria; eliminação e `legalHold`; canal de contestação; RIPD; configuração dos turnos reais; e ensaio em aparelho físico. Até isso ocorrer, telas e contratos podem demonstrar a opção, mas nenhuma coleta periódica real deve iniciar.
 
 ## Objetivo e decisão principal
 
@@ -44,7 +44,7 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 - uma área circular por política, com centro e raio;
 - captura pontual no navegador durante a confirmação da batida;
 - validação e cálculo de distância no servidor;
-- persistência atômica da referência da marcação e da evidência no banco `coala-rh`;
+- política lida na transação da marcação no `coala-rep-p`; a evidência acessória é persistida depois do commit sem alterar ou bloquear a batida;
 - replay idempotente da mesma tentativa sem recapturar a posição;
 - classificação conservadora que considera a precisão informada pelo aparelho;
 - lista nominal de participantes do piloto dentro da política da unidade;
@@ -97,7 +97,7 @@ GET options ──► confirmação da batida ──► captura pontual no apare
                          identidade + vínculo + HLB + política vigente
                                                 │
                                                 ▼
-                     transação no coala-rh: ARP original + tentativa
+                   transação no coala-rep-p: ARP original + tentativa
                                                 │
                          commit soberano da batida│
                                                 ▼
@@ -108,7 +108,7 @@ GET options ──► confirmação da batida ──► captura pontual no apare
                                   comprovante e AFD sem localização
 ```
 
-As políticas e as evidências ficam no `coala-rh`, que já recebe a transação do REP-P. Assim a política pode ser lida na mesma transação da marcação, sem uma janela entre bancos. O cadastro geral da unidade em `dp_units`, no banco principal, continua sendo a fonte de identidade, nome, endereço e fuso; não receberá coordenadas da política.
+As políticas e as evidências ficam no `coala-rep-p`, que recebe a transação oficial do REP-P. A política é lida na mesma transação da marcação, sem uma janela entre bancos; a evidência acessória é gravada depois do commit e uma falha nela nunca desfaz nem bloqueia o ponto. O cadastro geral da unidade em `dp_units`, no banco principal, continua sendo a fonte de identidade, nome, endereço e fuso; não receberá coordenadas da política.
 
 ## Modelo de política
 
@@ -431,7 +431,7 @@ Não selecionar consentimento como base por conveniência técnica. A base deve 
 
 ### Retenção
 
-O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclusive a coordenada exata. Cada documento recebe `expiresAt` calculado a partir do instante da batida, e `firestore.rh.indexes.json` configura TTL na coleção `repP_locationEvidence`. A marcação fiscal e seu comprovante permanecem fora desse descarte. Coordenadas não são copiadas para ARP, recibos, AFD, AEJ, auditorias genéricas ou data warehouse. Suspensão futura por litígio exigirá remover/controlar o vencimento antes da data; não existe botão de deleção manual na interface.
+O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclusive a coordenada exata. Cada documento recebe `expiresAt` calculado a partir do instante da batida, e `firestore.rep.indexes.json` configura TTL na coleção `repP_locationEvidence`. A marcação fiscal e seu comprovante permanecem fora desse descarte. Coordenadas não são copiadas para eventos/recibos da ARP, AFD, AEJ, auditorias genéricas ou data warehouse. Suspensão futura por litígio exigirá remover/controlar o vencimento antes da data; não existe botão de deleção manual na interface.
 
 ## Segurança e limites probatórios
 
@@ -439,7 +439,7 @@ O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclu
 | --- | --- | --- |
 | Coordenada simulada | Cálculo no servidor, autenticação, replay protegido e atestação mobile quando disponível | Navegador e aparelho continuam capazes de informar posição falsa |
 | Reenvio com outra posição | `requestDigest` cobre `locationAttempt`; mesmo `attemptId` com conteúdo diferente retorna conflito | Novo `attemptId` representa nova tentativa válida |
-| Política alterada durante a batida | Cabeçalho e revisão lidos na transação do `coala-rh`; snapshot e digest na evidência | A política não prova onde o aparelho realmente estava |
+| Política alterada durante a batida | Cabeçalho e revisão lidos na transação do `coala-rep-p`; snapshot e digest na evidência | A política não prova onde o aparelho realmente estava |
 | GPS impreciso | Círculo de precisão e resultado `indeterminate` | `accuracyMeters` também é declarado pelo cliente |
 | Acesso indevido | Coleções server-only e nenhuma rota de leitura de coordenadas no piloto | IAM do Admin SDK precisa de revisão operacional; futura leitura exigirá permissão, escopo e auditoria |
 | Vazamento em logs | Proibir coordenadas em erro, log, métrica, tracing e analytics | Dumps e ferramentas administrativas exigem controle próprio |
@@ -473,7 +473,7 @@ Falha ao interpretar uma captura válida ou política inconsistente não deve se
 
 ## Índices e custo
 
-Índices previstos no `coala-rh`:
+Índices previstos no `coala-rep-p`:
 
 - política: leitura por ID determinístico, sem consulta composta;
 - evidência: ID determinístico igual ao evento e TTL em `expiresAt`; não há consulta administrativa no piloto.
@@ -513,7 +513,7 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 ### Incremento 1 — domínio e política (implementado localmente)
 
 - criar tipos, schemas e funções puras de normalização, Haversine e avaliação;
-- implementar política versionada no `coala-rh`;
+- implementar política versionada no `coala-rep-p`;
 - criar rotas seguras de leitura e atualização;
 - acrescentar regras deny-all e índices;
 - implementar configuração sem mapa externo;
@@ -563,7 +563,7 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 | Configuração | detalhe da unidade, `location-policy-control.tsx` e rota `api/dp/time-recording/location-policies/[unitId]` |
 | Conferência | não implementada nem necessária no piloto em observação |
 | Tipos e permissões | contrato existente `dp.settings.manageTime`, escopado por unidade |
-| Regras e índices | `firestore.rh.rules`, `firestore.rh.indexes.json` |
+| Regras e índices | `firestore.rep.rules`, `firestore.rep.indexes.json` |
 | Documentação | este arquivo, guia REP-P, privacidade e matriz de superfícies |
 | Android | `apps/coala-one-android`, somente no incremento 5 |
 

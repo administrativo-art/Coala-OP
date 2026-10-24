@@ -7,6 +7,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { zonedFiscalTimestamp } from '@/features/dp/time-adjustments/core';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import { nextJourneyLocationState, type JourneyLocationState } from './journey-location-core';
@@ -19,6 +20,7 @@ export const JOURNEY_LOCATION_EVENTS = 'dp_journeyLocationEvents';
 export const JOURNEY_LOCATION_SESSIONS = 'dp_journeyLocationSessions';
 type Dependencies = {
   repDb: Firestore;
+  policyDb: Firestore;
   now: () => Date;
   enabled: boolean;
   readMonth: typeof readOwnRepPMonth;
@@ -26,6 +28,7 @@ type Dependencies = {
 };
 const defaults: Dependencies = {
   repDb: hrDbAdmin,
+  policyDb: repPDbAdmin,
   now: () => new Date(),
   // Off until the legal/privacy decision and operational pilot authorize activation.
   enabled: process.env.DP_JOURNEY_LOCATION_ENABLED === 'true',
@@ -117,7 +120,7 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
     throw fail('DP_JOURNEY_LOCATION_SESSION_INVALID', 'A sessão de localização não corresponde à jornada.', 'DATA_INTEGRITY');
   }
 
-  const livePolicies = await deps.loadPolicies(deps.repDb, context.workspace_id, unitIds);
+  const livePolicies = await deps.loadPolicies(deps.policyDb, context.workspace_id, unitIds);
   const policyActive = unitIds.every((unitId) => {
     const policy = livePolicies.get(unitId);
     return policy?.mode === 'observe' && policy.participantUserIds.includes(context.decoded.uid)

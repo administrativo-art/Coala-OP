@@ -7,6 +7,7 @@ import { openSystemNotice, resolveSystemNotices } from '@/features/system-notice
 import { civilDateIn, repPCertificateMilestone, repPCertificateMilestoneSeverity } from '@/features/system-notices/core';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import { inspectRepPIcpCredential } from './icp-signer';
@@ -35,7 +36,7 @@ export async function runRepPDailyMonitor(params: {
   const now = params.now ?? new Date();
   const timeZone = params.timeZone ?? 'America/Fortaleza';
   const database = params.database ?? dbAdmin;
-  const repDatabase = params.repDatabase ?? hrDbAdmin;
+  const repDatabase = params.repDatabase ?? repPDbAdmin;
   const { workspaceId } = params;
   const opened: string[] = [];
   const open = async (input: Omit<Parameters<typeof openSystemNotice>[0], 'workspaceId' | 'audience'>) => {

@@ -1,13 +1,17 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import type { DocumentData, Firestore, Query, Transaction } from 'firebase-admin/firestore';
 
+import { repPCompetenceFenceRef } from '@/features/dp/rep-p/competence-fence.server';
 import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { serializeShiftSwap, SHIFT_SWAP_REQUESTS } from '@/features/dp/shift-swaps/contract.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import {
@@ -24,7 +28,8 @@ const ITEM_LIMIT = 2000;
 const PEOPLE_LIMIT = 450;
 
 type Clock = { read(): Promise<{ instant: Date }> };
-type Dependencies = { mainDb: Firestore; hrDb: Firestore; clock: Clock; readRoster(): Promise<ClosureRosterPerson[]> };
+type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore; clock: Clock;
+  readRoster(): Promise<ClosureRosterPerson[]>; afterFenceAcquired?(): Promise<void> };
 const unavailableClock: Clock = { async read() { throw new Error('Hora Legal não configurada.'); } };
 async function readActiveOperationalRoster() {
   const snapshot = await dbAdmin.collection('users').limit(PEOPLE_LIMIT + 1).get();
@@ -33,7 +38,8 @@ async function readActiveOperationalRoster() {
     .filter((doc) => doc.get('isActive') !== false && doc.get('operacional') !== false)
     .map((doc) => ({ uid: doc.id, name: typeof doc.get('username') === 'string' && doc.get('username').trim() ? doc.get('username').trim() : null }));
 }
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock, readRoster: readActiveOperationalRoster };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin,
+  clock: configuredRepPClock() ?? unavailableClock, readRoster: readActiveOperationalRoster };
 
 export type ClosureReopening = { at: string; by: string; reason: string; fromVersion: number; clockSource: 'hora_legal' | 'server' };
 export type ClosureRecord = {
@@ -45,6 +51,53 @@ export type ClosureRecord = {
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'CONFLICT' | 'AUTHORIZATION' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
+}
+
+async function acquireRepPClosureFence(deps: Dependencies, workspaceId: string, competence: string, token: string, at: string) {
+  const ref = repPCompetenceFenceRef(deps.repDb, workspaceId, competence);
+  await deps.repDb.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    const status = current.get('status');
+    if (status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
+    if (status === 'closing') throw fail('PTRP_CLOSURE_IN_PROGRESS', 'Outro fechamento desta competência está em andamento.', 'CONFLICT');
+    tx.set(ref, { schemaVersion: 1, workspaceId, competence, status: 'closing', token, closingAt: at,
+      closedAt: null, closureVersion: null, updatedAt: at }, { merge: true });
+  });
+  return ref;
+}
+
+async function releaseRepPClosureFence(deps: Dependencies, workspaceId: string, competence: string, token: string, at: string) {
+  const ref = repPCompetenceFenceRef(deps.repDb, workspaceId, competence);
+  await deps.repDb.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    if (current.get('status') === 'closing' && current.get('token') === token) {
+      tx.set(ref, { status: 'open', token: null, releasedAt: at, updatedAt: at }, { merge: true });
+    }
+  });
+}
+
+async function sealRepPClosureFence(deps: Dependencies, workspaceId: string, competence: string, token: string,
+  version: number, at: string) {
+  const ref = repPCompetenceFenceRef(deps.repDb, workspaceId, competence);
+  await deps.repDb.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    if (current.get('status') !== 'closing' || current.get('token') !== token) {
+      throw fail('PTRP_CLOSURE_FENCE_CONFLICT', 'A trava fiscal do fechamento mudou durante a operação.', 'CONFLICT');
+    }
+    tx.set(ref, { status: 'closed', token: null, closureVersion: version, closedAt: at, updatedAt: at }, { merge: true });
+  });
+}
+
+async function openRepPClosureFence(deps: Dependencies, workspaceId: string, competence: string, version: number, at: string) {
+  const ref = repPCompetenceFenceRef(deps.repDb, workspaceId, competence);
+  await deps.repDb.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    if (current.exists && current.get('closureVersion') !== version) {
+      throw fail('PTRP_CLOSURE_FENCE_CONFLICT', 'A trava fiscal pertence a outra versão do fechamento.', 'CONFLICT');
+    }
+    tx.set(ref, { schemaVersion: 1, workspaceId, competence, status: 'open', token: null,
+      reopenedFromVersion: version, reopenedAt: at, updatedAt: at }, { merge: true });
+  });
 }
 function permissions(context: ServerUserContext) {
   const closure = context.permissions.dp.timeClosure;
@@ -176,7 +229,17 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
   const classificationPendingQuery = deps.hrDb.collection('ptrp_markingClassificationRequests')
     .where('workspaceId', '==', context.workspace_id).where('status', '==', 'in_review')
     .where('workDate', '>=', `${input.competence}-01`).where('workDate', '<=', `${input.competence}-31`).limit(1);
-  return deps.hrDb.runTransaction(async (tx: Transaction) => {
+  const fenceToken = randomUUID();
+  await acquireRepPClosureFence(deps, context.workspace_id, input.competence, fenceToken, at);
+  try {
+    await deps.afterFenceAcquired?.();
+  } catch (cause) {
+    await releaseRepPClosureFence(deps, context.workspace_id, input.competence, fenceToken, at);
+    throw cause;
+  }
+  let record: ClosureRecord;
+  try {
+    record = await deps.hrDb.runTransaction(async (tx: Transaction) => {
     const [snapshot, classificationPending] = await Promise.all([tx.get(ref), tx.get(classificationPendingQuery)]);
     const current = snapshot.exists ? snapshot.data() as ClosureRecord : null;
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
@@ -202,8 +265,16 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     tx.set(ref, record);
     tx.create(versionRef, { ...record, itemDigests: digests });
     for (const person of people) tx.create(versionRef.collection('people').doc(person.uid), person);
-    return record;
-  });
+      return record;
+    });
+  } catch (cause) {
+    await releaseRepPClosureFence(deps, context.workspace_id, input.competence, fenceToken, at);
+    throw cause;
+  }
+  // Se esta etapa falhar, a trava permanece em `closing`: é mais seguro bloquear novas batidas
+  // retroativas do que abrir uma janela depois que o PTRP já congelou a versão.
+  await sealRepPClosureFence(deps, context.workspace_id, input.competence, fenceToken, record.version, at);
+  return record;
 }
 
 /** Reabre com motivo e versão esperada; a versão fechada fica preservada e o próximo fechamento cria outra. */
@@ -212,7 +283,7 @@ export async function reopenCompetence(context: ServerUserContext, competence: s
   const deps = { ...defaults, ...injected };
   const { at, clockSource } = await actInstant(deps.clock);
   const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence));
-  return deps.hrDb.runTransaction(async (tx) => {
+  const record = await deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
     const current = snapshot.exists ? snapshot.data() as ClosureRecord : null;
     if (current?.status !== 'closed') throw fail('PTRP_CLOSURE_NOT_CLOSED', 'Esta competência não está fechada.', 'CONFLICT');
@@ -222,4 +293,7 @@ export async function reopenCompetence(context: ServerUserContext, competence: s
     tx.set(ref, record);
     return record;
   });
+  // A ARP só volta a aceitar marcações da competência depois que o PTRP já está aberto.
+  await openRepPClosureFence(deps, context.workspace_id, competence, input.expectedVersion, at);
+  return record;
 }

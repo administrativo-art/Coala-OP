@@ -31,12 +31,13 @@ const rules = {
   main: await readFile(new URL("firestore.rules", root), "utf8"),
   financial: await readFile(new URL("firestore.financial.rules", root), "utf8"),
   rh: await readFile(new URL("firestore.rh.rules", root), "utf8"),
+  rep: await readFile(new URL("firestore.rep.rules", root), "utf8"),
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
 
-test("ARP do REP-P no coala-rh não é acessível a nenhum cliente, nem administrador", async () => {
-  const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-arp", firestore: { rules: rules.rh } });
-  const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_offlinePermits", "repP_pilotHeads", "repP_pilotMarkings", "repP_pilotClassificationEvents", "repP_pilotDayGuards", "repP_exportAudit",
+test("ARP do REP-P no banco dedicado não é acessível a nenhum cliente, nem administrador", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-arp", firestore: { rules: rules.rep } });
+  const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_offlinePermits", "repP_exportAudit",
     "repP_locationPolicies", "repP_locationEvidence", "repP_locationReviews"];
   try {
     await env.withSecurityRulesDisabled(async (context) => {

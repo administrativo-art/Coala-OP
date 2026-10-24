@@ -13,6 +13,7 @@ import { repPMarkingTimeZone } from '@/features/dp/rep-p/time-zones';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 
@@ -25,6 +26,7 @@ import type { AdjustmentDecisionInput, AdjustmentMonthInput, CreateAdjustmentInp
 export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const TREATMENTS = 'ptrp_treatments';
 export const CLASSIFICATION_REQUESTS = 'ptrp_markingClassificationRequests';
+export const CLASSIFICATIONS = 'ptrp_markingClassifications';
 /** Documento da competência fechada, gravado por `closure.server.ts`. Período fechado não aceita pedido nem decisão. */
 export const CLOSURES = 'ptrp_competenceClosures';
 /** Auditoria de cada AEJ gerado (quem, quando, período, carimbo e versões dos fechamentos usados). */
@@ -55,7 +57,7 @@ type Clock = { read(): Promise<{ instant: Date }> };
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore; clock: Clock };
 // Sem Hora Legal configurada, o ato usa o relógio do servidor e registra essa origem.
 const unavailableClock: Clock = { async read() { throw new Error('Hora Legal não configurada.'); } };
-const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock: configuredRepPClock() ?? unavailableClock };
+const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock: configuredRepPClock() ?? unavailableClock };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND' | 'CONFLICT' | 'AUTHORIZATION' = 'VALIDATION') {
   return new AppError({ code, kind, safeMessage });
@@ -147,7 +149,7 @@ function comparableOperations(value: AdjustmentRecord) {
 /** Pedido do próprio titular: valida vínculo, batida alvo e competência aberta; grava o primeiro ato encadeado. */
 export async function createOwnAdjustment(context: ServerUserContext, input: CompatibleAdjustmentInput, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  await assertNoPilotMarkingForDay(deps.repDb, context.workspace_id, context.decoded.uid, input.workDate);
+  await assertNoPilotMarkingForDay(deps.hrDb, context.workspace_id, context.decoded.uid, input.workDate);
   const requestedOperations = inputOperations(input);
   const requestDigest = digest({ workDate: input.workDate, operations: requestedOperations, reason: input.reason });
   const docId = digest(['adjustment', context.workspace_id, context.decoded.uid, input.attemptId]);
@@ -227,8 +229,8 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Com
     createdAt: at, updatedAt: at,
   };
   const saved = await deps.hrDb.runTransaction(async (tx) => {
-    const pilotQuery = pilotMarkingsOnDay(deps.repDb, context.workspace_id, context.decoded.uid, input.workDate);
-    const pilotDayGuard = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+    const pilotQuery = pilotMarkingsOnDay(deps.hrDb, context.workspace_id, context.decoded.uid, input.workDate);
+    const pilotDayGuard = deps.hrDb.collection(REP_P_PILOT_DAY_GUARDS)
       .doc(repPPilotDayGuardId(context.workspace_id, context.decoded.uid, input.workDate));
     const [again, closure, pilotMarkings, pilotGuard] = await Promise.all([
       tx.get(ref),
@@ -329,11 +331,17 @@ async function decideClassificationRequest(context: ServerUserContext, requestId
   }
   const status = input.action === 'approve' ? 'approved' : input.action === 'reject' ? 'rejected' : 'cancelled';
   const now = Timestamp.now();
-  const receiptRef = deps.hrDb.collection('repP_receipts').doc(String(before.get('receiptId')));
+  const receiptId = String(before.get('receiptId'));
+  const receipt = await deps.repDb.collection('repP_receipts').doc(receiptId).get();
+  if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id
+    || receipt.get('employeeId') !== before.get('employeeId')) {
+    throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
+  }
+  const classificationRef = deps.hrDb.collection(CLASSIFICATIONS).doc(receiptId);
   const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, String(before.get('workDate'))));
   const result = await deps.hrDb.runTransaction(async (tx) => {
-    const [requestSnapshot, receiptSnapshot, closureSnapshot] = await Promise.all([
-      tx.get(ref), tx.get(receiptRef), tx.get(closureRef),
+    const [requestSnapshot, classificationSnapshot, closureSnapshot] = await Promise.all([
+      tx.get(ref), tx.get(classificationRef), tx.get(closureRef),
     ]);
     if (!requestSnapshot.exists || requestSnapshot.get('status') !== 'in_review') throw fail('PTRP_ADJUSTMENT_NOT_PENDING', 'Este pedido já foi decidido.', 'CONFLICT');
     if (Number(requestSnapshot.get('version')) !== input.expectedVersion) throw fail('PTRP_ADJUSTMENT_VERSION_CONFLICT', 'O pedido mudou. Atualize e tente de novo.', 'CONFLICT');
@@ -342,17 +350,15 @@ async function decideClassificationRequest(context: ServerUserContext, requestId
         || Number(closureSnapshot.get('version')) !== Number(requestSnapshot.get('closureVersion'))) {
         throw fail('PTRP_CLASSIFICATION_CLOSURE_CHANGED', 'O fechamento mudou desde este pedido. Atualize a classificação e envie uma nova solicitação.', 'CONFLICT');
       }
-      if (!receiptSnapshot.exists || receiptSnapshot.get('workspaceId') !== context.workspace_id
-        || receiptSnapshot.get('employeeId') !== requestSnapshot.get('employeeId')) {
-        throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
-      }
       const classification = { purpose: requestSnapshot.get('requestedPurpose'), source: 'reviewed', status: 'confirmed',
         updatedAt: now, updatedBy: context.decoded.uid };
-      if (receiptSnapshot.get('classification')?.purpose !== requestSnapshot.get('requestedPurpose')) {
-        const history = Array.isArray(receiptSnapshot.get('classificationHistory'))
-          ? receiptSnapshot.get('classificationHistory') as unknown[] : [];
-        tx.update(receiptRef, { classification, classificationHistory: [...history.slice(-99), { ...classification, at: now,
-          actorUid: context.decoded.uid, requestId }] });
+      const current = classificationSnapshot.get('classification') ?? receipt.get('classification');
+      if (current?.purpose !== requestSnapshot.get('requestedPurpose')) {
+        const history = Array.isArray(classificationSnapshot.get('history')) ? classificationSnapshot.get('history') as unknown[] : [];
+        tx.set(classificationRef, { schemaVersion: 1, workspaceId: context.workspace_id,
+          employeeId: requestSnapshot.get('employeeId'), receiptId, workDate: requestSnapshot.get('workDate'),
+          classification, history: [...history.slice(-99), { ...classification, at: now,
+            actorUid: context.decoded.uid, requestId }], updatedAt: now }, { merge: true });
       }
     }
     tx.update(ref, { status, version: input.expectedVersion + 1, updatedAt: now, decidedAt: now,
@@ -392,12 +398,12 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
   }
   if (discardTaken) throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por outro ajuste aprovado.', 'CONFLICT');
   const result = await deps.hrDb.runTransaction(async (tx) => {
-    const pilotDayGuard = deps.repDb.collection(REP_P_PILOT_DAY_GUARDS)
+    const pilotDayGuard = deps.hrDb.collection(REP_P_PILOT_DAY_GUARDS)
       .doc(repPPilotDayGuardId(context.workspace_id, current.employeeUid, current.workDate));
     const [snapshot, closure, pilotMarkings, pilotGuard] = await Promise.all([
       tx.get(ref),
       tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, current.workDate))),
-      tx.get(pilotMarkingsOnDay(deps.repDb, context.workspace_id, current.employeeUid, current.workDate)),
+      tx.get(pilotMarkingsOnDay(deps.hrDb, context.workspace_id, current.employeeUid, current.workDate)),
       tx.get(pilotDayGuard),
     ]);
     const value = snapshot.data() as AdjustmentRecord;

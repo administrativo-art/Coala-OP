@@ -196,27 +196,16 @@ service cloud.firestore {
     match /dp_absenceRetentionExecutionReceipts/{id} { allow read, write: if false; }
     match /dp_absenceRetentionReconciliations/{id} { allow read, write: if false; }
 
-    // ARP do REP-P (registro eletrônico de ponto): nenhum cliente, nem administrador, lê ou escreve.
-    // Marcações originais, NSR, comprovantes e auditoria só passam pelo serviço server-side.
-    match /repP_establishments/{id} { allow read, write: if false; }
-    match /repP_employees/{id} { allow read, write: if false; }
-    match /repP_events/{id} { allow read, write: if false; }
-    match /repP_attempts/{id} { allow read, write: if false; }
-    match /repP_receipts/{id} { allow read, write: if false; }
-    match /repP_offlinePermits/{id} { allow read, write: if false; }
+    // Ensaio nominal e trilhas acessórias continuam no RH; a ARP oficial fica no coala-rep-p.
     match /repP_pilotHeads/{id} { allow read, write: if false; }
     match /repP_pilotMarkings/{id} { allow read, write: if false; }
     match /repP_pilotClassificationEvents/{id} { allow read, write: if false; }
     match /repP_pilotDayGuards/{id} { allow read, write: if false; }
-    match /repP_exportAudit/{id} { allow read, write: if false; }
-    match /repP_locationPolicies/{id} { allow read, write: if false; }
-    match /repP_locationPolicies/{id}/{document=**} { allow read, write: if false; }
-    match /repP_locationEvidence/{id} { allow read, write: if false; }
-    match /repP_locationReviews/{id} { allow read, write: if false; }
     match /dp_timeRecordingAccessAudit/{id} { allow read, write: if false; }
 
     // Tratamento do ponto (PTRP): pedidos de ajuste e tratamentos só pelas APIs autenticadas; o original segue na ARP.
     match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }
+    match /ptrp_markingClassifications/{id} { allow read, write: if false; }
     match /ptrp_treatments/{id} { allow read, write: if false; }
     match /ptrp_competenceClosures/{id} {
       allow read, write: if false;

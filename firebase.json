@@ -24,6 +24,11 @@
       "indexes": "firestore.rh.indexes.json"
     },
     {
+      "database": "coala-rep-p",
+      "rules": "firestore.rep.rules",
+      "indexes": "firestore.rep.indexes.json"
+    },
+    {
       "database": "coala-checklist",
       "rules": "firestore.checklist.rules",
       "indexes": "firestore.checklist.indexes.json"
