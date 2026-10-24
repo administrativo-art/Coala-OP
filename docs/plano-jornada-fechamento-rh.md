@@ -2,9 +2,9 @@
 
 **Produto:** Coala OP / Coala Go
 
-**Status:** candidata técnica local com REP-P/PTRP, comprovantes, fechamento, documentos e Coala Go validados sinteticamente; coleta real, conformidade formal, piloto e publicação continuam bloqueados
+**Status:** fases técnicas 1–6 publicadas; ensaio nominal segregado em validação; coleta oficial, conformidade formal, lançamento total e saída do Bizneo continuam bloqueados
 
-**Última atualização:** 21/10/2026
+**Última atualização:** 23/10/2026
 
 **Responsável funcional:** RH / Administração
 

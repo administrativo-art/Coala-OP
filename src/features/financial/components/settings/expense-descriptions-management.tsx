@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { addDoc, deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/lib/zod-resolver";
 import { useAuth } from "@/hooks/use-auth";
 import {
   expenseDescriptionFormSchema,

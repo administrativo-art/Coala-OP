@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import Papa from 'papaparse';
 import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, subMonths, endOfDay, parseISO, subDays } from 'date-fns';

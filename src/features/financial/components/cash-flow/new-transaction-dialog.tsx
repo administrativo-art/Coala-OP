@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { addDoc, Timestamp } from "firebase/firestore";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/lib/zod-resolver";
 import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";

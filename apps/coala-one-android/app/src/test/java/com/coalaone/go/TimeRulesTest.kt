@@ -9,6 +9,15 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class TimeRulesTest {
+    @Test fun visualThemeFollowsTheHourInsteadOfTheDevicePreference() {
+        assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(0))
+        assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(5))
+        assertFalse(com.coalaone.go.ui.timeBasedDarkTheme(6))
+        assertFalse(com.coalaone.go.ui.timeBasedDarkTheme(15))
+        assertFalse(com.coalaone.go.ui.timeBasedDarkTheme(17))
+        assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(18))
+        assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(23))
+    }
     @Test fun offlineCanonicalMatchesTheServerAndUsesTheUnitTimeZone() {
         val markedAt = com.coalaone.go.domain.TimeOfflineRules.markedAt("2026-10-18T11:00:00.000Z", 1000, 1801000, "America/Manaus")
         assertEquals("2026-10-18T07:30:00-0400", markedAt)
@@ -34,6 +43,9 @@ class TimeRulesTest {
         assertFalse(TimeRules.canRecord(options, "other"))
         assertNull(TimeRules.blockedReason(options))
         assertTrue(TimeRules.blockedReason(options.copy(eligible = false))!!.contains("CLT"))
+        val displayOnly = options.copy(eligible = false, markingEnabled = false, executionUnits = emptyList())
+        assertTrue(displayOnly.officialClock?.available == true)
+        assertFalse(TimeRules.canRecord(displayOnly, null))
         assertFalse(TimeRules.canRecord(options.copy(officialClock = OfficialClock(false)), "slz"))
         assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false)))!!.contains("Hora Legal Brasileira"))
     }

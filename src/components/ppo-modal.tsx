@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { type ProductSimulation, type PPO } from '@/types';
 import { useProductSimulation } from '@/hooks/use-product-simulation';

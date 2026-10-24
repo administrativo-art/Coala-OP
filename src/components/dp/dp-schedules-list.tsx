@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { z } from 'zod';
 import { auth } from '@/lib/firebase';
 import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
