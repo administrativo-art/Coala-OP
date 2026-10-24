@@ -163,7 +163,7 @@
 - Correção de regressão deve deixar um teste permanente no menor nível capaz de reproduzir a falha. Adicione E2E quando a regressão depender da integração entre navegador, rota e persistência.
 - E2E nunca executa contra produção nem usa credenciais reais. Use projeto Firebase com prefixo `demo-`, emuladores locais e dados determinísticos criados pelo próprio teste.
 - Um E2E novo entra no CI primeiro em observação. Ele só vira gate bloqueante depois de permanecer estável e de não depender de tempo arbitrário, ordem de execução ou estado compartilhado.
-- A varredura geral dos E2E em observação roda semanalmente e sob acionamento manual em workflow próprio, com uma única preparação de ambiente. PR não dispara essa varredura geral; a mudança executa localmente apenas o E2E do fluxo crítico afetado.
+- A varredura geral dos quatro grupos E2E em observação roda automaticamente em todo PR para `main`, semanalmente e sob acionamento manual em workflow próprio, com uma única preparação de ambiente. Não roda nos PRs de promoção para `production` e não é gate obrigatório. Localmente, a mudança executa apenas o E2E do fluxo crítico afetado. A economia de tokens deve vir de um único observador dos checks obrigatórios, resultados resumidos e leitura dirigida de logs em falhas, não da redução da cobertura automática no GitHub.
 
 ## CLI e navegador
 

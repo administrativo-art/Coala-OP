@@ -12,7 +12,9 @@ Escolha as verificações depois de identificar o fluxo pelo [mapa](system-map.m
 
 Não rode `npm run check` e depois `npm run verify`: `verify` já inclui `check`. Não repita localmente uma suíte verde no mesmo estado. Se o CI falhar, reproduza somente o comando falho, corrija, valide o subconjunto afetado e deixe o CI repetir o conjunto integral no novo SHA.
 
-Os E2E gerais de observação não rodam em todo PR. O workflow `E2E observation` reúne a preparação de Node, Java, dependências e Chromium uma única vez e executa a varredura semanalmente ou por acionamento manual. Uma alteração em fluxo crítico continua obrigada a rodar o E2E dirigido daquele fluxo antes do push.
+Os quatro grupos E2E de observação rodam automaticamente em todo PR para `main`, além da execução semanal e do acionamento manual. O workflow `E2E observation` reúne a preparação de Node, Java, dependências e Chromium uma única vez. Não executa em PRs de promoção para `production` e não integra os checks obrigatórios para merge. Uma alteração em fluxo crítico continua obrigada a rodar o E2E dirigido daquele fluxo antes do push.
+
+A execução dos testes no GitHub Actions consome recursos do CI; não exige análise da IA durante cada etapa. Para economizar tokens, acompanhe somente os checks obrigatórios com um único observador em intervalos de 30–60 segundos, receba resultados resumidos e consulte os trechos relevantes dos logs em caso de falha. Não repita suítes locais enquanto o CI executa.
 
 Quando páginas do dashboard forem criadas, removidas ou movidas, execute `python3 scripts/generate-route-inventory.py` e confira a alteração em [inventário de rotas](route-inventory.md). Use `python3 scripts/generate-route-inventory.py --check` para detectar inventário desatualizado sem escrever arquivos.
 Para página fora do dashboard ou rota de API, execute `python3 scripts/generate-surface-inventory.py` e confira a alteração no [inventário de superfícies](surface-inventory.md). Use `--check` no CI; o inventário apenas detecta caminho/métodos e exige revisão manual dos guias de fluxo.
