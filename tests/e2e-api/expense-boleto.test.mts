@@ -33,9 +33,11 @@ test("API E2E: anexa PDF, prepara uma ordem, preserva competência e bloqueia du
   const id = "expense-boleto-e2e", path = `/api/financial/expenses/${id}/boleto`;
   await financial.collection("expenses").doc(id).set({ workspaceId: "coala", status: "provisioned", provisionType: "forecast", paymentMethod: "single", totalValue: 3000, competenceMonth, dueDate: Timestamp.fromDate(new Date(`${dueDate}T15:00:00Z`)), description: "Aluguel de teste", installments: [{ number: 1, status: "provisioned" }] });
   const pdf = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF");
-  function form() {
+  function form(input: { installmentNumber?: number; dueDate?: string; amountCents?: number; documentReference?: string } = {}) {
     const body = new FormData(); body.set("file", new Blob([pdf], { type: "application/pdf" }), "boleto-teste.pdf");
-    for (const [key, value] of Object.entries({ barcode: boletoFixture(dueDate), amountCents: "300000", dueDate, competenceMonth, beneficiaryDocument: "11222333000181", documentReference: "TEST-1", confirmed: "true" })) body.set(key, value);
+    const targetDueDate = input.dueDate ?? dueDate;
+    const targetAmountCents = input.amountCents ?? 300000;
+    for (const [key, value] of Object.entries({ ...(input.installmentNumber ? { installmentNumber: String(input.installmentNumber) } : {}), barcode: boletoFixture(targetDueDate, targetAmountCents), amountCents: String(targetAmountCents), dueDate: targetDueDate, competenceMonth, beneficiaryDocument: "11222333000181", documentReference: input.documentReference ?? "TEST-1", confirmed: "true" })) body.set(key, value);
     return body;
   }
   const upload = await fetch(origin + path, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form() });
@@ -51,6 +53,30 @@ test("API E2E: anexa PDF, prepara uma ordem, preserva competência e bloqueia du
   assert.equal(requests[0].id, requests[1].id); assert.equal(requests[0].sourceType, "expense_boleto"); assert.equal(requests[0].barcodeSnapshot.beneficiaryDocument, "11222333000181");
   assert.equal((await financial.collection("financialInboxMessages").limit(1).get()).size, 0);
   const expense = await financial.collection("expenses").doc(id).get(); assert.equal(expense.get("competenceMonth"), competenceMonth); assert.equal(expense.get("status"), "provisioned");
+
+  const installmentId = "expense-boleto-installments-e2e";
+  const installmentDates = [30, 37, 44].map(days => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10));
+  await financial.collection("expenses").doc(installmentId).set({
+    workspaceId: "coala", status: "pending", paymentMethod: "installments", totalValue: 3343.56,
+    competenceMonth, dueDate: Timestamp.fromDate(new Date(`${installmentDates[0]}T15:00:00Z`)), description: "Compra parcelada de teste",
+    installments: installmentDates.map((date, index) => ({ number: index + 1, value: 1114.52, dueDate: Timestamp.fromDate(new Date(`${date}T15:00:00Z`)), status: "pending" })),
+  });
+  const installmentRequests = [];
+  for (let index = 0; index < installmentDates.length; index += 1) {
+    const number = index + 1;
+    const installmentPath = `/api/financial/expenses/${installmentId}/boleto`;
+    const uploadInstallment = await fetch(origin + installmentPath, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form({ installmentNumber: number, dueDate: installmentDates[index], amountCents: 111452, documentReference: `TEST-${number}` }) });
+    assert.equal(uploadInstallment.status, 200, `${await uploadInstallment.text()}\n${logs}`);
+    const prepared = await fetch(origin + installmentPath + "/payment", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ scheduledFor: installmentDates[index], installmentNumber: number, confirmed: true }) });
+    const preparedBody = await prepared.json();
+    assert.equal(prepared.status, 200, JSON.stringify(preparedBody));
+    assert.equal(preparedBody.request.id, `expense_boleto_${installmentId}_${number}`);
+    assert.equal(preparedBody.request.installmentNumber, number);
+    installmentRequests.push(preparedBody.request.id);
+  }
+  assert.equal(new Set(installmentRequests).size, 3);
+  const installmentExpense = await financial.collection("expenses").doc(installmentId).get();
+  assert.deepEqual(installmentExpense.get("installments").map((item: { paymentRequestId?: string }) => item.paymentRequestId), installmentRequests);
   await financial.collection("expenses").doc(id).update({ status: "paid" });
   assert.equal((await send(token)).status, 409);
   // This E2E never calls submit: no bank credentials, browser or real transfer.

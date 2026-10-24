@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -195,4 +196,9 @@ test("bloqueia a ressíncronia de compra no débito ou frete que já foi liquida
     purchaseExpenseRole: "freight",
     installments: [{ number: 1, status: "partially_paid" }],
   }), /já possui liquidação/);
+});
+
+test("sincronização financeira da compra persiste o workspace da despesa", () => {
+  const route = readFileSync("src/app/api/purchasing/[...path]/route.ts", "utf8");
+  assert.match(route, /const sharedPayload = \{\s*workspaceId: WORKSPACE_ID,/);
 });
