@@ -34,13 +34,15 @@ const contract = defineSecurityContract({
   version: 1,
   surface: { method: 'POST', path: '/api/jobs/rep-p/availability-events' },
   exposure: 'internal-service',
-  identity: { kind: 'service-job', service: 'cloud-monitoring-relay' },
+  // A transição é deduplicada por incident_id no estado fiscal do REP-P;
+  // por isso a identidade customizada declara a garantia de replay junto da autenticação.
+  identity: { kind: 'custom', strategy: 'authenticated-monitor-relay',
+    guarantees: ['authenticated-service', 'replay-protected'] },
   authorization: { kind: 'none' },
   resourceScope: { kind: 'workspace' },
   input: { kind: 'schema', schema: 'rep-p.availability-notification', unknownFields: 'strip' },
   effects: { mode: 'write', audit: 'server-authoritative' },
   errorExposure: 'sanitized',
-  additionalGuarantees: ['replay-protected'],
 });
 
 function authorized(actual: string, expected: string) {
