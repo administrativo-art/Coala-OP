@@ -20,8 +20,9 @@ export function BankStatementsPage() {
   if (permissions.financial?.audits?.view !== true) {
     return <PageContainer surface><FinancialAccessGuard title="Extratos bancários" description="Seu perfil não possui permissão para consultar auditorias de extratos." /></PageContainer>;
   }
-  return <PageContainer variant="wide" surface className="space-y-6 pb-10">
+  return <PageContainer variant="wide" className="space-y-5 pb-10">
     <PageHero
+      compact
       kicker="Financeiro · Conciliação"
       title="Extratos bancários"
       subtitle="Auditoria do extrato e conciliação com as despesas."

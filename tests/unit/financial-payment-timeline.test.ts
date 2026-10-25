@@ -133,4 +133,7 @@ test("reenvio usa a mesma política restrita do backend e erros abrem detalhe co
   assert.match(paymentPage, /canRetryDefinitivelyRejectedPayment\(item\)/);
   assert.match(paymentPage, /Ver motivo/);
   assert.match(paymentPage, /Tentativas de envio/);
+  assert.match(paymentPage, /ChargeReviewDrawer/);
+  assert.match(paymentPage, /void openReview\(item\)/);
+  assert.doesNotMatch(paymentPage, /window\.location\.assign\(`\$\{FINANCIAL_ROUTES\.inbox/);
 });

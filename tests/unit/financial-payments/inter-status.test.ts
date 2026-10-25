@@ -45,7 +45,7 @@ test("normaliza a chave Pix para o formato aceito pelo DICT", () => {
   assert.equal(normalizeInterPixKey("(98) 99999-9999", "phone"), "+5598999999999");
 });
 
-test("descarta integralmente o corpo do erro 422", () => {
+test("preserva o motivo sanitizado do corpo do erro 422", () => {
   const parsed = safeInterPaymentError({
     response: {
       status: 422,
@@ -64,7 +64,10 @@ test("descarta integralmente o corpo do erro 422", () => {
     parsed.safeMessage,
     "O Banco Inter recusou os dados do pagamento. Revise os dados antes de tentar novamente.",
   );
+  assert.match(parsed.details ?? "", /Dados inválidos/);
+  assert.match(parsed.details ?? "", /\[REDACTED\]/);
   assert.doesNotMatch(parsed.safeMessage, /destinatario\.chave|29696755000154|financeiro@clinica\.com/);
+  assert.doesNotMatch(parsed.details ?? "", /29696755000154|financeiro@clinica\.com/);
 });
 
 test("concilia o CNPJ completo do banco com o hash do snapshot mascarado", () => {

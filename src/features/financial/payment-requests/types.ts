@@ -88,7 +88,7 @@ type BankPaymentRequestBase = {
   createdAt: string;
   createdBy: string;
   updatedAt: string;
-  lastError?: { code: string; safeMessage: string; occurredAt: string } | null;
+  lastError?: { code: string; safeMessage: string; occurredAt: string; details?: string | null } | null;
   supersedesPaymentRequestId?: string | null;
   supersededByPaymentRequestId?: string | null;
   duplicateCheck?: {

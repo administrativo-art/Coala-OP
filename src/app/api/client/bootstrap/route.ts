@@ -160,14 +160,21 @@ export async function GET(request: NextRequest) {
             payload.users = [serializeValue(context.userDoc)];
             return;
           }
-          const users = await rawCollectionData("users");
-          payload.users = users
-            .filter((user) => user.id === context.userDoc.id || canAccessUserByUnit(
-              context.userDoc,
-              user as UnitAccessUser,
-              { isDefaultAdmin: context.isDefaultAdmin }
-            ))
-            .map(serializeValue);
+          try {
+            const users = await rawCollectionData("users");
+            payload.users = users
+              .filter((user) => user.id === context.userDoc.id || canAccessUserByUnit(
+                context.userDoc,
+                user as UnitAccessUser,
+                { isDefaultAdmin: context.isDefaultAdmin }
+              ))
+              .map(serializeValue);
+          } catch (error) {
+            // O diretório é auxiliar: uma falha transitória não deve derrubar
+            // a autenticação nem impedir o restante da aplicação de carregar.
+            console.error("[client/bootstrap:users]", error);
+            payload.users = [serializeValue(context.userDoc)];
+          }
           return;
         }
 
