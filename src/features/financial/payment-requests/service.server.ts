@@ -1037,6 +1037,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         actorId: actor === "system" ? "system" : actor.uid,
         actorEmail: actor === "system" ? null : actor.email ?? null,
         code: lastError.code,
+        responseDetails: lastError.details ?? null,
       });
       if (messageRef && messageSnapshot?.exists) {
         const plan = planFinancialInboxPaymentProjection({
