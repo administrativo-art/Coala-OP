@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class SessionState(val identity: Identity? = null, val loading: Boolean = true, val locked: Boolean = true, val busy: Boolean = false, val error: String? = null, val resetSent: Boolean = false, val simulation: Boolean = false)
+data class SessionState(val identity: Identity? = null, val loading: Boolean = true, val locked: Boolean = true, val busy: Boolean = false, val error: String? = null, val resetSent: Boolean = false, val simulation: Boolean = false, val localUnlockEnabled: Boolean = false)
 data class DeveloperViewAsState(val available: Boolean = false, val users: List<DeveloperViewAsUser> = emptyList(), val targetUserId: String? = null, val targetName: String? = null, val busy: Boolean = false, val error: String? = null)
 @HiltViewModel class SessionViewModel @Inject constructor(private val auth: AuthGateway, private val gate: SessionGate, val mode: RuntimeMode, private val biometric: BiometricPreferences, private val api: ApiService, private val attestation: AppAttestation, val push: PushController, private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(), private val demoApi: com.coalaone.go.data.DemoApi = com.coalaone.go.data.DemoApi()) : ViewModel() {
     private val mutable = MutableStateFlow(SessionState())
@@ -34,7 +34,7 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
     init { viewModelScope.launch { auth.identities.collect { identity -> if (!mode.simulation) {
         val developerIdentity = identity?.email?.trim()?.lowercase() == DEVELOPER_VIEW_AS_EMAIL
         if (!developerIdentity) { developerViewAsStore.clear(); developerViewAsMutable.value = DeveloperViewAsState() }
-        mutable.update { it.copy(identity = identity, loading = false, locked = identity == null || !gate.permits(identity.uid)) }; push.reflect(identity?.uid)
+        mutable.update { it.copy(identity = identity, loading = false, locked = identity == null || !gate.permits(identity.uid), localUnlockEnabled = identity?.let { current -> biometric.enabled(current.uid) } == true) }; push.reflect(identity?.uid)
         if (developerIdentity) loadDeveloperViewAs()
     } } } }
     fun login(email: String, password: String) = perform {
@@ -43,18 +43,21 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
         val identity = auth.login(email, password)
         if (previous != identity.uid) biometric.clear() else if (biometric.enabled(identity.uid)) biometric.record(identity.uid, true)
         gate.unlock(identity.uid)
-        mutable.update { it.copy(identity = identity, locked = false, resetSent = false) }
+        mutable.update { it.copy(identity = identity, locked = false, resetSent = false, localUnlockEnabled = biometric.enabled(identity.uid)) }
         push.reflect(identity.uid); push.foreground(identity.uid)
     }
     fun unlock(password: String, enableBiometric: Boolean) = perform {
         auth.reauthenticate(password)
         val identity = auth.current ?: error("Sessão expirada")
         biometric.record(identity.uid, enableBiometric); gate.unlock(identity.uid)
-        mutable.update { it.copy(locked = false) }
+        mutable.update { it.copy(locked = false, localUnlockEnabled = biometric.enabled(identity.uid)) }
+    }
+    fun enableBiometricUnlock() {
+        auth.current?.uid?.let { uid -> biometric.record(uid, true); mutable.update { it.copy(localUnlockEnabled = true, error = null) } }
     }
     fun biometricReady() = auth.current?.uid?.let(biometric::ready) == true
     fun biometricEnabled() = auth.current?.uid?.let(biometric::enabled) == true
-    fun unlockBiometric() { auth.current?.uid?.takeIf { biometric.ready(it) }?.let { gate.unlock(it); mutable.update { current -> current.copy(locked = false, error = null) } } }
+    fun unlockBiometric() { auth.current?.uid?.takeIf { biometric.ready(it) }?.let { gate.unlock(it); mutable.update { current -> current.copy(locked = false, error = null, localUnlockEnabled = true) } } }
     fun reset(email: String) = perform { require(email.contains('@')) { "Informe seu e-mail." }; api.reset(ResetRequest(email.trim())); mutable.update { it.copy(resetSent = true) } }
     fun simulate() { mode.simulate(); mutable.value = SessionState(mode.identity(), loading = false, locked = false, simulation = true) }
     fun loadDeveloperViewAs() {
