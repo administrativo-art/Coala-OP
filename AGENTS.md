@@ -17,7 +17,7 @@
 
 ## Departamento de Desenvolvimento e Tecnologia
 
-- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
+- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os oito especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown.
 - Escolha somente os especialistas necessários. Execute no máximo um especialista por vez; aguarde sua entrega e confira processos ainda ativos antes de iniciar ou retomar outro. Especialistas não delegam.
 - Selecione o modelo pelo trabalho concreto, conforme `docs/engineering/development-technology.md`. Neste departamento, use Luna ou Sol no Codex e Haiku ou Sonnet no Claude Code. Nunca selecione Fable ou Opus; Astra exige uma solicitação explícita do programador para aquele chamado. Se o trabalho exceder esses modelos, informe o limite e peça uma decisão. Registre o modelo efetivamente usado quando o CLI informar.
 - Antes de usar o Claude Code para este departamento, confira `claude --version`: a restrição da opção Padrão exige a versão 2.1.175 ou posterior. Se o comando resolver para uma instalação mais antiga, use uma instalação compatível antes de iniciar o chamado.
@@ -25,6 +25,12 @@
 - Registre objetivo, autorização, critérios de aceite, trabalho e evidências em `.ai-work/development-technology/<id>/`. Ao mudar de CLI, encerre a sessão anterior e confira o registro e o estado dos arquivos antes de assumir a coordenação.
 - Nome de personagem identifica papel. Somente TARS pode usar um estilo direto, calmo, pragmático e com humor pontual; precisão e regras operacionais têm prioridade.
 - Uma solicitação de implementação autoriza as alterações e verificações locais pertinentes ao escopo. Commit, push, migração em banco real, publicação e deploy exigem autorização própria, salvo quando já foram explicitamente incluídos na solicitação.
+
+### Revisão obrigatória das normas de ponto eletrônico
+
+- Toda mudança que toque registro, tratamento ou documento de ponto exige revisão de Doc Brown (`doc`) antes do commit: `src/features/dp/rep-p/**`, `src/features/dp/time-calculation/**`, `src/app/api/dp/time-recording/**`, telas de ponto no Coala One e no Coala Go, coleções `repP_*` (regras e índices em `firestore.rh.*`), jornadas, escalas e regras que alimentem o PTRP, AFD, AEJ, espelho, comprovante, assinatura, hora legal, retenção e contingência do ponto.
+- O veredito fica no registro do chamado. Requisito `não conforme` bloqueia o commit até correção ou decisão explícita do programador registrada; `decisão jurídica necessária` vira pendência nomeada no plano, nunca suposição no código.
+- O especialista também orienta juridicamente (interpretação, riscos, alternativas e recomendação) e prepara a consulta ao advogado quando o risco for alto. A orientação não é parecer definitivo, não declara conformidade legal e não substitui advogado habilitado, atestado técnico REP-P/PTRP ou registro no INPI.
 
 ### Gatilho compartilhado de entrega integral
 
@@ -141,10 +147,12 @@
 ## Verificação antes de concluir
 
 - Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
-- Mudanças comuns devem manter `npm run check` verde.
-- Mudanças que afetem build, importações, fronteiras server/client ou geração de rotas devem manter `npm run verify` verde.
-- Mudanças em regras de acesso ao Firestore exigem `npm run check:rules` verde.
-- Mudanças cobertas por teste de integração exigem o respectivo comando verde.
+- Durante a implementação, execute o menor teste capaz de reproduzir a alteração ou regressão. Antes do push, complemente apenas com os contratos diretamente afetados e `git diff --check`; não use a suíte completa como substituto de testes dirigidos.
+- Em PR para `main`, o job obrigatório `quality` é a fonte final para `npm run check:vulnerabilities`, mapas de engenharia, `npm run check:rules`, `npm run verify` e build das Functions. Não execute localmente os mesmos comandos completos em paralelo nem depois do push apenas para duplicar o CI.
+- Execute `npm run check` ou `npm run verify` localmente antes do CI somente quando: o CI estiver indisponível; for preciso reproduzir uma falha; a mudança alterar o próprio pipeline, build, dependências ou toolchain e uma verificação dirigida não bastar; ou o programador pedir expressamente. Um resultado verde permanece válido para o mesmo SHA, dependências, configuração e ambiente; não o repita sem mudança relevante.
+- Quando o CI falhar, reproduza localmente primeiro apenas o comando ou teste que falhou. Depois da correção, rode o subconjunto afetado e deixe o `quality` validar novamente a suíte integral no novo SHA.
+- Acompanhe uma única execução do CI, em intervalos de 30–60 segundos. Para merge, espere somente os checks exigidos pela proteção da branch; jobs de observação não bloqueiam entrega e não justificam repetir testes localmente.
+- Mudanças cobertas por teste de integração exigem o respectivo comando dirigido verde antes do push. Mudanças de regras ou Functions continuam cobertas pelo `quality`, sem jobs obrigatórios paralelos com instalações duplicadas.
 - A IA não afirma que algo funciona sem ter executado a verificação. Não descreva como resultado aquilo que não rodou.
 - Falhas preexistentes devem ser identificadas como preexistentes; não podem ser omitidas nem atribuídas à mudança sem evidência.
 
@@ -155,9 +163,11 @@
 - Correção de regressão deve deixar um teste permanente no menor nível capaz de reproduzir a falha. Adicione E2E quando a regressão depender da integração entre navegador, rota e persistência.
 - E2E nunca executa contra produção nem usa credenciais reais. Use projeto Firebase com prefixo `demo-`, emuladores locais e dados determinísticos criados pelo próprio teste.
 - Um E2E novo entra no CI primeiro em observação. Ele só vira gate bloqueante depois de permanecer estável e de não depender de tempo arbitrário, ordem de execução ou estado compartilhado.
+- A varredura geral dos quatro grupos E2E em observação roda automaticamente em todo PR para `main`, semanalmente e sob acionamento manual em workflow próprio, com uma única preparação de ambiente. Não roda nos PRs de promoção para `production` e não é gate obrigatório. Localmente, a mudança executa apenas o E2E do fluxo crítico afetado. A economia de tokens deve vir de um único observador dos checks obrigatórios, resultados resumidos e leitura dirigida de logs em falhas, não da redução da cobertura automática no GitHub.
 
 ## CLI e navegador
 
+- **Terminal visível somente com aceite prévio:** a IA não pode abrir, ativar, controlar, reutilizar nem enviar comandos a uma janela do Terminal (ou aplicativo equivalente) por iniciativa própria. Quando entender que um Terminal visível ajudaria ou for necessário para entrada pessoal, deve primeiro sugerir sua abertura e explicar a finalidade; só pode abri-lo e trabalhar por essa janela depois que o desenvolvedor aceitar expressamente a sugestão naquela tarefa. A autorização não se transfere para tarefas futuras. Comandos executados pelas ferramentas internas em segundo plano continuam permitidos dentro das demais regras e autorizações do projeto.
 - **REGRA DE PARADA — NAVEGADOR PROIBIDO POR PADRÃO:** a IA não pode iniciar, conectar, selecionar, descobrir, inspecionar nem controlar qualquer navegador sem autorização explícita e específica do desenvolvedor nesta tarefa. A proibição inclui Chrome, navegador interno, extensões, Playwright, Computer Use e qualquer ferramenta equivalente.
 - **Exceção permanente — Playwright do repositório:** fica autorizado em todas as tarefas, sem nova confirmação, executar `npm run test:e2e*` e `playwright test` do próprio repositório (Chromium headless instalado pelo Playwright) para criar, rodar e depurar testes E2E, somente contra o app local com emuladores e projeto `demo-`. Essa exceção não amplia nada além disso: continuam proibidos, sem autorização expressa na tarefa, o Chrome ou qualquer navegador do usuário, extensões, Computer Use, abas e sessões existentes, qualquer ambiente real (produção, projetos reais, credenciais reais) e repetir no navegador algo que um script já confirmou. Uma instrução negativa do desenvolvedor, como "sem navegador", suspende a exceção naquela tarefa.
 - A proibição começa antes da navegação. Sem autorização, é vedado inicializar cliente ou sessão de navegador, consultar navegadores disponíveis, listar ou reivindicar abas, ler histórico, cookies ou estado da sessão, capturar telas e executar até mesmo uma inspeção somente de leitura.

@@ -22,6 +22,19 @@ Para cada insumo base que precisa de reposição:
 
 Uma compra histórica identifica o derivado e o fornecedor; ela não reduz a falta física. Uma compra ainda ativa e destinada explicitamente à unidade aparece em aviso separado de **compra a caminho**, também sem reduzir automaticamente a falta física.
 
+## Auditoria de cobertura das compras
+
+Consultar apenas os recebimentos filtrados pela unidade não é suficiente: pedidos legados ou importados podem estar ativos sem `destinationKioskId` e desaparecer desse filtro. Em toda reposição operacional que considere o que já foi comprado, faça também uma consulta limitada dos recebimentos ativos do workspace e reconcilie seus pedidos.
+
+Classifique o resultado sem inferir destino:
+
+- **Compra a caminho**: recebimento ativo com `destinationKioskId` igual à unidade solicitada.
+- **Compra ativa sem destino**: recebimento ativo cujo pedido e recebimento não tenham destino explícito. Mostre fornecedor, pedido e itens em bloco separado; não atribua à unidade nem abata da necessidade.
+- **Pedido sem recebimento ativo**: pedido confirmado sem recebimento ativo correspondente. Mostre como inconsistência para reconciliação, sem tratá-lo como mercadoria a caminho.
+- **Compromisso comercial pendente de confirmação operacional**: pedido ainda em revisão que o usuário informou como comprado, aceito pelo fornecedor ou com cobrança emitida. Mostre separadamente e explique o estado cadastral; não o omita nem o promova silenciosamente a confirmado.
+
+Se a consulta global limitada atingir o limite sem provar cobertura completa, declare a pesquisa parcial. Nunca conclua que não existe compra somente porque a busca por destino veio vazia.
+
 ## Conversão
 
 Quando estiver trabalhando no repositório, reutilize as regras canônicas de `src/lib/purchasing-units.ts` e `src/lib/conversion.ts`:
@@ -43,6 +56,7 @@ Considere apenas pedidos confirmados e não cancelados. Ordene pela data da comp
 - Desconte reservas físicas uma única vez conforme a regra oficial da reposição.
 - Não confunda mínimo, estoque disponível, falta física, compra a caminho e quantidade arredondada para embalagem.
 - Não deduza recebimento ou destino para pedidos legados sem vínculo explícito.
+- Não omita uma compra ativa por falta de destino; exponha-a no bloco de reconciliação.
 
 ## Formato da resposta
 
@@ -53,6 +67,8 @@ Organize por fornecedor e mostre, no mínimo:
 | Ovomaltine Rocks 40 g | 1.034,67 g | 26 pacotes |
 
 O campo **Comprar** é sempre a necessidade física atual mostrada pelo cálculo de reposição. O campo **Pedir** é essa mesma necessidade convertida pelo derivado da última compra.
+
+Depois da lista de reposição, apresente quando aplicável os blocos **Compra a caminho**, **Compra ativa sem destino**, **Pedido sem recebimento ativo** e **Compromisso comercial pendente de confirmação operacional**. Esses blocos explicam a cobertura da pesquisa e não alteram **Comprar** ou **Pedir** automaticamente.
 
 Não mostre data nem quantidade da compra anterior, salvo se o usuário pedir esse histórico. Informe a data/hora de atualização dos dados quando a consulta for operacional.
 

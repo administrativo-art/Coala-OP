@@ -11,7 +11,7 @@ Este fluxo separa quatro responsabilidades:
 
 Férias não pertencem a este domínio: continuam no módulo próprio, com aquisição, concessão e efeitos específicos. Pessoa jurídica também não usa ausência trabalhista; eventual indisponibilidade contratual de PJ deve ser tratada em outro fluxo. Os vínculos elegíveis aqui são CLT, Aprendiz e Estágio, cada um com regras configuráveis e sem presumir que compartilham os mesmos limites.
 
-Este documento descreve o plano completo. A **Etapa 1** está publicada. As Etapas 2 e 3 estão funcionalmente fechadas no código local desta branch, com os gates e limites descritos abaixo; isso ainda não significa migração, homologação, ativação operacional ou publicação em produção.
+Este documento descreve o domínio de ausências. As **Etapas 1, 2 e 3 estão em produção** desde 17/10/2026: catálogo e pedidos no banco `coala-rh` (recibo `active`) e aplicação na escala com `DP_ABSENCE_OPERATIONAL_GUARD=on` e recibo operacional `ready`. O teste controlado na tela e a homologação funcional pelo DP continuam pendentes. A antiga Etapa 4 foi absorvida pelas Fases 3 e 5 do [plano mestre de ponto, jornada e fechamento](../../plano-jornada-fechamento-rh.md#6-fases).
 
 ## Banco e versionamento — decisão de 14/10/2026
 
@@ -136,6 +136,15 @@ Antes do envio, a interface deverá mostrar datas/horas no padrão brasileiro, q
 
 Quando a regra exigir documento, o arquivo deve estar anexado e validado no servidor antes da criação do pedido, não somente antes do envio. A preparação/upload pode usar uma referência temporária privada; ela não equivale a pedido aceito e precisa de expiração e limpeza delimitadas. O envio revalida a existência e o vínculo do arquivo. Não existe modalidade de documento obrigatório pendente de entrega posterior. Respeitar os prazos já configurados; não confundir antecedência/retroatividade com SLA do aprovador.
 
+### Motivo, envio em duas etapas e aprovação por decurso de prazo (19/10/2026)
+
+- **Coala Go (Etapa 7):** a entrada Solicitações do app repete as duas etapas com as mesmas rotas (opções, prévia, preparo de anexos, rascunho e `submit`, com as chaves reaproveitadas entre tentativas), mostra a regra de decurso de prazo no resumo e a tag "Aprovada por decurso de prazo" na lista. Anexo depois do envio, edição de rascunho e acompanhamento detalhado seguem na web.
+
+- **Motivo:** campo opcional (`reason`, 10 a 1000 caracteres) na criação e na edição do rascunho; gravado no pedido, exibido ao titular e a quem analisa (detalhe e fila).
+- **Envio em duas etapas:** o painel `AbsencePreviewPanel` pede tipo, período, motivo e comprovantes já na primeira etapa (o anexo obrigatório trava "Concluir"); "Concluir" calcula a prévia no servidor e abre o resumo; "Enviar solicitação" cria o rascunho e o envia em seguida (`submit`), com chaves de repetição próprias. Se só o envio falhar, o rascunho fica salvo para enviar pelo detalhe. "Salvar rascunho" continua disponível. O mesmo painel abre no Registro de ponto, com a data do dia "sem batidas" já preenchida.
+- **Aprovação por decurso de prazo:** a regra do tipo ganha `tacitApprovalDays` (1 a 30 dias corridos; regras novas vêm com 3; em branco, nunca). A função `absenceTacitApprovalJob` (a cada hora, minuto 5) chama `POST /api/jobs/dp/absences/tacit-approval`, que percorre com cursor os pedidos `in_review` com o prazo de 24 h vencido (índice existente `workspaceId`+`status`+`reviewSla.deadlineAt`; páginas de 100, até 1.000 lidos e 50 aprovados por execução, para que vencidos de regras sem decurso não escondam os que já devem ser aprovados) e aprova a etapa cujo prazo, contado de `reviewSla.startedAt`, venceu. O prazo vale por etapa: no fluxo gestor e depois DP, o pedido pode levar até o dobro (ex.: 6 dias com prazo de 3). A aprovação usa o mesmo caminho da análise humana (reservas, ocorrência, escala, notificação e auditoria) com o ator de sistema `system:absence-tacit-approval` e `operationId` determinístico; o que exigir confirmação humana (perfil, conflito, regra mudada) é pulado e fica com o DP. O pedido grava `tacitApprovals` por etapa, histórico `tacit_approve` e, na aprovação final por decurso, `approvalOrigin: 'tacit_timeout'`; listas, detalhe e Registro de ponto mostram a tag **"Aprovada por decurso de prazo"**. Pedidos pulados ficam em análise com o DP e a rotina devolve só os códigos opacos (`skippedCodes`); o alerta ao DP para pedido vencido que não pode ser aprovado sozinho é pendência. A auditoria (`dp_absenceAudit` e eventos) grava a ação `tacit_approve`. Reverter só com fraude comprovada fica para implementação futura. O motivo é texto livre e pode conter dado sensível: o campo orienta a não descrever diagnóstico (o atestado vai no anexo), e o espelho/fechamento deve referenciá-lo sem reproduzir. Custo: 24 execuções/dia × até 1.000 leituras (normalmente poucas dezenas; consulta vazia ≈ 1 leitura).
+- **Competência fechada:** criação, alteração de rascunho, envio, cancelamento e decisão humana conferem todas as competências civis tocadas pelo período; a rotina de decurso faz a mesma conferência antes de aprovar. Se qualquer `ptrp_competenceClosures/{workspace}_{AAAA-MM}` estiver fechado, a ação falha com `PTRP_COMPETENCE_CLOSED`. A checagem é repetida dentro da transação que muda o pedido, serializando a ausência com fechamento/reabertura; para corrigir, o DP precisa reabrir a competência e gerar nova versão do fechamento. **Custo:** uma ação comum de um mês acrescenta uma leitura antes e uma dentro da transação; o limite técnico de 180 dias toca no máximo sete competências, portanto até 14 leituras. No decurso, o custo se aplica somente aos candidatos efetivamente tentados, além das até 1.000 leituras paginadas já descritas; não há listener nem consulta sem limite.
+
 ### Responsáveis e documentos — decisões de produto
 
 - Configurar uma hierarquia ordenada com quantos níveis forem necessários, admitindo uma ou mais pessoas, função e cargo. Na ausência de responsável elegível pela função, usar o cargo alternativo explicitamente configurado; não inferir um diretor/presidente fixo.
@@ -228,9 +237,11 @@ A análise deve respeitar escopo de unidade e separar `view`, `review` e eventua
 
 ## Etapa 4 — ponto, folha, integrações e indicadores
 
-Somente depois da ocorrência aprovada e da integração validada:
+**Revisão de 17/10/2026:** esta etapa passa a ser executada dentro do [plano mestre](../../plano-jornada-fechamento-rh.md#6-fases): a parte de ponto na Fase 3 (PTRP) e a parte de folha na Fase 5 (eventos e fechamento). O ponto oficial futuro é o REP-P do Coala; não haverá projeção de justificativas no Bizneo, que sai no longo prazo. Os itens abaixo continuam como requisitos dessas fases.
 
-- projetar justificativa no ponto/Bizneo;
+Somente depois da ocorrência aprovada e do PTRP validado:
+
+- aplicar o tratamento da ocorrência no PTRP, sem alterar a marcação original da ARP;
 - creditar período trabalhado, debitar banco ou enviar para revisão, conforme o efeito;
 - produzir evento para folha sem calcular valor diretamente neste cadastro;
 - consolidar absenteísmo apenas quando `includeInAbsenteeism` estiver ativo;
@@ -299,11 +310,11 @@ A reconciliação da exclusão roda a cada 15 minutos: são 2.880 consultas de f
 
 Custos adicionais: página do sino até 26 documentos mais cursor; 5 aberturas/dia × 100 pessoas × 22 dias × 26 = 286.000 leituras/mês, além de autenticação/cursores, sem polling. O dispatcher revalida até 20 destinatários e grava somente os avisos internos elegíveis; não consulta dispositivos para ausências. Reconciliação-sombra: até 7 leituras/3 escritas por operação, além da autenticação; repetição da mesma operação não escreve. Dez operações/dia representam teto ilustrativo de 70 leituras/30 escritas diárias. Os índices RH declarados cobrem as combinações de filtros, inclusive SLA vencido; emulador não comprova provisionamento em produção.
 
-- homologar cutover do catálogo e pedidos no banco RH, índices, bootstrap e guard operacional em ambiente controlado antes de produção;
+- teste controlado na tela e homologação funcional pelo DP (cutover do catálogo, índices, bootstrap e guard já executados em produção em 17/10/2026);
 - inventariar e adaptar qualquer writer Admin externo ao repositório que possa contornar os fences;
 - executar testes controlados com Storage real para o descarte após 20 anos, sem remover documentos de produção durante a homologação;
 - validar os fluxos de encerramento documental e troca de custódia com o DP responsável;
-- mapeamento de cada efeito no Bizneo e na folha;
+- mapeamento de cada efeito no PTRP e nos eventos de folha (Fases 3 e 5 do plano mestre);
 - possibilidade e autoridade para reverter aprovação já exportada.
 
 As políticas concretas e documentos aceitos são preenchidos nas regras/instruções existentes e validados pelo DP/jurídico antes da publicação; não são um questionário estrutural novo. O sistema não transforma exemplos de interface em política trabalhista. Retenção, classificação e acesso definidos acima têm implementação local; ainda exigem inventário operacional de qualquer writer Admin externo, testes com Storage real controlado, migração/cutover e publicação antes de uso real.

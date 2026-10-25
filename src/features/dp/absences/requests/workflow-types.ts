@@ -27,6 +27,12 @@ export type AbsenceRequestRecord = {
   segments: AbsenceDaySegment[];
   stage: 'manager' | 'dp' | null; stageIndex: number; assignedReviewerIds: string[];
   reviewSla?: AbsenceReviewSla;
+  /** Motivo opcional informado no pedido. */
+  reason?: string;
+  /** Etapas aprovadas por decurso de prazo (sem análise no prazo da regra). */
+  tacitApprovals?: Array<{ stage: 'manager' | 'dp'; at: string; days: number }>;
+  /** Como a aprovação final aconteceu: análise humana ou decurso de prazo da última etapa. */
+  approvalOrigin?: 'review' | 'tacit_timeout';
   history: Array<{ action: string; actorUid: string; at: string; reason?: string; version: number }>;
   createdAt: string; updatedAt: string; submittedAt?: string; decidedAt?: string;
   lastOperationId?: string; lastOperationActorUid?: string; lastOperationAction?: string; lastOperationHash?: string;
@@ -39,6 +45,8 @@ export type AbsenceRequestDto = Pick<AbsenceRequestRecord,
   'id' | 'status' | 'version' | 'revision' | 'input' | 'quantity' | 'unit' | 'typeId' | 'typeVersion' | 'origin'
   | 'stage' | 'createdAt' | 'updatedAt' | 'submittedAt' | 'decidedAt' | 'reviewSla'> & {
     typeName: string; attachmentCount: number; canSubmit: boolean; canReview: boolean;
+    reason?: string; approvedByInaction: boolean; tacitApprovals?: AbsenceRequestRecord['tacitApprovals'];
+    tacitApprovalDays: number | null;
     beneficiaryUid: string; beneficiaryName: string | null; requesterUid: string; assignedReviewerIds: string[];
     canCancel: boolean; canConfirmProfile: boolean; profileReviewRequired: boolean;
     attachments: Array<Pick<AbsenceAttachment, 'id' | 'mime' | 'size'> & { canRead: boolean }>;

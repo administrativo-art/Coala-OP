@@ -86,6 +86,13 @@
   --color-ds-warn-bg: var(--ds-warn-bg);
   --color-ds-danger: var(--ds-danger);
   --color-ds-danger-bg: var(--ds-danger-bg);
+  --color-ds-caution: var(--ds-caution);
+  --color-ds-caution-bg: var(--ds-caution-bg);
+  --color-ds-caution-border: var(--ds-caution-border);
+  --color-ds-caution-tile: var(--ds-caution-tile);
+  --color-ds-caution-tile-ink: var(--ds-caution-tile-ink);
+  --color-ds-trouble-bg: var(--ds-trouble-bg);
+  --color-ds-trouble-border: var(--ds-trouble-border);
   --color-ds-info: var(--ds-info);
   --color-ds-info-bg: var(--ds-info-bg);
   --color-ds-neutral: var(--ds-neutral);
@@ -822,6 +829,10 @@
     --ds-ok-bg: #e8f5ee;      --ds-ok: #147337;
     --ds-warn-bg: #fff1e6;    --ds-warn: #c2410c;
     --ds-danger-bg: #ffe4e8;  --ds-danger: #be123c;
+    /* Cartão de dia com alerta (decisão 0006): atenção em mostarda suave, problema em rosado. */
+    --ds-caution: #b45309;    --ds-caution-bg: #fffbeb;  --ds-caution-border: #fde68a;
+    --ds-caution-tile: #fef3c7; --ds-caution-tile-ink: #92400e;
+    --ds-trouble-bg: #fff5f7; --ds-trouble-border: #fecdd6;
     --ds-info-bg: #eef3fe;    --ds-info: #1d4ed8;
     --ds-neutral-bg: #eceae5; --ds-neutral: #5f646c;
     --ds-alert-bg: #fff7e6;   --ds-alert-border: #f5d9a3; --ds-alert-ink: #6b4500;
@@ -867,6 +878,11 @@
   0% { background-position: 200% 0; }
   100% { background-position: -100% 0; }
 }
+@keyframes coala-shimmer-divider {
+  0% { background-position: 0 200%; box-shadow: 0 0 0 rgba(238, 111, 168, 0); }
+  45% { box-shadow: 0 0 9px rgba(238, 111, 168, .58); }
+  100% { background-position: 0 -100%; box-shadow: 0 0 0 rgba(238, 111, 168, 0); }
+}
 .coala-shimmer-word {
   background: linear-gradient(110deg, var(--ds-accent-kicker-dark) 25%, #ffffff 45%, var(--ds-accent-kicker-dark) 65%);
   background-size: 250% 100%;
@@ -875,6 +891,12 @@
   color: transparent;
   animation: coala-shimmer-word 3.4s linear infinite;
 }
+.coala-shimmer-divider {
+  background: linear-gradient(180deg, var(--ds-accent-kicker-dark) 22%, #ffffff 48%, var(--ds-accent-kicker-dark) 74%);
+  background-size: 100% 250%;
+  animation: coala-shimmer-divider 3.4s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .coala-shimmer-word { animation: none; background: none; color: var(--ds-accent-kicker-dark); -webkit-text-fill-color: currentColor; }
+  .coala-shimmer-divider { animation: none; background: var(--ds-accent-kicker-dark); box-shadow: none; }
 }

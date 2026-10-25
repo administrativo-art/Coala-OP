@@ -10,7 +10,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 
 const QUERY_LIMIT = 501;
 const PROJECTED_FIELDS = [
-  'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd',
+  'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakSegments',
   'unitId', 'unitIds', 'daysOfWeek', 'journeyIds', 'isArchived',
 ] as const;
 

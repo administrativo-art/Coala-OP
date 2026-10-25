@@ -8,6 +8,7 @@ import com.coalaone.go.push.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.*
 import org.junit.Assert.*
 import java.io.File
@@ -34,6 +35,43 @@ class ViewModelsTest {
     private val mode = RuntimeMode(auth)
     private val queue = MemoryQueue()
     private val scheduler = WorkScheduler { }
+
+    @Test fun pendingWithdrawalLinkCanBeCancelledWithoutCallingServer() = runTest {
+        var links = 0; var uploads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse { uploads++; return DemoApi().upload(fields, documents, expectedOwner) }
+            override suspend fun link(request: LinkWithdrawal): PurchaseResponse { links++; return DemoApi().link(request) }
+        }
+        val vm = PurchaseViewModel(repository(auth, api), mode, queue, QueueSync(auth, queue, repository(auth, api)), scheduler)
+        runCurrent()
+        val withdrawal = vm.state.value.withdrawals!!.withdrawals.first()
+        val purchase = vm.state.value.withdrawals!!.awaitingPurchases.firstOrNull()
+            ?: AwaitingPurchase("purchase-1", withdrawal.unitId, "Mercado", withdrawal.date, withdrawal.amountCents)
+        vm.prepareLink(purchase, withdrawal)
+        assertNotNull(vm.state.value.pendingLink)
+        assertEquals(withdrawal.unitId, vm.state.value.unitView)
+        assertEquals(0, links)
+        val focus = vm.state.value.linkFocusRequest
+        vm.select("cash_withdrawal", withdrawal)
+        assertNull(vm.state.value.selected)
+        assertNotNull(vm.state.value.pendingLink)
+        assertTrue(vm.state.value.linkFocusRequest > focus)
+        vm.select("cash_withdrawal", vm.state.value.withdrawals!!.withdrawals[1])
+        assertNull(vm.state.value.selected)
+        assertEquals(withdrawal.sourceId, vm.state.value.pendingLink!!.withdrawal.sourceId)
+        vm.cancelLink()
+        assertNull(vm.state.value.pendingLink)
+        assertEquals(0, links)
+        vm.select("cash_withdrawal", withdrawal)
+        assertNotNull(vm.state.value.selected)
+        vm.leaveReview()
+        assertNull(vm.state.value.selected)
+        assertEquals(0, uploads)
+        vm.prepareLink(purchase, withdrawal)
+        vm.link(); advanceUntilIdle()
+        assertEquals(1, links)
+        assertNull(vm.state.value.pendingLink)
+    }
 
     @Test fun restoredSessionStartsLockedAndPasswordFailureDoesNotUnlock() = runTest {
         val biometric = object : BiometricPreferences {
@@ -77,6 +115,33 @@ class ViewModelsTest {
         runCurrent(); vm.reset(" nobody@example.invalid "); advanceUntilIdle()
         assertEquals("nobody@example.invalid", requested); assertTrue(vm.state.value.resetSent)
     }
+    @Test fun persistedDeveloperViewAsIsRestoredBeforeHomeAndReconciledAtStartup() = runTest {
+        val developerAuth = TestAuth().also { it.mutable.value = Identity("developer", DEVELOPER_VIEW_AS_EMAIL) }
+        val storedSelection = InMemoryDeveloperViewAsStore().also { it.select("view-as-user") }
+        val target = DeveloperViewAsUser("view-as-user", "Pessoa visualizada", "pessoa@example.invalid")
+        var directoryReads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun developerViewAs(): DeveloperViewAsDirectory {
+                directoryReads++
+                assertEquals("view-as-user", storedSelection.current())
+                return DeveloperViewAsDirectory(true, target.id, target, listOf(target))
+            }
+        }
+        val biometric = object : BiometricPreferences {
+            override fun enabled(uid: String) = false; override fun ready(uid: String) = false
+            override fun record(uid: String, enabled: Boolean) {}; override fun clear() {}
+        }
+        val vm = SessionViewModel(developerAuth, SessionGate(), RuntimeMode(developerAuth), biometric, api,
+            object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push, storedSelection)
+
+        // This assertion happens before the authentication flow or any network response can run.
+        assertEquals("view-as-user", vm.developerViewAs.value.targetUserId)
+        assertNull(vm.developerViewAs.value.targetName)
+        advanceUntilIdle()
+        assertEquals(1, directoryReads)
+        assertEquals("view-as-user", vm.developerViewAs.value.targetUserId)
+        assertEquals("Pessoa visualizada", vm.developerViewAs.value.targetName)
+    }
     @Test fun homeUsesServerModulesAndRejectsOversizeAvatarBeforeSending() = runTest {
         var uploads = 0
         val api = object : ApiService by DemoApi() {
@@ -84,11 +149,155 @@ class ViewModelsTest {
             override suspend fun avatar(photo: okhttp3.MultipartBody.Part): AvatarResponse { uploads++; return AvatarResponse("https://example.invalid/avatar.jpg") }
         }
         val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
-        assertTrue(vm.profile.value!!.modules.stockCount); assertFalse(vm.profile.value!!.modules.localPurchase)
+        assertTrue(vm.profile.value.response!!.modules.stockCount); assertFalse(vm.profile.value.response!!.modules.localPurchase)
         vm.avatar(Document("photo.jpg", "image/jpeg", ByteArray(5 * 1024 * 1024 + 1))); advanceUntilIdle()
         assertEquals(0, uploads); assertNotNull(vm.feedback.value.error)
         vm.avatar(pending().receipts.single()); advanceUntilIdle()
-        assertEquals(1, uploads); assertEquals("https://example.invalid/avatar.jpg", vm.profile.value!!.profile.avatarUrl)
+        assertEquals(1, uploads); assertEquals("https://example.invalid/avatar.jpg", vm.profile.value.response!!.profile.avatarUrl)
+    }
+    @Test fun homeProfileHidesThePreviousTargetAndDiscardsALateResponse() = runTest {
+        val firstStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var reads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                reads++
+                return if (reads == 1) {
+                    firstStarted.complete(Unit); releaseFirst.await()
+                    ProfileResponse(Profile("Pessoa anterior"), Modules(stockCount = true))
+                } else ProfileResponse(Profile("Pessoa atual"), Modules(schedule = true))
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler)
+        runCurrent(); firstStarted.await()
+        assertNull(vm.profile.value.visibleFor("view-as-user"))
+        vm.refresh("view-as-user"); runCurrent()
+        assertEquals("Pessoa atual", vm.profile.value.visibleFor("view-as-user")?.profile?.name)
+        assertTrue(vm.profile.value.visibleFor("view-as-user")!!.modules.schedule)
+        releaseFirst.complete(Unit); advanceUntilIdle()
+        assertEquals("view-as-user", vm.profile.value.contextKey)
+        assertEquals("Pessoa atual", vm.profile.value.response!!.profile.name)
+        assertFalse(vm.profile.value.response!!.modules.stockCount)
+    }
+    @Test fun persistedViewAsKeysTheFirstHomeRequestAndCannotSurviveAContextChange() = runTest {
+        val firstStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val storedSelection = InMemoryDeveloperViewAsStore().also { it.select("view-as-user") }
+        var reads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                reads++
+                return if (reads == 1) {
+                    firstStarted.complete(Unit); releaseFirst.await()
+                    ProfileResponse(Profile("Pessoa visualizada"), Modules(stockCount = true))
+                } else ProfileResponse(Profile("Pessoa real"), Modules(schedule = true))
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, storedSelection)
+        assertEquals("view-as-user", vm.profile.value.contextKey)
+        runCurrent(); firstStarted.await()
+        storedSelection.clear(); vm.refresh("test-owner"); runCurrent()
+        assertEquals("Pessoa real", vm.profile.value.visibleFor("test-owner")?.profile?.name)
+        releaseFirst.complete(Unit); advanceUntilIdle()
+        assertEquals("test-owner", vm.profile.value.contextKey)
+        assertEquals("Pessoa real", vm.profile.value.response!!.profile.name)
+        assertFalse(vm.profile.value.response!!.modules.stockCount)
+    }
+    @Test fun avatarCompletionCannotChangeTheNewViewAsContextOrItsFeedback() = runTest {
+        val avatarStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseAvatar = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var profileReads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                profileReads++
+                val name = if (profileReads == 1) "Pessoa real" else "Pessoa visualizada"
+                return ProfileResponse(Profile(name), Modules(localPurchase = true))
+            }
+            override suspend fun avatar(photo: okhttp3.MultipartBody.Part): AvatarResponse {
+                avatarStarted.complete(Unit); releaseAvatar.await()
+                return AvatarResponse("https://example.invalid/new-avatar.jpg")
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        vm.avatar(pending().receipts.single()); runCurrent(); avatarStarted.await()
+        vm.refresh("view-as-user"); runCurrent()
+        assertEquals("Pessoa visualizada", vm.profile.value.visibleFor("view-as-user")?.profile?.name)
+        releaseAvatar.complete(Unit); advanceUntilIdle()
+        assertEquals("Pessoa visualizada", vm.profile.value.response!!.profile.name)
+        assertNull(vm.profile.value.response!!.profile.avatarUrl)
+        assertNull(vm.feedback.value.notice)
+    }
+    @Test fun homeReloadsTodayForAViewAsTargetAndWhenReturningFromPoint() = runTest {
+        var shift = "08:00" to "16:00"
+        var optionReads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile() = ProfileResponse(Profile("Ana"), Modules(schedule = true, timeRecording = true))
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                optionReads++
+                return TimeOptions(workDate, true, true, listOf(ExecutionUnit("unit", "Unidade", true)),
+                    OfficialClock(true, "2026-10-23T18:00:00Z", "America/Belem"))
+            }
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
+            override suspend fun timeMonth(month: String) = OwnMonth(month, listOf(OwnShift(LocalDate.now().toString(), "work",
+                shift.first, shift.second, unitId = "unit", unitName = "Unidade", shiftName = "Turno")))
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler)
+        runCurrent()
+        val modules = Modules(schedule = true, timeRecording = true)
+        vm.loadToday(modules, null, "real-user", force = true); advanceUntilIdle()
+        assertEquals("08h–16h", vm.today.value.shiftShort)
+        assertFalse(vm.today.value.visibleFor("view-as-user").loaded)
+        assertNull(vm.today.value.visibleFor("view-as-user").shiftShort)
+        shift = "14:00" to "22:00"
+        vm.loadToday(modules, null, "view-as-user", force = true); advanceUntilIdle()
+        assertEquals("view-as-user", vm.today.value.contextKey)
+        assertEquals("14h–22h", vm.today.value.shiftShort)
+        shift = "10:00" to "18:00"
+        vm.loadToday(modules, null, "view-as-user", force = true); advanceUntilIdle()
+        assertEquals("10h–18h", vm.today.value.shiftShort)
+        assertEquals(3, optionReads)
+    }
+    @Test fun lateHomeResponseCannotReplaceTheCurrentViewAsTarget() = runTest {
+        val firstStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var optionsReads = 0
+        var monthReads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                optionsReads++
+                if (optionsReads == 1) { firstStarted.complete(Unit); releaseFirst.await() }
+                return TimeOptions(workDate, true, true, listOf(ExecutionUnit("unit", "Unidade", true)),
+                    OfficialClock(true, "2026-10-23T18:00:00Z", "America/Belem"))
+            }
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
+            override suspend fun timeMonth(month: String): OwnMonth {
+                monthReads++
+                val hours = if (monthReads == 1) "14:00" to "22:00" else "08:00" to "16:00"
+                return OwnMonth(month, listOf(OwnShift(LocalDate.now().toString(), "work", hours.first, hours.second,
+                    unitId = "unit", unitName = "Unidade", shiftName = "Turno")))
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        val modules = Modules(schedule = true, timeRecording = true)
+        vm.loadToday(modules, null, "real-user", force = true); runCurrent(); firstStarted.await()
+        vm.loadToday(modules, null, "view-as-user", force = true); runCurrent()
+        assertEquals("14h–22h", vm.today.value.shiftShort)
+        releaseFirst.complete(Unit); advanceUntilIdle()
+        assertEquals("view-as-user", vm.today.value.contextKey)
+        assertEquals("14h–22h", vm.today.value.shiftShort)
+    }
+    @Test fun homeDistinguishesAnUnavailableScheduleFromADayWithoutShift() = runTest {
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = TimeOptions(workDate, false, false, emptyList(),
+                OfficialClock(true, "2026-10-23T18:00:00Z", "America/Belem"))
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
+            override suspend fun timeMonth(month: String): OwnMonth = throw IOException("indisponível")
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        vm.loadToday(Modules(schedule = true, timeRecording = true), null, "real-user", force = true); advanceUntilIdle()
+        assertTrue(vm.today.value.loaded)
+        assertEquals(false, vm.today.value.scheduleAvailable)
+        assertNull(vm.today.value.shift)
     }
     @Test fun countRehydratesNewerLocalDraftAndPersistsOwner() = runTest {
         val store = MemoryDrafts()
@@ -140,16 +349,38 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() {
             override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse {
                 val buffer = okio.Buffer(); fields.getValue("submissionId").writeTo(buffer); sentId = buffer.readUtf8(); assertEquals("test-owner", expectedOwner)
-                return UploadResponse(Submission("server", false, "pending_review", ReceiptAnalysis("Fornecedor", purchaseDate = "2026-10-01", amountCents = 5000, items = listOf(AnalysisItem("Leite", 10.0, "un", 500, 5000)))))
+                return UploadResponse(Submission("server", false, "pending_review", ReceiptAnalysis("Fornecedor", purchaseDate = "2026-10-01", amountCents = 5000, items = listOf(AnalysisItem("Leite", 10.0, "un", 500, 5000, aiTreatment = "item_not_found", aiConfidence = "high", aiReason = "Não há produto compatível.")))))
             }
             override suspend fun confirm(request: ConfirmPurchase): PurchaseResponse { confirms++; assertEquals(sentId, request.submissionId); return PurchaseResponse(PurchaseResult("p", "confirmed", stockEntry = if (confirms == 1) "pending" else "done")) }
         }
         val repo = repository(auth, api); val vm = PurchaseViewModel(repo, mode, queue, QueueSync(auth, queue, repo), scheduler)
         runCurrent(); vm.select("cash_withdrawal"); val id = vm.state.value.selected!!.submissionId; vm.attach(pending().receipts.single(), false); vm.upload(); advanceUntilIdle()
         assertEquals(id, sentId); assertEquals("UPLOADED", queue.rows.value.single().state); assertNotNull(vm.state.value.review)
+        assertEquals("item_not_found", vm.state.value.review!!.items.single().aiTreatment)
+        assertEquals("Não há produto compatível.", vm.state.value.review!!.items.single().aiReason)
         // The simulation has several units, so a purchase without a withdrawal needs the unit chosen in the review.
         vm.review(vm.state.value.review!!.copy(unitId = "simulation-unit", accountPlanId = "account", resultCenterId = "center")); vm.confirm(); advanceUntilIdle()
         assertEquals(2, confirms); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)
+    }
+    @Test fun noteKeptForWithdrawalShowsOnItsCardAndCancelsOnServerThenPhone() = runTest {
+        val cancelled = mutableListOf<String>(); var failCancel = true
+        val api = object : ApiService by DemoApi() {
+            override suspend fun cancelUpload(request: CancelUpload): CancelUploadResponse { if (failCancel) throw IOException(); cancelled += request.submissionId; return CancelUploadResponse(CancelledUpload("cancelled")) }
+        }
+        val repo = repository(auth, api); val vm = PurchaseViewModel(repo, mode, queue, QueueSync(auth, queue, repo), scheduler)
+        runCurrent()
+        val withdrawal = vm.state.value.withdrawals!!.withdrawals.first()
+        vm.openUnit(withdrawal.unitId); assertEquals(withdrawal.unitId, vm.state.value.unitView)
+        vm.select("cash_withdrawal", withdrawal); vm.attach(pending().receipts.single(), false); val id = vm.state.value.selected!!.submissionId
+        vm.upload(); advanceUntilIdle()
+        assertEquals(withdrawal.sourceId, vm.state.value.queueWithdrawals[id]); assertNotNull(vm.state.value.review)
+        // Offline: nothing is dropped, so the server copy is never orphaned.
+        vm.discard(id); advanceUntilIdle()
+        assertEquals(id, queue.rows.value.single().id); assertNotNull(vm.feedback.value.error)
+        failCancel = false; vm.discard(id); advanceUntilIdle()
+        assertEquals(listOf(id), cancelled); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)
+        assertEquals(withdrawal.unitId, vm.state.value.unitView)
+        vm.closeUnit(); assertNull(vm.state.value.unitView)
     }
     @Test fun failedUploadIsRetainedAndResumesWithSameId() = runTest {
         val api = object : ApiService by DemoApi() { override suspend fun upload(fields: Map<String, okhttp3.RequestBody>, documents: List<okhttp3.MultipartBody.Part>, expectedOwner: String?): UploadResponse = throw IOException() }
@@ -228,5 +459,78 @@ class ViewModelsTest {
         catch (_: kotlinx.coroutines.CancellationException) { }
         assertEquals("READY", queue.rows.value.single().state)
         assertTrue(queue.acks.isEmpty())
+    }
+    @Test fun punchRetriesTheSameAttemptAndDateUntilTheServerAnswersAndStartsOverAfterConflict() = runTest {
+        val sent = mutableListOf<MarkingRequest>(); var failures = mutableListOf<Throwable>(java.io.IOException("lost"))
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest): MarkingResponse { sent += request; failures.removeFirstOrNull()?.let { throw it }; return DemoApi().mark(request) }
+        }
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val repository = repository(auth, api)
+        val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
+        vm.record(declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertNotNull(vm.feedback.value.error)
+        // A new view model over the same saved state (process killed) resends the same attempt and date.
+        val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(sent[0], sent[1]); assertEquals("mobile", sent[1].channel)
+        assertNotNull(revived.state.value.last); assertNull(saved.get<String>("attemptId"))
+        failures = mutableListOf(retrofit2.HttpException(retrofit2.Response.error<Any>(409, "{}".toResponseBody())))
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle(); assertNull(saved.get<String>("attemptId"))
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertNotEquals(sent[2].attemptId, sent[3].attemptId)
+    }
+    @Test fun locationIsPreservedWithThePunchAcrossNetworkFailureAndProcessRestart() = runTest {
+        val sent = mutableListOf<MarkingRequest>(); var first = true
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                val original = DemoApi().timeOptions(workDate)
+                return original.copy(executionUnits = original.executionUnits.map { unit ->
+                    unit.copy(locationPolicy = LocationPolicy("observe", 1, 10_000, 100.0, "https://example.test/privacidade"))
+                })
+            }
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sent += request
+                if (first) { first = false; throw java.io.IOException("lost") }
+                return DemoApi().mark(request)
+            }
+        }
+        val saved = androidx.lifecycle.SavedStateHandle(); val repository = repository(auth, api)
+        val location = LocationAttempt("capture-1", "captured", 300, "2026-10-19T11:00:00Z", -1.4558, -48.4902, 15.0)
+        val vm = timeViewModel(auth, repository, saved); vm.load(); advanceUntilIdle()
+        vm.record(true, location, "journey_start"); advanceUntilIdle(); assertTrue(vm.hasPendingLocationAttempt())
+        val revived = timeViewModel(auth, repository, saved); revived.load(); advanceUntilIdle()
+        revived.record(declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(sent[0].attemptId, sent[1].attemptId); assertEquals(location, sent[1].locationAttempt)
+        assertFalse(revived.hasPendingLocationAttempt()); assertNull(saved.get<String>("attemptLocation"))
+    }
+    @Test fun offlinePunchStaysLocalWithoutPretendingItHasAnNsr() = runTest {
+        var sends = 0
+        val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            sends++; return DemoApi().mark(request)
+        } }
+        val queue = MemoryTimeOfflineQueue(); val repository = repository(auth, api)
+        val vm = timeViewModel(auth, repository, androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle(); vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(0, sends); assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline); assertNull(vm.state.value.last)
+    }
+    @Test fun offlineSyncStopsAtFirstFailureToPreserveTheSignedSequence() = runTest {
+        val queue = MemoryTimeOfflineQueue()
+        fun pending(id: String, sequence: Int) = TimeMarkingRow("test-owner", id, "permit", sequence, sequence.toLong(), sealed = byteArrayOf()) to
+            MarkingRequest(id, "2026-10-19", "unit")
+        queue.readyRows = listOf(pending("first", 1), pending("second", 2))
+        var sends = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sends++
+                throw IOException("offline")
+            }
+        }
+        val completed = TimeOfflineSync(auth, queue, repository(auth, api)).sync("test-owner")
+        assertFalse(completed)
+        assertEquals(1, sends)
+        assertEquals(listOf("first"), queue.failures.map { it.first })
+        assertTrue(queue.syncedIds.isEmpty())
     }
 }

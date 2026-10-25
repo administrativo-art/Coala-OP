@@ -1,4 +1,4 @@
-import { InterApiError } from './error';
+import { InterApiError, interResponseDetails } from './error';
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -8,10 +8,15 @@ function object(value: unknown): Record<string, unknown> {
 
 export function safeInterPaymentError(error: unknown, now = new Date().toISOString()) {
   if (error instanceof InterApiError) {
+    const rejected = error.statusCode === 400 || error.statusCode === 422;
+    const genericInterMessage = 'Não foi possível concluir a comunicação com o Banco Inter.';
     return {
       code: error.code,
-      safeMessage: error.safeMessage,
+      safeMessage: rejected && error.safeMessage === genericInterMessage
+        ? 'O Banco Inter recusou os dados do pagamento. Revise os dados antes de tentar novamente.'
+        : error.safeMessage,
       occurredAt: now,
+      ...(error.responseDetails ? { details: error.responseDetails } : {}),
     };
   }
   const response = object(object(error).response);
@@ -20,10 +25,12 @@ export function safeInterPaymentError(error: unknown, now = new Date().toISOStri
   if (status === 422) {
     safeMessage = 'O Banco Inter recusou os dados do pagamento. Revise os dados antes de tentar novamente.';
   }
+  const details = interResponseDetails(error);
 
   return {
     code: status ? `INTER_HTTP_${status}` : 'INTER_REQUEST_FAILED',
     safeMessage,
     occurredAt: now,
+    ...(details ? { details } : {}),
   };
 }

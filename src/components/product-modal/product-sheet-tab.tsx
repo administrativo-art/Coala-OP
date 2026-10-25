@@ -3,7 +3,7 @@
 import { calculateProductCompositionCmv } from "@/lib/product-composition-cmv";
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { type ProductSimulation, type PPO } from '@/types';
 import { useProductSimulation } from '@/hooks/use-product-simulation';

@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   DEFAULT_PAYMENT_REQUEST_FILTER,
+  bankReportsPaymentSettled,
   matchesPaymentRequestFilter,
+  paymentRequestDisplayStatus,
   paymentSchedulePresentation,
   stageGroup,
 } from "../../src/features/financial/payment-requests/presentation";
@@ -191,9 +193,9 @@ test("filtro inicial inclui todos os status não pagos, até os terminais", () =
   assert.equal(requests.filter((item) => matchesPaymentRequestFilter(item, "all")).length, statuses.length);
 });
 
-test("pago divergente sai de Não pagos e continua acessível em Todos e Atenção", () => {
+test("pago com revisão continua visível em Não pagos, Todos e Atenção", () => {
   const divergent = { ...boleto, status: "paid", beneficiaryVerificationStatus: "divergent" } as const;
-  assert.equal(matchesPaymentRequestFilter(divergent, DEFAULT_PAYMENT_REQUEST_FILTER), false);
+  assert.equal(matchesPaymentRequestFilter(divergent, DEFAULT_PAYMENT_REQUEST_FILTER), true);
   assert.equal(matchesPaymentRequestFilter(divergent, "all"), true);
   assert.equal(matchesPaymentRequestFilter(divergent, "risk"), true);
   assert.equal(stageGroup(divergent), "risk");
@@ -201,17 +203,82 @@ test("pago divergente sai de Não pagos e continua acessível em Todos e Atenç�
   assert.equal(matchesPaymentRequestFilter(divergent, "done"), false);
 });
 
+test("divergência histórica não esconde que o banco já confirmou o pagamento", () => {
+  const legacy = {
+    ...pix,
+    status: "failed",
+    bankStatus: "PAGO",
+    statementReconciliationStatus: "divergent",
+    bankReconciliationDivergenceField: "receiver",
+    lastError: {
+      code: "BANK_RECONCILIATION_DIVERGENCE",
+      safeMessage: "Documento divergente.",
+      occurredAt: "2026-09-26T15:00:00.000Z",
+    },
+  } as const;
+  assert.equal(bankReportsPaymentSettled(legacy), true);
+  assert.equal(paymentRequestDisplayStatus(legacy), "Pago · revisar favorecido");
+  assert.equal(stageGroup(legacy), "risk");
+  assert.equal(matchesPaymentRequestFilter(legacy, "unpaid"), true);
+  assert.equal(paymentSchedulePresentation(legacy, now).label, "Pago no banco");
+});
+
+test("boleto realizado fica aguardando conciliação, sem parecer em processamento bancário", () => {
+  const realized = {
+    ...boleto,
+    status: "awaiting_statement",
+    bankStatus: "REALIZADO",
+    bankLiquidationObservedAt: "2026-09-26T15:00:00.000Z",
+  } as const;
+  assert.equal(paymentRequestDisplayStatus(realized), "Pago no banco · aguardando extrato");
+  assert.deepEqual(paymentSchedulePresentation(realized, now), {
+    label: "Pago no banco",
+    date: "26/09/2026",
+    timing: "Aguardando conciliação no extrato",
+    dueDate: null,
+  });
+});
+
+test("boleto legado em processamento com REALIZADO já mostra liquidação bancária", () => {
+  const realized = {
+    ...boleto,
+    status: "processing",
+    bankStatus: "REALIZADO",
+    bankLiquidationObservedAt: "2026-09-26T15:00:00.000Z",
+  } as const;
+  assert.equal(paymentRequestDisplayStatus(realized), "Pago no banco · aguardando extrato");
+  assert.deepEqual(paymentSchedulePresentation(realized, now), {
+    label: "Pago no banco",
+    date: "26/09/2026",
+    timing: "Aguardando conciliação no extrato",
+    dueDate: null,
+  });
+});
+
+test("pagamento concluído continua rotulado como pago mesmo com status bancário liquidado", () => {
+  assert.equal(paymentRequestDisplayStatus({
+    ...pix,
+    status: "paid",
+    bankStatus: "PAGO",
+    paidAt: "2026-09-26T15:00:00.000Z",
+  }), null);
+});
+
 test("filtros anteriores preservam acesso por etapa e concluídos", () => {
   assert.equal(matchesPaymentRequestFilter(pix, "you"), true);
   assert.equal(matchesPaymentRequestFilter({ ...pix, status: "scheduled" }, "bank"), true);
   assert.equal(matchesPaymentRequestFilter({ ...pix, status: "failed" }, "risk"), true);
-  for (const beneficiaryVerificationStatus of ["verified", "unavailable", undefined] as const) {
+  for (const beneficiaryVerificationStatus of ["verified", undefined] as const) {
     const paid = { ...pix, status: "paid", beneficiaryVerificationStatus } as const;
     assert.equal(matchesPaymentRequestFilter(paid, "done"), true);
     assert.equal(matchesPaymentRequestFilter(paid, "risk"), false);
     assert.equal(matchesPaymentRequestFilter(paid, "all"), true);
     assert.equal(matchesPaymentRequestFilter(paid, "unpaid"), false);
   }
+  const unavailable = { ...pix, status: "paid", beneficiaryVerificationStatus: "unavailable" } as const;
+  assert.equal(matchesPaymentRequestFilter(unavailable, "done"), false);
+  assert.equal(matchesPaymentRequestFilter(unavailable, "risk"), true);
+  assert.equal(matchesPaymentRequestFilter(unavailable, "unpaid"), true);
 });
 
 test("pagos destacam a data efetiva e deixam de exibir previsão, vencimento ou envio imediato", () => {

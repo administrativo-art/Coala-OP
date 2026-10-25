@@ -372,13 +372,14 @@ function normalizeRecruitmentDisplay(
 export function normalizeJobRoleInput(
   input: z.infer<typeof jobRoleCreateSchema>
 ) {
+  const hierarchyParentId = input.parentId ?? input.reportsTo ?? null;
   return stripUndefined({
     ...input,
     cbo: input.cbo?.trim() || undefined,
     publicTitle: input.publicTitle?.trim() || input.name,
     slug: input.slug?.trim() || slugify(input.name),
-    parentId: input.parentId ?? input.reportsTo ?? null,
-    reportsTo: input.reportsTo ?? null,
+    parentId: hierarchyParentId,
+    reportsTo: hierarchyParentId,
     responsibilities: normalizeStringList(input.responsibilities),
     publicResponsibilities: normalizeStringList(input.publicResponsibilities),
     requirements: normalizeStringList(input.requirements),
@@ -396,6 +397,10 @@ export function normalizeJobRoleInput(
 export function normalizeJobRolePatch(
   input: z.infer<typeof jobRolePatchSchema>
 ) {
+  const hierarchyWasChanged =
+    input.parentId !== undefined || input.reportsTo !== undefined;
+  const hierarchyParentId =
+    input.parentId !== undefined ? input.parentId : input.reportsTo;
   return stripUndefined({
     ...input,
     cbo: input.cbo === undefined ? undefined : input.cbo.trim() || undefined,
@@ -409,13 +414,8 @@ export function normalizeJobRolePatch(
           ? slugify(input.name)
           : undefined
         : input.slug.trim() || (input.name ? slugify(input.name) : undefined),
-    reportsTo: input.reportsTo === undefined ? undefined : input.reportsTo,
-    parentId:
-      input.parentId === undefined
-        ? input.reportsTo === undefined
-          ? undefined
-          : input.reportsTo
-        : input.parentId,
+    reportsTo: hierarchyWasChanged ? hierarchyParentId : undefined,
+    parentId: hierarchyWasChanged ? hierarchyParentId : undefined,
     responsibilities:
       input.responsibilities === undefined
         ? undefined

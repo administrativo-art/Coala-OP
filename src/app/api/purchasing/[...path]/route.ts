@@ -26,6 +26,7 @@ import {
   getTreatmentEntryType,
   inferPurchaseItemTreatment,
   purchaseTreatmentCreatesAsset,
+  purchaseTreatmentRequiresKioskDestination,
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
 import {
@@ -543,6 +544,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   );
 
   const sharedPayload = {
+    workspaceId: WORKSPACE_ID,
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
@@ -1032,6 +1034,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     }
     if (order.financialReversalStatus === 'pending') {
       return jsonError('Conclua o retrocesso financeiro pendente antes de confirmar novamente.', 409);
+    }
+
+    const requiresDestination = itemsSnap.docs.some((itemDoc) =>
+      purchaseTreatmentRequiresKioskDestination(
+        inferPurchaseItemTreatment(itemDoc.data()),
+      ),
+    );
+    const destinationKioskId = typeof order.destinationKioskId === 'string'
+      ? order.destinationKioskId.trim()
+      : '';
+    if (requiresDestination) {
+      if (!destinationKioskId) {
+        return jsonError('Defina o destino operacional antes de confirmar a compra.', 409);
+      }
+      if (
+        destinationKioskId.includes('/') ||
+        !canAccessUnit(userContext.userDoc, destinationKioskId, {
+          isDefaultAdmin: userContext.isDefaultAdmin,
+        })
+      ) {
+        return jsonError('Destino da compra inválido ou sem acesso.', 403);
+      }
+      const destination = await dbAdmin.collection('kiosks').doc(destinationKioskId).get();
+      if (!destination.exists) return jsonError('Destino da compra não encontrado.', 409);
     }
 
     const batch = dbAdmin.batch();
@@ -2584,6 +2610,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    if (Object.prototype.hasOwnProperty.call(rest, 'destinationKioskId')) {
+      const destinationKioskId = typeof rest.destinationKioskId === 'string'
+        ? rest.destinationKioskId.trim()
+        : '';
+      if (
+        !destinationKioskId ||
+        destinationKioskId.includes('/') ||
+        !canAccessUnit(userContext.userDoc, destinationKioskId, {
+          isDefaultAdmin: userContext.isDefaultAdmin,
+        })
+      ) {
+        return jsonError('Destino da compra inválido ou sem acesso.', 403);
+      }
+      if (
+        currentOrder.status !== 'created' &&
+        destinationKioskId !== String(currentOrder.destinationKioskId ?? '').trim()
+      ) {
+        return jsonError('O destino só pode ser alterado enquanto o pedido está em revisão.', 409);
+      }
+      const destination = await dbAdmin.collection('kiosks').doc(destinationKioskId).get();
+      if (!destination.exists) return jsonError('Destino da compra não encontrado.', 400);
+      rest.destinationKioskId = destinationKioskId;
+    }
     const nextPaymentMethod = rest.paymentMethod ?? currentOrder.paymentMethod;
     const nextUsesCard = nextPaymentMethod === 'card_credit' || nextPaymentMethod === 'card_debit';
     const nextPurchaseDateValue = String(

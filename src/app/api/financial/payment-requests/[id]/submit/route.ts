@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { submitPaymentRequest } from "@/features/financial/payment-requests/service.server";
 import { requireUser } from "@/lib/auth-server";
+import { isInterConfigured } from "@/lib/integrations/inter/config.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -25,6 +26,13 @@ export const POST = withApiErrorHandling<RouteContext>({
       code: "PAYMENT_SUBMISSION_FORBIDDEN",
       kind: "AUTHORIZATION",
       safeMessage: "Sem permissão para enviar pagamentos ao banco.",
+    });
+  }
+  if (!isInterConfigured()) {
+    throw new AppError({
+      code: "PAYMENT_SUBMISSION_ENVIRONMENT_UNAVAILABLE",
+      kind: "CONFLICT",
+      safeMessage: "Por segurança, o envio ao Banco Inter deve ser concluído no ambiente publicado.",
     });
   }
   const { id } = await context.params;

@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { AppError } from "@/lib/observability";
+import { sanitizeValue } from "@/lib/observability/sanitize";
 
 export type InterOperation = "oauth-token" | "api-request" | "certificate-validation";
 
@@ -12,6 +13,7 @@ const TRANSIENT_NETWORK_CODES = new Set([
   "ENOTFOUND",
   "ETIMEDOUT",
 ]);
+const RESPONSE_DETAILS_LIMIT = 2_000;
 
 function axiosFacts(error: unknown) {
   try {
@@ -25,6 +27,68 @@ function axiosFacts(error: unknown) {
   }
 }
 
+/** Preserve only a bounded, redacted summary of the provider response. */
+export function interResponseDetails(error: unknown): string | null {
+  try {
+    const data = axios.isAxiosError(error)
+      ? error.response?.data
+      : (
+        error && typeof error === "object" && "response" in error
+          ? ((error as { response?: { data?: unknown } }).response?.data)
+          : undefined
+      );
+    if (data === undefined || data === null || data === "") return null;
+    const sanitized = sanitizeValue(data);
+    const serialized = typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized);
+    if (!serialized || serialized === "{}" || serialized === "null") return null;
+    return serialized.slice(0, RESPONSE_DETAILS_LIMIT);
+  } catch {
+    return null;
+  }
+}
+
+const PAYMENT_REJECTION_FIELDS = [
+  ["codBarralinhaDigitavel", "O Banco Inter recusou a linha digitável do boleto."],
+  ["valorPagar", "O Banco Inter recusou o valor informado para o pagamento."],
+  ["dataPagamento", "O Banco Inter recusou a data programada do pagamento."],
+  ["dataVencimento", "O Banco Inter recusou o vencimento informado para o boleto."],
+  ["cpfCnpjBeneficiario", "O Banco Inter recusou o CPF/CNPJ informado para o beneficiário."],
+] as const;
+
+function safePaymentRejectionMessage(error: unknown) {
+  try {
+    if (!axios.isAxiosError(error)) return null;
+    const pending: Array<{ value: unknown; depth: number }> = [{ value: error.response?.data, depth: 0 }];
+    const observed = new Set<string>();
+    let visited = 0;
+    while (pending.length && visited < 100) {
+      const current = pending.shift()!;
+      visited += 1;
+      if (typeof current.value === "string") {
+        for (const [field] of PAYMENT_REJECTION_FIELDS) {
+          if (current.value.toLowerCase().includes(field.toLowerCase())) observed.add(field);
+        }
+        continue;
+      }
+      if (!current.value || typeof current.value !== "object" || current.depth >= 4) continue;
+      const entries = Array.isArray(current.value)
+        ? current.value.map((value) => ["", value] as const)
+        : Object.entries(current.value as Record<string, unknown>);
+      for (const [key, value] of entries) {
+        for (const [field] of PAYMENT_REJECTION_FIELDS) {
+          if (key.toLowerCase() === field.toLowerCase()) observed.add(field);
+        }
+        pending.push({ value, depth: current.depth + 1 });
+      }
+    }
+    if (observed.size !== 1) return null;
+    const field = [...observed][0];
+    return PAYMENT_REJECTION_FIELDS.find(([candidate]) => candidate === field)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function isTransientInterFailure(error: unknown) {
   const { statusCode, networkCode } = axiosFacts(error);
   return statusCode !== null
@@ -35,6 +99,7 @@ export function isTransientInterFailure(error: unknown) {
 export class InterApiError extends AppError {
   readonly statusCode: number | null;
   readonly operation: InterOperation;
+  readonly responseDetails: string | null;
 
   constructor(options: {
     code: string;
@@ -42,6 +107,7 @@ export class InterApiError extends AppError {
     statusCode?: number | null;
     retryable?: boolean;
     safeMessage?: string;
+    responseDetails?: string | null;
   }) {
     const retryable = options.retryable ?? false;
     super({
@@ -57,11 +123,13 @@ export class InterApiError extends AppError {
         provider: "Banco Inter",
         operation: options.operation,
         statusCode: options.statusCode ?? null,
+        ...(options.responseDetails ? { responseDetails: options.responseDetails } : {}),
       },
     });
     this.name = "InterApiError";
     this.statusCode = options.statusCode ?? null;
     this.operation = options.operation;
+    this.responseDetails = options.responseDetails ?? null;
   }
 
   toJSON() {
@@ -72,6 +140,7 @@ export class InterApiError extends AppError {
       operation: this.operation,
       retryable: this.retryable,
       statusCode: this.statusCode,
+      ...(this.responseDetails ? { responseDetails: this.responseDetails } : {}),
     };
   }
 }
@@ -85,5 +154,12 @@ export function safeInterApiError(error: unknown, operation: InterOperation) {
     operation,
     statusCode,
     retryable,
+    safeMessage: operation === "api-request" && (statusCode === 400 || statusCode === 422)
+      ? safePaymentRejectionMessage(error) ?? undefined
+      : undefined,
+    // OAuth failures can contain credential-shaped provider payloads. Keep
+    // those outside the serialized error boundary; payment API failures still
+    // retain the bounded, redacted provider reason for backend diagnostics.
+    responseDetails: operation === "oauth-token" ? null : interResponseDetails(error),
   });
 }

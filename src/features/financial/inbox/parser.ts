@@ -29,6 +29,9 @@ export function htmlToPlainText(value: string) {
     value
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      // Alguns provedores entregam o CSS do Outlook no campo de texto,
+      // sem as tags <style>. Remova essas regras antes de exibir/analisar o e-mail.
+      .replace(/(?:^|\n)\s*(?:[#.]?[a-z][\w-]*(?:\s+[#.]?[a-z][\w-]*)*|#[\w-]+)\s*\{[^}]*\}/gim, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>|<\/div>|<\/li>|<\/tr>/gi, "\n")
       .replace(/<[^>]+>/g, " "),
@@ -520,7 +523,7 @@ export function classifyFinancialEmail(input: {
   documentHints?: FinancialInboxDocumentHints[];
   documentReferences?: string[];
 }): { textContent: string; textPreview: string; classification: FinancialInboxClassification } {
-  const textContent = (input.text?.trim() || htmlToPlainText(input.html ?? "")).slice(0, MAX_TEXT_LENGTH);
+  const textContent = htmlToPlainText((input.text?.trim() || input.html) ?? "").slice(0, MAX_TEXT_LENGTH);
   const documentText = String(input.documentText ?? "").slice(0, MAX_TEXT_LENGTH);
   const hints = input.documentHints ?? [];
   const hintText = hints.map((hint) => hint.documentText || "").join("\n").slice(0, MAX_TEXT_LENGTH);

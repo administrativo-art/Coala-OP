@@ -8,10 +8,10 @@ Base `70aaab65`. Inventários regenerados contra o código desta versão; mapas 
 | Páginas externas | 20 |
 | APIs por arquivo handler | 352 |
 | Exports de Functions | 42 |
-| Grupos com ao menos um guia | 56/56 |
-| Grupos marcados `Traçado` | 56/56 |
-| Grupos marcados `Verificado` | 0/56 |
-| Guias de subfluxo | 76 |
+| Grupos com ao menos um guia | 58/58 |
+| Grupos marcados `Traçado` | 58/58 |
+| Grupos marcados `Verificado` | 0/58 |
+| Guias de subfluxo | 78 |
 
 A [matriz de páginas](flow-matrix.csv), [matriz de superfícies](surface-flow-matrix.csv) e verificadores exigem caminhos e classificação atuais. Os [limites por grupo](flow-verification.md) não foram resolvidos por documentação. O [relatório de integração](main-map-integration.md) distingue a main das correções locais anteriores.
 

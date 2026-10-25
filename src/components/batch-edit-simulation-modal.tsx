@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { useProductSimulation } from '@/hooks/use-product-simulation';

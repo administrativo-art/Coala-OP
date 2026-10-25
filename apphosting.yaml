@@ -95,6 +95,36 @@ env:
     secret: INTER_WEBHOOK_SECRET
   - variable: INTER_RECONCILIATION_SECRET
     secret: INTER_RECONCILIATION_SECRET
+  # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
+  - variable: REP_P_ICP_SIGNER_PEM
+    secret: REP_P_ICP_SIGNER_PEM
+  # Bucket exclusivo dos pacotes AFD/AEJ. Cada objeto é gravado já com retenção Locked por 20 anos.
+  - variable: REP_P_FISCAL_STORAGE_BUCKET
+    value: "smart-converter-752gf-rep-p-fiscal"
+  # ARP oficial isolada do RH/PTRP; ensaios e dados acessórios continuam no coala-rh.
+  - variable: REP_P_FIRESTORE_DATABASE_ID
+    value: "coala-rep-p"
+  # Contato da CT Sorvetes LTDA, identificada como desenvolvedora do PTRP no AEJ.
+  - variable: PTRP_DEVELOPER_EMAIL
+    value: "administrativo@coalashakes.com"
+  # HLB gratuita: consulta com quórum aos quatro servidores NTP publicados pelo Observatório Nacional.
+  # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
+  - variable: REP_P_HLB_NTP_ENABLED
+    value: "true"
+  # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
+  - variable: REP_P_MARKING_ENABLED
+    value: "false"
+  # Ensaio nominal pré-homologação: grava fora da ARP e nunca participa do fechamento/AFD/AEJ.
+  - variable: REP_P_PILOT_ENABLED
+    value: "true"
+  - variable: REP_P_PILOT_USER_IDS
+    value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+  # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
+  - variable: DP_JOURNEY_LOCATION_ENABLED
+    value: "false"
+  # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
+  - variable: SYSTEM_NOTICES_JOB_SECRET
+    secret: SYSTEM_NOTICES_JOB_SECRET
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
     value: "true"
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS

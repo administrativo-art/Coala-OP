@@ -54,7 +54,7 @@ export function AbsenceApprovalAssignments({ value, onChange, roles, functions, 
   const update = (stage: Stage, levels: DPAbsenceApprovalLevel[]) => onChange({ ...current, [stage]: levels.length ? levels : undefined });
   return <div className="space-y-4 rounded-ds-card border border-ds-divider bg-ds-warm p-3">
     <div><p className="text-xs font-extrabold text-ds-ink">Responsáveis por etapa</p><p className="mt-1 text-xs text-ds-ink-muted">A ordem define a busca: o primeiro nível com pessoas elegíveis recebe a etapa. Cada pessoa precisa ter permissão de analisar solicitações.</p></div>
-    {attachment === 'required' ? <p className="rounded-ds-md border border-ds-warn-border bg-ds-warn-bg p-2 text-xs text-ds-warn">Pedidos com documento exigem responsável de DP configurado, inclusive com aprovação automática ou apenas pelo gestor.</p> : null}
+    {attachment === 'required' ? <p className="rounded-ds-md border border-ds-warn/20 bg-ds-warn-bg p-2 text-xs text-ds-warn">Pedidos com documento exigem responsável de DP configurado, inclusive com aprovação automática ou apenas pelo gestor.</p> : null}
     {(['manager', 'dp'] as const).map((stage) => {
       const levels = current[stage] ?? [];
       return <div key={stage} className="space-y-3 border-t border-ds-divider pt-3">

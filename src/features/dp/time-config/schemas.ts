@@ -95,6 +95,7 @@ const journeyFieldsObjectSchema = z.object({
   scaleValidation: journeyScaleValidationSchema.default({ mode: 'consecutive_days' }),
   expectedBreakMinutes: z.number().int().min(0).max(480).optional(),
   useDefinedShiftWhenShorter: z.boolean().optional(),
+  toleranceMinutes: z.number().int().min(0, 'A tolerância não pode ser negativa.').max(10, 'A tolerância vai até 10 minutos por dia (art. 58 §1º da CLT).').optional(),
   allowedShiftDefinitionIds: z.array(idSchema).max(100).optional(),
   applicability: applicabilitySchema,
   validFrom: dateSchema,
@@ -138,6 +139,7 @@ export const createJourneySchema = journeyFieldsObjectSchema.extend({ supersedes
 const journeyUpdateDataSchema = journeyFieldsObjectSchema.partial().extend({
   description: journeyFieldsObjectSchema.shape.description.nullable(),
   allowedShiftDefinitionIds: journeyFieldsObjectSchema.shape.allowedShiftDefinitionIds.nullable(),
+  toleranceMinutes: journeyFieldsObjectSchema.shape.toleranceMinutes.nullable(),
   validTo: journeyFieldsObjectSchema.shape.validTo.nullable(),
 }).refine((value) => Object.keys(value).length > 0);
 export const updateJourneySchema = z.discriminatedUnion('action', [
@@ -186,7 +188,6 @@ const overtimeFieldsObjectSchema = z.object({
   applicability: applicabilitySchema,
   validFrom: dateSchema,
   validTo: dateSchema.optional(),
-  dailyToleranceMinutes: z.number().int().min(0).max(180),
   dailyOvertimeLimitMinutes: z.number().int().positive().max(24 * 60).optional(),
   weeklyOvertimeLimitMinutes: z.number().int().positive().max(7 * 24 * 60).optional(),
   categories: z.array(overtimeCategorySchema).min(1).max(30),
@@ -197,6 +198,14 @@ const overtimeFieldsObjectSchema = z.object({
     negativeLimitMinutes: z.number().int().positive().max(100000).optional(),
     expirationDays: z.number().int().positive().max(3650).optional(),
     expiredBalanceDestination: z.enum(['payroll', 'forfeit', 'review']),
+    cycle: z.object({
+      unit: z.enum(['month', 'day']),
+      length: z.number().int().min(1, 'O ciclo precisa ter ao menos 1 período.').max(366, 'O ciclo vai até 366.'),
+      anchorDate: dateSchema,
+      residualDestination: z.enum(['carry', 'payroll', 'review', 'forfeit']),
+    }).strict().refine((cycle) => cycle.unit === 'day' || cycle.length <= 12, { message: 'O ciclo em meses vai até 12 meses.', path: ['length'] })
+      .refine((cycle) => cycle.unit !== 'month' || Number(cycle.anchorDate.slice(8, 10)) <= 28, { message: 'No ciclo em meses, use marco entre os dias 1 e 28.', path: ['anchorDate'] })
+      .optional(),
   }).strict(),
   externalCoverageRule: z.enum(['origin', 'execution_unit', 'manual_review']),
 }).strict();
@@ -239,6 +248,10 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   breakDurationMinutes: z.number().int().min(1).max(480).nullable().optional(),
   breakWindowStart: nullableOptionalString,
   breakWindowEnd: nullableOptionalString,
+  breakSegments: z.array(z.object({ start: timeSchema, end: timeSchema }).strict()).min(2).max(6).nullable().optional(),
+  breakSplit: z.enum(['single', 'multiple']).nullable().optional(),
+  breakPauseCount: z.number().int().min(2).max(10).nullable().optional(),
+  breakMinPauseMinutes: z.number().int().min(1).max(60).nullable().optional(),
   unitId: nullableOptionalString,
   unitName: nullableOptionalString,
   unitIds: z.array(idSchema).max(100).optional(),
@@ -250,16 +263,44 @@ const shiftDefinitionFieldsObjectSchema = z.object({
   configurationNotes: z.string().trim().max(2000).nullable().optional(),
   overnight: z.boolean().optional(),
   expectedPunches: z.number().int().min(2).max(12).nullable().optional(),
+  executionUnitPolicy: z.enum(['scheduled', 'free']).optional(),
+  locationTrackingPolicy: z.enum(['disabled', 'punch_only', 'workday']).optional(),
 }).strict();
 
 function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObjectSchema>, context: z.RefinementCtx) {
   const hasBreakStart = typeof value.breakStart === 'string';
   const hasBreakEnd = typeof value.breakEnd === 'string';
   const effectiveBreakType = value.breakType ?? (hasBreakStart && hasBreakEnd ? 'fixed' : 'none');
+  if (effectiveBreakType === 'none') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakType'], message: 'Todo turno de trabalho precisa ter um intervalo configurado.' });
+  }
+  const segments = value.breakSegments ?? null;
+  if (segments) {
+    if (effectiveBreakType !== 'fixed') {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments'], message: 'Vários horários só existem no intervalo fixo intercalado.' });
+    }
+    if (hasBreakStart || hasBreakEnd) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments'], message: 'No fixo intercalado, informe só a lista de horários.' });
+    }
+    segments.forEach((segment, index) => {
+      if (segment.end <= segment.start) context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments', index, 'end'], message: 'O fim da pausa deve ser depois do início.' });
+      if (index > 0 && segment.start < segments[index - 1].end) context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSegments', index, 'start'], message: 'As pausas devem estar em ordem e sem sobreposição.' });
+    });
+  }
+  if ((value.breakSplit === 'multiple' || value.breakPauseCount) && !['flexible', 'staggered'].includes(String(value.breakType))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakSplit'], message: 'Várias pausas só existem no intervalo livre ou de janela.' });
+  }
+  if (value.breakMinPauseMinutes && value.breakPauseCount && value.breakDurationMinutes
+    && value.breakMinPauseMinutes * value.breakPauseCount > value.breakDurationMinutes) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakMinPauseMinutes'], message: 'Pausa mínima × quantidade de pausas passa da duração total.' });
+  }
+  if (value.breakPauseCount && value.breakSplit !== 'multiple') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakPauseCount'], message: 'A quantidade de pausas exige a opção de várias pausas.' });
+  }
   if (hasBreakStart !== hasBreakEnd) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe início e fim do intervalo.' });
   }
-  if (effectiveBreakType === 'fixed' && (!hasBreakStart || !hasBreakEnd)) {
+  if (effectiveBreakType === 'fixed' && !segments && (!hasBreakStart || !hasBreakEnd)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['breakStart'], message: 'Informe o início e o fim do intervalo pré-definido.' });
   }
   if (effectiveBreakType !== 'fixed' && (hasBreakStart || hasBreakEnd)) {
@@ -282,6 +323,9 @@ function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObject
   }
   if (value.unitIds && value.unitNames && value.unitIds.length !== value.unitNames.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['unitNames'], message: 'Unidades e nomes precisam ter o mesmo tamanho.' });
+  }
+  if (value.locationTrackingPolicy === 'workday' && value.executionUnitPolicy !== 'free') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['locationTrackingPolicy'], message: 'O acompanhamento durante a jornada só pode ser usado no trabalho entre unidades.' });
   }
 }
 

@@ -25,6 +25,7 @@ const DEFAULT_METADATA_KEYS = new Set([
   "reasonCode",
   "resourceId",
   "resourceType",
+  "responseDetails",
   "retryAttempt",
   "route",
   "source",

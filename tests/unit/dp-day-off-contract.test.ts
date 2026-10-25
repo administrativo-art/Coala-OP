@@ -79,7 +79,8 @@ test('usa o selo da folga prevista como ação sem renderizar botão avulso', ()
   const end = scheduleEditorSource.indexOf('// ─── Main Component', start);
   const component = scheduleEditorSource.slice(start, end);
 
-  assert.match(component, /badgeLabel = canAction \? actionLabel : 'Folga prevista'/);
+  // Toda folga da escala é o DSR: o operador vê "DSR previsto" (o colaborador continua vendo "Folga").
+  assert.match(component, /badgeLabel = canAction \? actionLabel : 'DSR previsto'/);
   assert.match(component, /className=\{cn\([\s\S]*?'ml-auto inline-flex h-6 shrink-0/);
   assert.equal(component.match(/onClick=\{onPublish\}/g)?.length, 1);
   assert.doesNotMatch(component, /mt-1\.5 flex h-6 w-full/);
@@ -87,7 +88,17 @@ test('usa o selo da folga prevista como ação sem renderizar botão avulso', ()
 
 test('mantém ausências de alocação e remoção de folga visíveis na própria célula', () => {
   assert.match(scheduleEditorSource, /Sem unidade vinculada/);
-  assert.match(scheduleEditorSource, /Folga em \$\{sourceUnitName\}/);
+  assert.match(scheduleEditorSource, /DSR em \$\{sourceUnitName\}/);
   assert.match(scheduleEditorSource, /aria-label=\{removalFailed \?/);
   assert.match(scheduleEditorSource, /method: 'DELETE'/);
+});
+
+test('um botão por dia lança turno, DSR ou ausência; a ausência abre o pedido com a pessoa e a data', () => {
+  assert.match(scheduleEditorSource, /function DayLaunchMenu/);
+  assert.match(scheduleEditorSource, /Lançar no dia/);
+  assert.match(scheduleEditorSource, />Turno<\/button>/);
+  assert.match(scheduleEditorSource, />DSR<\/button>/);
+  assert.match(scheduleEditorSource, />Ausência<\/button>/);
+  assert.match(scheduleEditorSource, /<AbsencePreviewPanel[\s\S]*?beneficiaryUid=\{absenceLaunch\?\.userId\}[\s\S]*?initialDate=\{absenceLaunch\?\.date\}/);
+  assert.doesNotMatch(scheduleEditorSource, /Adicionar folga/);
 });

@@ -26,6 +26,7 @@ interface UploadQueue {
     suspend fun markFailed(uid: String, id: String, failure: AppFailure)
     suspend fun retry(uid: String, id: String)
     suspend fun confirmed(uid: String, id: String, response: PurchaseResponse)
+    suspend fun discard(uid: String, id: String)
 }
 @Singleton class QueueStore @Inject constructor(@ApplicationContext context: Context, private val db: QueueDatabase, private val vault: Vault, private val json: Json) : UploadQueue {
     private val directory = File(context.noBackupFilesDir, "coala-go-queue").apply { mkdirs() }
@@ -38,15 +39,17 @@ interface UploadQueue {
     override suspend fun enqueue(uid: String, upload: PendingUpload) = withContext(Dispatchers.IO) { mutex.withLock {
         Rules.validateUpload(upload)
         val owner = vault.owner(uid)
-        if (db.queue().get(owner, upload.submissionId) != null) return@withLock
-        require(db.queue().total() < 20) { "O aparelho já tem 20 notas pendentes. Sincronize antes de guardar outra." }
+        val existing = db.queue().get(owner, upload.submissionId)
+        if (existing != null && (existing.state != "BLOCKED" || existing.acknowledgement != null)) return@withLock
+        if (existing == null) require(db.queue().total() < 20) { "O aparelho já tem 20 notas pendentes. Sincronize antes de guardar outra." }
         val destination = file(uid, upload.submissionId)
         val atomic = AtomicFile(destination)
         val stream = atomic.startWrite()
         try {
             val sealed = vault.seal(uid, upload.submissionId, json.encodeToString(upload).toByteArray())
             stream.write(sealed); atomic.finishWrite(stream)
-            db.queue().insert(QueueRow(owner, upload.submissionId, System.currentTimeMillis()))
+            if (existing == null) db.queue().insert(QueueRow(owner, upload.submissionId, System.currentTimeMillis()))
+            else db.queue().retry(owner, upload.submissionId)
         } catch (cause: Exception) { atomic.failWrite(stream); throw cause }
     } }
     override suspend fun payload(uid: String, id: String) = withContext(Dispatchers.IO) {
@@ -83,5 +86,9 @@ interface UploadQueue {
     override suspend fun confirmed(uid: String, id: String, response: PurchaseResponse) = withContext(Dispatchers.IO) { mutex.withLock {
         require(response.purchase.id.isNotBlank() && response.purchase.status.isNotBlank()) { "Compra não confirmada; a fila foi preservada." }
         if (db.queue().removeConfirmed(vault.owner(uid), id) == 1) file(uid, id).delete()
+    } }
+    override suspend fun discard(uid: String, id: String) = withContext(Dispatchers.IO) { mutex.withLock {
+        if (db.queue().discard(vault.owner(uid), id) == 1) file(uid, id).delete()
+        Unit
     } }
 }

@@ -2,13 +2,13 @@
 
 ## Escopo desta entrega
 
-Este rollout ativa regras de trabalho e sete perfis locais no Codex e no Claude Code. Não altera o produto em execução, banco de dados, permissões de usuários finais ou infraestrutura de produção. O coordenador é a sessão principal, TARS; o programador pode apresentar o objetivo sem escolher um especialista.
+Este rollout ativa regras de trabalho e oito perfis locais no Codex e no Claude Code. Não altera o produto em execução, banco de dados, permissões de usuários finais ou infraestrutura de produção. O coordenador é a sessão principal, TARS; o programador pode apresentar o objetivo sem escolher um especialista.
 
 ## Pré-requisitos no ambiente de cada programador
 
-1. Abrir o repositório na revisão publicada e executar `npm run agents:validate` para conferir os sete perfis e os limites estáticos. `npm run check` inclui essa validação.
+1. Abrir o repositório na revisão publicada e executar `npm run agents:validate` para conferir os oito perfis e os limites estáticos. `npm run check` inclui essa validação.
 2. Conferir a versão do Claude Code. `enforceAvailableModels` exige 2.1.175 ou posterior. Nesta máquina, em 2026-09-23, `claude` no `PATH` apontava para 2.1.76; `/Users/imated/.npm-global/bin/claude` era 2.1.281. Usar a instalação compatível até corrigir o `PATH`. Conferir a versão também no editor, caso ele use instalação própria.
-3. Conferir a configuração efetiva e os sete perfis carregados em cada CLI. No Claude Code, verificar a seleção disponível de modelos sem iniciar Fable/Opus; no Codex, conferir o modelo efetivo do chamado. As configurações do projeto são padrão e restrições locais, não um limite administrativo global de consumo.
+3. Conferir a configuração efetiva e os oito perfis carregados em cada CLI. No Claude Code, verificar a seleção disponível de modelos sem iniciar Fable/Opus; no Codex, conferir o modelo efetivo do chamado. As configurações do projeto são padrão e restrições locais, não um limite administrativo global de consumo.
 4. Antes do primeiro chamado, conferir permissões da sessão e conectores disponíveis. Velma e Trinity só atuam como revisores de leitura quando a sessão efetiva também impede escrita.
 
 ## Ativação
@@ -20,7 +20,7 @@ Este rollout ativa regras de trabalho e sete perfis locais no Codex e no Claude 
 
 ## Sinais de sucesso e limites
 
-- Os sete perfis aparecem em cada CLI; `npm run agents:validate` e `npm run check` passam.
+- Os oito perfis aparecem em cada CLI; `npm run agents:validate` e `npm run check` passam.
 - O chamado registra especialista, modelo solicitado e efetivo quando disponível, alterações, testes executados, resultados e pendências.
 - Nenhum especialista delega; as passagens ocorrem depois de encerrar o anterior. A coordenação entre duas sessões independentes depende do registro e da disciplina operacional, pois os limites técnicos são por sessão.
 - A configuração de projeto evita Fable/Opus na seleção normal do Claude Code compatível e inicia o Codex em Sol. Ela não impede que configurações de maior precedência ou uma seleção explícita alterem o modelo. Um limite obrigatório para toda a conta exige política gerenciada fora do repositório.

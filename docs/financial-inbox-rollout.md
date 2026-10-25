@@ -39,6 +39,12 @@ Por revisão humana:
 - 1 atualização do registro;
 - 1 escrita de evento.
 
+Por tentativa manual de envio ao Inter:
+
+- até 140 leituras pontuais e limitadas para solicitação, mensagem, despesa, hash/código/origem, fingerprint do e-mail, pagamentos, obrigação/vínculos e extrato na janela do vencimento;
+- uma consulta direta ao Inter pela linha digitável antes de eventual POST;
+- nenhuma consulta recorrente; truncamento ou identidade insuficiente bloqueiam a tentativa.
+
 Na conciliação bancária, uma obrigação quitada faz uma leitura pontual da solicitação associada. Para registros históricos sem `paymentRequestId`, o fallback é uma consulta única limitada a dois resultados por despesa conciliada; não há polling adicional, e novos pedidos gravam o ponteiro na despesa de forma transacional.
 
 A listagem usa `workspaceId`, status opcional, ordenação e `limit(25)`, com cursor. Considerando três usuários, seis aberturas/atualizações por dia e uma página por abertura: `25 × 6 × 3 × 30 = 13.500` leituras mensais. Não há atualização automática em segundo plano. Uma segunda página custa outras 25 leituras apenas quando solicitada.
@@ -53,6 +59,16 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 - tipos permitidos: PDF, XML, CSV, texto, EML e imagens;
 - HTML nunca é renderizado na interface;
 - até cinco documentos arquivados são analisados por cobrança;
+- a triagem determinística separa ruído automático de descarte humano; somente candidato financeiro plausível com documento suportado e campo essencial faltante pode acionar IA após o parser determinístico;
+- a análise documental tem duas passagens: extração sem IA, nova triagem e OCR/IA apenas para candidato financeiro plausível ou domínio cadastrado com DMARC alinhado; PDF genérico não é enviado externamente só pela extensão;
+- fornecedor conhecido depende de configuração persistida versionada, DMARC `pass` alinhado ao `From`, domínio exato e CNPJ válido; o padrão é lista vazia;
+- envio automático ao Inter está desabilitado por contrato até política de negócio e reserva atômica dos limites por período; o envio manual expressamente autorizado consulta pedidos locais, despesa/obrigação, agenda/pagamentos Inter, extrato, fingerprint e identidade de origem e só alcança o POST com evidência completa e lock exclusivo;
+- arquivamento manual recebe somente 1 a 50 IDs selecionados, relê despesa e pedido dentro de transação, mantém documentos e permite restauração; mensagens já arquivadas não geram novo evento;
+- um e-mail tratado pode ser arquivado antes da liquidação somente quando o pedido atual da mesma despesa possui `interRequestId` e estado bancário confirmado (`scheduled`, `processing`, `awaiting_statement` ou `paid`); ausência, falha ou conflito bloqueia o lote;
+- a confirmação do handoff arquiva automaticamente a mensagem principal e lembretes documentais fortes; o acompanhamento financeiro continua na despesa/pedido, sem criar outro pagamento;
+- falha/rejeição/cancelamento projeta `payment_failed` na caixa e reabre a ação; `Aguardando autorização` não representa pedido `failed`;
+- a manutenção periódica, sem leituras correlatas, só arquiva `ignored` sem vínculos financeiros; cobrança `identified`/`reconciled` vinculada exige arquivamento explícito com o preflight transacional;
+- antes de expor `view=noise`/`discarded`, executar a migração de resolução v2 até `complete=true`; antes disso a API falha explicitamente e não oculta registros legados;
 - PDFs com camada textual, XML, CSV e TXT são lidos deterministicamente; imagens e PDFs escaneados usam análise visual somente quando a chave da OpenAI está configurada;
 - cobranças de telefonia móvel ou fixa só recebem sugestão automática quando o número da linha extraído também coincide com a despesa ou previsão;
 - no fallback visual, o arquivo temporário enviado à OpenAI usa `store: false` na resposta e é removido da Files API em melhor esforço após a análise;
@@ -66,12 +82,13 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 
 ## Ativação e rollback
 
-1. Publicar código, regras e índices.
-2. Configurar `FINANCIAL_INBOUND_ADDRESS` e validar o webhook no Resend.
-3. Enviar um e-mail direto ao endereço técnico e confirmar o registro único.
-4. Ativar no Google a regra do alias `cobrancas@coalashakes.com`.
-5. Ativar a regra legada com a lista autenticada de fornecedores.
-6. Em rollback, desativar as regras do Google; a entrega original permanece intacta.
+1. Publicar os índices, inclusive os novos índices de despesas por `workspaceId`, e aguardar o estado pronto.
+2. Publicar o código e executar as manutenções de resolução v2 e projeção de pagamento v1 até `complete=true`.
+3. Configurar `FINANCIAL_INBOUND_ADDRESS` e validar o webhook e os cabeçalhos DMARC recebidos no Resend.
+4. Enviar um e-mail direto ao endereço técnico e confirmar o registro único.
+5. Ativar no Google a regra do alias `cobrancas@coalashakes.com`.
+6. Ativar a regra legada com a lista autenticada de fornecedores.
+7. Em rollback, desativar as regras do Google; a entrega original permanece intacta. Manter a automação da caixa ao Inter desabilitada e suspender envios manuais até restaurar o preflight integral.
 
 ## Fila de implementação — vinculação automática opt-in
 

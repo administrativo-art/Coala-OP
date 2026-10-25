@@ -8,6 +8,7 @@
 - **O contêiner não pode ter `overflow: hidden`**, senão a sombra e o lift são cortados.
 - Selecionada (painel aberto): fundo #fbf3f6 + `box-shadow: inset 3px 0 0 #a6325b`.
 - Respeitar `prefers-reduced-motion`: sem transform, só fundo e sombra.
+- O mesmo lift (escala de tabela, `1.006`) vale na ficha do colaborador (`PROFILE_LIFT_CLASS`), no menor bloco de leitura: nos subgrupos quando a seção tem subgrupos; no card inteiro quando a seção não tem (inclui os blocos de sistema, como Escala e unidades). Não são linhas clicáveis.
 
 ## Comportamento
 - A linha inteira é o alvo do clique e abre o `SidePanel`. Clicar em outra linha troca o conteúdo do painel.

@@ -1,6 +1,19 @@
 import { PaymentCliError } from "./payment-cli-transport";
 
 export function paymentLookupQuery(kind: string, value: string) {
+  if (kind === "expense-due-date") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new PaymentCliError("Data de vencimento inválida.");
+    const startDate = new Date(`${value}T03:00:00.000Z`);
+    if (Number.isNaN(startDate.getTime()) || startDate.toISOString().slice(0, 10) !== value
+      || startDate.getUTCFullYear() < 2000 || startDate.getUTCFullYear() > 2100) {
+      throw new PaymentCliError("Data de vencimento inválida.");
+    }
+    const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+    return { from: [{ collectionId: "expenses" }], where: { compositeFilter: { op: "AND", filters: [
+      { fieldFilter: { field: { fieldPath: "dueDate" }, op: "GREATER_THAN_OR_EQUAL", value: { timestampValue: startDate.toISOString() } } },
+      { fieldFilter: { field: { fieldPath: "dueDate" }, op: "LESS_THAN", value: { timestampValue: endDate.toISOString() } } },
+    ] } }, limit: 26 };
+  }
   if (kind === "expense-center-due-month") {
     const match = value.match(/^([^|\r\n]{1,160})\|(\d{4})-(0[1-9]|1[0-2])$/);
     if (!match || Number(match[2]) < 2000 || Number(match[2]) > 2100) throw new PaymentCliError("Centro e mês inválidos.");
@@ -38,9 +51,11 @@ export function paymentLookupQuery(kind: string, value: string) {
       throw new PaymentCliError("Valor de busca inválido.");
     }
     collectionId = "expenses"; fieldPath = "totalValue"; fieldValue = { doubleValue: cents / 100 };
-  } else if (kind === "expense-supplier" || kind === "expense-account") {
+  } else if (kind === "expense-supplier" || kind === "expense-account" || kind === "expense-purchase-order") {
     if (!/^[a-zA-Z0-9_-]{1,170}$/.test(value)) throw new PaymentCliError("Fornecedor ou conta inválidos.");
-    collectionId = "expenses"; fieldPath = kind === "expense-account" ? "accountPlan" : "supplier"; fieldValue = { stringValue: value };
+    collectionId = "expenses";
+    fieldPath = kind === "expense-account" ? "accountPlan" : kind === "expense-purchase-order" ? "purchaseOrderId" : "supplier";
+    fieldValue = { stringValue: value };
   } else throw new PaymentCliError("Busca não permitida.");
   return { from: [{ collectionId }], where: { fieldFilter: {
     field: { fieldPath }, op: "EQUAL", value: fieldValue,

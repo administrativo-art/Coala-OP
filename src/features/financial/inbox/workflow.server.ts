@@ -2,7 +2,6 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
-import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
@@ -20,7 +19,10 @@ import {
 import {
   defaultFinancialInboxAutomationSettings,
   getFinancialInboxAutomationSettings,
+  getTrustedInboxSuppliers,
 } from "./automation-settings.server";
+import { shouldAttemptFinancialInboxDocumentAi, triageFinancialInboxMessage } from "./triage-policy";
+import { canCommitFinancialInboxAnalysis } from "./analysis-commit-policy";
 import {
   automaticReminderResolutionPatch,
   discardedFinancialInboxResolution,
@@ -42,6 +44,10 @@ import {
 } from "./search-index";
 import { classificationForFinancialInboxReanalysis } from "./reanalysis-classification";
 import type { FinancialInboxMessage } from "./types";
+import {
+  financialInboxManualArchivePlan,
+  FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+} from "./retention-policy";
 
 const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
@@ -171,48 +177,94 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   if (expectedWorkspaceId && message.workspaceId !== expectedWorkspaceId) {
     throw new Error("Cobrança recebida não encontrada.");
   }
+  if (message.status === "ignored" || message.status === "archived") return message;
   const checkedAt = new Date().toISOString();
-  const documents = await prepareFinancialInboxDocuments(message);
-  const reparsed = classifyFinancialEmail({
+  const preliminaryTriage = triageFinancialInboxMessage({
+    classification: message.classification, senderDomain: message.senderDomain,
+    attachments: message.attachments,
+  });
+  const trustedSuppliers = preliminaryTriage.kind === "noise" || message.provider === "mobile"
+    ? [] : await getTrustedInboxSuppliers(message.workspaceId);
+  const initialTriage = triageFinancialInboxMessage({
+    classification: message.classification, senderDomain: message.senderDomain,
+    attachments: message.attachments, trustedSuppliers,
+    senderAuthenticated: message.senderAuthentication?.status === "pass",
+  });
+  const deterministicDocuments = await prepareFinancialInboxDocuments(message, false);
+  const deterministicClassification = classifyFinancialEmail({
+    subject: message.subject,
+    text: message.textContent,
+    senderDomain: message.senderDomain,
+    documentText: deterministicDocuments.documentText,
+    documentHints: deterministicDocuments.hints,
+    documentReferences: message.attachments.map((attachment) => attachment.filename),
+  }).classification;
+  const deterministicTriage = triageFinancialInboxMessage({
+    classification: deterministicClassification, senderDomain: message.senderDomain,
+    attachments: deterministicDocuments.attachments, trustedSuppliers,
+    senderAuthenticated: message.senderAuthentication?.status === "pass",
+  });
+  // Documento genérico só deixa o parser local quando já há evidência financeira
+  // ou o domínio cadastrado possui autenticação alinhada. Ruído não chama IA.
+  const allowDocumentAi = shouldAttemptFinancialInboxDocumentAi({
+    initial: initialTriage,
+    afterDeterministicExtraction: deterministicTriage,
+    attachments: deterministicDocuments.attachments,
+    authenticatedTrustedDomain: message.senderAuthentication?.status === "pass"
+      && Boolean(message.senderDomain && trustedSuppliers.some((supplier) => supplier.senderDomain === message.senderDomain)),
+  });
+  const documents = allowDocumentAi
+    ? await prepareFinancialInboxDocuments(message, true, deterministicDocuments)
+    : deterministicDocuments;
+  const reparsed = allowDocumentAi ? classifyFinancialEmail({
     subject: message.subject,
     text: message.textContent,
     senderDomain: message.senderDomain,
     documentText: documents.documentText,
     documentHints: documents.hints,
     documentReferences: message.attachments.map((attachment) => attachment.filename),
-  }).classification;
+  }).classification : deterministicClassification;
   const classification = classificationForFinancialInboxReanalysis({
     status: message.status,
     current: message.classification,
     reparsed,
   });
+  const triage = triageFinancialInboxMessage({
+    classification, senderDomain: message.senderDomain,
+    attachments: documents.attachments, trustedSuppliers,
+    senderAuthenticated: message.senderAuthentication?.status === "pass",
+  });
 
   let expenseCandidates: InboxExpenseCandidate[] = [];
   let expenseScanTruncated = false;
-  if (classification.financeLikely && (
+  if (triage.kind === "candidate" && classification.financeLikely && (
     Boolean(classification.barcode)
     || Boolean(classification.amountCents && classification.dueDate && classification.supplierName)
   )) {
     const incomingBarcodeHash = paymentBarcodeHash(classification.barcode);
     const [openSnapshot, paymentSnapshot, barcodeHashPaymentSnapshot, legacyBarcodePaymentSnapshot] = await Promise.all([
       financialDbAdmin.collection("expenses")
+      .where("workspaceId", "==", message.workspaceId)
       .where("status", "in", ["pending", "partially_paid"])
       .limit(MAX_EXISTING_EXPENSE_CANDIDATES + 1)
       .get(),
       classification.amountCents
         ? financialDbAdmin.collection("payments")
+          .where("workspaceId", "==", message.workspaceId)
           .where("principalAmountCents", "==", classification.amountCents)
           .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
           .get()
         : Promise.resolve(null),
       classification.barcode
         ? financialDbAdmin.collection("bankPaymentRequests")
+          .where("workspaceId", "==", message.workspaceId)
           .where("barcodeSnapshot.codeHash", "==", incomingBarcodeHash)
           .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
           .get()
         : Promise.resolve(null),
       classification.barcode
         ? financialDbAdmin.collection("bankPaymentRequests")
+          .where("workspaceId", "==", message.workspaceId)
           .where("barcodeSnapshot.code", "==", classification.barcode)
           .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
           .get()
@@ -279,7 +331,9 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         .filter((expenseId) => !openById.has(expenseId))
         .map((expenseId) => financialDbAdmin.collection("expenses").doc(expenseId));
       const paidSnapshots = missingPaidRefs.length ? await financialDbAdmin.getAll(...missingPaidRefs) : [];
-      expenseCandidates = [...openSnapshot.docs, ...paidSnapshots.filter((document) => document.exists)]
+      expenseCandidates = [...openSnapshot.docs, ...paidSnapshots.filter((document) => (
+        document.exists && document.get("workspaceId") === message.workspaceId
+      ))]
         .map((document) => ({
           id: document.id,
           ...document.data(),
@@ -295,8 +349,9 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   }
 
   let candidates: ProvisionCandidate[] = [];
-  if (existingExpenseSuggestion.status !== "suggested" && classification.financeLikely && classification.competence) {
+  if (existingExpenseSuggestion.status !== "suggested" && triage.kind === "candidate" && classification.financeLikely && classification.competence) {
     const snapshot = await financialDbAdmin.collection("expenses")
+      .where("workspaceId", "==", message.workspaceId)
       .where("provisionType", "==", "forecast")
       .where("status", "==", "provisioned")
       .where("provisionCompetence", "==", classification.competence)
@@ -319,41 +374,83 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     settings: automationSettings,
     suggestion: existingExpenseSuggestion,
   });
-  const automaticReminder = classification.marketingLikely || !analysisCanResolve
+  const automaticReminder = triage.kind !== "candidate" || !analysisCanResolve
     ? null
     : automaticIdentificationAllowed
       ? automaticReminderResolutionPatch({ suggestion: existingExpenseSuggestion, at: checkedAt })
       : null;
-  const nextResolution = automaticReminder?.resolution
-    ?? (classification.marketingLikely && analysisCanResolve
+  const automaticReminderArchive = Boolean(automaticReminder
+    && ["scheduled", "reconciled"].includes(automaticReminder.resolution.financialState ?? "")
+    && ["scheduled", "awaiting_statement", "reconciled"].includes(automaticReminder.bankState)
+    && (existingExpenseSuggestion.existingBankPayment?.transactionId
+      || existingExpenseSuggestion.existingSettlement?.transactionId));
+  const automaticReminderResolution = automaticReminder
+    ? {
+        ...automaticReminder.resolution,
+        status: automaticReminderArchive ? "archived" as const : automaticReminder.resolution.status,
+      }
+    : null;
+  const nextResolution = automaticReminderResolution
+    ?? (triage.kind === "noise" && analysisCanResolve
       ? discardedFinancialInboxResolution({
           mode: "automatic",
           at: checkedAt,
           by: "system:financial-inbox",
-          reasons: ["mensagem classificada como conteúdo não financeiro"],
+          reasons: [triage.reasonCode],
         })
       : analysisCanResolve
         ? pendingFinancialInboxResolution()
         : resolutionForDisplay(message));
-  const nextStatus = classification.marketingLikely
+  const nextStatus = triage.kind === "noise"
     ? "ignored"
     : automaticReminder
-      ? automaticReminder.status
-    : existingExpenseSuggestion.status === "suggested"
+      ? automaticReminderArchive ? "archived" : automaticReminder.status
+    : triage.kind === "candidate" && (existingExpenseSuggestion.status === "suggested"
       || suggestion.status === "suggested"
-      || creationSuggestion.status === "suggested"
+      || creationSuggestion.status === "suggested")
       ? "suggestion_available"
       : message.status === "document_pending"
         && documents.attachments.some((attachment) => ["extracted", "ocr_extracted"].includes(attachment.extractionStatus ?? ""))
         ? "pending_review"
-        : message.status;
+        : message.status === "suggestion_available" ? "pending_review" : message.status;
   const persistedStatus = ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
     ? nextStatus
     : message.status;
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
-  const batch = financialDbAdmin.batch();
-  batch.set(messageRef, {
+  const targetExpense = automaticReminder
+    ? expenseCandidates.find((candidate) => candidate.id === automaticReminder.resolution.targetId)
+    : null;
+  const primaryMessageId = targetExpense
+    ? String((targetExpense as Record<string, unknown>).financialInboxMessageId || id)
+    : id;
+  const committed = await financialDbAdmin.runTransaction(async (transaction) => {
+    const current = await transaction.get(messageRef);
+    if (!current.exists || !canCommitFinancialInboxAnalysis(message, {
+      workspaceId: current.get("workspaceId"), status: current.get("status"),
+      updatedAt: current.get("updatedAt"), linkedExpenseId: current.get("linkedExpenseId"),
+      paymentRequestId: current.get("paymentRequestId"),
+    })) return false;
+    const targetExpenseSnapshot = targetExpense
+      ? await transaction.get(financialDbAdmin.collection("expenses").doc(targetExpense.id))
+      : null;
+    if (automaticReminder && !targetExpense) return false;
+    if (targetExpense && (!targetExpenseSnapshot?.exists
+      || targetExpenseSnapshot.get("workspaceId") !== message.workspaceId
+      || String(targetExpenseSnapshot.get("updatedAt") ?? "") !== String((targetExpense as Record<string, unknown>).updatedAt ?? "")
+      || targetExpenseSnapshot.get("status") !== targetExpense.status
+      || String(targetExpenseSnapshot.get("financialInboxMessageId") ?? "")
+        !== String((targetExpense as Record<string, unknown>).financialInboxMessageId ?? ""))) return false;
+    const primaryMessageSnapshot = targetExpense && primaryMessageId !== id
+      ? await transaction.get(financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId))
+      : null;
+    if (primaryMessageSnapshot?.exists && (primaryMessageSnapshot.get("workspaceId") !== message.workspaceId
+      || primaryMessageSnapshot.get("status") === "ignored")) return false;
+    const automaticArchivePlan = automaticReminderArchive
+      ? financialInboxManualArchivePlan(message, new Date(checkedAt))
+      : null;
+    transaction.set(messageRef, {
     classification,
+    triage,
     searchTerms: buildFinancialInboxSearchTerms({ ...message, classification }),
     searchIndexVersion: FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
     searchIndexedAt: checkedAt,
@@ -368,18 +465,29 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     ...(automaticReminder ? {
       bankState: automaticReminder.bankState,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+    } : {}),
+    ...(automaticArchivePlan ? {
+      archivedAt: checkedAt,
+      archivedBy: "system:financial-inbox-handoff",
+      archivedFromStatus: "identified",
+      retentionClass: automaticArchivePlan.retentionClass,
+      purgeEligibleAt: automaticArchivePlan.purgeEligibleAt,
+      retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
     } : {}),
     updatedAt: checkedAt,
-  }, { merge: true });
-  if (persistedStatus === "ignored" && message.status !== "ignored" && classification.marketingLikely) {
-    batch.set(messageRef.collection("events").doc("auto-marketing-v1"), {
+    }, { merge: true });
+  if (persistedStatus === "ignored" && message.status !== "ignored" && triage.kind === "noise") {
+    transaction.set(messageRef.collection("events").doc("auto-marketing-v1"), {
       type: "MESSAGE_AUTO_IGNORED_MARKETING",
       at: checkedAt,
       actorId: "system:financial-inbox",
+      reasonCode: triage.reasonCode,
     }, { merge: true });
   }
   if (automaticReminder) {
-    const targetExpense = expenseCandidates.find((candidate) => candidate.id === automaticReminder.resolution.targetId);
     if (targetExpense) {
       const obligationId = String((targetExpense as Record<string, unknown>).obligationId || `obl_${targetExpense.id}`);
       const billingIdentity = mergeBillingIdentities(
@@ -413,7 +521,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
               }
             : installment
         ));
-      batch.set(financialDbAdmin.collection("expenses").doc(targetExpense.id), {
+      transaction.set(financialDbAdmin.collection("expenses").doc(targetExpense.id), {
         aliases: mergeExpenseAliases((targetExpense as Record<string, unknown>).aliases, message.subject),
         billingIdentity,
         documentIdentity,
@@ -421,17 +529,13 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         ...(targetInstallmentNumber == null ? {} : { installments: enrichedInstallments }),
         updatedAt: checkedAt,
       }, { merge: true });
-      const primaryMessageId = String((targetExpense as Record<string, unknown>).financialInboxMessageId || id);
-      const primaryMessageSnapshot = primaryMessageId === id
-        ? null
-        : await financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId).get();
       const primaryMessage = primaryMessageSnapshot?.exists
         ? { id: primaryMessageSnapshot.id, ...primaryMessageSnapshot.data() } as FinancialInboxMessage
         : null;
       const currentThreadMessage = inboxThreadMessage({
         ...message,
-        status: automaticReminder.status,
-        resolution: automaticReminder.resolution,
+        status: automaticReminderArchive ? "archived" : automaticReminder.status,
+        resolution: automaticReminderResolution,
       });
       const threadMessages = mergeInboxThreadMessages(
         primaryMessage?.thread?.messages,
@@ -439,17 +543,17 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         [currentThreadMessage],
       );
       const thread = { primaryMessageId, messageCount: threadMessages.length, messages: threadMessages };
-      batch.set(messageRef, {
+      transaction.set(messageRef, {
         obligationId,
         thread,
       }, { merge: true });
       if (primaryMessageId !== id) {
-        batch.set(financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId), {
+        transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId), {
           thread,
           updatedAt: checkedAt,
         }, { merge: true });
       }
-      batch.set(financialDbAdmin.collection("financialObligations").doc(obligationId), {
+      transaction.set(financialDbAdmin.collection("financialObligations").doc(obligationId), {
         id: obligationId,
         billingIdentity,
         documentIdentity,
@@ -460,7 +564,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         updatedAt: checkedAt,
       }, { merge: true });
     }
-    batch.set(messageRef.collection("events").doc("automatic-reminder-identification-v1"), {
+    transaction.set(messageRef.collection("events").doc("automatic-reminder-identification-v1"), {
       type: "CHARGE_IDENTIFIED_AS_EXISTING",
       at: checkedAt,
       actorId: "system:financial-inbox",
@@ -472,11 +576,29 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       automationPolicyVersion: automationSettings.policyVersion,
       resolutionOnly: true,
     }, { merge: true });
+    if (automaticReminderArchive) transaction.set(messageRef.collection("events").doc("automatic-reminder-archive-v1"), {
+      type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+      at: checkedAt,
+      actorId: "system:financial-inbox-handoff",
+      paymentRequestId: null,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+      previousStatus: message.status,
+    }, { merge: true });
   }
-  await batch.commit();
+    transaction.create(messageRef.collection("events").doc(), {
+      type: "INBOX_TRIAGED", at: checkedAt, actorId: "system:financial-inbox",
+      kind: triage.kind, reasonCode: triage.reasonCode, policyVersion: triage.policyVersion,
+      knownSupplier: triage.knownSupplier,
+    });
+    return true;
+  });
+  if (!committed) return getFinancialInboxMessage(id);
   return {
     ...message,
     classification,
+    triage,
     attachments: documents.attachments,
     archiveWarnings: [...new Set([...(message.archiveWarnings ?? []), ...documents.warnings])],
     linkResolution: documents.linkResolution,
@@ -487,6 +609,14 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     resolution: nextResolution,
     ...(automaticReminder ? {
       bankState: automaticReminder.bankState,
+      bankTransactionId: existingExpenseSuggestion.existingBankPayment?.transactionId
+        ?? existingExpenseSuggestion.existingSettlement?.transactionId
+        ?? null,
+    } : {}),
+    ...(automaticReminderArchive ? {
+      archivedAt: checkedAt,
+      archivedBy: "system:financial-inbox-handoff",
+      archivedFromStatus: "identified",
     } : {}),
   } as FinancialInboxMessage;
 }
@@ -554,7 +684,7 @@ export async function linkSuggestedInboxCharge(
     const provisionSnapshot = await transaction.get(provisionRef);
     if (!provisionSnapshot.exists) throw new Error("O provisionamento sugerido não existe mais.");
     const provision = provisionSnapshot.data() as Record<string, unknown>;
-    if (documentConfirmation && provision.workspaceId !== expectedWorkspaceId) {
+    if (provision.workspaceId !== expectedWorkspaceId) {
       throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
     }
     if (provision.provisionType !== "forecast" || provision.status !== "provisioned") {
@@ -641,7 +771,7 @@ export async function linkSuggestedInboxCharge(
         competenceMonth: classification.competence,
         competenceDate,
       }),
-      workspaceId: WORKSPACE_ID,
+      workspaceId: expectedWorkspaceId,
       description,
       aliases,
       supplier,
@@ -808,14 +938,17 @@ export async function linkInboxChargeToExistingExpense(
     const message = { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage;
     if (message.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
     const expense = expenseSnapshot.data() || {};
+    if (expense.workspaceId !== expectedWorkspaceId) throw new Error("Despesa não encontrada.");
     if (message.linkedExpenseId && message.linkedExpenseId !== expenseId) {
       throw new Error("A cobrança já está vinculada a outra despesa.");
     }
     if (resolutionOnly
       && message.resolution?.status === "identified"
       && message.resolution.targetId
-      && message.resolution.targetId !== expenseId) {
-      throw new Error("A cobrança já foi identificada com outro lançamento.");
+      && message.resolution.targetId !== expenseId
+      && (message.linkedExpenseId || message.paymentRequestId
+        || !["reminder", "duplicate"].includes(message.resolution.kind ?? ""))) {
+      throw new Error("A cobrança já possui vínculo financeiro e não pode ser movida para outro lançamento.");
     }
     if (resolutionOnly
       && message.resolution?.status === "identified"
@@ -864,8 +997,30 @@ export async function linkInboxChargeToExistingExpense(
     }
     const obligationId = String(expense.obligationId || `obl_${expenseId}`);
     const obligationRef = financialDbAdmin.collection("financialObligations").doc(obligationId);
-    const obligationSnapshot = await transaction.get(obligationRef);
+    const previousObligationId = message.obligationId && message.obligationId !== obligationId
+      ? message.obligationId
+      : null;
+    const previousObligationRef = previousObligationId
+      ? financialDbAdmin.collection("financialObligations").doc(previousObligationId)
+      : null;
+    const [obligationSnapshot, previousObligationSnapshot] = await Promise.all([
+      transaction.get(obligationRef),
+      previousObligationRef ? transaction.get(previousObligationRef) : Promise.resolve(null),
+    ]);
     const obligation = obligationSnapshot.data() || {};
+    if (previousObligationSnapshot?.exists
+      && String(previousObligationSnapshot.get("primaryInboxMessageId") ?? "") === id) {
+      throw new Error("A cobrança principal não pode ser movida sem revisar toda a obrigação.");
+    }
+    const previousPrimaryMessageId = previousObligationSnapshot?.exists
+      ? String(previousObligationSnapshot.get("primaryInboxMessageId") ?? "").trim()
+      : "";
+    const previousPrimaryMessageRef = previousPrimaryMessageId
+      ? financialDbAdmin.collection("financialInboxMessages").doc(previousPrimaryMessageId)
+      : null;
+    const previousPrimaryMessageSnapshot = previousPrimaryMessageRef
+      ? await transaction.get(previousPrimaryMessageRef)
+      : null;
     const primaryMessageId = String(obligation.primaryInboxMessageId || expense.financialInboxMessageId || id);
     const primaryMessageRef = financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId);
     const primaryMessageSnapshot = primaryMessageId === id ? messageSnapshot : await transaction.get(primaryMessageRef);
@@ -972,10 +1127,21 @@ export async function linkInboxChargeToExistingExpense(
       at: now,
       by: actor.uid,
     });
+    const archiveAfterHandoff = ["scheduled", "awaiting_statement", "reconciled"].includes(inboxState.status)
+      && Boolean(existingBankPayment?.transactionId || existingSettlement?.transactionId);
+    const persistedResolution = archiveAfterHandoff
+      ? { ...resolution, status: "archived" as const }
+      : resolution;
+    const persistedMessageStatus = archiveAfterHandoff
+      ? "archived" as const
+      : resolutionOnly ? "identified" as const : inboxState.status;
+    const archivePlan = archiveAfterHandoff
+      ? financialInboxManualArchivePlan(message, new Date(now))
+      : null;
     const currentThreadMessage = inboxThreadMessage({
       ...message,
-      status: resolutionOnly ? "identified" : inboxState.status,
-      resolution,
+      status: persistedMessageStatus,
+      resolution: persistedResolution,
     });
     const primaryThreadMessages = primaryMessage?.thread?.messages
       ?? (primaryMessage ? [inboxThreadMessage(primaryMessage)] : []);
@@ -985,6 +1151,27 @@ export async function linkInboxChargeToExistingExpense(
       [currentThreadMessage],
     );
     const thread = { primaryMessageId, messageCount: threadMessages.length, messages: threadMessages };
+    if (previousObligationRef && previousObligationSnapshot?.exists) {
+      const previousSummaries = Array.isArray(previousObligationSnapshot.get("inboxMessageSummaries"))
+        ? previousObligationSnapshot.get("inboxMessageSummaries") as Array<{ id?: string }>
+        : [];
+      const remainingSummaries = previousSummaries.filter((entry) => entry.id !== id);
+      transaction.set(previousObligationRef, {
+        inboxMessageIds: FieldValue.arrayRemove(id),
+        inboxMessageSummaries: remainingSummaries,
+        updatedAt: now,
+      }, { merge: true });
+      if (previousPrimaryMessageRef && previousPrimaryMessageSnapshot?.exists) {
+        transaction.set(previousPrimaryMessageRef, {
+          thread: {
+            primaryMessageId: previousPrimaryMessageId,
+            messageCount: remainingSummaries.length,
+            messages: remainingSummaries,
+          },
+          updatedAt: now,
+        }, { merge: true });
+      }
+    }
     transaction.set(obligationRef, {
       id: obligationId,
       billingIdentity,
@@ -997,8 +1184,9 @@ export async function linkInboxChargeToExistingExpense(
     }, { merge: true });
     if (primaryMessageId !== id) transaction.set(primaryMessageRef, { thread, updatedAt: now }, { merge: true });
     transaction.set(messageRef, {
-      status: resolutionOnly ? "identified" : inboxState.status,
+      status: persistedMessageStatus,
       bankState: inboxState.bankState,
+      bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
       ...(resolutionOnly ? {} : {
         linkedExpenseId: expenseId,
         linkedExpenseInstallmentNumber: installmentNumber,
@@ -1006,7 +1194,7 @@ export async function linkInboxChargeToExistingExpense(
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
       thread,
-      resolution,
+      resolution: persistedResolution,
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       classification: { ...classification, billingIdentity },
       searchTerms: buildFinancialInboxSearchTerms({
@@ -1036,6 +1224,14 @@ export async function linkInboxChargeToExistingExpense(
       } : {}),
       reviewedAt: now,
       reviewedBy: actor.uid,
+      ...(archivePlan ? {
+        archivedAt: now,
+        archivedBy: "system:financial-inbox-handoff",
+        archivedFromStatus: "identified",
+        retentionClass: archivePlan.retentionClass,
+        purgeEligibleAt: archivePlan.purgeEligibleAt,
+        retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
+      } : {}),
       updatedAt: now,
     }, { merge: true });
     transaction.create(messageRef.collection("events").doc(), {
@@ -1054,12 +1250,27 @@ export async function linkInboxChargeToExistingExpense(
       obligationId,
       resolutionOnly,
     });
+    if (archiveAfterHandoff) transaction.set(messageRef.collection("events").doc(), {
+      type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
+      at: now,
+      actorId: "system:financial-inbox-handoff",
+      paymentRequestId: null,
+      bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
+      previousStatus: message.status,
+    });
     return {
       message: {
         ...message,
-        status: resolutionOnly ? "identified" as const : inboxState.status,
-        resolution,
+        status: persistedMessageStatus,
+        bankState: inboxState.bankState,
+        bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
+        resolution: persistedResolution,
         ...(resolutionOnly ? {} : { linkedExpenseId: expenseId }),
+        ...(archivePlan ? {
+          archivedAt: now,
+          archivedBy: "system:financial-inbox-handoff",
+          archivedFromStatus: "identified" as const,
+        } : {}),
       },
       expenseId,
       duplicate: resolutionOnly

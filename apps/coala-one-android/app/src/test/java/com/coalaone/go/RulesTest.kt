@@ -46,7 +46,8 @@ class RulesTest {
     @Test fun uploadLimitsAndFundingAreValidatedBeforePersistence() {
         Rules.validateUpload(pending())
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(receipts = emptyList())) }
-        assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(fundingSource = "company_payment")) }
+        Rules.validateUpload(pending().copy(fundingSource = "company_payment"))
+        assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(paymentProofs = pending().receipts)) }
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(receipts = pending().receipts + pending().receipts)) }
         assertThrows(IllegalArgumentException::class.java) { Rules.validateUpload(pending().copy(note = "a".repeat(241))) }
     }
@@ -70,6 +71,9 @@ class RulesTest {
         assertFalse(Rules.updateRequired(release, 0))
         assertFalse(Rules.updateRequired(null, 3))
         assertFalse(Rules.updateRequired(release, 4))
+        val pilotRelease = Release(26, "0.3.21", 26, "/app/CoalaGo.apk")
+        assertTrue(Rules.updateRequired(pilotRelease, 25))
+        assertFalse(Rules.updateRequired(pilotRelease, 26))
     }
     @Test fun profilePhotoFramingStaysInsideThePhoto() {
         // A landscape photo at zoom 1 shows its centred square; dragging right reveals the left edge and stops there.
@@ -88,5 +92,31 @@ class RulesTest {
         val one = listOf("a" to "Centro"); val two = one + ("b" to "Orla")
         assertEquals(one, Rules.unitChoices(one)); assertEquals(emptyList<Pair<String, String>>(), Rules.unitChoices(emptyList()))
         assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades") + two, Rules.unitChoices(two))
+    }
+    @Test fun purchaseFiltersFollowOrganizationAndGroup() {
+        val units = listOf(
+            UnitRef("a", "Centro", "g1", "Quiosques", "o1", "Coala"),
+            UnitRef("b", "Orla", "g1", "Quiosques", "o1", "Coala"),
+            UnitRef("c", "CD", "g2", "Abastecimento", "o2", "Logística"),
+            UnitRef("d", "Legada"),
+            UnitRef("e", "Shopping", "g3", "Shoppings", "o1", "Coala"),
+        )
+        val withdrawals = units.take(4).mapIndexed { index, unit -> Withdrawal(index.toString().repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 100L + index) } +
+            Withdrawal("9".repeat(64), "z", "Fora do contexto", "2026-10-01", amountCents = 1)
+        assertEquals(listOf("a", "b"), Rules.filterWithdrawals(withdrawals, units, "o1", "g1").map { it.unitId })
+        assertEquals(listOf("d"), Rules.filterWithdrawals(withdrawals, units, Rules.NO_ORGANIZATION, Rules.NO_GROUP).map { it.unitId })
+        // A unit the context does not know only shows with no filter.
+        assertEquals(5, Rules.filterWithdrawals(withdrawals, units, Rules.ALL_UNITS, Rules.ALL_UNITS).size)
+        assertEquals(listOf(Rules.ALL_UNITS to "Todas as organizações", "o1" to "Coala", "o2" to "Logística", Rules.NO_ORGANIZATION to "Sem organização"), Rules.purchaseOrganizationChoices(units))
+        // A group with nothing pending is still offered; the filter labels carry no counts.
+        assertEquals(listOf(Rules.ALL_UNITS to "Todos", "g1" to "Quiosques", "g3" to "Shoppings"), Rules.purchaseGroupChoices(units, "o1"))
+        // Only units with withdrawals become cards, each with its count, by name.
+        assertEquals(listOf(Triple("c", "CD", 1), Triple("a", "Centro", 1), Triple("z", "Fora do contexto", 1), Triple("d", "Legada", 1), Triple("b", "Orla", 1)), Rules.purchaseUnitCards(withdrawals))
+        assertEquals(listOf(Triple("a", "Centro", 2)), Rules.purchaseUnitCards(withdrawals.take(1) + withdrawals.first().copy(sourceId = "8".repeat(64))))
+        assertEquals("o2" to "g2", Rules.purchaseScope(units, "c")); assertNull(Rules.purchaseScope(units, "z"))
+        assertTrue(Rules.inPurchaseScope(units, "e", "o1", Rules.ALL_UNITS))
+        assertEquals("o1" to "g3", Rules.restorePurchaseScope(units, "o1", "g3"))
+        assertEquals("o1" to Rules.ALL_UNITS, Rules.restorePurchaseScope(units, "o1", "g2"))
+        assertEquals(Rules.ALL_UNITS to Rules.ALL_UNITS, Rules.restorePurchaseScope(units, "gone", "g1"))
     }
 }

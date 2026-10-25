@@ -11,6 +11,7 @@ import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { cn } from "@/lib/utils";
 import { useNavTrail } from "@/components/navigation/nav-trail";
 import { resolveSafeReturnPath } from "@/lib/safe-return-path";
+import { QuickMarkingButton } from "@/features/dp/rep-p/quick-marking-button";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -50,6 +51,8 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/dp/ferias": "Gestão do colaborador",
   "/dashboard/dp/requests": "Gestão do colaborador",
   "/dashboard/collaborator/requests": "Painel do colaborador",
+  "/dashboard/collaborator/time-recording": "Gestão do colaborador",
+  "/dashboard/system-notices": "Configurações",
   "/dashboard/stock/uniforms": "Gestão do colaborador",
   "/dashboard/dp/settings": "Departamento pessoal",
   "/dashboard/documents": "Documentos",
@@ -107,7 +110,10 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/dp/schedules": "Escalas de trabalho",
   "/dashboard/dp/ferias": "Férias da equipe",
   "/dashboard/dp/requests": "Solicitações dos colaboradores",
+  "/dashboard/collaborator": "Painel do colaborador",
   "/dashboard/collaborator/requests": "Minhas solicitações",
+  "/dashboard/collaborator/time-recording": "Registro de ponto",
+  "/dashboard/system-notices": "Avisos do sistema",
   "/dashboard/stock/uniforms": "Uniformes",
   "/dashboard/dp/settings": "Configurações do DP",
   "/dashboard/dp/settings/collaborators": "Colaboradores",
@@ -153,6 +159,8 @@ function getBreadcrumb(pathname: string): { section: string | null; current: str
 
 // ── Pendências (só aparecem quando existem) e relógio ─────────────────────────
 
+const HEADER_CHIP_CLASS = "inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.07] px-3 text-[12px] font-semibold text-ds-on-dark-2 ring-1 ring-inset ring-white/10";
+
 function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
   const { lots } = useExpiryProducts();
 
@@ -170,7 +178,7 @@ function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
 
   if (expiringCount === 0 && taskCount === 0) return null;
 
-  const chip = "inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.07] px-3 text-[12px] font-semibold text-ds-on-dark-2 ring-1 ring-inset ring-white/10";
+  const chip = HEADER_CHIP_CLASS;
   const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
 
   return (
@@ -264,7 +272,8 @@ function Clock() {
       setClock(`${date} · ${time}`);
     }
     tick();
-    const id = setInterval(tick, 60_000);
+    // A cada segundo, para virar o minuto junto com os outros relógios; texto igual não redesenha.
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
   if (!clock) return null;
@@ -294,6 +303,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Gestão de preços", href: "/dashboard/pricing", section: "Departamento comercial" },
   { label: "Painel DP", href: "/dashboard/dp", section: "Departamento pessoal" },
   { label: "Acompanhamento de processos", href: "/dashboard/processes", section: "Gestão" },
+  { label: "Registro de ponto", href: "/dashboard/collaborator/time-recording", section: "Gestão do colaborador" },
   { label: "Integração", href: "/dashboard/hr/recruitment/integration", section: "Gestão do colaborador" },
   { label: "Escalas de trabalho", href: "/dashboard/dp/schedules", section: "Gestão do colaborador" },
   { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Gestão do colaborador" },
@@ -487,6 +497,7 @@ export function Header({ onMenuClick, tasks, gutterClassName = "mx-4 md:mx-8" }:
 
         <div className="flex-1" />
 
+        <QuickMarkingButton chipClassName={HEADER_CHIP_CLASS} />
         <PendingChips tasks={tasks} />
         <Clock />
         <NotificationCenter tasks={tasks} tone="dark" />

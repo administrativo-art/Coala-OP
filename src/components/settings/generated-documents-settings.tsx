@@ -21,6 +21,7 @@ function originLabel(template: SystemDocumentTemplate) {
   if (template.id === "system-receipt-standard") return "Gerador de documentos";
   if (template.id.includes("transportation-voucher-reactivation")) return "Solicitações do colaborador";
   if (template.sourceModule === "uniforms") return "Uniformes";
+  if (template.sourceModule === "time_recording") return "Registro de ponto";
   if (template.id.startsWith("system-admission-")) return "Admissão";
   return template.category;
 }
@@ -32,6 +33,8 @@ function generationLabel(template: SystemDocumentTemplate) {
 }
 
 function signatureLabel(template: SystemDocumentTemplate) {
+  if (template.renderer === "rep_p_receipt") return "Assinatura digital PAdES";
+  if (template.renderer === "time_mirror") return "Autentique, com o contracheque do mês";
   if (template.signatureScope === "independent") return "Assinatura individual";
   if (template.signatureScope === "bundle") return "Assinatura do pacote";
   return "Sem assinatura";
@@ -40,6 +43,8 @@ function signatureLabel(template: SystemDocumentTemplate) {
 function collaboratorBindingLabel(template: SystemDocumentTemplate) {
   if (template.id.includes("transportation-voucher-reactivation")) return "Colaborador da solicitação";
   if (template.sourceModule === "uniforms") return "Colaborador do movimento de uniforme";
+  if (template.renderer === "time_mirror") return "Colaborador do mês fechado";
+  if (template.sourceModule === "time_recording") return "Colaborador que registrou a batida";
   if (template.id.startsWith("system-admission-")) return "Colaborador da admissão";
   return "Definido no momento da geração";
 }
@@ -128,7 +133,7 @@ export function GeneratedDocumentsSettings() {
 
   return (
     <div className="space-y-5 font-ds">
-      <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg px-4 py-3 text-[13px] leading-5 text-ds-info">
+      <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg px-4 py-3 text-[13px] leading-5 text-ds-info">
         <strong>Uma regra por modelo ou pacote.</strong> Esta aba controla o local de geração, o vínculo com o colaborador, a assinatura, o arquivamento e a publicação. O conteúdo e as versões ficam na aba Modelos.
       </div>
 

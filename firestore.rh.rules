@@ -196,6 +196,24 @@ service cloud.firestore {
     match /dp_absenceRetentionExecutionReceipts/{id} { allow read, write: if false; }
     match /dp_absenceRetentionReconciliations/{id} { allow read, write: if false; }
 
+    // Ensaio nominal e trilhas acessórias continuam no RH; a ARP oficial fica no coala-rep-p.
+    match /repP_pilotHeads/{id} { allow read, write: if false; }
+    match /repP_pilotMarkings/{id} { allow read, write: if false; }
+    match /repP_pilotClassificationEvents/{id} { allow read, write: if false; }
+    match /repP_pilotDayGuards/{id} { allow read, write: if false; }
+    match /dp_timeRecordingAccessAudit/{id} { allow read, write: if false; }
+
+    // Tratamento do ponto (PTRP): pedidos de ajuste e tratamentos só pelas APIs autenticadas; o original segue na ARP.
+    match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }
+    match /ptrp_markingClassifications/{id} { allow read, write: if false; }
+    match /ptrp_treatments/{id} { allow read, write: if false; }
+    match /ptrp_competenceClosures/{id} {
+      allow read, write: if false;
+      match /{nested=**} { allow read, write: if false; }
+    }
+    match /dp_timeBankMovementGuards/{id} { allow read, write: if false; }
+    match /dp_timeBankMovementOperations/{id} { allow read, write: if false; }
+
     // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
     match /candidates/{id}   { allow read, write: if false; }
     match /applications/{id} { allow read, write: if false; }

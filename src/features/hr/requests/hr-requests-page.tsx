@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
+import { FiscalExportsCard } from "@/features/dp/time-adjustments/fiscal-exports-card";
+import { AdjustmentReviewSection } from "@/features/dp/time-adjustments/review-section";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
 import { ResponsibilityTaskSection } from "@/features/dp/responsibility-coverage/task-section";
@@ -55,6 +58,8 @@ export function HrRequestsPage() {
   const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({ status: 'in_review' });
   const canReview = isDefaultAdmin || permissions.dp?.requests?.review === true;
   const canViewAbsences = isDefaultAdmin || permissions.dp?.requests?.view === true;
+  const canSeeClosure = isDefaultAdmin || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
+  const canExportFiscalFiles = isDefaultAdmin || permissions.dp?.settings?.manageTime === true;
   const canViewResponsibilityTasks = isDefaultAdmin || permissions.dp?.schedules?.edit === true
     || permissions.dp?.responsibilities?.manage === true
     || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true;
@@ -211,6 +216,23 @@ export function HrRequestsPage() {
         {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setAbsenceTeamOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
       </section> : null}
 
+      {canReview ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Pedidos dos colaboradores para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
+        <AdjustmentReviewSection firebaseUser={firebaseUser} people={activeUsers} />
+      </section> : null}
+
+      {canSeeClosure ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Fechamento do ponto</h2>
+        <p className="text-xs text-ds-ink-muted">Congela o mês com a declaração de cada pessoa: todos os ajustes de ponto e ausências, inclusive recusados e cancelados. Pedido sem decisão impede o fechamento.</p>
+        <CompetenceClosureSection firebaseUser={firebaseUser} people={activeUsers} />
+      </section> : null}
+
+      {canExportFiscalFiles ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Exportação fiscal AFD e AEJ</h2>
+        <FiscalExportsCard firebaseUser={firebaseUser} />
+      </section> : null}
+
       {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}
         canManage={isDefaultAdmin || permissions.dp?.responsibilities?.manage === true}
         canWorkSchedules={isDefaultAdmin || permissions.dp?.schedules?.edit === true}
@@ -236,7 +258,7 @@ export function HrRequestsPage() {
               <PanelField label="Benefício ao solicitar">{selected.currentSnapshot.active ? "Ativo" : "Inativo"}</PanelField>
               <PanelField label="Valor anterior">{formatCurrency(selected.currentSnapshot.dailyValue)}</PanelField>
             </div>
-            <p className="rounded-ds-md border border-ds-info-border bg-ds-info-bg p-3 text-[12px] leading-5 text-ds-info">Até o dia {selected.cutoffDay}, a alteração vale no mês seguinte. Depois do corte, vale no segundo mês seguinte. A análise do RH não muda a competência registrada no envio. O reflexo aparecerá no contracheque que será pago no dia {formatRequestDate(selected.payslipPaymentDate)}.</p>
+            <p className="rounded-ds-md border border-ds-info/20 bg-ds-info-bg p-3 text-[12px] leading-5 text-ds-info">Até o dia {selected.cutoffDay}, a alteração vale no mês seguinte. Depois do corte, vale no segundo mês seguinte. A análise do RH não muda a competência registrada no envio. O reflexo aparecerá no contracheque que será pago no dia {formatRequestDate(selected.payslipPaymentDate)}.</p>
             <p className="rounded-ds-md bg-ds-muted p-3 text-[12.5px] leading-5 text-ds-ink-muted">{selected.details || "Nenhum motivo ou detalhe adicional foi informado."}</p>
           </PanelSection>
 

@@ -83,8 +83,9 @@ export interface DPStoreState {
   resetResourceMeta: () => void;
 
   // CRUD Actions (Acessíveis pelos componentes)
-  addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
+  addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<DPUnit | null>;
   updateUnit: (unit: DPUnit) => Promise<void>;
+  setUnitTimeZone: (unitId: string, timeZone: string | null) => Promise<void>;
   deleteUnit: (unitId: string) => Promise<void>;
   addUnitOrganization: (data: Omit<DPUnitOrganization, 'id' | 'createdAt'>) => Promise<void>;
   updateUnitOrganization: (organization: DPUnitOrganization) => Promise<void>;
@@ -293,6 +294,14 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
       set((state) => ({ units: [...state.units, payload.unit!] }));
     }
     void requestFormUnitProjectSync();
+    return payload.unit ?? null;
+  },
+  setUnitTimeZone: async (unitId, timeZone) => {
+    // Rota própria e auditada: o fuso muda a hora gravada nas próximas batidas da unidade.
+    await authorizedDpJson(`/api/dp/units/${encodeURIComponent(unitId)}/time-zone`, 'PATCH', { timeZone });
+    set((state) => ({
+      units: state.units.map((unit) => (unit.id === unitId ? { ...unit, timeZone: timeZone ?? undefined } : unit)),
+    }));
   },
   updateUnit: async ({ id, createdAt: _createdAt, ...data }) => {
     await authorizedDpJson(`/api/dp/units/${encodeURIComponent(id)}`, 'PATCH', data);

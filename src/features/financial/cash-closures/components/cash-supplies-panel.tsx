@@ -88,7 +88,7 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
           "rounded-full px-2.5 py-1 text-[11px] font-black",
           protectedHistory
             ? "bg-ds-muted text-ds-ink-muted"
-            : summary.pending > 0 ? "bg-ds-warn-bg text-ds-warn-ink" : "bg-ds-ok-bg text-ds-ok",
+            : summary.pending > 0 ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-ok-bg text-ds-ok",
         )}>
           {protectedHistory
             ? "Finalizado · histórico preservado"

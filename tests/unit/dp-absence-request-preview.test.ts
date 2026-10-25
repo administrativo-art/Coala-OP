@@ -38,7 +38,7 @@ test('opções exibem apenas publicados aplicáveis à própria pessoa e campos 
   const draft = { ...baseType, id: 'draft', status: 'draft' } as DPAbsenceType;
   const options = listAbsenceRequestOptions([baseType, restricted, archived, draft], target, '2026-10-14');
   assert.deepEqual(options.map((option) => option.id), ['type-1']);
-  assert.deepEqual(Object.keys(options[0]).sort(), ['calculation', 'color', 'id', 'name', 'units', 'validFrom', 'validTo']);
+  assert.deepEqual(Object.keys(options[0]).sort(), ['attachmentRequired', 'calculation', 'color', 'id', 'name', 'units', 'validFrom', 'validTo']);
   assert.equal(options[0].calculation, 'calendar_days');
   assert.deepEqual(listAbsenceRequestOptions([baseType], { ...target, employmentRelationshipType: 'pj' }, '2026-10-14'), []);
 });

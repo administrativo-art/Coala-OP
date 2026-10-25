@@ -27,6 +27,7 @@ export type PaymentLegalEntitySnapshot = {
 
 type BankPaymentRequestBase = {
   id: string;
+  workspaceId?: string;
   sourceId: string;
   expenseId?: string;
   installmentNumber?: number | null;
@@ -87,7 +88,25 @@ type BankPaymentRequestBase = {
   createdAt: string;
   createdBy: string;
   updatedAt: string;
-  lastError?: { code: string; safeMessage: string; occurredAt: string } | null;
+  lastError?: { code: string; safeMessage: string; occurredAt: string; details?: string | null } | null;
+  supersedesPaymentRequestId?: string | null;
+  supersededByPaymentRequestId?: string | null;
+  duplicateCheck?: {
+    checkedAt: string;
+    completedAt?: string;
+    localRequests: "clear";
+    expenseAndObligation: "clear";
+    importedStatement: "clear";
+    documentFingerprint: "clear";
+    sourceIdentity: "clear";
+    interSchedulesAndPayments: "pending" | "clear" | "existing_recovered";
+    exclusiveLockId: string;
+  };
+  bankPreflight?: {
+    checkedAt: string;
+    outcome: "clear" | "existing_recovered";
+    bankTransactionCode?: string | null;
+  };
 };
 
 export type PixBankPaymentRequest = BankPaymentRequestBase & {

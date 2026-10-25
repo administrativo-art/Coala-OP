@@ -5,6 +5,8 @@ export type AbsenceRequestOption = {
   name: string;
   units: DPAbsenceRequestUnit[];
   calculation: DPAbsencePolicy['calculation'];
+  /** A regra aplicável exige comprovante: o pedido pede o anexo já na primeira etapa. */
+  attachmentRequired: boolean;
   validFrom: string;
   validTo: string | null;
   color: DPAbsenceColor;
@@ -22,7 +24,7 @@ export type AbsencePreviewPending =
 
 export type PublicAbsenceRule = Pick<DPAbsencePolicy,
   'id' | 'name' | 'calculation' | 'maxUnitsPerRequest' | 'maxUnitsPerPeriod' | 'limitPeriod'
-  | 'minimumNoticeDays' | 'maximumRetroactiveDays' | 'attachment' | 'approvalFlow' | 'instructions'>;
+  | 'minimumNoticeDays' | 'maximumRetroactiveDays' | 'attachment' | 'approvalFlow' | 'instructions' | 'tacitApprovalDays'>;
 
 export type AbsenceRequestPreview = {
   previewOnly: true;
@@ -33,6 +35,8 @@ export type AbsenceRequestPreview = {
   period: { startDate: string; endDate: string; startTime: string | null; endTime: string | null };
   quantity: { value: number | null; unit: DPAbsenceRequestUnit; calculation: DPAbsencePolicy['calculation'] };
   approvalFlow: DPAbsencePolicy['approvalFlow'];
+  /** Dias corridos sem análise para cada etapa ser aprovada automaticamente; null = nunca. */
+  tacitApprovalDays: number | null;
   attachmentRequired: boolean;
   instructions: string | null;
   limits: {

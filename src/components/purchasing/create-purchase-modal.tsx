@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
@@ -311,11 +311,11 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
             <form id="create-purchase-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="destinationKioskId" render={({ field }) => (
-                  <FormItem className="col-span-2"><FormLabel>Destino operacional da compra (opcional)</FormLabel>
+                  <FormItem className="col-span-2"><FormLabel>Destino operacional da compra</FormLabel>
                     <Select value={field.value || 'none'} onValueChange={value => field.onChange(value === 'none' ? '' : value)}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
                       <SelectContent><SelectItem value="none">Não definido</SelectItem>{accessibleKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent>
-                    </Select><p className="text-xs text-muted-foreground">Define onde a compra é esperada. A conferência não altera o saldo até a entrada dos lotes.</p><FormMessage />
+                    </Select><p className="text-xs text-muted-foreground">Pode ficar indefinido durante a revisão, mas é obrigatório antes de confirmar itens operacionais. A conferência não altera o saldo até a entrada dos lotes.</p><FormMessage />
                   </FormItem>
                 )}/>
                 <FormField

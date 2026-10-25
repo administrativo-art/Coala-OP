@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,12 +34,12 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
   formSchema?: DocumentFormSchema;
-  letterheadVersion: "coala-letterhead-v2";
+  letterheadVersion: "coala-letterhead-v2" | "none";
   signatureScope: "none" | "bundle" | "independent";
   postAdmissionSignatureScope?: "none" | "independent";
   retentionPolicyId: string;
@@ -423,10 +423,80 @@ const admissionTemplates: SystemDocumentTemplate[] = [
   updatedAt: ADMISSION_PUBLISHED_AT,
 }));
 
+/** Comprovante fiscal do REP-P: leiaute próprio, sem timbre, emitido e assinado a cada marcação. */
+const timeRecordingTemplates: SystemDocumentTemplate[] = [{
+  id: "system-rep-p-marking-receipt",
+  name: "Comprovante de registro de ponto",
+  documentTitle: "Comprovante de Registro de Ponto do Trabalhador",
+  category: "Controle de ponto",
+  description: "PDF individual de cada batida no REP-P, com NSR, empregador, local, trabalhador, horário e hash, assinado em PAdES.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "rep_p_receipt",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/rep-p/receipt.ts",
+  variables: [],
+  letterheadVersion: "none",
+  signatureScope: "none",
+  // Prescrição não autoriza descarte automático; a guarda por classe ainda depende da Fase 0 jurídica.
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-rep-p-marking-receipt/preview",
+  updatedAt: "2026-10-18T00:00:00.000Z",
+}, {
+  id: "system-rep-p-pilot-receipt",
+  name: "Comprovante de ensaio do ponto",
+  documentTitle: "Ensaio de registro de ponto",
+  category: "Controle de ponto",
+  description: "PDF individual de cada batida do ensaio pré-homologação, identificado sem NSR, sem assinatura ICP-Brasil e sem validade como comprovante REP-P.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "rep_p_pilot_receipt",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/rep-p/pilot-receipt.ts",
+  variables: [],
+  letterheadVersion: "none",
+  signatureScope: "none",
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-rep-p-pilot-receipt/preview",
+  updatedAt: "2026-10-23T00:00:00.000Z",
+}, {
+  id: "system-ptrp-time-mirror",
+  name: "Espelho de ponto",
+  documentTitle: "Espelho de ponto",
+  category: "Controle de ponto",
+  description: "Espelho do mês fechado por pessoa: escala, batidas originais com NSR, desconsideradas e incluídas por ajuste aprovado, ausências e a declaração do fechamento. Assinado pela empresa com o e-CNPJ e enviado com o contracheque do mês, num único PDF, para a assinatura do trabalhador na Autentique.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "time_mirror",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/time-adjustments/mirror-pdf.ts",
+  variables: [],
+  letterheadVersion: "none",
+  // Pacote do fechamento (20/10/2026): espelho e contracheque num PDF assinado na Autentique; e-CNPJ da empresa em .p7s destacado.
+  signatureScope: "bundle",
+  // Retenção de 20 anos decidida pelo programador (plano REP-P 10-B); descarte nunca é automático.
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-ptrp-time-mirror/preview",
+  updatedAt: "2026-10-20T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
   ...admissionTemplates,
+  ...timeRecordingTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

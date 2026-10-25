@@ -81,3 +81,14 @@ test('CLI de definições expõe ajuda sem autenticar ou consultar dados', () =>
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--shift-definition-scope/);
 });
+
+test('intervalo livre, de janela ou fixo intercalado também marca o turno como tendo intervalo', () => {
+  const report = prepareNatashaShiftDirectory({ unitIds: ['matriz'], sourceQuery: 'synthetic', documents: [
+    { id: 'livre', code: 'L', name: 'Livre', startTime: '10:00', endTime: '16:15', breakType: 'flexible', breakDurationMinutes: 15, daysOfWeek: [1] },
+    { id: 'multi', code: 'X', name: 'Fixo intercalado', startTime: '10:00', endTime: '16:15', breakType: 'fixed',
+      breakSegments: [{ start: '11:30', end: '11:37' }, { start: '14:30', end: '14:38' }], daysOfWeek: [1] },
+    { id: 'sem', code: 'S', name: 'Sem intervalo', startTime: '10:00', endTime: '14:00', daysOfWeek: [1] },
+  ] });
+  const configured = Object.fromEntries(report.shiftDefinitions.map((item) => [item.id, item.breakConfigured]));
+  assert.deepEqual(configured, { livre: true, multi: true, sem: false });
+});

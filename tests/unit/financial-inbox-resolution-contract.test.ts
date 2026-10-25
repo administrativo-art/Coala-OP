@@ -5,6 +5,9 @@ import {
   automaticReminderResolutionPatch,
   isStrongAutomaticExpenseMatch,
   resolutionForDisplay,
+  restoredFinancialInboxResolution,
+  financialInboxResolutionMigrationComplete,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
 } from "../../src/features/financial/inbox/resolution-contract";
 import type { FinancialInboxExpenseSuggestion, FinancialInboxMessage } from "../../src/features/financial/inbox/types";
 
@@ -89,6 +92,36 @@ test("pagamento aguardando aprovação não é apresentado como agendado", () =>
   assert.equal(patch?.resolution.financialState, "payment_prepared");
 });
 
+test("pedido ainda pronto para envio ou desconhecido nunca é inferido como agendado", () => {
+  const ready = automaticReminderResolutionPatch({
+    suggestion: suggestion({
+      existingBankPayment: {
+        transactionId: "request-ready-1",
+        bankStatus: null,
+        schedulingStatus: "ready_to_submit",
+        scheduledFor: "2026-09-14",
+      },
+    }),
+    at: "2026-09-11T14:00:00.000Z",
+  });
+  const unknown = automaticReminderResolutionPatch({
+    suggestion: suggestion({
+      existingBankPayment: {
+        transactionId: "request-unknown-1",
+        bankStatus: "STATUS_NOVO",
+        schedulingStatus: null,
+        scheduledFor: "2026-09-14",
+      },
+    }),
+    at: "2026-09-11T14:00:00.000Z",
+  });
+
+  assert.equal(ready?.bankState, "ready_to_submit");
+  assert.equal(ready?.resolution.financialState, "payment_prepared");
+  assert.equal(unknown?.bankState, "not_prepared");
+  assert.equal(unknown?.resolution.financialState, "payment_prepared");
+});
+
 test("mensagens legadas vinculadas continuam aparecendo como identificadas", () => {
   const resolution = resolutionForDisplay({
     status: "linked",
@@ -153,4 +186,28 @@ test("backfill preserva a natureza e a liquidação de registro legado arquivado
   assert.equal(resolution.kind, "reminder");
   assert.equal(resolution.targetId, "expense-legacy");
   assert.equal(resolution.financialState, "reconciled");
+});
+
+test("restauração recompõe objeto inteiro, inclusive vínculo e quitação", () => {
+  const archived = {
+    status: "archived", archivedFromStatus: "identified", linkedExpenseId: "expense-1",
+    resolution: { status: "archived", kind: "reminder", targetType: "expense", targetId: "expense-1",
+      financialState: "reconciled", mode: "automatic", reasons: ["MATCH_CONFIRMED"] },
+  } as FinancialInboxMessage;
+  const restored = restoredFinancialInboxResolution(archived, "identified");
+  assert.equal(restored.status, "identified");
+  assert.equal(restored.targetId, "expense-1");
+  assert.equal(restored.financialState, "reconciled");
+  assert.deepEqual(restored.reasons, ["MATCH_CONFIRMED"]);
+});
+
+test("ignored legado entra em descarte manual somente após migração v2 concluída", () => {
+  const legacy = { status: "ignored", resolution: { status: "discarded" }, linkedExpenseId: null } as FinancialInboxMessage;
+  const normalized = resolutionForDisplay(legacy);
+  assert.equal(normalized.mode, "manual");
+  assert.deepEqual(normalized.reasons, ["LEGACY_DISCARD_ORIGIN_UNKNOWN"]);
+  assert.equal(financialInboxResolutionMigrationComplete(null), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: true, version: 1 }), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: false, version: FINANCIAL_INBOX_RESOLUTION_VERSION }), false);
+  assert.equal(financialInboxResolutionMigrationComplete({ complete: true, version: FINANCIAL_INBOX_RESOLUTION_VERSION }), true);
 });

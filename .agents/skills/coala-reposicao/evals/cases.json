@@ -21,10 +21,14 @@
     "expected_behaviors": [
       "usar a última compra histórica apenas para selecionar derivado e fornecedor",
       "mostrar recebimento ativo destinado à unidade como aviso separado",
+      "auditar recebimentos ativos do workspace sem destino explícito",
+      "mostrar compras ativas sem destino em bloco separado para reconciliação",
       "preservar a falta física sem abatimento automático"
     ],
     "forbidden_behaviors": [
       "presumir destino para pedido legado sem destinationKioskId",
+      "concluir que não existe compra apenas porque o filtro por destino veio vazio",
+      "omitir compra ativa sem destino",
       "tratar pedido confirmado histórico como mercadoria a caminho",
       "criar pedido ou alterar estoque"
     ]
@@ -41,6 +45,21 @@
       "atribuir fornecedor por semelhança de nome",
       "inventar tamanho de embalagem",
       "omitir o item por falta de histórico"
+    ]
+  },
+  {
+    "name": "reconcilia compromisso comercial ainda em revisão",
+    "input": "Essa compra existe e já temos a cobrança, considere na reposição.",
+    "expected_behaviors": [
+      "localizar o pedido informado mesmo que ainda esteja em revisão",
+      "mostrar o pedido como compromisso comercial pendente de confirmação operacional",
+      "explicar que o estado cadastral ainda não comprova recebimento ativo",
+      "preservar a necessidade física sem abatimento automático"
+    ],
+    "forbidden_behaviors": [
+      "dizer que a compra não existe apenas por faltar recebimento",
+      "alterar o estado do pedido sem solicitação separada",
+      "atribuir destino por suposição"
     ]
   }
 ]

@@ -36,7 +36,10 @@ export async function generateStructuredOutput<TInput, TOutput>(
   const contents = options.promptTemplate
     ? renderPromptTemplate(options.promptTemplate, input)
     : JSON.stringify(input);
-  const jsonSchema = zodToJsonSchema(options.outputSchema, { $refStrategy: "none" });
+  // `zod-to-json-schema` still publishes Zod 3's type surface while the app
+  // uses Zod 4. Runtime conversion remains compatible; keep the boundary
+  // explicit so TypeScript does not recursively compare the two Zod types.
+  const jsonSchema = zodToJsonSchema(options.outputSchema as never, { $refStrategy: "none" });
   const client = new GoogleGenAI({ apiKey: resolveApiKey() });
 
   let responseText: string | undefined;

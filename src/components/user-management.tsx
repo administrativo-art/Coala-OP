@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useForm, Controller, type FieldErrors } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { differenceInDays, format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
@@ -21,7 +21,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from '@/components/ui/separator';
 import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { type User } from '@/types';
+import { type UnitAccessScope, type User } from '@/types';
+import { normalizeUnitAccessScope } from '@/lib/unit-access';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProfileManagementModal } from './profile-management-modal';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -179,35 +180,46 @@ function UserFormSection({
   );
 }
 
-type CollaboratorEditTab = 'identity' | 'access';
+type CollaboratorEditTab = 'identity' | 'journey' | 'units' | 'access';
+
+const UNIT_ACCESS_SCOPE_NOTES: Record<UnitAccessScope, string> = {
+  linked: 'Vê e opera só as unidades marcadas em "Unidades de escala e operação"; se a lotação mudar, o acesso muda junto.',
+  selected: 'Vê e opera só as unidades escolhidas em "Unidades liberadas no escopo", mesmo onde não trabalha (ex.: supervisão).',
+  all: 'Vê e opera todas as unidades. Reserve para gestão e administração.',
+};
 
 const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> = [
   { id: 'identity', label: 'Identificação' },
-  { id: 'access', label: 'Atuação e acesso' },
+  { id: 'journey', label: 'Cargo e jornada' },
+  { id: 'units', label: 'Unidades' },
+  { id: 'access', label: 'Acesso e rotinas' },
 ];
+
+/** Abas que dependem do módulo DP; sem `dp.view` o drawer mostra só identificação e acesso. */
+const DP_ONLY_EDIT_TABS = new Set<CollaboratorEditTab>(['journey', 'units']);
 
 const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
   username: 'identity',
   email: 'identity',
   avatarUrl: 'identity',
   employmentRelationshipType: 'identity',
+  jobRoleId: 'journey',
+  jobFunctionIds: 'journey',
+  shiftDefinitionId: 'journey',
+  admissionDate: 'journey',
+  birthDate: 'journey',
+  assignedKioskIds: 'units',
+  unitId: 'units',
+  responsibleUnitIds: 'units',
+  unitAccessScope: 'units',
+  unitAccessUnitIds: 'units',
   profileId: 'access',
-  unitId: 'access',
-  assignedKioskIds: 'access',
-  jobRoleId: 'access',
-  jobFunctionIds: 'access',
-  responsibleUnitIds: 'access',
-  unitAccessScope: 'access',
-  unitAccessUnitIds: 'access',
   registrationIdBizneo: 'access',
   registrationIdPdv: 'access',
-  shiftDefinitionId: 'identity',
-  admissionDate: 'identity',
-  birthDate: 'identity',
-  operacional: 'identity',
-  participatesInGoals: 'identity',
-  needsTransportVoucher: 'identity',
-  transportVoucherValue: 'identity',
+  operacional: 'access',
+  participatesInGoals: 'access',
+  needsTransportVoucher: 'access',
+  transportVoucherValue: 'access',
 };
 
 type InactivationMode = 'temporary' | 'contract_termination';
@@ -412,7 +424,7 @@ export function UserManagement({
   showTransportVoucher = false,
 }: UserManagementProps = {}) {
   const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
-  const { kiosks } = useKiosks();
+  const { kiosks, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
   const { shiftDefinitions, shiftDefsLoading, vacations } = useDP();
@@ -481,16 +493,27 @@ export function UserManagement({
 
   const isDrawer = presentation === 'drawer' && !createOnly;
 
+  const visibleEditTabs = permissions.dp?.view
+    ? COLLABORATOR_EDIT_TABS
+    : COLLABORATOR_EDIT_TABS.filter((tab) => !DP_ONLY_EDIT_TABS.has(tab.id));
+  // Ler errors/dirtyFields aqui inscreve o render nas mudanças; o ponto na aba evita salvar sem ver o que mudou em outra aba.
+  const editTabStatus = (tab: CollaboratorEditTab): 'error' | 'changed' | null => {
+    const inTab = (field: string) => COLLABORATOR_EDIT_FIELD_TAB[field as keyof UserFormValues] === tab;
+    if (Object.keys(form.formState.errors).some(inTab)) return 'error';
+    if (Object.keys(form.formState.dirtyFields).some(inTab)) return 'changed';
+    return null;
+  };
+
   const handleEditTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
     let nextIndex = currentIndex;
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % COLLABORATOR_EDIT_TABS.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + COLLABORATOR_EDIT_TABS.length) % COLLABORATOR_EDIT_TABS.length;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % visibleEditTabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + visibleEditTabs.length) % visibleEditTabs.length;
     else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = COLLABORATOR_EDIT_TABS.length - 1;
+    else if (event.key === 'End') nextIndex = visibleEditTabs.length - 1;
     else return;
 
     event.preventDefault();
-    const nextTab = COLLABORATOR_EDIT_TABS[nextIndex];
+    const nextTab = visibleEditTabs[nextIndex];
     setActiveEditTab(nextTab.id);
     window.requestAnimationFrame(() => document.getElementById(`collaborator-edit-tab-${nextTab.id}`)?.focus());
   };
@@ -626,12 +649,14 @@ export function UserManagement({
   );
 
   useEffect(() => {
+    // Sem o catálogo do RH, a lista de compatíveis está vazia e apagaria a função já gravada.
+    if (hrLoading) return;
     const allowedFunctionIds = new Set(compatibleFunctions.map((item) => item.id));
     const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id)).slice(0, 1);
     if (nextValue.length !== selectedFunctionIds.length) {
       form.setValue('jobFunctionIds', nextValue, { shouldDirty: true });
     }
-  }, [compatibleFunctions, form, selectedFunctionIds]);
+  }, [compatibleFunctions, form, hrLoading, selectedFunctionIds]);
 
   useEffect(() => {
     if (!effectiveDefaultProfileId) return;
@@ -796,11 +821,13 @@ export function UserManagement({
 
   useEffect(() => {
     if (!editUserId || initializedEditUserIdRef.current === editUserId) return;
+    // O reset filtra quiosques e unidades pelos catálogos; inicializar antes deles descarta vínculos gravados.
+    if (hrLoading || kiosksLoading) return;
     const target = users.find((user) => user.id === editUserId);
     if (!target) return;
     initializedEditUserIdRef.current = editUserId;
     handleEdit(target);
-  }, [editUserId, handleEdit, users]);
+  }, [editUserId, handleEdit, hrLoading, kiosksLoading, users]);
 
   const openTransportVoucherChangeDialog = (nextChecked: boolean) => {
     const fromStatus = getTransportVoucherStatus(form.getValues('needsTransportVoucher'), transportVoucherHistory);
@@ -1248,7 +1275,7 @@ export function UserManagement({
             className={cn(
               createOnly && 'personal-create-user-form space-y-2',
               !createOnly && !isDrawer && 'collaborator-edit-form system-standard-page space-y-5 font-ds',
-              isDrawer && 'collaborator-edit-form flex min-h-[calc(100dvh-158px)] flex-col gap-4 font-ds',
+              isDrawer && 'collaborator-edit-form flex shrink-0 min-h-[calc(100dvh-158px)] flex-col gap-4 font-ds',
             )}
           >
             {/* ── Back nav ── */}
@@ -1284,10 +1311,12 @@ export function UserManagement({
             {isDrawer ? (
               <nav
                 aria-label="Seções da edição do colaborador"
-                className="sticky top-0 z-20 -mx-1 overflow-x-auto rounded-ds-md bg-ds-surface-seg p-[3px] shadow-xs"
+                className="sticky top-0 z-20 -mx-1 shrink-0 overflow-x-auto rounded-ds-md bg-ds-seg p-[3px] shadow-xs"
               >
                 <div role="tablist" aria-label="Dados do colaborador" className="flex min-w-max gap-1">
-                  {COLLABORATOR_EDIT_TABS.map((tab, index) => (
+                  {visibleEditTabs.map((tab, index) => {
+                    const status = editTabStatus(tab.id);
+                    return (
                     <button
                       key={tab.id}
                       id={`collaborator-edit-tab-${tab.id}`}
@@ -1299,15 +1328,22 @@ export function UserManagement({
                       onClick={() => setActiveEditTab(tab.id)}
                       onKeyDown={(event) => handleEditTabKeyDown(event, index)}
                       className={cn(
-                        'rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
+                        'inline-flex items-center gap-1.5 rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
                         activeEditTab === tab.id
                           ? 'bg-ds-surface text-ds-ink shadow-xs'
                           : 'text-ds-ink-muted hover:text-ds-ink',
                       )}
                     >
                       {tab.label}
+                      {status ? (
+                        <>
+                          <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', status === 'error' ? 'bg-ds-danger' : 'bg-ds-accent')} />
+                          <span className="sr-only">{status === 'error' ? '(com erro)' : '(alterada)'}</span>
+                        </>
+                      ) : null}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </nav>
             ) : null}
@@ -1432,12 +1468,12 @@ export function UserManagement({
 
             {permissions.dp?.view ? (
               <>
-                {(!isDrawer || activeEditTab === 'access') ? (
-                <div id="collaborator-edit-panel-access" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-access' : undefined}>
+                {(!isDrawer || activeEditTab === 'journey') ? (
+                <div id="collaborator-edit-panel-journey" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-journey' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
                 <UserFormSection
-                  title="Atuação e acesso"
-                  description="Cargo, função, unidades e alcance das permissões deste cadastro."
-                  help="Cargo e função determinam o perfil de permissão aplicável. As unidades de operação controlam onde a pessoa entra na escala; a unidade principal é a referência financeira; e o escopo define onde ela pode visualizar ou operar."
+                  title="Cargo e função"
+                  description="O que a pessoa faz na empresa e qual perfil de permissão isso aplica."
+                  help="Cargo e função determinam o perfil de permissão aplicado automaticamente. A lista de funções respeita a compatibilidade com o cargo escolhido."
                   compact={createOnly}
                 >
                   <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
@@ -1506,175 +1542,8 @@ export function UserManagement({
                         </FormItem>
                       )} />
                     </div>
-                    <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Unidades sob responsabilidade</FormLabel>
-                        <FormControl>
-                          <MultiSelect
-                            options={responsibleUnitOptions}
-                            selected={field.value ?? []}
-                            onChange={field.onChange}
-                            placeholder="Selecione as unidades"
-                            className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
-                      <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Escopo de visualização por unidade</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="linked">Somente unidades vinculadas</SelectItem>
-                              <SelectItem value="selected">Unidades específicas</SelectItem>
-                              <SelectItem value="all">Todas as unidades</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Define onde o usuário pode visualizar e operar. As permissões do perfil continuam definindo o que ele pode fazer.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      {selectedUnitAccessScope === 'selected' ? (
-                        <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Unidades liberadas no escopo</FormLabel>
-                            <FormControl>
-                              <MultiSelect
-                                options={responsibleUnitOptions}
-                                selected={field.value ?? []}
-                                onChange={field.onChange}
-                                placeholder="Selecione as unidades"
-                              />
-                            </FormControl>
-                            <FormDescription className="text-xs">
-                              Não altera a lotação nem as unidades sob responsabilidade.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      ) : null}
-                    </div>
-                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
-                      <FormField control={form.control} name="profileId" render={() => (
-                        <FormItem>
-                          <FormLabel>Perfil de permissão</FormLabel>
-                          <FormControl>
-                            <Input
-                              value={
-                                profilesLoading
-                                  ? 'Carregando perfil...'
-                                  : selectedProfileName ?? selectedProfileId ?? 'Definido pelo cargo/função'
-                              }
-                              disabled
-                            />
-                          </FormControl>
-                          <FormDescription className="text-xs">
-                            Campo informativo. O perfil acompanha o cargo/função configurado.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="unitId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {selectedWorkUnits.map((unit) => (
-                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Define a lotação usada no financeiro. As demais unidades não alteram essa referência.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                    <div>
-                      <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidades de escala e operação</FormLabel>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <FormControl>
-                                <Button variant="ds-secondary" className="relative h-10 w-full justify-start rounded-ds-md bg-ds-input pr-12 text-[13px] font-normal">
-                                  {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
-                                  <span className="pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
-                                    <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
-                                  </span>
-                                </Button>
-                              </FormControl>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
-                              <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <ScrollArea className="h-48">
-                                {kiosks.map(kiosk => (
-                                  <DropdownMenuCheckboxItem
-                                    key={kiosk.id}
-                                    checked={field.value?.includes(kiosk.id)}
-                                    onCheckedChange={checked => {
-                                      const selected = field.value || [];
-                                      field.onChange(checked
-                                        ? Array.from(new Set([...selected, kiosk.id]))
-                                        : selected.filter(id => id !== kiosk.id));
-                                    }}
-                                    onSelect={e => e.preventDefault()}
-                                  >
-                                    {kiosk.name}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
-                              </ScrollArea>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <FormDescription className="text-xs">
-                            Controla onde a pessoa aparece na escala e pode operar; aceita várias unidades.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                    {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {form.watch('assignedKioskIds').map(kioskId => {
-                            const id = pdvOperatorIds[kioskId];
-                            if (!id) return null;
-                            const name = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
-                            return (
-                              <span key={kioskId} className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground rounded-md px-2 py-1">
-                                <span className="font-medium">{name}</span>
-                                <span className="text-muted-foreground/60">·</span>
-                                {id}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </UserFormSection>
-                </div>
-                ) : null}
-
-                {(!isDrawer || activeEditTab === 'identity') ? (
-                <div id="collaborator-edit-section-journey">
                 <UserFormSection
                   title="Jornada e datas"
                   description="Turno de referência, datas contratuais e informações calculadas."
@@ -1740,11 +1609,188 @@ export function UserManagement({
                 </UserFormSection>
                 </div>
                 ) : null}
+
+                {(!isDrawer || activeEditTab === 'units') ? (
+                <div id="collaborator-edit-panel-units" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-units' : undefined}>
+                <UserFormSection
+                  title="Unidades"
+                  description="Onde trabalha, referência financeira, onde é gestora e o que pode ver no sistema."
+                  help="São quatro informações diferentes: unidades de escala (onde a pessoa trabalha), unidade principal (referência do financeiro), unidades sob responsabilidade (onde é gestora) e escopo (onde pode visualizar e operar no sistema)."
+                  compact={createOnly}
+                >
+                  <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
+                    <div>
+                      <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidades de escala e operação</FormLabel>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <FormControl>
+                                <Button variant="ds-secondary" className="relative h-10 w-full justify-start rounded-ds-md bg-ds-input pr-12 text-[13px] font-normal">
+                                  {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
+                                  <span className="pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
+                                    <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
+                                  </span>
+                                </Button>
+                              </FormControl>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
+                              <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <ScrollArea className="h-48">
+                                {kiosks.map(kiosk => (
+                                  <DropdownMenuCheckboxItem
+                                    key={kiosk.id}
+                                    checked={field.value?.includes(kiosk.id)}
+                                    onCheckedChange={checked => {
+                                      const selected = field.value || [];
+                                      field.onChange(checked
+                                        ? Array.from(new Set([...selected, kiosk.id]))
+                                        : selected.filter(id => id !== kiosk.id));
+                                    }}
+                                    onSelect={e => e.preventDefault()}
+                                  >
+                                    {kiosk.name}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              </ScrollArea>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <FormDescription className="text-xs">
+                            Onde a pessoa trabalha: entra na escala e opera nessas unidades (aceita várias). É a base do escopo &quot;Somente unidades vinculadas&quot;.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {form.watch('assignedKioskIds').map(kioskId => {
+                            const id = pdvOperatorIds[kioskId];
+                            if (!id) return null;
+                            const name = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
+                            return (
+                              <span key={kioskId} className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground rounded-md px-2 py-1">
+                                <span className="font-medium">{name}</span>
+                                <span className="text-muted-foreground/60">·</span>
+                                {id}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
+                      <FormField control={form.control} name="unitId" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {selectedWorkUnits.map((unit) => (
+                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Referência do financeiro (lotação e custos), escolhida entre as unidades de escala. As demais não alteram essa referência.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidades sob responsabilidade</FormLabel>
+                          <FormControl>
+                            <MultiSelect
+                              options={responsibleUnitOptions}
+                              selected={field.value ?? []}
+                              onChange={field.onChange}
+                              placeholder="Selecione as unidades"
+                              className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Onde a pessoa é gestora: aparece como responsável no organograma, nas metas e nos documentos. Não libera acesso; isso é o escopo abaixo.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
+                      <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Escopo de visualização por unidade</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="linked">Somente unidades vinculadas</SelectItem>
+                              <SelectItem value="selected">Unidades específicas</SelectItem>
+                              <SelectItem value="all">Todas as unidades</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            {UNIT_ACCESS_SCOPE_NOTES[normalizeUnitAccessScope(field.value)]} O perfil continua definindo o que ele pode fazer.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      {selectedUnitAccessScope === 'selected' ? (
+                        <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidades liberadas no escopo</FormLabel>
+                            <FormControl>
+                              <MultiSelect
+                                options={responsibleUnitOptions}
+                                selected={field.value ?? []}
+                                onChange={field.onChange}
+                                placeholder="Selecione as unidades"
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">
+                              Não altera a lotação nem as unidades sob responsabilidade.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      ) : null}
+                    </div>
+                  </div>
+                </UserFormSection>
+                </div>
+                ) : null}
               </>
             ) : null}
 
-            {(!isDrawer || activeEditTab === 'identity') ? (
-            <div id="collaborator-edit-section-system">
+            {(!isDrawer || activeEditTab === 'access') ? (
+            <div id="collaborator-edit-panel-access" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-access' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+            {permissions.dp?.view ? (
+              <FormField control={form.control} name="profileId" render={() => (
+                <FormItem data-ui="profile-summary" className="rounded-ds-card border border-ds-border bg-ds-surface px-5 py-4 shadow-xs">
+                  <FormLabel className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">Perfil de permissão</FormLabel>
+                  <p className="text-base font-extrabold text-ds-ink">
+                    {profilesLoading ? 'Carregando perfil...' : selectedProfileName ?? 'Sem perfil definido'}
+                  </p>
+                  <FormDescription className="text-xs">
+                    {effectiveDefaultProfileId && effectiveDefaultProfileId === selectedProfileId
+                      ? 'Aplicado pelo cargo e função (aba Cargo e jornada). '
+                      : ''}
+                    O perfil define o que a pessoa pode fazer; as unidades definem onde.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            ) : null}
             <UserFormSection
               title="Comportamento no sistema"
               description="Recursos operacionais habilitados para esta pessoa."

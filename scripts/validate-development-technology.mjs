@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const roles = ['edna', 'gandalf', 'r2d2', 'rocket', 'shuri', 'trinity', 'velma'];
+const roles = ['doc', 'edna', 'gandalf', 'r2d2', 'rocket', 'shuri', 'trinity', 'velma'];
 const financialRoles = ['diana', 'hermione', 'leia', 'monica', 'pepper', 'sherlock', 'spock', 'tony'];
 const rhRoles = ['natasha'];
-const reviewers = new Set(['gandalf', 'rocket', 'trinity', 'velma']);
+const reviewers = new Set(['doc', 'gandalf', 'rocket', 'trinity', 'velma']);
+// Revisores que consultam fontes externas (requisitos e normas oficiais).
+const webReviewers = new Set(['doc', 'gandalf']);
 
 function read(path) {
   return readFileSync(path, 'utf8');
@@ -29,7 +31,7 @@ assert.deepEqual(
   [...roles, ...financialRoles, ...rhRoles].sort(),
   'Os perfis Codex de desenvolvimento, financeiro e RH devem coincidir',
 );
-assert.deepEqual(projectFiles('.claude/agents', '.md'), roles, 'Os sete perfis Claude devem coincidir');
+assert.deepEqual(projectFiles('.claude/agents', '.md'), roles, 'Os oito perfis Claude devem coincidir');
 
 const codex = read('.codex/config.toml');
 assert.equal(tomlValue(codex, 'model'), '"gpt-6-sol"');
@@ -66,10 +68,12 @@ for (const role of roles) {
   const tools = toolLine[1].split(',').map((tool) => tool.trim());
   assert.ok(!tools.includes('Agent'), `${role}: delegação não permitida`);
   if (reviewers.has(role)) {
-    assert.deepEqual(tools, ['Read', 'Glob', 'Grep', ...(role === 'gandalf' ? ['WebSearch', 'WebFetch'] : [])]);
+    assert.deepEqual(tools, ['Read', 'Glob', 'Grep', ...(webReviewers.has(role) ? ['WebSearch', 'WebFetch'] : [])]);
   }
   assert.match(claudeAgent, /Não delegue nem invoque outros agentes\./);
 }
+assert.match(read('.claude/agents/doc.md'), /Nunca declare o sistema legalmente conforme/);
+assert.match(read('.codex/agents/doc.toml'), /Nunca declare o sistema legalmente conforme/);
 
 for (const role of financialRoles) {
   const codexAgent = read(join('.codex/agents', `${role}.toml`));
@@ -106,4 +110,4 @@ for (const role of rhRoles) {
   assert.doesNotMatch(codexAgent, /^model\s*=/m, `${role}: modelo deve ser escolhido por tarefa`);
 }
 
-console.log('Perfis Codex válidos: sete de desenvolvimento, oito financeiros e Natasha no RH.');
+console.log('Perfis Codex válidos: oito de desenvolvimento, oito financeiros e Natasha no RH.');

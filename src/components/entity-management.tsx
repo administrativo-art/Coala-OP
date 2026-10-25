@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
 import { useToast } from '@/hooks/use-toast';

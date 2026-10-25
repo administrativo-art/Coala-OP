@@ -14,13 +14,13 @@ import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
-import {
+import { BellRing,
   ChevronDown, X, LayoutDashboard, Package, ListTodo,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
-  Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale} from "lucide-react";
+  Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale, Clock3} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
 interface NavItem {
@@ -82,6 +82,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
+  const canViewCollaboratorPanel = Boolean(permissions.dashboard?.collaborator ?? permissions.dashboard?.view);
   /* Recolhida por padrão; expande ao passar o cursor ou ao focar por teclado, flutuando sobre a tela. */
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const [keyboardFocus, setKeyboardFocus] = useState(false);
@@ -185,7 +186,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               permissions.dp?.schedules?.view ||
               permissions.dp?.vacation?.viewAll ||
               permissions.stock.uniforms?.view ||
-              permissions.dp?.view,
+              permissions.dp?.view ||
+              canViewCollaboratorPanel,
             children: [
               {
                 label: "Perfil do colaborador",
@@ -195,6 +197,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 icon: UserCircle,
                 show: permissions.dp?.collaborators?.view,
               },
+              // Caminho fixo para a tela completa; não depende das opções do ponto, que podem falhar e esconder o atalho da barra.
+              { label: "Registro de ponto", href: "/dashboard/collaborator/time-recording", icon: Clock3, show: canViewCollaboratorPanel },
               { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
@@ -288,6 +292,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Settings,
         items: [
           { label: "Configurações", href: "/dashboard/settings", icon: Settings, show: permissions.settings.view },
+          { label: "Avisos do sistema", href: "/dashboard/system-notices", icon: BellRing, show: isDefaultAdmin || (permissions.settings.view && permissions.settings.viewSystemNotices) },
           { label: "Ajuda", href: "/dashboard/help", icon: HelpCircle, show: permissions.help.view },
         ],
       },
@@ -302,6 +307,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       .filter(s => s.items.length > 0);
   }, [
     canAccessPurchasing,
+    canViewCollaboratorPanel,
     pendingTaskCount,
     permissions,
     isDefaultAdmin,
@@ -547,7 +553,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
         <div className={cn("shrink-0 space-y-1", expanded ? "px-3 pb-1" : "px-2 pb-1 pt-1")}>
           {permissions.dashboard?.view ? quickLink("/dashboard", "Painel da gestão", LayoutDashboard, pathname === "/dashboard") : null}
-          {(permissions.dashboard?.collaborator ?? permissions.dashboard?.view)
+          {canViewCollaboratorPanel
             ? quickLink("/dashboard/collaborator", "Painel do colaborador", ClipboardCheck, pathname === "/dashboard/collaborator")
             : null}
         </div>
