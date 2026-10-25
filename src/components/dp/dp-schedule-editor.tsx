@@ -297,6 +297,8 @@ function ShiftDialog({
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
   const selectedUnitId = form.watch('unitId');
+  const selectedShiftDefinitionId = form.watch('shiftDefinitionId');
+  const hasSelectedShiftDefinition = Boolean(selectedShiftDefinitionId);
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
     [selectedDate, selectedUserId, vacations],
@@ -557,14 +559,14 @@ function ShiftDialog({
               <FormField control={form.control} name="startTime" render={({ field }) => (
                 <FormItem className="space-y-2">
                   <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Início</FormLabel>
-                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormControl><Input type="time" readOnly={hasSelectedShiftDefinition} aria-readonly={hasSelectedShiftDefinition} title={hasSelectedShiftDefinition ? 'O horário é definido pelo turno selecionado.' : undefined} className={cn('h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0', hasSelectedShiftDefinition && 'cursor-not-allowed bg-[#f8fafc] text-[#64748b]')} {...field} /></FormControl>
                   <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
               <FormField control={form.control} name="endTime" render={({ field }) => (
                 <FormItem className="space-y-2">
                   <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Fim</FormLabel>
-                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormControl><Input type="time" readOnly={hasSelectedShiftDefinition} aria-readonly={hasSelectedShiftDefinition} title={hasSelectedShiftDefinition ? 'O horário é definido pelo turno selecionado.' : undefined} className={cn('h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0', hasSelectedShiftDefinition && 'cursor-not-allowed bg-[#f8fafc] text-[#64748b]')} {...field} /></FormControl>
                   <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />

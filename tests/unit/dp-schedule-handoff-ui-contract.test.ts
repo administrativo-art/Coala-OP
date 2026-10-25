@@ -48,6 +48,13 @@ test('editor expõe grade operacional, fila Bizneo e modais de apoio', () => {
   assert.match(editorSource, /Em outras unidades/);
 });
 
+test('horários do editor ficam somente leitura quando um turno é selecionado', () => {
+  assert.match(editorSource, /const selectedShiftDefinitionId = form\.watch\('shiftDefinitionId'\)/);
+  assert.match(editorSource, /const hasSelectedShiftDefinition = Boolean\(selectedShiftDefinitionId\)/);
+  assert.strictEqual((editorSource.match(/readOnly=\{hasSelectedShiftDefinition\}/g) ?? []).length, 2);
+  assert.strictEqual((editorSource.match(/aria-readonly=\{hasSelectedShiftDefinition\}/g) ?? []).length, 2);
+});
+
 test('painel em lote oferece seleção visível, por pessoa e bloqueios de ausência', () => {
   assert.match(bulkSource, /Selecionar visíveis/);
   assert.match(bulkSource, /Selecionar por colaboradora/);
