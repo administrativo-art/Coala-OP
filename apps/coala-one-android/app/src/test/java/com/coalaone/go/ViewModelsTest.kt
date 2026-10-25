@@ -107,6 +107,16 @@ class ViewModelsTest {
         runCurrent(); vm.unlock("good", true); advanceUntilIdle()
         assertEquals("test-owner", recorded); assertFalse(vm.state.value.locked)
     }
+    @Test fun biometricEnrollmentEnablesLocalUnlockWithoutNetwork() = runTest {
+        var recorded = ""
+        val biometric = object : BiometricPreferences {
+            override fun enabled(uid: String) = false; override fun ready(uid: String) = false
+            override fun record(uid: String, enabled: Boolean) { if (enabled) recorded = uid }; override fun clear() {}
+        }
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push)
+        runCurrent(); vm.enableBiometricUnlock()
+        assertEquals("test-owner", recorded); assertTrue(vm.state.value.localUnlockEnabled)
+    }
     @Test fun resetUsesPublicContractAndReturnsNeutralConfirmation() = runTest {
         var requested = ""
         val api = object : ApiService by DemoApi() { override suspend fun reset(request: ResetRequest) { requested = request.email } }
