@@ -1,4 +1,4 @@
-import { InterApiError } from './error';
+import { InterApiError, interResponseDetails } from './error';
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -12,6 +12,7 @@ export function safeInterPaymentError(error: unknown, now = new Date().toISOStri
       code: error.code,
       safeMessage: error.safeMessage,
       occurredAt: now,
+      details: error.responseDetails,
     };
   }
   const response = object(object(error).response);
@@ -25,5 +26,6 @@ export function safeInterPaymentError(error: unknown, now = new Date().toISOStri
     code: status ? `INTER_HTTP_${status}` : 'INTER_REQUEST_FAILED',
     safeMessage,
     occurredAt: now,
+    details: interResponseDetails(error),
   };
 }

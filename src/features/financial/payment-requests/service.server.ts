@@ -641,7 +641,10 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
   } catch (error) {
     const lastError = safeInterPaymentError(error);
     await transitionPaymentRequest(id, ["submitting"], "failed", { lastError });
-    await addPaymentEvent(id, "INTER_SUBMISSION_FAILED", actor, { code: lastError.code });
+    await addPaymentEvent(id, "INTER_SUBMISSION_FAILED", actor, {
+      code: lastError.code,
+      responseDetails: lastError.details ?? null,
+    });
     throw new Error(lastError.safeMessage);
   }
 }
