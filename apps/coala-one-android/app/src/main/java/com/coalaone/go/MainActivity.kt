@@ -64,6 +64,14 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             LaunchedEffect(captureAllowed) {
                 if (captureAllowed) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
+            // Local unlock is part of the first successful sign-in flow, so offline access is
+            // offered without requiring the person to discover a setup card in Profile.
+            LaunchedEffect(identity.identity?.uid, identity.loading, identity.locked, identity.localUnlockEnabled) {
+                if (!identity.loading && identity.identity != null && !identity.locked
+                    && !identity.localUnlockEnabled && !session.mode.simulation) {
+                    biometric(enroll = true)
+                }
+            }
             SideEffect {
                 val lightSurface = !identity.loading && identity.identity != null && !identity.locked
                 WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -86,19 +94,25 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
                 when {
                     Rules.updateRequired(release, BuildConfig.VERSION_CODE) -> Page("Atualização necessária", feedback, footer = { Action("Baixar atualização", feedback.busy) { update.download(::install) } }) { Text("Atualize o Coala Go para continuar."); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) }
                     identity.loading || identity.identity == null || identity.locked -> AuthScreen(session, ::biometric)
-                    else -> AppNavigation(session, update)
+                    else -> AppNavigation(session, update) { biometric(enroll = true) }
                 }
             }
         } }
     }
     override fun onStop() { session.stopped(); super.onStop() }
     override fun onStart() { super.onStart(); session.resumed() }
-    private fun biometric() {
+    private fun biometric(enroll: Boolean = false) {
         if (BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) return
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { session.unlockBiometric() }
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { if (enroll) session.enableBiometricUnlock() else session.unlockBiometric() }
         })
-        prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle("Desbloquear Coala Go").setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG).setNegativeButtonText("Usar senha").build())
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(if (enroll) "Ativar acesso offline" else "Desbloquear Coala Go")
+            .setSubtitle(if (enroll) "Use a biometria para abrir o app sem conexão" else null)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("Usar senha")
+            .build()
+        prompt.authenticate(info)
     }
     private fun install(file: File) {
         runOnUiThread {
@@ -108,7 +122,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         }
     }
 }
-@Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel) {
+@Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit) {
     val nav = rememberNavController()
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val back: () -> Unit = { nav.popBackStack(); Unit }
@@ -120,7 +134,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         popExitTransition = { fadeOut(tween(if (motion) 160 else 0)) + slideOutVertically(tween(if (motion) 160 else 0)) { if (motion) 6 else 0 } }) {
         composable("home") { HomeScreen(hiltViewModel(), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
-        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back) }
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back, onPrepareBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -259,7 +273,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     }
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
-@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit) {
+@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
@@ -307,6 +321,14 @@ private fun installUpdate(context: android.content.Context, file: File) {
             if (target != null) Action("Baixar atualização ${target.versionName}", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             else Text("Você está na versão mais recente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
+        }
+        if (developerViewAs.targetUserId == null) CardBlock {
+            Text("Acesso sem internet", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (sessionState.localUnlockEnabled) "A biometria está pronta para abrir o Coala Go sem conexão. A autorização das batidas é preparada automaticamente ao abrir Ponto online."
+                else "O app oferece a biometria após o login para liberar o acesso sem conexão. Se você pulou essa etapa, pode ativá-la aqui.",
+                color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (!sessionState.localUnlockEnabled) Action("Ativar biometria", sessionState.busy, enabled = !sessionState.busy, onClick = onPrepareBiometric)
         }
         if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)
