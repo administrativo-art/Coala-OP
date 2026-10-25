@@ -1,0 +1,6 @@
+0000000001111222333000181              AMOSTRA DE HOMOLOGACAO SEM VALIDADE                                                                                                                   000000000000000002026-10-252026-10-252026-10-25T14:12:00-0300004114276603000125                              4DBB
+1        22026-10-25T14:12:00-030052998224725   111222333000181              AMOSTRA DE HOMOLOGACAO SEM VALIDADE                                                                                                                   AMOSTRA - ENDERECO FICTICIO, SEM VALIDADE                                                           B13B
+2        52026-10-25T14:12:00-0300I52998224725 TRABALHADOR FICTICIO AMOSTRA                            529982247250AFC
+3        72026-10-25T14:12:00-030052998224725 2026-10-25T14:12:00-03000205240ffceb8b1e7e378bccb24c24492ca74a88f2b3cafee790e37af8dc44581b7
+9999999991        0        0        1        0        1        9
+ASSINATURA_DIGITAL_EM_ARQUIVO_P7S                                                                   

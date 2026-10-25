@@ -28,11 +28,12 @@ const PADES_CONTENTS_BYTES = 16_384;
 
 /**
  * Política ICP-Brasil AD-RB vigente para CAdES (LPA_CAdES assinada pelo ITI, conferida em 18/10/2026):
- * v2.4, válida de 12/06/2025 a 22/10/2037. O hash é do arquivo .der da política, guardado em docs/rep-p/referencias.
+ * v2.4, válida de 12/06/2025 a 22/10/2037. O DOC-ICP-15.03 exige o hash interno
+ * contido na própria PA, não o SHA-256 do arquivo .der publicado na LPA.
  */
 export const REP_P_CADES_SIGNATURE_POLICY = Object.freeze({
   oid: '2.16.76.1.7.1.1.2.4',
-  sha256: '25f148b0828c0ba93695742469566fcc4d1618aa0c20cac56ae72b3419ecee6b',
+  sha256: '1f3c904c44c392feef447e21faa7a04e85d9c0153346320f557b7042af5dcf13',
   uri: 'http://politicas.icpbrasil.gov.br/PA_AD_RB_v2_4.der',
 });
 export type RepPSignaturePolicy = Readonly<{ oid: string; sha256: string; uri: string }>;
@@ -222,13 +223,19 @@ export async function signRepPPdfIncrementally(pdf: Buffer, identity: RepPIcpIde
   if (!(root instanceof PDFRef)) throw new TypeError('PDF sem catálogo referenciado.');
   const page = document.getPage(0);
   const signatureNumber = context.largestObjectNumber + 1;
+  const signatureRef = PDFRef.of(signatureNumber);
   const widgetRef = PDFRef.of(signatureNumber + 1);
   const existingAnnots = page.node.Annots()?.asArray() ?? [];
   page.node.set(PDFName.of('Annots'), context.obj([...existingAnnots, widgetRef]));
   document.catalog.set(PDFName.of('AcroForm'), context.obj({ Fields: [widgetRef], SigFlags: 3 }));
+  // Assinatura de certificação sem alterações posteriores (DocMDP P=1). O VALIDAR/ITI usa esta
+  // referência para distinguir documento integralmente protegido de atualização incremental indeterminada.
+  document.catalog.set(PDFName.of('Perms'), context.obj({ DocMDP: signatureRef }));
 
   const objects: Array<{ ref: PDFRef; body: string }> = [
-    { ref: PDFRef.of(signatureNumber), body: `<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached`
+    { ref: signatureRef, body: `<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached`
+      + ` /Reference [<< /Type /SigRef /TransformMethod /DocMDP`
+      + ` /TransformParams << /Type /TransformParams /P 1 /V /1.2 >> >>]`
       + ` /ByteRange [0 ${BYTE_RANGE_PLACEHOLDER}] /Contents <${'0'.repeat(PADES_CONTENTS_BYTES * 2)}> /M (${pdfDate(now)}) >>` },
     { ref: widgetRef, body: `<< /Type /Annot /Subtype /Widget /FT /Sig /T (Assinatura REP-P) /V ${signatureNumber} 0 R`
       + ` /Rect [0 0 0 0] /F 132 /P ${page.ref.toString()} >>` },

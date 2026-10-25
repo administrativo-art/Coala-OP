@@ -19,7 +19,7 @@ O IAM do Firestore não concede papéis por coleção. Por decisão do programad
 
 O código usa `REP_P_FIRESTORE_DATABASE_ID=coala-rep-p`; regras próprias negam todo acesso direto de clientes e índices próprios atendem AFD, comprovantes e monitoração. Reclassificações posteriores passaram a ser sobreposições auditáveis em `ptrp_markingClassifications`, no PTRP, sem atualizar o comprovante ou a marcação original na ARP. O ensaio nominal permanece no RH e não é migrado.
 
-Resta um controle administrativo: as contas genéricas de Functions e do Admin SDK ainda recebem permissões amplas no projeto. Foi preparada uma negação condicionada à tag para `datastore.entities.*`, preservando o runtime do App Hosting como escritor legítimo, mas a criação foi recusada porque `administrativo@coalashakes.com` não possui `iam.googleapis.com/denypolicies.create`. É necessário um administrador com `roles/iam.denyAdmin` criar essa política, ou conceder temporariamente esse papel para a aplicação controlada. Não remover `firebase.admin` nem papéis de agente de serviço às cegas.
+Controle administrativo aplicado em 25/10/2026: a deny policy IAM v2 `rep-p-arp-write-guard`, condicionada a `resource.matchTag('smart-converter-752gf/rep-p-arp', 'protected')`, nega `datastore.googleapis.com/entities.create`, `.update` e `.delete` a `principalSet://goog/public:all`. As únicas exceções são `firebase-app-hosting-compute@…`, escritor legítimo da ARP, e o agente gerenciado `service-787876557774@gcp-sa-firestore…`, necessário à administração do banco. A conta genérica das Functions, o Admin SDK e usuários administrativos não são exceções. O papel `roles/iam.denyAdmin` foi concedido temporariamente no nível da organização, porque o papel não é aceito no projeto, e removido imediatamente após a criação. Não remover papéis de agentes de serviço às cegas.
 
 ## Roteiro de restauração (ensaio)
 
@@ -47,7 +47,17 @@ Objetivo do ensaio de 24/10: provar o procedimento de recuperação usando o bac
 
 O ensaio comprova a restauração integral do backup e o procedimento seguro. A prova específica de PITR por instante continua sendo um exercício distinto.
 
-O primeiro ensaio acima validou `coala-rh`, antes da separação. Após a publicação e antes da primeira batida oficial, executar também uma restauração do primeiro backup disponível de `coala-rep-p`; até haver dados, a prova limita-se à criação, proteção, PITR e agendamento do backup.
+### Ensaio do banco dedicado executado em 25/10/2026
+
+- origem: primeiro backup disponível do `coala-rep-p`, `1812b508-cce6-4ed0-9720-5fc313e16bbd`, fotografia de `25/10/2026 09:49:41 UTC`;
+- destino literal descartável: `coala-rep-p-restore-20261025`;
+- restauração concluída em estado `SUCCESSFUL`, preservando a proteção contra exclusão durante a conferência;
+- comparação por lista fechada retornou resultado idêntico para `repP_establishments`, `repP_employees`, `repP_events`, `repP_attempts`, `repP_exportAudit`, `repP_receipts`, `repP_offlinePermits`, `repP_locationPolicies`, `repP_locationEvidence`, `repP_locationReviews`, `repP_competenceFences`, `repP_availabilityIncidents` e `repP_availabilityStates`;
+- todas as contagens eram zero e não havia cabeçalho/NSR, como esperado antes da primeira batida oficial; isso prova o procedimento e a restauração integral da fotografia vazia, não uma cadeia fiscal populada;
+- após a comparação, a proteção foi desativada **somente** no destino literal e o banco descartável foi excluído em `25/10/2026 15:17:48 UTC`;
+- `coala-rep-p` e o backup de origem permaneceram intactos.
+
+O primeiro ensaio validou `coala-rh` antes da separação; este segundo ensaio fecha a prova inicial do banco dedicado. Repetir com dados populados faz parte da rotina periódica de recuperação, não é condição para criar a primeira marcação.
 
 ## Arquivo fiscal imutável
 
