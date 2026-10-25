@@ -128,7 +128,7 @@ Todos os endpoints autenticados usam token Firebase no cabeçalho `Authorization
 | `GET /api/mobile/profile` | Firebase + atestação | — | Perfil e `modules` por permissão |
 | `POST /api/mobile/profile/photo` | Firebase + atestação | Multipart `photo`, JPG/PNG/WEBP, até 5 MB | `{avatarUrl}`; somente a foto do usuário autenticado |
 | `GET /api/purchasing/local-purchases/withdrawals` | Firebase + atestação; `app.localPurchase.register` | — | Sangrias abertas, compras aguardando, janela e `partial` |
-| `GET /api/purchasing/local-purchases/context` | Firebase + atestação; `app.localPurchase.register` | — | Unidades, contas, centros e produtos quando houver `app.localPurchase.stockEntry` ou admin |
+| `GET /api/purchasing/local-purchases/context` | Firebase + atestação; `app.localPurchase.register` | — | Unidades acessíveis com organização/grupo cadastrados, contas, centros e produtos quando houver `app.localPurchase.stockEntry` ou admin |
 | `POST /api/financial/inbox/mobile-upload` | Firebase + atestação; `app.localPurchase.register` | Multipart `submissionId`, `capturedAt`, `note`, `fundingSource`, `receipt`, `paymentProof` | `{submission:{id, duplicate, status, analysis?}}`; replay protegido |
 | `POST /api/purchasing/local-purchases/confirm` | Firebase + atestação; `app.localPurchase.register` | Compra, itens, origem, pagamento, centro e possível `withdrawal` | `{purchase:{id,status,duplicate,stockEntry,stockItemCount?}}` |
 | `POST /api/purchasing/local-purchases/link-withdrawal` | Firebase + atestação; `app.localPurchase.register` | `{purchaseId, withdrawal:{sourceId,date}}` | Compra e `changeCents` |

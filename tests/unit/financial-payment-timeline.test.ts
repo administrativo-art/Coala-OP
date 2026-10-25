@@ -129,6 +129,11 @@ test("janela de sete dias usa o calendário financeiro de Belém", () => {
   assert.equal(financialDaysUntil("2026-09-09", new Date("2026-09-09T03:00:00.000Z")), 0);
 });
 
-test("divergência bancária não oferece reenvio do pagamento", () => {
-  assert.match(paymentPage, /item\.lastError\?\.code !== "BANK_RECONCILIATION_DIVERGENCE"/);
+test("reenvio usa a mesma política restrita do backend e erros abrem detalhe consultável", () => {
+  assert.match(paymentPage, /canRetryDefinitivelyRejectedPayment\(item\)/);
+  assert.match(paymentPage, /Ver motivo/);
+  assert.match(paymentPage, /Tentativas de envio/);
+  assert.match(paymentPage, /ChargeReviewDrawer/);
+  assert.match(paymentPage, /void openReview\(item\)/);
+  assert.doesNotMatch(paymentPage, /window\.location\.assign\(`\$\{FINANCIAL_ROUTES\.inbox/);
 });

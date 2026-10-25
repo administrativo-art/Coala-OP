@@ -14,6 +14,20 @@ env:
     value: "--max-old-space-size=4096"
     availability:
       - BUILD
+  # O CI já executa typecheck. Estes ajustes afetam somente o build gerenciado
+  # e mantêm o padrão local conservador de um worker com validação de tipos.
+  - variable: COALA_NEXT_BUILD_CPUS
+    value: "2"
+    availability:
+      - BUILD
+  - variable: COALA_NEXT_SKIP_TYPECHECK
+    value: "true"
+    availability:
+      - BUILD
+  - variable: COALA_NEXT_WEBPACK_BUILD_WORKER
+    value: "true"
+    availability:
+      - BUILD
   - variable: BIZNEO_TOKEN
     secret: BIZNEO_TOKEN
   - variable: PDVLEGAL_COD_EMPRESA
@@ -34,6 +48,13 @@ env:
     value: coala
   - variable: FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS
     value: "365"
+  # Catálogo e pedidos de ausência no banco de RH. Só trocar depois do recibo
+  # dp_absenceCatalogMigrations/active (scripts/migrate-absence-catalog.mts).
+  - variable: DP_ABSENCE_CATALOG_DATABASE
+    value: coala-rh
+  # Etapa 3: aplicação de ausências na escala. Só ligar depois do recibo operacional ready.
+  - variable: DP_ABSENCE_OPERATIONAL_GUARD
+    value: "on"
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
   - variable: RESEND_WEBHOOK_SECRET
@@ -74,6 +95,40 @@ env:
     secret: INTER_WEBHOOK_SECRET
   - variable: INTER_RECONCILIATION_SECRET
     secret: INTER_RECONCILIATION_SECRET
+  # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
+  - variable: REP_P_ICP_SIGNER_PEM
+    secret: REP_P_ICP_SIGNER_PEM
+  # Bucket exclusivo dos pacotes AFD/AEJ. Cada objeto é gravado já com retenção Locked por 20 anos.
+  - variable: REP_P_FISCAL_STORAGE_BUCKET
+    value: "smart-converter-752gf-rep-p-fiscal"
+  # ARP oficial isolada do RH/PTRP; ensaios e dados acessórios continuam no coala-rh.
+  - variable: REP_P_FIRESTORE_DATABASE_ID
+    value: "coala-rep-p"
+  # Contato da CT Sorvetes LTDA, identificada como desenvolvedora do PTRP no AEJ.
+  - variable: PTRP_DEVELOPER_EMAIL
+    value: "administrativo@coalashakes.com"
+  # HLB gratuita: consulta com quórum aos quatro servidores NTP publicados pelo Observatório Nacional.
+  # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
+  - variable: REP_P_HLB_NTP_ENABLED
+    value: "true"
+  # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
+  - variable: REP_P_MARKING_ENABLED
+    value: "false"
+  # Ensaio nominal pré-homologação: grava fora da ARP e nunca participa do fechamento/AFD/AEJ.
+  - variable: REP_P_PILOT_ENABLED
+    value: "true"
+  - variable: REP_P_PILOT_USER_IDS
+    value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+  # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
+  - variable: DP_JOURNEY_LOCATION_ENABLED
+    value: "false"
+  # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
+  - variable: SYSTEM_NOTICES_JOB_SECRET
+    secret: SYSTEM_NOTICES_JOB_SECRET
+  - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
+    value: "true"
+  - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS
+    value: "7c1c9815-0167-4132-a1c4-116c0ea8c20d,dd5b24aa-19f4-4550-a94a-83ab4e735232"
   - variable: INTER_ACCOUNT_NUMBER
     secret: INTER_ACCOUNT_NUMBER
   - variable: INTER_ENVIRONMENT
@@ -82,8 +137,6 @@ env:
     value: "production"
   - variable: INTER_COBRANCA_PAYER_CNPJ
     value: "14276603000125"
-  - variable: INTER_COBRANCA_DUE_BUSINESS_DAYS
-    value: "2"
   - variable: INTER_COBRANCA_NUM_DIAS_AGENDA
     value: "30"
   - variable: INTER_COBRANCA_MIN_CENTS

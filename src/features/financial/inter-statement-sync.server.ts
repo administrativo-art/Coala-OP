@@ -16,7 +16,11 @@ import {
 } from "@/features/financial/lib/inter-statement-reconciliation";
 import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
 import { queueMatchedBankPayment } from "@/features/financial/obligations/service.server";
-import { findExpectedBankDebitMatch, type ExpectedBankDebitCandidate } from "@/features/financial/payment-requests/expected-bank-debits";
+import {
+  findExpectedBankDebitGroupMatches,
+  findExpectedBankDebitMatch,
+  type ExpectedBankDebitCandidate,
+} from "@/features/financial/payment-requests/expected-bank-debits";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
 import type { BankPaymentRequest } from "@/features/financial/payment-requests/types";
 import {
@@ -24,6 +28,8 @@ import {
   planLateChargeBreakdown,
 } from "@/features/financial/payment-requests/barcode-amounts";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { planFinancialInboxPaymentProjection } from "@/features/financial/inbox/payment-projection";
+import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
@@ -89,6 +95,7 @@ type SyncResult = {
     candidateDocumentsRead: number;
     ledgerDocumentsRead: number;
     expectedDebitDocumentsRead: number;
+    groupTransactionDocumentsRead: number;
   };
 };
 
@@ -566,7 +573,7 @@ async function loadExpectedBankDebits() {
     .limit(MATCH_QUERY_LIMITS.expectedBankDebits)
     .get();
   const complete = snapshot.size < MATCH_QUERY_LIMITS.expectedBankDebits;
-  const candidates = snapshot.docs.flatMap((document): ExpectedBankDebitCandidate[] => {
+  const baseCandidates = snapshot.docs.flatMap((document): ExpectedBankDebitCandidate[] => {
     const data = document.data();
     const expectedDate = asDate(data.expectedDate);
     const amount = Number(data.amountCents) / 100;
@@ -585,9 +592,30 @@ async function loadExpectedBankDebits() {
       expectedDate,
       references: [data.bankTransactionCode, data.paymentRequestId]
         .filter((value): value is string => typeof value === "string" && Boolean(value.trim())),
+      counterpartyName: typeof data.counterpartyName === "string" ? data.counterpartyName : null,
     }];
   });
-  return { candidates: complete ? candidates : [], complete, documentsRead: snapshot.size };
+  if (!complete || baseCandidates.length === 0) {
+    return { candidates: [], complete, documentsRead: snapshot.size };
+  }
+  const missingCounterparty = baseCandidates.filter((candidate) => !candidate.counterpartyName);
+  const expenseSnapshots = missingCounterparty.length
+    ? await financialDbAdmin.getAll(...missingCounterparty.map((candidate) => financialDbAdmin.collection("expenses").doc(candidate.expenseId)))
+    : [];
+  const counterpartyByExpenseId = new Map(expenseSnapshots.flatMap((document) => {
+    if (!document.exists) return [];
+    const counterpartyName = String(document.get("supplier") || "").trim();
+    return counterpartyName ? [[document.id, counterpartyName] as const] : [];
+  }));
+  const candidates = baseCandidates.map((candidate) => ({
+    ...candidate,
+    counterpartyName: candidate.counterpartyName || counterpartyByExpenseId.get(candidate.expenseId) || null,
+  }));
+  return {
+    candidates,
+    complete,
+    documentsRead: snapshot.size + expenseSnapshots.length,
+  };
 }
 
 class ExpectedBankDebitReviewError extends Error {}
@@ -636,6 +664,7 @@ async function reconcileExpectedBankDebit(params: {
   expected: ExpectedBankDebitCandidate;
   entry: InterStatementEntry;
   transactionId: string;
+  groupMatched?: boolean;
 }) {
   const expectedDebitRef = financialDbAdmin.collection("expectedBankDebits").doc(params.expected.id);
   const leaseId = `statement:${params.transactionId}:${randomUUID()}`;
@@ -659,10 +688,14 @@ async function reconcileExpectedBankDebit(params: {
   try {
     const expenseRef = financialDbAdmin.collection("expenses").doc(params.expected.expenseId);
     const paymentRequestRef = financialDbAdmin.collection("bankPaymentRequests").doc(params.expected.paymentRequestId);
-    const [expenseSnapshot, paymentRequestSnapshot, expectedDebitSnapshot] = await Promise.all([
+    const inboxMessageRef = params.expected.financialInboxMessageId
+      ? financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId)
+      : null;
+    const [expenseSnapshot, paymentRequestSnapshot, expectedDebitSnapshot, inboxMessageSnapshot] = await Promise.all([
       expenseRef.get(),
       paymentRequestRef.get(),
       expectedDebitRef.get(),
+      inboxMessageRef ? inboxMessageRef.get() : Promise.resolve(null),
     ]);
     if (!expenseSnapshot.exists) {
       throw new ExpectedBankDebitReviewError("A despesa esperada para o débito bancário não foi encontrada.");
@@ -682,6 +715,9 @@ async function reconcileExpectedBankDebit(params: {
       id: paymentRequestSnapshot.id,
       ...(paymentRequestSnapshot.data() || {}),
     } as BankPaymentRequest;
+    const inboxMessage = inboxMessageSnapshot?.exists
+      ? { id: inboxMessageSnapshot.id, ...inboxMessageSnapshot.data() } as FinancialInboxMessage
+      : null;
     const paymentRequestStatusAllowed = [
       "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement",
     ].includes(paymentRequest.status)
@@ -699,6 +735,9 @@ async function reconcileExpectedBankDebit(params: {
       throw new ExpectedBankDebitReviewError(
         "A solicitação bancária diverge do débito esperado; a baixa automática foi bloqueada.",
       );
+    }
+    if (paymentRequest.sourceType === "financial_inbox" && !inboxMessage) {
+      throw new ExpectedBankDebitReviewError("A cobrança de origem do pagamento não foi encontrada.");
     }
     const expensePrincipal = Number(expense.totalValue) || 0;
     const principal = params.expected.principalAmount;
@@ -853,12 +892,13 @@ async function reconcileExpectedBankDebit(params: {
       paymentRequestId: params.expected.paymentRequestId,
       auditStatus: "resolved",
       autoMatched: true,
-      autoMatchConfidence: "expected_bank_debit",
+      autoMatchConfidence: params.groupMatched ? "expected_bank_debit_group" : "expected_bank_debit",
+      expectedBankDebitMatchMode: params.groupMatched ? "set" : "individual",
       bankReconciledAt: now,
     }, { merge: true });
     batch.set(financialDbAdmin.collection("bankStatementEvents").doc(params.transactionId), {
       linkedExpenseId: params.expected.expenseId,
-      reconciliationMode: "expected_bank_debit",
+      reconciliationMode: params.groupMatched ? "expected_bank_debit_group" : "expected_bank_debit",
       reconciliationError: FieldValue.delete(),
       updatedAt: now,
     }, { merge: true });
@@ -866,6 +906,7 @@ async function reconcileExpectedBankDebit(params: {
       status: isDivergent ? "divergent" : "matched",
       statementTransactionId: params.transactionId,
       matchedAt: now,
+      matchMode: params.groupMatched ? "set" : "individual",
       reconciliationError: FieldValue.delete(),
       reconciliationLeaseId: null,
       reconciliationLeaseUntil: null,
@@ -884,14 +925,30 @@ async function reconcileExpectedBankDebit(params: {
       bankStatus: "STATEMENT_MATCHED",
       sourceCompletedAt: now.toDate().toISOString(),
     }, { merge: true });
-    if (paymentRequest.sourceType === "financial_inbox") batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
-      status: isDivergent ? "divergent" : "reconciled",
-      bankState: isDivergent ? "divergent" : "reconciled",
-      "resolution.status": "identified",
-      "resolution.financialState": isDivergent ? "scheduled" : "reconciled",
-      statementTransactionId: params.transactionId,
-      updatedAt: now.toDate().toISOString(),
-    }, { merge: true });
+    if (paymentRequest.sourceType === "financial_inbox" && inboxMessageRef && inboxMessage) {
+      const inboxPatch = isDivergent
+        ? {
+            status: "divergent",
+            bankState: "divergent",
+            "resolution.status": "identified",
+            "resolution.financialState": "scheduled",
+            statementTransactionId: params.transactionId,
+            updatedAt: now.toDate().toISOString(),
+          }
+        : {
+            ...planFinancialInboxPaymentProjection({
+              message: inboxMessage,
+              request: {
+                ...paymentRequest,
+                status: "paid",
+                statementReconciliationStatus: "matched",
+              },
+              observedAt: now.toDate().toISOString(),
+            }).patch,
+            statementTransactionId: params.transactionId,
+          };
+      batch.set(inboxMessageRef, inboxPatch, { merge: true });
+    }
     batch.set(paymentRequestRef.collection("events").doc(`statement-payment-${params.transactionId}`), isDivergent ? {
       type: "STATEMENT_DIVERGENCE_FOUND",
       at: now.toDate().toISOString(),
@@ -1185,6 +1242,32 @@ export async function syncInterStatement(): Promise<SyncResult> {
   const claimed = new Set<string>();
   const claimedLedgerTransactions = new Set<string>();
   const claimedExpectedDebits = new Set<string>();
+  const preliminaryGroupedExpectedDebits = expectedDebitLoad.complete
+    ? findExpectedBankDebitGroupMatches(entries, expectedDebitLoad.candidates, claimedExpectedDebits)
+    : new Map<string, ExpectedBankDebitCandidate>();
+  const groupedTransactionSnapshots = preliminaryGroupedExpectedDebits.size
+    ? await financialDbAdmin.getAll(...[...preliminaryGroupedExpectedDebits.keys()].map((externalId) =>
+      financialDbAdmin.collection("transactions").doc(interStatementTransactionDocumentId(accountId, externalId))))
+    : [];
+  const eligibleGroupedEntryIds = new Set(groupedTransactionSnapshots.flatMap((document) => {
+    if (!document.exists) return [document.id];
+    const unresolved = String(document.get("auditStatus") || "pending") === "pending"
+      && !document.get("linkedExpenseId")
+      && !document.get("expenseId")
+      && !document.get("paymentRequestId");
+    return unresolved ? [document.id] : [];
+  }));
+  const groupedExpectedDebits = groupedTransactionSnapshots.length
+    ? findExpectedBankDebitGroupMatches(
+      entries.filter((entry) => {
+        if (!preliminaryGroupedExpectedDebits.has(entry.externalId)) return true;
+        return eligibleGroupedEntryIds.has(interStatementTransactionDocumentId(accountId, entry.externalId));
+      }),
+      expectedDebitLoad.candidates,
+      claimedExpectedDebits,
+    )
+    : preliminaryGroupedExpectedDebits;
+  const reservedGroupedExpectedDebits = new Set([...groupedExpectedDebits.values()].map((candidate) => candidate.id));
   const sessionItems = new Map<string, Record<string, unknown>[]>();
   let inserted = 0;
   let duplicates = 0;
@@ -1193,7 +1276,12 @@ export async function syncInterStatement(): Promise<SyncResult> {
   let pendingAudit = 0;
 
   for (const entry of entries) {
-    let expectedDebit = findExpectedBankDebitMatch(entry, expectedDebitLoad.candidates, claimedExpectedDebits);
+    const groupedExpectedDebit = groupedExpectedDebits.get(entry.externalId);
+    const unavailableExpectedDebits = new Set([...claimedExpectedDebits, ...reservedGroupedExpectedDebits]);
+    if (groupedExpectedDebit) unavailableExpectedDebits.delete(groupedExpectedDebit.id);
+    let expectedDebit = groupedExpectedDebit && !claimedExpectedDebits.has(groupedExpectedDebit.id)
+      ? groupedExpectedDebit
+      : findExpectedBankDebitMatch(entry, expectedDebitLoad.candidates, unavailableExpectedDebits);
     const existingLedger = expectedDebit ? null : findExistingLedgerMatch(entry, existingLedgerCandidates, claimedLedgerTransactions);
     const suggestion = expectedDebit || existingLedger || !canAutoMatchExpense(entry)
       ? null
@@ -1208,7 +1296,12 @@ export async function syncInterStatement(): Promise<SyncResult> {
     if (expectedDebit) {
       const expectedDebitCandidate = expectedDebit;
       try {
-        const reconciliation = await reconcileExpectedBankDebit({ expected: expectedDebitCandidate, entry, transactionId: result.transactionId });
+        const reconciliation = await reconcileExpectedBankDebit({
+          expected: expectedDebitCandidate,
+          entry,
+          transactionId: result.transactionId,
+          groupMatched: groupedExpectedDebit?.id === expectedDebitCandidate.id,
+        });
         if (reconciliation.skipped) {
           expectedDebit = null;
         } else {
@@ -1323,6 +1416,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       candidateDocumentsRead: candidateLoad.documentsRead,
       ledgerDocumentsRead: existingLedgerLoad.documentsRead,
       expectedDebitDocumentsRead: expectedDebitLoad.documentsRead,
+      groupTransactionDocumentsRead: groupedTransactionSnapshots.length,
     },
     updatedBy: SYSTEM_ACTOR,
   }, { merge: true });
@@ -1343,6 +1437,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       candidateDocumentsRead: candidateLoad.documentsRead,
       ledgerDocumentsRead: existingLedgerLoad.documentsRead,
       expectedDebitDocumentsRead: expectedDebitLoad.documentsRead,
+      groupTransactionDocumentsRead: groupedTransactionSnapshots.length,
     },
   };
 }

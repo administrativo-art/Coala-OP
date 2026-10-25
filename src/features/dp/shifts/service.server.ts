@@ -6,10 +6,11 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
+import { buildDPShiftReference } from '@/lib/dp-shift-reference';
 import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rules';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
-import type { DPJourney } from '@/types';
+import type { DPJourney, DPShiftDefinition } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 import type { SaveWorkShiftInput } from './schemas';
@@ -229,6 +230,15 @@ export async function saveWorkShift(params: {
     }
     const now = Timestamp.now();
     const journey = journeyResolution.journey;
+    const referenceRef = dbAdmin.collection('dp_shiftReferenceHistory').doc();
+    const reference = buildDPShiftReference({
+      collaboratorId: input.userId, user: userSnapshot.data() ?? {}, journey, resolvedBy: journeyResolution.resolvedBy,
+      definition: shiftDefinitionSnapshot?.exists
+        ? { id: shiftDefinitionSnapshot.id, ...shiftDefinitionSnapshot.data() } as DPShiftDefinition
+        : null,
+      executionUnitId: input.unitId, date: input.date,
+      startTime: input.startTime, endTime: input.endTime, capturedAt: now.toDate().toISOString(),
+    });
     const basePayload = {
       scheduleId,
       unitId: input.unitId,
@@ -252,6 +262,7 @@ export async function saveWorkShift(params: {
         maxConsecutiveWorkDays: journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
         resolvedAt: now,
       },
+      referenceRevisionId: referenceRef.id,
       updatedAt: now,
     };
 
@@ -271,7 +282,7 @@ export async function saveWorkShift(params: {
         ...oldSlices,
         ...shiftOccupancySlices({ beneficiaryUid: input.userId, date: input.date,
           startTime: input.startTime, endTime: input.endTime, addsOccupancy: true }),
-      ]);
+      ], 4);
     }
 
     if (mode === 'create') {
@@ -297,6 +308,15 @@ export async function saveWorkShift(params: {
         journeyValidationVersion: FieldValue.increment(1),
       });
     }
+    transaction.create(referenceRef, {
+      workspaceId: context.workspace_id,
+      scheduleId, shiftId, shiftPath: shiftRef.path, userId: input.userId,
+      actorId: context.decoded.uid, requestId,
+      event: mode === 'create' ? 'created' : 'revised',
+      previousRevisionId: shiftSnapshot.get('referenceRevisionId') ?? null,
+      reference,
+      capturedAt: now,
+    });
     transaction.set(dbAdmin.collection('actionLogs').doc(), {
       workspace_id: context.workspace_id,
       user_id: context.decoded.uid,

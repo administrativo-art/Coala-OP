@@ -47,6 +47,18 @@ test("extrai linha digitável quando o PDF inclui o código do banco antes do bo
   );
 });
 
+test("extrai linha arrecadadora isolada entre outras linhas numéricas do PDF", () => {
+  const code = "836600000015667800481009180975657313001211080064";
+  const grouped = code.match(/.{12}/g)?.join("   ");
+  const text = [
+    "Cód. Débito Automático 0461855379 - 1 Nº da Conta 0461855379 Mês Referência 10/2026",
+    grouped,
+    "Período: 01/10/2026 a 31/10/2026",
+  ].join("\n");
+
+  assert.equal(extractPaymentBarcode(text), code);
+});
+
 test("dados estruturados concordantes do boleto prevalecem sobre encargos citados no e-mail", () => {
   const parsed = classifyFinancialEmail({
     subject: "Seu boleto vencerá em breve",
@@ -208,6 +220,15 @@ test("não preserva scripts nem links com protocolos inseguros", () => {
   assert.deepEqual(extractExternalLinks("", html), ["https://seguro.example/doc"]);
 });
 
+test("remove CSS cru de Outlook quando o provedor o envia no texto do e-mail", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Boleto Bizneo",
+    text: "#outlook a { padding: 0; }\nbody { margin: 0; padding: 0; }\nOlá, segue o boleto.",
+  });
+  assert.equal(parsed.textContent, "Olá, segue o boleto.");
+  assert.doesNotMatch(parsed.textContent, /padding|margin|#outlook/);
+});
+
 test("extrai o endereço real de remetentes com nome de exibição", () => {
   assert.equal(extractEmailAddress("Urania | Maximus <urania.silva@grupomse.com>"), "urania.silva@grupomse.com");
 });
@@ -281,6 +302,22 @@ test("extrai identidade da linha móvel do documento anexado", () => {
   assert.equal(parsed.classification.billingIdentity?.serviceType, "mobile");
   assert.equal(parsed.classification.billingIdentity?.customerAccount, "00192837");
   assert.deepEqual(parsed.classification.billingIdentity?.serviceNumbers, ["+5598999991234"]);
+});
+
+test("mantém fatura Vivo como utilidade mesmo quando discrimina tributos", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    senderDomain: "vivo.com.br",
+    documentText: [
+      "VIVO / TELEFÔNICA BRASIL S.A.",
+      "Vencimento: 25/10/2026",
+      "Valor total: R$ 40,81",
+      "Tributos incidentes sobre serviços de comunicação",
+    ].join("\n"),
+  });
+
+  assert.equal(parsed.classification.documentType, "utility_bill");
+  assert.equal(parsed.classification.fiscalIdentity, null);
 });
 
 test("não confunde telefone de atendimento nem linha digitável com linha cobrada", () => {

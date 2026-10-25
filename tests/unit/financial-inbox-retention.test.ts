@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { financialInboxRetentionPlan } from "../../src/features/financial/inbox/retention-policy";
+import { financialInboxManualArchivePlan, financialInboxRetentionPlan } from "../../src/features/financial/inbox/retention-policy";
 import type { FinancialInboxMessage } from "../../src/features/financial/inbox/types";
 
 function treated(overrides: Partial<FinancialInboxMessage> = {}): FinancialInboxMessage {
@@ -52,18 +52,30 @@ test("arquiva somente tratado há pelo menos seis meses", () => {
   const now = new Date("2026-09-09T12:00:00.000Z");
   assert.equal(financialInboxRetentionPlan(treated({ status: "linked" }), now), null);
   assert.equal(financialInboxRetentionPlan(treated({ updatedAt: "2026-04-01T12:00:00.000Z" }), now), null);
-  assert.equal(financialInboxRetentionPlan(treated(), now)?.archivedFromStatus, "reconciled");
-  assert.equal(financialInboxRetentionPlan(treated({ status: "identified" }), now)?.archivedFromStatus, "identified");
+  // A manutenção não lê despesa/pedido/obrigação: cobrança vinculada deve ficar para
+  // arquivamento explícito com releitura transacional dessas evidências.
+  assert.equal(financialInboxRetentionPlan(treated(), now), null);
+  assert.equal(financialInboxRetentionPlan(treated({ linkedExpenseId: null }), now), null);
+  assert.equal(financialInboxRetentionPlan(treated({ status: "identified" }), now), null);
+  assert.equal(financialInboxRetentionPlan(treated({ status: "identified", resolution: {
+    status: "identified", kind: "reminder", targetType: "expense", targetId: "expense-1",
+    installmentNumber: null, financialState: "reconciled", mode: "automatic", confidence: "high",
+    reasons: [], resolvedAt: null, resolvedBy: null,
+  } }), now), null);
+  assert.equal(financialInboxRetentionPlan(treated({ status: "ignored", linkedExpenseId: null }), now)?.archivedFromStatus, "ignored");
 });
 
 test("aplica um, seis e dez anos conforme a categoria", () => {
   const now = new Date("2026-09-09T12:00:00.000Z");
-  const standard = financialInboxRetentionPlan(treated(), now);
+  const standard = financialInboxRetentionPlan(treated({ status: "ignored", linkedExpenseId: null }), now);
   const nonFinancial = financialInboxRetentionPlan(treated({
     status: "ignored",
+    linkedExpenseId: null,
     classification: { ...treated().classification, financeLikely: false, marketingLikely: true },
   }), now);
   const tax = financialInboxRetentionPlan(treated({
+    status: "ignored",
+    linkedExpenseId: null,
     classification: { ...treated().classification, documentType: "tax" },
   }), now);
   assert.equal(standard?.retentionClass, "financial_standard");
@@ -72,6 +84,9 @@ test("aplica um, seis e dez anos conforme a categoria", () => {
   assert.match(nonFinancial?.purgeEligibleAt ?? "", /^2026-02-01/);
   assert.equal(tax?.retentionClass, "tax_or_payroll");
   assert.match(tax?.purgeEligibleAt ?? "", /^2035-02-01/);
+  // O plano manual calcula a retenção, mas a elegibilidade de uma cobrança
+  // vinculada é decidida pelo guard transacional do arquivamento explícito.
+  assert.equal(financialInboxManualArchivePlan(treated(), now).retentionClass, "financial_standard");
 });
 
 test("manutenção é seca por padrão, transacional e não apaga documentos", () => {
@@ -79,10 +94,20 @@ test("manutenção é seca por padrão, transacional e não apaga documentos", (
   const scheduled = readFileSync("functions/src/financial-inbox-jobs.ts", "utf8");
   assert.match(source, /const dryRun = params\.dryRun !== false/);
   assert.match(source, /backfillResolutionContract/);
+  assert.match(source, /backfillPaymentProjection/);
+  assert.match(source, /FINANCIAL_INBOX_PAYMENT_PROJECTION_STATE_ID/);
+  assert.match(source, /Math\.min\(params\.batchSize, 150\)/);
+  assert.match(source, /PAYMENT_PROJECTION_BACKFILLED/);
   assert.match(source, /resolutionContractVersion/);
   assert.match(source, /resolutionForDisplay\(message\)/);
   assert.match(source, /runTransaction\(async \(transaction\) =>/);
+  assert.match(source, /currentSnapshots = updates\.length[\s\S]{0,180}transaction\.getAll/);
+  assert.match(source, /const message = \{ id: document\.id, \.\.\.document\.data\(\) \}/);
   assert.match(source, /MESSAGE_ARCHIVED_BY_RETENTION/);
+  assert.match(source, /financialInboxRetentionPlan\(message, params\.now\)/);
+  const repository = readFileSync("src/features/financial/inbox/repository.server.ts", "utf8");
+  assert.match(repository, /const expenseSnapshots = expenseIds\.length[\s\S]{0,200}transaction\.getAll/);
+  assert.match(repository, /financialInboxArchiveEligibility\(message, \{/);
   assert.doesNotMatch(source, /\.delete\(/);
   assert.match(scheduled, /schedule: '20 2 \* \* \*'/);
   assert.match(scheduled, /timeZone: 'America\/Belem'/);

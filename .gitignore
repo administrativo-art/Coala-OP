@@ -45,6 +45,7 @@
 !.claude/agents/velma.md
 !.claude/agents/trinity.md
 !.claude/agents/rocket.md
+!.claude/agents/doc.md
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/coala-error-triage

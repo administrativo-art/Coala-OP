@@ -12,7 +12,7 @@ test("classification complements both existing counting entries without another 
   assert.match(panel, /AccountPlanTreeSelect/);
   assert.match(panel, /limit\(501\)/);
   assert.match(panel, /limit\(51\)/);
-  assert.match(panel, /Confirmar desvinculação/);
+  assert.match(panel, /Desfazer e cancelar despesa/);
   assert.doesNotMatch(panel, /setInterval|onSnapshot/);
 });
 

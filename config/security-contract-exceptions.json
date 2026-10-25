@@ -2,6 +2,41 @@
   "schemaVersion": 1,
   "exceptions": [
     {
+      "source": "src/app/api/client/bootstrap/route.ts",
+      "methods": ["GET"],
+      "owner": "plataforma-seguranca",
+      "reason": "A recuperação tolerante do diretório de usuários alterou uma rota legada; a migração integral para secureRoute será tratada em contrato dedicado de bootstrap.",
+      "expiresAt": "2026-11-24"
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/route.ts",
+      "methods": ["GET", "POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "A disponibilidade e a recuperação de solicitações alteraram a rota financeira legada; a migração integral para secureRoute exige contrato próprio de pagamentos.",
+      "expiresAt": "2026-11-24"
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/[id]/submit/route.ts",
+      "methods": ["POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "O bloqueio de envio local e o preflight bancário alteraram a rota legada; a migração integral para secureRoute será feita no contrato de pagamentos.",
+      "expiresAt": "2026-11-24"
+    },
+    {
+      "source": "src/app/api/hr/roles/route.ts",
+      "methods": ["GET", "POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "A reconciliação da hierarquia executiva alterou a rota legada de cargos; a migração integral para secureRoute exige contrato específico do catálogo de RH.",
+      "expiresAt": "2026-11-24"
+    },
+    {
+      "source": "src/app/api/hr/roles/[roleId]/route.ts",
+      "methods": ["PATCH"],
+      "owner": "plataforma-seguranca",
+      "reason": "A sincronização de parentId e reportsTo alterou a rota legada de cargos; a migração integral para secureRoute exige contrato específico do catálogo de RH.",
+      "expiresAt": "2026-11-24"
+    },
+    {
       "source": "src/app/api/hr/onboarding/route.ts",
       "methods": ["GET", "POST"],
       "owner": "plataforma-seguranca",
@@ -14,6 +49,13 @@
       "owner": "plataforma-seguranca",
       "reason": "A inclusão do vínculo Societário alterou esta rota legada de criação; a migração integral será tratada com o contrato completo de criação e convite de usuários.",
       "expiresAt": "2026-11-14"
+    },
+    {
+      "source": "src/app/api/purchasing/[...path]/route.ts",
+      "methods": ["GET", "POST", "PATCH", "DELETE"],
+      "owner": "plataforma-seguranca",
+      "reason": "A validação de destino na confirmação corrige compras operacionais invisíveis na reposição; a rota coringa legada extensa exige migração dedicada de todos os recursos e métodos para secureRoute.",
+      "expiresAt": "2026-11-20"
     }
   ]
 }

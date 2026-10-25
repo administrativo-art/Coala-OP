@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { z } from "zod";
 
 import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertDocumentsDp, autoPublishDocument } from "@/features/hr/documents/publication.server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -23,6 +26,11 @@ import {
 } from "@/lib/hr/employee-document-batch";
 import { applyEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
+import { AppError } from "@/lib/observability/app-error";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { rethrowServerAuthenticationFailure } from "@/lib/server-authentication-failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +39,28 @@ const COLLECTION = "employeeDocuments";
 const BATCHES = "documentUploadBatches";
 const ITEMS = "documentUploadItems";
 const VERSION_COUNTERS = "documentVersionCounters";
+const path = "/api/hr/employee-documents/confirm" as const;
+const inputSchema = z.object({ batchId: z.string().trim().min(1).max(128), itemIds: z.array(z.string().trim().min(1).max(128)).max(100).optional() }).strict();
+type Input = z.infer<typeof inputSchema>;
+type Resource = { workspaceId: string };
+
+const contract = defineSecurityContract({ schemaVersion: 1, id: "hr.employee-documents.confirm", version: 1,
+  surface: { method: "POST", path }, exposure: "authenticated", identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "documents-dp" }, resourceScope: { kind: "workspace" },
+  input: { kind: "schema", schema: "hr.employee-documents.confirm", unknownFields: "reject" },
+  effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
+const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, Input, Resource>({
+  id: "hr-employee-documents-confirm-v1",
+  guarantees: ["authenticated-user", "active-user", "authorization:documents-dp", "workspace-scoped", "input-validated", "fields-allowlisted"],
+  async enforce({ request }) {
+    if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: "EMPLOYEE_DOCUMENT_CONFIRM_QUERY_INVALID", kind: "VALIDATION" });
+    const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
+    assertDocumentsDp(actor);
+    const parsed = inputSchema.safeParse(await request.clone().json().catch(() => null));
+    if (!parsed.success) throw new AppError({ code: "EMPLOYEE_DOCUMENT_CONFIRM_INPUT_INVALID", kind: "VALIDATION", safeMessage: parsed.error.issues[0]?.message ?? "Lote inválido." });
+    return { actor, input: parsed.data, resource: { workspaceId: actor.workspace_id } };
+  },
+});
 
 function error(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
 function pad2(n: number) { return String(n).padStart(2, "0"); }
@@ -57,7 +87,7 @@ async function reserveVersion(logicalKey: string, documentId: string): Promise<n
  * itens 'ready', movendo do temporário para o definitivo (versão), atualiza os
  * contadores do lote (arquivamento parcial) e é idempotente por item.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const access = await assertHrAccess(request, "manage");
     const body = await request.json().catch(() => ({}));
@@ -239,6 +269,12 @@ export async function POST(request: NextRequest) {
             traceId: item.traceId ?? null,
             at: now,
           });
+          await autoPublishDocument(documentId, "validated").catch(async (cause) => {
+            await hrDbAdmin.collection(COLLECTION).doc(documentId).collection("audit").add({
+              action: "DOCUMENT_PUBLICATION_PENDING", actorId: "system:publication-policy", event: "validated",
+              issue: cause instanceof AppError ? cause.code : "EMPLOYEE_DOCUMENT_PUBLICATION_FAILED", at: Timestamp.now(),
+            });
+          });
         }
         await bucket.file(tempPath).delete({ ignoreNotFound: true });
         await itemRef.update({ status: "filed", filedDocumentId: documentId, version, profileSuggestions, profileAutofill, updatedAt: now });
@@ -260,3 +296,5 @@ export async function POST(request: NextRequest) {
     return error(cause instanceof Error ? cause.message : "Falha ao arquivar lote.", 403);
   }
 }
+
+export const POST = secureRoute({ contract, enforcer }, async ({ request }) => handlePost(request));

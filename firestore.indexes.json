@@ -1,6 +1,18 @@
 
 {
   "indexes": [
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "shiftKeys", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "workDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "dp_absenceOperationalAvailability", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "unitId", "order": "ASCENDING" },
@@ -51,6 +63,14 @@
       { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" },
       { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "systemNotices", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "audience", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "systemNotices", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "category", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }
     ] },
     { "collectionGroup": "userNotifications", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "ownerUid", "order": "ASCENDING" },

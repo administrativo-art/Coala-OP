@@ -3,6 +3,11 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
+import { shiftClosureDate, todayInClosureTimezone } from "../../../src/features/financial/cash-closures/date";
+import {
+  FINANCIAL_INBOX_RESOLUTION_STATE_ID,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
+} from "../../../src/features/financial/inbox/resolution-contract";
 
 const PROJECT_ID = "demo-coala-e2e";
 export const E2E_USER = {
@@ -20,9 +25,18 @@ export const E2E_FINANCIAL_INBOX_IDS = {
   expense: "expense-e2e-vivo-0001",
   automaticMessage: "inbox-e2e-automatic-0002",
   automaticExpense: "expense-e2e-automatic-0002",
+  noiseA: "inbox-e2e-noise-0003",
+  noiseB: "inbox-e2e-noise-0004",
 };
 export const E2E_FINANCIAL_INBOX_BARCODE = "23793493079001004992396000130003915620000113884";
 export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
+export const E2E_CASH_COUNTING = {
+  sessionId: "cash-counting-session-e2e",
+  kioskId: "kiosk-e2e",
+  kioskName: "Quiosque E2E",
+  operatorId: "operator-cash-e2e",
+  operatorName: "Operador Caixa E2E",
+};
 export const E2E_VACATION = {
   employeeId: "employee-vacation-e2e",
   vacationId: "vacation-e2e-planned-0001",
@@ -48,6 +62,28 @@ function isoDate(offsetDays = 0) {
 
 function dateOnly(offsetDays = 0) {
   return isoDate(offsetDays).slice(0, 10);
+}
+
+function upcomingVacationWindow() {
+  let start = new Date();
+  start.setHours(12, 0, 0, 0);
+  start.setDate(start.getDate() + 30);
+
+  const candidateEnd = new Date(start);
+  candidateEnd.setDate(candidateEnd.getDate() + 29);
+  if (candidateEnd.getFullYear() !== start.getFullYear()) {
+    start = new Date(start.getFullYear() + 1, 0, 15, 12, 0, 0, 0);
+  }
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 29);
+  const returnDate = new Date(end);
+  returnDate.setDate(returnDate.getDate() + 1);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+    returnDate: returnDate.toISOString().slice(0, 10),
+  };
 }
 
 // A listagem de despesas abre em "Mês atual"; datas relativas a hoje ou fixas saem do filtro na virada do mês.
@@ -153,8 +189,9 @@ export default async function seedE2E() {
       [E2E_STOCK_MIN.storeKioskId]: { min: 20, safetyStock: 0, leadTime: 0, override: true },
     },
   });
-  const vacationStart = dateOnly(45);
-  const vacationEnd = dateOnly(74);
+  const vacationWindow = upcomingVacationWindow();
+  const vacationStart = vacationWindow.start;
+  const vacationEnd = vacationWindow.end;
   const vacationYear = Number(vacationStart.slice(0, 4));
   const weeklyRestDay = (new Date(`${vacationStart}T12:00:00Z`).getUTCDay() + 3) % 7;
   batch.set(mainDb.collection("users").doc(E2E_VACATION.employeeId), {
@@ -180,7 +217,7 @@ export default async function seedE2E() {
     recordType: "gozo",
     startDate: vacationStart,
     endDate: vacationEnd,
-    returnDate: dateOnly(75),
+    returnDate: vacationWindow.returnDate,
     days: 30,
     unjustifiedAbsences: 0,
     entitledDays: 30,
@@ -361,6 +398,21 @@ export async function resetFinancialE2EFixtures() {
     ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
   const financialDb = getFirestore(app, "coala-financeiro");
   const now = new Date().toISOString();
+  const cashClosureDate = shiftClosureDate(todayInClosureTimezone(), -1);
+  const cashClosureId = `${E2E_CASH_COUNTING.kioskId}_${cashClosureDate}`;
+  const cashClosureYear = Number(cashClosureDate.slice(0, 4));
+  const cashClosureMonth = Number(cashClosureDate.slice(5, 7));
+  const cashClosureDay = Number(cashClosureDate.slice(8, 10));
+  const channelTotals = {
+    cash: 12_500,
+    pix: 0,
+    debit_card: 0,
+    credit_card: 0,
+    voucher: 0,
+    signed_account: 0,
+    other: 0,
+  };
+  const emptyChannelTotals = Object.fromEntries(Object.keys(channelTotals).map((channel) => [channel, 0]));
 
   const financialBatch = financialDb.batch();
   financialBatch.set(financialDb.collection("accounts").doc("account-e2e"), {
@@ -376,6 +428,180 @@ export async function resetFinancialE2EFixtures() {
     name: "Conta E2E",
     active: true,
     paymentMethods: [],
+  });
+  financialBatch.set(financialDb.collection("cashCountingSessions").doc(E2E_CASH_COUNTING.sessionId), {
+    id: E2E_CASH_COUNTING.sessionId,
+    workspaceId: "coala",
+    status: "open",
+    scopes: [],
+    scopeKeys: [],
+    kioskIds: [E2E_CASH_COUNTING.kioskId],
+    kioskNames: [E2E_CASH_COUNTING.kioskName],
+    periodKeys: [],
+    scopeAggregationVersion: 1,
+    finalizedOperatorCountsByScope: {},
+    finalizedOperatorCountsByDate: {},
+    finalizedOperatorCount: 0,
+    countedCashCents: 0,
+    depositEligibleCents: 0,
+    dreOnlyCashCents: 0,
+    denominationTotalCents: 0,
+    noteTotalCents: 0,
+    coinTotalCents: 0,
+    coinPendingExchangeCents: 0,
+    coinExchangedCents: 0,
+    coinReturnedToTillCents: 0,
+    denominations: [],
+    bags: [],
+    batchIds: [],
+    paidBatchCount: 0,
+    openedAt: now,
+    openedBy: E2E_USER.uid,
+    openedByName: "Administrador E2E",
+    lastDraftKioskId: null,
+    lastDraftDate: null,
+    lastDraftUpdatedAt: null,
+    lastDraftUpdatedBy: null,
+    countingFinishedAt: null,
+    countingFinishedBy: null,
+    denominationsConfirmedAt: null,
+    denominationsConfirmedBy: null,
+    completedAt: null,
+    cancelledAt: null,
+    cancelledBy: null,
+    cancellationReason: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  financialBatch.set(financialDb.collection("cashCountingSessionLocks").doc(`coala:unit:${E2E_CASH_COUNTING.kioskId}`), {
+    id: `coala:unit:${E2E_CASH_COUNTING.kioskId}`,
+    workspaceId: "coala",
+    lockKind: "unit",
+    scopeKey: null,
+    sessionId: E2E_CASH_COUNTING.sessionId,
+    kioskId: E2E_CASH_COUNTING.kioskId,
+    year: null,
+    month: null,
+    lockedAt: now,
+    lockedBy: E2E_USER.uid,
+  });
+  financialBatch.set(financialDb.collection("cashClosures").doc(cashClosureId), {
+    id: cashClosureId,
+    workspaceId: "coala",
+    kioskId: E2E_CASH_COUNTING.kioskId,
+    kioskName: E2E_CASH_COUNTING.kioskName,
+    pdvFilialId: "filial-e2e",
+    date: cashClosureDate,
+    year: cashClosureYear,
+    month: cashClosureMonth,
+    day: cashClosureDay,
+    status: "draft",
+    expectedTotalCents: 12_500,
+    reportedTotalCents: 0,
+    countedTotalCents: 0,
+    reportedDifferenceTotalCents: 0,
+    differenceTotalCents: 0,
+    expectedCashCents: 12_500,
+    reportedCashCents: 0,
+    countedCashCents: 0,
+    finalizedCountedTotalCents: 0,
+    finalizedDifferenceTotalCents: 0,
+    finalizedCountedCashCents: 0,
+    cashDepositEligibleCents: 0,
+    expectedByChannelCents: channelTotals,
+    reportedByChannelCents: emptyChannelTotals,
+    countedByChannelCents: emptyChannelTotals,
+    reportedDifferenceByChannelCents: emptyChannelTotals,
+    differenceByChannelCents: emptyChannelTotals,
+    operatorCount: 1,
+    finalizedOperatorCount: 0,
+    unreportedLineCount: 1,
+    pendingLineCount: 1,
+    reportedDivergentLineCount: 0,
+    divergentLineCount: 0,
+    reportedMatchedLineCount: 0,
+    matchedLineCount: 0,
+    pdvSales: { version: 1, amountCents: 12_500 },
+    source: {
+      provider: "pdvlegal",
+      endpoint: "cupom/get",
+      couponCount: 1,
+      validCouponCount: 1,
+      ignoredCancelledCouponCount: 0,
+      estornadoCouponCount: 0,
+      itemCount: 1,
+      paymentRowCount: 1,
+      rawPaymentNames: ["DINHEIRO"],
+      unknownPaymentNames: [],
+      integrityWarnings: [],
+      movementCount: 0,
+      ignoredCancelledMovementCount: 0,
+      ignoredNonCashMovementCount: 0,
+      unassignedMovementCount: 0,
+    },
+    sourceHash: "cash-counting-e2e",
+    cashDepositPolicy: "standard",
+    cashDepositPolicyReason: null,
+    cashDeposit: {
+      eligibleCents: 0,
+      allocatedCents: 0,
+      issuedCents: 0,
+      paidCents: 0,
+      batchId: null,
+      batchItemId: null,
+      status: "not_eligible",
+      manualSplitRequired: false,
+      allocationReason: null,
+      pendingSince: null,
+    },
+    approvedWithDivergence: false,
+    pdvChangedAfterApproval: false,
+    syncedAt: now,
+    syncError: null,
+    submittedAt: null,
+    submittedBy: null,
+    approvedAt: null,
+    approvedBy: null,
+    approvalReason: null,
+    reopenedAt: null,
+    reopenedBy: null,
+    reopenedReason: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  financialBatch.set(financialDb.collection("cashClosures").doc(cashClosureId).collection("lines").doc(`${E2E_CASH_COUNTING.operatorId}_cash`), {
+    id: `${E2E_CASH_COUNTING.operatorId}_cash`,
+    closureId: cashClosureId,
+    workspaceId: "coala",
+    kioskId: E2E_CASH_COUNTING.kioskId,
+    date: cashClosureDate,
+    operatorId: E2E_CASH_COUNTING.operatorId,
+    operatorName: E2E_CASH_COUNTING.operatorName,
+    channel: "cash",
+    channelLabel: "Dinheiro",
+    pdvSales: { version: 1, amountCents: 12_500 },
+    calculatedExpectedCents: 12_500,
+    expectedCents: 12_500,
+    expectedAdjustmentCents: 0,
+    expectedAdjustmentReason: null,
+    expectedAdjustedBy: null,
+    expectedAdjustedAt: null,
+    expectedAdjustmentNeedsReview: false,
+    reportedCents: null,
+    reportedDifferenceCents: null,
+    countedCents: null,
+    conferenceDifferenceCents: null,
+    differenceCents: null,
+    status: "pending",
+    rawPaymentNames: ["DINHEIRO"],
+    metadata: { grossCashCents: 12_500, changeCents: 0, supplyCents: 0, withdrawalCents: 0, cashMovements: [] },
+    reportedNote: null,
+    note: null,
+    reportedBy: null,
+    reportedAt: null,
+    countedBy: null,
+    countedAt: null,
+    updatedAt: now,
   });
   financialBatch.set(financialDb.collection("expenses").doc("expense-e2e"), {
     purchaseOrderId: E2E_ORDER_IDS.confirmed,
@@ -536,7 +762,7 @@ export async function resetFinancialE2EFixtures() {
       resolvedAt: null,
       resolvedBy: null,
     },
-    resolutionContractVersion: 1,
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
@@ -604,17 +830,65 @@ export async function resetFinancialE2EFixtures() {
       resolvedAt: null,
       resolvedBy: null,
     },
-    resolutionContractVersion: 1,
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
     updatedAt: now,
+  });
+  const noiseFixture = {
+    workspaceId: "coala",
+    provider: "resend",
+    messageId: null,
+    status: "ignored",
+    from: "Boletim <news@example.test>",
+    fromAddress: "news@example.test",
+    senderDomain: "example.test",
+    to: ["financeiro@coala.test"],
+    originalRecipients: [],
+    receivedAt: "2026-09-11T12:00:00.000Z",
+    textPreview: "Newsletter sem cobrança.",
+    textContent: "Newsletter sem cobrança.",
+    classification: { documentType: "other", financeLikely: false, confidence: "high", supplierName: null,
+      competence: null, dueDate: null, amountCents: null, barcode: null, barcodeMasked: null, links: [] },
+    attachments: [],
+    rawStoragePath: null,
+    rawSha256: null,
+    archiveWarnings: [],
+    linkedExpenseId: null,
+    linkedProvisionId: null,
+    obligationId: null,
+    paymentRequestId: null,
+    existingBankPayment: null,
+    statementTransactionId: null,
+    bankState: "not_prepared",
+    resolution: { status: "discarded", kind: "non_financial", targetType: null, targetId: null,
+      installmentNumber: null, financialState: null, mode: "automatic", confidence: "high", reasons: [],
+      resolvedAt: now, resolvedBy: null },
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+    reviewedAt: now,
+    reviewedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.noiseA), {
+    ...noiseFixture, providerEmailId: "email-e2e-noise-a", providerEventId: "event-e2e-noise-a", subject: "Boletim sem cobrança A E2E",
+  });
+  financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.noiseB), {
+    ...noiseFixture, providerEmailId: "email-e2e-noise-b", providerEventId: "event-e2e-noise-b", subject: "Boletim sem cobrança B E2E",
   });
   financialBatch.set(financialDb.collection("financialInboxSettings").doc("coala"), {
     mode: "manual",
     policyVersion: 1,
     updatedAt: now,
     updatedBy: E2E_USER.uid,
+  });
+  financialBatch.set(financialDb.collection("financialSystemState").doc(FINANCIAL_INBOX_RESOLUTION_STATE_ID), {
+    version: FINANCIAL_INBOX_RESOLUTION_VERSION,
+    complete: true,
+    cursor: null,
+    lastRunAt: now,
+    updatedInLastRun: 0,
   });
   await financialBatch.commit();
 }

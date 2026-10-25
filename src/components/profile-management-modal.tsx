@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import { useProfiles } from '@/hooks/use-profiles';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Segmented } from '@/components/patterns/segmented';
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox, Clock } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -531,7 +531,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </AccordionTrigger>
                                   <AccordionContent className="space-y-2 p-1 pt-4">
                                     {renderPermissionSwitch("permissions.app.localPurchase.register" as any, "Registrar compra local", "Permite fotografar a nota e o comprovante, revisar e registrar uma compra recebida na unidade, e vinculá-la à sangria do caixa.")}
-                                    {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, os itens ficam como consumo direto.", !appLocalPurchaseWatch, true)}
+                                    {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, a IA ainda classifica os itens, mas não vincula produto nem movimenta estoque.", !appLocalPurchaseWatch, true)}
                                   </AccordionContent>
                                 </AccordionItem>
 
@@ -561,6 +561,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   <AccordionContent className="space-y-2 p-1 pt-4">
                                     {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
                                     {renderPermissionSwitch("permissions.app.schedule.viewAllUnits" as any, "Ver escala de todas as unidades", "Para gestores: mostra também a escala publicada das outras unidades do acesso da pessoa, mesmo sem ela estar escalada nelas.", !appScheduleViewWatch, true)}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-time">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><Clock className="mr-2 h-5 w-5" /> Ponto e solicitações</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.timeRecording.mark" as any, "Ponto", "Mostra o Ponto no app: bater ponto com a hora oficial, ver e compartilhar comprovantes e pedir ajuste. Só bate ponto quem tem vínculo CLT ou de aprendiz no dia; também exige a permissão de colaborador do sistema.")}
+                                    {renderPermissionSwitch("permissions.app.requests.create" as any, "Solicitações", "Mostra Solicitações no app: pedir ausência (com atestado) e vale-transporte. Também exige a permissão de colaborador do sistema.")}
                                   </AccordionContent>
                                 </AccordionItem>
 
@@ -785,6 +795,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                       {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar, desligar e excluir usuários.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar, duplicar e editar perfis de permissão.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.settings.viewAiCosts" as any, "Visualizar custos de IA", "Permite consultar consumo e custos dos serviços de IA e infraestrutura.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.settings.viewSystemNotices" as any, "Ver avisos do sistema", "Permite abrir a central de avisos operacionais; cada aviso ainda exige a permissão do módulo que o resolve.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Gerenciar Cargos, Funções e Organograma", "Permite manter cadastros do DP usados em cargos, funções e estrutura organizacional.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Gerenciar Acesso por Escala", "Permite acessar diagnósticos e auditorias ligados à política de acesso por escala.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar turnos reutilizáveis.", !settingsViewWatch)}
@@ -1074,6 +1085,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.dp.requests.review" as any, "Analisar solicitações", "Permite aprovar, rejeitar e gerar novamente os documentos resultantes.", !dpRequestsViewWatch, true)}
                                   </div>
+                                </div>
+
+                                {/* Fechamento do ponto */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Clock className="h-4 w-4" /> Fechamento do ponto</h4>
+                                  {renderPermissionSwitch("permissions.dp.timeRecording.view" as any, "Consultar ponto de colaboradores", "Permite abrir, em modo somente leitura e dentro do escopo de unidades, as batidas, escalas, ausências, alertas, ajustes e o banco de horas de cada pessoa. Não permite bater ponto por ela.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.close" as any, "Fechar competência", "Congela o mês do ponto com a declaração de cada pessoa (ajustes e ausências). Só fecha sem pedido pendente; depois disso não se aceita pedido de ajuste no mês. O painel fica em Solicitações do DP.", !dpRequestsViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.timeClosure.reopen" as any, "Reabrir competência", "Reabre um mês fechado, com motivo. A versão anterior fica guardada e o novo fechamento declara o que mudou.", !dpRequestsViewWatch)}
                                 </div>
 
                                 {/* Cobertura de responsabilidades */}

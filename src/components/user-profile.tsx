@@ -15,12 +15,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut, Warehouse, Camera, Upload, KeyRound, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { LogOut, Warehouse, Camera, Upload, KeyRound, Loader2, Eye, RotateCcw, Search } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { ChangePasswordModal } from './change-password-modal';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import type { DeveloperViewAsUser } from '@/features/auth/developer-view-as';
+
+const LOCAL_VIEW_AS_PREVIEW: DeveloperViewAsUser[] = [
+  { id: 'preview-heucilene', username: 'Heucilene Oliveira Ribeiro', email: 'heucilene@coalashakes.com', jobRoleName: 'Atendente', profileId: 'profile-attendant' },
+  { id: 'preview-edna', username: 'Maria Edna Gois Ribeiro', email: 'edna@coalashakes.com', jobRoleName: 'Administrativo', profileId: 'profile-administrative' },
+  { id: 'preview-edwilson', username: 'Edwilson Lobato', email: 'edwilson@coalashakes.com', jobRoleName: 'Líder', profileId: 'profile-leader' },
+  { id: 'preview-samila', username: 'Samila Santos', email: 'samila@coalashakes.com', jobRoleName: 'Atendente', profileId: 'profile-attendant' },
+];
 
 function getAvatarUploadErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
@@ -31,7 +42,17 @@ function getAvatarUploadErrorMessage(error: unknown) {
 }
 
 export function UserProfile({ variant = "avatar", collapsed = false }: { variant?: "avatar" | "card"; collapsed?: boolean }) {
-  const { user, logout, updateUser } = useAuth();
+  const {
+    user,
+    authenticatedUser,
+    logout,
+    updateUser,
+    canViewAs,
+    viewAs,
+    viewAsUsers,
+    startViewAs,
+    stopViewAs,
+  } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
@@ -39,6 +60,10 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isViewAsOpen, setIsViewAsOpen] = useState(false);
+  const [viewAsQuery, setViewAsQuery] = useState('');
+  const [viewAsBusy, setViewAsBusy] = useState(false);
+  const [localViewAs, setLocalViewAs] = useState<DeveloperViewAsUser | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
@@ -50,6 +75,54 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
 
   const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
   const profileName = profile ? profile.name : 'Perfil não encontrado';
+  const usesLocalPreview = process.env.NODE_ENV === 'development' && canViewAs && viewAsUsers.length === 0;
+  const displayedViewAs = viewAs ?? localViewAs;
+  const displayedViewAsUsers = usesLocalPreview ? LOCAL_VIEW_AS_PREVIEW : viewAsUsers;
+  const normalizedViewAsQuery = viewAsQuery.trim().toLocaleLowerCase('pt-BR');
+  const filteredViewAsUsers = normalizedViewAsQuery
+    ? displayedViewAsUsers.filter((candidate) =>
+        `${candidate.username} ${candidate.email} ${candidate.jobRoleName ?? ''}`
+          .toLocaleLowerCase('pt-BR')
+          .includes(normalizedViewAsQuery)
+      )
+    : displayedViewAsUsers;
+
+  const handleStartViewAs = async (targetUserId: string) => {
+    if (usesLocalPreview) {
+      setLocalViewAs(LOCAL_VIEW_AS_PREVIEW.find((candidate) => candidate.id === targetUserId) ?? null);
+      setIsViewAsOpen(false);
+      return;
+    }
+    setViewAsBusy(true);
+    try {
+      await startViewAs(targetUserId);
+    } catch (error) {
+      setViewAsBusy(false);
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível visualizar esse usuário.',
+        description: error instanceof Error ? error.message : 'Tente novamente.',
+      });
+    }
+  };
+
+  const handleStopViewAs = async () => {
+    if (localViewAs) {
+      setLocalViewAs(null);
+      return;
+    }
+    setViewAsBusy(true);
+    try {
+      await stopViewAs();
+    } catch (error) {
+      setViewAsBusy(false);
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível voltar ao seu perfil.',
+        description: error instanceof Error ? error.message : 'Tente novamente.',
+      });
+    }
+  };
 
   // ── Salva no Storage e guarda só a URL no Firestore ──────────────
   const handlePhotoUpdate = async (dataUrl: string) => {
@@ -151,6 +224,11 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{user.username}</p>
               <p className="text-xs leading-none text-muted-foreground">{profileName}</p>
+              {displayedViewAs && (
+                <p className="text-xs font-semibold text-ds-accent-ink">
+                  Visualizando como {displayedViewAs.username} · somente leitura
+                </p>
+              )}
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -159,18 +237,33 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
             <span>Quiosque(s): {kioskNames || 'N/A'}</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>
-            <Camera className="mr-2 h-4 w-4" />
-            <span>Tirar foto</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
-            <Upload className="mr-2 h-4 w-4" />
-            <span>Carregar foto</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
-            <KeyRound className="mr-2 h-4 w-4" />
-            <span>Alterar senha</span>
-          </DropdownMenuItem>
+          {canViewAs && (displayedViewAs ? (
+            <DropdownMenuItem disabled={viewAsBusy} onSelect={handleStopViewAs}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              <span>Voltar ao meu perfil</span>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onSelect={() => setIsViewAsOpen(true)}>
+              <Eye className="mr-2 h-4 w-4" />
+              <span>Visualizar como usuário</span>
+            </DropdownMenuItem>
+          ))}
+          {!displayedViewAs && (
+            <>
+              <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>
+                <Camera className="mr-2 h-4 w-4" />
+                <span>Tirar foto</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+                <Upload className="mr-2 h-4 w-4" />
+                <span>Carregar foto</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                <span>Alterar senha</span>
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout}>
             <LogOut className="mr-2 h-4 w-4" />
@@ -197,6 +290,59 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
         open={isPasswordModalOpen}
         onOpenChange={setIsPasswordModalOpen}
       />
+
+      <Dialog open={isViewAsOpen} onOpenChange={setIsViewAsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Visualizar como usuário</DialogTitle>
+            <DialogDescription>
+              Você continua autenticado como {authenticatedUser?.email}. As alterações ficam bloqueadas até voltar ao seu perfil.
+            </DialogDescription>
+          </DialogHeader>
+          {usesLocalPreview && (
+            <p className="rounded-ds-card border border-ds-accent/30 bg-ds-accent-soft px-3 py-2 text-xs text-ds-accent-ink">
+              Prévia local preenchida: nenhuma troca de identidade será enviada ao servidor.
+            </p>
+          )}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={viewAsQuery}
+              onChange={(event) => setViewAsQuery(event.target.value)}
+              placeholder="Buscar por nome, e-mail ou função"
+              className="pl-9"
+            />
+          </div>
+          <ScrollArea className="max-h-[min(420px,60vh)] pr-3">
+            <div className="space-y-2">
+              {filteredViewAsUsers.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  disabled={viewAsBusy}
+                  onClick={() => handleStartViewAs(candidate.id)}
+                  className="flex w-full items-center gap-3 rounded-ds-card border border-ds-border bg-ds-surface px-3 py-3 text-left transition-colors hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:opacity-60"
+                >
+                  <Avatar className="h-9 w-9">
+                    {candidate.avatarUrl ? <AvatarImage src={candidate.avatarUrl} alt={candidate.username} /> : null}
+                    <AvatarFallback>{candidate.username.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{candidate.username}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {candidate.jobRoleName || candidate.email}
+                    </span>
+                  </span>
+                  {viewAsBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                </button>
+              ))}
+              {filteredViewAsUsers.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">Nenhum usuário ativo encontrado.</p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -56,6 +56,7 @@ type JourneyForm = {
   scaleValidationMode: NonNullable<DPJourney['scaleValidation']>['mode'];
   expectedBreakMinutes: string;
   useDefinedShiftWhenShorter: boolean;
+  toleranceMinutes: string;
   maxConsecutiveWorkDays: string;
   sundayCadenceWeeks: string;
   allowedShiftDefinitionIds: string[];
@@ -63,6 +64,9 @@ type JourneyForm = {
   validFrom: string;
   validTo: string;
 };
+
+// Única tolerância do ponto: a jornada vale para saldo, banco de horas e avisos de entrada, saída e intervalo.
+const TOLERANCE_NOTE = 'Diferença do dia dentro dela não vira débito nem crédito no banco; acima dela, conta inteira. Também é a margem dos avisos de entrada, saída e intervalo.';
 
 type PanelState =
   | { mode: 'view'; item: DPJourney }
@@ -118,6 +122,7 @@ function formFor(item?: DPJourney): JourneyForm {
     scaleValidationMode: item?.scaleValidation?.mode ?? 'consecutive_days',
     expectedBreakMinutes: String(item?.expectedBreakMinutes ?? defaultExpectedBreakMinutes(firstWorkdayMinutes)),
     useDefinedShiftWhenShorter: item ? item.useDefinedShiftWhenShorter ?? true : false,
+    toleranceMinutes: item ? item.toleranceMinutes === undefined ? '' : String(item.toleranceMinutes) : '5',
     maxConsecutiveWorkDays: String(item?.weeklyRest?.maxConsecutiveWorkDays ?? 6),
     sundayCadenceWeeks: item?.weeklyRest?.sundayCadenceWeeks ? String(item.weeklyRest.sundayCadenceWeeks) : '',
     allowedShiftDefinitionIds: item?.allowedShiftDefinitionIds ?? [],
@@ -175,6 +180,10 @@ function buildPayload(form: JourneyForm) {
   if (!Number.isInteger(expectedBreakMinutes) || expectedBreakMinutes < 0 || expectedBreakMinutes > 480) {
     throw new Error('O intervalo esperado deve estar entre 0 e 480 minutos.');
   }
+  const toleranceMinutes = form.toleranceMinutes.trim() ? Number(form.toleranceMinutes) : undefined;
+  if (toleranceMinutes !== undefined && (!Number.isInteger(toleranceMinutes) || toleranceMinutes < 0 || toleranceMinutes > 10)) {
+    throw new Error('A tolerância vai de 0 a 10 minutos por dia (art. 58 §1º da CLT).');
+  }
 
   return {
     name: form.name.trim(),
@@ -196,6 +205,7 @@ function buildPayload(form: JourneyForm) {
     scaleValidation: { mode: form.scaleValidationMode },
     expectedBreakMinutes,
     useDefinedShiftWhenShorter: form.useDefinedShiftWhenShorter,
+    ...(toleranceMinutes !== undefined ? { toleranceMinutes } : {}),
     ...(form.allowedShiftDefinitionIds.length ? { allowedShiftDefinitionIds: form.allowedShiftDefinitionIds } : {}),
     applicability: form.applicability,
     validFrom: form.validFrom,
@@ -270,6 +280,7 @@ export function DPSettingsJourneys() {
             ...payload,
             description: form.description.trim() || null,
             allowedShiftDefinitionIds: form.allowedShiftDefinitionIds,
+            toleranceMinutes: payload.toleranceMinutes ?? null,
             validTo: form.validTo || null,
           },
         });
@@ -445,6 +456,12 @@ export function DPSettingsJourneys() {
                 </PanelField>
               ) : null}
             </PanelSection>
+            <PanelSection title="Tolerância">
+              <PanelField label="Tolerância do dia">
+                {item.toleranceMinutes ? `${item.toleranceMinutes} min` : 'Sem tolerância'}
+              </PanelField>
+              <p className="text-[13px] text-ds-ink-muted">{TOLERANCE_NOTE}</p>
+            </PanelSection>
             <PanelSection title="Expediente menor que o esperado">
               <PanelField label="Comportamento">
                 {(item.useDefinedShiftWhenShorter ?? true)
@@ -607,6 +624,19 @@ export function DPSettingsJourneys() {
                     : { mode: form.regimeMode },
                 )}
               </p>
+            </PanelSection>
+            <PanelSection title="Tolerância">
+              <Field label="Tolerância do dia" htmlFor="journey-tolerance" requirement="opcional" hint={`Minutos, de 0 a 10. Em branco: sem tolerância. ${TOLERANCE_NOTE}`}>
+                <Input
+                  id="journey-tolerance"
+                  type="number"
+                  min={0}
+                  max={10}
+                  className={fieldInputClass}
+                  value={form.toleranceMinutes}
+                  onChange={(event) => setForm((current) => ({ ...current, toleranceMinutes: event.target.value }))}
+                />
+              </Field>
             </PanelSection>
             <PanelSection
               title="Expediente definido menor que o esperado"
@@ -788,7 +818,7 @@ export function DPSettingsJourneys() {
                 })}
                 </div>
               ) : (
-                <p className="rounded-ds-md border border-dashed border-ds-divider px-3 py-4 text-sm text-ds-ink-3">
+                <p className="rounded-ds-md border border-dashed border-ds-divider px-3 py-4 text-sm text-ds-ink-muted">
                   Informe os dias no ciclo para configurar a distribuição.
                 </p>
               )}

@@ -4,6 +4,7 @@ import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 import { DOCUMENT_VARIABLES, formatDocumentVariableValue, type DocumentVariableCatalogEntry } from "@/features/hr/integration/document-variables";
 import type { DPVacationRecord, UniformAssignment, UniformEvent } from "@/types";
 import type { ConditionalRule } from "@/types/rh";
+import { composeResidentialAddress } from "@/features/rh/lib/profile-field-layout";
 
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): RecordValue { return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {}; }
@@ -227,8 +228,14 @@ async function employmentContext(params: { onboarding: RecordValue; user: Record
   const overnightEnd = startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes
     ? endMinutes + 24 * 60
     : endMinutes;
-  const breakMinutes = breakStart !== null && breakEnd !== null
-    ? Math.max(0, breakEnd - breakStart)
+  // Fixo intercalado soma os horários; livre e janela seguem como antes (sem alterar documentos já gerados).
+  const segments = Array.isArray(shift.breakSegments) ? shift.breakSegments as Array<{ start?: unknown; end?: unknown }> : [];
+  const segmentMinutes = segments.reduce((sum, segment) => {
+    const segmentStart = minutes(segment.start); const segmentEnd = minutes(segment.end);
+    return sum + (segmentStart !== null && segmentEnd !== null ? Math.max(0, segmentEnd - segmentStart) : 0);
+  }, 0);
+  const breakMinutes = segments.length ? segmentMinutes
+    : breakStart !== null && breakEnd !== null ? Math.max(0, breakEnd - breakStart)
     : 0;
   const dailyMinutes = startMinutes !== null && overnightEnd !== null
     ? Math.max(0, overnightEnd - startMinutes - breakMinutes)
@@ -279,7 +286,21 @@ async function buildComputed(params: {
         return age !== null && age >= 0 && age < 14;
       }).length
     : 0;
+  const text = (key: string) => {
+    const value = fieldStoredRaw(params.fieldValues[key]);
+    return typeof value === "string" ? value : null;
+  };
+  const residentialAddress = composeResidentialAddress({
+    street: text("employee.address_street"),
+    number: text("employee.address_number"),
+    complement: text("employee.address_complement"),
+    neighborhood: text("employee.address_neighborhood"),
+    city: text("employee.city"),
+    state: text("employee.state"),
+    zipcode: text("employee.address_zipcode"),
+  });
   return {
+    address: { full: residentialAddress },
     uniforms: { summary: uniforms },
     vacations: { summary: vacations },
     aso: { summary: asoSummary(params.fieldValues) },

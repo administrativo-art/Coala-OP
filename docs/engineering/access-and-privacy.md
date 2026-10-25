@@ -1,10 +1,16 @@
 # Acesso, privacidade e entradas compartilhadas
 
+## Georreferenciamento planejado do ponto
+
+A [especificação técnica de georreferenciamento](time-recording-geolocation.md) implementa coleta de localização somente quando o trabalhador confirma uma batida, sem rastreamento contínuo e sem bloqueio por posição externa, imprecisa ou indisponível. A evidência fica fora da ARP, do AFD e do comprovante para possuir acesso e retenção próprios. Coordenadas exatas são server-only e têm TTL fixo de 1.825 dias; ainda não há leitor administrativo publicado. Base legal, cláusula LGPD/aditivo, aviso, parâmetros físicos, participantes nominais e ativação explícita continuam como gates anteriores à coleta com pessoas reais.
+
 No desligamento sob cutover operacional de ausências, Functions revogam Auth, refresh tokens, claims e caches antes de suspender efeitos antigos em turnos/férias. `pending_occupancy_guard` não equivale a efeitos concluídos nem libera o usuário; falha de revogação propaga erro. A sincronização de perfil não restaura claims de conta desligada. O bootstrap que gera readiness continua restrito a demo/emulador e quiescência explícita.
 
 ## Coala Go e coexistência do mobile legado
 
 O Android nativo usa `coalaone.go`, único cliente mobile após retirada expressamente autorizada do Expo (não havia usuários). `/api/mobile/app-attestation` mantém compatibilidade de transporte: `packageName` opcional estrito na allowlist Go/legado (ausência conserva o legado). O servidor seleciona decode Google após validação e exige correspondência exata no request/appIntegrity, nonce vinculado ao UID, frescor, PLAY_RECOGNIZED e integridade do aparelho. O passe assinado continua vinculado ao UID/expiração; não muda permissões de negócio. Aceitar o formato antigo não mantém um instalador antigo disponível.
+
+O ponto offline é mais restrito que as demais rotas mobile: autorização e sincronização recusam ambientes com atestação `off` ou `monitor` e exigem `enforce`. A chave privada de assinatura fica no Android Keystore e precisa estar em TEE/StrongBox; servidor guarda apenas chave pública, identificadores, âncora temporal e cadeia necessária para validar o evento. A fila local é cifrada e separada por UID; o servidor preserva a autorização e a evidência aceita junto do original pela retenção do REP-P. Não há geolocalização, biometria facial nem acesso à pasta de documentos nesse fluxo.
 
 `GET /api/app/version` seleciona Go por padrão ou com `?packageName=coalaone.go`, com versão4/0.2.0 e `/app/CoalaGo.apk` preparados localmente. Query explícita do package retirado devolve instalador nulo, nunca APK Go. Apps desconhecidos/campos extras são rejeitados pelo enforcer. Não há consulta/gravação Firestore nessas mudanças; publicação permanece sem autorização. Ver [primeira instalação](coala-go-device-migration.md). Testes: `mobile-app-attestation.test.ts`, `mobile-app-release.test.ts`, `coala-go-release.test.ts` e `ApiContractTest` Kotlin. IDs históricos `coala-notas-android` em metadados de negócio não foram renomeados/migrados.
 
@@ -35,6 +41,18 @@ Em `firestore.rules`, clientes não podem criar política/metadados de cálculo 
 Complemento transversal da etapa 8, em 2026-09-26. Estes percursos não dependem de uma página ativa do dashboard; não acrescentam automaticamente grupos à matriz de 53 grupos. Estado: leitura estática das fronteiras abaixo, sem homologação dos provedores.
 
 ## Autenticação e primeiro acesso
+
+### Visualização assistida exclusiva do desenvolvimento
+
+O Sistema e o Coala Go oferecem **Visualizar como usuário** exclusivamente quando a identidade autenticada tem o e-mail exato `administrativo@cialashakes.com`. A opção fica no menu da foto/perfil. O seletor mostra somente usuários ativos e a API `GET/POST/DELETE /api/auth/view-as` repete a autorização no servidor; ocultar o item na interface não é o controle de acesso. Iniciar e encerrar a visualização geram eventos `developer_view_as_started` e `developer_view_as_stopped` em `actionLogs`, sempre atribuídos ao UID real e com o alvo nos metadados.
+
+A identidade real do Firebase continua responsável pela sessão, atestação mobile e auditoria. Em leitura, `requireUser` projeta usuário, perfil e permissões do alvo para reproduzir sua experiência. Qualquer método diferente de `GET`, `HEAD` ou `OPTIONS` que passe por essa fronteira é recusado enquanto o modo estiver ativo; a faixa persistente **Visualizando como … · somente leitura** permite sair imediatamente. Foto, senha, atualização do aplicativo e notificações também ficam indisponíveis no perfil mobile visualizado. A ferramenta não concede ao alvo as permissões do desenvolvedor e não permite visualizar conta inativa ou o próprio usuário como alvo.
+
+O Sistema guarda a seleção em cookie `HttpOnly`, `SameSite=Lax`, seguro em produção e com validade máxima de oito horas. O Coala Go guarda apenas o ID selecionado em `SharedPreferences` privado do app, limpa-o na troca de conta ou saída e o envia no cabeçalho interno `x-coala-view-as` somente para a origem da API. As seleções de Sistema e aplicativo são deliberadamente independentes. Uma conta diferente pode conservar um cookie antigo no navegador, mas o servidor o ignora porque revalida o e-mail real em cada requisição.
+
+Limite conhecido: o bloqueio central cobre as APIs que usam `requireUser`; escritas legadas feitas diretamente por SDK do cliente continuam dependendo das regras e permissões existentes. Por isso o recurso é ferramenta temporária de diagnóstico, não delegação de sessão, e deve permanecer restrito ao único e-mail autorizado. Antes de ampliar a allowlist ou permitir ações, é necessária revisão específica de todas as superfícies de escrita.
+
+Preflight de custo: abrir o seletor faz uma consulta limitada a 250 usuários ativos candidatos; se a seleção persistida estiver fora dessa janela, há no máximo uma leitura documental adicional. Cada leitura durante a visualização acrescenta até duas leituras, uma do usuário-alvo e outra de seu perfil quando existente, além das leituras normais da identidade real. Iniciar ou encerrar gera uma escrita de auditoria. Não há listener, polling, job ou processamento em segundo plano.
 
 Entradas: [login](../../src/app/login/page.tsx), [recuperação](../../src/app/api/auth/forgot-password/route.ts), [primeiro acesso](../../src/app/api/auth/first-access/%5Btoken%5D/route.ts) e [serviço do link](../../src/lib/first-access-links.ts). A recuperação responde genericamente para e-mails ausentes ou desconhecidos. Antes de consultar Auth/enviar e-mail, reserva tentativa em transação em `passwordResetRateLimits`, por hash do e-mail: intervalo mínimo de 60 segundos, no máximo cinco na janela de uma hora. Em seguida usa Auth e Resend e registra `emailCommunications`; essas operações não formam transação global. Limitação observada: o limite é por endereço, não comprova proteção global contra abuso distribuído.
 

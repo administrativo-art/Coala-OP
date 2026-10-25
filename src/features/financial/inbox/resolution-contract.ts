@@ -6,8 +6,14 @@ import type {
   FinancialInboxResolution,
 } from "./types";
 
-export const FINANCIAL_INBOX_RESOLUTION_VERSION = 1;
+export const FINANCIAL_INBOX_RESOLUTION_VERSION = 2;
 export const FINANCIAL_INBOX_RESOLUTION_STATE_ID = `inbox-resolution-v${FINANCIAL_INBOX_RESOLUTION_VERSION}`;
+
+export function financialInboxResolutionMigrationComplete(state: {
+  complete?: unknown; version?: unknown;
+} | null | undefined) {
+  return state?.complete === true && state.version === FINANCIAL_INBOX_RESOLUTION_VERSION;
+}
 
 export function pendingFinancialInboxResolution(): FinancialInboxResolution {
   return {
@@ -62,9 +68,13 @@ function bankStateForSuggestion(
   if (/aguardando[_\s-]*(?:aprova|autoriza)|awaiting[_\s-]*(?:approval|authorization)/.test(state)) {
     return "awaiting_bank_approval";
   }
+  if (/ready[_\s-]*to[_\s-]*submit|pront[oa][ _-]*(?:para|pra)[ _-]*enviar/.test(state)) {
+    return "ready_to_submit";
+  }
+  if (/submitting|enviando|submitted|enviado/.test(state)) return "submitted";
   if (/agendad|scheduled/.test(state)) return "scheduled";
   if (/process|execut|paid|pago|conclu/.test(state)) return "awaiting_statement";
-  return "scheduled";
+  return "not_prepared";
 }
 
 export function financialStateForExpenseSuggestion(
@@ -158,6 +168,11 @@ export function resolutionForDisplay(
     if (normalized.status === "archived" && message.archivedFromStatus === "reconciled") {
       normalized.financialState ??= "reconciled";
     }
+    if (message.status === "ignored" || (message.status === "archived" && message.archivedFromStatus === "ignored")) {
+      normalized.mode ??= "manual";
+      normalized.kind ??= "non_financial";
+      if (!message.resolution.mode) normalized.reasons = [...normalized.reasons, "LEGACY_DISCARD_ORIGIN_UNKNOWN"];
+    }
     return normalized;
   }
   const sourceStatus = message.status === "archived"
@@ -168,16 +183,17 @@ export function resolutionForDisplay(
       mode: "manual",
       at: message.reviewedAt ?? "",
       by: message.reviewedBy ?? "legacy",
+      reasons: ["LEGACY_DISCARD_ORIGIN_UNKNOWN"],
     });
     return message.status === "archived" ? { ...resolution, status: "archived" } : resolution;
   }
-  if (message.linkedExpenseId || ["identified", "linked", "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled"].includes(sourceStatus)) {
+  if (message.linkedExpenseId || ["identified", "linked", "awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement", "reconciled"].includes(sourceStatus)) {
     const suggestion = message.existingExpenseSuggestion;
     const financialState: FinancialInboxFinancialState = sourceStatus === "reconciled"
       ? "reconciled"
       : sourceStatus === "scheduled" || sourceStatus === "awaiting_statement"
         ? "scheduled"
-        : sourceStatus === "awaiting_authorization"
+        : sourceStatus === "awaiting_authorization" || sourceStatus === "payment_failed"
           ? "payment_prepared"
         : "open";
     return {
@@ -200,4 +216,16 @@ export function resolutionForDisplay(
     return { ...pendingFinancialInboxResolution(), status: "archived" };
   }
   return pendingFinancialInboxResolution();
+}
+
+export function restoredFinancialInboxResolution(
+  message: FinancialInboxMessage,
+  restoredStatus: "ignored" | "identified" | "reconciled",
+): FinancialInboxResolution {
+  const resolution = resolutionForDisplay(message);
+  return {
+    ...resolution,
+    status: restoredStatus === "ignored" ? "discarded" : "identified",
+    financialState: restoredStatus === "reconciled" ? "reconciled" : resolution.financialState,
+  };
 }

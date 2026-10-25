@@ -2,6 +2,8 @@ kind,source,symbol,guide,note
 api,src/app/api/mobile/push/devices/route.ts,,docs/engineering/coala-go-parity.md,Registro e revogacao propria de push com sessao e atestacao mobile; sem rota publica de envio.
 api,src/app/api/collaborator/absence-requests/options/route.ts,,docs/engineering/flows/dp-absences.md,Opcoes proprias limitadas e capacidade operacional condicionada ao cutover RH.
 api,src/app/api/collaborator/absence-requests/preview/route.ts,,docs/engineering/flows/dp-absences.md,Previa autenticada sem persistencia ou aceitacao de pedido.
+api,src/app/api/collaborator/documents/route.ts,,docs/engineering/flows/employee-documents.md,GET lista so os documentos do proprio titular publicados para ele (macro 02); consulta filtrada pelo titular; sem escrita.
+api,src/app/api/collaborator/documents/access/route.ts,,docs/engineering/flows/employee-documents.md,POST abre ou baixa documento proprio publicado; outro titular ou nao publicado responde nao encontrado; registra auditoria.
 api,src/app/api/collaborator/absence-requests/route.ts,,docs/engineering/flows/dp-absences.md,Listagem paginada propria ou atribuida e criacao propria RH condicionada ao gate.
 api,src/app/api/collaborator/absence-requests/[requestId]/route.ts,,docs/engineering/flows/dp-absences.md,Detalhe e transicoes autoritativas com versao esperada e operacao idempotente.
 api,src/app/api/collaborator/absence-requests/preparations/route.ts,,docs/engineering/flows/dp-absences.md,Preparacao privada de documentos obrigatorios antes da criacao do pedido.
@@ -33,6 +35,7 @@ api,src/app/api/auth/first-access/[token]/route.ts,,docs/engineering/access-and-
 api,src/app/api/auth/forgot-password/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/last-login/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/password-changed/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/auth/view-as/route.ts,,docs/engineering/access-and-privacy.md,Ferramenta DEV somente leitura; ator real preservado e inicio/fim auditados.
 api,src/app/api/catalogo/route.ts,,docs/engineering/flows/catalog.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/client/bootstrap/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/collaborator/dashboard/route.ts,,docs/engineering/flows/collaborator-dashboard.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -70,6 +73,8 @@ api,src/app/api/documents/templates/[id]/workflow/route.ts,,docs/engineering/flo
 api,src/app/api/documents/templates/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dashboard/layouts/route.ts,,docs/engineering/flows/platform-home.md,Layouts pessoais do painel por UID; modelos compartilhados somente para administradores; preferencia ativa individual.
 api,src/app/api/dp/bootstrap/route.ts,,docs/engineering/flows/dp-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/collaborators/[userId]/employment-reference/route.ts,,docs/engineering/flows/people-access.md,Consulta pontual e publicacao transacional de timeline privada de vinculo por vigencia; consumida pela ficha do colaborador sem polling.
+api,src/app/api/dp/time-recording/employees/[employeeUid]/route.ts,,docs/engineering/flows/dp-time-recording.md,Consulta mensal somente leitura de escala batidas ausencias ajustes e unidades; exige permissao dedicada ou fechamento e escopo da pessoa por unidade.
 api,src/app/api/dp/natasha/team/route.ts,,docs/engineering/flows/dp-schedules.md,Equipe candidata minima da Natasha; leitura autenticada por unidades com permissao dupla e limites fail-closed; sem escala ou escrita.
 api,src/app/api/dp/natasha/journeys/route.ts,,docs/engineering/flows/dp-schedules.md,Jornadas publicadas e historicas resolvidas por pessoa e data; leitura autenticada e limitada por unidades autorizadas; sem premissa manual nem escrita.
 api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Disponibilidade candidata v2 cruza férias e ausências operacionais ativas com ack RH e readiness; leitura autenticada limitada sem folgas ou indisponibilidades externas.
@@ -91,11 +96,35 @@ api,src/app/api/dp/time/overtime-policies/[id]/route.ts,,docs/engineering/flows/
 api,src/app/api/dp/time/overtime-policies/route.ts,,docs/engineering/flows/dp-configuration.md,Listagem limitada e criacao auditada de politica de hora extra sem apuracao financeira.
 api,src/app/api/dp/time/shifts/[id]/route.ts,,docs/engineering/flows/dp-configuration.md,Consulta alteracao e exclusao auditada das definicoes de turno atuais.
 api,src/app/api/dp/time/shifts/route.ts,,docs/engineering/flows/dp-configuration.md,Listagem limitada e criacao auditada das definicoes de turno atuais preservando campos Bizneo.
+api,src/app/api/dp/time-recording/afd/route.ts,,docs/engineering/flows/dp-time-recording.md,Exportacao administrativa limitada por workspace estabelecimento e periodo; falha fechada sem Hora Legal e CAdES da desenvolvedora.
+api,src/app/api/dp/time-recording/aej/route.ts,,docs/engineering/flows/dp-time-recording.md,POST AEJ leiaute 002 de um estabelecimento e periodo de competencias fechadas para o gestor de ponto; originais da ARP mais tratamentos aprovados e horario contratual da escala; CAdES da desenvolvedora; auditoria em ptrp_aejExports.
+api,src/app/api/dp/time-recording/fiscal-options/route.ts,,docs/engineering/flows/dp-time-recording.md,GET lista estabelecimentos fiscais do workspace para gestor global de Tempo selecionar na tela de exportacao AFD e AEJ.
+api,src/app/api/dp/time-recording/options/route.ts,,docs/engineering/flows/dp-time-recording.md,Unidades de execucao do proprio usuario na data pela abrangencia do vinculo historico; somente leitura sem ARP.
+api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno e politica nominal ativos grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
+api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da politica central de geolocalizacao por unidade para gestor de Tempo com escopo; lista nominal do piloto revisao e auditoria autoritativas; nunca le evidencias.
+api,src/app/api/dp/time-recording/offline-permits/route.ts,,docs/engineering/flows/dp-time-recording.md,POST pre-autorizacao de contingencia por ate 12 horas exclusivamente ao Coala Go atestado em modo enforce; ancora Hora Legal unidades e chave P-256 protegida sem criar NSR.
+api,src/app/api/dp/time-recording/month/route.ts,,docs/engineering/flows/dp-time-recording.md,Escala do mes do proprio usuario para o Registro de ponto: escalas do mes uma por unidade e turnos proprios pelo indice userId+date (ate 62) com intervalo do cadastro; somente leitura sem ARP.
+api,src/app/api/dp/time-recording/adjustments/route.ts,,docs/engineering/flows/dp-time-recording.md,GET pedidos de ajuste e tratamentos do proprio titular no mes; POST pedido proprio com justificativa (inclusao desconsideracao ou correcao) validando vinculo batida alvo e competencia aberta; nunca altera a ARP.
+api,src/app/api/dp/time-recording/adjustments/review/route.ts,,docs/engineering/flows/dp-time-recording.md,Fila de ajustes em analise para quem tem dp.requests.review nas unidades acessiveis sem os proprios pedidos; limite 50.
+api,src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts,,docs/engineering/flows/dp-time-recording.md,PATCH aprovar ou recusar com justificativa por quem analisa (nunca o solicitante) ou cancelar pelo titular; aprovar cria desconsideracao e inclusao em ptrp_treatments na mesma transacao com ato encadeado.
+api,src/app/api/dp/time-recording/closures/route.ts,,docs/engineering/flows/dp-time-recording.md,GET situacao e declaracao do fechamento; POST fecha em transacao recusando pendencia e depois apura idempotentemente o banco de toda a equipe congelada com falhas individuais explicitas.
+api,src/app/api/dp/time-recording/closures/[competence]/route.ts,,docs/engineering/flows/dp-time-recording.md,PATCH reabre competencia fechada com dp.timeClosure.reopen motivo e versao esperada; a versao fechada fica preservada e o proximo fechamento declara o que mudou.
+api,src/app/api/dp/time-recording/mirrors/route.ts,,docs/engineering/flows/dp-time-recording.md,GET situacao do espelho do mes fechado e da assinatura do pacote (titular ou dp.timeClosure para outra pessoa) sem escrita; POST gera o instantaneo uma vez por pessoa e versao do fechamento.
+api,src/app/api/dp/time-recording/closing-packages/route.ts,,docs/engineering/flows/dp-time-recording.md,GET o que falta para o pacote do fechamento da pessoa (contracheque e-mail situacao) com dp.timeClosure sem escrita; POST monta espelho e contracheque num PDF assina com e-CNPJ destacado e envia a Autentique uma vez por pessoa e versao do fechamento.
+api,src/app/api/dp/time-recording/mirrors/pdf/route.ts,,docs/engineering/flows/dp-time-recording.md,GET PDF do espelho ja gerado derivado so do instantaneo gravado; titular ou dp.timeClosure; sem escrita.
+api,src/app/api/dp/time-recording/time-bank/route.ts,,docs/engineering/flows/dp-time-recording.md,GET extrato com previa do mes aberto e apuracoes fechadas; POST apura por versao encerra ciclo aprova extra e cria ou estorna compensacao ajuste e lancamento na folha; outra pessoa exige dp.timeClosure.
+api,src/app/api/dp/time-recording/pending-receipts/route.ts,,docs/engineering/flows/dp-time-recording.md,Monitoracao de comprovantes pendentes por workspace para gestor global de Tempo; limitada a 100 sem CPF nem bytes.
+api,src/app/api/dp/time-recording/markings/route.ts,,docs/engineering/flows/dp-time-recording.md,POST batida do proprio usuario com corpo minimo; identidade hora empregador NSR e hash resolvidos no servidor; replay protegido. GET historico proprio por periodo de ate 62 dias limitado a 300 sem CPF nem bytes.
+api,src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts,,docs/engineering/flows/dp-time-recording.md,PATCH organizacional da finalidade de uma batida propria; nao altera instante NSR hash ou comprovante; competencia aberta aplica com trilha e competencia fechada cria pedido de revisao.
+api,src/app/api/dp/time-recording/receipts/[receiptId]/route.ts,,docs/engineering/flows/dp-time-recording.md,Comprovante PDF PAdES do proprio usuario; GET devolve bytes emitidos sem efeito e POST so reemite pendente sem nova batida; documento alheio responde como inexistente.
+api,src/app/api/dp/time-recording/receipts/export/route.ts,,docs/engineering/flows/dp-time-recording.md,GET exporta ao proprio titular um ZIP limitado por periodo com indice e PDFs PAdES originais; pendencias tornam o pacote explicitamente incompleto e hash divergente falha fechado.
+api,src/app/api/dp/time-recording/signer-status/route.ts,,docs/engineering/flows/dp-time-recording.md,Validade do e-CNPJ configurado para gestor global de Tempo; nao le nem devolve a chave.
 api,src/app/api/dp/unit-groups/[groupId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-groups/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-organizations/[organizationId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-organizations/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/units/[unitId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/units/[unitId]/time-zone/route.ts,,docs/engineering/flows/dp-configuration.md,PATCH do fuso da unidade usado na batida de ponto; permissao de gerir unidades; lista fechada de fusos brasileiros; historico na mesma transacao.
 api,src/app/api/dp/units/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts,,docs/engineering/flows/vacation-notice.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/vacations/[vacationId]/events/route.ts,,docs/engineering/flows/vacation-payment-closure.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -136,6 +165,7 @@ api,src/app/api/financial/cash-closures/[closureId]/finalize/route.ts,,docs/engi
 api,src/app/api/financial/cash-closures/[closureId]/reopen/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/cash-closures/[closureId]/supplies/route.ts,,docs/engineering/flows/cash-closures.md,Classificacao transacional de suprimentos em fundo de caixa ou suprimento a partir de 2026-11-01; contrato seguro e auditoria no servidor.
 api,src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts,,docs/engineering/flows/cash-closures.md,Classificacao transacional de sangrias com autenticacao e escopo de unidade/workspace; GET sem escrita.
 api,src/app/api/financial/cash-closures/months/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/overview/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -172,6 +202,7 @@ api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,doc
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/import-sessions/[sessionId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/analyze/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/financial-inbox.md,Consulta segura do contexto da cobrança e correção allowlistada da leitura sem alterar a despesa.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/link/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/payment/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -183,6 +214,7 @@ api,src/app/api/financial/inbox/settings/route.ts,,docs/engineering/flows/financ
 api,src/app/api/financial/management-analysis/route.ts,,docs/engineering/flows/financial-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/authorize/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/proof/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/payment-requests/[id]/recover/route.ts,,docs/engineering/flows/payment-requests.md,Recuperacao versionada apos duas recusas; preserva a tentativa anterior e nao envia automaticamente.
 api,src/app/api/financial/payment-requests/[id]/refresh/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -261,6 +293,10 @@ api,src/app/api/hr/employee-documents/cleanup/route.ts,,docs/engineering/flows/e
 api,src/app/api/hr/employee-documents/confirm/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/item/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/reanalyze/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/hr/employee-documents/publication/route.ts,,docs/engineering/flows/employee-documents.md,POST publica ou retira documento da pasta do colaborador; so DP autorizado com edicao; politica do tipo; retirar exige motivo; auditoria.
+api,src/app/api/hr/employee-documents/publication-policy/route.ts,,docs/engineering/flows/employee-documents.md,GET e PUT da matriz completa de publicacao por tipo; so DP autorizado; UNKNOWN_DOCUMENT permanece nunca.
+api,src/app/api/hr/employee-documents/classification/route.ts,,docs/engineering/flows/employee-documents.md,POST classifica documento legado ainda desconhecido sem publica-lo; confere DP e unidade do titular e audita.
+api,src/app/api/hr/employee-documents/status/route.ts,,docs/engineering/flows/employee-documents.md,POST altera situacao documental com DP e unidade revalidados; validacao dispara a politica de publicacao automatica.
 api,src/app/api/hr/employee-documents/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/summary/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/visibility/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -446,6 +482,7 @@ function,functions/src/index.ts,onResponsibilityUnitGroupChange,docs/engineering
 function,functions/src/index.ts,absenceRetentionDailyReview,docs/engineering/flows/dp-absences.md,onSchedule; detector limitado de vencimentos e aviso privado sem exclusao; deploy nao confirmado.
 function,functions/src/index.ts,absenceRetentionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; continua cursors de reconciliacao por beneficiario limitados; deploy nao confirmado.
 function,functions/src/index.ts,absenceRetentionExecutionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; a cada 15 minutos reconcilia ate 20 exclusoes pela geracao exata; deploy nao confirmado.
+function,functions/src/index.ts,absenceTerminationEffectsResume,docs/engineering/flows/dp-absences.md,onSchedule; a cada 30 minutos so com recibo operacional ready toca ate 20 cadastros com efeitos de desligamento pendentes para reaplicacao por onUserProfileChange; deploy nao confirmado.
 function,functions/src/index.ts,reactivateUser,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcileGeneratedDocumentRetention,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcilePdvSalesHistory,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
@@ -465,6 +502,9 @@ api,src/app/api/collaborator/requests/route.ts,,docs/engineering/flows/collabora
 api,src/app/api/collaborator/requests/[requestId]/route.ts,,docs/engineering/flows/collaborator-requests.md,Cancela analisa ou refaz o termo da solicitacao com trilha persistida.
 api,src/app/api/collaborator/requests/[requestId]/document/route.ts,,docs/engineering/flows/collaborator-requests.md,Entrega privada do termo em DOCX ou PDF ao titular ou RH autorizado.
 api,src/app/api/collaborator/requests/[requestId]/signature/route.ts,,docs/engineering/flows/collaborator-requests.md,Consulta e inicia a assinatura independente do termo gerado.
+api,src/app/api/collaborator/requests/shift-swaps/route.ts,,docs/engineering/flows/collaborator-requests.md,Lista e cria propostas de troca entre dois turnos da mesma unidade e data pelo contrato central.
+api,src/app/api/collaborator/requests/shift-swaps/[requestId]/route.ts,,docs/engineering/flows/collaborator-requests.md,Aceita recusa ou cancela a proposta com identidade auditada; o aceite inverte somente os ocupantes.
+api,src/app/api/collaborator/requests/shift-swaps/options/route.ts,,docs/engineering/flows/collaborator-requests.md,Lista os turnos futuros que podem formar uma proposta segura para o titular.
 api,src/app/api/dev/transport-voucher-templates/[kind]/route.ts,,docs/engineering/flows/collaborator-requests.md,Previa ficticia somente local dos termos de adesao suspensao e reativacao; bloqueada em producao.
 function,functions/src/rh/propagation.ts,checkFieldMapConsistency,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/sync.ts,manualSyncFromBizneo,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
@@ -503,9 +543,10 @@ page,src/app/vagas/banco-de-talentos/page.tsx,,docs/engineering/flows/recruitmen
 page,src/app/vagas/onboarding/[token]/page.tsx,,docs/engineering/flows/onboarding-public-documents.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 api,src/app/api/financial/inbox/mobile-upload/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Envio de nota e comprovante pelo aplicativo com analise unica de IA; idempotente por submissionId; nao registra compra.
+api,src/app/api/financial/inbox/mobile-upload/cancel/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Cancelamento pelo aplicativo de nota enviada e nao confirmada; so quem enviou; descarta a entrada na caixa de entrada e libera a sangria.
 api,src/app/api/mobile/app-attestation/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Troca de token Play Integrity por passe HMAC do proprio usuario; desligado por padrao; nao validado ponta a ponta.
 api,src/app/api/purchasing/local-purchases/confirm/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Confirma compra local revisada; cria despesa e pre-vinculo de sangria e dispara entrada de estoque idempotente em outro banco.
-api,src/app/api/purchasing/local-purchases/context/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Cadastros para a revisao no aplicativo; unidades do usuario e produtos de estoque so com permissao propria; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/context/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Cadastros para a revisao no aplicativo; unidades acessiveis incluem hierarquia explicita de organizacao e grupo; produtos de estoque so com permissao propria; GET sem escrita.
 api,src/app/api/purchasing/local-purchases/list/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Compras locais para a lista geral de compras; leitura limitada e escopo de unidade; GET sem escrita.
 api,src/app/api/purchasing/local-purchases/reverse/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Estorno completo com motivo; desfaz estoque e despesa e libera a sangria; bloqueia se pago ou vinculado no fechamento.
 api,src/app/api/purchasing/local-purchases/withdrawals/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Sangrias do PDV sem nota lidas ao vivo com cache curto; so unidades do usuario; GET sem escrita.
@@ -528,3 +569,12 @@ api,src/app/api/signage/pair/qr/route.ts,,docs/engineering/flows/signage.md,QR c
 api,src/app/api/app/version/route.ts,,docs/engineering/flows/signage.md,Versao publicada do Coala One para o botao de atualizar do app; publica; nao le nem grava.
 api,src/app/api/stock/mobile-count/cancel/route.ts,,docs/engineering/flows/stock-count.md,Cancela (apaga) a contagem aberta do proprio operador pelo aplicativo; nada foi aplicado ao estoque; mesma regra de dono do web.
 api,src/app/api/stock/mobile-count/photo/route.ts,,docs/engineering/flows/stock-count.md,Entrega ao aplicativo a foto do insumo guardada dentro do cadastro (data URI); exige app.stockCount.perform; GET sem escrita.
+api,src/app/api/system-notices/route.ts,,docs/engineering/flows/system-notices.md,Central de avisos com permissao settings.viewSystemNotices e filtro por publico no Firestore; paginada.
+api,src/app/api/jobs/rep-p/receipts-retry/route.ts,,docs/engineering/flows/dp-time-recording.md,Reemissao de 15 em 15 minutos dos comprovantes de ponto pendentes autenticada por SYSTEM_NOTICES_JOB_SECRET; nunca altera a ARP.
+api,src/app/api/jobs/dp/time-closing/overdue/route.ts,,docs/engineering/flows/dp-time-recording.md,POST interno da rotina de hora em hora; pacotes do fechamento sem assinatura em 24 horas ou recusados abrem aviso para os responsaveis pelo fechamento; resolve os que deixaram de ter atraso.
+api,src/app/api/jobs/dp/absences/tacit-approval/route.ts,,docs/engineering/flows/dp-absences.md,Aprovacao por decurso de prazo das ausencias autenticada por SYSTEM_NOTICES_JOB_SECRET; ate 50 pedidos vencidos por execucao pelo mesmo caminho da analise humana.
+api,src/app/api/jobs/system-notices/daily/route.ts,,docs/engineering/flows/system-notices.md,Rotina diaria idempotente autenticada por SYSTEM_NOTICES_JOB_SECRET; certificado Hora Legal do ponto comprovantes pendentes e revisao de normas.
+function,functions/src/system-notice-jobs.ts,repPReceiptRetryJob,docs/engineering/flows/dp-time-recording.md,Agendamento a cada 15 minutos que chama a reemissao de comprovantes de ponto pendentes com o segredo da rotina de avisos.
+function,functions/src/system-notice-jobs.ts,absenceTacitApprovalJob,docs/engineering/flows/dp-absences.md,Agendamento de hora em hora que chama a aprovacao por decurso de prazo das ausencias com o segredo da rotina de avisos.
+function,functions/src/system-notice-jobs.ts,timeClosingOverdueJob,docs/engineering/flows/dp-time-recording.md,Agendada de hora em hora (minuto 20); chama POST /api/jobs/dp/time-closing/overdue para abrir ou resolver o aviso de pacote do fechamento sem assinatura em 24 horas.
+function,functions/src/system-notice-jobs.ts,systemNoticesDailyMonitor,docs/engineering/flows/system-notices.md,Agendamento diario 08h America/Belem que chama a rota de avisos com segredo proprio e verifica certificado comprovantes normas e novo quorum da Hora Legal.

@@ -552,6 +552,9 @@ export async function prepareCashDepositCoinHold(input: {
     if (!batchSnapshot.exists) throw new Error("Bloco de depósito não encontrado.");
     const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
     if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco de depósito não encontrado.");
+    if (batch.countingSessionId) {
+      throw new Error("As moedas desta sessão já foram separadas durante a composição física.");
+    }
     if (!["open", "locked", "failed", "cancelled"].includes(batch.status)) {
       throw new Error("As moedas só podem ser separadas antes da emissão do boleto.");
     }
@@ -942,6 +945,8 @@ export async function reopenCashClosureWithDepositHandling(input: {
       transaction.set(closureRef.collection(CLOSURE_OPERATORS).doc(operator.id), operator);
     }
     for (const detachment of sessionDetachments) {
+      for (const itemRef of detachment.compositionItemRefs) transaction.delete(itemRef);
+      for (const batchRef of detachment.compositionBatchRefs) transaction.delete(batchRef);
       transaction.delete(detachment.operatorRef);
       if (detachment.sessionUpdate) transaction.set(detachment.sessionRef, detachment.sessionUpdate, { merge: true });
       for (const lock of detachment.locks) transaction.set(lock.ref, lock.value);

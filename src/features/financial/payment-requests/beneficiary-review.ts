@@ -31,8 +31,9 @@ export function canRevalidatePaidBeneficiary(request: BankPaymentRequest) {
   return request.status === "paid"
     && request.paymentRail !== "barcode"
     && request.statementReconciliationStatus === "matched"
-    && request.beneficiaryVerificationStatus === "divergent"
-    && request.bankReconciliationDivergenceField === "receiver"
+    && (request.beneficiaryVerificationStatus === "divergent"
+      ? request.bankReconciliationDivergenceField === "receiver"
+      : request.beneficiaryVerificationStatus === "unavailable")
     && Boolean(request.statementTransactionId && request.expenseId && request.interRequestId);
 }
 

@@ -51,6 +51,7 @@ import java.util.Locale
 
 val LocalImages = staticCompositionLocalOf<ImageLoader> { error("ImageLoader unavailable") }
 val LocalOwner = staticCompositionLocalOf { "anonymous" }
+val LocalDeveloperViewAsName = staticCompositionLocalOf<String?> { null }
 fun money(cents: Long) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(cents / 100.0)
 fun moneyValue(value: Double) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(value)
 
@@ -106,12 +107,20 @@ fun shortDate(value: String?): String? {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Tokens.dark).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp)) {
                 if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack)
             }
+            LocalDeveloperViewAsName.current?.let { targetName ->
+                Text("Visualizando como $targetName · somente leitura", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.fillMaxWidth().background(Tokens.warningBg).padding(horizontal = 20.dp, vertical = 10.dp))
+            }
             // What survives without a connection is said in words, not left for the person to guess.
-            if (!online) Text("Sem conexão. Rascunhos de contagem e notas de compra ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            if (!online) Text("Sem conexão. Rascunhos, notas de compra e o ponto previamente autorizado ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp).background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             val body: @Composable () -> Unit = {
-                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+                // Cada rota começa no topo. Sem a chave, o mesmo slot do Compose herdava a
+                // rolagem da lista anterior ao abrir, por exemplo, o Detalhe do dia.
+                key(title) {
+                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+                    }
                 }
             }
             // Lists refresh by pulling down; there is no refresh button in the bar.
@@ -147,11 +156,16 @@ fun shortDate(value: String?): String? {
 @Composable fun rememberOnline(): Boolean {
     val context = LocalContext.current
     val manager = remember { context.getSystemService(android.net.ConnectivityManager::class.java) }
-    var online by remember { mutableStateOf(manager?.let { it.getNetworkCapabilities(it.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true } ?: true) }
+    fun connected() = manager?.let { service -> service.getNetworkCapabilities(service.activeNetwork)?.let { capabilities ->
+        capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            && capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } == true } ?: true
+    var online by remember { mutableStateOf(connected()) }
     DisposableEffect(manager) {
         val callback = object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) { online = true }
-            override fun onLost(network: android.net.Network) { online = manager?.activeNetwork != null }
+            override fun onAvailable(network: android.net.Network) { online = connected() }
+            override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) { online = connected() }
+            override fun onLost(network: android.net.Network) { online = connected() }
         }
         runCatching { manager?.registerDefaultNetworkCallback(callback) }
         onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }
@@ -207,6 +221,7 @@ fun shortDate(value: String?): String? {
     if (secondary) OutlinedButton(onClick, enabled = enabled && !busy, colors = ButtonDefaults.outlinedButtonColors(containerColor = if (dark) Color.Transparent else Tokens.surface, contentColor = if (dark) Tokens.onDark else Tokens.ink, disabledContentColor = if (dark) Tokens.onDark2 else Tokens.muted), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, if (dark) Tokens.onDark.copy(alpha = .14f) else Tokens.fieldBorder), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
     else Button(onClick, enabled = enabled && !busy, colors = ButtonDefaults.buttonColors(disabledContainerColor = if (dark) Tokens.accent.copy(alpha = .32f) else Tokens.ink.copy(alpha = .12f), disabledContentColor = if (dark) Tokens.onDark.copy(alpha = .6f) else Tokens.muted), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (busy) "Aguarde…" else label) }
 }
+
 @Composable fun Field(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(value, onValueChange = onChange, enabled = enabled, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Tokens.soft, focusedContainerColor = Tokens.soft), label = { Text(label) }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Text))
 }
@@ -251,20 +266,20 @@ fun shortDate(value: String?): String? {
     SelectorCard(label, values.firstOrNull { it.first == selected }?.second, "Selecionar", enabled) { open = true }
     if (open) PickerSheet(label, values, selected, onSelect) { open = false }
 }
-/** Compact unit switcher in a dark page header, shared by Metas and Escala. */
-@Composable fun UnitPickerHeader(values: List<Pair<String, String>>, selected: String, busy: Boolean, onSelect: (String) -> Unit) {
+/** Compact switcher in a dark page header: the unit in Metas and Escala, the organization in Compra local. */
+@Composable fun UnitPickerHeader(values: List<Pair<String, String>>, selected: String, busy: Boolean, label: String = "Unidade", action: String = "Trocar unidade", onSelect: (String) -> Unit) {
     if (values.isEmpty()) return
     var choosingUnit by rememberSaveable { mutableStateOf(false) }
     val several = values.size > 1
-    if (choosingUnit) PickerSheet("Unidade", values, selected, onSelect) { choosingUnit = false }
+    if (choosingUnit) PickerSheet(label, values, selected, onSelect) { choosingUnit = false }
     Spacer(Modifier.height(10.dp))
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !busy, role = Role.Button, onClickLabel = action) { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
-            Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-            Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher unidade", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label.uppercase(), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+            Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher ${label.lowercase()}", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (several) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Trocar unidade", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+            Text(action, color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
             DropdownChevron(choosingUnit, Tokens.pink)
         }
     }
@@ -371,5 +386,8 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, label: String, onConfirm: () -> Unit) {
-    CardBlock { Text(message); Action("Voltar", busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
+    InlineConfirmation(message, busy, onCancel, "Voltar", label, onConfirm)
+}
+@Composable fun InlineConfirmation(message: String, busy: Boolean, onCancel: () -> Unit, cancelLabel: String, label: String, onConfirm: () -> Unit) {
+    CardBlock { Text(message); Action(cancelLabel, busy, secondary = true, onClick = onCancel); Action(label, busy, onClick = onConfirm) }
 }

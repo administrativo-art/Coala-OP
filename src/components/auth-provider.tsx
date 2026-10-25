@@ -16,6 +16,12 @@ import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
 } from '@/features/hr/lib/client';
+import {
+  isDeveloperViewAsEmail,
+  type DeveloperViewAsDirectory,
+  type DeveloperViewAsUser,
+} from '@/features/auth/developer-view-as';
+import { resolveAuthenticatedEmail } from '@/features/auth/authenticated-email';
 
 export interface TerminateUserPayload {
   uid: string;
@@ -28,6 +34,7 @@ export interface TerminateUserPayload {
 
 export interface AuthContextType {
   user: User | null;
+  authenticatedUser: User | null;
   firebaseUser: FirebaseUser | null;
   users: User[];
   activeUsers: User[];
@@ -36,6 +43,11 @@ export interface AuthContextType {
   loading: boolean;
   isDefaultAdmin: boolean;
   permissions: PermissionSet;
+  canViewAs: boolean;
+  viewAs: DeveloperViewAsUser | null;
+  viewAsUsers: DeveloperViewAsUser[];
+  startViewAs: (targetUserId: string) => Promise<void>;
+  stopViewAs: () => Promise<void>;
   login: (email: string, password: string) => Promise<{
     success: boolean;
     error?: string;
@@ -101,7 +113,9 @@ async function hasEmulatorIdToken(user: FirebaseUser) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [authenticatedAppUser, setAuthenticatedAppUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
+  const [viewAsDirectory, setViewAsDirectory] = useState<DeveloperViewAsDirectory | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
   const [loading, setLoading] = useState(true);
@@ -115,7 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
 
       if (!user) {
+        setAuthenticatedAppUser(null);
         setAppUser(null);
+        setViewAsDirectory(null);
         setPermissions(defaultGuestPermissions);
         setPermissionsReady(true);
         setLoading(false);
@@ -127,7 +143,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const isEmulatorToken = await hasEmulatorIdToken(user).catch(() => false);
           if (!isEmulatorToken) {
             await signOut(auth);
+            setAuthenticatedAppUser(null);
             setAppUser(null);
+            setViewAsDirectory(null);
             setPermissions(defaultGuestPermissions);
             setPermissionsReady(true);
             setLoading(false);
@@ -179,16 +197,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = fallbackUser ?? ({ id: userDocSnap!.id, ...userDocSnap!.data() } as User);
           if (userData.isActive === false) {
             await signOut(auth);
+            setAuthenticatedAppUser(null);
             setAppUser(null);
+            setViewAsDirectory(null);
             setPermissions(defaultGuestPermissions);
             setPermissionsReady(true);
             setLoading(false);
             return;
           }
-          setAppUser(userData);
+          setAuthenticatedAppUser(userData);
+          if (isDeveloperViewAsEmail(resolveAuthenticatedEmail(user.email, userData.email))) {
+            try {
+              const token = await user.getIdToken();
+              const response = await fetch('/api/auth/view-as', {
+                headers: { Authorization: `Bearer ${token}` },
+                cache: 'no-store',
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const directory = await response.json() as DeveloperViewAsDirectory;
+              setViewAsDirectory(directory);
+              if (directory.targetUserId) {
+                const payload = await fetchClientBootstrap(user, ['currentUser']);
+                setAppUser(payload.currentUser ?? userData);
+              } else {
+                setAppUser(userData);
+              }
+            } catch {
+              setViewAsDirectory(null);
+              setAppUser(userData);
+            }
+          } else {
+            setViewAsDirectory(null);
+            setAppUser(userData);
+          }
         } else {
           await signOut(auth);
+          setAuthenticatedAppUser(null);
           setAppUser(null);
+          setViewAsDirectory(null);
         }
       }
       setLoading(false);
@@ -378,9 +424,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [recordLoginAccess]);
 
   const logout = useCallback(async () => {
+    const current = auth.currentUser;
+    if (current && isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) {
+      const token = await current.getIdToken().catch(() => null);
+      if (token) {
+        await fetch('/api/auth/view-as', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => undefined);
+      }
+    }
     await signOut(auth);
     window.location.href = '/login'; // reload completo mata todos os listeners
-  }, []);
+  }, [authenticatedAppUser?.email]);
+
+  const startViewAs = useCallback(async (targetUserId: string) => {
+    const current = auth.currentUser;
+    if (!current || !isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) {
+      throw new Error('Esta ferramenta não está disponível para este usuário.');
+    }
+    const token = await current.getIdToken();
+    const response = await fetch('/api/auth/view-as', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ targetUserId }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error?.message ?? payload?.error ?? 'Não foi possível iniciar a visualização.');
+    }
+    window.location.reload();
+  }, [authenticatedAppUser?.email]);
+
+  const stopViewAs = useCallback(async () => {
+    const current = auth.currentUser;
+    if (!current || !isDeveloperViewAsEmail(resolveAuthenticatedEmail(current.email, authenticatedAppUser?.email))) return;
+    const token = await current.getIdToken();
+    const response = await fetch('/api/auth/view-as', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error?.message ?? payload?.error ?? 'Não foi possível encerrar a visualização.');
+    }
+    window.location.reload();
+  }, [authenticatedAppUser?.email]);
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string) => {
     try {
@@ -530,6 +622,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     user: appUser,
+    authenticatedUser: authenticatedAppUser,
     firebaseUser,
     users,
     activeUsers,
@@ -538,6 +631,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading: loading || profilesLoading || !permissionsReady,
     isDefaultAdmin,
     permissions,
+    canViewAs: isDeveloperViewAsEmail(resolveAuthenticatedEmail(firebaseUser?.email, authenticatedAppUser?.email)),
+    viewAs: viewAsDirectory?.targetUser ?? null,
+    viewAsUsers: viewAsDirectory?.users ?? [],
+    startViewAs,
+    stopViewAs,
     login,
     logout,
     addUser,
@@ -549,15 +647,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     changePassword,
     recordLoginAccess,
   }), [
-    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading, isDefaultAdmin,
-    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, reactivateUser, resetPassword, changePassword, recordLoginAccess,
+    appUser, authenticatedAppUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading, isDefaultAdmin,
+    permissionsReady, permissions, viewAsDirectory, startViewAs, stopViewAs, login, logout, addUser, updateUser, deleteUser, terminateUser, reactivateUser, resetPassword, changePassword, recordLoginAccess,
   ]);
 
   return (
     <AuthContext.Provider value={value}>
       {children}
       <ChangePasswordModal
-        open={!!appUser?.mustChangePassword}
+        open={!!authenticatedAppUser?.mustChangePassword && !viewAsDirectory?.targetUser}
         onOpenChange={() => undefined}
         forceChange
       />

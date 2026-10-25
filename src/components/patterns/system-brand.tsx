@@ -14,7 +14,7 @@ export interface SystemBrandProps {
 
 /**
  * Marca do sistema no topo das barras laterais (docs/design/barra-lateral.md): o logotipo anima o tamanho
- * junto com a barra e, expandida, mostra "Coala + palavra" separada por um filete rosa.
+ * junto com a barra e, expandida, mostra "Coala + palavra" separada por um filete luminoso.
  */
 export function SystemBrand({ collapsed, accent, animation = "pulse", className }: SystemBrandProps) {
   return (
@@ -33,14 +33,22 @@ export function SystemBrand({ collapsed, accent, animation = "pulse", className 
         />
       </div>
       {!collapsed && (
-        <span
-          className={cn(
-            "whitespace-nowrap border-l-2 border-ds-accent py-1.5 pl-3 text-[17px] font-extrabold leading-none tracking-[-0.01em] text-ds-on-dark",
-            animation === "pulse" && "coala-pulse-name"
+        <>
+          {animation === "shimmer" && (
+            <span
+              aria-hidden="true"
+              className="coala-shimmer-divider h-11 w-0.5 shrink-0 rounded-full bg-ds-accent"
+            />
           )}
-        >
-          Coala <span className={animation === "shimmer" ? "coala-shimmer-word" : "text-ds-accent-kicker"}>{accent}</span>
-        </span>
+          <span
+            className={cn(
+              "whitespace-nowrap py-1.5 text-[17px] font-extrabold leading-none tracking-[-0.01em] text-ds-on-dark",
+              animation === "pulse" && "coala-pulse-name border-l-2 border-ds-on-dark pl-3"
+            )}
+          >
+            Coala <span className={animation === "shimmer" ? "coala-shimmer-word" : "text-ds-accent-kicker"}>{accent}</span>
+          </span>
+        </>
       )}
     </div>
   )

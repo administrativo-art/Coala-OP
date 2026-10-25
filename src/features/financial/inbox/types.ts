@@ -1,4 +1,4 @@
-import type { MobilePurchaseAnalysis } from "./mobile-upload";
+import type { MobileFiscalVerification, MobilePurchaseAnalysis } from "./mobile-upload";
 
 export type FinancialInboxStatus =
   | "pending_review"
@@ -8,6 +8,7 @@ export type FinancialInboxStatus =
   | "identified"
   | "linked"
   | "awaiting_authorization"
+  | "payment_failed"
   | "scheduled"
   | "awaiting_statement"
   | "reconciled"
@@ -30,7 +31,7 @@ export type FinancialInboxRetentionClass =
   | "financial_standard"
   | "tax_or_payroll";
 
-export type FinancialInboxView = "work" | "identified";
+export type FinancialInboxView = "work" | "identified" | "noise" | "discarded";
 
 export type FinancialInboxAutomationMode = "manual" | "document_identity";
 
@@ -39,6 +40,16 @@ export type FinancialInboxAutomationSettings = {
   policyVersion: number;
   updatedAt: string | null;
   updatedBy: string | null;
+};
+
+export type FinancialInboxBankAutomationPolicy = {
+  enabled: false;
+  suppliers: Array<{ senderDomain: string; supplierTaxId: string }>;
+  maxPerPaymentCents: number | null;
+  maxPerPeriodCents: number | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  approvedBy: string | null;
 };
 
 export type FinancialInboxResolutionStatus =
@@ -338,6 +349,7 @@ export type FinancialInboxMessage = {
   from: string;
   fromAddress: string | null;
   senderDomain: string | null;
+  senderAuthentication?: import("./triage-policy").FinancialInboxSenderAuthentication | null;
   to: string[];
   originalRecipients: string[];
   subject: string;
@@ -345,9 +357,11 @@ export type FinancialInboxMessage = {
   textPreview: string;
   textContent: string;
   classification: FinancialInboxClassification;
+  triage?: import("./triage-policy").FinancialInboxTriage | null;
   attachments: FinancialInboxAttachment[];
   mobilePurchaseFundingSource?: "cash_withdrawal" | "company_payment";
   mobilePurchaseAnalysis?: MobilePurchaseAnalysis | null;
+  mobileFiscalVerification?: MobileFiscalVerification | null;
   rawStoragePath: string | null;
   rawSha256: string | null;
   archiveWarnings: string[];
@@ -364,6 +378,8 @@ export type FinancialInboxMessage = {
   existingSettlement?: FinancialInboxExistingSettlement | null;
   linkedExpenseInstallmentNumber?: number | null;
   bankState?: FinancialInboxBankState | null;
+  bankTransactionId?: string | null;
+  paymentProjectionVersion?: number | null;
   statementTransactionId?: string | null;
   resolution?: FinancialInboxResolution | null;
   resolutionContractVersion?: number;

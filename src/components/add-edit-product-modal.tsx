@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useFieldArray, useForm, type DefaultValues } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';

@@ -1,3227 +1,559 @@
-# Plano — Jornada e Fechamento de RH
+# Plano — Ponto, Jornada e Fechamento da Competência
 
-**Produto:** Coala OP  
-**Status:** Planejamento revisado  
-**Última atualização:** 12/08/2026  
+**Produto:** Coala OP / Coala Go
+
+**Status:** fases técnicas 1–6 publicadas; ensaio nominal segregado em validação; coleta oficial, conformidade formal, lançamento total e saída do Bizneo continuam bloqueados
+
+**Última atualização:** 23/10/2026
+
 **Responsável funcional:** RH / Administração
 
-> **Atualização de 14/10/2026:** o Coala passará a ter REP-P próprio, conforme [plano-rep-p-controle-de-ponto.md](plano-rep-p-controle-de-ponto.md). Quando ele for promovido, a fonte das batidas descrita na seção 2.1 deixa de ser o sistema externo e passa a ser a ARP do Coala; até lá, o sistema externo continua sendo a fonte oficial.
+**Titular do sistema:** CT Sorvetes LTDA — CNPJ 14.276.603/0001-25, informado pelo proprietário em 17/10/2026. O e-CNPJ utilizado é o dessa pessoa jurídica; “Coala” identifica o sistema/marca neste plano.
+
+> CT Sorvetes LTDA usa seu e-CNPJ como titular do sistema; Coala é a marca/produto. O papel documental de desenvolvedora será conferido na Fase 0. INPI, certificados reais e atestados antecedem o piloto com empregados reais. Este documento não declara conformidade já alcançada.
+
+## Documentos deste plano
+
+| Documento | Papel |
+| --- | --- |
+| Este plano mestre | Decisões, fases, PTRP, fechamento, contador e critérios de promoção |
+| [REP-P e conformidade](plano-rep-p-controle-de-ponto.md) | Registro original, documentos fiscais, assinaturas e matriz jurídica |
+| [Ausências do DP](engineering/flows/dp-absences.md) | Ausências, efeitos na escala e integração futura com ponto/folha |
+| [Escalas do DP](engineering/flows/dp-schedules.md) | Escala atual, turnos, folgas e validações |
+| [Férias](engineering/flows/vacation-scheduling.md) e [desligamento](termination-effects-map.md) | Entradas da competência e efeitos sobre vínculos/acessos |
+
+A especificação jurídica e do REP-P fica no documento complementar; PTRP e fechamento ficam neste plano, sem fontes normativas paralelas.
 
 ## 1. Objetivo
 
-Criar no Coala um subproduto completo de Jornada e Fechamento de RH capaz de:
-
-1. Manter contratos, regras de jornada, turnos, escalas, feriados, folgas, férias e ausências.
-2. Receber e armazenar as batidas individuais fornecidas pelo sistema externo de ponto.
-3. Associar as batidas aos colaboradores já cadastrados no Coala.
-4. Construir a jornada esperada de cada colaborador em cada dia.
-5. Interpretar as batidas por meio do Motor de Apuração de Jornada do Coala.
-6. Calcular jornada trabalhada, intervalos, atrasos, ausências, excedentes e horas extras.
-7. Detectar ocorrências e permitir justificativas, documentos, ajustes e decisões administrativas.
-8. Reprocessar apenas os dias ou períodos afetados quando alguma informação relevante mudar.
-9. Converter os resultados finais em eventos estruturados de folha.
-10. Fechar a competência com histórico, versões, ressalvas e auditoria.
-11. Exportar o resumo mensal para a contabilidade.
-12. Posteriormente, controlar envio, retorno, conciliação, correções, aprovação e documentos definitivos da folha.
-
-O novo produto nascerá em paralelo ao fluxo atualmente utilizado. Nesta primeira etapa, não substituirá, modificará nem escreverá automaticamente na escala atual do Coala. A primeira validação ocorrerá exclusivamente com um colaborador fictício explicitamente marcado como teste; depois serão utilizados modo sombra, piloto controlado e expansão gradual antes de qualquer migração definitiva.
-
-O núcleo funcional do produto será o seguinte:
+Construir o ciclo interno completo:
 
 ```text
-CONTRATO / REGRAS DO COLABORADOR
-        +
-TURNO
-        +
-ESCALA DO DIA
-        +
-FERIADO
-        +
-FOLGA
-        +
-FÉRIAS
-        +
-AUSÊNCIAS
-        +
-OUTRAS EXCEÇÕES
-        +
-BATIDAS DO SISTEMA EXTERNO
-        ↓
-MOTOR DE APURAÇÃO DO COALA
-        ↓
-APURAÇÃO DA JORNADA
-        ↓
-OCORRÊNCIAS
-        ↓
-TRATAMENTO DO RH
-        ↓
-EVENTOS DE FOLHA
+Contrato/regras vigentes + escala histórica + férias/ausências/feriados
+                                 +
+Coala Go → REP-P → registro original preservado → comprovante / AFD
+                                 ↓
+PTRP → apuração → ocorrências → tratamento → AEJ / espelho
+                                 ↓
+Eventos → fechamento versionado → contador → conciliação
 ```
 
-## 2. Decisões fundamentais
+O sistema registra a jornada real, explica cálculos e preserva evidências. INPI não certifica cálculo trabalhista; validade probatória depende também da configuração, integridade e operação.
 
-### 2.1. O sistema externo será somente a fonte das batidas
+## 2. Postura jurídica e responsabilidades
 
-O sistema externo de ponto será responsável por registrar e fornecer as marcações realizadas pelos colaboradores. O contrato de integração deverá obter, sempre que disponível:
+- Aplicar CLT, regulamentação do ponto e instrumentos coletivos efetivamente aplicáveis, por estabelecimento, categoria e vigência.
+- CCT/ACT não é autorização necessária para adotar REP-P e não bloqueia o início do núcleo técnico. Consultar instrumentos existentes quando aplicáveis à apuração; não exigir a criação de um acordo coletivo apenas para implementar o ponto.
+- REP-P próprio, sem presumir homologação geral pelo MTE. A documentação de conformidade contempla REP-P e PTRP.
+- CT Sorvetes LTDA — CNPJ 14.276.603/0001-25 é a titular informada para os dois componentes; o plano prevê seu e-CNPJ nas assinaturas da desenvolvedora e no depósito direto ao INPI. Confirmar documentalmente esse papel na Fase 0; não usar a marca Coala no lugar da razão social.
+- Responsáveis legal e técnico assinam atestados com certificados pessoais ICP-Brasil; identificar ambos na Fase 0.
+- Advogado trabalhista valida enquadramento, regras e instrumentos no início; contador valida eventos, unidades e efeitos de folha. A Fase 7 confirma a implementação final.
+- Separar obrigação legal, interpretação pendente e controle técnico escolhido. Fonte e evidência acompanham a obrigação; teste de eficácia acompanha o controle.
+- Conferir CNAE/enquadramento com o contador. Uso interno não autoriza comercialização.
+- Verificar titularidade e licenças do código; obter cessões quando necessárias, sem presumir cessão de toda dependência de terceiros.
+- Este plano não autoriza deploy, migração real, compra de certificados, pagamento de GRU ou publicação.
 
-- Identificador externo do colaborador.
-- Data e hora da batida.
-- Identificador estável da batida.
-- Origem ou dispositivo.
-- Timezone.
-- Data de criação e de alteração.
-- Estado de cancelamento ou exclusão.
-- Indicação de inserção manual na origem.
-- Demais metadados técnicos fornecidos pela API.
+## 3. Decisões fundamentais
 
-Exemplo:
+### 3.1. Ponto próprio e transição
 
-```text
-Colaborador: Maria Silva
-Data: 12/08/2026
+Bizneo permanece oficial por estabelecimento até a promoção do Coala. Não haverá conector de batidas para o PTRP nesta implementação; comparação por relatório/exportação. A exportação atual de escala ao Bizneo permanece enquanto necessária.
 
-Batidas:
-09:58
-12:31
-12:46
-16:17
-```
+Preferir mudança oficial na fronteira de competência. Troca ou retorno no meio do período exige consolidação rastreável das duas origens, sem recriar batidas antigas na ARP Coala.
 
-O sistema externo não será considerado responsável por calcular atrasos, faltas, horas extras, intervalos ou qualquer interpretação funcional da jornada.
+### 3.2. REP-P registra; PTRP trata
 
-### 2.2. O Coala será o motor oficial de apuração na arquitetura-alvo
+Ajuste, abono, pré-assinalação e decisão de folha não reescrevem originais. Ausência aprovada, falta de escala ou de autorização de extra não bloqueiam a coleta. A hora registrada não pode ser substituída pela hora contratual.
 
-O Coala combinará regras internas e batidas externas para produzir a apuração de jornada. Durante `TESTE` e `SHADOW`, esse resultado será experimental ou comparativo; somente nos escopos formalmente promovidos a `PILOTO` ou `PRODUÇÃO` ele se tornará oficial. O motor deverá calcular ou identificar, conforme as regras aplicáveis:
+### 3.3. Escala atual com memória histórica
 
-- Jornada prevista.
-- Jornada efetivamente trabalhada.
-- Entrada antecipada.
-- Atraso.
-- Saída antecipada.
-- Permanência posterior ao horário.
-- Intervalo realizado.
-- Intervalo menor ou maior que o previsto.
-- Ausência parcial.
-- Ausência integral.
-- Falta de batida.
-- Quantidade incompatível de batidas.
-- Jornada excedente.
-- Hora extra.
-- Trabalho em folga.
-- Trabalho em feriado.
-- Batida em dia sem jornada.
-- Escala sem batida.
-- Batida sem escala.
-- Outras irregularidades configuráveis.
+Não haverá Escala V2. Distinguir jornada contratual, escala planejada, alterações por férias/ausências/desligamento e trabalho registrado. Retirar pessoa de um turno por ausência não pode apagar a referência necessária para explicar abono, débito ou falta. PTRP lê; não reescreve escala.
 
-### 2.3. Quatro camadas de informação
+### 3.4. Regras por matéria e vigência
 
-O modelo funcional e as telas deverão manter separadas quatro camadas:
+Não há precedência universal “contrato → lei → CCT → empresa”. Resolver cada matéria conforme limites legais, instrumento aplicável, condições contratuais e validação jurídica.
 
-#### Jornada esperada
+Guardar assunto, valor/unidade, fonte, artigo/cláusula, abrangência, vigência e responsável pela validação. Mudança cria versão; não altera silenciosamente períodos anteriores.
 
-O que deveria acontecer no dia, determinado a partir de contrato, carga horária, turno, escala, folga, férias, feriados, ausências reconhecidas e regras aplicáveis.
+### 3.5. Quantidades, não valores
 
-#### Registro real
+O motor de ponto produz quantidades e natureza dos eventos; contador calcula sua remuneração, incidências e reflexos. Isso não elimina valores monetários já apurados por outros módulos, como metas: estes são integrados com origem, moeda e versão, sem conversão em horas ou recálculo pelo ponto. O contrato de integração distingue horas extras, noturno, intervalo suprimido, ausências, banco e benefícios.
 
-O que foi efetivamente marcado: as batidas recebidas do sistema externo, preservadas com sua origem e metadados.
+### 3.6. Tolerância
 
-#### Apuração automática
+Separar alerta operacional e apuração remuneratória. Respeitar limites aplicáveis por marcação e por dia, sem arredondar originais. Tempo à disposição e atividades particulares exigem regra validada; não são inferidos apenas da presença.
 
-O resultado calculado pelo Motor de Jornada do Coala, como atraso de 9 minutos, falta de batida de saída, intervalo de 20 minutos, 1h10 de jornada excedente ou trabalho em feriado.
+**Decisão do programador (20/10/2026): uma só tolerância, na jornada** (`toleranceMinutes`, 0 a 10 min). Diferença do dia dentro dela não gera débito nem crédito; acima, conta inteira (Súmula 366 do TST). Vale também para os avisos de entrada, saída e intervalo. Saíram a tolerância geral da política de hora extra (`dailyToleranceMinutes`, que fica só nos documentos antigos, sem uso) e as do intervalo no turno. Jornada sem o campo = sem tolerância. **Pendências do Doc Brown (20/10/2026, conforme com ressalvas):** (a) **pergunta ao advogado:** a empresa pode zerar até 10 min diários concentrados numa única marcação, ou cada marcação precisa respeitar 5 min? Até a resposta, o apurador do fechamento deve aplicar |entrada| ≤ 5, |saída| ≤ 5 e soma ≤ tolerância da jornada; hoje a margem única vale só na prévia do Registro de ponto. (b) Na apuração, redução de intervalo (art. 71, Súmula 437) não herda a tolerância do art. 58 §1º; a margem fica só no aviso. (c) Cadastrar o valor em cada jornada antes do uso. (d) Antes do apurador, ler a tolerância congelada na referência do turno e usar a jornada só para turnos antigos.
 
-#### Tratamento administrativo
+### 3.6.1. Modalidades de intervalo e avisos na batida (decidido e implementado em 19/10/2026)
 
-A decisão posterior do RH, com justificativa, documentos e ajustes quando aplicáveis.
+Decisão do programador sobre o cadastro do turno; implementação depende das decisões abertas abaixo e de revisão do Doc Brown, porque turno alimenta escala e PTRP.
 
-Exemplo:
+| Grupo | Modalidade | Regra | Hoje no cadastro |
+| --- | --- | --- | --- |
+| — | Sem intervalo | — | `none` |
+| Fixo | Fixo único | Um horário definido (início e fim) | `fixed` ("Único pré-definido") |
+| Fixo | Fixo intercalado | Vários horários definidos | novo |
+| Flexível | Livre | Duração total em uma pausa, a qualquer momento do turno | `flexible` |
+| Flexível | Intercalado livre | Duração total em 2+ pausas; quantidade definida ou em aberto | novo |
+| Flexível | Janela livre | Uma pausa dentro de um período definido | `staggered` ("Intercalado") |
+| Flexível | Janela intercalada livre | Duração total dentro do período, em várias pausas (quantidade definida ou em aberto) | novo |
 
-```text
-Jornada esperada:
-10:00 às 16:15
+Turnos existentes caem no tipo equivalente sem migração; campos novos: lista de horários (fixo intercalado), quantidade de pausas (número ou em aberto) e tolerância para mais/para menos. Conferir se o export Bizneo aceita mais de dois blocos para o fixo intercalado.
 
-Batidas originais:
-10:00
-12:30
-12:45
-—
+**Avisos na faixa de registro e no painel do dia** (calculados na tela com a hora oficial e o turno escalado do dia; sem leitura recorrente; nunca bloqueiam a batida — art. 74):
 
-Apuração automática:
-Batida final ausente
+- **Fixo:** proximidade do início e do fim de cada horário; durante a pausa, "volte às HH:MM"; após o fim sem retorno, alerta.
+- **Livre e intercalado livre:** limite para iniciar = fim do turno − tempo de intervalo que ainda falta. Ex.: turno até 14:00 e 15 min → iniciar até 13:45.
+- **Janela livre e janela intercalada:** antes da janela, quando ela abre; dentro, enquanto o intervalo não começou, o **limite para iniciar = fim da janela − tempo de intervalo que ainda falta** (janela até 14:00 e 15 min → até 13:45). A duração vem da jornada/turno de cada pessoa, nunca de valor fixo.
+- **Intercalados:** tempo usado × total, pausas feitas × previstas e limite recalculado com o que falta.
+- Níveis: informativo (azul) até 15 min antes; atenção (mostarda) a 10 min do limite ou 2 min do fim da pausa; problema (rosado) quando passa do limite sem intervalo, excede total + tolerância ou fica abaixo do mínimo.
+- Batidas esperadas = 2 + 2 × pausas; estado (trabalhando/em pausa) pela ordem das batidas do dia.
 
-Tratamento do RH:
-Saída confirmada administrativamente às 16:15
+**Notas explicativas do cadastro** (substituem o texto atual do tooltip "Tipos de intervalo" em `dp-settings-shifts.tsx`, junto com o guia `docs/engineering/flows/dp-configuration.md`):
 
-Motivo:
-Colaborador esqueceu de registrar a saída.
+- **Sem intervalo:** o turno não prevê pausa.
+- **Fixo único:** um horário definido de início e fim (ex.: 13:00–13:15). A batida avisa a proximidade do início e do fim.
+- **Fixo intercalado:** vários horários definidos (ex.: 11:00–11:10 e 15:00–15:10). Cada pausa tem seu aviso.
+- **Livre:** só a duração; a pessoa escolhe quando. A batida mostra até que horas o intervalo precisa começar para caber antes do fim do turno.
+- **Intercalado livre:** a duração total pode ser dividida em duas ou mais pausas, em número definido ou em aberto. A batida mostra o tempo usado, o que falta e o limite para iniciar.
+- **Janela livre:** uma pausa dentro de um período (ex.: entre 14:00 e 16:00). Enquanto o intervalo não começa, a batida mostra o limite para iniciar dentro da janela (fim da janela menos a duração).
+- **Janela intercalada livre:** a duração total dentro do período, em várias pausas (número definido ou em aberto), com o mesmo limite calculado sobre o que falta.
+- **Tolerância:** não fica no turno; vale a tolerância única da jornada (seção 3.6). O mínimo legal continua valendo.
 
-Resultado final:
-Jornada regular
-```
+**Implementação (19/10/2026):** cadastro com as sete modalidades, tolerância do intervalo (substituída em 20/10/2026 pela tolerância única da jornada, seção 3.6), pausa mínima opcional e quantidade de pausas definida ou em aberto (até 10); avisos na faixa do Registro de ponto. **Limites conhecidos:** a prévia do Registro de ponto lê o cadastro vivo do turno (alterar tolerância ou horários muda o "a conferir" de dias passados); o PTRP/AEJ deve usar o turno congelado ou versionado com modalidade, horários, tolerâncias, quantidade e pausa mínima. Fixo intercalado não aceita pausa depois da meia-noite em turno noturno. O aviso de horário fixo existe sempre (proximidade e pausa não feita), independentemente de tolerância cadastrada. **Ainda em aberto:** horário mínimo para iniciar no livre, antecedência definitiva dos avisos (provisória 15/10 min) e aviso ao gestor (não implementado). **Pergunta ao Doc Brown/advogado:** fracionar o intervalo legal (arts. 71 e 611-A da CLT) em várias pausas é válido fora dos casos previstos, ou o turno deve ter um intervalo legal único e pausas adicionais separadas?
 
-### 2.4. Batidas originais serão armazenadas e preservadas
+### 3.7. Coleta inicial
 
-- O Coala armazenará as batidas necessárias à apuração.
-- A batida original recebida não será sobrescrita silenciosamente.
-- Uma correção criará um ajuste administrativo associado ao registro original ou ao dia.
-- A apuração identificará quais batidas originais e quais ajustes foram utilizados.
-- Alterações e cancelamentos recebidos da origem serão versionados ou registrados em histórico.
+Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-O sistema deverá permitir sempre distinguir:
+O portal web permanece on-line. A contingência offline foi implementada localmente somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, bloqueio após reinício, fila cifrada e assinada, envio ordenado e NSR apenas no servidor. Ainda depende de Play Integrity `enforce`, teste físico e homologação jurídica/operacional antes do piloto. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila offline não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
 
-```text
-Batida original
-+ ajuste administrativo
-+ motivo
-+ responsável
-+ data/hora
-```
+### 3.8. Estágios
 
-### 2.5. Turnos, escalas e ausências são insumos do cálculo
+| Estágio | Dados/coleta | Referência operacional |
+| --- | --- | --- |
+| Desligado | Sem coleta Coala | Bizneo |
+| Teste | Pessoas/jornadas sintéticas, ambiente isolado, certificado de teste | Nenhum efeito oficial |
+| Piloto paralelo | Empregados reais, após conformidade formal | Bizneo; Coala comparativo |
+| Oficial | Coala promovido por estabelecimento | REP-P/PTRP Coala |
 
-- O turno define a jornada-base e as regras aplicáveis.
-- A escala responde qual jornada o colaborador deveria cumprir em cada data.
-- Férias, folgas, licenças e outras ausências podem eliminar ou alterar a jornada esperada antes da apuração.
-- Mudanças retroativas nesses dados deverão disparar reprocessamento direcionado.
+Backend valida estágio/origem antes de folha, benefícios, indicadores e comunicação externa. Teste e piloto não produzem esses efeitos automaticamente.
 
-### 2.6. Tolerância de marcação não é tempo computável
+Piloto real produz dados pessoais e pode produzir prova. Divergência que indique trabalho real deve ser apurada e encaminhada ao processo oficial quando cabível; a classificação “piloto” não permite ignorá-la.
 
-Serão conceitos distintos:
-
-**Tolerância de marcação:** define quando uma batida gera ou não uma irregularidade.
-
-**Regra de apuração do tempo:** define quanto daquele período será considerado jornada, atraso, hora extra, saldo ou outro evento.
-
-Exemplo: uma batida às 09:55 para um turno iniciado às 10:00 pode estar dentro da tolerância e não gerar ocorrência, sem que os cinco minutos sejam automaticamente computados como hora extra.
-
-### 2.7. O RH poderá atuar diretamente
-
-Conforme suas permissões, o RH poderá:
-
-- Criar e administrar ausências sem solicitação prévia do colaborador.
-- Ajustar situações autorizadas de ponto sem apagar as batidas originais.
-- Criar eventos de folha manuais.
-- Tratar ocorrências individualmente ou em lote.
-- Reprocessar dias ou períodos afetados.
-- Fechar uma competência de forma regular ou com ressalvas.
-
-### 2.8. Falhas técnicas não bloquearão de forma absoluta o fechamento
-
-- Falha de sincronização, dado antigo ou batida sem vínculo gerarão alertas e ocorrências técnicas.
-- O sistema poderá indicar que uma competência não está recomendada para fechamento.
-- O RH responsável poderá prosseguir por meio do fechamento com ressalvas.
-- A decisão exigirá motivo, confirmação explícita e auditoria.
-
-### 2.9. Não haverá criação automática de colaboradores
-
-- A integração associará batidas a colaboradores existentes.
-- A associação priorizará identificador externo, matrícula e CPF.
-- Nome não será utilizado como único critério automático definitivo.
-- Batidas sem associação irão para uma fila de pendências de integração.
-
-### 2.10. O Coala apurará quantidades, não valores financeiros da folha
-
-O Coala produzirá eventos estruturados, por exemplo:
-
-- Hora extra 60%: 3h22.
-- Hora extra 100%: 6h.
-- Falta descontável: 6h.
-- Atraso descontável: 37 min.
-- Trabalho em feriado: 6h.
-- Ativar vale-transporte em 01/09/2026.
-
-O cálculo em reais continuará sob responsabilidade do contador ou sistema contábil.
-
-### 2.11. Implantação paralela e sem impacto involuntário
-
-> A nova Jornada do Coala deverá nascer paralelamente ao sistema atual, ser testada inicialmente com um colaborador fictício e somente assumir responsabilidades reais de forma gradual, por colaborador ou grupo, depois de validada. Durante a transição, nenhuma funcionalidade nova poderá alterar involuntariamente a escala ou o processo oficial já existente.
-
-Consequentemente:
-
-- A escala atual continuará funcionando exatamente como funciona hoje.
-- O novo módulo terá estrutura própria e isolada para jornada, regras, escala, ausências, batidas, apuração, ocorrências, eventos e fechamento experimental.
-- A ativação mínima será por colaborador, não somente por uma chave global da empresa.
-- Dados e resultados terão um modo explícito: teste, shadow, piloto ou produção.
-- Dados experimentais não produzirão folha, exportação, notificação, benefício, documento ou indicador oficial.
-- O novo módulo não escreverá automaticamente na escala atual durante a coexistência.
-- Migrações de turnos, escalas, regras ou colaboradores serão deliberadas, graduais e auditáveis.
-- Será possível desativar a Jornada V2 para um participante sem perder seu histórico.
-
-## 3. Fontes de informação na arquitetura-alvo
-
-A tabela abaixo descreve a responsabilidade de cada fonte no novo produto. Durante teste e shadow, o processo atual continuará sendo a referência oficial da operação; a responsabilidade do Motor do Coala passará a valer oficialmente apenas para participantes em piloto ou produção.
-
-| Informação | Fonte oficial |
-|---|---|
-| Cadastro do colaborador | Coala |
-| Contrato, vínculo e carga horária | Coala |
-| Unidade, cargo e função | Coala |
-| Regras de jornada e tolerâncias | Coala |
-| Turnos e intervalos previstos | Coala |
-| Escala do dia e trocas de turno | Coala |
-| Feriados e folgas | Coala |
-| Férias, ausências e documentos | Coala |
-| Batidas originalmente realizadas | Sistema externo de ponto |
-| Ajustes administrativos de ponto | Coala |
-| Jornada esperada | Motor de Jornada do Coala |
-| Jornada trabalhada e intervalos | Motor de Jornada do Coala |
-| Atrasos, faltas e horas extras | Motor de Jornada do Coala |
-| Ocorrências de jornada | Motor de Jornada do Coala |
-| Tratamento das ocorrências | Coala / RH |
-| Benefícios | Coala |
-| Eventos enviados para a folha | Coala |
-| Cálculo financeiro da folha | Contador / sistema contábil |
-| Prévia e folha definitiva | Contador |
-| Conciliação e aprovação | Coala |
-
-## 4. Fluxo principal
-
-Este é o fluxo interno da Jornada V2. Ele será executado de forma experimental ou comparativa enquanto o participante estiver em teste ou shadow e não substituirá o processo atual até a promoção controlada.
-
-```text
-CADASTRO E REGRAS NO COALA
-Contrato + regras + turnos + escalas
-Feriados + folgas + férias + ausências
-                  │
-                  ▼
-          Jornada esperada do dia
-                  │
-                  │       SISTEMA EXTERNO DE PONTO
-                  │       Batidas brutas e metadados
-                  │                   │
-                  └─────────┬─────────┘
-                            ▼
-                Motor de Jornada do Coala
-                            │
-                  ┌─────────┴─────────┐
-                  ▼                   ▼
-           Jornada regular       Ocorrências
-                                      │
-                       ┌──────────────┼──────────────┐
-                       ▼              ▼              ▼
-                 Justificativa   Documento      Ajuste do RH
-                       └──────────────┬──────────────┘
-                                      ▼
-                               Reprocessamento
-                                      ▼
-                                Resultado final
-                                      ▼
-                               Eventos de folha
-                                      ▼
-                              Fechamento mensal
-                                      ▼
-                              Envio ao contador
-                                      ▼
-                           Retorno e conciliação
-                           ├── Divergência → correção
-                           └── Correto → aprovação
-```
-
-## 5. Domínios funcionais
-
-| Domínio | Responsabilidade |
-|---|---|
-| Pessoas e contratos | Cadastro, vínculo, carga horária e associação externa |
-| Jornada | Turnos, escalas, folgas, feriados e vigências |
-| Regras de Jornada / Motor de Apuração | Construção da jornada esperada, interpretação das batidas e cálculo diário |
-| Ausências | Férias, faltas, atestados, licenças, afastamentos e documentos |
-| Integração de ponto | Sincronização e preservação das batidas brutas |
-| Ocorrências e ajustes | Fila de exceções, tratamentos e ajustes administrativos |
-| Solicitações | Pedidos, justificativas e documentos enviados pelo colaborador |
-| Benefícios | Histórico e movimentações de VT e futuros benefícios |
-| Eventos de folha | Conversão dos resultados em quantidades estruturadas |
-| Fechamento mensal | Revisão, congelamento, ressalvas e versionamento da competência |
-| Contabilidade | Envio, retorno, conciliação, correções e aprovação |
-
-Esses domínios não precisam aparecer como onze opções independentes na navegação. Eles representam responsabilidades internas do produto.
-
-## 6. Navegação proposta
-
-```text
-RH
-├── Visão geral
-├── Pessoas
-├── Jornada
-│   ├── Escalas
-│   ├── Turnos
-│   ├── Regras
-│   └── Feriados e folgas
-├── Ponto
-│   ├── Apuração
-│   ├── Ocorrências
-│   ├── Ajustes
-│   └── Sincronizações
-├── Ausências
-│   ├── Registros
-│   ├── Solicitações
-│   ├── Documentos
-│   └── Tipos de ausência
-├── Benefícios
-├── Fechamento mensal
-└── Contabilidade
-    ├── Envios
-    ├── Retornos
-    └── Conciliação
-
-Meu RH
-└── Solicitações
-```
-
-Para evitar uma sidebar extensa, Escalas, Turnos, Regras e Feriados poderão ser abas de Jornada; Apuração, Ocorrências, Ajustes e Sincronizações poderão ser abas de Ponto; e Envios, Retornos e Conciliação poderão ser abas de Contabilidade. Essa navegação é própria do novo módulo e não pressupõe remoção ou reorganização imediata da navegação atual.
-
-Enquanto a Jornada V2 estiver em teste, a navegação poderá ser protegida por permissão e feature flag, identificada como experimental e visível somente aos usuários autorizados. A navegação atual permanecerá inalterada.
-
-## 7. Pessoas, contratos e vínculos externos
-
-### 7.1. Cadastro principal
-
-- Nome.
-- CPF.
-- Matrícula interna.
-- E-mail e telefone.
-- Cargo e função.
-- Unidade e gestor.
-- Data de admissão e desligamento.
-- Tipo de contrato.
-- Carga horária contratual.
-- Regra de jornada aplicável.
-- Situação do vínculo.
-
-### 7.2. Vínculo com o sistema externo
-
-- Fornecedor de ponto.
-- Empresa ou estabelecimento externo.
-- Identificador externo do colaborador.
-- Matrícula externa.
-- Data de início e fim do vínculo.
-- Status da associação.
-- Responsável e origem da associação.
-
-### 7.3. Ordem para associação
-
-1. Identificador externo estável.
-2. Matrícula.
-3. CPF.
-4. Associação manual.
-
-O nome poderá apoiar a busca manual, mas não será critério automático definitivo. Batidas não associadas ficarão em `Ponto → Sincronizações → Pessoas não vinculadas` e não criarão cadastros automaticamente.
-
-### 7.4. Vigência e histórico
-
-Contrato, carga horária, unidade, regra aplicável e vínculo externo deverão possuir vigência. Alterações não poderão modificar silenciosamente a interpretação histórica dos dias anteriores.
-
-### 7.5. Participação na Jornada V2
-
-O cadastro deverá possuir uma associação explícita de participação, independente do nome do colaborador:
-
-- Modo atual da Jornada V2.
-- Escopo de ativação que o incluiu.
-- Data de início e fim.
-- Responsável pela ativação.
-- Motivo.
-- Indicador de colaborador fictício ou registro experimental.
-- Permissão para produzir efeitos oficiais.
-
-Estados mínimos:
-
-```text
-DESATIVADA
-TESTE
-SHADOW
-PILOTO
-PRODUÇÃO
-```
-
-O requisito mínimo é a ativação individual. A arquitetura deverá permitir evolução para ativação por grupo, unidade e empresa, sempre resolvendo conflitos por uma regra explícita de precedência.
-
-## 8. Jornada esperada
-
-A jornada esperada é o retrato do que o colaborador deveria cumprir em determinada data. Será materializada ou reproduzível a partir de informações versionadas.
-
-Exemplo:
-
-```text
-Colaborador: Maria Silva
-Data: 12/08/2026
-Contrato: Jornada 6h — versão 2
-Turno: Manhã — versão 4
-Escala: Turno Manhã
-Entrada prevista: 10:00
-Saída prevista: 16:15
-Intervalo previsto: 15 min
-Batidas esperadas: 4
-Regra de jornada: Quiosques 2026 — versão 3
-```
-
-O snapshot ou conjunto de referências utilizado em cada apuração deverá permitir explicar posteriormente por que aquele resultado foi produzido.
-
-Durante a coexistência, a jornada esperada do novo motor será construída em uma estrutura própria. Ela poderá receber uma cópia ou adaptação somente de leitura da escala atual, mas não poderá depender de alterações estruturais no fluxo legado nem escrever de volta nele.
-
-## 9. Turnos
-
-O turno será uma das bases obrigatórias do Motor de Jornada.
-
-Os turnos utilizados pela Jornada V2 serão inicialmente próprios do novo módulo. Não haverá migração geral automática dos turnos atuais. Quando um turno existente precisar ser reutilizado, sua conversão será explícita, validada e auditada.
-
-### 9.1. Campos
-
-- Nome.
-- Código.
-- Horário previsto de entrada.
-- Horário previsto de saída.
-- Duração prevista da jornada.
-- Existência e quantidade de intervalos.
-- Duração prevista de cada intervalo.
-- Janela em que o intervalo pode ocorrer.
-- Quantidade esperada de batidas.
-- Regras específicas ou regra herdada.
-- Unidade ou grupo aplicável.
-- Dias aplicáveis.
-- Vigência.
-- Status.
-- Observações.
-
-Exemplo:
-
-```text
-Turno Manhã
-
-Entrada: 10:00
-Saída: 16:15
-Intervalo: 15 minutos
-Janela de intervalo: 12:00 às 15:00
-Batidas esperadas: 4
-```
-
-### 9.2. Casos que o modelo deverá comportar
-
-- Turnos sem intervalo.
-- Um ou múltiplos intervalos.
-- Turnos que atravessam a meia-noite.
-- Jornadas de duração variável.
-- Turnos específicos de unidade.
-- Turnos excepcionais.
-- Mudança de turno com data de vigência.
-
-Alterar um turno deverá afetar somente datas dentro da nova vigência. Alteração retroativa deverá exigir confirmação e provocar reprocessamento do intervalo afetado.
-
-## 10. Escalas, folgas e feriados
-
-Durante a transição, esta seção se refere à escala própria do novo módulo, denominada conceitualmente **Escala V2**. Ela coexistirá com a escala atual sem substituí-la.
-
-### 10.1. Responsabilidade da escala
-
-A escala responderá:
-
-> Qual jornada este colaborador deveria cumprir nesta data?
-
-### 10.2. Dados da escala
-
-- Colaborador.
-- Data.
-- Turno.
-- Unidade.
-- Indicador de folga.
-- Troca de turno.
-- Alteração excepcional.
-- Origem da escala.
-- Responsável pela alteração.
-- Motivo.
-- Data da alteração.
-- Histórico.
-
-Exemplo:
-
-```text
-12/08 — Turno Manhã
-13/08 — Turno Manhã
-14/08 — Folga
-15/08 — Turno Tarde
-```
-
-### 10.3. Alterações retroativas
-
-Quando uma escala já utilizada em uma apuração for alterada retroativamente:
-
-1. O registro anterior será preservado.
-2. O sistema registrará usuário, data, motivo e valores anterior e novo.
-3. Os dias afetados serão colocados na fila de reprocessamento.
-4. Ocorrências e eventos derivados serão recalculados ou marcados para revisão.
-5. Fechamentos já concluídos exigirão reabertura para incorporar o novo resultado.
-
-### 10.4. Folgas e feriados
-
-- Folgas poderão vir da própria escala ou de concessão específica.
-- Feriados poderão ser nacionais, estaduais, municipais ou específicos da empresa.
-- Cada feriado deverá indicar abrangência, vigência e regra aplicável.
-- O motor distinguirá trabalho em folga, trabalho em feriado e batida em dia sem jornada.
-
-### 10.5. Coexistência com a escala atual
-
-```text
-SISTEMA / ESCALA ATUAL
-→ continua funcionando normalmente
-→ continua sendo utilizado na operação real
-
-NOVO MÓDULO / ESCALA V2
-→ funciona paralelamente
-→ inicialmente apenas para testes
-→ não altera automaticamente a escala atual
-```
-
-Regras obrigatórias:
-
-- O desenvolvimento da Jornada V2 não exigirá mudança estrutural na escala atual para funcionar.
-- A Escala V2 terá suas próprias entidades, vigências, histórico e permissões.
-- Quando necessário, dados do legado poderão ser lidos, copiados ou adaptados para a V2.
-- Essa relação será inicialmente unidirecional: escala atual → leitura/cópia → Jornada V2.
-- Jornada V2 → alteração automática → escala atual será proibido até uma decisão formal de migração.
-- Não haverá migração automática de todos os turnos, escalas, regras ou colaboradores.
-
-Durante a transição, um colaborador poderá estar:
-
-- Apenas na escala atual.
-- Na escala atual e na Jornada V2 em modo teste ou shadow.
-- Na escala atual com a Jornada V2 oficial somente para um piloto controlado.
-- Posteriormente, apenas na nova arquitetura, depois de aprovada a migração.
-
-Se a escala atual já contiver dados úteis, um adaptador de leitura poderá criar snapshots na Escala V2. Alterações feitas no snapshot V2 não retornarão ao legado.
-
-## 11. Regras de Jornada / Motor de Apuração
-
-### 11.1. Domínio específico
-
-O Motor de Apuração de Jornada será um domínio explícito do Coala, responsável por combinar a jornada esperada, as batidas efetivas, os ajustes administrativos e as exceções reconhecidas.
-
-### 11.2. Escopos de configuração
-
-As regras poderão ser definidas por:
-
-- Empresa.
-- Unidade.
-- Tipo de contrato.
-- Colaborador.
-- Turno.
-- Dia ou situação excepcional.
-
-Deverá existir uma ordem de precedência clara e rastreável. Regras mais específicas poderão substituir regras gerais sem apagar o histórico.
-
-### 11.3. Regras configuráveis
-
-- Tolerância de entrada antecipada.
-- Tolerância de atraso.
-- Tolerância de saída antecipada.
-- Tolerância de saída posterior.
-- Quantidade esperada de batidas.
-- Associação e pareamento das batidas.
-- Tratamento de batidas excedentes.
-- Tratamento de batidas ausentes.
-- Regras de intervalo.
-- Intervalo mínimo e máximo.
-- Janela válida do intervalo.
-- Arredondamentos, quando utilizados.
-- Jornada excedente.
-- Horas extras e percentuais.
-- Trabalho em feriado.
-- Trabalho em folga.
-- Ausência parcial e integral.
-- Regra para batida sem escala.
-- Regra para escala sem batida.
-- Regras especiais por contrato, unidade ou turno.
-
-### 11.4. Tolerância de marcação
-
-Determina se uma diferença entre a batida e o horário esperado deve gerar uma ocorrência.
-
-Exemplo:
-
-```text
-Entrada prevista: 10:00
-Tolerância antecipada: 5 min
-Batida: 09:57
-Resultado de conformidade: dentro da tolerância
-```
-
-### 11.5. Regra de apuração do tempo
-
-Determina quanto tempo será efetivamente computado como jornada, atraso, extra, saldo ou outro evento.
-
-No exemplo anterior, a regra poderá iniciar a jornada computável às 10:00, mesmo com batida às 09:57. Tolerar a marcação não significa remunerar automaticamente o período antecipado.
-
-### 11.6. Vigência e versão
-
-Toda regra usada para cálculo deverá ter:
-
-- Identificador e versão.
-- Data inicial e final de vigência.
-- Escopo.
-- Responsável pela publicação.
-- Motivo da alteração.
-- Histórico.
-
-Uma mudança de regra não poderá recalcular silenciosamente competências fechadas.
-
-## 12. Integração com o sistema externo de ponto
-
-### 12.1. Papel da integração
-
-A integração terá como finalidade trazer batidas brutas e metadados técnicos. Não importará como verdade oficial cálculos de jornada, atrasos, faltas ou horas extras feitos pelo fornecedor.
-
-### 12.2. Formas de integração
-
-Prioridade:
-
-1. API com sincronização incremental.
-2. Webhook, quando confiável e disponível.
-3. Sincronização periódica de reconciliação.
-4. Arquivo CSV ou XLSX apenas como contingência controlada.
-
-Mesmo com webhook, haverá uma rotina periódica de reconciliação para recuperar eventos perdidos ou alterações retroativas.
-
-### 12.3. Contrato mínimo da batida
-
-- Fornecedor.
-- Empresa ou estabelecimento externo.
-- Identificador externo da batida.
-- Identificador externo do colaborador.
-- Data e hora local.
-- Instante normalizado em UTC.
-- Timezone original.
-- Origem e dispositivo, quando disponíveis.
-- Forma de criação: dispositivo, aplicativo, web ou manual na origem.
-- Data de criação.
-- Data da última alteração.
-- Situação: ativa, corrigida, cancelada ou removida.
-- Payload bruto ou referência técnica para auditoria, respeitando minimização de dados.
-
-### 12.4. Sincronização incremental
-
-O conector deverá suportar, conforme a API:
-
-- Cursor ou timestamp da última leitura.
-- Paginação.
-- Janela de sobreposição para evitar perda de alterações tardias.
-- Reconsulta dos dias recentes.
-- Recuperação histórica controlada.
-- Retry com backoff.
-- Registro de limites e erros da API.
-
-### 12.5. Idempotência e duplicidade
-
-Receber a mesma batida mais de uma vez não poderá duplicá-la. A chave preferencial será o identificador externo da batida. Quando ele não existir, será necessária uma chave derivada e uma política explícita de colisão usando, por exemplo:
-
-```text
-fornecedor
-+ estabelecimento
-+ colaborador externo
-+ instante da batida
-+ origem/dispositivo
-```
-
-Batidas aparentemente duplicadas não deverão ser apagadas sem rastreabilidade. O sistema poderá ignorá-las para cálculo, preservando a razão da decisão.
-
-### 12.6. Alterações, cancelamentos e exclusões
-
-Quando a origem alterar ou remover uma batida:
-
-1. O Coala preservará o estado anteriormente recebido.
-2. Registrará o novo estado e os metadados da mudança.
-3. Identificará os dias e colaboradores impactados.
-4. Enfileirará reprocessamento direcionado.
-5. Marcará tratamentos e eventos derivados para revisão quando necessário.
-6. Se a competência estiver fechada, criará um alerta de alteração retroativa, sem sobrescrever a versão fechada.
-
-### 12.7. Importação por arquivo de contingência
-
-- Exigirá layout versionado.
-- Guardará o arquivo original.
-- Executará as mesmas validações e regras de idempotência.
-- Informará claramente que a origem foi contingencial.
-- Não poderá duplicar batidas já recebidas por API.
-
-### 12.8. Estados técnicos
-
-- Nunca sincronizado.
-- Sincronizando.
-- Atualizado.
-- Atualizado com alertas.
-- Falha na última tentativa.
-- Dados potencialmente antigos.
-- Sem vínculo externo.
-- Reconciliação pendente.
-
-Esses estados orientarão o RH, mas não impedirão de forma absoluta um fechamento com ressalvas.
-
-### 12.9. Isolamento por modo operacional
-
-Toda sincronização e toda batida vinculada à Jornada V2 deverão carregar o contexto em que serão utilizadas:
-
-- `TESTE`: somente dados do colaborador fictício ou sandbox.
-- `SHADOW`: dados reais processados paralelamente, sem efeito oficial.
-- `PILOTO`: novo motor oficial somente para participantes explicitamente selecionados.
-- `PRODUÇÃO`: novo motor oficial para escopo migrado e aprovado.
-
-O conector deverá consultar somente participantes habilitados ou separar inequivocamente o uso posterior das batidas. Dados de teste jamais poderão ser misturados com sincronizações oficiais sem marcação explícita.
-
-## 13. Tela de sincronização
-
-### 13.1. Indicadores
-
-- Última sincronização.
-- Período sincronizado.
-- Colaboradores consultados.
-- Batidas recebidas.
-- Novas batidas.
-- Batidas alteradas.
-- Batidas removidas ou canceladas.
-- Duplicidades ignoradas.
-- Colaboradores não vinculados.
-- Erros técnicos.
-- Última atualização conhecida da origem.
-- Status da integração.
-- Reprocessamentos disparados.
-- Modo da execução: teste, shadow, piloto ou produção.
-- Participantes e escopo de ativação.
-
-### 13.2. Detalhamento de uma execução
-
-- Identificador da execução.
-- Tipo: manual, agendada, webhook, reconciliação ou arquivo.
-- Início, término e duração.
-- Cursor inicial e final.
-- Páginas consultadas.
-- Quantidades lidas, criadas, atualizadas, canceladas e ignoradas.
-- Erros e tentativas.
-- Usuário ou processo responsável.
-- Arquivo original, quando aplicável.
-
-### 13.3. Ações
-
-- Sincronizar agora.
-- Reconciliar período.
-- Importar arquivo de contingência.
-- Revisar pessoas não vinculadas.
-- Revisar batidas alteradas ou canceladas.
-- Ver reprocessamentos.
-- Baixar relatório técnico.
-
-Todas as ações deverão mostrar o modo operacional antes da confirmação. A importação de teste utilizará ambiente, arquivo ou filtro explicitamente identificado como experimental.
-
-## 14. Batidas e ajustes administrativos
-
-### 14.1. Batida original
-
-Cada batida deverá preservar:
-
-- Identificador interno e externo.
-- Colaborador externo e colaborador vinculado.
-- Data e hora originais.
-- Instante normalizado.
-- Timezone.
-- Origem e dispositivo.
-- Datas de criação, recebimento e alteração.
-- Estado atual na origem.
-- Histórico de versões recebidas.
-- Modo operacional em que foi capturada ou utilizada.
-- Indicador de dado experimental, quando aplicável.
-
-### 14.2. Ajuste administrativo de ponto
-
-O RH poderá, conforme permissão, resolver:
-
-- Esquecimento de entrada.
-- Esquecimento de saída.
-- Ausência de registro de intervalo.
-- Batida em horário incorreto.
-- Duplicidade.
-- Batida que deve ser desconsiderada.
-- Outra inconsistência autorizada.
-
-O ajuste não apagará nem modificará silenciosamente a batida original. Deverá guardar:
-
-- Tipo de ajuste.
-- Batida original relacionada, quando houver.
-- Valor original.
-- Valor efetivamente utilizado na apuração.
-- Data e hora inserida, corrigida ou desconsiderada.
-- Motivo.
-- Justificativa do colaborador, quando houver.
-- Documento, quando aplicável.
-- Responsável.
-- Data/hora.
-- Aprovação adicional, quando exigida.
-- Histórico e auditoria.
-
-### 14.3. Estados do ajuste
-
-```text
-Rascunho
-→ Pendente de aprovação, quando aplicável
-→ Aprovado
-→ Aplicado
-→ Cancelado
-→ Substituído
-```
-
-Aplicar, cancelar ou substituir um ajuste deverá provocar reprocessamento do dia afetado.
-
-## 15. Motor de Apuração de Jornada
-
-### 15.1. Entradas do motor
-
-Para cada colaborador e data:
-
-```text
-Contrato vigente
-+ carga horária
-+ regra de jornada vigente
-+ turno
-+ escala
-+ feriado
-+ folga
-+ férias
-+ ausências reconhecidas
-+ outras exceções
-+ batidas originais válidas
-+ ajustes administrativos aplicáveis
-```
-
-Durante a coexistência, contrato, turno, regra, escala e demais entradas serão resolvidos no contexto da Jornada V2 e do modo operacional do colaborador. O motor não modificará o cálculo, a escala nem o resultado oficial do legado quando estiver em `TESTE` ou `SHADOW`.
-
-### 15.2. Processamento diário
-
-1. Identificar o vínculo e o contrato válidos na data.
-2. Determinar a escala, o turno, a folga ou a inexistência de jornada.
-3. Aplicar feriados, férias e ausências reconhecidas.
-4. Materializar a jornada esperada e as regras utilizadas.
-5. Selecionar batidas válidas e ajustes aplicáveis.
-6. Ordenar e parear as marcações conforme a regra.
-7. Calcular períodos trabalhados e intervalos.
-8. Aplicar tolerâncias de marcação.
-9. Aplicar regras de tempo computável.
-10. Calcular atrasos, antecipações, ausências e excedentes.
-11. Classificar trabalho em folga ou feriado.
-12. Detectar inconsistências.
-13. Gerar resultado de apuração e ocorrências.
-14. Registrar entradas, versão do algoritmo e justificativa do resultado.
-
-### 15.3. Resultados possíveis
-
-- Jornada regular.
-- Jornada regular dentro da tolerância.
-- Atraso.
-- Entrada antecipada relevante.
-- Saída antecipada.
-- Permanência posterior.
-- Intervalo menor, maior, ausente ou fora da janela.
-- Ausência parcial.
-- Possível ausência integral.
-- Falta de batida.
-- Quantidade incompatível de batidas.
-- Batida excedente.
-- Jornada excedente.
-- Hora extra.
-- Trabalho em folga.
-- Trabalho em feriado.
-- Escala sem batida.
-- Batida sem escala.
-- Dia sem dados suficientes.
-- Resultado regular após ajuste ou ausência reconhecida.
-
-### 15.4. Resultado preliminar e resultado final
-
-O sistema distinguirá:
-
-- **Resultado automático:** produzido pelo motor antes do tratamento humano.
-- **Resultado final:** produzido após considerar tratamentos, ausências e ajustes aprovados.
-
-Ambos permanecerão rastreáveis.
-
-Todo resultado indicará também:
-
-- Modo: teste, shadow, piloto ou produção.
-- Efeito: experimental, comparativo ou oficial.
-- Escopo de ativação aplicado.
-- Versão do motor e da regra.
-
-Resultados `TESTE` e `SHADOW` jamais serão promovidos implicitamente a resultado oficial.
-
-### 15.5. Explicabilidade
-
-Cada resultado deverá permitir responder:
-
-- Qual jornada era esperada?
-- Quais regras e versões foram utilizadas?
-- Quais batidas e ajustes foram considerados?
-- Como os períodos foram pareados?
-- Quais tolerâncias foram aplicadas?
-- Qual cálculo produziu o total?
-- Qual ocorrência foi gerada?
-- Qual tratamento alterou o resultado final?
-
-## 16. Reprocessamento
-
-### 16.1. Eventos que podem dispará-lo
-
-- Nova batida.
-- Alteração, cancelamento ou remoção de batida na origem.
-- Criação, alteração, cancelamento ou aprovação de ajuste.
-- Mudança de contrato ou carga horária.
-- Mudança de turno.
-- Mudança de escala.
-- Inclusão ou retirada de folga.
-- Alteração de feriado.
-- Inclusão, aprovação, alteração ou cancelamento de férias ou ausência.
-- Troca de turno aprovada.
-- Mudança de regra de jornada.
-- Correção administrativa.
-- Mudança relevante de vínculo do colaborador.
-
-### 16.2. Escopo direcionado
-
-O motor deverá calcular o menor conjunto possível de dias afetados:
-
-- Uma batida alterada: reprocessar o dia associado e, em turno noturno, os dias limítrofes necessários.
-- Uma ausência de três dias: reprocessar os três dias.
-- Uma escala mensal substituída: reprocessar somente as datas alteradas.
-- Uma regra com nova vigência: reprocessar datas abertas cobertas pela vigência.
-
-Não se deverá recalcular indiscriminadamente toda a base.
-
-### 16.3. Histórico do reprocessamento
-
-Registrar:
-
-- Resultado anterior.
-- Motivo do reprocessamento.
-- Informação que provocou a mudança.
-- Escopo calculado.
-- Novo resultado.
-- Ocorrências criadas, encerradas ou alteradas.
-- Eventos de folha afetados.
-- Data/hora.
-- Usuário ou processo responsável.
-- Versão do motor.
-
-### 16.4. Competências fechadas
-
-- O resultado congelado não será sobrescrito.
-- A mudança posterior gerará alerta retroativo.
-- Para incorporar a mudança, o RH deverá reabrir a competência.
-- A reabertura criará uma nova versão de trabalho.
-
-### 16.5. Reprocessamento em shadow mode
-
-No modo sombra, o reprocessamento atualizará somente resultados comparativos da Jornada V2. Não poderá:
-
-- Alterar a apuração oficial vigente.
-- Criar eventos oficiais de folha.
-- Modificar a escala atual.
-- Notificar o contador.
-- Produzir documentos oficiais.
-
-As divergências entre o processo atual e o novo motor serão preservadas para análise e classificação.
-
-## 17. Ausências
-
-**Incrementos locais em 15/10/2026:** Etapa 2 implementa pedidos próprios/terceiros, documentos, revisões, decisões, saldos e avisos pelo sino interno. Cada etapa humana tem SLA de 24 horas corridas; atraso fica sinalizado somente nas superfícies internas autorizadas, não é exposto ao solicitante e não produz decisão automática. Ausências não enviam e-mail nem push. Etapa 3 começou com projeção-sombra RH e ganhou protocolo local de intenção, relógios, marcadores, reconciliação e fonte limitada para a Natasha v2. O bootstrap, os bloqueios de writers conhecidos e todo o protocolo foram testados somente em emulador demo; não alteram escala nem marcações. ON real continua bloqueado até cobertura de todos os escritores legados, bootstrap de produção comprovado, retomada guardada de efeitos pendentes, cutover, validação dos índices e homologação. O estado detalhado e os critérios de passagem estão no [guia de ausências](engineering/flows/dp-absences.md). Não confundir código/testes locais com publicação ou homologação do ponto.
-
-**Contrato atualizado em 14/10/2026:** o catálogo de ausências já implementado e as próximas etapas seguem [Ausências do DP](engineering/flows/dp-absences.md). Reutilizar as configurações de tipos/regras/instruções existentes, sem catálogo paralelo. Férias e folgas continuam em seus domínios próprios; as referências genéricas abaixo a elas são insumos da apuração, não novos tipos da coleção `dp_absenceTypes`.
-
-A aprovação final na Etapa 2 criará a ocorrência histórica vinculada ao pedido; a Etapa 3 fornecerá disponibilidade à escala e a Etapa 4 aplicará tratamento ao ponto/folha. Marcação original, ocorrência e tratamento são registros distintos. Abono/crédito/justificativa não criam batidas fictícias nem alteram a fonte; correções e reversões preservam decisão e versão anteriores. A futura coleta não será bloqueada por uma ausência aprovada, e trabalho real conflitante será sinalizado para análise. AEJ e espelho refletirão o tratamento conforme os leiautes oficiais do MTE, preservando as marcações de origem.
-
-A hierarquia configurável, o acesso documental por etapa e a retenção dos anexos por 20 anos após o desligamento estão descritos no guia. Ao fim do prazo, o sistema apenas avisa e exige autorização expressa do DP; a remoção local apaga somente a geração autorizada do comprovante, sob trava do vínculo e reconciliação, preservando pedido, decisões, auditoria e recibo permanente. O DELETE legado permanece bloqueado. A retenção é uma política deste fluxo, não uma definição geral de guarda da ARP ou dos arquivos fiscais. As perguntas históricas da seção 39 sobre campos já existentes devem ser respondidas pelo cadastro, sem exigir uma nova decisão estrutural.
-
-### 17.1. Papel na apuração
-
-Ausências reconhecidas poderão alterar a jornada esperada antes do cálculo.
-
-Exemplo:
-
-```text
-15/08/2026
-Situação: férias
-Jornada esperada: nenhuma
-Batidas esperadas: nenhuma
-```
-
-Assim, a ausência de batidas não será interpretada como falta. O efeito dependerá do tipo de ausência, de sua situação e de suas regras.
-
-### 17.2. Três origens possíveis
-
-#### Pelo colaborador
-
-Em `Meu RH → Solicitações`, o colaborador poderá solicitar uma ausência, justificar uma ocorrência, informar ausência parcial, enviar atestado ou documento e solicitar correção relacionada ao ponto.
-
-#### Diretamente pelo RH
-
-> O RH poderá criar, editar, aprovar, recusar, cancelar e encerrar registros de ausência, conforme suas permissões, independentemente de solicitação prévia do colaborador.
-
-Exemplos:
-
-- Cadastrar férias.
-- Registrar licença ou afastamento.
-- Receber atestado presencialmente.
-- Registrar comunicação de um gestor.
-- Conceder folga.
-- Registrar ausência autorizada.
-- Classificar falta como injustificada.
-- Realizar lançamento retroativo.
-
-O RH não precisará criar artificialmente uma solicitação em nome do colaborador.
-
-Durante a implantação gradual, ausências da Jornada V2 serão inicialmente isoladas. Caso seja necessário utilizar uma ausência já existente no sistema atual, ela será lida ou copiada com referência à origem; o novo módulo não alterará automaticamente o registro legado.
-
-#### Pela ocorrência detectada pelo motor
-
-Exemplo:
-
-```text
-Jornada esperada: 10:00 às 16:15
-Batidas: nenhuma
-Ausência cadastrada: nenhuma
-
-Resultado:
-Possível ausência integral — tratamento necessário
-```
-
-O RH poderá solicitar justificativa, vincular documento, criar uma ausência, classificar como falta injustificada, abonar ou aplicar outro tratamento permitido.
-
-### 17.3. Solicitação de ausência e ausência reconhecida
-
-São registros distintos.
-
-**Solicitação de ausência:** pedido que pode estar em rascunho, enviado, em análise, aprovado, recusado ou cancelado.
-
-**Ausência:** registro reconhecido e aplicado ao colaborador, capaz de alterar a jornada esperada e os eventos de folha.
-
-Fluxos possíveis:
-
-```text
-Colaborador solicita ausência
-        ↓
-RH analisa e aprova
-        ↓
-Sistema cria ou reconhece AUSÊNCIA
-        ↓
-Motor reprocessa o período
-```
-
-```text
-RH cadastra ausência diretamente
-        ↓
-AUSÊNCIA
-        ↓
-Motor reprocessa o período
-```
-
-### 17.4. Dados mínimos da ausência
-
-- Colaborador.
-- Tipo de ausência.
-- Data inicial e final.
-- Ausência integral ou parcial.
-- Horário inicial e final, quando parcial.
-- Origem: colaborador, RH, gestor, ocorrência do ponto ou integração futura.
-- Motivo.
-- Observações.
-- Documentos.
-- Solicitante, quando houver.
-- Responsável pelo lançamento.
-- Responsável pela aprovação.
-- Status.
-- Data de vigência.
-- Efeito sobre a jornada esperada.
-- Efeito na apuração.
-- Efeito para a folha.
-- Histórico.
-- Auditoria.
-
-### 17.5. Tipos configuráveis
-
-Cada tipo poderá determinar:
-
-- Documento obrigatório ou opcional.
-- Aprovação necessária.
-- Possibilidade de período parcial.
-- Possibilidade de período integral.
-- Efeito na jornada esperada.
-- Efeito na apuração.
-- Efeito padrão para folha.
-- Evento de folha relacionado.
-- Vigência.
-- Status.
-
-Tipos iniciais:
-
-- Falta injustificada.
-- Atestado.
-- Férias.
-- Folga.
-- Licença.
-- Afastamento.
-- Ausência autorizada.
-- Acompanhamento médico.
-- Falecimento.
-- Casamento.
-- Doação de sangue.
-- Outros tipos configuráveis.
-
-### 17.6. Estados da ausência
-
-```text
-Rascunho
-→ Em análise, quando aplicável
-→ Aprovada / Ativa
-→ Encerrada
-
-Alternativas:
-Recusada
-Cancelada
-Substituída
-```
-
-### 17.7. Ausência registrada depois da apuração
-
-Quando uma ausência for criada ou aprovada após o dia já ter sido calculado:
-
-```text
-ANTES
-Jornada esperada: 6h
-Batidas: nenhuma
-Apuração: possível falta de 6h
-
-RH registra atestado
-        ↓
-Motor reprocessa o dia
-        ↓
-Resultado anterior permanece no histórico
-        ↓
-Novo resultado é gerado
-```
-
-O histórico deverá registrar resultado anterior, gatilho, novo resultado, data, usuário ou processo responsável e eventos afetados.
-
-## 18. Solicitações do colaborador
-
-Área proposta: `Meu RH → Solicitações`.
-
-### 18.1. Tipos iniciais
-
-- Justificativa de ocorrência.
-- Esquecimento de batida.
-- Solicitação de correção de ponto.
-- Envio de documento.
-- Solicitação de ausência.
-- Informação de ausência parcial.
-- Troca de turno.
-- Férias, quando aplicável.
-- Ativação de vale-transporte.
-- Desativação de vale-transporte.
-- Alteração de vale-transporte.
-
-### 18.2. Fluxo
-
-```text
-Rascunho
-→ Enviada
-→ Em análise
-→ Aprovada ou recusada
-→ Aplicada ao registro correspondente
-→ Concluída
-```
-
-Uma solicitação cancelada permanecerá no histórico.
-
-### 18.3. Dados principais
-
-- Tipo.
-- Colaborador.
-- Data ou período.
-- Motivo.
-- Justificativa.
-- Documentos.
-- Registro de ponto, ocorrência, escala, ausência ou benefício relacionado.
-- Data da solicitação.
-- Solicitante.
-- Analista.
-- Decisão e justificativa da decisão.
-- Data de vigência.
-- Histórico.
-
-### 18.4. Efeitos de uma aprovação
-
-A solicitação não será o resultado em si. Sua aprovação poderá produzir uma ação de domínio:
-
-```text
-Solicitação de ausência aprovada
-→ cria ausência
-→ reprocessa os dias afetados
-```
-
-```text
-Solicitação de troca de turno aprovada
-→ altera escala
-→ reprocessa os dias afetados
-```
-
-```text
-Esquecimento de saída aprovado
-→ cria ajuste administrativo
-→ reprocessa o dia
-```
-
-```text
-Ativação de VT aprovada
-→ cria movimentação do benefício
-→ gera evento de folha na vigência correta
-```
-
-Em `TESTE` ou `SHADOW`, esses efeitos ocorrerão apenas no conjunto de dados experimental da Jornada V2. Não haverá alteração de escala atual, benefício real, folha oficial ou notificação externa real. No piloto, somente participantes autorizados poderão produzir efeitos oficiais no novo fluxo.
-
-## 19. Central de Ocorrências
-
-### 19.1. Finalidade
-
-A Central de Ocorrências será o principal ambiente de trabalho por exceção. As ocorrências de jornada serão majoritariamente geradas pelo Motor do Coala, e o RH não precisará revisar manualmente todos os dias regulares.
-
-A central exibirá e filtrará o modo operacional. Ocorrências de teste e shadow serão visualmente distintas das oficiais e não integrarão contagens oficiais por padrão.
-
-### 19.2. Níveis
-
-| Nível | Uso | Fechamento |
-|---|---|---|
-| Informação | Registro sem ação necessária | Não bloqueia |
-| Alerta | Recomenda revisão | Permite fechar com decisão |
-| Ação necessária | Exige tratamento administrativo | Recomenda tratamento |
-| Ressalva | Caso mantido em aberto deliberadamente | Permite fechamento com ressalvas |
-
-### 19.3. Tipos iniciais
-
-- Atraso.
-- Saída antecipada.
-- Entrada antecipada relevante.
-- Permanência posterior relevante.
-- Jornada excedente.
-- Hora extra pendente de classificação.
-- Falta de batida.
-- Quantidade incompatível ou excesso de batidas.
-- Intervalo ausente, menor, maior ou fora da janela.
-- Ausência parcial.
-- Possível ausência integral.
-- Escala sem batida.
-- Batida sem escala.
-- Trabalho em folga.
-- Trabalho em feriado.
-- Batida alterada ou cancelada na origem.
-- Alteração retroativa de escala, turno, regra ou ausência.
-- Colaborador não vinculado.
-- Documento pendente.
-- Justificativa pendente.
-- Solicitação pendente.
-- Outra ocorrência configurável.
-
-### 19.4. Fluxo de tratamento
-
-```text
-OCORRÊNCIA
-        ↓
-JUSTIFICATIVA
-        ↓
-DOCUMENTO, QUANDO APLICÁVEL
-        ↓
-ANÁLISE DO RH
-        ↓
-CLASSIFICAÇÃO
-        ↓
-REPROCESSAMENTO / RESULTADO FINAL
-        ↓
-EFEITO PARA A FOLHA
-```
-
-### 19.5. Ações do RH
-
-- Confirmar.
-- Corrigir por ajuste administrativo.
-- Abonar.
-- Desconsiderar.
-- Classificar como falta.
-- Criar ou vincular ausência.
-- Vincular documento.
-- Solicitar informação.
-- Tratar sem efeito.
-- Gerar evento.
-- Manter como ressalva.
-
-### 19.6. Tratamento em lote
-
-Será permitido somente para ocorrências compatíveis. A interface mostrará:
-
-- Quantidade afetada.
-- Colaboradores e período.
-- Decisão aplicada.
-- Efeito previsto.
-- Necessidade de reprocessamento.
-- Confirmação explícita.
-- Registro de auditoria.
-
-### 19.7. Estados
-
-```text
-Nova
-→ Em análise
-→ Aguardando colaborador
-→ Aguardando documento
-→ Tratada
-→ Tratada com ressalva
-→ Desconsiderada
-→ Reaberta por reprocessamento
-```
-
-## 20. Tela individual do colaborador
-
-### 20.1. Abas
-
-```text
-[Resumo] [Escala] [Batidas] [Apuração] [Ocorrências]
-[Ausências] [Documentos] [Solicitações] [Eventos]
-[Benefícios] [Histórico]
-```
-
-O cabeçalho mostrará de forma inequívoca se o colaborador está em `TESTE`, `SHADOW`, `PILOTO`, `PRODUÇÃO` ou com a Jornada V2 desativada. Para o colaborador fictício, também mostrará a identificação de registro experimental.
-
-### 20.2. Resumo da competência
-
-- Jornada prevista.
-- Jornada trabalhada.
-- Horas extras.
-- Atrasos.
-- Saídas antecipadas.
-- Faltas.
-- Ausências.
-- Ocorrências abertas e tratadas.
-- Documentos pendentes.
-- Eventos de folha.
-- Situação para fechamento.
-- Data da última sincronização e da última apuração.
-
-### 20.3. Dia regular
-
-```text
-12/08/2026
-
-Jornada esperada:
-10:00 às 16:15
-
-Batidas:
-09:58
-12:31
-12:46
-16:17
-
-Intervalo:
-15 min
-
-Apuração:
-Regular
-
-Ocorrências:
-Nenhuma
-```
-
-### 20.4. Dia com ocorrência
-
-```text
-14/08/2026
-
-Jornada esperada:
-10:00 às 16:15
-
-Batidas:
-10:02
-12:20
-12:35
-—
-
-Ocorrência:
-Batida de saída ausente
-
-[Corrigir ponto]
-[Solicitar justificativa]
-[Registrar ausência]
-[Outra ação]
-```
-
-A tela deverá permitir alternar entre batidas originais, ajustes aplicados, cálculo automático e resultado final.
-
-## 21. Eventos de folha
-
-### 21.1. Origem dos eventos
-
-Eventos poderão ser produzidos por:
-
-- Resultado final da apuração de jornada.
-- Tratamento de ocorrência.
-- Ausência reconhecida.
-- Movimentação de benefício.
-- Lançamento manual autorizado.
-
-### 21.2. Cadastro de tipos
-
-Cada tipo poderá ter:
-
-- Código interno.
-- Nome.
-- Categoria.
-- Unidade de medida.
-- Percentual, quando aplicável.
-- Código utilizado pelo contador.
-- Regra de geração.
-- Exigência de aprovação.
-- Permissão para lançamento manual.
-- Vigência.
-- Status.
-
-Unidades possíveis:
-
-- Horas.
-- Minutos.
-- Dias.
-- Quantidade.
-- Valor apenas informativo, quando permitido.
-- Sim ou não.
-- Data de vigência.
-
-### 21.3. Exemplos
-
-| Código | Evento | Quantidade |
-|---|---|---:|
-| HE60 | Hora extra 60% | 3h22 |
-| HE100 | Hora extra 100% | 6h |
-| FALTA | Falta descontável | 6h |
-| ATRASO | Atraso descontável | 37m |
-| FERIADO | Trabalho em feriado | 6h |
-| VT_ATIVAR | Ativar vale-transporte | 01/09 |
-| VT_REMOVER | Desativar vale-transporte | 01/09 |
-
-### 21.4. Valores financeiros
-
-O Coala apurará e enviará quantidades. Não precisará calcular salário, reflexos, adicionais em reais, descontos financeiros ou valor líquido. Esses cálculos permanecerão no sistema contábil ou com o contador.
-
-### 21.5. Reprocessamento e eventos
-
-Quando um resultado de jornada mudar:
-
-- Eventos ainda não congelados poderão ser recalculados.
-- Eventos manuais não serão apagados automaticamente.
-- Eventos aprovados que forem afetados serão marcados para revisão.
-- Eventos de competência fechada só mudarão em nova versão após reabertura.
-
-### 21.6. Eventos experimentais
-
-- Eventos gerados em `TESTE` ou `SHADOW` serão marcados como experimentais.
-- Não integrarão folha oficial, exportação para o contador, arquivo bancário ou indicador oficial.
-- Exportações de validação terão cabeçalho, nome de arquivo e destinatário claramente identificados como teste.
-- Um evento experimental não poderá ser convertido em oficial apenas por mudança de status; o cálculo oficial deverá ocorrer no modo e na versão de fechamento correspondentes.
-
-## 22. Benefícios e vale-transporte
-
-### 22.1. Histórico do benefício
-
-O primeiro benefício será o vale-transporte, com histórico de:
-
-- Ativação.
-- Alteração.
-- Suspensão.
-- Desativação.
-- Reativação.
-
-### 22.2. Origens da movimentação
-
-- Solicitação do colaborador.
-- Lançamento direto pelo RH.
-- Gestor, quando permitido.
-- Integração futura.
-
-O RH poderá registrar movimentações diretamente conforme sua permissão, sem criar uma solicitação fictícia.
-
-### 22.3. Dados da movimentação
-
-- Data da solicitação, quando houver.
-- Data de vigência.
-- Origem.
-- Motivo.
-- Solicitante.
-- Responsável pelo lançamento.
-- Aprovação.
-- Observação.
-- Documento, quando necessário.
-- Evento de folha gerado.
-- Histórico.
-
-### 22.4. Isolamento durante testes
-
-Movimentações criadas para o colaborador fictício ou em shadow mode serão experimentais e não poderão ativar, suspender ou remover um benefício real. Caso o fluxo precise ser validado, o evento e toda saída deverão ser identificados como teste.
-
-## 23. Fechamento mensal
-
-### 23.1. Princípio operacional
-
-O fechamento trabalhará por exceção. Dias regulares, calculados com dados suficientes e sem ocorrência, serão consolidados automaticamente. O RH concentrará sua revisão em pessoas e datas com ocorrências, alterações retroativas, documentos ou ressalvas.
-
-### 23.2. Fluxo completo
-
-```text
-1. Sincronizar batidas
-2. Apurar jornadas
-3. Identificar ocorrências
-4. Tratar ocorrências
-5. Conferir ausências e documentos
-6. Revisar ponto por colaborador
-7. Gerar eventos de folha
-8. Revisar eventos
-9. Gerar resumo mensal
-10. Fechar competência
-11. Enviar ao contador
-12. Receber prévia
-13. Conciliar
-14. Solicitar correções, quando necessário
-15. Aprovar
-16. Receber documentos definitivos
-17. Concluir competência
-```
-
-Na interface, essas dezessete etapas poderão ser agrupadas em macroetapas:
-
-```text
-Dados e apuração
-→ Exceções e tratamentos
-→ Eventos e revisão
-→ Fechamento
-→ Contabilidade
-→ Conclusão
-```
-
-### 23.3. Painel da competência
-
-O painel deverá apresentar:
-
-- Total de colaboradores.
-- Período das batidas sincronizadas.
-- Quantidade de batidas recebidas.
-- Colaboradores sem dados.
-- Jornadas apuradas.
-- Colaboradores sem escala.
-- Batidas sem vínculo.
-- Dias com batidas faltantes.
-- Ocorrências totais.
-- Ocorrências tratadas.
-- Ocorrências pendentes.
-- Ausências reconhecidas.
-- Documentos aguardando conferência.
-- Justificativas aguardando colaborador.
-- Horas extras apuradas.
-- Faltas apuradas.
-- Eventos de folha.
-- Colaboradores prontos.
-- Colaboradores com ressalvas.
-- Alterações retroativas após a última revisão.
-- Modo do fechamento e escopo de participantes.
-
-Todos os indicadores deverão abrir a lista correspondente.
-
-Por padrão, o painel oficial excluirá dados `TESTE` e `SHADOW`. Uma visão específica de transição mostrará esses dados e as comparações, sem misturá-los aos totais oficiais.
-
-### 23.4. Situação por colaborador
-
-```text
-Sem escala
-→ Aguardando batidas
-→ Apuração pendente
-→ Com ocorrências
-→ Em tratamento
-→ Pronto
-→ Pronto com ressalvas
-→ Fechado
-```
-
-Nem todos os estados representam bloqueio. A interface deverá explicar o que falta e quais decisões estão disponíveis.
-
-### 23.5. Fechamento regular
-
-Utilizado quando todos os casos relevantes foram tratados e não existem ressalvas assumidas pelo RH.
-
-### 23.6. Fechamento com ressalvas
-
-Utilizado quando existem situações não resolvidas ou incertezas técnicas, mas o RH decide prosseguir. Exigirá:
-
-- Motivo.
-- Responsável.
-- Relação das ressalvas.
-- Impacto conhecido ou potencial.
-- Confirmação explícita.
-- Auditoria.
-
-Falhas técnicas não serão impedimento absoluto, mas deverão ficar visíveis no fechamento e na versão congelada.
-
-### 23.7. Estados da competência
-
-```text
-Em preparação
-→ Sincronizando batidas
-→ Em apuração
-→ Em tratamento
-→ Em revisão de eventos
-→ Pronto para fechar
-→ Fechado
-→ Enviado ao contador
-→ Aguardando retorno
-→ Em conciliação
-→ Correção solicitada
-→ Prévia aprovada
-→ Aguardando documentos definitivos
-→ Concluído
-```
-
-### 23.8. Fechamento experimental
-
-O colaborador fictício deverá percorrer um ciclo mensal completo:
-
-```text
-Sincronização de batidas de teste
-→ apuração
-→ ocorrências
-→ tratamentos
-→ eventos experimentais
-→ revisão
-→ fechamento de teste
-```
-
-O fechamento experimental deverá:
-
-- Indicar `Modo: TESTE` em todas as telas e arquivos.
-- Usar competência ou identificador experimental inequívoco.
-- Não compor folha, relatórios ou indicadores oficiais.
-- Não ser enviado a destinatários reais.
-- Não produzir arquivo bancário ou documento trabalhista oficial.
-- Permitir reabertura, versão, auditoria e reprocessamento como o fluxo real.
-
-No modo sombra, poderá existir um fechamento comparativo, também sem efeito oficial.
-
-## 24. Versionamento e reabertura
-
-### 24.1. Conteúdo congelado
-
-Ao fechar, o Coala deverá congelar ou referenciar imutavelmente:
-
-- Batidas e versões de origem utilizadas.
-- Ajustes administrativos utilizados.
-- Jornada esperada por dia.
-- Versões de contrato, turno, escala e regras utilizadas.
-- Ausências, documentos e tratamentos considerados.
-- Resultados automáticos e finais.
-- Ocorrências e ressalvas.
-- Eventos gerados.
-- Resumo por colaborador.
-- Resumo da empresa.
-- Responsável e data.
-- Modo operacional e efeito oficial ou experimental.
-- Feature flags e escopo de ativação vigentes.
-
-Exemplo:
-
-```text
-Agosto/2026 — Versão 1
-Fechada em 01/09/2026 às 10:31
-Responsável: Fernanda/RH
-5 ressalvas
-```
-
-### 24.2. Reabertura
-
-```text
-Reabrir
-→ informar motivo
-→ preservar V1
-→ criar área de trabalho V2
-→ aplicar ajustes
-→ reprocessar somente o necessário
-→ revisar eventos afetados
-→ fechar novamente
-→ Agosto/2026 — Versão 2
-```
-
-Nenhuma versão anterior será sobrescrita ou apagada.
-
-## 25. Resumo para o contador
-
-Somente participantes e eventos oficiais dos modos `PILOTO` ou `PRODUÇÃO`, dentro do escopo aprovado, poderão compor o resumo oficial. Dados `TESTE` e `SHADOW` ficarão excluídos por regra de domínio, não apenas por filtro de interface.
-
-### 25.1. Por colaborador
-
-| Colaborador | Evento | Quantidade | Origem | Observação |
-|---|---|---:|---|---|
-| Maria | HE 60% | 3h22 | Apuração Coala | Resultado final aprovado |
-| Maria | Falta | 6h | Tratamento RH | Falta do dia 14/08 |
-| João | HE 100% | 6h | Apuração Coala | Trabalho em feriado |
-| Ana | VT | Ativar | Benefícios | Vigência em 01/09 |
-
-### 25.2. Resumo geral
-
-- Competência e empresa.
-- Versão do fechamento.
-- Quantidade de colaboradores.
-- Admissões e desligamentos.
-- Férias, licenças e afastamentos.
-- Eventos de jornada.
-- Movimentações de benefícios.
-- Observações.
-- Ressalvas.
-- Data e responsável pelo fechamento.
-
-### 25.3. Formatos
-
-Prioridade:
-
-1. XLSX estruturado.
-2. CSV com layout versionado.
-3. Portal seguro.
-4. PDF como documento de leitura.
-
-Exportações experimentais, quando necessárias para validação, deverão usar layout e identificação visual de teste, destinatários controlados e trilha de auditoria separada.
-
-## 26. Contabilidade
-
-### 26.1. Envio
-
-- Competência.
-- Versão do fechamento.
-- Destinatários.
-- Assunto e mensagem.
-- Arquivos.
-- Data e responsável.
-- Identificador da mensagem e da conversa.
-- Status.
-
-O serviço de envio deverá rejeitar competências e eventos experimentais quando o destino for um canal oficial. Testes de e-mail utilizarão destinatário seguro e assunto marcado como `TESTE — SEM EFEITO`.
-
-### 26.2. Fluxo
-
-```text
-Pronto para envio
-→ Enviado
-→ Aguardando retorno
-→ Retorno recebido
-→ Em conciliação
-→ Correção solicitada, quando necessário
-→ Nova prévia recebida
-→ Aprovado
-→ Documentos definitivos recebidos
-→ Concluído
-```
-
-### 26.3. E-mail
-
-- O e-mail continuará sendo um canal de comunicação.
-- O Coala deverá guardar identificadores da mensagem e da conversa quando o provedor permitir.
-- Respostas e correções deverão permanecer associadas à competência e à versão.
-- O fechamento existirá independentemente do e-mail; o Coala será o registro oficial do processo.
-
-### 26.4. Portal do contador — fase posterior
-
-- Acesso por link seguro.
-- Visualização apenas das empresas e competências autorizadas.
-- Download do resumo e arquivos.
-- Upload de prévia.
-- Upload de documentos definitivos.
-- Mensagens.
-- Histórico do processo.
-
-## 27. Retorno, prévias e conciliação
-
-### 27.1. Retorno do contador
-
-- Competência.
-- Versão do fechamento enviada.
-- Versão do retorno.
-- Data.
-- Arquivo original.
-- Tipo de documento.
-- Observação do contador.
-- Responsável pelo recebimento.
-- Dados estruturados extraídos ou digitados.
-- Relação com o envio e com a conversa original.
-
-Documentos possíveis:
-
-- Prévia da folha.
-- Relatório de eventos.
-- Resumo financeiro.
-- Holerites.
-- Arquivos bancários.
-- Documentos governamentais, quando aplicáveis.
-- Documentos definitivos.
-
-### 27.2. Tela de conciliação
-
-| Evento | Coala | Contador | Resultado |
-|---|---:|---:|---|
-| HE 60% | 3h22 | 3h22 | OK |
-| HE 100% | 6h | 6h | OK |
-| Falta | 6h | 0h | Divergência |
-| VT | Ativar | Ativar | OK |
-
-Classificações:
-
-- Igual.
-- Divergência de quantidade.
-- Ausente no contador.
-- Ausente no Coala.
-- Código não reconhecido.
-- Informação incomparável.
-- Conferência manual necessária.
-
-Decisões:
-
-- Aceitar resultado do contador.
-- Manter resultado do Coala e solicitar correção.
-- Ajustar mapeamento.
-- Registrar justificativa.
-- Marcar como conferido manualmente.
-
-### 27.3. Solicitação de correção
-
-Exemplo:
-
-```text
-Colaborador: Maria da Silva
-Evento: Falta
-
-Enviado pelo Coala: 6 horas
-Retornado pelo contador: 0 hora
-
-Mensagem:
-A falta referente ao dia 14/08 não foi considerada.
-Favor revisar a prévia.
-```
-
-O sistema registrará a divergência, enviará ou preparará a mensagem, alterará o status, aguardará nova versão e preservará a prévia anterior.
-
-## 28. Permissões
-
-### Colaborador
-
-- Ver as próprias escalas, batidas e apurações autorizadas.
-- Enviar justificativas e documentos.
-- Informar esquecimento de batida.
-- Solicitar correção, ausência, troca de turno e benefício.
-- Acompanhar decisões.
-- Ver documentos liberados.
-
-O colaborador não poderá editar diretamente a batida original nem aprovar a própria solicitação.
-
-### Gestor
-
-- Ver a própria equipe.
-- Ver escalas e ocorrências operacionais.
-- Comentar.
-- Criar comunicações ou ausências permitidas.
-- Aprovar solicitações específicas.
-- Não ajustar ponto ou eventos de folha sem permissão explícita.
-
-### RH operacional
-
-- Sincronizar batidas.
-- Vincular colaboradores.
-- Gerenciar turnos e escalas conforme permissão.
-- Cadastrar e administrar ausências.
-- Tratar ocorrências.
-- Analisar documentos.
-- Criar ajustes administrativos autorizados.
-- Executar reprocessamentos.
-- Gerar eventos.
-
-### RH responsável
-
-- Publicar regras de jornada.
-- Aprovar ajustes e tratamentos sensíveis.
-- Fechar com ou sem ressalvas.
-- Reabrir competências.
-- Enviar ao contador.
-- Aprovar conciliação.
-- Ativar, alterar estágio e desativar participantes da Jornada V2.
-- Autorizar a passagem entre teste, shadow, piloto e produção.
-
-### Financeiro
-
-- Ver resumos, eventos financeiros e documentos autorizados.
-- Acompanhar o status.
-- Não alterar batidas, apuração ou decisões de RH.
-
-### Administrador
-
-- Configurar integrações.
-- Configurar regras, turnos, tipos e permissões.
-- Gerenciar acessos técnicos.
-- Acessar auditoria conforme governança.
-- Gerenciar feature flags e isolamento dos dados experimentais.
-- Não promover participantes para produção sem a aprovação funcional definida.
-
-### Contador externo
-
-- Ver somente empresas e competências autorizadas.
-- Baixar arquivos.
-- Enviar retornos.
-- Responder solicitações.
-- Sem acesso ao restante do RH, batidas ou documentos médicos.
-
-## 29. Auditoria
-
-### 29.1. Escopo
-
-Serão auditados:
-
-- Sincronizações.
-- Batidas importadas.
-- Alterações, cancelamentos e exclusões na origem.
-- Vínculos de colaboradores.
-- Contratos e cargas horárias.
-- Regras de jornada.
-- Turnos.
-- Escalas e trocas.
-- Feriados e folgas.
-- Ajustes administrativos de ponto.
-- Ausências e férias.
-- Documentos.
-- Solicitações.
-- Tratamentos.
-- Reprocessamentos.
-- Resultados de apuração.
-- Eventos de folha.
-- Benefícios.
-- Fechamento e reabertura.
-- Versionamento.
-- Envio ao contador.
-- Retorno e prévias.
-- Conciliação e aprovação.
-- Criação e identificação de colaborador fictício.
-- Ativação e desativação da Jornada V2.
-- Mudança entre teste, shadow, piloto e produção.
-- Escopo de feature flags.
-- Cópias ou adaptações de dados da escala atual para a Escala V2.
-- Rollback de participante ou grupo.
-
-### 29.2. Dados mínimos
-
-Sempre que aplicável:
-
-- Usuário ou processo.
-- Data/hora.
-- Entidade e identificador.
-- Ação.
-- Valor anterior.
-- Valor novo.
-- Origem.
-- Motivo.
-- Documento ou solicitação relacionados.
-- Competência e versão afetadas.
-- Modo operacional anterior e novo.
-- Escopo de ativação anterior e novo.
-
-Registros de auditoria não deverão ser alterados ou removidos por usuários operacionais.
-
-## 30. Segurança e proteção documental
-
-- Aplicar acesso por menor privilégio.
-- Separar documentos médicos de anexos operacionais comuns.
-- Restringir documentos sensíveis ao RH autorizado.
-- Manter URLs temporárias ou downloads autenticados.
-- Criptografar dados em trânsito e utilizar os controles do armazenamento em repouso.
-- Definir política de retenção e descarte por categoria documental.
-- Auditar visualização e download quando necessário.
-- Evitar expor informações médicas em notificações, relatórios gerais ou acesso do gestor.
-- Limitar o acesso do contador aos documentos estritamente necessários.
-- Separar logicamente dados de teste, shadow e oficiais.
-- Bloquear por regra de backend qualquer efeito externo real originado em `TESTE` ou `SHADOW`.
-- Impedir que o nome do colaborador seja o único mecanismo de identificação de dado fictício.
-- Exigir marcação explícita em arquivos, documentos e notificações experimentais.
-
-## 31. Entidades principais
-
-| Entidade | Responsabilidade |
-|---|---|
-| Employee | Colaborador |
-| EmploymentContract | Contrato, vínculo e carga horária com vigência |
-| ExternalEmployeeLink | Associação do colaborador com o sistema externo |
-| ShiftTemplate | Modelo versionado de turno |
-| LegacyScheduleReference | Referência somente de leitura à escala atual, quando utilizada |
-| V2ScheduleEntry | Jornada escalada para uma data dentro da Jornada V2 |
-| WorkRule / TimeRule | Regras e tolerâncias do Motor de Jornada |
-| Holiday | Feriado e abrangência |
-| TimePunch | Batida original e versões recebidas da origem |
-| PunchSyncRun | Execução de sincronização ou reconciliação |
-| WorkdayExpectation | Jornada esperada e referências utilizadas no dia |
-| DailyTimeCalculation | Execução do cálculo diário |
-| TimeCalculationResult | Resultado automático ou final da apuração |
-| TimeOccurrence | Ocorrência gerada pelo motor ou processo administrativo |
-| TimeAdjustment | Ajuste administrativo sem apagar a batida original |
-| OccurrenceTreatment | Decisão do RH sobre uma ocorrência |
-| EmployeeRequest | Solicitação genérica do colaborador |
-| AbsenceRequest | Pedido de ausência ainda sujeito a análise |
-| Absence | Ausência reconhecida e aplicada à jornada |
-| AbsenceType | Tipo configurável de ausência |
-| HRDocument | Documento, atestado ou anexo |
-| BenefitEnrollment | Histórico da adesão ao benefício |
-| BenefitRequest | Pedido de movimentação de benefício |
-| PayrollEventType | Tipo configurável de evento de folha |
-| PayrollEvent | Evento gerado ou lançado manualmente |
-| PayrollClosing | Fechamento da competência |
-| EmployeePayrollClosing | Situação e resumo individual no fechamento |
-| ClosingVersion | Versão congelada do fechamento |
-| AccountantSubmission | Envio ao contador |
-| AccountantReturn | Retorno ou prévia do contador |
-| PayrollReconciliation | Processo de conciliação |
-| ReconciliationItem | Item comparado entre Coala e contador |
-| PayrollDocument | Documento da folha |
-| AuditLog | Registro imutável de auditoria |
-| TimekeepingEnrollment | Ativação individual ou por escopo na Jornada V2 |
-| RolloutCohort | Grupo controlado de teste, shadow, piloto ou produção |
-| ExperimentContext | Identificação explícita de dados experimentais |
-| FeatureFlagAssignment | Liberação gradual de capacidades por escopo |
-
-### 31.1. Relações conceituais essenciais
-
-```text
-Employee
-├── EmploymentContract
-├── ExternalEmployeeLink
-├── TimekeepingEnrollment → RolloutCohort / ExperimentContext
-├── V2ScheduleEntry → ShiftTemplate
-├── TimePunch
-├── AbsenceRequest → Absence
-├── EmployeeRequest
-├── BenefitEnrollment
-└── EmployeePayrollClosing
-
-WorkdayExpectation
-├── contrato/regra/turno/escala vigentes
-├── feriado/folga/ausência
-└── DailyTimeCalculation
-    ├── TimePunch
-    ├── TimeAdjustment
-    ├── TimeCalculationResult
-    └── TimeOccurrence → OccurrenceTreatment
-
-TimeCalculationResult final
-└── PayrollEvent
-    └── PayrollClosing → ClosingVersion
-```
-
-Entidades da Jornada V2 não substituirão automaticamente entidades da escala atual. Quando houver leitura do legado, `LegacyScheduleReference` ou adaptador equivalente manterá a origem explícita e evitará escrita reversa.
-
-## 32. Notificações
-
-### Colaborador
-
-- Justificativa solicitada.
-- Correção de ponto recebida ou decidida.
-- Documento recusado.
-- Solicitação aprovada, negada ou cancelada.
-- Prazo próximo.
-- Documento disponibilizado.
-
-### Gestor
-
-- Troca de turno aguardando decisão.
-- Ocorrência da equipe que exige manifestação.
-- Ausência comunicada.
-- Escala alterada.
-
-### RH
-
-- Sincronização concluída ou com falha.
-- Batidas alteradas ou canceladas retroativamente.
-- Pessoas não vinculadas.
-- Dias reprocessados.
-- Novas ocorrências.
-- Novas justificativas.
-- Documentos aguardando análise.
-- Competência próxima do fechamento.
-- Alteração após o fechamento.
-- Retorno do contador recebido.
-- Divergência encontrada.
-
-Notificações de teste serão exibidas apenas em canais experimentais ou para destinatários autorizados e carregarão marcação inequívoca. Shadow mode não enviará mensagens operacionais reais aos colaboradores.
-
-### Contador
-
-- Novo fechamento disponível.
-- Correção solicitada.
-- Documento adicional enviado.
-- Prazo próximo.
-- Prévia aprovada.
-
-## 33. Relatórios e indicadores
-
-- Cobertura de sincronização das batidas.
-- Batidas novas, alteradas, canceladas e duplicadas.
-- Pessoas não vinculadas.
-- Escalas sem batida e batidas sem escala.
-- Dias apurados e dias com erro técnico.
-- Ocorrências por tipo, unidade e colaborador.
-- Tratamentos por responsável.
-- Tempo médio de resolução.
-- Ajustes administrativos por tipo e responsável.
-- Jornadas previstas e trabalhadas.
-- Horas extras por período e percentual.
-- Atrasos, saídas antecipadas e faltas.
-- Intervalos irregulares.
-- Trabalho em folgas e feriados.
-- Ausências por tipo e origem.
-- Documentos pendentes.
-- Benefícios ativos e movimentações.
-- Eventos enviados ao contador.
-- Divergências encontradas.
-- Histórico de versões.
-- Fechamentos com ressalvas.
-- Situação das competências.
-- Tempo entre fechamento, retorno e aprovação.
-- Colaboradores somente no sistema atual.
-- Colaboradores em teste.
-- Colaboradores em shadow mode.
-- Colaboradores em piloto.
-- Colaboradores em produção V2.
-- Apurações comparadas entre legado e V2.
-- Divergências de comparação encontradas, classificadas e resolvidas.
-- Rollbacks realizados.
-- Falhas do novo motor por modo operacional.
-
-Os relatórios deverão respeitar permissões e restringir a exposição de informações médicas.
-
-Relatórios e indicadores oficiais excluirão dados de teste e shadow por padrão e por regra de backend. Um painel específico de implantação acompanhará a transição sem contaminar métricas operacionais oficiais.
-
-## 34. Arquitetura técnica inicial
-
-### 34.1. Estratégia
-
-**Decisão de 14/10/2026:** Tempo e PTRP usam o banco existente `coala-rh`, em coleções específicas e versionadas, conforme o [contrato de ausências](engineering/flows/dp-absences.md). A ARP do REP-P permanece em banco separado. Os catálogos atualmente em `coala` exigem transição controlada, preservando IDs, versões e consumidores; não duplicar fontes editáveis. O banco RH não substitui vigência, snapshots e histórico de reprocessamento. A mudança aqui é de arquitetura-alvo; não representa migração de dados reais.
-
-Adotar um monólito modular dentro da arquitetura atual do Coala, sem introduzir microserviços nesta fase.
-
-O Motor de Apuração de Jornada deverá ser um módulo de domínio isolado das telas e do conector externo, ainda que executado dentro da mesma aplicação.
-
-A Jornada V2 também será isolada do fluxo atual por contratos de leitura, namespaces ou coleções/tabelas próprias, permissões e controles de ativação. A implementação não poderá exigir que a escala atual seja remodelada antes de funcionar.
-
-```text
-SISTEMA DE PONTO
-        ↓
-Conector
-        ↓
-Batidas brutas
-        ↓
-┌───────────────────────────┐
-│ MOTOR DE JORNADA DO COALA │
-└───────────────────────────┘
-        ↑
-        ├── Contrato
-        ├── Turno
-        ├── Escala
-        ├── Regras
-        ├── Feriados
-        ├── Folgas
-        ├── Férias
-        └── Ausências
-        ↓
-Apuração diária
-        ↓
-Ocorrências
-        ↓
-Tratamento RH / ajustes
-        ↓
-Reprocessamento
-        ↓
-Eventos de folha
-```
-
-### 34.2. Módulos internos sugeridos
-
-```text
-Employees
-Contracts
-Scheduling
-TimeRules
-PunchIntegration
-TimeCalculationEngine
-Absences
-Requests
-Occurrences
-Adjustments
-Benefits
-PayrollEvents
-PayrollClosing
-Accounting
-Documents
-Audit
-Notifications
-RolloutControl
-LegacyScheduleAdapter
-```
-
-### 34.3. Princípios técnicos
-
-- Conectores idempotentes.
-- Batidas originais e versões de origem preservadas.
-- Motor determinístico para as mesmas entradas e mesma versão de regra.
-- Versionamento do algoritmo e das regras.
-- Jobs observáveis, reprocessáveis e com escopo direcionado.
-- Fila de reprocessamento por colaborador e data.
-- Histórico append-only para auditoria e versões fechadas.
-- Documentos armazenados com acesso restrito.
-- Transações nas mudanças críticas de estado.
-- Índices planejados antes de liberar consultas em produção.
-- Separação entre batida, ajuste, cálculo automático, tratamento e evento de folha.
-- Datas e horas armazenadas com instante normalizado, timezone e contexto local.
-- Testes de cenários de jornada como parte obrigatória da entrega.
-- Feature flags avaliadas no servidor para capacidades sensíveis.
-- Ativação da Jornada V2 por colaborador, com futura composição por grupo, unidade e empresa.
-- Separação explícita entre dados `TESTE`, `SHADOW`, `PILOTO` e `PRODUÇÃO`.
-- Bloqueio de side effects oficiais para teste e shadow.
-- Adaptador de leitura do legado sem escrita reversa.
-- Rollback de participação sem remoção de histórico.
-
-### 34.4. Persistência
-
-A escolha entre Firestore e PostgreSQL deverá ser avaliada durante a modelagem técnica. A decisão considerará:
-
-- Consultas temporais e relacionais.
-- Volume de batidas.
-- Necessidade de transações.
-- Versionamento e auditoria.
-- Custo operacional.
-- Compatibilidade com a arquitetura atual.
-- Relatórios e exportações.
-
-Não haverá migração automática de todo o Coala nem adoção híbrida sem justificativa de custo e operação.
-
-### 34.5. Processamento e consistência
-
-- A sincronização salva batidas antes de disparar cálculos.
-- Um evento de domínio identifica os dias afetados.
-- O job de apuração usa snapshot consistente das entradas.
-- O resultado registra hash ou referências das entradas utilizadas.
-- Repetir o mesmo cálculo não cria ocorrências ou eventos duplicados.
-- Falhas parciais podem ser retomadas.
-- Fechamentos congelados não são alterados por jobs posteriores.
-- Todo job resolve o modo operacional antes de persistir resultados ou disparar efeitos.
-- Filas experimentais e oficiais deverão ser separadas logicamente ou carregar validação obrigatória de contexto.
-
-### 34.6. Feature flags e controle de liberação
-
-Utilizar feature flags ou mecanismo equivalente para liberar capacidades sem afetar o fluxo atual. Exemplos conceituais:
-
-```text
-new_timekeeping_module
-new_schedule_v2
-new_absence_module
-new_time_calculation_engine
-new_monthly_closing
-```
-
-As flags poderão controlar disponibilidade de tela ou capacidade técnica, mas não substituirão o `TimekeepingEnrollment` por colaborador. Para produzir resultado, ambas as condições deverão ser satisfeitas:
-
-```text
-feature disponível para o escopo
-+ colaborador habilitado no estágio correto
-```
-
-Uma flag global nunca deverá ativar automaticamente a Jornada V2 oficial para toda a empresa.
-
-### 34.7. Proteção contra efeitos externos
-
-Antes de executar qualquer efeito, o backend deverá verificar o modo do dado e do fechamento. Dados `TESTE` ou `SHADOW` serão excluídos de:
-
-- Folha oficial.
-- Exportação oficial para o contador.
-- Movimentações reais de vale-transporte.
-- Notificações reais.
-- Relatórios e indicadores oficiais.
-- Arquivos bancários.
-- Documentos oficiais.
-- Integrações com efeito financeiro ou trabalhista.
-
-Caso uma funcionalidade externa precise ser testada, deverá utilizar sandbox, destinatário controlado ou saída marcada como experimental.
-
-### 34.8. Rollback
-
-Retirar um colaborador do novo fluxo não apagará batidas, cálculos, ocorrências, tratamentos ou fechamentos experimentais já produzidos.
-
-Exemplo:
-
-```text
-Maria — Jornada V2: PILOTO
-        ↓ problema identificado
-Maria — Jornada V2: DESATIVADA
-```
-
-O sistema anterior continuará disponível enquanto a migração não estiver consolidada. Serão auditados estado anterior, estado novo, responsável, data, motivo e competências afetadas.
-
-## 35. Implantação gradual e coexistência com o sistema atual
-
-### 35.1. Princípio obrigatório
-
-> A nova Jornada do Coala deverá nascer paralelamente ao sistema atual, ser testada inicialmente com um colaborador fictício e somente assumir responsabilidades reais de forma gradual, por colaborador ou grupo, depois de validada. Durante a transição, nenhuma funcionalidade nova poderá alterar involuntariamente a escala ou o processo oficial já existente.
-
-### 35.2. Sistema atual preservado
-
-Na primeira etapa:
-
-```text
-SISTEMA / ESCALA ATUAL
-→ continua funcionando exatamente como hoje
-→ continua sendo utilizado na operação real
-→ continua produzindo o processo oficial
-
-NOVO MÓDULO DE JORNADA
-→ funciona paralelamente
-→ possui dados e rotinas próprios
-→ inicialmente é experimental
-→ não altera automaticamente a escala atual
-```
-
-O novo módulo deverá funcionar sem exigir mudanças estruturais no fluxo atual. A existência da Jornada V2 não autoriza remover, reescrever ou redirecionar rotinas legadas.
-
-### 35.3. Estrutura isolada do novo módulo
-
-O novo módulo deverá possuir, quando aplicável, estrutura própria para:
-
-- Turnos V2.
-- Regras de jornada.
-- Tolerâncias e regras de tempo computável.
-- Intervalos.
-- Escala V2 utilizada pela apuração.
-- Ausências, férias, folgas e feriados.
-- Batidas e sincronizações.
-- Motor de apuração.
-- Ocorrências.
-- Ajustes administrativos.
-- Eventos experimentais de folha.
-- Fechamento experimental.
-
-Essas entidades e rotinas coexistirão com as estruturas atuais e não deverão substituí-las implicitamente.
-
-### 35.4. Identificação dos modos
-
-Todo participante, apuração, evento e fechamento da Jornada V2 deverá possuir modo explícito:
-
-| Modo | Finalidade | Efeito oficial |
-|---|---|---|
-| `DESATIVADA` | Fora da Jornada V2 | Nenhum |
-| `TESTE` | Colaborador fictício ou sandbox | Nenhum |
-| `SHADOW` | Cálculo paralelo de colaborador real | Nenhum |
-| `PILOTO` | Novo fluxo oficial para escopo reduzido | Somente para participantes aprovados |
-| `PRODUÇÃO` | Fluxo oficial para escopo migrado | Sim |
-
-O modo deverá aparecer em telas, relatórios de transição, logs, apurações, eventos, exportações experimentais e fechamentos.
-
-### 35.5. Primeira implantação com colaborador fictício
-
-A primeira implantação será exclusiva para um colaborador fictício. Ele será identificado por atributo técnico, como `ExperimentContext` ou `isTestSubject`, e não apenas pelo nome.
-
-O colaborador fictício deverá permitir validar:
-
-- Cadastro e contrato.
-- Vínculo externo ou fonte de batidas de teste.
-- Turno e Escala V2.
-- Jornada esperada.
-- Intervalos e tolerâncias.
-- Folgas, férias, feriados e ausências.
-- Batidas regulares e irregulares.
-- Falta de batida.
-- Atraso e saída antecipada.
-- Jornada excedente e horas extras.
-- Documentos e justificativas.
-- Ajustes administrativos.
-- Tratamento de ocorrências.
-- Reprocessamento.
-- Eventos experimentais de folha.
-- Fechamento mensal de teste.
-- Reabertura, versionamento e auditoria.
-
-Inicialmente:
-
-```text
-Colaboradores reais
-→ utilizam exclusivamente o fluxo atual
-
-Colaborador fictício
-→ utiliza a Jornada V2 em modo TESTE
-```
-
-### 35.6. Isolamento de efeitos do teste
-
-O colaborador fictício e qualquer dado experimental serão excluídos de:
-
-- Folha oficial.
-- Exportação oficial para o contador.
-- Movimentações reais de vale-transporte.
-- Notificações reais.
-- Relatórios e indicadores oficiais.
-- Arquivos bancários.
-- Documentos oficiais.
-- Integrações externas com efeito financeiro ou trabalhista.
-
-Testes dessas saídas utilizarão sandbox, destinatário controlado ou arquivo marcado como `TESTE — SEM EFEITO OFICIAL`.
-
-### 35.7. Fechamento experimental
-
-O colaborador fictício deverá completar um ciclo mensal de teste:
-
-```text
-Batidas de teste
-→ apuração
-→ ocorrências
-→ justificativas e ajustes
-→ reprocessamento
-→ eventos experimentais
-→ revisão
-→ fechamento de teste
-→ reabertura e nova versão, quando necessário
-```
-
-Esse fechamento terá identificador e modo experimentais, não será misturado com competências oficiais e não poderá ser promovido diretamente a fechamento real.
-
-### 35.8. Modo sombra
-
-Depois da validação fictícia, colaboradores reais selecionados poderão entrar em `SHADOW`:
-
-```text
-PROCESSO ATUAL
-→ permanece oficial
-
-MOTOR DA JORNADA V2
-→ recebe batidas e calcula em paralelo
-→ produz resultado comparativo
-→ não altera o processo oficial
-```
-
-Serão comparados, conforme disponibilidade do processo atual:
-
-- Jornada trabalhada.
-- Atrasos.
-- Intervalos.
-- Faltas.
-- Horas excedentes.
-- Horas extras.
-- Ocorrências.
-
-Divergências serão classificadas e analisadas, mas não modificarão automaticamente escala, folha, eventos ou fechamento oficiais.
-
-### 35.9. Piloto controlado
-
-Depois do shadow mode, um escopo reduzido poderá entrar em `PILOTO`:
-
-- Um colaborador.
-- Alguns colaboradores.
-- Um grupo definido pelo RH.
-- Uma unidade.
-
-Nesse estágio, a Jornada V2 poderá se tornar oficial somente para os participantes aprovados. Os demais continuarão no fluxo atual. O escopo deverá ser explícito, versionado e auditado.
-
-### 35.10. Expansão gradual
-
-```text
-Colaborador fictício
-        ↓
-Modo sombra
-        ↓
-Piloto controlado
-        ↓
-Grupo maior
-        ↓
-Unidade
-        ↓
-Demais unidades
-        ↓
-Migração completa
-```
-
-Não haverá virada obrigatória de toda a empresa de uma única vez. A expansão poderá ser pausada ou revertida em qualquer estágio.
-
-### 35.11. Ativação seletiva
-
-O controle de ativação deverá aceitar, progressivamente:
-
-- Colaborador.
-- Grupo ou coorte.
-- Unidade.
-- Empresa.
-
-A ativação individual é requisito mínimo. Regras de composição deverão evitar que uma configuração ampla promova inadvertidamente um colaborador em teste ou shadow. Exceções individuais terão precedência sobre escopos mais amplos.
-
-### 35.12. Rollback
-
-Durante teste, shadow e piloto, será possível retirar um participante do novo fluxo:
-
-```text
-Maria — Jornada V2: PILOTO
-        ↓ problema encontrado
-Maria — Jornada V2: DESATIVADA
-```
-
-O rollback deverá:
-
-- Preservar todo o histórico da Jornada V2.
-- Impedir novos efeitos oficiais da V2 para o participante.
-- Permitir continuidade do processo anterior.
-- Identificar competências que exigem ação manual.
-- Registrar estado anterior, estado novo, responsável, data e motivo.
-
-### 35.13. Relação com a escala atual
-
-Durante a coexistência:
-
-```text
-ESCALA ATUAL
-        ↓
-leitura / cópia / adaptação controlada
-        ↓
-ESCALA V2
-```
-
-Será evitado:
-
-```text
-ESCALA V2
-        ↓
-alteração automática
-        ↓
-ESCALA ATUAL
-```
-
-Qualquer migração será explícita e auditável. Não serão executadas automaticamente migração de todos os turnos, migração de todas as escalas, substituição de regras ou ativação em massa de colaboradores.
-
-### 35.14. Critérios de passagem entre estágios
-
-#### Teste fictício → Shadow
-
-Somente avançar quando:
-
-- Regras básicas funcionarem nos cenários definidos.
-- Apuração estiver consistente e explicável.
-- Ajustes e ausências produzirem o resultado esperado.
-- Reprocessamento estiver validado.
-- Fechamento experimental e versionamento funcionarem.
-- Não houver impacto na escala ou no processo atual.
-- Barreiras contra efeitos externos reais estiverem testadas.
-
-#### Shadow → Piloto
-
-Somente avançar quando:
-
-- Resultados estiverem suficientemente alinhados com o processo oficial.
-- Divergências relevantes estiverem compreendidas e classificadas.
-- Estabilidade técnica estiver comprovada.
-- Sincronização e reprocessamento estiverem observáveis.
-- RH validar o fluxo operacional.
-- Rollback individual estiver testado.
-
-#### Piloto → Expansão
-
-Somente avançar quando:
-
-- Fechamento do piloto puder ser concluído.
-- Não houver perda de dados.
-- Auditoria estiver íntegra.
-- Eventos e exportações oficiais estiverem corretos para o escopo.
-- Rollback estiver validado.
-- RH aprovar formalmente a expansão.
-
-#### Expansão → Migração completa
-
-Somente avançar quando:
-
-- Todos os fluxos necessários estiverem cobertos.
-- O módulo estiver estável nos escopos já migrados.
-- Dados e resultados tiverem sido validados por competências suficientes.
-- O RH estiver operando normalmente.
-- Dependências relevantes do modelo anterior estiverem identificadas e resolvidas.
-
-### 35.15. Observabilidade da transição
-
-O painel de implantação mostrará:
-
-- Colaboradores apenas no sistema atual.
-- Colaboradores em teste.
-- Colaboradores em shadow.
-- Colaboradores em piloto.
-- Colaboradores em produção V2.
-- Apurações comparadas.
-- Divergências encontradas, resolvidas e ainda abertas.
-- Erros de sincronização.
-- Reprocessamentos.
-- Falhas do motor.
-- Rollbacks.
-- Fechamentos experimentais e oficiais por modo.
-- Cobertura das regras testadas.
-
-### 35.16. Desativação do legado
-
-O sistema antigo continuará existindo durante toda a transição. Sua desativação será uma fase própria e só poderá ocorrer quando:
-
-- Todos os fluxos necessários estiverem cobertos.
-- A Jornada V2 estiver estável.
-- Os dados tiverem sido validados.
-- O RH estiver operando normalmente.
-- O rollback da última expansão estiver disponível durante a janela acordada.
-- Não existirem dependências relevantes do legado.
-- A migração definitiva tiver aprovação formal.
-
-Até esse momento, nenhuma decisão técnica presumirá substituição imediata da escala ou do processo atual.
-
-## 36. Plano de implementação
-
-O roadmap foi reorganizado para respeitar as dependências do cálculo: primeiro são definidos os dados que formam a jornada esperada; depois são trazidas as batidas; em seguida entra o motor; só então ocorrências, eventos e fechamento. Solicitações do colaborador vêm depois do fluxo administrativo básico, mas o módulo de Ausências é anterior ao motor porque altera sua entrada.
-
-O plano será conduzido em duas dimensões independentes:
-
-- **Trilha funcional:** constrói as capacidades do produto nas Fases 0 a 14.
-- **Trilha de implantação:** controla quem pode usar cada capacidade e se ela produz ou não efeito oficial nas Fases A a H.
-
-Concluir uma fase funcional não autoriza ativação geral. Toda capacidade continuará submetida ao estágio de implantação, às feature flags e ao modo do participante.
-
-### 36.1. Trilha de implantação
-
-#### Fase A — Infraestrutura para coexistência
-
-- Criar feature flags.
-- Criar `TimekeepingEnrollment` por colaborador.
-- Criar modos `DESATIVADA`, `TESTE`, `SHADOW`, `PILOTO` e `PRODUÇÃO`.
-- Criar identificação explícita de colaborador fictício e contexto experimental.
-- Criar Escala V2 e demais namespaces isolados.
-- Criar adaptador somente de leitura da escala atual, caso necessário.
-- Bloquear efeitos oficiais originados em teste e shadow.
-- Separar relatórios, notificações, documentos e exportações experimentais.
-- Criar auditoria de ativação, mudança de estágio e rollback.
-
-Critério de saída: o novo módulo pode existir e processar dados sem alterar a escala atual nem qualquer saída oficial.
-
-#### Fase B — Colaborador fictício
-
-- Criar um único colaborador explicitamente marcado como teste.
-- Cadastrar contrato, regras, turnos e Escala V2.
-- Gerar ou importar batidas de teste.
-- Executar apuração básica em modo `TESTE`.
-- Confirmar que nenhum colaborador real é incluído.
-
-Critério de saída: o fluxo básico funciona exclusivamente para o colaborador fictício e todos os efeitos externos permanecem isolados.
-
-#### Fase C — Validação completa do fictício
-
-- Exercitar folgas, férias, ausências e feriados.
-- Exercitar faltas de batida, atrasos, saídas antecipadas e jornadas excedentes.
-- Exercitar justificativas, documentos, ajustes e tratamentos.
-- Validar reprocessamento e explicabilidade.
-- Gerar eventos experimentais.
-- Executar fechamento mensal de teste, reabertura e nova versão.
-- Validar bloqueios de exportação, notificação, benefício e documento oficial.
-
-Critério de saída: todos os critérios `Teste fictício → Shadow` da seção 35.14 estão atendidos.
-
-#### Fase D — Shadow mode com colaboradores reais
-
-- Selecionar individualmente os participantes.
-- Processar batidas reais no novo motor sem efeito oficial.
-- Manter o processo atual como fonte oficial.
-- Comparar resultados, classificar divergências e ajustar regras.
-- Medir estabilidade, sincronização e reprocessamento.
-- Validar rollback individual.
-
-Critério de saída: todos os critérios `Shadow → Piloto` da seção 35.14 estão atendidos.
-
-#### Fase E — Piloto controlado
-
-- Definir coorte reduzida e responsáveis.
-- Tornar a Jornada V2 oficial somente para o escopo aprovado.
-- Manter o legado para os demais colaboradores.
-- Concluir pelo menos um fechamento do piloto.
-- Validar eventos, exportações, auditoria e rollback.
-
-Critério de saída: todos os critérios `Piloto → Expansão` da seção 35.14 estão atendidos.
-
-#### Fase F — Expansão gradual
-
-- Ampliar por colaborador, grupo ou unidade.
-- Monitorar indicadores e divergências a cada expansão.
-- Manter exceções individuais e capacidade de rollback.
-- Não ativar toda a empresa por consequência de uma flag global.
-
-Critério de saída: os escopos migrados operam normalmente por competências suficientes e o RH aprova cada nova expansão.
-
-#### Fase G — Migração definitiva
-
-- Resolver dependências restantes do legado.
-- Executar migrações de dados explicitamente aprovadas.
-- Validar cobertura funcional e histórico.
-- Aprovar formalmente a Jornada V2 como processo oficial para todo o escopo desejado.
-- Manter janela de segurança e rollback conforme plano de corte.
-
-Critério de saída: todos os critérios `Expansão → Migração completa` da seção 35.14 estão atendidos.
-
-#### Fase H — Desativação do legado
-
-- Confirmar ausência de dependências relevantes.
-- Preservar acesso ao histórico necessário.
-- Retirar gradualmente rotinas e navegação antigas.
-- Monitorar a operação depois da desativação.
-- Registrar aprovação, data e responsáveis.
-
-Critério de saída: legado desativado sem perda de histórico, capacidade operacional ou rastreabilidade.
-
-### 36.2. Trilha funcional
-
-### Fase 0 — Descoberta da integração
-
-Entregas:
-
-- Identificação do sistema externo.
-- Documentação da API.
-- Estrutura completa das batidas.
-- Identificadores de colaborador e batida.
-- Timezone.
-- Paginação e consulta incremental.
-- Webhooks disponíveis.
-- Alterações, cancelamentos e exclusões.
-- Batidas inseridas manualmente na origem.
-- Histórico recuperável.
-- Limites e autenticação.
-- Exemplos reais anonimizados.
-- Estratégia de contingência por arquivo.
-
-Critério de saída: contrato técnico de batidas conhecido, testado e aprovado.
-
-### Fase 1 — Fundação do domínio
-
-Entregas:
-
-- Competências.
-- Colaboradores e vínculos externos.
-- Contratos, cargas horárias e vigências.
-- Permissões.
-- Auditoria.
-- Armazenamento seguro de documentos.
-- Tipos configuráveis iniciais.
-- Convenções de datas, timezone e versionamento.
-- Controle de ativação por colaborador.
-- Contexto experimental e separação dos modos.
-- Feature flags e barreiras contra efeitos oficiais.
-
-Critério de saída: base capaz de representar colaboradores, vigências, decisões e histórico.
-
-### Fase 2 — Jornada
-
-Entregas:
-
-- Turnos.
-- Regras de jornada.
-- Tolerâncias de marcação.
-- Regras de tempo computável.
-- Intervalos.
-- Quantidade esperada de batidas.
-- Escala V2 isolada.
-- Adaptador somente de leitura da escala atual, se necessário.
-- Trocas de turno.
-- Folgas.
-- Feriados.
-- Vigências e histórico.
-
-Critério de saída: Coala consegue construir a jornada esperada do colaborador fictício na Escala V2 sem alterar a escala atual.
-
-### Fase 3 — Ausências
-
-Entregas:
-
-- Tipos configuráveis.
-- Ausência integral e parcial.
-- Lançamento direto pelo RH.
-- Solicitação do colaborador em estrutura mínima.
-- Férias, licenças, folgas e afastamentos.
-- Documentos.
-- Aprovações.
-- Efeito sobre a jornada esperada.
-- Vigência, histórico e auditoria.
-
-Critério de saída: ausências reconhecidas alteram corretamente a jornada esperada antes do cálculo.
-
-### Fase 4 — Integração das batidas
-
-Entregas:
-
-- Conector.
-- Sincronização incremental e reconciliação.
-- Webhook, se aplicável.
-- Armazenamento das batidas.
-- Idempotência e duplicidade.
-- Vínculo de colaboradores.
-- Alterações e exclusões retroativas.
-- Importação contingencial.
-- Tela de sincronização.
-- Monitoramento.
-
-Critério de saída: batidas brutas entram no Coala com origem, histórico e associação rastreáveis.
-
-### Fase 5 — Motor de apuração
-
-Entregas:
-
-- Materialização da jornada esperada.
-- Associação e pareamento das batidas.
-- Jornada trabalhada.
-- Intervalos.
-- Tolerâncias.
-- Atrasos e saídas antecipadas.
-- Entrada antecipada e permanência posterior.
-- Ausência parcial e integral.
-- Falta e excesso de batidas.
-- Jornada excedente e horas extras.
-- Trabalho em feriados e folgas.
-- Batida sem escala e escala sem batida.
-- Explicabilidade do cálculo.
-- Versionamento do motor.
-- Suíte de testes de cenários.
-
-Critério de saída: Coala parte de batidas brutas e produz uma apuração diária explicável e reproduzível.
-
-### Fase 6 — Ocorrências, ajustes e reprocessamento
-
-Entregas:
-
-- Central de ocorrências.
-- Fila por responsável.
-- Justificativas e documentos.
-- Tratamentos.
-- Ajustes administrativos de ponto.
-- Aprovação de ajustes sensíveis.
-- Tratamento em lote.
-- Reprocessamento direcionado.
-- Histórico entre resultado anterior e novo.
-- Ressalvas.
-
-Critério de saída: RH consegue resolver exceções sem apagar dados originais e obter novo resultado calculado.
-
-### Fase 7 — Portal do colaborador
-
-Entregas:
-
-- Meu RH → Solicitações.
-- Justificativas.
-- Esquecimento de batida.
-- Correção de ponto.
-- Documentos.
-- Ausências.
-- Troca de turno.
-- Férias, quando aplicável.
-- Acompanhamento do pedido.
-- Notificações.
-- Aplicação da decisão aos registros correspondentes.
-
-Critério de saída: colaborador participa do processo com solicitações rastreáveis e conectadas à jornada.
-
-### Fase 8 — Eventos de folha
-
-Entregas:
-
-- Tipos configuráveis.
-- Mapeamentos para o contador.
-- Geração automática a partir do resultado final.
-- Lançamento manual.
-- Aprovação.
-- Recalculo e revisão quando a apuração mudar.
-- Resumo individual.
-- Consolidação da competência.
-
-Critério de saída: apuração e tratamentos geram quantidades de folha confiáveis.
-
-### Fase 9 — Fechamento mensal
-
-Entregas:
-
-- Painel orientado a exceções.
-- Status por colaborador.
-- Revisão de apuração e eventos.
-- Fechamento regular.
-- Fechamento com ressalvas.
-- Congelamento.
-- Versionamento.
-- Reabertura justificada.
-- Reprocessamento em nova versão.
-- Resumos geral e individual.
-- Exportação XLSX e CSV.
-- Fechamento experimental identificado e isolado.
-- Bloqueio de saídas oficiais para teste e shadow.
-
-Critério de saída: competência experimental pode ser fechada e reaberta com rastreabilidade completa; exportações de teste permanecem isoladas. O uso oficial dependerá da trilha de implantação.
-
-### Fase 10 — Benefícios
-
-Entregas:
-
-- Histórico do vale-transporte.
-- Ativação, alteração, suspensão, desativação e reativação.
-- Movimentação direta pelo RH.
-- Solicitações do colaborador.
-- Vigência e aprovação.
-- Eventos de folha.
-
-Critério de saída: movimentações de VT entram corretamente na competência.
-
-### Fase 11 — Envio ao contador
-
-Entregas:
-
-- Destinatários e modelos de mensagem.
-- Pacote do fechamento.
-- Histórico de envio.
-- E-mail e link seguro.
-- Identificação da conversa.
-- Status e prazos.
-
-Critério de saída: fechamento enviado de forma padronizada e rastreável.
-
-### Fase 12 — Retorno e documentos
-
-Entregas:
-
-- Upload pelo RH.
-- Portal do contador.
-- Prévias e versões.
-- Documentos definitivos.
-- Associação à competência e ao envio.
-- Histórico.
-
-Critério de saída: retornos centralizados no Coala.
-
-### Fase 13 — Conciliação
-
-Entregas:
-
-- Estruturação do retorno.
-- Mapeamento de eventos.
-- Comparação.
-- Destaque de divergências.
-- Solicitação de correção.
-- Nova versão.
-- Aprovação.
-
-Critério de saída: RH revisa prioritariamente o que divergiu.
-
-### Fase 14 — Relatórios e automações
-
-Entregas:
-
-- Indicadores.
-- Alertas e prazos.
-- Relatórios gerenciais.
-- Jobs agendados.
-- Cobranças automáticas.
-- Monitoramento da integração e do motor.
-- Métricas operacionais.
-
-Critério de saída: processo previsível, monitorado e mensurável.
-
-## 37. Escopo do MVP
-
-O MVP funcional deverá cobrir as fases funcionais 0 a 9 e provar o fluxo completo a partir das batidas brutas. Sua primeira execução será limitada às Fases A, B e C da trilha de implantação, exclusivamente com o colaborador fictício:
-
-```text
-Cadastrar regras de jornada
-        ↓
-Cadastrar turnos
-        ↓
-Montar a Escala V2 isolada
-        ↓
-Cadastrar ausências
-        ↓
-Sincronizar batidas
-        ↓
-Apurar jornada automaticamente
-        ↓
-Identificar ocorrências
-        ↓
-RH tratar ocorrências
-        ↓
-Receber justificativas e documentos
-        ↓
-Aplicar ajustes administrativos autorizados
-        ↓
-Reprocessar quando necessário
-        ↓
-Gerar eventos de folha
-        ↓
-Revisar por colaborador
-        ↓
-Fechar competência
-        ↓
-Versionar
-        ↓
-Gerar exportação experimental do resumo
-```
-
-O MVP somente estará concluído quando o Coala conseguir partir das batidas brutas do colaborador fictício e produzir uma apuração de jornada confiável, explicável e auditável, sem alterar a escala atual nem produzir qualquer efeito oficial.
-
-O MVP deverá demonstrar também:
-
-- Ativação individual em modo `TESTE`.
-- Identificação técnica do colaborador fictício.
-- Feature flags e isolamento dos dados.
-- Escala V2 sem escrita na escala atual.
-- Fechamento mensal experimental completo.
-- Bloqueio de folha, contador, benefício, notificação, documento e relatório oficiais.
-- Reabertura, nova versão e rollback sem perda de histórico.
-
-Shadow mode, piloto e produção não fazem parte da primeira liberação do MVP; são estágios posteriores de implantação, condicionados aos critérios da seção 35.14.
-
-Ficam para entregas posteriores ao MVP:
-
-- Vale-transporte completo e demais benefícios.
-- Envio integrado de e-mail.
-- Portal do contador.
-- Retorno estruturado.
-- Conciliação automática.
-- Documentos definitivos.
-- Automações e relatórios avançados.
-
-## 38. Critérios de sucesso do MVP
-
-O MVP estará concluído quando o RH conseguir:
-
-1. Selecionar uma competência.
-2. Cadastrar e versionar regras de jornada.
-3. Cadastrar turnos, intervalos e tolerâncias.
-4. Montar e alterar a Escala V2 sem modificar a escala atual.
-5. Cadastrar férias, folgas e ausências diretamente.
-6. Receber solicitações de ausência do colaborador.
-7. Sincronizar as batidas.
-8. Identificar colaboradores não vinculados.
-9. Consultar as batidas por colaborador e dia.
-10. Visualizar a jornada esperada.
-11. Visualizar a apuração automática e sua explicação.
-12. Identificar ocorrências geradas pelo motor.
-13. Corrigir administrativamente situações autorizadas sem apagar as batidas originais.
-14. Solicitar e analisar justificativas.
-15. Receber e analisar documentos.
-16. Criar ou vincular ausências a uma ocorrência.
-17. Reprocessar somente os dias ou períodos necessários.
-18. Comparar o resultado anterior e o novo.
-19. Gerar eventos de folha.
-20. Revisar cada colaborador por exceção.
-21. Fechar uma competência experimental de forma regular ou com ressalvas.
-22. Reabrir gerando uma nova versão.
-23. Gerar exportação experimental, identificada e impedida de seguir para o contador oficial.
-24. Consultar todo o histórico e a auditoria.
-25. Ativar e desativar individualmente o colaborador fictício.
-26. Confirmar que nenhum colaborador real foi processado pela Jornada V2.
-27. Confirmar que a escala atual permaneceu inalterada.
-28. Confirmar que dados experimentais não entraram em folha, benefícios, notificações, relatórios ou documentos oficiais.
-
-Critérios técnicos complementares:
-
-- Reimportar a mesma batida não gera duplicidade.
-- Alterar ou cancelar uma batida na origem provoca reprocessamento direcionado.
-- O mesmo conjunto de entradas e a mesma versão de regra produzem o mesmo resultado.
-- Uma competência fechada não é modificada por sincronização ou job posterior.
-- Todos os resultados exibem regras, batidas, ajustes e tratamentos que os originaram.
-- Cenários críticos de jornada possuem testes automatizados.
-- A Jornada V2 funciona com estrutura própria sem escrita no legado.
-- Feature flags e modo do participante são validados no backend.
-- `TESTE` e `SHADOW` não conseguem disparar efeitos oficiais.
-- O rollback preserva o histórico e interrompe novos processamentos da V2.
-
-## 39. Questões em aberto antes do desenvolvimento
-
-### Integração
-
-- Qual é o sistema externo de ponto?
-- Existe API oficial?
-- Como o colaborador é identificado?
-- Como cada batida é identificada?
-- Há webhook?
-- A API permite consulta incremental?
-- Como funciona a paginação?
-- Como batidas alteradas são informadas?
-- Como batidas excluídas ou canceladas são informadas?
-- Existe timezone explícito?
-- Existe identificação de dispositivo ou origem?
-- Existem batidas inseridas manualmente na origem?
-- É possível diferenciar uma batida manual de uma batida feita em dispositivo?
-- Qual histórico pode ser recuperado?
-- Quais são os limites e janelas da API?
-- Qual frequência de sincronização será adotada?
-- Qual janela de sobreposição será utilizada?
-- Qual será o formato de contingência por arquivo?
-
-### Jornada e regras
-
-- Quais tipos de contrato e carga horária existem?
-- Quais turnos existem atualmente?
-- Existem turnos noturnos ou que atravessam a meia-noite?
-- Quantas batidas são esperadas em cada turno?
-- Quais regras de tolerância serão utilizadas?
-- Haverá arredondamento? Em quais situações?
-- Como será computada a entrada antecipada dentro e fora da tolerância?
-- Como será computada a permanência posterior?
-- Quais regras definem horas extras?
-- Quais percentuais de hora extra existem?
-- Como tratar trabalho em folga e feriado?
-- Existe banco de horas? Se sim, quais regras?
-- Como tratar múltiplos intervalos?
-- Como tratar batida sem escala?
-- Quem pode publicar uma nova versão de regra?
-
-### Ausências e solicitações
-
-Os tipos, vínculos/abrangência, quem inicia, unidade/contagem, limites, prazos, anexo e fluxo de aprovação são preenchidos no catálogo já existente. O documento aceito é descrito nas instruções. Não repetir essas escolhas como pendências estruturais. A hierarquia configurável, o acesso por etapa, a retenção dos anexos por 20 anos após o desligamento e a eliminação mediante autorização seguem [Ausências do DP](engineering/flows/dp-absences.md). A aprovação final criará a ocorrência histórica na Etapa 2, sem fabricar batidas.
-
-O SLA de análise foi definido em 24 horas corridas por etapa humana, contado da atribuição. O vencimento apenas sinaliza atraso internamente: não aprova, rejeita nem troca o responsável, e o solicitante não recebe o prazo ou o atraso. Os avisos de ausência ficam somente no sino, sem e-mail e sem push. A fila interna possui filtro paginado de vencidas. Quando uma ausência aprovada bloquear um período com turno futuro, a implementação local retira a pessoa do turno ativo, preserva o turno deslocado no histórico, exibe a ausência no período e cria uma pendência para o DP responsável pela escala mensal. Essa responsabilidade combina permissão da atividade com abrangência sobre o grupo de unidades, em hierarquia configurável; falta de cobertura aparece no painel e em fila própria, sem cair no limbo. Permanecem abertos o cutover/homologação operacional e o mapeamento de efeitos no ponto e na folha. As propostas de funcionamento não são requisitos legais por si sós; seguir a lista delimitada de pendências do guia.
-
-### Ajustes e governança
-
-- Quais perfis poderão ajustar ponto?
-- Quais ajustes exigirão aprovação adicional?
-- Quais ajustes exigirão justificativa e documento?
-- Colaborador poderá sugerir horário ou apenas informar o esquecimento?
-- Qual prazo será permitido para ajustes retroativos?
-- Como tratar alterações recebidas depois do fechamento?
-- Quais perfis poderão fechar com ressalvas?
-
-### Implantação e coexistência
-
-- Qual atributo identificará tecnicamente o colaborador fictício?
-- As batidas de teste virão de sandbox, arquivo ou gerador controlado?
-- Quais usuários poderão acessar a Jornada V2 experimental?
-- Quais feature flags serão necessárias no primeiro corte?
-- A Escala V2 será totalmente manual no teste ou receberá cópia somente de leitura do legado?
-- Qual será a regra de precedência entre ativação individual, grupo, unidade e empresa?
-- Qual quantidade de colaboradores e competências será usada em shadow mode?
-- Qual limiar de divergência será aceito para avançar ao piloto?
-- Qual grupo ou unidade é candidato ao primeiro piloto?
-- Qual janela de rollback será mantida em cada expansão?
-- Quais relatórios do processo atual estarão disponíveis para comparação no shadow mode?
-- Quem aprovará formalmente cada mudança de estágio?
-- Quais dependências do legado precisam permanecer até a migração definitiva?
-
-### Folha e contabilidade
-
-- Quais eventos de folha o contador utiliza?
-- Quais códigos e unidades são esperados?
-- Qual formato de exportação será utilizado?
-- Haverá um layout por empresa contábil?
-- Quais eventos exigirão aprovação manual?
-- Quais documentos retornarão do contador?
-- Qual canal de e-mail será integrado?
-- Quais competências históricas deverão ser migradas ou apenas consultadas?
-
-## 40. Definição final do produto
-
-> O sistema externo registra e fornece as batidas. O Coala mantém contratos, regras de jornada, turnos, escalas, férias, folgas, feriados e ausências; armazena e interpreta as batidas; apura a jornada; identifica ocorrências; permite que colaborador e RH informem ausências, justificativas e documentos; permite ao RH tratar ocorrências e ajustar situações autorizadas sem apagar o registro original; reprocessa os períodos afetados; gera eventos mensais de folha; e controla o fechamento, o versionamento e a interação com a contabilidade.
-
-> A Jornada V2 nasce paralelamente ao sistema atual. Primeiro opera somente com um colaborador fictício explicitamente marcado como teste; depois avança para shadow mode, piloto e expansão gradual por colaborador, grupo ou unidade. Até a migração formalmente aprovada, não substitui nem altera automaticamente a escala atual, e resultados experimentais não produzem efeitos oficiais.
+### 3.9. Experiência de ponto e documentos no aplicativo e na web
+
+Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada **Ponto**, com as seguintes entregas. Estado em 22/10/2026 (sem teste em aparelho): itens 1 e 2 implementados para o mês corrente e anteriores; item 3 inclui comprovante individual, espelho e ZIP limitado do mês selecionado com índice de completude; item 4 implementado para comprovante, espelho e ZIP; item 5 implementado com saldo provisório/fechado, ciclo e extrato. A pasta de documentos pessoais permanece exclusivamente no Coala One. Solicitações (ausência, vale-transporte e troca de turno) ficaram nativas:
+
+1. **Hoje / bater ponto:** identidade do colaborador, estabelecimento, data/hora e ação de registro; mostrar confirmação somente após persistência. Exibir marcação registrada e acesso ao respectivo comprovante. Distinguir falha de registro, registro persistido com comprovante pendente e comprovante disponível; recuperação não pode duplicar batida nem aguardar indefinidamente sem alerta/contingência.
+2. **Histórico:** linha do tempo de hoje, seleção de outro dia e intervalo de datas, com marcações originais, origem app/web/terminal e tratamentos identificados separadamente. Turno planejado, jornada de referência e trabalho apurado aparecem com rótulos distintos; dia em andamento é parcial, não fechamento definitivo. Considerar fuso do estabelecimento e jornadas que atravessam meia-noite.
+3. **Documentos:** abrir, visualizar e baixar comprovante PDF de cada batida; selecionar dia ou período para consultar e exportar os comprovantes disponíveis. Resumo diário/período é relatório de consulta, não substitui os comprovantes individuais assinados nem o espelho. Mostrar tipo, período, versão e estado de emissão/fechamento.
+4. **Compartilhar:** selecionar comprovante, espelho ou conjunto; usar compartilhamento nativo do Android para WhatsApp, e-mail e demais apps instalados. Usuário escolhe destino e destinatário e confirma no aplicativo escolhido; não há envio automático nem garantia de entrega. Sem aplicativo compatível, oferecer salvar/baixar. Cancelar o compartilhamento não altera ponto nem documento.
+5. **Banco de horas:** saldo, extrato, memória do débito/crédito, ciclo vigente, data prevista de encerramento e ciclos anteriores, vinculados ao dia e à versão da apuração. Separar saldo provisório de fechado e permitir contestação pelos fluxos existentes/planejados.
+
+No **Coala One web**, prever “Meu ponto” para registro e consulta pessoal equivalente; painel DP com filtros autorizados por colaborador, unidade/estabelecimento, período e pendência. Ambas as interfaces consultam as mesmas fontes. Web oferece download e compartilhamento quando suportado pelo navegador, com download como alternativa; o link de consulta nunca contorna autenticação/permissões.
+
+Documentos pessoais ficam acessíveis pela **pasta do colaborador no Coala One**, mediante referências ao catálogo e aos mesmos arquivos originais, sem cópias divergentes. O Coala Go não consulta essa pasta. AFD/AEJ são exportações restritas do REP-P/PTRP por estabelecimento/período, não documentos gerais liberados na pasta pessoal. Escala planejada é outro documento, claramente separado dos registros de ponto.
+
+Exportação em lote entrega os PDFs originais em pacote ZIP com índice; não fundir ou reimprimir PDFs assinados como se fossem novos originais. Consultas paginadas e geração de lotes limitados/retomáveis; informar filtros, arquivos indisponíveis e erros, sem apresentar lote incompleto como completo. Arquivos temporários e links devem ter acesso controlado e validade limitada; compartilhar arquivo pessoal não expõe arquivos de outros empregados. Abrir o seletor de compartilhamento não comprova envio/recebimento.
+
+### 3.10. Jornada de referência, turno aplicado e banco de horas
+
+**Decisão de negócio confirmada em 17/10/2026:** jornada de referência de 7h20 e turno aplicado de 6h líquidas são parâmetros distintos. Cumpridas as 6h, sem outras ocorrências, o resultado é **−1h20 no banco**. Não reduzir automaticamente a referência para 6h por haver turno menor; não lançar a mesma diferença novamente como falta/atraso. O ponto registra os horários reais; escala não substitui batidas.
+
+Implementar memória de cálculo com referência, turno, trabalho apurado, abonos/ajustes e destino de cada diferença, sem dupla contagem. Validar também os turnos existentes de 5h45 e 8h, ausências, tolerâncias e extras, respeitando destinação configurada (banco ou folha). A decisão sobre saldo negativo está encerrada para este escopo; resta implementar e testar sua aplicação.
+
+“Movimentação de banco” significa **extrato rastreável do banco de horas**: crédito, débito, compensação, ajuste, estorno e encerramento/liquidação. Cada lançamento identifica pessoa, data, ciclo, origem, regra, versão e responsável quando manual. Reprocessamento é idempotente; correção preserva trilha, não duplica saldo.
+
+**Pendências do Doc Brown sobre o pacote do fechamento (20/10/2026):** (a) **perguntas ao advogado:** a assinatura do trabalhador no espelho é exigida pela Portaria 671 ou escolha da empresa, e a recusa tem efeito? Recibo de salário (art. 464) e espelho no mesmo documento: a recusa do pacote vale só como divergência do espelho (o depósito em conta segue como prova do pagamento)? Prazo de guarda do pacote assinado e se o e-CNPJ destacado basta sem carimbo do tempo. (b) Conferir se `signPtrpDetached` gera CAdES com carimbo do tempo (CAdES-T ou superior) para valer em 20 anos. (c) Empresa como signatária também na Autentique, ou entrega do `.p7s` ao trabalhador. (d) Retenção: `retentionUntil` e trava contra exclusão no documento arquivado; versionamento/retenção do bucket. (e) LGPD: contrato de operador com a Autentique (art. 39); quem fecha o mês passa a acionar a leitura do contracheque (finalidade: entrega ao titular); tirar o tipo de ausência do PDF do espelho. (f) Buscar o PDF assinado pela API da Autentique (`providerDocumentId`) em vez da URL do evento. (g) Contracheque retificado depois do envio não marca o pacote como desatualizado.
+
+**Pendências do Doc Brown sobre o banco (20/10/2026; decisões jurídicas, nada suposto no código):** (1) **Decidido pelo programador (20/10/2026):** falta é ato discricionário do operador. Dia sem batida fica "a tratar"; o DP lança a ausência e o tipo decide (injustificada desconta na folha e vai ao AEJ como "2"; "débito no banco" vai ao banco). O tamanho do ciclo é configurado por quem conhece o acordo; segue a **pergunta ao advogado** sobre o instrumento do banco. (2) Base legal na política (`timeBank.legalBasis`) para limitar o ciclo: mesmo mês, até 6 meses/180 dias (individual) ou até 12 meses/365 dias (coletivo); hoje o ciclo vai até 12 meses ou 366 dias, e o "transportar" pode envelhecer crédito além do prazo legal. (3) Natureza do débito por atraso no AEJ como "3"/"2" (compensação), a confirmar com o MTE e o atestado técnico. (4) **Decidido pelo programador (20/10/2026):** toda folga da escala, inclusive a prevista, é DSR; outro abono é ausência. Falta na escala: clicar no dia e escolher turno, DSR ou ausência. (5) Compensação, ajuste manual, estorno e lançamento da liquidação no extrato. (6) Apurar no fechamento ou congelar as entradas (escala, jornada, política, feriados), em vez da primeira leitura. (7) Vencimento individual do crédito (`expirationDays`) e limites positivo/negativo só como aviso. (8) Feriado por unidade quando a pessoa trabalha em locais com calendários diferentes. (9) Domingo escalado: só o excedente segue a faixa de domingo; confirmar na CCT.
+
+**Correção de liquidação (pendência operacional, 21/10/2026):** a liquidação criada pelo encerramento é imutável e não pode ser estornada isoladamente, para não recolocar no banco um valor já enviado à folha. Ainda falta definir e implementar o procedimento de correção conjunta entre o encerramento, o evento substitutivo de folha e a trilha do banco; até lá, divergência exige ajuste auditável do DP e não apaga o lançamento original.
+
+Configurar ciclos mensais, de 15 dias, de seis meses ou de 180 dias, além de outros intervalos suportados explicitamente. **Implementado em 20/10/2026** em `timeBank.cycle` da política (unidade mês ou dia, tamanho, marco, destino do residual: transportar, folha, revisão ou zerar); extrato em `docs/engineering/flows/dp-time-recording.md`. Guardar marco inicial, unidade de duração, limites do período e vigência; seis meses de calendário não equivalem automaticamente a 180 dias. O vencimento individual usa lotes FIFO por data e `expirationDays`; folha retira o crédito vencido do saldo e cria evento, revisão conserva o valor para decisão humana, e `forfeit` de crédito positivo também vira revisão. “Resetar” encerra um ciclo e abre outro, **sem apagar extrato**; destino do residual é configurado e a liquidação na folha cria movimento auditável.
+
+Histórico obrigatório **a partir do início dos testes**, com regras fiéis à operação pretendida e versionamento de jornada, turno, cargo, unidade e política. Ensaios sintéticos continuam isolados; coleta com empregados reais segue os gates do piloto. Não haverá recálculo/backfill obrigatório de períodos anteriores; comparação histórica com Bizneo é auditoria opcional. Alterações futuras de jornada/escala, inclusive eventual mudança de regime semanal, entram por vigência, sem pressupor mudança legislativa ou data de aplicação.
+
+**Decisão de 21/10/2026:** testar primeiro com algumas colaboradoras e só depois migrar toda a equipe. Para cada participante, o DP publica uma fotografia inicial na data de entrada no piloto; não se importa o histórico de batidas do Bizneo. Toda alteração posterior passa pelo contrato central de vigências, preserva a anterior e exige nova versão. No cadastro de unidades, CNPJ e endereço identificam o estabelecimento fiscal quando a unidade for selecionada como empregadora. A flag global da coleta nunca libera a equipe inteira sozinha: o servidor também exige `app.timeRecording.mark=true` no perfil efetivo da participante.
+
+### 3.11. Empregador, lotação e trabalho em outra unidade
+
+Reaproveitar os campos existentes de `users`, definidos em [tipos do colaborador](../src/types/index.ts). Não criar outro cadastro de empregador:
+
+| Campo existente | Papel no ponto e fechamento |
+| --- | --- |
+| `employerUnitId` | Referência à unidade jurídica responsável pelo vínculo; resolver identificação fiscal vigente para agrupamento do empregado na folha |
+| `employerCnpj`, `employerUnitName`, `employerAddress` | Dados registrados do empregador; conferir consistência com a referência e preservar snapshot por vigência |
+| `unitId` | Lotação principal/referência financeira; não substitui empregador |
+| `unitIds` | Unidades onde pode ser escalado/atuar; não cria vínculos jurídicos adicionais |
+| `employmentRelationshipType` | Natureza do vínculo; não identifica o CNPJ empregador |
+
+Para cada jornada, preservar separadamente vínculo/ciclo de admissão, empregador fiscal, lotação, unidade planejada e unidade efetiva de prestação, com fonte e vigência. A unidade da ocorrência de escala é previsão, não prova automática do local efetivamente trabalhado. Divergência ou unidade desconhecida gera ocorrência para tratamento; nunca inventar local nem bloquear coleta apenas por estar fora de `unitIds`. Não ampliar automaticamente permissões ou unidades cadastradas por uma batida excepcional.
+
+**Cobertura excepcional:** empregado vinculado ao empregador A e lotado no Tirirical cumpre seis horas no João Paulo. As seis horas entram uma única vez na apuração do mesmo vínculo/competência, identificadas com a unidade de prestação. Se a referência do dia é 7h20 e não há outras ocorrências, o débito é de 1h20 no mesmo banco, não uma falta de 7h20 na origem mais seis horas extras no destino. A cobertura não troca `employerUnitId`, não cria admissão/transferência jurídica e não usa automaticamente o CNPJ do local como empregador.
+
+Consolidar o trabalho do vínculo antes de apurar limites diários/semanais; jornadas repartidas entre unidades não duplicam referência, tolerância, débito ou extra. Regras territoriais e de cobertura usam o contexto vigente e a política aprovada; não aplicar toda a política da unidade de destino por simples localização. Rateio de custos é dimensão separada do empregador e não altera horas nem saldo; automatização de rateio depende de contrato financeiro próprio.
+
+Ausência/conflito de identificação jurídica impede finalizar documentos/folha como conformes, mas não autoriza perder tentativas de marcação. Aplicar contingência sem atribuir NSR/CNPJ por suposição. Transferência jurídica real requer alteração explícita com vigência; não reler documentos anteriores pelo cadastro atual. O mapeamento fiscal da ARP segue o vínculo validado, nunca a troca operacional de unidade isoladamente.
+
+**Aceite:** testar cobertura em outra unidade, divisão do mesmo dia entre duas unidades, unidade fora de `unitIds`, vínculo fiscal ausente/divergente, transferência com vigência e mudança posterior de lotação. Conferir horas consolidadas, empregador nos documentos, saldo único, rastreabilidade do local e ausência de ampliação de acesso. Verificar preenchimento individual antes do piloto; a existência dos campos no código não comprova sua completude real.
+
+## 4. Arquitetura
+
+- **REP-P:** código e versão próprios; coleta, hora, NSR, ARP, comprovante e AFD.
+- **ARP:** banco exclusivo e escrita por serviço dedicado, com acessos mínimos. Demonstrar proteção contra escrita privilegiada; cadeia de hashes e backup diário isoladamente não bastam.
+- **PTRP/Tempo:** coleções próprias em `coala-rh`. Migrações necessárias seguem transição controlada, sem duas fontes editáveis.
+- **Escala:** permanece em `coala`, preservando proteção de ocupação e histórico.
+- **Documentos:** identidade, versão, origem e assinatura quando exigida; registrar geradores em `SYSTEM_DOCUMENT_TEMPLATES`, conforme [catálogo oficial](engineering/generated-documents-registry.md).
+- **Operação:** filas idempotentes, consultas limitadas, índices e custos dimensionados antes da implantação.
+
+## 5. Estado de partida
+
+O estado funcional abaixo vem do registro anterior. Após a correção do usuário, foi feita consulta real somente de leitura ao banco `coala`, projeto `smart-converter-752gf`, em 17/10/2026. Essa leitura confirma os cadastros listados, não sua conformidade jurídica nem todos os vínculos dos empregados.
+
+### Inventário real confirmado em 17/10/2026
+
+| Cadastro | Resultado |
+| --- | --- |
+| Unidades | 4 ativas, todas com CNPJ e endereço; 1 arquivada (Administrativo/CTA) |
+| Quiosque Tirirical | CNPJ 14.276.603/0001-25 |
+| Quiosque João Paulo | CNPJ 14.276.603/0002-06 |
+| Centro de distribuição - Matriz | CNPJ 14.276.603/0003-97; “Matriz” é o nome operacional cadastrado, não classificação fiscal inferida |
+| Quiosque Shopping do Automóvel | CNPJ 14.276.603/0004-78 |
+| Municípios | Endereços das 4 unidades ativas indicam São Luís/MA; preservar suporte a vários municípios |
+| Jornadas | 1 publicada: “Jornada 44h — 7h20 diárias”, versão 2, vigência inicial 01/10/2026; 1 versão arquivada |
+| Turnos | 13 definições cadastradas, nenhuma marcada como arquivada na consulta |
+| Horas extras | 1 política publicada, versão 1: “CCT — 2026 - São Luís/MA”; referência “CCT Comerciários 2026/2027 - São Luís/MA” |
+| Calendários | 2025 e 2026, com cidade São Luís e UF MA |
+
+O município em `dp_units` está no endereço textual; calendários e cadastro empresarial oferecem campos estruturados. A fonte e o vínculo municipal do REP-P devem ser definidos sem duplicar cadastro. A referência textual à CCT já existe; falta confrontar seu conteúdo e abrangência com as regras configuradas. Não pedir novamente CNPJs, jornadas e turnos já disponíveis.
+
+### Estado funcional registrado
+
+| Bloco | Situação registrada |
+| --- | --- |
+| Jornadas e políticas de extras | Em produção, versionadas, ainda em `coala` |
+| Turnos | Em produção; falta versionamento histórico |
+| Escala, folgas, calendários | Em produção; preservar referências anteriores às alterações |
+| Ausências | Etapas 1–3 em produção; homologação funcional DP pendente conforme guia |
+| Férias, desligamento e metas | Fluxos existentes a integrar à competência |
+| REP-P | Núcleo sintético local de NSR/hash/idempotência; sem serviço, ARP, coleta ou documento válido |
+| PTRP, documentos assinados e fechamento integrado | Não iniciados |
+
+### Análise de lacunas — primeiro passo concluído em 17/10/2026
+
+Escopo: comparação do código com cadastros reais e requisitos planejados. Bases, comandos e resultados da investigação ficam no registro da tarefa `2026-10-17-plano-ponto-fechamento`, no arquivo local canônico `.ai-work-archive/development-technology/`, fora do repositório. O diagnóstico abaixo orienta implementação; não comprova conformidade operacional.
+
+Consulta adicional, limitada e com projeção de campos, confirmou os parâmetros abaixo. Não foram consultados empregados, contratos individuais, anexos médicos nem escalas individuais. Portanto, não se declara cobertura de todos os vínculos ou correção da jornada efetivamente praticada.
+
+#### Configuração real e implicações
+
+| Tema | Observado | Implicação para o novo ponto |
+| --- | --- | --- |
+| Jornada publicada | 2.640 minutos semanais; ciclo de 7 dias, seis de 440 minutos; folga definida pela escala; máximo de 6 dias consecutivos; domingo a cada 3 semanas | Reaproveitar regra e resolução; verificar efetiva aplicação de todos os parâmetros |
+| Abrangência | Jornada restrita a organização, cargo e três funções; política de extras restrita à organização | Não assumir que uma única jornada atende todos os empregados; testar resolução por vínculo antes do piloto |
+| Turnos | 11 definições com 6h líquidas, uma com 5h45 e uma de liderança com 8h; todas vinculadas à jornada publicada | Aplicar decisão da seção 3.10: 6h cumpridas frente a 7h20 geram −1h20 no banco; testar demais durações e ocorrências |
+| Prevalência de turno menor | `useDefinedShiftWhenShorter` ausente na jornada publicada; o validador bloqueia turno menor somente quando o campo é explicitamente `false` | Comportamento atual permite passar sem esse bloqueio; isso não é regra suficiente de remuneração/compensação |
+| Intervalos | 12 turnos com intervalo fixo de 15min; liderança com duração flexível de 60min | Usar previsão para comparação, sem converter intervalo esperado em intervalo efetivamente gozado |
+| Tolerância | `dailyToleranceMinutes = 5` na política (legado) | Substituída em 20/10/2026 pela tolerância única da jornada (seção 3.6); cadastrar o valor em cada jornada antes do uso |
+| Extras | 50% em dia de trabalho com aprovação; 100% em domingo/feriado sem aprovação; destino folha | Parametrização existente; não há apurador de batidas identificado nesses consumidores. Aprovação não pode suprimir coleta nem resolver automaticamente direito ao pagamento |
+| Banco | Habilitado, saldo negativo permitido, vencimento em 180 dias, vencido para revisão; categorias atuais destinam extras à folha | Definir quais eventos creditam/debitam o banco, instrumento autorizador e liquidação; habilitar cadastro não significa possuir razão de movimentos |
+| Vigência | Jornada publicada começa 01/10/2026; política começa 13/10/2026; versão antiga da jornada está arquivada sem `validTo` | Resolver períodos sem política e política de histórico. Não inferir irregularidade de folha: não foram consultados registros oficiais históricos |
+| Referência coletiva | Texto “CCT Comerciários 2026/2027 - São Luís/MA” | Já existe insumo. Ainda não foram conferidos documento, cláusulas e abrangência; não exigir novo ACT para construir REP-P |
+
+Os limites de tolerância precisam ser modelados conforme [CLT, art. 58, §1º](https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452compilado.htm). Para banco, definir unidade de prazo e instrumento aplicável: 180 dias e seis meses de calendário não devem ser tratados como equivalentes automáticos. Esta análise não aprovou juridicamente os valores cadastrados.
+
+#### Reaproveitar, adaptar e construir
+
+| ID | Bloco | Diagnóstico com evidência | Trabalho necessário / aceite |
+| --- | --- | --- | --- |
+| G01 | Identificação fiscal e territorial | CNPJs/endereço em `dp_units`; município estruturado em calendários/cadastro empresarial; [tipos](../src/types/index.ts) | **Adaptar:** mapear unidade → estabelecimento → empregador, município/UF/fuso com fonte explícita; aceitar múltiplos municípios; não duplicar cadastro |
+| G02 | Jornadas e políticas | [Serviço Tempo](../src/features/dp/time-config/service.server.ts) mantém rascunho/publicação, versão e vigência; bloqueia edição de publicado | **Reaproveitar:** serviço e catálogo; ampliar regras jurídicas específicas, sem refazer CRUD |
+| G03 | Histórico de turnos | `updateShiftDefinition` atualiza o mesmo documento; ocorrência grava início/fim e referência de jornada, mas não a definição completa do intervalo | **Adaptar:** versão/snapshot imutável do turno e intervalo; alteração futura não muda a leitura de dia passado |
+| G04 | Vínculo histórico | [Validação de escala](../src/features/dp/journey-validation/service.server.ts) lê cargo, funções e unidade atuais de `users` para resolver datas passadas | **Adaptar:** resolver vínculo por vigência e preservar decisão aplicada. Não reconstruir passado exclusivamente com cadastro atual |
+| G05 | Resolução e validação | [Resolvedor](../src/lib/dp-journey-resolution.ts) distingue ausência/ambiguidade e vigência; [núcleo de escala](../src/features/dp/journey-validation/core.ts) verifica dias consecutivos e compatibilidade | **Reaproveitar/adaptar:** resolvedor; complementar totais diário/semanal, intervalos, interjornada e domingos no motor próprio |
+| G06 | Cadência de domingos | Campo existe e tem valor 3; núcleo de validação da escala não o usa. Há consumidor no [solver consultivo Natasha](../src/lib/natasha-roster-solver.ts) | **Adaptar:** enforcement no fluxo autoritativo e no PTRP; não confundir sugestão do solver com validação operacional |
+| G07 | Jornada contratual versus turno | [Duração de turno](../src/lib/dp-shift-duration.ts) calcula duração prevista e saída esperada; não apura batidas reais | **Implementar decisão confirmada:** seção 3.10; 7h20 de referência e 6h cumpridas resultam em −1h20 no banco, sem dupla contagem; cobrir demais turnos e ocorrências |
+| G08 | Ausências e escala original | [Protocolo](../src/features/dp/absences/operational/protocol.server.ts) já arquiva `shift.data()` em `dp_absenceDisplacedShifts` antes de remover a ocorrência | **Reaproveitar/adaptar:** consumir arquivo existente e ocorrência aprovada. Não criar segundo arquivo de ausências; complementar histórico das demais alterações de escala |
+| G09 | Banco, tolerância, noturno e extras | [Schemas](../src/features/dp/time-config/schemas.ts) oferecem parâmetros; não há razão de banco nem motor remuneratório identificado no percurso examinado | **Construir:** motor, movimentos reversíveis, vigência, critérios de classificação e eventos; ampliar schema onde insuficiente |
+| G10 | REP-P | Não identificado núcleo de coleta regulada, ARP, NSR, hora legal ou serviço PAdES/CAdES no inventário/busca dirigida | **Construir:** fronteira REP-P, identidade, persistência original, comprovante, AFD, contingência e testes de integridade |
+| G11 | PTRP e fiscalização | Fluxos de ausência são insumos; AEJ/espelho regulados não identificados | **Construir:** ajuste com proveniência, AEJ, espelho e atendimento fiscal, reutilizando catálogo de documentos/acessos |
+| G12 | Competência e contador | Há processos de férias/desligamento; não foi identificado fechamento integrado da jornada descrito neste plano | **Construir:** eventos, snapshots, reabertura, envio/retorno e conciliação. Reutilizar canais existentes sem confundir provisão financeira com apuração de ponto |
+
+“Não identificado” registra o limite da busca dirigida no código e mapa; não é alegação de inventário integral de todos os sistemas externos.
+
+#### Primeiro incremento de implementação recomendado
+
+**Histórico confiável da jornada esperada**, dentro da escala atual, antes do cálculo oficial:
+
+1. Definir um contrato de leitura por pessoa/data que devolva vínculo vigente, regra/versionamento, turno e intervalo, alterações/ausências e referências das fontes.
+2. Versionar definições de turno e preservar snapshot necessário na ocorrência, aproveitando a referência `journeyResolution` já gravada.
+3. Consumir o arquivo `dp_absenceDisplacedShifts` e definir histórico para alterações/remoções que não sejam ausência.
+4. Tratar data sem regra ou histórico insuficiente como pendência explícita; não preencher com o estado atual silenciosamente.
+5. Demonstrar que uma mudança futura de turno/cargo/unidade não altera a reconstrução anterior; desfazer ausência mantém a trilha.
+
+Sem migração real nesta análise. Preservação começa no início dos testes; backfill anterior não é requisito e auditoria histórica Bizneo é opcional. Ausência de evidência não autoriza fabricar versões passadas. A migração entre bancos pode ser planejada separadamente; não é pré-requisito para especificar esse contrato.
+
+Em paralelo, a especificação técnica REP-P pode avançar sem depender da obtenção de novo ACT. G07 foi definida pelo usuário na seção 3.10; implementar casos de referência e conferir a aplicação dos parâmetros existentes. Antes do piloto, completar os gates legais do plano.
+
+#### Limites e tratamento das lacunas
+
+Não foram auditados todos os contratos, atribuições de empregados, eventos de folha, CCT integral ou anexos da Portaria. A Fase 0 jurídica completa permanece pendente. Evidências de execução ficam no registro da tarefa, não como aceite de implementação deste plano.
+
+| Lacuna | Responsável funcional / execução | Entrega e aceite |
+| --- | --- | --- |
+| Tolerância única na jornada | DP/jurídico / desenvolvimento | Decidido em 20/10/2026: campo único diário na jornada (seção 3.6). Falta o jurídico confirmar se o limite de 5 min por marcação precisa de conferência separada; casos de fronteira na Fase 3 |
+| Aprovação de extra | DP/contador / desenvolvimento | Fase 3: distinguir autorização gerencial de classificação remuneratória; extra não aprovada permanece visível e vai para decisão, nunca some da coleta/cálculo |
+| Política começa após jornada | DP / desenvolvimento | Fase 1: cobertura sem lacunas desde o início dos testes; período anterior sem backfill obrigatório. Data sem regra impede finalizar cálculo conforme, não a coleta |
+| Domingos e intervalos | DP/jurídico / desenvolvimento | Fases 1/3: aplicar parâmetros validados no caminho autoritativo e testar limites; campo cadastrado não é execução comprovada |
+| Empregador e unidade excepcional | DP / desenvolvimento | Fases 1/3/5: contrato da seção 3.11 e seus testes; sem fallback silencioso para lotação |
+
+Nenhum item autoriza alterar parâmetros em produção; novas versões e eventual migração real dependem do fluxo autorizado.
+
+## 6. Fases
+
+Esta numeração substitui a anterior. Fases 0/1 podem avançar em paralelo nas partes independentes; cálculo regulado depende das regras validadas.
+
+Entrega incremental de interface, **sem retirar escopo**: Fase 2 entrega batida app/web, confirmação e PDF individual; Fases 3/4 entregam histórico, espelho, banco e pasta pessoal; Fase 4 completa compartilhamento nativo e exportação em lote; Fase 5 integra versões do fechamento. Testar cada incremento antes do seguinte. Esse sequenciamento não é declaração de “mínimo legal” e não dispensa qualquer gate anterior ao piloto. Todo o escopo da seção 3.9 permanece na candidata à validação integrada.
+
+| Fase | Entrega | Critério de saída |
+| --- | --- | --- |
+| 0 — Base jurídica | Fontes, enquadramento, instrumentos, matriz, privacidade e retenção | Requisitos do MVP fundamentados; pendências com responsável |
+| 1 — Jornada histórica | Contrato, jornada, turno e escala versionados; estabelecimento fiscal | Reconstrução por pessoa/data sem depender do cadastro atual |
+| 2 — REP-P | Coleta online, hora, NSR, ARP, comprovante e AFD de teste | Integridade, concorrência, persistência e recuperação demonstradas |
+| 3 — PTRP | Apuração, ajustes, ausências, banco e reprocessamento | Resultados explicáveis contra casos aprovados |
+| 4 — Documentos e fiscalização | AEJ, espelho e pacote fiscal | Leiautes, assinaturas e rastreabilidade conferidos |
+| 5 — Fechamento e contador | Eventos, versões, envio, retorno e conciliação | Competência sintética completa |
+| 6 — Validação integrada | Simulação operacional e de falhas | Nenhuma pendência crítica; versão candidata identificada |
+| 7 — Conformidade formal | INPI, certificados reais e atestados REP-P/PTRP | Documentação e versão final validadas |
+| 8 — Piloto técnico | Batida real para um usuário, antecipada por decisão do programador (19/10/2026), com comprovantes sem validade até o lançamento total; sem comparação com o Bizneo, pois nada é importado de lá | Batidas, comprovantes e AFD do piloto sem perda nem divergência crítica não resolvida |
+| 9 — Lançamento total | Promoção por estabelecimento depois das Fases 3 a 7; comprovantes passam a valer | Checklist completo; primeiro fechamento acompanhado |
+| 10 — Saída do Bizneo | Histórico independente; encerramento das integrações antigas | Consulta/recuperação verificadas antes do desligamento |
+
+### Sequência vigente (21/10/2026)
+
+Decisões do programador alteraram a ordem original: o piloto técnico (Fase 8) vem antes da conformidade formal (Fase 7), e a interface do colaborador antecipou partes das Fases 3 e 4. Estado e próximos passos:
+
+1. **Fases 1 a 6 — implementação publicada:** jornada, REP-P/PTRP, ausências, ajustes, documentos, fechamento individual/geral, banco de horas, AFD/AEJ e interfaces web/Coala Go estão em produção com a coleta real desligada. Regras e índices do `coala-rh` e as três rotinas agendadas do ponto foram publicados em 21/10/2026.
+2. **Fase 0 — validação jurídica pendente:** decisões de produto estão na [seção 10-B do plano REP-P](plano-rep-p-controle-de-ponto.md); permanecem as confirmações formais e a matriz por requisito.
+3. **Fase 7 — conformidade formal pendente:** validar assinaturas no ITI, obter o certificado do INPI e concluir os atestados assinados com e-CPF fora do sistema.
+4. **Fase 8 — piloto controlado pendente:** configurar integralmente Heucilene Ribeiro e Luis, testar em aparelho físico e só então autorizar separadamente a flag e os perfis individuais.
+5. **Fase 9 — código publicado, lançamento total não autorizado:** depende do piloto, dos gates fiscais/jurídicos e do primeiro fechamento acompanhado. `REP_P_MARKING_ENABLED=false` continua impedindo qualquer batida real.
+6. **Fase 10 — pendente:** saída do Bizneo reduzida, sem importação; exportação, custódia e consulta independente devem ser verificadas antes do desligamento.
+
+**Etapa 7 — Coala Go: Ponto e Solicitações** (incluída em 19/10/2026 e executada antes da Etapa 6). Entradas nativas no app que reaproveitam as rotas web: **Ponto** (hora oficial no fuso da unidade, batida como coletor móvel `01`, sequência de hoje, histórico do mês com tratamentos, comprovante individual e ZIP do mês selecionado para abrir, compartilhar pela folha nativa ou salvar, pedido de ajuste em duas etapas) e **Solicitações** (ausência com anexo, resumo e decurso de prazo; vale-transporte e troca de turno). Aparecem com as permissões `app.timeRecording.mark` e `app.requests.create` do perfil, mais a de colaborador. Banco de horas, espelho e exportação limitada em lote estão no app; a pasta do colaborador permanece, por decisão de produto, somente no Coala One. Falta validar o conjunto em aparelho físico.
+
+**Etapa 6 — fechamento do mês** (publicada em 21/10/2026, com a coleta real desligada): declaração versionada por pessoa, reabertura com motivo e bloqueio transacional de ajustes e ausências em competência fechada. A versão congela toda a equipe e separa fechamento individual e geral: somente a assinatura do pacote espelho + contracheque na Autentique fecha a pessoa; o geral só fecha quando todos assinaram e, após 24 horas sem assinatura, continua pendente com aviso e possibilidade de reenvio. O banco tem prévia do mês aberto, apuração automática da equipe ao fechar, aprovação de extra, limites diário/semanal, vencimento individual, compensação, ajuste, lançamento na folha e estorno auditável; turno noturno é pareado pela virada do dia e preserva minutos noturnos. A tela administrativa exporta AFD e AEJ com as respectivas assinaturas. O Coala Go mostra espelho, extrato do banco e ZIP de comprovantes do mês sob demanda; a pasta publicada permanece no Coala One. **Lacunas restantes:** outros tratamentos fora da declaração, consumidor monetário dos eventos de folha, congelamento completo de versões vivas, provisionamento do bucket fiscal imutável e os gates fiscais/ICP do piloto.
+
+**Troca de turno em Solicitações (21/10/2026, publicada):** proposta entre dois turnos futuros da mesma unidade e data, aceite ou recusa pela outra pessoa, identidade da sessão e declaração preservadas por no mínimo 20 anos, sem TTL de exclusão automática no pedido. O programador confirmou a manifestação autenticada como prova operacional, sem assinatura reconhecida. O aceite revalida o contrato central e inverte somente os ocupantes na escala, com novas referências históricas; a recusa não altera nada. Web e Coala Go usam as mesmas rotas server-authoritative. A declaração do fechamento e o PDF do espelho listam a troca e suas manifestações para as duas pessoas; uma proposta pendente bloqueia o fechamento até receber decisão ou ficar não aplicável. As três consultas têm índices explícitos no banco principal e limites de 100, 20 por turno e 2.001 por competência. Aplicação e índices foram publicados; falta homologar em duas contas reais e testar em aparelho.
+
+### Fase 0 — Base jurídica
+
+- Confirmar razão social/CNPJ da titular/desenvolvedora e empregadores/estabelecimentos atendidos.
+- Partir dos cadastros existentes: `dp_units` (CNPJ/endereço), `entities` (dados empresariais e município), `dp_journeys`, `dp_shiftDefinitions` e `dp_overtimePolicies`. Pedir informação ao usuário somente para lacunas encontradas. Tratar municípios por estabelecimento/abrangência, sem presumir um único município para a empresa.
+- Conferir categorias e abrangência a partir dos cadastros e da referência já publicada “CCT Comerciários 2026/2027 - São Luís/MA”; localizar o instrumento correspondente e verificar acordos individuais quando aplicáveis. Ausência de um ACT próprio não é impedimento geral ao REP-P.
+- Conferir integralmente Portaria vigente, anexos, leiautes, atestado e orientações; arquivar versões/hashes em `docs/rep-p/referencias/` na execução desta fase.
+- Completar a [matriz](plano-rep-p-controle-de-ponto.md#11-matriz-de-requisitos-legais), distinguindo conferência documental de implementação.
+- Validar jornada, tolerância, intervalos, descansos, noturno, domingos, feriados, compensação e rescisão.
+- Definir retenção por classe, privacidade, acesso após desligamento, fornecedores e incidentes.
+- Escolher assinatura PAdES/CAdES destacado, testável sem certificado real.
+- Identificar responsáveis e direitos sobre código próprio, contratado e dependências.
+
+### Fase 1 — Jornada histórica
+
+Incremento local de simulação, sem conclusão desta fase: `src/features/dp/time-calculation/core.ts` calcula em memória uma pessoa/dia com vigência explícita, referências congeladas e intervalos efetivos normalizados. Para 440 minutos de referência e 360 trabalhados, só propõe −80 ao banco quando vínculo/política são elegíveis; cobertura sequencial em outra unidade consolida as horas sem substituir o empregador. Ausência, falta de batida, extra, sobreposição, ambiguidade ou regra territorial não resolvida exigem revisão. A saída é `simulation_only`, sem ledger, API, UI, documento fiscal, REP-P/PTRP ou efeito em `users`; não valida a identidade jurídica do empregador. O plano continua aberto nas Fases 1, 2 e 3.
+
+Versionar turnos, contratos, escala e regras; preservar planejamento anterior às ausências. Implementar turno ajustado para recomposição por horas conforme escopo já combinado. Mapear unidade operacional para estabelecimento fiscal. Migrar Tempo quando necessário, sem fontes duplicadas. Confirmar dependências de mudanças retroativas.
+
+Incremento local disponível: gravação individual e substituição em lote preservam referências privadas de planejamento em `dp_shiftReferenceHistory`, com revisões anteriores, turno/intervalo e separação empregador/lotação; campos ausentes são pendências. O serviço privado de vínculo resolve pessoa/data e a ficha do colaborador permite consultar e acrescentar vigências sem alterar `users`. Ainda faltam o histórico efetivo dos cadastros reais, o consumo da referência por pessoa/data no PTRP, a cobertura dos demais escritores e eventos de remoção. Nenhum cadastro real foi preenchido automaticamente. Detalhes e limites nos guias de [escalas](engineering/flows/dp-schedules.md) e [pessoas](engineering/flows/people-access.md).
+
+### Fase 2 — Núcleo REP-P
+
+Implementar coleta preferencial no Coala Go existente, alternativa pessoal no Coala One web e terminal, identificação, hora, NSR, ARP, comprovante e AFD conforme especificação complementar. Entregar confirmação e acesso ao PDF por batida nas duas interfaces (seção 3.9). Dados exclusivamente sintéticos.
+
+Testar concorrência, repetição, falha após persistência, indisponibilidade de assinatura, desvio de hora e restauração. Definir contingência antes de declarar coleta apta.
+
+Incremento local de 18/10/2026: as etapas técnicas 1–4 foram implementadas com ARP dedicada, API própria autenticada, NSR/original transacional, relógio confiável fail-closed e AFD 004 com contrato de assinatura CAdES. O emulador validou concorrência, replay e unidade excepcional sem trocar empregador. Os provedores padrão de Hora Legal e assinatura recusam operação; portanto não há coleta ou exportação fiscal real. A etapa 5 acrescentou o comprovante PDF/PAdES por batida (snapshot na transação, emissão única, recuperação sem nova batida), também bloqueado pelo assinador padrão. Interfaces, INPI/atestados, IAM/backup/restauração e homologação continuam nesta fase.
+
+### Fase 3 — Tratamento
+
+Motor e ajustes das seções 7/8; banco com extrato, ciclos e decisão de débito da seção 3.10, visível no app/web. Absorve a parte de ponto da antiga Etapa 4 de ausências. Cada ausência distingue justificativa, abono/crédito, débito e efeito de folha. Aplicar no motor tolerância, domingos e demais regras já cadastradas; cadastro existente não dispensa teste do cálculo.
+
+### Fase 4 — Documentos e fiscalização
+
+AEJ/espelho identificam originais e tratamentos. Validar pares por jornada, virada de dia, pré-assinalação e horário contratual. AFD é gerado pelo REP-P.
+
+Entregar histórico por hoje/dia/período, visualização/download, compartilhamento nativo, exportação em lote e referências na pasta do colaborador, conforme seção 3.9. Separar comprovantes, resumo de consulta, espelho, escala e arquivos fiscais restritos.
+
+Exercitar solicitação fiscal simulada: período, assinaturas, metadados e documentação técnica. Pendência no PTRP não impede a extração do AFD.
+
+### Fase 5 — Fechamento e contador
+
+Eventos, fechamento/reabertura, envio versionado, retorno, conciliação e definitivos. Absorve a parte de folha da antiga Etapa 4 de ausências. Destinatários e documentos de teste isolados.
+
+Reaproveitar o fechamento integrado já especificado nas seções 9–11; publicar espelhos e versões correspondentes na pasta do colaborador e nas consultas app/web, preservando versões anteriores identificadas.
+
+### Fase 6 — Validação integrada
+
+Competência sintética completa com casos esperados aprovados pelo DP/contador e revisão jurídica dos casos sensíveis. Incluir falhas, recuperação, mudança contratual, férias, ausência parcial, desligamento e retroatividade.
+
+Congelar versão candidata e evidências. Concordância entre programas não substitui resultados de referência.
+
+### Fase 7 — Conformidade formal
+
+1. Confirmar titularidade/licenças e cessões necessárias.
+2. Disponibilizar e-CNPJ da CT Sorvetes LTDA e certificados pessoais dos responsáveis sem transmitir chaves pelo chat.
+3. Preservar pacote/hash da versão e obter registro no INPI.
+4. Configurar número INPI e certificados por configuração controlada, sem mudar código apenas para inserir valores.
+5. Emitir atestados que contemplem expressamente REP-P/PTRP, versões e destinatários.
+6. Validar assinaturas reais e repetir verificações afetadas pela configuração final.
+7. Confirmar privacidade, retenção, atendimento, contingência e revisão final jurídica/contábil.
+
+Mudança na versão candidata exige reconciliar pacote, atestados e evidências antes do piloto. Certificado de teste não atende este gate.
+
+### Fase 8 — Piloto paralelo
+
+Um estabelecimento, por pelo menos uma competência. Bizneo oficial; Coala comparativo e já formalizado. Orientar empregados sobre acesso, finalidade e divergências.
+
+Classificar diferenças de instante de coleta, regra e defeito. Duas batidas feitas em momentos distintos não precisam ser artificialmente iguais. Resolver causas, repetir verificações afetadas e tratar evidência de trabalho real no processo oficial.
+
+### Fase 9 — Oficial e expansão
+
+Aprovação do RH por estabelecimento, checklist da seção 14 e instante de corte registrado. Acompanhar primeiro fechamento antes de expandir.
+
+Retorno ao Bizneo preserva documentos/proveniência e consolida competência. Nunca apagar coleta do Coala nem apresentá-la como realizada no outro sistema.
+
+### Fase 10 — Saída do Bizneo
+
+Exportar/conferir registros, arquivos fiscais disponíveis, espelhos, tratamentos e demais documentos necessários. Testar consulta sem fornecedor. Só então encerrar serviço/exportação de escala, com custódia, prazos e suspensão de descarte documentados.
+
+## 7. Motor de apuração
+
+Entradas: vínculo/contrato/regras vigentes, escala histórica, feriados, férias, ausências, ARP e tratamentos.
+
+1. Resolver jornada e regra por data/contexto.
+2. Parear registros por jornada, inclusive atravessando meia-noite.
+3. Calcular trabalho, intervalos e tolerâncias.
+4. Apurar excedentes diários/semanais sem duplicidade, noturno, descansos, banco e ausências.
+5. Identificar inconsistências sem inventar marcações.
+6. Preservar resultado automático/final, entradas, versões e memória de cálculo.
+
+Reprocessamento segue dependências: dia pode afetar semana, descanso, banco e competências posteriores. Fila limitada, idempotente e retomável. Competência fechada recebe alerta e exige reabertura; jobs não a alteram silenciosamente.
+
+### 7.1. Contratos do motor e do banco (requisitos de implementação)
+
+- **Entrada congelada:** pessoa, vínculo/ciclo de admissão, jornada lógica, fuso, empregador, unidades, IDs/versões de regras, escala, originais e tratamentos. Mesmas entradas ordenadas e versão do motor produzem mesmo resultado; entrada ausente/ambígua retorna pendência, não zero horas.
+- **Saída:** versão, memória de cálculo, tempo real, tempo considerado, intervalos, abonos, diferenças, destino banco/folha, pendências e referências das fontes. Guardar precisão original; conversão/arredondamento somente por regra explícita. Atribuir jornada noturna, semana, feriado e competência por regra versionada, não por corte arbitrário da meia-noite.
+- **Não duplicidade:** cada parcela compensável tem origem e destino exclusivos. Adicionais que possam coexistir são dimensões separadas, com regra explícita; a mesma hora não vira crédito de banco e extra de folha simultaneamente. Débito de 80 minutos não reaparece como falta remuneratória.
+- **Banco:** lançamento imutável com ID, vínculo, ciclo, origem/parcela, versão de apuração, minutos com sinal, tipo, motivo e eventual autor. Chave única por origem/parcela/versão/tipo; ajuste por estorno referenciado e substituição, sem edição destrutiva. Saldo projetado deve reconciliar com saldo inicial mais lançamentos.
+- **Ciclos:** início inclusivo e fim exclusivo, sem sobreposição por vínculo; política e fuso congelados. Encerrar exige residual destinado explicitamente e reconciliação. Correção de ciclo fechado exige reabertura autorizada/versionada e recálculo dos ciclos dependentes, sem reescrever silenciosamente o saldo seguinte.
+- **Concorrência:** publicar resultado somente se versões de entrada continuam atuais; alteração concorrente torna resultado obsoleto e agenda nova execução limitada. Persistência dos efeitos usa transação quando possível ou tarefa durável idempotente com reconciliação entre bancos; falha parcial não pode deixar saldo aceito sem evento de origem.
+
+## 8. Ajustes e ocorrências
+
+Esquecimento, falha, marcação indevida, intervalo/saída ausente e conflito com escala/ausência.
+
+- Solicitante não aprova o próprio ajuste.
+- Fluxo por gestor, RH ou ambos; automação somente em casos definidos/validados.
+- Guardar evidência, motivo, solicitado/aplicado, autores, decisões, datas e reversões.
+- Nunca completar horário por conveniência para “fechar pares”.
+- Identificar inclusão, desconsideração e pré-assinalação nos documentos.
+- Lote exige compatibilidade, prévia e auditoria.
+- Estados: nova → análise → aguardando informação → tratada/desconsiderada → reaberta.
+- **Implementado em 19/10/2026 (etapa 5):** pedido, decisão com justificativa, tratamentos D/I e relatório; ver [fluxo do Registro de ponto](engineering/flows/dp-time-recording.md). Falta gerar o AEJ e o espelho a partir dos tratamentos (fases 4 e 5).
+- Pedido do colaborador (orientação Doc Brown, 19/10/2026): batida esquecida = inclusão; errada/duplicada = desconsideração; horário errado = desconsideração + inclusão na mesma transação; unidade errada = tratamento de local, sem tocar a ARP. Justificativa obrigatória; hora sempre informada pela pessoa; evidência opcional (sem dado de saúde). Cada pedido tem um histórico consultável com original × novo, justificativa, autor, decisor, instantes, estado e reversões; se virar PDF persistente, entra em `SYSTEM_DOCUMENT_TEMPLATES`. Detalhes e perguntas ao advogado na [seção 10-A do plano REP-P](plano-rep-p-controle-de-ponto.md).
+
+## 9. Eventos de folha
+
+Código interno/do contador, natureza, unidade, quantidade, percentual quando aplicável, origem, competência, versão e aprovação.
+
+Identidade mínima do evento: ID estável, pessoa/vínculo, empregador vigente, competência, origem/parcela e versão. Distinguir `minutes`, dias, unidades e moeda; valores monetários de metas preservam moeda e aprovação do módulo de origem. Contrato com contador define códigos e conversões; valor desconhecido não vira zero. Não gerar lançamentos financeiros ou pagamentos apenas por fechar ponto.
+
+Automáticos abertos podem ser recalculados; manuais não são apagados; aprovados afetados voltam à revisão. Integrar férias, desligamento, ausências, metas e vale-transporte conforme contrato com contador.
+
+## 10. Fechamento e conformidade
+
+Estados independentes:
+- **Administrativo:** preparação → revisão → fechado → enviado → conciliação → concluído.
+- **Conformidade:** pendente → conforme / não conforme, com evidências e impedimentos.
+
+Ressalva documenta motivo, responsável, pessoas, impacto e prazo. Não certifica registro, cálculo ou documento irregular.
+
+Falha de integridade, assinatura inválida, falta de documento obrigatório ou cálculo não confiável impede declarar conformidade/promover o sistema. Procedimento acordado com contador permite cumprir obrigações de pagamento tempestivamente, documentando ajustes/retificações.
+
+Congelar entradas, referências a originais, tratamentos, regras, resultados, eventos, documentos e aprovadores. Reabertura cria nova versão e preserva a anterior.
+
+**Declaração obrigatória no documento de fechamento (decisão do programador, 19/10/2026).** O documento de fechamento do ponto de cada pessoa e competência declara todos os pedidos e tratamentos que afetaram ou justificaram a jornada, um a um, ligados ao dia:
+
+- **Ajustes de ponto:** marcação original (NSR, instante) × nova, tipo (inclusão/desconsideração), justificativa, solicitante, decisor, instantes e situação, inclusive recusados, revertidos e reabertos.
+- **Ausências:** tipo, período, quantidade, situação e forma de aprovação (análise humana ou **aprovada por decurso de prazo**), com referência ao comprovante sem reproduzir dado de saúde.
+- **Outros tratamentos:** troca de unidade conferida, pré-assinalação, abonos e qualquer correção do DP, com autor e motivo.
+
+Fechar a competência sem que todos esses itens estejam declarados é impedimento de conformidade; pedido em aberto aparece como pendente, nunca omitido. A versão reaberta declara o que mudou em relação à anterior.
+
+Chave do fechamento: empregador/estabelecimento fiscal e competência, com pessoas/vínculos incluídos explicitamente. Fechar usa a versão esperada e verifica ausência de entradas alteradas, jobs pendentes e divergências críticas; concorrência rejeita a transição e exige revisão. Se a materialização for em lotes, publicar o manifesto completo somente após verificar todos os itens; pacote parcial não é fechamento concluído.
+
+Reabertura exige permissão, motivo e referência à versão anterior; gera manifesto de diferenças em eventos, banco e documentos. Jobs não modificam pacote fechado/enviado. Correção após remessa requer nova versão e retificação identificada, preservando o envio anterior e reavaliando efeitos em ciclos/competências seguintes.
+
+## 11. Contador e conciliação
+
+Resumo por pessoa/geral; CSV/XLSX estruturado e PDF; leiaute e unidades acordados. Envio registra destinatários, arquivos e versão; e-mail é canal. Retorno vincula prévia/definitivos à versão. Conciliação aponta diferenças de pessoa, quantidade, evento e competência; correção gera nova prévia.
+
+Portal do contador e conciliação automática ficam após o MVP; ciclo básico integra Fase 5.
+
+Remessa contém ID idempotente, empregador, competência/versão, eventos, manifesto de arquivos/hashes, destinatário autorizado e estado (`preparada`, `enviada`, `recebida`, `conciliada` ou `falha`). Envio técnico não significa aceite contábil. Retorno referencia remessa/versão e separa divergência de quantidade, valor e pessoa; retorno antigo não concilia versão atual. Repetir tentativa não duplica evento/remessa lógica; reenvio intencional fica auditado. Dados sintéticos usam destinatários isolados, nunca o canal real automaticamente.
+
+## 12. Acesso, privacidade e retenção
+
+| Perfil | Responsabilidade |
+| --- | --- |
+| Colaborador | Marcar, consultar documentos, solicitar ajuste e contestar |
+| Gestor | Equipe/aprovações configuradas, sem acesso geral a anexos sensíveis |
+| RH operacional | Tratamento/reprocessamento autorizado |
+| RH responsável | Publicar regras validadas, fechar/reabrir e promover |
+| Administrador técnico | Configuração/operação, sem editar originais |
+| Auditor | Leitura e exportações autorizadas |
+| Contador | Competências/documentos autorizados, sem acesso geral à ARP/anexos médicos |
+
+Definir acesso após desligamento, recuperação de conta e alternativa para empregado sem celular próprio. Consulta ao comprovante não depende de concordância com o espelho.
+
+Privacidade vale desde a primeira coleta real. Retenção por finalidade/classe; 48 horas não é prazo de descarte. Suspender eliminação por litígio/fiscalização quando aplicável. Política anterior de anexos médicos não vira regra legal geral do ponto.
+
+## 13. MVP e verificações
+
+MVP funcional = Fases 0–5 com dados sintéticos; não autoriza coleta real. Operação real exige Fases 6–8 e promoção na 9.
+
+Casos mínimos: jornada regular, tolerâncias, extra diária/semanal, intervalos, noturno, feriado, folga, ausência parcial, batida ímpar, sem escala, alteração contratual, desligamento, retroatividade, concorrência e falha de persistência/assinatura.
+
+Testes significativos por requisito. Verificação documental não comprova implementação; ensaio sintético não comprova produção.
+
+Aceites adicionais: 7h20 versus 6h = −1h20 sem débito duplicado; encerramento de ciclo preserva extrato; seis meses versus 180 dias; alteração futura não muda período anterior ao ajuste; mesma batida consultável app/web; PDF original idêntico no download e compartilhamento; hoje parcial e jornada noturna; intervalo de datas e lote incompleto; assinatura pendente e recuperação sem duplicação; cancelamento do compartilhamento e ausência de WhatsApp/e-mail instalado; isolamento entre colaboradores e bloqueio de AFD/AEJ na consulta pessoal.
+
+## 14. Critérios para uso oficial
+
+Todos necessários:
+1. Matriz legal aplicável completa com evidências.
+2. INPI e atestados REP-P/PTRP arquivados.
+3. Regras de vínculo/instrumento coletivo validadas e vigentes.
+4. Assinaturas reais e arquivos fiscais verificados.
+5. Integridade e ausência de perda demonstradas em testes/piloto.
+6. Contingência e recuperação exercitadas.
+7. Acesso e contestação pelo empregado disponíveis.
+8. Competência piloto conciliada; diferenças críticas resolvidas.
+9. Transição/retorno documentados.
+10. Aprovação RH por estabelecimento.
+
+## 15. Pendências
+
+| Insumo/decisão | Responsável | Até |
+| --- | --- | --- |
+| Conferir cadastros existentes e identificar lacunas de estabelecimento/categoria/instrumento aplicável; titular CT Sorvetes já informada | Desenvolvimento; DP/contador/jurídico apenas nas lacunas | Fase 0 |
+| Regras, retenção e instrumentos de banco | Jurídico + DP | Fase 0 |
+| Responsáveis técnico/legal | Administração | Fase 0 |
+| Identificação no terminal/aprovações | DP + desenvolvimento | Antes das Fases 2/3 |
+| Assinatura, proteção ARP e contingência | Desenvolvimento + responsáveis | Fase 2 |
+| Eventos, unidades e formatos contábeis | DP + contador | Fase 5 |
+| Estabelecimento piloto e critérios de diferença | RH + desenvolvimento | Antes da Fase 8 |
+| Parâmetros e validação física da geolocalização | Operação + jurídico + desenvolvimento | Antes do piloto nominal |

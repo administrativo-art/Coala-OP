@@ -24,7 +24,7 @@ test("identifica um lembrete sem alterar a despesa e o preserva na auditoria", a
   expect(nextDecision).not.toBeNull();
   expect(suggestedPosting!.y).toBeLessThan(nextDecision!.y);
 
-  await page.getByRole("button", { name: "Confirmar como já registrada" }).click();
+  await page.getByRole("button", { name: "Vincular à despesa", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Confirmar identificação?" })).toBeVisible();
   await page.getByRole("button", { name: "Registrar como já existente" }).click();
 
@@ -50,7 +50,7 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   await page.getByPlaceholder("Buscar fornecedor, assunto, valor, conta ou telefone...").fill("Cobrança automática documental E2E");
   await expect(page.getByText("Cobrança automática documental E2E", { exact: true }).first()).toBeVisible();
   await page.getByText("Cobrança automática documental E2E", { exact: true }).first().click();
-  await page.getByRole("button", { name: "Analisar cobrança" }).click();
+  await page.getByRole("button", { name: "Reprocessar documento", exact: true }).click();
   await expect(page.getByText("Cobrança analisada contra despesas, previsões e pagamentos.", { exact: true })).toBeVisible();
 
   await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
@@ -59,4 +59,35 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   await identifiedCharge.click();
   await expect(page.getByText("Identificação automática em", { exact: false })).toBeVisible();
   await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
+});
+
+test("separa ruído automático de descarte manual e arquiva só a página visível com restauração", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("E-mail").fill(E2E_USER.email);
+  await page.getByLabel("Senha").fill(E2E_USER.password);
+  await page.getByRole("button", { name: "Entrar no sistema" }).click();
+  await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeHidden();
+
+  await page.goto("/dashboard/financial/expenses/inbox");
+  await page.getByRole("radio", { name: "Ruídos" }).click();
+  await expect(page.getByRole("heading", { name: "Ruídos" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança B E2E/ })).toBeVisible();
+  await page.getByRole("button", { name: "Selecionar todos desta página" }).click();
+  await expect(page.getByRole("region", { name: "Ações em massa" })).toContainText("2 cobranças selecionadas para arquivamento");
+  await page.getByRole("region", { name: "Ações em massa" }).getByRole("button", { name: "Arquivar cobranças" }).click();
+  await expect(page.getByRole("heading", { name: "Arquivar 2 cobranças?" })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Arquivar cobranças" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByText("2 mensagens arquivadas.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeHidden();
+
+  await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
+  await page.getByRole("button", { name: "Arquivadas" }).click();
+  await page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ }).click();
+  await page.getByRole("button", { name: "Restaurar cobrança", exact: true }).click();
+  await page.getByRole("radio", { name: "Ruídos" }).click();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeVisible();
+  await page.getByRole("button", { name: "Descartados manualmente" }).click();
+  await expect(page.getByRole("button", { name: /Abrir cobrança Boletim sem cobrança A E2E/ })).toBeHidden();
 });

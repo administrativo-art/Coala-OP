@@ -25,6 +25,7 @@
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",
+    "body-parser@>=2.0.0 <2.4.0": "2.4.0",
     "browserslist": "4.28.8",
     "protobufjs": "7.6.6",
     "websocket-driver": "0.7.5"

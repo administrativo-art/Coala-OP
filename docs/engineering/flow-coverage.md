@@ -1,5 +1,17 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-22: implementação local da visualização assistida no Sistema e no Coala Go, exclusiva de `administrativo@cialashakes.com`. O ator Firebase real permanece responsável por autenticação, atestação e auditoria; o usuário escolhido fornece dados e permissões apenas para métodos de leitura, com aviso persistente e saída imediata. Sistema e app mantêm seleções separadas. Testes locais cobrem autorização exata, leitura e cabeçalho Android restrito à origem; conta/aparelho reais e superfícies legadas de escrita ainda exigem homologação. Nenhum grupo foi promovido.
+
+2026-10-22: o [Registro REP-P](flows/dp-time-recording.md) ganhou implementação local da [geolocalização pontual](time-recording-geolocation.md) na web e no Coala Go: política por unidade e participante, cálculo no servidor, evidência fora da ARP, TTL fixo de cinco anos e nenhuma consequência automática. O perfil do colaborador também passou a abrir Registro de ponto e Banco de horas; a visão de terceiros é somente leitura, usa permissão dedicada com compatibilidade para fechamento e aplica escopo de unidade no servidor. Código ainda não publicado; cláusula/aditivo, parâmetros reais, Doc Brown, aparelho físico e piloto continuam pendentes. O grupo permanece Traçado.
+
+2026-10-19: o [Registro REP-P](flows/dp-time-recording.md) ganhou a especificação inicial de georreferenciamento; seu estado atual está na entrada de 22/10/2026. O grupo permanece Traçado.
+
+2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, NTP público do Observatório Nacional com quórum/falha fechada e AFD 004 com contrato CAdES. O ensaio é somente local; conectividade do runtime, validação oficial de assinaturas, Coala Go e piloto seguem bloqueados. Nenhum grupo/página foi promovido.
+
+2026-10-18: [Escalas DP](flows/dp-schedules.md) documenta simulação pura diária a partir de vínculo vigente e referências históricas explícitas, sem leitura atual de cadastro, API, UI ou persistência. Só o débito conservador de banco sob condições completas pode ser proposto; qualquer ausência ou trabalho extra vai para revisão. Não é apuração fiscal nem conclusão das Fases 1/2/3; o grupo permanece Traçado.
+
+2026-10-17: [Escalas DP](flows/dp-schedules.md) ganha captura privada append-only de referências de planejamento nas gravações individuais e substituições em lote. Empregador é separado de lotação/cobertura; faltas cadastrais ficam pendentes. [Pessoas](flows/people-access.md) ganha serviço e API privados para publicar revisões de vigências e resolver pessoa/data, sem alterar `users`; a ficha do colaborador consulta e acrescenta períodos com CAS, preservação integral da timeline e datas civis. Ainda faltam leitura histórica pelo PTRP, cobertura de todos os escritores e validação integrada; grupos permanecem Traçados. Testes e limites da execução ficam no registro da tarefa de ponto.
+
 2026-10-11: [Coala Go Kotlin](../../apps/coala-one-android/README.md), package `coalaone.go`, único mobile após autorização expressa de retirada do Expo/APK antigo (não havia usuários). APK assinado/metadados/hash/link `/app/CoalaGo.apk` preparados localmente; [matriz](coala-go-parity.md) registra testes/lacunas. Extensões autorizadas: foto privada do recebimento e seleção de package na atestação/versão; [acesso/privacidade](access-and-privacy.md) documenta controles. Estoque/compras/signage continuam Traçados; testes locais não homologam serviços reais/aparelhos físicos. Sem publicação.
 
 2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
@@ -21,6 +33,8 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
+| `dp-time-recording` | 2 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela própria na barra lateral e conferência individual pelo perfil; [georreferenciamento](time-recording-geolocation.md) implementado localmente para web/Coala Go, ainda sem publicação ou piloto; validação oficial, gates fiscais/jurídicos e aparelho real pendentes |
+| `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
@@ -30,10 +44,10 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — [ausências](flows/dp-absences.md): Etapa 1 publicada; Etapas 2 e 3 fechadas localmente, inclusive SLA, escala e coberturas do DP; cutover, homologação e publicação pendentes |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
-| `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
+| `employee-documents` | 4 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; pasta do colaborador e publicação com teste de integração (20/10/2026) |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
-| `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — confirmação manual protegida por validação unitária; verificação integrada pendente |
+| `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote e confirmação manual cobertos localmente; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
 | `forms` | 6 | Traçado | [Modelos, execução e tarefas](flows/forms.md) — percurso complementado; verificação integrada pendente |
 | `goals` | 5 | Traçado | [Metas](flows/goals.md) — percurso complementado; verificação integrada pendente |
@@ -43,12 +57,12 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `measure-conversion` | 1 | Traçado | [Conversão local](flows/conversions.md) — cálculo, acesso e ausência de escrita conferidos; renderização visual não testada |
 | `operations` | 1 | Traçado | [Agregação do painel](flows/operations-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `organization` | 1 | Traçado | [Organograma](flows/organization.md) — percurso complementado; verificação integrada pendente |
-| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — revalidação do recebedor após pagamento testada em emulador; demais fronteiras bancárias pendentes |
+| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — `REALIZADO`, divergência histórica apresentada como pago/revisão, recuperação versionada após duas recusas e conciliação conservadora por conjunto possuem cobertura unitária; fronteiras bancárias e gravação integrada permanecem pendentes |
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; sem geração de lançamento financeiro; HTTP autenticado e homologação global pendentes |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; compra local sem comprovante, sessão única/retomada de vínculo na própria sangria, filtros hierárquicos de unidade e classificação operacional de itens pela IA cobertos por contrato/teste de estado, sem OCR real ou HTTP autenticado; sem criação automática de cadastro/patrimônio pendente; homologação global pendente |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
@@ -69,9 +83,9 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `uniforms` | 1 | Traçado | [Uniformes](flows/uniforms.md) — percurso complementado; verificação integrada pendente |
 | `vacations` | 2 | Traçado | [Agendamento](flows/vacation-scheduling.md), [aviso](flows/vacation-notice.md), [contador](flows/vacation-accountant-dispatch.md), [recibos](flows/vacation-receipts.md), [pagamento e encerramento](flows/vacation-payment-closure.md) — verificação integrada pendente |
 
-Total atual: **56 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
+Total atual: **58 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
-Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 56 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
+Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 58 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
 

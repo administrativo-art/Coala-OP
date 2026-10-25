@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   FINANCIAL_INBOX_STAGE_STATUSES,
   financialInboxStageForStatus,
+  isFinancialInboxArchiveCandidate,
   isFinancialInboxBulkDiscardEligible,
   matchesFinancialInboxSearch,
 } from "../../src/features/financial/inbox/presentation";
@@ -68,6 +69,7 @@ test("organiza todos os estados nas etapas operacionais sem misturar banco e con
     identified: "done",
     linked: "pay",
     awaiting_authorization: "bank",
+    payment_failed: "bank",
     scheduled: "bank",
     awaiting_statement: "bank",
     reconciled: "done",
@@ -92,6 +94,31 @@ test("só permite descarte em lote antes de vínculo ou pagamento", () => {
   assert.equal(isFinancialInboxBulkDiscardEligible(message({ status: "linked", linkedExpenseId: "expense-1" })), false);
   assert.equal(isFinancialInboxBulkDiscardEligible(message({ paymentRequestId: "payment-1" })), false);
   assert.equal(isFinancialInboxBulkDiscardEligible(message({ status: "scheduled" })), false);
+});
+
+test("arquivamento local só oferece estados terminais e ruídos sem efeito financeiro", () => {
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "ignored" })), true);
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "ignored", paymentRequestId: "payment-1" })), false);
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "ignored", obligationId: "obligation-1" })), false);
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "reconciled" })), true);
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "identified" })), false);
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "identified", resolution: {
+    status: "identified", financialState: "reconciled", kind: "new_charge", mode: "manual", targetType: null,
+    targetId: null, resolvedAt: null, resolvedBy: null,
+  } as FinancialInboxMessage["resolution"] })), true);
+  assert.equal(isFinancialInboxArchiveCandidate(message({
+    status: "scheduled",
+    bankState: "scheduled",
+    bankTransactionId: "inter-1",
+    resolution: {
+      status: "identified", financialState: "scheduled", kind: "new_charge", mode: "manual",
+      targetType: "expense", targetId: "expense-1", resolvedAt: null, resolvedBy: null,
+    } as FinancialInboxMessage["resolution"],
+  })), true);
+  for (const status of ["linked", "awaiting_authorization", "payment_failed", "scheduled", "awaiting_statement", "pending_review", "suggestion_available", "divergent", "error"] as const) {
+    assert.equal(isFinancialInboxArchiveCandidate(message({ status })), false, status);
+  }
+  assert.equal(isFinancialInboxArchiveCandidate(message({ status: "reconciled", bankState: "scheduled" })), false);
 });
 
 test("busca por fornecedor, valor brasileiro, conta e número de telefone", () => {

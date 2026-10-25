@@ -17,6 +17,7 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { WORKSPACE_ID } from "@/lib/workspace";
+import { financialInboxSenderAuthentication, triageFinancialInboxMessage } from "./triage-policy";
 
 const RESEND_API_URL = "https://api.resend.com/emails/receiving";
 const MAX_RAW_BYTES = 35 * 1024 * 1024;
@@ -186,6 +187,7 @@ export async function ingestFinancialEmail(params: {
   const from = String(received.from || "Remetente não informado");
   const fromAddress = extractEmailAddress(from);
   const senderDomain = fromAddress?.split("@")[1] ?? null;
+  const senderAuthentication = financialInboxSenderAuthentication(received.headers, senderDomain);
   const subject = String(received.subject || "Sem assunto").trim().slice(0, 500);
   const parsed = classifyFinancialEmail({ subject, text: received.text, html: received.html, senderDomain });
   const basePath = `financial-inbox/${WORKSPACE_ID}/${documentId}`;
@@ -230,7 +232,13 @@ export async function ingestFinancialEmail(params: {
 
   const now = new Date().toISOString();
   const hasStoredDocument = attachments.some((attachment) => attachment.archiveStatus === "stored");
-  const status: FinancialInboxMessage["status"] = parsed.classification.marketingLikely
+  const triage = triageFinancialInboxMessage({
+    classification: parsed.classification,
+    senderDomain,
+    senderAuthenticated: senderAuthentication.status === "pass",
+    attachments,
+  });
+  const status: FinancialInboxMessage["status"] = triage.kind === "noise"
     ? "ignored"
     : !hasStoredDocument && parsed.classification.links.length > 0
       ? "document_pending"
@@ -245,6 +253,7 @@ export async function ingestFinancialEmail(params: {
     from,
     fromAddress,
     senderDomain,
+    senderAuthentication,
     to: Array.isArray(received.to) ? received.to.map(String) : [],
     originalRecipients: Array.isArray(received.received_for) ? received.received_for.map(String) : [],
     subject,
@@ -252,6 +261,7 @@ export async function ingestFinancialEmail(params: {
     textPreview: parsed.textPreview,
     textContent: parsed.textContent,
     classification: parsed.classification,
+    triage,
     attachments,
     rawStoragePath,
     rawSha256,
@@ -282,12 +292,12 @@ export async function ingestFinancialEmail(params: {
     },
     bankState: "not_prepared",
     statementTransactionId: null,
-    resolution: parsed.classification.marketingLikely
+    resolution: triage.kind === "noise"
       ? discardedFinancialInboxResolution({
           mode: "automatic",
           at: now,
           by: "system:resend",
-          reasons: ["mensagem classificada como conteúdo não financeiro"],
+          reasons: [triage.reasonCode],
         })
       : pendingFinancialInboxResolution(),
     resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
@@ -316,11 +326,12 @@ export async function ingestFinancialEmail(params: {
       actorId: "system:resend",
       providerEventId: params.eventId,
     });
-    if (parsed.classification.marketingLikely) {
+    if (triage.kind === "noise") {
       batch.create(reference.collection("events").doc("auto-marketing-v1"), {
         type: "MESSAGE_AUTO_IGNORED_MARKETING",
         at: now,
         actorId: "system:resend",
+        reasonCode: triage.reasonCode,
       });
     }
     await batch.commit();
@@ -328,13 +339,13 @@ export async function ingestFinancialEmail(params: {
     if (!isAlreadyExists(error)) throw error;
     return { id: documentId, duplicate: true };
   }
-  if (!parsed.classification.marketingLikely) {
+  if (triage.kind !== "noise") {
     await analyzeFinancialInboxMessage(documentId).catch(async (error: unknown) => {
       await reference.collection("events").doc().create({
         type: "PROVISION_ANALYSIS_FAILED",
         at: new Date().toISOString(),
         actorId: "system:resend",
-        safeMessage: error instanceof Error ? error.message.slice(0, 240) : "Falha não identificada.",
+        reasonCode: "ANALYSIS_FAILED",
       });
     });
   }

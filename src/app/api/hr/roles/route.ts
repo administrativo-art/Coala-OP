@@ -15,6 +15,7 @@ import {
   applyRecruitmentScoring,
   getRecruitmentScoringBlockMessage,
 } from "@/lib/recruitment-scoring";
+import { reconcileExecutiveJobRoleHierarchy } from "@/features/hr/lib/job-role-hierarchy.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     });
 
     const ref = await hrDbAdmin.collection("jobRoles").add(data);
+    await reconcileExecutiveJobRoleHierarchy();
     const saved = await ref.get();
 
     return NextResponse.json(

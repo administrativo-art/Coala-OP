@@ -5,6 +5,22 @@ export type StageGroup = "you" | "risk" | "bank" | "done";
 export type PaymentRequestFilter = "unpaid" | "all" | StageGroup;
 export const DEFAULT_PAYMENT_REQUEST_FILTER: PaymentRequestFilter = "unpaid";
 
+const SETTLED_BANK_STATUSES = new Set([
+  "PAGO", "EFETIVADO", "PROCESSADO", "CONCLUIDO", "LIQUIDADO", "REALIZADO",
+]);
+
+function normalizedBankStatus(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase();
+}
+
+export function bankReportsPaymentSettled(item: BankPaymentRequest) {
+  return SETTLED_BANK_STATUSES.has(normalizedBankStatus(item.bankStatus));
+}
+
 const STATUS_GROUP: Record<BankPaymentRequestStatus, StageGroup> = {
   draft: "you",
   awaiting_financial_authorization: "you",
@@ -22,7 +38,11 @@ const STATUS_GROUP: Record<BankPaymentRequestStatus, StageGroup> = {
 };
 
 export function requiresBeneficiaryReview(item: BankPaymentRequest) {
-  return item.status === "paid" && item.beneficiaryVerificationStatus === "divergent";
+  const paidOrSettledAtBank = item.status === "paid" || bankReportsPaymentSettled(item);
+  const explicitReview = ["divergent", "unavailable"].includes(item.beneficiaryVerificationStatus ?? "");
+  const legacyReceiverDivergence = item.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE"
+    && item.bankReconciliationDivergenceField === "receiver";
+  return paidOrSettledAtBank && (explicitReview || legacyReceiverDivergence);
 }
 
 export function stageGroup(item: BankPaymentRequest): StageGroup {
@@ -31,8 +51,20 @@ export function stageGroup(item: BankPaymentRequest): StageGroup {
 
 export function matchesPaymentRequestFilter(item: BankPaymentRequest, filter: PaymentRequestFilter) {
   if (filter === "all") return true;
-  if (filter === "unpaid") return item.status !== "paid";
+  if (filter === "unpaid") return item.status !== "paid" || requiresBeneficiaryReview(item);
   return stageGroup(item) === filter;
+}
+
+export function paymentRequestDisplayStatus(item: BankPaymentRequest) {
+  if (requiresBeneficiaryReview(item)) {
+    return item.beneficiaryVerificationStatus === "unavailable"
+      ? "Pago · validação pendente"
+      : "Pago · revisar favorecido";
+  }
+  if (item.status !== "paid" && bankReportsPaymentSettled(item)) {
+    return "Pago no banco · aguardando extrato";
+  }
+  return null;
 }
 
 /** Actual payment date for settled requests, otherwise the requested/confirmed schedule. */
@@ -45,6 +77,17 @@ export function paymentSchedulePresentation(item: BankPaymentRequest, now = new 
       label: "Pago em",
       date,
       timing: date ? null : "Data não informada",
+      dueDate: null,
+    };
+  }
+  if (bankReportsPaymentSettled(item)) {
+    const paidDateTime = formatFinancialDateTime(item.bankLiquidationObservedAt);
+    const date = formatFinancialDate(item.bankLiquidationObservedAt)
+      ?? (paidDateTime === "—" ? null : paidDateTime.split(" ")[0]);
+    return {
+      label: "Pago no banco",
+      date,
+      timing: "Aguardando conciliação no extrato",
       dueDate: null,
     };
   }

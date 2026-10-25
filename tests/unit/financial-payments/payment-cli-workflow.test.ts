@@ -3,6 +3,9 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+// @ts-expect-error The test runner resolves this executable .mts module through tsx.
+import { authenticateWithPassword, existingExpenseLinkInput } from "../../../scripts/financial/coala-authenticated-payment.mts";
+
 const cli = fileURLToPath(new URL("../../../scripts/financial/coala-authenticated-payment.mts", import.meta.url));
 const order = {
   id: "request_demo_123", sourceType: "expense_boleto", sourceId: "expense_demo_123",
@@ -21,6 +24,87 @@ const preparedOrder = {
     scheduledFor: "2026-10-10", beneficiaryDocument: "11222333000181" },
   status: "awaiting_financial_authorization",
 };
+
+test("sessão temporária autentica sem persistir no Chaves", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (input, init) => {
+    calls++;
+    const target = new URL(String(input));
+    assert.equal(target.hostname, "identitytoolkit.googleapis.com");
+    assert.equal(target.pathname.endsWith("/accounts:signInWithPassword"), true);
+    assert.equal(init?.method, "POST");
+    const body = JSON.parse(String(init?.body));
+    assert.deepEqual(body, {
+      email: "demo@example.invalid",
+      password: "SENHA_FICTICIA",
+      returnSecureToken: true,
+    });
+    return Response.json({
+      email: "demo@example.invalid",
+      idToken: "ID_TOKEN_FICTICIO",
+      refreshToken: "REFRESH_NAO_PERSISTIDO",
+    });
+  };
+  try {
+    assert.equal(await authenticateWithPassword("demo@example.invalid", "SENHA_FICTICIA"), "ID_TOKEN_FICTICIO");
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("vínculo automático só usa sugestão única de despesa", () => {
+  assert.deepEqual(existingExpenseLinkInput({
+    existingExpenseSuggestion: { status: "suggested", expenseId: "expense_vivo_123", installmentNumber: 2 },
+  }), { expenseId: "expense_vivo_123", installmentNumber: 2 });
+  assert.equal(existingExpenseLinkInput({
+    existingExpenseSuggestion: { status: "ambiguous", expenseId: "expense_vivo_123" },
+  }), undefined);
+  assert.equal(existingExpenseLinkInput({
+    provisionSuggestion: { status: "suggested", expenseId: "expense_vivo_123" },
+  }), undefined);
+});
+
+test("dispatcher usa sessão temporária sem consultar o Chaves", () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    import childProcess from 'node:child_process';
+    import {pathToFileURL} from 'node:url';
+    childProcess.spawnSync = () => { throw new Error('CHAVES_NAO_DEVE_SER_ACESSADO'); };
+    Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: true});
+    Object.defineProperty(process.stdin, 'setRawMode', {configurable: true, value: () => process.stdin});
+    Object.defineProperty(process.stdin, 'resume', {configurable: true, value: () => process.stdin});
+    Object.defineProperty(process.stdin, 'pause', {configurable: true, value: () => process.stdin});
+    globalThis.fetch = async (url, init) => {
+      const target = new URL(url);
+      assert.equal(init.method, target.hostname === 'identitytoolkit.googleapis.com' ? 'POST' : undefined);
+      if (target.hostname === 'identitytoolkit.googleapis.com') {
+        assert.equal(target.pathname.endsWith('/accounts:signInWithPassword'), true);
+        const body = JSON.parse(String(init.body));
+        assert.deepEqual(body, {email: 'demo@example.invalid', password: 'SENHA_FICTICIA', returnSecureToken: true});
+        return Response.json({email: 'demo@example.invalid', idToken: 'ID_TOKEN_FICTICIO', refreshToken: 'REFRESH_NAO_PERSISTIDO'});
+      }
+      assert.equal(target.hostname, 'op.coalashakes.com');
+      assert.equal(target.pathname, '/api/financial/inbox/inbox_temp_123');
+      assert.equal(init.headers.Authorization, 'Bearer ID_TOKEN_FICTICIO');
+      return Response.json({message: {id: 'inbox_temp_123', status: 'linked', linkedExpenseId: 'expense_temp_123', paymentRequestId: null}});
+    };
+    setTimeout(() => process.stdin.emit('data', Buffer.from('SENHA_FICTICIA\\n')), 0);
+    process.argv = [process.execPath, ${JSON.stringify(cli)}, 'inspect', '--email', 'demo@example.invalid', '--id', 'inbox_temp_123', '--temporary-session'];
+    await import(pathToFileURL(${JSON.stringify(cli)}).href);
+  `;
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", source], {
+    encoding: "utf8", timeout: 15_000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /CHAVES_NAO_DEVE_SER_ACESSADO|REFRESH_NAO_PERSISTIDO/);
+  const payloadStart = result.stdout.lastIndexOf('{"message"');
+  assert.ok(payloadStart >= 0, result.stdout);
+  const payload = JSON.parse(result.stdout.slice(payloadStart));
+  assert.equal(payload.message.id, "inbox_temp_123");
+});
 
 // Run the real command dispatcher in a child with all network and Keychain calls replaced.
 // No Swift process, credentials, emulator, browser or real API can be reached.
@@ -187,6 +271,50 @@ test("dispatcher autoriza e envia em etapas separadas sem Chaves ou rede reais",
   const submission = runFixture({ action: "send", state: "ready_to_submit", posts: 1 });
   assert.equal(submission.status, 0, submission.stderr);
   assert.equal(JSON.parse(submission.stdout).status, "awaiting_bank_approval");
+});
+
+test("dispatcher de refresh consulta a ordem sem aceitar parâmetros de reenvio", () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    import childProcess from 'node:child_process';
+    import {syncBuiltinESMExports} from 'node:module';
+    import {pathToFileURL} from 'node:url';
+    const order = ${JSON.stringify(order)};
+    let posts = 0;
+    childProcess.spawnSync = () => ({status:0, stdout:'REFRESH_FICTICIO', stderr:''});
+    syncBuiltinESMExports();
+    globalThis.fetch = async (url, init) => {
+      const target = new URL(url);
+      if (target.hostname === 'securetoken.googleapis.com') return Response.json({id_token:'ID_TOKEN_FICTICIO', refresh_token:'REFRESH_FICTICIO', user_id:'demo'});
+      if (target.hostname === 'identitytoolkit.googleapis.com') return Response.json({users:[{email:'demo@example.invalid'}]});
+      assert.equal(target.hostname, 'op.coalashakes.com');
+      assert.equal(init.headers.Authorization, 'Bearer ID_TOKEN_FICTICIO');
+      if (target.pathname === '/api/financial/payment-requests') {
+        assert.equal(init.method, undefined);
+        return Response.json({requests:[{...order,status:'failed',submissionAttemptCount:2}]});
+      }
+      assert.equal(target.pathname, '/api/financial/payment-requests/' + order.id + '/refresh');
+      assert.equal(init.method, 'POST');
+      assert.equal(init.body, undefined);
+      posts++;
+      return Response.json({request:{...order,status:'failed',submissionAttemptCount:2,
+        bankPreflight:{checkedAt:'2026-10-21T12:00:00.000Z',outcome:'clear',bankTransactionCode:null}}});
+    };
+    process.on('exit', () => assert.equal(posts, 1));
+    process.argv = [process.execPath, ${JSON.stringify(cli)}, 'refresh', '--email', 'demo@example.invalid', '--id', order.id];
+    await import(pathToFileURL(${JSON.stringify(cli)}).href);
+  `;
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", source], {
+    encoding: "utf8", timeout: 15_000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /REFRESH_FICTICIO|ID_TOKEN_FICTICIO/);
+  assert.deepEqual(JSON.parse(result.stdout).bankPreflight, {
+    checkedAt: "2026-10-21T12:00:00.000Z",
+    outcome: "clear",
+    bankTransactionCode: null,
+  });
 });
 
 test("dispatcher impede escrita para ordem divergente ou tentativa anterior", () => {

@@ -84,6 +84,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   manageLabels: "Gerenciar etiquetas",
   managePublicBio: "Gerenciar perfil público",
   viewAiCosts: "Ver custos de IA",
+  viewSystemNotices: "Ver avisos do sistema",
   prepareDispatch: "Preparar envio",
   schedules: "Escalas",
   publishBizneo: "Publicar no Bizneo",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/auth-server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import {
   assertCashDepositBatchAccess,
   cashClosureActor,
@@ -8,15 +8,57 @@ import {
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
 import { issueInterCobrancaForBatch } from "@/features/financial/cash-deposits/inter-service.server";
 import { issueCashDepositSchema } from "@/features/financial/cash-deposits/schemas";
-import { AppError, withApiErrorHandling } from "@/lib/observability";
+import { AppError } from "@/lib/observability";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import {
+  classifyInterCobrancaApiError,
+  InterCobrancaApiError,
+} from "@/lib/integrations/inter/cobrancas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ batchId: string }> };
+type IssueInput = { dueDate?: string };
+type IssueResource = NonNullable<Awaited<ReturnType<typeof getCashDepositBatch>>>;
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "financial.cash-deposit.issue",
+  version: 1,
+  surface: { method: "POST", path: "/api/financial/cash-deposits/[batchId]/issue" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "financial.cash-deposit.issue" },
+  resourceScope: { kind: "unit" },
+  input: { kind: "schema", schema: "financial.cash-deposit.issue", unknownFields: "reject" },
+  effects: { mode: "external", audit: "server-authoritative" },
+  errorExposure: "sanitized",
+});
 
 function mapIssueError(cause: unknown): never {
   const message = cause instanceof Error ? cause.message : "";
+  const interRejection = classifyInterCobrancaApiError(cause);
+  if (interRejection === "invalid-request") {
+    throw new AppError({
+      code: "CASH_DEPOSIT_INTER_DATA_REJECTED",
+      kind: "PERMANENT_EXTERNAL",
+      safeMessage: "O Banco Inter recusou os dados da cobrança. Confira o cadastro do pagador e tente novamente.",
+      metadata: { providerStatus: cause instanceof InterCobrancaApiError ? cause.status : null },
+      cause,
+    });
+  }
+  if (interRejection === "authorization") {
+    throw new AppError({
+      code: "CASH_DEPOSIT_INTER_AUTHORIZATION_REJECTED",
+      kind: "PERMANENT_EXTERNAL",
+      safeMessage: "A integração do Banco Inter não está autorizada a emitir esta cobrança.",
+      metadata: { providerStatus: cause instanceof InterCobrancaApiError ? cause.status : null },
+      cause,
+    });
+  }
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND", cause });
   }
@@ -39,39 +81,54 @@ function mapIssueError(cause: unknown): never {
   throw cause;
 }
 
-export const POST = withApiErrorHandling<RouteContext>({
-  source: "api-financial",
-  operation: "issue-cash-deposit",
-  routeOrJob: "/api/financial/cash-deposits/[batchId]/issue",
-}, async (request: NextRequest, routeContext) => {
-    const context = await requireUser(request).catch((cause) => {
+const enforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, IssueInput, IssueResource>(contract, {
+  authenticate: ({ request }) => requireUser(request).catch((cause) => {
       throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
-    });
-    const { batchId } = await routeContext.params;
+  }),
+  parseInput: async ({ request }) => {
     const parsed = issueCashDepositSchema.safeParse(await request.json().catch(() => ({})));
     if (!parsed.success) {
       throw new AppError({
         code: "CASH_DEPOSIT_ISSUE_INVALID",
         kind: "VALIDATION",
-        safeMessage: "Informe um vencimento válido para o boleto.",
+        safeMessage: "Informe uma data de vencimento válida.",
         cause: parsed.error,
       });
     }
+    return parsed.data;
+  },
+  loadResource: async ({ actor, routeContext }) => {
+    const { batchId } = await routeContext.params;
     const current = await getCashDepositBatch(batchId);
-    if (!current || current.batch.workspaceId !== context.workspace_id) {
+    if (!current || current.batch.workspaceId !== actor.workspace_id) {
       throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND" });
     }
+    return current;
+  },
+  authorize: ({ actor, resource }) => {
     try {
-      assertCashDepositBatchAccess(context, "issue", current.batch);
+      assertCashDepositBatchAccess(actor, "issue", resource.batch);
     } catch (cause) {
       throw new AppError({ code: "CASH_DEPOSIT_ISSUE_FORBIDDEN", kind: "AUTHORIZATION", cause });
     }
-    const result = await issueInterCobrancaForBatch({
-      workspaceId: context.workspace_id,
-      batchId,
-      actor: cashClosureActor(context),
-      dueBusinessDays: parsed.data.dueBusinessDays,
-      dueDate: parsed.data.dueDate,
-    }).catch(mapIssueError);
-    return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
+  },
+  assertScope: ({ actor, resource }) => {
+    if (resource.batch.workspaceId !== actor.workspace_id) {
+      throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND" });
+    }
+  },
+});
+
+export const POST = secureRoute({
+  contract,
+  enforcer,
+  observability: { source: "api-financial", operation: "issue-cash-deposit" },
+}, async ({ security }) => {
+  const result = await issueInterCobrancaForBatch({
+    workspaceId: security.actor.workspace_id,
+    batchId: security.resource.batch.id,
+    actor: cashClosureActor(security.actor),
+    dueDate: security.input.dueDate,
+  }).catch(mapIssueError);
+  return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
 });

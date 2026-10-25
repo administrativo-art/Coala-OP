@@ -2,11 +2,23 @@ package com.coalaone.go.data
 
 import kotlinx.serialization.Serializable
 
-@Serializable data class UnitRef(val id: String, val name: String)
+@Serializable data class UnitRef(
+    val id: String,
+    val name: String,
+    val groupId: String? = null,
+    val groupName: String? = null,
+    val organizationId: String? = null,
+    val organizationName: String? = null,
+)
 @Serializable data class Profile(val name: String, val email: String? = null, val role: String? = null, val avatarUrl: String? = null)
-@Serializable data class Modules(val localPurchase: Boolean = false, val stockCount: Boolean = false, val repositionReceipt: Boolean = false, val goals: Boolean = false, val schedule: Boolean = false, val signage: Boolean = false)
+@Serializable data class Modules(val localPurchase: Boolean = false, val stockCount: Boolean = false, val repositionReceipt: Boolean = false, val goals: Boolean = false, val schedule: Boolean = false, val signage: Boolean = false, val timeRecording: Boolean = false, val requests: Boolean = false)
 @Serializable data class ProfileResponse(val profile: Profile, val modules: Modules)
 @Serializable data class AvatarResponse(val avatarUrl: String)
+@Serializable data class DeveloperViewAsUser(val id: String, val username: String, val email: String, val avatarUrl: String? = null, val jobRoleName: String? = null, val profileId: String = "")
+@Serializable data class DeveloperViewAsDirectory(val enabled: Boolean, val targetUserId: String? = null, val targetUser: DeveloperViewAsUser? = null, val users: List<DeveloperViewAsUser> = emptyList())
+@Serializable data class DeveloperViewAsSelection(val targetUserId: String)
+@Serializable data class DeveloperViewAsSelectionResponse(val targetUser: DeveloperViewAsUser)
+@Serializable data class DeveloperViewAsStopped(val stopped: Boolean)
 @Serializable data class Release(val versionCode: Int, val versionName: String, val minVersionCode: Int, val packagePath: String?)
 @Serializable data class AttestationRequest(val integrityToken: String, val nonce: String, val packageName: String = "coalaone.go")
 @Serializable data class AttestationToken(val token: String, val expiresAt: Long)
@@ -46,18 +58,21 @@ import kotlinx.serialization.Serializable
 @Serializable data class ResultCenter(val id: String, val name: String, val unitId: String)
 @Serializable data class StockProduct(val id: String, val name: String, val packageLabel: String)
 @Serializable data class PurchaseContext(val units: List<UnitRef>, val accounts: List<UnitRef>, val resultCenters: List<ResultCenter>, val products: List<StockProduct> = emptyList())
-@Serializable data class AnalysisItem(val description: String, val quantity: Double? = null, val unit: String? = null, val unitPriceCents: Long? = null, val totalCents: Long? = null, val productId: String? = null, val packages: Double? = null)
+@Serializable data class AnalysisItem(val description: String, val quantity: Double? = null, val unit: String? = null, val unitPriceCents: Long? = null, val totalCents: Long? = null, val productId: String? = null, val packages: Double? = null, val aiTreatment: String = "needs_review", val aiConfidence: String = "low", val aiReason: String? = null)
 @Serializable data class PaymentAnalysis(val method: String, val amountCents: Long? = null, val paidAt: String? = null, val payeeName: String? = null, val transactionId: String? = null, val confidence: String, val amountMatchesReceipt: Boolean? = null, val payeeMatchesSupplier: Boolean? = null)
 @Serializable data class ReceiptAnalysis(val supplierName: String? = null, val supplierTaxId: String? = null, val purchaseDate: String? = null, val amountCents: Long? = null, val items: List<AnalysisItem> = emptyList(), val confidence: String = "low", val suggestedAccountId: String? = null, val payment: PaymentAnalysis? = null, val warnings: List<String> = emptyList())
 @Serializable data class Submission(val id: String, val duplicate: Boolean, val status: String, val analysis: ReceiptAnalysis? = null)
 @Serializable data class UploadResponse(val submission: Submission)
 @Serializable data class StockEntry(val productId: String, val quantity: Double, val expiryDate: String? = null)
-@Serializable data class PurchaseItem(val description: String, val quantity: Double, val unit: String, val unitPriceCents: Long, val totalCents: Long, val baseItemId: String? = null, val stock: StockEntry? = null, @kotlinx.serialization.Transient val localId: String = java.util.UUID.randomUUID().toString())
+@Serializable data class PurchaseItem(val description: String, val quantity: Double, val unit: String, val unitPriceCents: Long, val totalCents: Long, val baseItemId: String? = null, val stock: StockEntry? = null, val aiTreatment: String = "needs_review", val aiConfidence: String = "low", val aiReason: String? = null, @kotlinx.serialization.Transient val localId: String = java.util.UUID.randomUUID().toString())
 @Serializable data class WithdrawalLink(val sourceId: String, val date: String)
 @Serializable data class ConfirmPurchase(val submissionId: String, val unitId: String, val supplierName: String, val supplierTaxId: String? = null, val purchaseDate: String, val totalCents: Long, val fundingSource: String, val companyPaymentMethod: String? = null, val accountPlanId: String, val resultCenterId: String, val note: String = "", val items: List<PurchaseItem>, val withdrawal: WithdrawalLink? = null)
-@Serializable data class PurchaseResult(val id: String, val status: String, val duplicate: Boolean = false, val stockEntry: String? = null, val stockItemCount: Int? = null, val changeCents: Long? = null)
+@Serializable data class PurchaseResult(val id: String, val status: String, val duplicate: Boolean = false, val stockEntry: String? = null, val stockItemCount: Int? = null, val changeCents: Long? = null, val operationalStatus: String? = null, val resolvedItemCount: Int? = null, val itemCount: Int? = null)
 @Serializable data class PurchaseResponse(val purchase: PurchaseResult)
 @Serializable data class LinkWithdrawal(val purchaseId: String, val withdrawal: WithdrawalLink)
+@Serializable data class CancelUpload(val submissionId: String)
+@Serializable data class CancelledUpload(val status: String)
+@Serializable data class CancelUploadResponse(val submission: CancelledUpload)
 @Serializable data class Document(val name: String, val mimeType: String, @Serializable(with = Base64Bytes::class) val bytes: ByteArray)
 @Serializable data class PendingUpload(val submissionId: String, val capturedAt: String, val note: String, val fundingSource: String, val receipts: List<Document>, val paymentProofs: List<Document>, val withdrawal: Withdrawal? = null)
 

@@ -29,6 +29,9 @@ export function htmlToPlainText(value: string) {
     value
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      // Alguns provedores entregam o CSS do Outlook no campo de texto,
+      // sem as tags <style>. Remova essas regras antes de exibir/analisar o e-mail.
+      .replace(/(?:^|\n)\s*(?:[#.]?[a-z][\w-]*(?:\s+[#.]?[a-z][\w-]*)*|#[\w-]+)\s*\{[^}]*\}/gim, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>|<\/div>|<\/li>|<\/tr>/gi, "\n")
       .replace(/<[^>]+>/g, " "),
@@ -156,15 +159,14 @@ export function bankSlipAmountCents(value: string | null) {
 }
 
 export function extractPaymentBarcode(value: string) {
-  const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
-  const formattedBankSlip = value.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
-  const generic = Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g))
-    .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(value.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
-  const candidates = [
-    labeled?.[1],
-    formattedBankSlip?.[1],
-    ...generic.map((match) => match[1]),
-  ].filter((candidate): candidate is string => Boolean(candidate));
+  const chunks = [...value.split(/\r?\n/), value];
+  const candidates = chunks.flatMap((chunk) => {
+    const labeled = chunk.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\t -]{44,70})/i);
+    const formattedBankSlip = chunk.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
+    const generic = Array.from(chunk.matchAll(/(?<!\d)([\d][\d.\t -]{42,68}[\d])(?!\d)/g))
+      .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(chunk.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
+    return [labeled?.[1], formattedBankSlip?.[1], ...generic.map((match) => match[1])];
+  }).filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
     const normalized = normalizePaymentBarcode(candidate);
     if (normalized) return normalized;
@@ -185,8 +187,8 @@ function documentType(value: string): { type: FinancialInboxDocumentType; confid
   }
   if (fiscalKind === "darf" || fiscalKind === "dctfweb") return { type: "inss_darf", confidence: "high" };
   if (/honor[aá]rio\s+cont[aá]bil|mensalidade\s+cont[aá]bil/i.test(value)) return { type: "accounting_fee", confidence: "high" };
-  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:energia|telefone|telefonia|internet|[aá]gua|fatura\s+vivo)\b/i.test(value)) return { type: "utility_bill", confidence: "medium" };
+  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:boleto|cobran[cç]a|fatura|vencimento|pagar)\b/i.test(value)) return { type: "charge", confidence: "medium" };
   return { type: "other", confidence: "low" };
 }
@@ -521,7 +523,7 @@ export function classifyFinancialEmail(input: {
   documentHints?: FinancialInboxDocumentHints[];
   documentReferences?: string[];
 }): { textContent: string; textPreview: string; classification: FinancialInboxClassification } {
-  const textContent = (input.text?.trim() || htmlToPlainText(input.html ?? "")).slice(0, MAX_TEXT_LENGTH);
+  const textContent = htmlToPlainText((input.text?.trim() || input.html) ?? "").slice(0, MAX_TEXT_LENGTH);
   const documentText = String(input.documentText ?? "").slice(0, MAX_TEXT_LENGTH);
   const hints = input.documentHints ?? [];
   const hintText = hints.map((hint) => hint.documentText || "").join("\n").slice(0, MAX_TEXT_LENGTH);

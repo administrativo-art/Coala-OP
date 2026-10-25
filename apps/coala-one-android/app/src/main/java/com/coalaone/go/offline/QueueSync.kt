@@ -31,4 +31,13 @@ import javax.inject.Singleton
         }
         !retry
     }
+    /**
+     * Cancels a note kept on the phone. Under the upload lock, so a send in flight cannot recreate it:
+     * the server discards its copy first, and only then does the phone drop the row.
+     */
+    suspend fun discard(uid: String, id: String) = mutex.withLock {
+        check(auth.current?.uid == uid) { "Entre novamente." }
+        repository.cancelUpload(id)
+        queue.discard(uid, id)
+    }
 }

@@ -7,6 +7,7 @@ export type CashFlowStepState = "done" | "current" | "upcoming";
 type CashFlowStepperProps = {
   current?: number;
   completedThrough?: number;
+  scope?: "full" | "counting";
   className?: string;
 };
 
@@ -25,10 +26,15 @@ function stepState(index: number, current: number, completedThrough: number): Ca
   return "upcoming";
 }
 
-export function CashFlowStepper({ current = 0, completedThrough = 0, className }: CashFlowStepperProps) {
+export function CashFlowStepper({ current = 0, completedThrough = 0, scope = "full", className }: CashFlowStepperProps) {
+  const visibleSteps = scope === "counting" ? STEPS.slice(0, 3) : STEPS;
   return (
-    <div className={cn("grid gap-3 rounded-2xl border border-ds-border bg-ds-warm p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6", className)}>
-      {STEPS.map(([label, hint], index) => {
+    <div className={cn(
+      "grid gap-3 rounded-2xl border border-ds-border bg-ds-warm p-4 sm:grid-cols-2 lg:grid-cols-3",
+      scope === "full" && "xl:grid-cols-6",
+      className,
+    )}>
+      {visibleSteps.map(([label, hint], index) => {
         const state = stepState(index, current, completedThrough);
         return (
           <div key={label} className="flex min-w-0 items-center gap-2.5">

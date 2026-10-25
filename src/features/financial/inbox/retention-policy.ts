@@ -2,6 +2,7 @@ import type {
   FinancialInboxMessage,
   FinancialInboxRetentionClass,
 } from "./types";
+import { financialInboxArchiveEligibility } from "./archive-policy";
 
 export const FINANCIAL_INBOX_RETENTION_POLICY_VERSION = 1;
 export const FINANCIAL_INBOX_ARCHIVE_AFTER_MONTHS = 6;
@@ -41,6 +42,11 @@ export function financialInboxRetentionCutoff(now: Date) {
 
 export function financialInboxRetentionPlan(message: FinancialInboxMessage, now: Date) {
   if (!["ignored", "identified", "reconciled"].includes(message.status)) return null;
+  // The maintenance job has no correlated payment/obligation read. Linked
+  // entries therefore remain for explicit review with those records checked.
+  if (!financialInboxArchiveEligibility(message, {
+    paymentRequestStatus: null, paymentStatementStatus: null, obligationStatus: null,
+  }).eligible) return null;
   const anchor = new Date(message.updatedAt);
   if (Number.isNaN(anchor.getTime()) || anchor > financialInboxRetentionCutoff(now)) return null;
   const retentionClass = retentionClassFor(message);
@@ -49,5 +55,17 @@ export function financialInboxRetentionPlan(message: FinancialInboxMessage, now:
     retentionClass,
     anchorAt: anchor.toISOString(),
     purgeEligibleAt: addUtcMonths(anchor, retentionYears(retentionClass) * 12).toISOString(),
+  };
+}
+
+export function financialInboxManualArchivePlan(message: FinancialInboxMessage, now: Date) {
+  const retentionClass = retentionClassFor(message);
+  const archivedFromStatus = message.status === "ignored" || message.status === "reconciled"
+    ? message.status
+    : "identified";
+  return {
+    archivedFromStatus,
+    retentionClass,
+    purgeEligibleAt: addUtcMonths(now, retentionYears(retentionClass) * 12).toISOString(),
   };
 }

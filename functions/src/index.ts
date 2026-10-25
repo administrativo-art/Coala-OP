@@ -18,6 +18,7 @@ import { reconcileAbsenceRetentionPage, continueAbsenceRetentionReconciliations,
 import { assertActiveSession } from './active-session.js';
 import { setEmploymentCyclePatch } from './employment-cycle.js';
 import { reconcileOpenResponsibilityTasks } from './responsibility-coverage.js';
+import { occupancyMode } from './absence-occupancy-clock.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -37,6 +38,7 @@ export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-jo
 export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
+export { absenceTacitApprovalJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
 export {
   uberExpenseCandidateWritten,
@@ -1241,6 +1243,21 @@ export const reactivateUser = onCall(
     }
   }
 );
+
+// Retomada dos desligamentos com efeitos ocupacionais pendentes. Não aplica nada aqui: só toca o cadastro
+// para que onUserProfileChange (caminho único de aplicação) rode de novo, agora com o recibo `ready`.
+// Custo: 1 leitura do recibo + até 20 usuários pendentes a cada 30 min; sem recibo ready, nada é lido além dele.
+export const absenceTerminationEffectsResume = onSchedule({ schedule: 'every 30 minutes',
+  timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
+  const workspaceId = process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala';
+  if ((await occupancyMode(db, workspaceId)).kind !== 'guarded') return;
+  const pending = await db.collection('users')
+    .where('terminationEffectsStatus', '==', 'pending_occupancy_guard').limit(20).get();
+  for (const user of pending.docs) {
+    await user.ref.set({ terminationEffectsResumeRequestedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  if (!pending.empty) console.log(`[absenceTerminationEffectsResume] ${pending.size} desligamento(s) retomado(s).`);
+});
 
 // --- Custom Claims Sync: quando o documento do usuário muda ---
 export const onUserProfileChange = onDocumentWritten(

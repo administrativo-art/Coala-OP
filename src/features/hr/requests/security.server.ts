@@ -23,10 +23,7 @@ export const collaboratorRequestListSchema = z.object({
   scope: z.enum(["own", "team"]),
 }).strict();
 
-export const transportVoucherRequestCreateSchema = z.object({
-  action: z.enum(["activate", "change", "suspend", "reactivate"]),
-  details: z.string().trim().max(1_500).optional().default(""),
-}).strict();
+export { transportVoucherRequestCreateSchema } from "@/features/hr/requests/schemas";
 
 const optionalNotes = z.string().trim().max(1_500).optional();
 
