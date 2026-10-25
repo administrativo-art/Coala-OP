@@ -62,7 +62,7 @@ describe('Assinador ICP-Brasil A1 do REP-P', () => {
 
   it('declares the ICP-Brasil AD-RB policy in the AFD CAdES, pinned to the official policy file', async () => {
     const policyFile = readFileSync(new URL('../../docs/rep-p/referencias/icp-brasil/PA_AD_RB_v2_4.der', import.meta.url));
-    assert.equal(createHash('sha256').update(policyFile).digest('hex'), REP_P_CADES_SIGNATURE_POLICY.sha256);
+    assert.equal(policyFile.subarray(-32).toString('hex'), REP_P_CADES_SIGNATURE_POLICY.sha256);
     assert.ok(policyFile.includes(der.oid(REP_P_CADES_SIGNATURE_POLICY.oid)));
     const identity = loadRepPIcpIdentity(credential.pem, developerCnpj, now);
     const signedAttributes = (cms: Buffer) => {
@@ -89,6 +89,9 @@ describe('Assinador ICP-Brasil A1 do REP-P', () => {
     const unsigned = await renderRepPReceiptPdf(snapshot);
     const signed = await signRepPReceipt(snapshot, unsigned, createRepPIcpSigners(identity, () => now).pades);
     assert.ok(signed.bytes.subarray(0, unsigned.length).equals(unsigned));
+    assert.match(signed.bytes.toString('latin1'), /\/TransformMethod \/DocMDP/);
+    assert.match(signed.bytes.toString('latin1'), /\/TransformParams << \/Type \/TransformParams \/P 1 \/V \/1\.2 >>/);
+    assert.match(signed.bytes.toString('latin1'), /\/Perms <<[\s\S]*\/DocMDP \d+ 0 R/);
     assert.deepEqual(verifyRepPSignedPdf(signed.bytes), { valid: true, certificateCnpj: developerCnpj });
     const reloaded = await PDFDocument.load(signed.bytes, { updateMetadata: false });
     assert.equal(reloaded.getPageCount(), 1);

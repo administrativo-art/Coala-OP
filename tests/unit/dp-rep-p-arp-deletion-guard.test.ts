@@ -10,6 +10,7 @@ import { describe, it } from 'node:test';
  * compartilhado abriria.
  */
 const ARP_WRITERS = [
+  'src/features/dp/rep-p/availability.server.ts',
   'src/features/dp/rep-p/competence-fence.server.ts',
   'src/features/dp/rep-p/location-policy.server.ts',
   'src/features/dp/rep-p/monitor.server.ts',
