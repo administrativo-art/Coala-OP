@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { AppError } from "@/lib/observability";
+import { sanitizeValue } from "@/lib/observability/sanitize";
 
 export type InterOperation = "oauth-token" | "api-request" | "certificate-validation";
 
@@ -12,6 +13,7 @@ const TRANSIENT_NETWORK_CODES = new Set([
   "ENOTFOUND",
   "ETIMEDOUT",
 ]);
+const RESPONSE_DETAILS_LIMIT = 2_000;
 
 function axiosFacts(error: unknown) {
   try {
@@ -22,6 +24,26 @@ function axiosFacts(error: unknown) {
     };
   } catch {
     return { statusCode: null, networkCode: null };
+  }
+}
+
+/** Preserve only a bounded, redacted summary of the provider response. */
+export function interResponseDetails(error: unknown): string | null {
+  try {
+    const data = axios.isAxiosError(error)
+      ? error.response?.data
+      : (
+        error && typeof error === "object" && "response" in error
+          ? ((error as { response?: { data?: unknown } }).response?.data)
+          : undefined
+      );
+    if (data === undefined || data === null || data === "") return null;
+    const sanitized = sanitizeValue(data);
+    const serialized = typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized);
+    if (!serialized || serialized === "{}" || serialized === "null") return null;
+    return serialized.slice(0, RESPONSE_DETAILS_LIMIT);
+  } catch {
+    return null;
   }
 }
 
@@ -77,6 +99,7 @@ export function isTransientInterFailure(error: unknown) {
 export class InterApiError extends AppError {
   readonly statusCode: number | null;
   readonly operation: InterOperation;
+  readonly responseDetails: string | null;
 
   constructor(options: {
     code: string;
@@ -84,6 +107,7 @@ export class InterApiError extends AppError {
     statusCode?: number | null;
     retryable?: boolean;
     safeMessage?: string;
+    responseDetails?: string | null;
   }) {
     const retryable = options.retryable ?? false;
     super({
@@ -99,11 +123,13 @@ export class InterApiError extends AppError {
         provider: "Banco Inter",
         operation: options.operation,
         statusCode: options.statusCode ?? null,
+        ...(options.responseDetails ? { responseDetails: options.responseDetails } : {}),
       },
     });
     this.name = "InterApiError";
     this.statusCode = options.statusCode ?? null;
     this.operation = options.operation;
+    this.responseDetails = options.responseDetails ?? null;
   }
 
   toJSON() {
@@ -114,6 +140,7 @@ export class InterApiError extends AppError {
       operation: this.operation,
       retryable: this.retryable,
       statusCode: this.statusCode,
+      ...(this.responseDetails ? { responseDetails: this.responseDetails } : {}),
     };
   }
 }
@@ -130,5 +157,9 @@ export function safeInterApiError(error: unknown, operation: InterOperation) {
     safeMessage: operation === "api-request" && (statusCode === 400 || statusCode === 422)
       ? safePaymentRejectionMessage(error) ?? undefined
       : undefined,
+    // OAuth failures can contain credential-shaped provider payloads. Keep
+    // those outside the serialized error boundary; payment API failures still
+    // retain the bounded, redacted provider reason for backend diagnostics.
+    responseDetails: operation === "oauth-token" ? null : interResponseDetails(error),
   });
 }
