@@ -94,7 +94,9 @@ Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo
 `DesignMotionTest` verifica movimento, redução e fonte ampliada;
 `DesignScreensTest` captura telas nativas em simulação e navega nas novas abas;
 `ComposeFlowsTest` continua cobrindo as ações de negócio. As capturas liberam
-FLAG_SECURE somente na janela de teste, nunca no aplicativo distribuído.
+`FLAG_SECURE` somente para contas autorizadas de revisão do aplicativo, nunca
+de forma geral. Atualmente, a lista inclui `administrativo@coalashakes.com` e
+`tiagobrasill@yahoo.com`.
 
 ## Bibliotecas adicionais (integrações)
 

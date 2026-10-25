@@ -47,7 +47,10 @@ import kotlinx.coroutines.delay
 import java.io.File
 import javax.inject.Inject
 
-private val SCREEN_CAPTURE_ACCOUNTS = setOf("administrativo@coalashakes.com")
+private val SCREEN_CAPTURE_ACCOUNTS = setOf(
+    "administrativo@coalashakes.com",
+    "tiagobrasill@yahoo.com",
+)
 @AndroidEntryPoint class MainActivity : FragmentActivity() {
     private val session: SessionViewModel by viewModels()
     @Inject lateinit var images: ImageLoader
