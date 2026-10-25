@@ -34,6 +34,7 @@ import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, rend
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
 import { REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt, type RepPPilotReceiptSnapshot } from './pilot-receipt';
+import { repPOfficialMarkingEnabled, repPOfficialUserIds } from './runtime-config';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -65,7 +66,8 @@ const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; officialUserIds: ReadonlySet<string>;
+  pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
@@ -106,7 +108,8 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
 const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
-  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true',
+  markingEnabled: repPOfficialMarkingEnabled(),
+  officialUserIds: repPOfficialUserIds(),
   pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
   pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
   fiscalStore: fiscalArtifactStore };
@@ -146,6 +149,9 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 }
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
+}
+function markingAllowedForOfficialUser(context: ServerUserContext, deps: Dependencies) {
+  return deps.officialUserIds.has(context.decoded.uid);
 }
 function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
   return policy.participantUserIds.includes(context.decoded.uid)
@@ -343,7 +349,9 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   const input: RepPOfflinePermitRequest = parsed.data;
   const deps = { ...defaults, ...injected };
   if (!deps.markingEnabled) throw fail('REP_P_MARKING_DISABLED', 'O registro de ponto ainda não foi liberado.', 'AUTHORIZATION');
-  if (!markingAllowedForProfile(context)) throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
+  if (!markingAllowedForProfile(context) || !markingAllowedForOfficialUser(context, deps)) {
+    throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
+  }
   let calculatedKeyId: string;
   try { calculatedKeyId = repPDeviceKeyId(input.devicePublicKey); }
   catch { throw fail('REP_P_OFFLINE_DEVICE_KEY_INVALID', 'A chave segura deste aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
@@ -575,6 +583,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
   }
   if (!markingAllowedForProfile(context)
+    || deps.markingEnabled && !markingAllowedForOfficialUser(context, deps)
     || !deps.markingEnabled && deps.pilotEnabled && !deps.pilotUserIds.has(context.decoded.uid)) {
     throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
@@ -1408,8 +1417,10 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
   const mode = deps.markingEnabled ? 'official' as const : deps.pilotEnabled ? 'pilot' as const : 'disabled' as const;
-  const journeyLocationEnabled = mode === 'official' && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
+  const officialUserAllowed = markingAllowedForOfficialUser(context, deps);
+  const journeyLocationEnabled = mode === 'official' && officialUserAllowed && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
   if (mode === 'disabled' || !markingAllowedForProfile(context)
+    || mode === 'official' && !officialUserAllowed
     || mode === 'pilot' && !deps.pilotUserIds.has(context.decoded.uid)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
       mode, journeyLocationEnabled, executionUnits: [], officialClock: await readInformationalClock(deps) };

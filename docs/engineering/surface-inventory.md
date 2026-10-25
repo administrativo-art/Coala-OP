@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **500 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **502 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -135,6 +135,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/adjustments/review` | GET | [src/app/api/dp/time-recording/adjustments/review/route.ts](../../src/app/api/dp/time-recording/adjustments/review/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/aej` | POST | [src/app/api/dp/time-recording/aej/route.ts](../../src/app/api/dp/time-recording/aej/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/afd` | POST | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/availability` | GET | [src/app/api/dp/time-recording/availability/route.ts](../../src/app/api/dp/time-recording/availability/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closing-packages` | GET, POST | [src/app/api/dp/time-recording/closing-packages/route.ts](../../src/app/api/dp/time-recording/closing-packages/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closures` | GET, POST | [src/app/api/dp/time-recording/closures/route.ts](../../src/app/api/dp/time-recording/closures/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closures/[competence]` | PATCH | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -424,6 +425,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/inter/cobrancas/reconcile` | POST | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/reconcile` | POST | [src/app/api/jobs/inter/reconcile/route.ts](../../src/app/api/jobs/inter/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/statements/sync` | POST | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `/api/jobs/rep-p/availability-events` | POST | [src/app/api/jobs/rep-p/availability-events/route.ts](../../src/app/api/jobs/rep-p/availability-events/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/rep-p/receipts-retry` | POST | [src/app/api/jobs/rep-p/receipts-retry/route.ts](../../src/app/api/jobs/rep-p/receipts-retry/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/stone-pix/request` | POST | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
@@ -579,6 +581,7 @@ Inclui **57 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc-schedule.ts](../../functions/src/stock-min-recalc-schedule.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcileGeneratedDocumentRetention` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcilePdvSalesHistory` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `repPAvailabilityAlertRelay` | `onMessagePublished` | [functions/src/rep-p-availability.ts](../../functions/src/rep-p-availability.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `repPReceiptRetryJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `reviewFieldChangeRequest` | `onCall` | [functions/src/rh/field-update.ts](../../functions/src/rh/field-update.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `scheduledDateAlerts` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |

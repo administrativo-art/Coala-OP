@@ -39,6 +39,7 @@ export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
 export { absenceTacitApprovalJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
+export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
 export {
   uberExpenseCandidateWritten,
