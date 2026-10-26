@@ -158,7 +158,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
     if (found) setTodaySnapshot(found);
   }, [days, month, currentMonth, schedule, today]);
   const todayView = useMemo<DayView>(() => todaySnapshot
-    ?? { date: today, shift: null, markings: [], allMarkings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null, balanceMinutes: null, deviation: null },
+    ?? { date: today, shift: null, markings: [], allMarkings: [], absence: null, incidents: [], workedMinutes: 0, breakMinutes: null,
+      plannedWorkMinutes: null, nightMinutes: 0, balanceMinutes: null, deviation: null },
   [todaySnapshot, today]);
   const unitNames = useMemo(() => new Map(readOnly
     ? Object.entries(employeeUnitNames)
@@ -314,7 +315,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
           {/* Só aparece com o mês fechado pelo DP. */}
           {!readOnly || canReadClosure ? <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} employeeUid={employeeUid} /> : null}
           {/* Só aparece com o banco ligado na política; soma os meses já fechados do ciclo. */}
-          <div id="banco-de-horas" className="scroll-mt-28"><TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} /></div>
+          <div id="banco-de-horas" className="min-w-0 scroll-mt-28"><TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} detailHref={`${baseHref}?view=time-bank`} /></div>
         </aside>
 
         <div className="min-w-0 space-y-3">
@@ -411,8 +412,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
-        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} />
-      {adjustDate && !readOnly && !days.find((day) => day.date === adjustDate)?.allMarkings.some((item) => item.pilot) ? (
+        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} markingMode={options?.mode ?? null} />
+      {adjustDate && !readOnly && options?.mode === "official" && !days.find((day) => day.date === adjustDate)?.allMarkings.some((item) => item.pilot) ? (
         <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
           originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
           onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />

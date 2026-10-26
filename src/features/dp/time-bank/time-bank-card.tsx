@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
+import Link from "next/link";
 
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { errorMessageOf } from "@/components/patterns/panel-form";
@@ -57,12 +58,13 @@ const parseHm = (value: string) => {
  * Ao abrir, apura (uma vez por versão do fechamento) os meses fechados do ciclo que ainda não têm apuração.
  * No painel do DP (`employeeUid`), mostra o banco da pessoa na data informada.
  */
-export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false }: {
+export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false, detailHref }: {
   firebaseUser: FirebaseUser | null;
   employeeUid?: string;
   date?: string;
   canManage?: boolean;
   detailed?: boolean;
+  detailHref?: string;
 }) {
   const [data, setData] = useState<StatementResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,40 +162,40 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
   const open = statement.missing.filter((competence) => !data.closures[competence]);
   const lines = [...statement.lines].reverse();
   return (
-    <div className={detailed ? "space-y-4 rounded-ds-card border border-ds-border bg-ds-surface p-5" : "space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-3"}>
+    <div className={detailed ? "min-w-0 space-y-4 rounded-ds-card border border-ds-border bg-ds-surface p-5" : "min-w-0 space-y-2 overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface p-3"}>
       {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-extrabold text-ds-ink">Banco de horas</p>
           {detailed ? <p className="text-xs text-ds-ink-muted">Política: {data.policy.name}</p> : null}
         </div>
-        {statement.cycle ? <StatusPill variant="neutral">Ciclo {dateBR(statement.cycle.start)} a {dateBR(statement.cycle.end)}</StatusPill> : null}
+        {detailed && statement.cycle ? <StatusPill variant="neutral">Ciclo {dateBR(statement.cycle.start)} a {dateBR(statement.cycle.end)}</StatusPill> : null}
       </div>
       <p className={`font-ds-mono text-2xl font-extrabold ${statement.balanceMinutes < 0 ? "text-ds-danger" : "text-ds-ink"}`}>{hm(statement.balanceMinutes, true)}</p>
       {data.previewCompetences?.length ? <StatusPill className="h-auto w-full max-w-full justify-center whitespace-normal py-1 text-center leading-tight" variant="info">Prévia inclui o mês aberto; o saldo ainda pode mudar</StatusPill> : null}
       {data.pilotPreview ? <StatusPill className="h-auto w-full max-w-full justify-center whitespace-normal py-1 text-center leading-tight" variant="warn">Ensaio: estas batidas ajudam no teste, mas não entram no fechamento oficial</StatusPill> : null}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ds-ink-muted">
+      <div className={detailed ? "grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ds-ink-muted" : "grid min-w-0 grid-cols-1 gap-1 text-xs text-ds-ink-muted"}>
         {statement.openingMinutes ? <span>Saldo anterior <strong className="font-ds-mono text-ds-ink">{hm(statement.openingMinutes, true)}</strong></span> : null}
         <span>Créditos <strong className="font-ds-mono text-ds-ink">{hm(statement.credit)}</strong></span>
         <span>Débitos <strong className="font-ds-mono text-ds-ink">{hm(statement.debit)}</strong></span>
-        {statement.payroll ? <span>Extra para a folha <strong className="font-ds-mono text-ds-ink">{hm(statement.payroll)}</strong></span> : null}
-        {statement.discount ? <span>Desconto na folha <strong className="font-ds-mono text-ds-ink">{hm(statement.discount)}</strong></span> : null}
-        {statement.nightMinutes ? <span>Faixa noturna a tratar na folha <strong className="font-ds-mono text-ds-ink">{hm(statement.nightMinutes)}</strong></span> : null}
+        {detailed && statement.payroll ? <span>Extra para a folha <strong className="font-ds-mono text-ds-ink">{hm(statement.payroll)}</strong></span> : null}
+        {detailed && statement.discount ? <span>Desconto na folha <strong className="font-ds-mono text-ds-ink">{hm(statement.discount)}</strong></span> : null}
+        {statement.nightMinutes ? <span>Faixa noturna física <strong className="font-ds-mono text-ds-ink">{hm(statement.nightMinutes)}</strong></span> : null}
         {statement.review ? <span>Em revisão do DP <strong className="font-ds-mono text-ds-ink">{hm(statement.review)}</strong></span> : null}
       </div>
       {statement.limits.positiveExceeded ? <StatusPill variant="warn">Acima do limite positivo do banco</StatusPill> : null}
       {statement.limits.negativeExceeded || statement.limits.negativeNotAllowed ? <StatusPill variant="danger">Saldo negativo fora do permitido</StatusPill> : null}
-      {statement.settlement ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo encerrado pelo DP em {dateBR(statement.settlement.settledAt.slice(0, 10))}: {hm(statement.settlement.minutes, true)} · {RESIDUAL_LABELS[statement.settlement.destination]}.</p>
-        : statement.residual ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo terminado: {hm(statement.residual.minutes, true)} · {RESIDUAL_LABELS[statement.residual.destination]} (aguarda o DP registrar o encerramento).</p> : null}
-      {statement.settlementOutdated ? <StatusPill variant="danger">Encerramento desatualizado: o mês foi refechado depois dele</StatusPill> : null}
-      {employeeUid && canManage && statement.residual && !statement.settlement && !confirming ? <Button variant="ds-secondary" size="sm" onClick={() => setConfirming(true)}>Registrar encerramento do ciclo</Button> : null}
-      {confirming && statement.residual ? <InlineConfirm message={`Registrar o encerramento com ${hm(statement.residual.minutes, true)} · ${RESIDUAL_LABELS[statement.residual.destination]}? O registro fica com data e autor e não é desfeito.`}
+      {detailed ? (statement.settlement ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo encerrado pelo DP em {dateBR(statement.settlement.settledAt.slice(0, 10))}: {hm(statement.settlement.minutes, true)} · {RESIDUAL_LABELS[statement.settlement.destination]}.</p>
+        : statement.residual ? <p className="text-xs font-semibold text-ds-ink-2">Ciclo terminado: {hm(statement.residual.minutes, true)} · {RESIDUAL_LABELS[statement.residual.destination]} (aguarda o DP registrar o encerramento).</p> : null) : null}
+      {detailed && statement.settlementOutdated ? <StatusPill variant="danger">Encerramento desatualizado: o mês foi refechado depois dele</StatusPill> : null}
+      {detailed && employeeUid && canManage && statement.residual && !statement.settlement && !confirming ? <Button variant="ds-secondary" size="sm" onClick={() => setConfirming(true)}>Registrar encerramento do ciclo</Button> : null}
+      {detailed && confirming && statement.residual ? <InlineConfirm message={`Registrar o encerramento com ${hm(statement.residual.minutes, true)} · ${RESIDUAL_LABELS[statement.residual.destination]}? O registro fica com data e autor e não é desfeito.`}
         confirmLabel="Registrar encerramento" loadingLabel="Registrando…" loading={busy} onConfirm={() => void settle()} onCancel={() => setConfirming(false)} /> : null}
-      {statement.reviewDays.some((item) => item.issues.includes("MISSING_DAY")) ? <StatusPill variant="warn">{statement.reviewDays.filter((item) => item.issues.includes("MISSING_DAY")).length} dia(s) escalado(s) sem batida a tratar pelo DP</StatusPill> : null}
-      {statement.reviewDays.some((item) => item.issues.includes("NIGHT_SHIFT")) ? <StatusPill variant="warn">Turno noturno exige cálculo da hora reduzida e do adicional na folha</StatusPill> : null}
-      {statement.reviewDays.length ? <p className="text-xs text-ds-ink-muted">{statement.reviewDays.length} {statement.reviewDays.length === 1 ? "dia exige" : "dias exigem"} revisão do DP; os lançamentos seguros permanecem no extrato.</p> : null}
+      {detailed && statement.reviewDays.some((item) => item.issues.includes("MISSING_DAY")) ? <StatusPill variant="warn">{statement.reviewDays.filter((item) => item.issues.includes("MISSING_DAY")).length} dia(s) escalado(s) sem batida a tratar pelo DP</StatusPill> : null}
+      {detailed && statement.reviewDays.some((item) => item.issues.includes("NIGHT_SHIFT")) ? <StatusPill variant="warn">Faixa noturna exige cálculo da hora reduzida e do adicional na folha</StatusPill> : null}
+      {statement.reviewDays.length ? <p className="break-words text-xs text-ds-ink-muted">{statement.reviewDays.length} {statement.reviewDays.length === 1 ? "dia exige" : "dias exigem"} revisão do DP{detailed ? "; os lançamentos seguros permanecem no extrato." : "."}</p> : null}
       {open.length ? <p className="text-xs text-ds-ink-muted">O mês em andamento entra no banco depois do fechamento pelo DP.</p> : null}
-      {lines.length ? (
+      {detailed && lines.length ? (
         <ul className="divide-y divide-ds-divider text-xs">
           {(expanded ? lines : lines.slice(0, VISIBLE_LINES)).map((item, index) => (
             <li key={`${item.date}-${index}`} className={detailed ? "grid gap-1 py-2 sm:grid-cols-[90px_1fr_auto] sm:items-center sm:gap-3" : "flex items-center justify-between gap-2 py-1.5"}>
@@ -207,9 +209,10 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
             </li>
           ))}
         </ul>
-      ) : <p className="text-xs text-ds-ink-muted">Nenhum lançamento no ciclo ainda.</p>}
-      {lines.length > VISIBLE_LINES ? <Button variant="ds-ghost" size="sm" onClick={() => setExpanded((value) => !value)}>{expanded ? "Mostrar menos" : `Ver os ${lines.length} lançamentos`}</Button> : null}
-      {employeeUid && canManage ? <div className="space-y-2 border-t border-ds-divider pt-2">
+      ) : detailed ? <p className="text-xs text-ds-ink-muted">Nenhum lançamento no ciclo ainda.</p> : null}
+      {detailed && lines.length > VISIBLE_LINES ? <Button variant="ds-ghost" size="sm" onClick={() => setExpanded((value) => !value)}>{expanded ? "Mostrar menos" : `Ver os ${lines.length} lançamentos`}</Button> : null}
+      {!detailed && detailHref ? <Button asChild variant="ds-secondary" size="sm" className="w-full"><Link href={detailHref}>Ver banco de horas detalhado</Link></Button> : null}
+      {detailed && employeeUid && canManage ? <div className="space-y-2 border-t border-ds-divider pt-2">
         {!movementOpen ? <Button variant="ds-secondary" size="sm" onClick={() => setMovementOpen(true)}>Lançar movimento</Button> : <div className="grid gap-2 md:grid-cols-2">
           <Select value={movementKind} onValueChange={setMovementKind}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
             <SelectItem value="compensation">Compensação (débito)</SelectItem><SelectItem value="adjustment:credit">Ajuste de crédito</SelectItem>

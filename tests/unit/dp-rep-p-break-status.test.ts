@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { breakStatus } from '../../src/features/dp/rep-p/break-status';
+import { breakStatus, journeyStartStatus } from '../../src/features/dp/rep-p/break-status';
 import type { DayShift } from '../../src/features/dp/rep-p/day-model';
 
 const base: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: null, breakType: 'staggered',
@@ -12,6 +12,16 @@ const marks = (...times: string[]) => times.map((time, index) => ({ markedAt: `2
   classification: { purpose: purposes[index], source: 'declared', status: 'confirmed' } }));
 
 describe('Aviso de intervalo na faixa de registro', () => {
+  it('antes da primeira batida mostra o início do turno e não antecipa o aviso de intervalo', () => {
+    const morning = { ...base, startTime: '09:00', endTime: '18:00', breakDurationMinutes: 60 };
+    assert.deepEqual(journeyStartStatus(morning, [], at('03:10')), {
+      headline: 'Turno inicia às 09:00 · faltam 5h50',
+      detail: 'O acompanhamento do intervalo começa após a primeira batida da jornada.',
+    });
+    assert.equal(breakStatus(morning, [], at('03:10')), null);
+    assert.equal(journeyStartStatus(morning, marks('09:01'), at('09:02')), null);
+  });
+
   it('janela livre: abre em breve, limite para iniciar = fim da janela − duração, janela fechada', () => {
     assert.equal(breakStatus(base, marks('09:57'), at('11:50'))?.headline, 'Janela 12:00–14:00 abre em 10 min');
     const near = breakStatus(base, marks('09:57'), at('13:38'));
