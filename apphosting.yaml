@@ -131,6 +131,12 @@ env:
     value: "true"
   - variable: REP_P_PILOT_USER_IDS
     value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+  # O Coala Go oficial precisa ser reconhecido pelo Play Integrity para emitir a autorização
+  # de contingência. O modo ensaio continua segregado pelos IDs acima e não grava na ARP.
+  - variable: MOBILE_APP_ATTESTATION_MODE
+    value: "enforce"
+  - variable: MOBILE_APP_ATTESTATION_SECRET
+    secret: MOBILE_APP_ATTESTATION_SECRET
   # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
   - variable: DP_JOURNEY_LOCATION_ENABLED
     value: "false"
