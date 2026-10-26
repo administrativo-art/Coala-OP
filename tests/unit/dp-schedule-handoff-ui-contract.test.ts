@@ -7,6 +7,7 @@ const monthSource = readFileSync('src/components/dp/dp-schedule-month-view.tsx',
 const sidebarSource = readFileSync('src/components/dp/dp-schedules-sidebar.tsx', 'utf8');
 const editorSource = readFileSync('src/components/dp/dp-schedule-editor.tsx', 'utf8');
 const bulkSource = readFileSync('src/components/dp/dp-bulk-shift-edit-dialog.tsx', 'utf8');
+const bulkCreateSource = readFileSync('src/components/dp/dp-bulk-shift-create-dialog.tsx', 'utf8');
 const schedulePageSource = readFileSync('src/app/dashboard/dp/schedules/[id]/page.tsx', 'utf8');
 const scheduleStoreSource = readFileSync('src/store/use-dp-store.ts', 'utf8');
 const scheduleStateSource = readFileSync('src/features/dp/schedules/state-service.server.ts', 'utf8');
@@ -61,6 +62,14 @@ test('painel em lote oferece seleção visível, por pessoa e bloqueios de ausê
   assert.match(bulkSource, /swapDayOffWarning/);
   assert.match(bulkSource, /swapVacationWarning/);
   assert.match(bulkSource, /onRemoveSelected/);
+});
+
+test('preenchimento em lote separa pessoas, dias e turno sem sobrescrever ocorrências', () => {
+  assert.match(editorSource, /Preencher em lote/);
+  assert.match(bulkCreateSource, /Cria turnos somente nos dias vazios/);
+  assert.match(bulkCreateSource, /existingKeys/);
+  assert.match(bulkCreateSource, /Dias úteis/);
+  assert.match(bulkCreateSource, /Horário definido pelo cadastro do turno/);
 });
 
 test('editor busca uma escala histórica sem cancelar a própria requisição', () => {
