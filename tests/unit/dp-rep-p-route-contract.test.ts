@@ -58,8 +58,9 @@ describe('REP-P API route contracts', () => {
     assert.match(offlinePermit, /control:mobile-app-attested/);
     assert.match(offlinePermit, /export const POST = secureRoute/);
     const strictGate = mobileAttestation.split('export function assertOfficialMobileApp', 2)[1];
-    assert.match(strictGate, /currentMobileAttestationMode\(\) !== "enforce"/);
-    assert.match(strictGate, /assertMobileAppAttested\(request, uid\)/);
+    assert.match(strictGate, /currentOfflineAttestationMode\(\)/);
+    assert.match(strictGate, /mode !== "enforce"/);
+    assert.match(strictGate, /assertMobileAppAttestedWithMode\(request, uid, mode\)/);
   });
 
   it('keeps the between-units trail owner-scoped and outside fiscal point records', () => {
