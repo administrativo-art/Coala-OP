@@ -1,4 +1,5 @@
 import { applyTreatments } from "@/features/dp/time-adjustments/effective";
+import { pairedNightMinutes } from "@/features/dp/time-bank/core";
 
 import { repPInstantMs } from "./time-zones";
 
@@ -56,6 +57,10 @@ export type DayView = {
   allMarkings: DayMarking[];
   workedMinutes: number;
   breakMinutes: number | null;
+  /** Carga líquida prevista no turno, descontado o intervalo cadastrado. */
+  plannedWorkMinutes: number | null;
+  /** Tempo físico trabalhado na faixa urbana 22h–5h; não inclui hora reduzida nem adicional de folha. */
+  nightMinutes: number;
   /** Diferença prévia entre o trabalhado e o previsto, zerada dentro da tolerância da jornada; null quando não dá para comparar. */
   balanceMinutes: number | null;
   /** Desvio da saída (ou da entrada) acima da tolerância da jornada, em minutos com sinal. */
@@ -123,7 +128,8 @@ export function pauseLengths(markings: Pick<DayMarking, "markedAt">[]) {
   return lengths;
 }
 
-function shiftMinutes(shift: DayShift) {
+export function plannedWorkMinutesOf(shift: DayShift | null) {
+  if (!shift || shift.type !== "work") return null;
   if (!shift.startTime || !shift.endTime) return 0;
   const span = minutesOf(shift.endTime) - minutesOf(shift.startTime);
   return Math.max(0, (span < 0 ? span + 1440 : span) - plannedBreakMinutesOf(shift));
@@ -140,13 +146,16 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const past = input.date < input.today;
   const worked = workedMinutes(markings);
   const breakMinutes = breakTaken(markings);
+  const plannedWorkMinutes = plannedWorkMinutesOf(shift);
+  const nightMinutes = pairedNightMinutes(markings.map((marking) => marking.markedAt));
   const tolerance = toleranceOf(shift);
   const incidents: DayIncident[] = [];
   let deviation: DayView["deviation"] = null;
 
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
   if (shift?.overnight) {
-    return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes: null, deviation };
+    return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
+      plannedWorkMinutes, nightMinutes, balanceMinutes: null, deviation };
   }
   if (past && shift && !markings.length && !absence) incidents.push("missing");
   if (past && markings.length % 2 === 1) incidents.push("odd");
@@ -175,9 +184,10 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => marking.executionUnitId !== shift.unitId)) {
     incidents.push("other_unit");
   }
-  const difference = past && shift && !absence && markings.length % 2 === 0 ? worked - shiftMinutes(shift) : null;
+  const difference = past && shift && !absence && markings.length % 2 === 0 && plannedWorkMinutes !== null ? worked - plannedWorkMinutes : null;
   const balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
-  return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes, balanceMinutes, deviation };
+  return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
+    plannedWorkMinutes, nightMinutes, balanceMinutes, deviation };
 }
 
 export function monthDates(month: string) {

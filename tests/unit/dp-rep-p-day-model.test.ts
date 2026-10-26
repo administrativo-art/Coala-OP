@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { buildDayView, buildMonthView, plannedBreakMinutesOf, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
+import { adjustmentStateOf, incidentFact } from '../../src/features/dp/rep-p/day-list';
 
 const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: 'Quiosque', breakType: 'fixed',
   breakStart: '13:00', breakEnd: '13:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null, expectedPunches: 4,
@@ -109,5 +110,36 @@ describe('Leitura do dia no Registro de ponto', () => {
       { ...mark('2026-10-12', '16:15', 2), classification: { purpose: 'journey_end' as const, source: 'declared', status: 'confirmed' } },
     ];
     assert.ok(buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: legacyFixed, absences: [], markings: classified }).incidents.includes('missing_break'));
+  });
+
+  it('expõe a memória da prévia e a faixa noturna física sem tratá-la como hora extra', () => {
+    const evening = { ...shift, startTime: '09:00', endTime: '18:00', breakStart: null, breakEnd: null, breakDurationMinutes: 60,
+      unitId: 'centro', unitName: 'Centro de distribuição' };
+    const day = buildDayView({ date: '2026-10-25', today: '2026-10-26', shift: evening, absences: [], markings: [
+      mark('2026-10-25', '18:07', 1), mark('2026-10-25', '19:11', 2), mark('2026-10-25', '20:30', 3), mark('2026-10-25', '23:29', 4),
+    ] });
+    assert.equal(day.plannedWorkMinutes, 480);
+    assert.equal(day.workedMinutes, 243);
+    assert.equal(day.breakMinutes, 79);
+    assert.equal(day.balanceMinutes, -237);
+    assert.equal(day.nightMinutes, 89);
+    assert.equal(incidentFact(day, 'late_exit'), 'Previsto 18:00 · registrado 23:29 · 5h29 depois.');
+    assert.equal(incidentFact(day, 'long_break'), 'Previsto 1h00 · realizado 1h19 · 19 min acima.');
+    assert.equal(incidentFact(day, 'other_unit', new Map([['u', 'Quisque Tirirical']])), 'Escala: Centro de distribuição · registro: Quisque Tirirical.');
+  });
+
+  it('explica a pausa individual curta e bloqueia ajuste formal no ensaio mesmo sem batidas', () => {
+    const splitShift = { ...shift, breakType: 'flexible' as const, breakSplit: 'multiple' as const, breakDurationMinutes: 15,
+      breakMinPauseMinutes: 5 };
+    const day = buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: splitShift, absences: [], markings: [
+      mark('2026-10-12', '10:00', 1), mark('2026-10-12', '12:00', 2), mark('2026-10-12', '12:03', 3),
+      mark('2026-10-12', '14:00', 4), mark('2026-10-12', '14:12', 5), mark('2026-10-12', '16:15', 6),
+    ] });
+    assert.equal(incidentFact(day, 'short_break'), 'Total previsto 15 min · realizado 15 min · menor pausa 3 min (mínimo 5 min).');
+    const empty = buildDayView({ date: '2026-10-19', today: '2026-10-19', shift, absences: [], markings: [] });
+    assert.equal(adjustmentStateOf(empty, '2026-10-19', false, 'pilot'), 'pilot');
+    assert.equal(adjustmentStateOf(empty, '2026-10-19', false, null), 'hidden');
+    assert.equal(adjustmentStateOf(empty, '2026-10-19', false, 'disabled'), 'hidden');
+    assert.equal(adjustmentStateOf(empty, '2026-10-19', false, 'official'), 'available');
   });
 });

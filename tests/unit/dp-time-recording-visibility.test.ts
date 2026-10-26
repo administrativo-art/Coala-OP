@@ -30,7 +30,8 @@ test('modo de conferência não oferece batida nem ações pessoais', () => {
   assert.match(page, /enabled: !readOnly/);
   assert.match(page, /Ela não registra ponto em nome do colaborador/);
   assert.match(page, /readOnly \? null : receipts/);
-  assert.match(page, /adjustDate && !readOnly/);
-  assert.match(dayPanel, /day\.date <= today && !readOnly/);
+  assert.match(page, /adjustDate && !readOnly && options\?\.mode === "official"/);
+  assert.match(dayPanel, /if \(readOnly \|\| day\.date > today\) return "hidden"/);
+  assert.match(dayPanel, /markingMode === "official" \? "available"/);
   assert.match(dayPanel, /day\.incidents\.includes\("missing"\) && !readOnly/);
 });
