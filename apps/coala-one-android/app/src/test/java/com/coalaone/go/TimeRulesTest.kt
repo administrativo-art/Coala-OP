@@ -74,6 +74,44 @@ class TimeRulesTest {
         val endedWithoutBreak = listOf(marking("r1", "08:00", "journey_start"), marking("r2", "16:00", "journey_end"))
         assertTrue(TimeRules.breakIssue(endedWithoutBreak, split)!!.contains("0 de 20 min"))
     }
+    @Test fun liveBreakStatusCoversFixedWindowFlexibleAndMinimumPause() {
+        fun marking(id: String, time: String, purpose: String) = OwnMarking(id, "2026-10-19", id.drop(1).toLong(),
+            "2026-10-19T$time:00-03:00", "slz", "01", "available", classification = MarkingClassification(purpose))
+        fun now(time: String) = java.time.OffsetDateTime.parse("2026-10-19T$time:00-03:00").toInstant().toEpochMilli()
+        val zone = ZoneId.of("America/Fortaleza")
+        val fixed = OwnShift("2026-10-19", "work", "08:00", "16:00", breakType = "fixed",
+            breakSegments = listOf(BreakSegment("11:30", "11:37"), BreakSegment("14:30", "14:38")))
+        val firstDone = listOf(marking("r1", "08:00", "journey_start"), marking("r2", "11:30", "break_start"), marking("r3", "11:37", "break_end"))
+        assertEquals("2ª pausa 14:30–14:38 · começa em 10 min", TimeRules.breakStatus(fixed, firstDone, now("14:20"), zone)?.headline)
+        assertEquals(com.coalaone.go.domain.BreakLevel.DANGER, TimeRules.breakStatus(fixed,
+            listOf(marking("r1", "08:00", "journey_start")), now("11:40"), zone)?.level)
+
+        val window = OwnShift("2026-10-19", "work", "10:00", "16:15", breakType = "staggered",
+            breakDurationMinutes = 15, breakWindowStart = "12:00", breakWindowEnd = "14:00")
+        assertEquals("Janela 12:00–14:00 abre em 10 min", TimeRules.breakStatus(window,
+            listOf(marking("r1", "09:57", "journey_start")), now("11:50"), zone)?.headline)
+        assertEquals(com.coalaone.go.domain.BreakLevel.WARN, TimeRules.breakStatus(window,
+            listOf(marking("r1", "09:57", "journey_start")), now("13:38"), zone)?.level)
+
+        val flexible = window.copy(breakType = "flexible", breakWindowStart = null, breakWindowEnd = null)
+        val inPause = TimeRules.breakStatus(flexible, listOf(marking("r1", "09:57", "journey_start"),
+            marking("r2", "13:00", "break_start")), now("13:10"), zone)!!
+        assertEquals(300L, inPause.countdownSeconds)
+        assertTrue(inPause.headline.contains("volte às 13:15"))
+
+        val multiple = flexible.copy(breakSplit = "multiple", breakMinPauseMinutes = 5)
+        val short = TimeRules.breakStatus(multiple, listOf(marking("r1", "09:57", "journey_start"),
+            marking("r2", "12:00", "break_start"), marking("r3", "12:03", "break_end")), now("13:00"), zone)!!
+        assertEquals(com.coalaone.go.domain.BreakLevel.WARN, short.level)
+        assertTrue(short.headline.contains("mínimo de 5 min"))
+    }
+    @Test fun liveBreakStatusRequiresClassificationsAndNeverBlocksThePunch() {
+        val shift = OwnShift("2026-10-19", "work", "08:00", "16:00", breakType = "flexible", breakDurationMinutes = 60)
+        val unclassified = OwnMarking("r1", "2026-10-19", 1, "2026-10-19T08:00:00-03:00", "slz", "01", "available")
+        val status = TimeRules.breakStatus(shift, listOf(unclassified), Instant.parse("2026-10-19T13:00:00Z").toEpochMilli(), ZoneId.of("UTC"))
+        assertTrue(status!!.headline.contains("Classifique"))
+        assertTrue(TimeRules.canRecord(options, "slz"))
+    }
     @Test fun treatedDayKeepsTheOriginalPunchStruckAndShowsTheInclusion() {
         val markings = listOf(OwnMarking("r1", "2026-10-18", 1, "2026-10-18T08:00:00-03:00", "slz", "01", "available"), OwnMarking("r2", "2026-10-18", 2, "2026-10-18T08:01:00-03:00", "slz", "01", "available"))
         val treatments = listOf(Treatment("t1", "a", "2026-10-18", "discard", "r2"), Treatment("t2", "b", "2026-10-18", "inclusion", null, "2026-10-18T16:00:00-03:00", "slz"))

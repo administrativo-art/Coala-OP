@@ -38,7 +38,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
 /** Ponto: punch, today, history, receipts and adjustment requests, all through the web routes. Nothing is polled. */
 @HiltViewModel class TimeViewModel @Inject constructor(private val repository: ApiRepository, private val saved: androidx.lifecycle.SavedStateHandle,
     private val auth: AuthGateway, private val offlineQueue: TimeOfflineQueue, private val offlineSync: TimeOfflineSync,
-    private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null) : FeedbackViewModel() {
+    private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
+    private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates()) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState())
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -149,8 +150,13 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         }
         clearAttempt()
         mutable.update { it.copy(last = result) }
+        auth.current?.uid?.let { uid ->
+            timeSummaryUpdates.recorded(uid, OwnMarking(result.receiptId, pending.second, result.marking.nsr,
+                result.marking.markedAt, result.marking.executionUnitId, "01", result.receiptStatus,
+                result.receiptIssue, MarkingClassification(declaredPurpose), result.pilot))
+        }
         updateJourneyLocation(state, pending.second, result.marking.executionUnitId, declaredPurpose)
-        readMonth(YearMonth.now())
+        readMonth(YearMonth.from(LocalDate.parse(pending.second)))
     }
     private fun updateJourneyLocation(state: TimeState, workDate: String, unitId: String, purpose: String) {
         val shift = state.shifts.firstOrNull { it.date == workDate && it.type == "work" }

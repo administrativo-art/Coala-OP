@@ -144,6 +144,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
         composable("time") { TimeScreen(hiltViewModel(), back) }
+        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true) }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
             navArgument("tab") { type = NavType.StringType }, navArgument("date") { type = NavType.StringType }
@@ -155,7 +156,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
 }
-@Composable private fun HomeTimeSummary(today: HomeToday) {
+@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit) {
     val options = today.timeOptions
     val clock = options?.officialClock
     val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
@@ -184,6 +185,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
         }
+        Spacer(Modifier.height(5.dp))
+        // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
+        Action("Registrar ponto", dark = true, onClick = onRecord)
     }
 }
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
@@ -239,7 +243,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
         state?.modules?.let { modules ->
-            if (modules.timeRecording) HomeTimeSummary(visibleToday)
+            if (modules.timeRecording) HomeTimeSummary(visibleToday) { navigate("time/register") }
             val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
             if (journey.isNotEmpty()) {
                 Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
