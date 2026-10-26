@@ -189,6 +189,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            if (state.options?.mode == "pilot") Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.accentSoft, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp))
             if (clock?.available == true && state.clockOffset != null) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
         }
         if (clock?.available == true && state.clockOffset != null) {
@@ -267,6 +268,9 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val unitName = selectedUnit?.name.orEmpty()
     val locationPolicy = selectedUnit?.locationPolicy ?: LocationPolicy()
     val screenBusy = feedback.busy || capturingLocation
+    val pendingAttempt = vm.hasPendingAttempt()
+    val canPreserve = !pendingAttempt && TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)
+    val preserving = !pendingAttempt && (!online || canPreserve)
     val zone = TimeRules.unitZone(state.options, state.unitId)
     var officialNow by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
     LaunchedEffect(state.clockOffset) {
@@ -276,7 +280,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
     }
     LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
-        if (pendingDirectRecord && TimeRules.canRecord(state.options, state.unitId)) {
+        if (pendingDirectRecord && (TimeRules.canRecord(state.options, state.unitId) || canPreserve)) {
             confirming = true
             pendingDirectRecord = false
         }
@@ -324,6 +328,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     // One main action: the punch, confirmed in the footer itself; the history has no footer.
     val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today") null else { {
         if (confirming) {
+            if (pilotMode) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = .8.sp))
             Text("HORÁRIO A REGISTRAR", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
             Text(confirmationTime, style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
             Text(unitName, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -334,8 +339,10 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     if (suggestionReliable && id == suggestedPurpose) Text(" · sugerida", color = Tokens.wine, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (!online) Text("A marcação ficará preservada neste aparelho até a internet voltar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (online && locationPolicy.mode != "disabled") {
+            if (preserving) Text(if (online) "A Hora Legal não pôde ser confirmada agora. A marcação ficará preservada neste aparelho até o servidor validá-la."
+                else "A marcação ficará preservada neste aparelho até a conexão voltar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            if (pendingAttempt) Text("Uma tentativa anterior ainda aguarda confirmação. O aplicativo reenviará exatamente a mesma batida para evitar duplicidade.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            if (!preserving && locationPolicy.mode != "disabled") {
                 Text("Ao confirmar, o Coala Go fará uma leitura pontual de localização apenas para esta batida. O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade.",
                     color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 locationPolicy.privacyNoticeUrl?.let { url ->
@@ -343,20 +350,18 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                         enabled = !screenBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Aviso de privacidade", color = Tokens.wine) }
                 }
             }
-            FooterPair("Voltar", !screenBusy, { confirming = false }, if (online) "Confirmar ponto" else "Preservar no aparelho",
-                !screenBusy && declaredPurpose != null && (!pilotMode || online)) {
+            FooterPair("Voltar", !screenBusy, { confirming = false }, if (preserving) "Preservar no aparelho" else "Confirmar ponto",
+                !screenBusy && declaredPurpose != null) {
                 confirming = false
                 when {
-                    !online || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> declaredPurpose?.let { vm.record(online, declaredPurpose = it) }
+                    preserving || pendingAttempt || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> declaredPurpose?.let { vm.record(online, declaredPurpose = it) }
                     hasPointLocationPermission(context) -> captureAndRecord()
                     else -> locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
             }
         } else {
-            if (!online && pilotMode) Text("O ensaio pré-homologação exige internet; nenhuma batida será simulada ou guardada como oficial.",
-                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            Action(when { online -> "Registrar ponto"; pilotMode -> "Conecte-se para registrar"; else -> "Registrar ponto offline" }, screenBusy,
-                enabled = TimeRules.canRecord(state.options, state.unitId) && (!pilotMode || online)) { confirming = true }
+            Action(when { pendingAttempt && online -> "Confirmar tentativa pendente"; pendingAttempt -> "Conecte para confirmar a tentativa"; canPreserve -> "Preservar ponto neste aparelho"; online -> "Registrar ponto"; else -> "Registrar ponto offline" }, screenBusy,
+                enabled = !(!online && pendingAttempt) && (pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve)) { confirming = true }
         }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
@@ -406,7 +411,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     if (state.options?.officialClock?.available != true) TextButton({ vm.refreshClock() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Tentar de novo", color = Tokens.wine) }
                 }
             }
-            state.offlineIssue?.let { issue -> Text("O registro online continua disponível, mas a contingência offline não pôde ser renovada: $issue",
+            state.offlineIssue?.let { issue -> Text("A contingência local não pôde ser renovada: $issue",
                 color = Tokens.warning, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp)) }
             if (state.offlineRows.isNotEmpty()) {
@@ -419,7 +424,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             state.lastOffline?.let { local ->
                 CardBlock(selected = true) {
                     Text("Marcação preservada no aparelho · ${TimeRules.secondsOf(local.markedAt)}", style = MaterialTheme.typography.titleMedium)
-                    Text("Aguardando internet. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    Text(if (pilotMode) "Aguardando sincronização do ensaio. Ainda não há sequência nem comprovante do ensaio; nada será enviado ao registro fiscal oficial."
+                        else "Aguardando confirmação do servidor. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                     Action("Ok", secondary = true) { vm.dismissOffline() }
                 }
             }

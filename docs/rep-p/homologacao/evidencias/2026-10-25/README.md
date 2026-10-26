@@ -23,6 +23,8 @@ O relatório confirma: caminho de certificação aprovado, estrutura em conformi
 
 O relatório do e-CPF foi gerado pelo VALIDAR/ITI em 25/10/2026 16:58:16 BRT. A amostra assinada continua fora do acervo, conforme a regra de privacidade da homologação.
 
+O responsável declarou em 26/10/2026 que o AEJ/CAdES também foi validado. O AEJ, seu `.p7s` e um relatório específico não estão entre os arquivos deste diretório nem nos dois dossiês ZIP aqui arquivados. Portanto, a validação não deve ser refeita por padrão; falta somente localizar e anexar a evidência já produzida. Até essa anexação, este README não atribui ao AEJ um hash ou ID de documento que não tenha sido conferido.
+
 ## Arquivamento no Coala One
 
 Os cinco itens acima foram arquivados em **Documentos da empresa → Trabalhista e RH**, no projeto `smart-converter-752gf`, banco `coala`, em 25/10/2026. O dossiê ZIP serve como pacote completo para fiscalização; os demais registros permitem consulta e download individual. O arquivamento preserva o SHA-256 e possui trilha `DOCUMENT_UPLOADED`.

@@ -21,6 +21,15 @@ describe('contingência offline do REP-P', () => {
     const signature = sign('sha256', Buffer.from(canonical), privateKey).toString('base64');
     assert.equal(verifyRepPOfflineEvidence({ ...event, publicKeyBase64, localHash, signature }), true);
     assert.equal(verifyRepPOfflineEvidence({ ...event, sequence: 2, publicKeyBase64, localHash, signature }), false);
+    const pilotEvent = { ...event, scope: 'pilot' as const };
+    const pilotCanonical = canonicalRepPOfflineEvent(pilotEvent);
+    const pilotHash = hashRepPOfflineEvent(pilotCanonical);
+    const pilotSignature = sign('sha256', Buffer.from(pilotCanonical), privateKey).toString('base64');
+    assert.match(pilotCanonical, /^coala-rep-p-pilot-offline-v1\n/);
+    assert.equal(verifyRepPOfflineEvidence({ ...pilotEvent, publicKeyBase64, localHash: pilotHash,
+      signature: pilotSignature }), true);
+    assert.equal(verifyRepPOfflineEvidence({ ...event, publicKeyBase64, localHash: pilotHash,
+      signature: pilotSignature }), false, 'a assinatura do ensaio não pode ser promovida ao domínio oficial');
   });
 
   it('aceita offline só no canal mobile e exige chave segura no pedido', () => {
@@ -29,6 +38,9 @@ describe('contingência offline do REP-P', () => {
       localHash: 'b'.repeat(64), signature: Buffer.alloc(64, 1).toString('base64') };
     assert.equal(repPMarkingSchema.safeParse({ attemptId: 'attempt-a', workDate: '2026-10-18',
       executionUnitId: 'unit-a', channel: 'mobile', offline: evidence }).success, true);
+    assert.equal(repPMarkingSchema.parse({ attemptId: 'attempt-a', workDate: '2026-10-18',
+      executionUnitId: 'unit-a', channel: 'mobile', offline: evidence }).offline?.scope, undefined,
+    'o contrato oficial v1 não muda o digest de tentativas antigas');
     assert.equal(repPMarkingSchema.safeParse({ attemptId: 'attempt-a', workDate: '2026-10-18',
       executionUnitId: 'unit-a', channel: 'browser', offline: evidence }).success, false);
     assert.equal(repPOfflinePermitSchema.safeParse({ permitRequestId: 'request-a', workDate: '2026-10-18',

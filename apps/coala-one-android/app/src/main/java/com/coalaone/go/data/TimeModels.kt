@@ -18,11 +18,13 @@ import kotlinx.serialization.Serializable
 @Serializable data class OfflinePermitUnit(val id: String, val name: String, val timeZone: String)
 @Serializable data class OfflinePermit(val permitId: String, val installationId: String, val deviceKeyId: String, val keySecurity: String,
     val bootCount: Int, val anchorElapsedRealtimeMs: Long, val anchorInstant: String, val issuedAt: String, val expiresAt: String,
-    val units: List<OfflinePermitUnit>)
+    val units: List<OfflinePermitUnit>, val scope: String = "official")
 @Serializable data class OfflinePermitResponse(val permit: OfflinePermit)
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class OfflineMarkingEvidence(val permitId: String, val deviceKeyId: String, val elapsedRealtimeMs: Long,
     val bootCount: Int, val sequence: Int, val previousLocalHash: String? = null, val markedAt: String,
-    val localHash: String, val signature: String)
+    val localHash: String, val signature: String,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val scope: String = "official")
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class MarkingRequest(val attemptId: String, val workDate: String, val executionUnitId: String, val channel: String = "mobile",
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val declaredPurpose: String? = null,

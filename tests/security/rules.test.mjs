@@ -55,6 +55,24 @@ test("ARP do REP-P no banco dedicado não é acessível a nenhum cliente, nem ad
   } finally { await env.cleanup(); }
 });
 
+test("coleções do ensaio REP-P no RH não são acessíveis por clientes", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-pilot", firestore: { rules: rules.rh } });
+  const collections = ["repP_pilotHeads", "repP_pilotMarkings", "repP_pilotOfflinePermits", "repP_pilotClassificationEvents", "repP_pilotDayGuards"];
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      for (const collectionName of collections) await setDoc(doc(context.firestore(), collectionName, "private"), { protected: true });
+    });
+    for (const context of [env.unauthenticatedContext(), env.authenticatedContext("owner", { sessionVersion: 1, isDefaultAdmin: true })]) {
+      for (const collectionName of collections) {
+        const reference = doc(context.firestore(), collectionName, "private");
+        await assertFails(getDoc(reference));
+        await assertFails(setDoc(reference, { protected: false }));
+        await assertFails(deleteDoc(reference));
+      }
+    }
+  } finally { await env.cleanup(); }
+});
+
 test("referências históricas privadas não são acessíveis nem por administrador cliente", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-shift-reference", firestore: { rules: rules.main } });
   try {
