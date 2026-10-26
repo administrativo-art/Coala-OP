@@ -57,13 +57,23 @@ export function currentMobileAttestationMode() {
   return mobileAttestationMode(process.env.MOBILE_APP_ATTESTATION_MODE?.trim());
 }
 
+/** The offline time-recording boundary has its own gate: ordinary mobile actions may remain
+ * observable while the pilot is exercised, but a local punch never falls back to monitor/off. */
+export function currentOfflineAttestationMode() {
+  return mobileAttestationMode(process.env.REP_P_OFFLINE_ATTESTATION_MODE?.trim()
+    || process.env.MOBILE_APP_ATTESTATION_MODE?.trim());
+}
+
 /**
  * Gate for the routes only the Android app calls. `off` keeps Expo Go and local
  * builds working; `monitor` lets the rollout be observed; `enforce` rejects any
  * client that did not come from the Play-distributed app.
  */
 export function assertMobileAppAttested(request: NextRequest, uid: string) {
-  const mode = currentMobileAttestationMode();
+  assertMobileAppAttestedWithMode(request, uid, currentMobileAttestationMode());
+}
+
+function assertMobileAppAttestedWithMode(request: NextRequest, uid: string, mode: ReturnType<typeof mobileAttestationMode>) {
   if (mode === "off") return;
   if (verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid))) return;
   if (mode === "monitor") {
@@ -78,11 +88,12 @@ export function assertMobileAppAttested(request: NextRequest, uid: string) {
  * enabled while Play Integrity is only disabled or being monitored.
  */
 export function assertOfficialMobileApp(request: NextRequest, uid: string) {
-  if (currentMobileAttestationMode() !== "enforce") {
+  const mode = currentOfflineAttestationMode();
+  if (mode !== "enforce") {
     throw new AppError({ code: "MOBILE_ATTESTATION_NOT_ENFORCED", kind: "UNEXPECTED_APPLICATION", retryable: true,
       safeMessage: "O ponto offline ainda não foi liberado neste ambiente." });
   }
-  assertMobileAppAttested(request, uid);
+  assertMobileAppAttestedWithMode(request, uid, mode);
 }
 
 /** Exchanges a Play Integrity token, decoded by Google, for the short-lived pass. */
