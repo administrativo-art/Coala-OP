@@ -145,6 +145,9 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         composable("signage") { SignageScreen(hiltViewModel(), back) }
         composable("time") { TimeScreen(hiltViewModel(), back) }
         composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true) }
+        composable("time/day/{date}", arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
+            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"))
+        }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
             navArgument("tab") { type = NavType.StringType }, navArgument("date") { type = NavType.StringType }
@@ -156,7 +159,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
 }
-@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit) {
+@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit, onDetails: (String) -> Unit) {
     val options = today.timeOptions
     val clock = options?.officialClock
     val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
@@ -169,6 +172,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
         }
     }
     val times = today.timePunches.sortedBy { it.markedAt }.joinToString(" · ") { TimeRules.minuteOf(it.markedAt) }
+    val workDate = today.timeWorkDate ?: options?.workDate ?: java.time.LocalDate.now().toString()
+    val summary = TimeRules.homeDaySummary(workDate, today.timePunches, today.timeShift, today.timeTreatments,
+        today.timeTreatmentsAvailable, today.timeOfflinePending)
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -185,9 +191,38 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
         }
+        summary?.let { day ->
+            HorizontalDivider(color = Tokens.onDark4.copy(alpha = .45f), modifier = Modifier.padding(vertical = 7.dp))
+            Row(Modifier.fillMaxWidth().clickable { onDetails(workDate) }.padding(vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("RESUMO DA JORNADA", color = Tokens.onDark4,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+                    if (day.state == com.coalaone.go.domain.DaySummaryState.COMPLETE) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HomeTimeMetric("Trabalhado", TimeRules.durationText(day.workedMinutes ?: 0), Modifier.weight(1f))
+                            HomeTimeMetric("Intervalo", TimeRules.durationText(day.breakMinutes ?: 0), Modifier.weight(1f))
+                            HomeTimeMetric("Dif. da escala", day.shiftDifferenceMinutes?.let { TimeRules.durationText(it, true) } ?: "—", Modifier.weight(1f))
+                        }
+                        day.plannedBreakMinutes?.takeIf { it > 0 }?.let {
+                            Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+                    } else Text(day.message.orEmpty(), color = if (day.state == com.coalaone.go.domain.DaySummaryState.PENDING) Tokens.warning else Tokens.onDark2,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                Text("Ver ›", color = Tokens.onDark2, style = MaterialTheme.typography.labelMedium)
+            }
+        }
         Spacer(Modifier.height(5.dp))
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
         Action("Registrar ponto", dark = true, onClick = onRecord)
+    }
+}
+@Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(value, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
+        Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
@@ -243,7 +278,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
         state?.modules?.let { modules ->
-            if (modules.timeRecording) HomeTimeSummary(visibleToday) { navigate("time/register") }
+            if (modules.timeRecording) HomeTimeSummary(visibleToday, { navigate("time/register") }) { date -> navigate("time/day/$date") }
             val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
             if (journey.isNotEmpty()) {
                 Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
