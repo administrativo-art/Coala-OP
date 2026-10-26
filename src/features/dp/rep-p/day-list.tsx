@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 
-import { fiscalClock, INCIDENT_SEVERITY, type DayAbsence, type DayIncident, type DayMarking, type DayView } from "./day-model";
+import { fiscalClock, INCIDENT_SEVERITY, pauseLengths, plannedBreakMinutesOf, type DayAbsence, type DayIncident, type DayMarking, type DayView } from "./day-model";
 import { TACIT_APPROVAL_LABEL } from "@/features/dp/absences/requests/tacit-approval";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "@/features/dp/time-adjustments/types";
 
@@ -27,6 +27,41 @@ export const INCIDENTS: Record<DayIncident, { label: string; detail: string; ico
   other_unit: { label: "Batida em outra unidade", detail: "Batida feita numa unidade diferente da escala. Não foi bloqueada; o DP confere a troca.", icon: MapPin },
   long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto além da tolerância da jornada (aviso de conferência).", icon: Coffee },
 };
+
+const durationLabel = (minutes: number, signed = false) => {
+  const sign = minutes < 0 ? "−" : signed && minutes > 0 ? "+" : "";
+  const absolute = Math.abs(minutes);
+  return absolute < 60 ? `${sign}${absolute} min` : `${sign}${Math.floor(absolute / 60)}h${String(absolute % 60).padStart(2, "0")}`;
+};
+
+/** Memória específica da ocorrência; complementa a explicação geral sem alterar a prévia. */
+export function incidentFact(day: DayView, incident: DayIncident, unitNames: Map<string, string> = new Map()) {
+  const work = day.shift?.type === "work" ? day.shift : null;
+  const plannedBreak = plannedBreakMinutesOf(work);
+  if (incident === "late_exit" && work?.endTime && day.markings.length) {
+    const actual = fiscalClock(day.markings.at(-1)!.markedAt);
+    const difference = day.deviation?.edge === "end" ? day.deviation.minutes : null;
+    return `Previsto ${work.endTime} · registrado ${actual}${difference && difference > 0 ? ` · ${durationLabel(difference)} depois` : ""}.`;
+  }
+  if ((incident === "short_break" || incident === "long_break") && plannedBreak > 0 && day.breakMinutes !== null) {
+    const pauses = pauseLengths(day.markings);
+    const shortest = pauses.length ? Math.min(...pauses) : null;
+    if (incident === "short_break" && work?.breakMinPauseMinutes && shortest !== null && shortest < work.breakMinPauseMinutes) {
+      return `Total previsto ${durationLabel(plannedBreak)} · realizado ${durationLabel(day.breakMinutes)} · menor pausa ${durationLabel(shortest)} (mínimo ${durationLabel(work.breakMinPauseMinutes)}).`;
+    }
+    const difference = Math.abs(day.breakMinutes - plannedBreak);
+    return `Previsto ${durationLabel(plannedBreak)} · realizado ${durationLabel(day.breakMinutes)} · ${durationLabel(difference)} ${incident === "long_break" ? "acima" : "abaixo"}.`;
+  }
+  if (incident === "other_unit" && work) {
+    const actual = [...new Set(day.markings.filter((marking) => marking.executionUnitId !== work.unitId)
+      .map((marking) => unitNames.get(marking.executionUnitId) ?? "outra unidade"))];
+    return `Escala: ${work.unitName ?? "unidade prevista"} · registro: ${actual.join(", ")}.`;
+  }
+  if (incident === "odd") return `${day.markings.length} batidas registradas · falta fechar um período.`;
+  if (incident === "missing_break" && plannedBreak > 0) return `Intervalo previsto: ${durationLabel(plannedBreak)} · sem par completo classificado.`;
+  if (incident === "missing") return "0 batidas registradas no dia escalado.";
+  return null;
+}
 
 function weekday(date: string) {
   return WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()];
@@ -70,6 +105,7 @@ export function DayCard({ day, today, selected, onOpen }: { day: DayView; today:
   const tone = isToday ? null : dayTone(day);
   const balance = balanceOf(day, today);
   const first = day.incidents[0];
+  const openPeriod = isToday && day.markings.length % 2 === 1;
   return (
     <LiftRow table selected={selected} onClick={onOpen}
       className={cn(DAY_GRID, "rounded-ds-btn-lg border py-3 shadow-[0_1px_2px_rgba(0,0,0,.04)]",
@@ -90,19 +126,20 @@ export function DayCard({ day, today, selected, onOpen }: { day: DayView; today:
         {work ? (
           <span className="block text-xs text-ds-ink-muted">
             Previsto {work.startTime}–{work.endTime}
-            {day.deviation ? <span className="text-ds-caution"> · {hm(day.deviation.minutes, true).replace(":", "h")} na {day.deviation.edge === "end" ? "saída" : "entrada"}</span> : null}
+            {day.deviation ? <span className="text-ds-caution"> · {day.deviation.edge === "end" ? "saída" : "entrada"} registrada {fiscalClock(day.markings[day.deviation.edge === "end" ? day.markings.length - 1 : 0].markedAt)}</span> : null}
           </span>
         ) : null}
       </span>
       <span className="text-sm tabular-nums text-ds-ink-2">
-        {day.markings.length ? hm(day.workedMinutes) : "—"}
+        {day.markings.length ? <><strong className="font-ds-mono text-ds-ink">{durationLabel(day.workedMinutes)}</strong><span className="block text-xs text-ds-ink-muted">{openPeriod ? "períodos fechados" : "trabalhadas"}</span></> : "—"}
         {day.breakMinutes !== null ? (
           <span className={cn("block text-xs", day.incidents.includes("short_break") ? "font-bold text-ds-danger" : day.incidents.includes("long_break") ? "font-bold text-ds-caution" : "text-ds-ink-muted")}>
-            int. {day.breakMinutes} min
+            Intervalo {durationLabel(day.breakMinutes)}
           </span>
         ) : null}
+        {day.nightMinutes ? <span className="block text-xs font-semibold text-ds-ink-muted">Noturno {durationLabel(day.nightMinutes)}</span> : null}
       </span>
-      <span>{balance ? <StatusPill variant={balance.variant} className="tabular-nums">{balance.label}</StatusPill> : null}</span>
+      <span>{balance ? <StatusPill variant={balance.variant} className="tabular-nums" title="Diferença entre as horas trabalhadas e a jornada líquida prevista">{balance.label}</StatusPill> : null}</span>
       <span className="col-span-3 flex min-w-0 items-center gap-1.5 md:col-span-1">
         {day.incidents.map((incident) => {
           const { icon: Icon, label } = INCIDENTS[incident];
@@ -126,6 +163,12 @@ export type ReceiptActions = {
 export type ClassificationActions = {
   change: (receiptId: string, purpose: MarkingPurpose) => Promise<{ changeStatus: "applied" | "in_review" }>;
 };
+
+export function adjustmentStateOf(day: DayView, today: string, readOnly: boolean, markingMode: "official" | "pilot" | "disabled" | null) {
+  if (readOnly || day.date > today) return "hidden" as const;
+  if (markingMode === "pilot" || day.allMarkings.some((marking) => marking.pilot)) return "pilot" as const;
+  return markingMode === "official" ? "available" as const : "hidden" as const;
+}
 
 function MarkingClassificationEditor({ marking, actions }: { marking: DayMarking; actions: ClassificationActions }) {
   const current = (marking.classification?.purpose ?? "journey_start") as MarkingPurpose;
@@ -173,33 +216,53 @@ function MarkingClassificationEditor({ marking, actions }: { marking: DayMarking
   );
 }
 
-export function DayPanel({ day, today, unitNames, receipts, classifications, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment, readOnly = false }: {
+export function DayPanel({ day, today, unitNames, receipts, classifications, onClose, onRequestAbsence, adjustments, onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null }: {
   day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null; onClose: () => void;
   classifications: ClassificationActions | null;
   onRequestAbsence: (date: string) => void;
   adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void; onOpenAdjustment: (id: string) => void; readOnly?: boolean;
+  markingMode?: "official" | "pilot" | "disabled" | null;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
   const expected = expectedPunchesOf(day);
   const balance = balanceOf(day, today);
+  const plannedBreak = plannedBreakMinutesOf(work);
+  const adjustmentState = adjustmentStateOf(day, today, readOnly, markingMode);
+  const openPeriod = day.date === today && day.markings.length % 2 === 1;
   return (
     <SidePanel open onOpenChange={(open) => !open && onClose()} kicker={`${dayLabel(day.date)}/${day.date.slice(0, 4)}`}
       title={day.absence ? day.absence.typeName : work ? `${work.shiftName ?? "Turno"}` : day.shift ? "Folga" : "Sem escala"}
-      subtitle={work ? `Previsto ${work.startTime}–${work.endTime}${work.breakDurationMinutes ? ` · intervalo de ${work.breakDurationMinutes} min` : ""}${work.unitName ? ` · ${work.unitName}` : ""}` : "Nenhum registro esperado"}
+      subtitle={work ? `Previsto ${work.startTime}–${work.endTime}${plannedBreak ? ` · intervalo de ${durationLabel(plannedBreak)}` : ""}${work.unitName ? ` · ${work.unitName}` : ""}` : "Nenhum registro esperado"}
       highlights={<>
         <span>{day.markings.length}<span className="ml-1 text-xs font-bold text-ds-on-dark-2">batidas</span></span>
-        <span>{hm(day.workedMinutes)}<span className="ml-1 text-xs font-bold text-ds-on-dark-2">total</span></span>
-        {balance ? <span>{balance.label}<span className="ml-1 text-xs font-bold text-ds-on-dark-2">saldo (prévia)</span></span> : null}
+        <span>{durationLabel(day.workedMinutes)}<span className="ml-1 text-xs font-bold text-ds-on-dark-2">{openPeriod ? "períodos fechados" : "trabalhadas"}</span></span>
+        {balance ? <span>{balance.label.replace(":", "h")}<span className="ml-1 text-xs font-bold text-ds-on-dark-2">dif. da jornada</span></span> : null}
       </>}>
+      {work && day.markings.length ? (
+        <PanelSection title="Memória da prévia">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-ds-ink-muted">
+            <span>Jornada líquida prevista <strong className="block font-ds-mono text-sm text-ds-ink">{durationLabel(day.plannedWorkMinutes ?? 0)}</strong></span>
+            <span>{openPeriod ? "Períodos fechados" : "Horas trabalhadas"} <strong className="block font-ds-mono text-sm text-ds-ink">{durationLabel(day.workedMinutes)}</strong></span>
+            {day.breakMinutes !== null ? <span>Intervalo realizado <strong className="block font-ds-mono text-sm text-ds-ink">{durationLabel(day.breakMinutes)}</strong></span> : null}
+            {balance ? <span>Diferença da jornada <strong className={cn("block font-ds-mono text-sm", day.balanceMinutes && day.balanceMinutes < 0 ? "text-ds-danger" : "text-ds-ink")}>{balance.label.replace(":", "h")}</strong></span> : null}
+          </div>
+          {openPeriod ? <p className="text-xs text-ds-ink-muted">O período atual ainda não entrou neste total; ele será fechado pela próxima batida.</p> : null}
+          {day.nightMinutes ? <p className="rounded-ds-sm bg-ds-warm px-3 py-2 text-xs text-ds-ink-2">
+            <strong className="text-ds-ink">Faixa noturna urbana (22h–5h): {durationLabel(day.nightMinutes)}.</strong>{" "}
+            Tempo físico identificado; hora reduzida e adicional ainda precisam ser calculados e tratados na folha pelo DP.
+          </p> : null}
+        </PanelSection>
+      ) : null}
       {day.incidents.length ? (
         <PanelSection title="A conferir" aside={day.incidents.length}>
           {day.incidents.map((incident) => {
             const { label, detail, icon: Icon } = INCIDENTS[incident];
+            const fact = incidentFact(day, incident, unitNames);
             return (
               <div key={incident} className="flex gap-2.5">
                 <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", INCIDENT_SEVERITY[incident] === "danger" ? "text-ds-danger" : "text-ds-caution")} aria-hidden />
-                <div><p className="text-sm font-bold text-ds-ink">{label}</p><p className="text-xs text-ds-ink-muted">{detail}</p></div>
+                <div><p className="text-sm font-bold text-ds-ink">{label}</p>{fact ? <p className="text-xs font-semibold text-ds-ink-2">{fact}</p> : null}<p className="text-xs text-ds-ink-muted">{detail}</p></div>
               </div>
             );
           })}
@@ -291,8 +354,14 @@ export function DayPanel({ day, today, unitNames, receipts, classifications, onC
         <p className="flex items-start gap-1.5 text-xs text-ds-ink-muted">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> A classificação organiza a jornada e os avisos. Alterá-la não muda o horário nem o registro fiscal da batida.
         </p>
-        {day.date <= today && !readOnly ? (
-          <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Pedir ajuste de ponto</Button>
+        {adjustmentState === "pilot" ? (
+          <p className="rounded-ds-sm bg-ds-warn-bg px-3 py-2 text-xs text-ds-warn">Batidas de ensaio não aceitam correção formal. Você pode ajustar somente a classificação usada nesta prévia.</p>
+        ) : null}
+        {adjustmentState === "available" ? (
+          <div className="space-y-2">
+            <p className="text-xs text-ds-ink-muted">Use quando faltar ou sobrar uma batida, ou quando um horário estiver incorreto. A batida original é preservada e o gestor ou DP decide o pedido.</p>
+            <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Solicitar correção das batidas</Button>
+          </div>
         ) : null}
       </PanelSection>
     </SidePanel>

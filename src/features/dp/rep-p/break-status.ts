@@ -21,9 +21,22 @@ export type BreakStatus = {
   inPause: boolean;
 };
 
+export type JourneyStartStatus = { headline: string; detail: string };
+
 const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 const inMinutes = (value: number) => value <= 0 ? "agora" : `em ${value} min`;
 const left = (value: number) => value === 1 ? "falta 1 min" : `faltam ${value} min`;
+const duration = (value: number) => value < 60 ? `${value} min` : `${Math.floor(value / 60)}h${String(value % 60).padStart(2, "0")}`;
+
+/** Antes da primeira batida, orienta sobre a escala; o intervalo só passa a ser acompanhado após o início real. */
+export function journeyStartStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt">[], now: number): JourneyStartStatus | null {
+  if (!shift || shift.type !== "work" || !shift.startTime || markings.length) return null;
+  const untilStart = minutesOf(shift.startTime) - now;
+  return {
+    headline: untilStart > 0 ? `Turno inicia às ${shift.startTime} · faltam ${duration(untilStart)}` : `Turno previsto para iniciar às ${shift.startTime}`,
+    detail: "O acompanhamento do intervalo começa após a primeira batida da jornada.",
+  };
+}
 
 /** Pausas previstas: fixo intercalado = horários; várias pausas = quantidade (ou em aberto); demais = 1. */
 export function plannedPausesOf(shift: DayShift) {
@@ -34,12 +47,18 @@ export function plannedPausesOf(shift: DayShift) {
 
 export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt" | "classification">[], now: number): BreakStatus | null {
   if (!shift || shift.type !== "work" || shift.breakType === "none" || !shift.endTime) return null;
+  if (!markings.length) return null;
   const total = plannedBreakMinutesOf(shift);
   if (!total) return null;
   const classified = markings.filter((marking) => marking.classification?.purpose);
   if (classified.length !== markings.length) {
     return { level: "neutral", headline: "Classifique as batidas para acompanhar o intervalo", detail: "A classificação organiza os avisos e pode ser alterada sem modificar o horário registrado.",
       usedMinutes: 0, totalMinutes: total, pausesDone: 0, plannedPauses: plannedPausesOf(shift), inPause: false };
+  }
+  if (!classified.some((marking) => marking.classification?.purpose === "journey_start")) {
+    return { level: "neutral", headline: "Classifique o início da jornada para acompanhar o intervalo",
+      detail: "A classificação organiza os avisos e não modifica o horário registrado.", usedMinutes: 0, totalMinutes: total,
+      pausesDone: 0, plannedPauses: plannedPausesOf(shift), inPause: false };
   }
   const closed: { start: number; end: number }[] = [];
   let pauseStart: number | null = null;

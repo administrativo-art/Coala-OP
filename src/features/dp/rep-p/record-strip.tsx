@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-import { breakStatus, plannedPausesOf, type BreakLevel } from "./break-status";
+import { breakStatus, journeyStartStatus, plannedPausesOf, type BreakLevel } from "./break-status";
 import { fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import type { useRepPMarking } from "./use-rep-p-marking";
@@ -68,8 +68,21 @@ function BreakNotice({ day, timeZone }: { day: DayView; timeZone?: string }) {
     const timer = window.setInterval(() => setNow(nowMinutesIn(timeZone)), 30_000);
     return () => window.clearInterval(timer);
   }, [timeZone]);
-  const status = breakStatus(day.shift, day.markings, now);
-  if (!status || !day.shift) return null;
+  const beforeJourney = journeyStartStatus(day.shift, day.markings, now);
+  const status = beforeJourney ? null : breakStatus(day.shift, day.markings, now);
+  if ((!status && !beforeJourney) || !day.shift) return null;
+  if (beforeJourney) {
+    return (
+      <div className={cn("rounded-ds-md border px-3 py-2", BREAK_TONE.neutral)} role="status">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="text-[13px] font-bold">{beforeJourney.headline}</span>
+        </div>
+        <p className="mt-0.5 text-[11px] opacity-80">{beforeJourney.detail}</p>
+      </div>
+    );
+  }
+  if (!status) return null;
   const key = modalityKey(day.shift);
   return (
     <div className={cn("rounded-ds-md border px-3 py-2", BREAK_TONE[status.level])} role="status">
