@@ -18,6 +18,10 @@ enum class BreakLevel { NEUTRAL, INFO, WARN, DANGER, OK }
 data class BreakStatus(val level: BreakLevel, val headline: String, val detail: String?, val usedMinutes: Int,
     val totalMinutes: Int, val pausesDone: Int, val plannedPauses: Int?, val inPause: Boolean,
     val countdownSeconds: Long? = null, val countdownLabel: String? = null)
+enum class DaySummaryState { IN_PROGRESS, COMPLETE, PENDING }
+data class DaySummary(val state: DaySummaryState, val workedMinutes: Int? = null, val breakMinutes: Int? = null,
+    val plannedBreakMinutes: Int? = null, val shiftDifferenceMinutes: Int? = null, val message: String? = null)
+data class HomeWorkContext(val date: String, val shift: OwnShift?, val markings: List<OwnMarking>)
 
 /**
  * Rules of the Ponto and Solicitações screens, kept off the UI so they run in unit tests. They follow the web
@@ -285,6 +289,99 @@ object TimeRules {
             return total
         }
         return active.drop(1).dropLast(1).chunked(2).filter { it.size == 2 }.sumOf { punchSpan(it[0], it[1]) }
+    }
+    private fun validPurposeSequence(active: List<DayPunch>): Boolean {
+        if (active.firstOrNull()?.purpose != "journey_start") return false
+        var inBreak = false
+        active.drop(1).forEachIndexed { index, punch ->
+            val last = index == active.size - 2
+            when {
+                !inBreak && punch.purpose == "break_start" -> inBreak = true
+                inBreak && punch.purpose == "break_end" -> inBreak = false
+                !inBreak && punch.purpose == "journey_end" && last -> Unit
+                else -> return false
+            }
+        }
+        return true
+    }
+    private fun summarizeDay(punches: List<DayPunch>, shift: OwnShift?): DaySummary? {
+        val active = orderedPunches(punches)
+        if (active.isEmpty()) return null
+        if (active.any { it.purpose == null }) return DaySummary(DaySummaryState.PENDING,
+            message = "Classifique as batidas para calcular o resumo.")
+        if (!validPurposeSequence(active)) return DaySummary(DaySummaryState.PENDING,
+            message = "A sequência de batidas precisa de conferência.")
+        val ended = active.lastOrNull()?.purpose == "journey_end"
+        if (!ended) return DaySummary(DaySummaryState.IN_PROGRESS,
+            message = if (active.lastOrNull()?.purpose == "break_start") "Intervalo em andamento" else "Jornada em andamento")
+        val worked = workedMinutes(punches) ?: return DaySummary(DaySummaryState.PENDING,
+            message = "A sequência de batidas precisa de conferência.")
+        val planned = plannedWorkMinutes(shift)
+        return DaySummary(DaySummaryState.COMPLETE, worked, recordedBreakMinutes(punches),
+            plannedBreakMinutes(shift), planned?.let { worked - it })
+    }
+    /** Compact, preliminary view of a day. The monthly closing remains the authority for the final balance. */
+    fun daySummary(date: String, markings: List<OwnMarking>, shift: OwnShift?, treatments: List<Treatment> = emptyList()) =
+        summarizeDay(day(date, markings, treatments), shift)
+    /** Journey read model used by Home and Detalhe do dia, including the civil next day of overnight shifts. */
+    fun journeyDay(date: String, shift: OwnShift?, markings: List<OwnMarking>, treatments: List<Treatment>): List<DayPunch> {
+        val startDate = runCatching { LocalDate.parse(date) }.getOrNull()
+        val nextDate = startDate?.plusDays(1)?.toString()
+        val dateMarkings = markings.filter { it.workDate == date }.sortedBy { markingInstant(it.markedAt) }
+        val journeyStart = dateMarkings.indexOfFirst { it.classification?.purpose == "journey_start" }
+        // A civil date may begin with the end of the previous overnight shift. Start this journey at
+        // its own first declared beginning, retaining any duplicate beginnings after it for validation.
+        val base = if (journeyStart >= 0) dateMarkings.drop(journeyStart) else dateMarkings
+        val nextDateMarkings = if (shift?.overnight == true && nextDate != null) {
+            markings.filter { it.workDate == nextDate }.sortedBy { markingInstant(it.markedAt) }
+        } else emptyList()
+        val nextJourneyStart = nextDateMarkings.firstOrNull { it.classification?.purpose == "journey_start" }
+        val continuation = nextDateMarkings.takeWhile { it !== nextJourneyStart }
+        val selected = base + continuation
+        val receiptIds = selected.mapTo(mutableSetOf()) { it.receiptId }
+        val nextJourneyStartInstant = nextJourneyStart?.markedAt?.let(::markingInstant)
+        val relevantTreatments = treatments.filter { treatment ->
+            treatment.originalReceiptId in receiptIds || (treatment.type == "inclusion" && when (treatment.workDate) {
+                date -> true
+                nextDate -> shift?.overnight == true && (nextJourneyStart == null || treatment.markedAt?.let(::markingInstant)
+                    ?.let { nextJourneyStartInstant == null || it.isBefore(nextJourneyStartInstant) } != false)
+                else -> false
+            })
+        }
+        // Normalize only copies in this read model. Fiscal work dates and originals are never changed.
+        return day(date, selected.map { it.copy(workDate = date) }, relevantTreatments.map { it.copy(workDate = date) })
+    }
+    fun homeDaySummary(date: String, markings: List<OwnMarking>, shift: OwnShift?, treatments: List<Treatment>,
+        treatmentsAvailable: Boolean?, offlinePending: Int): DaySummary? {
+        val calculated = summarizeDay(journeyDay(date, shift, markings, treatments), shift) ?: return null
+        return when {
+            offlinePending > 0 -> DaySummary(DaySummaryState.PENDING,
+                message = "Há marcação offline aguardando sincronização; a prévia ainda não a inclui.")
+            treatmentsAvailable == null -> DaySummary(DaySummaryState.PENDING,
+                message = "Atualizando ajustes e tratamentos do dia…")
+            !treatmentsAvailable -> DaySummary(DaySummaryState.PENDING,
+                message = "Não foi possível conferir os tratamentos. Atualize para ver a prévia.")
+            else -> calculated
+        }
+    }
+    /** Selects the journey shown on Home; an overnight journey keeps its start date until a new one begins. */
+    fun homeWorkContext(today: LocalDate, shifts: List<OwnShift>, markings: List<OwnMarking>): HomeWorkContext {
+        val todayText = today.toString()
+        val previousText = today.minusDays(1).toString()
+        val ordered = markings.sortedBy { markingInstant(it.markedAt) }
+        val todayShift = shifts.firstOrNull { it.date == todayText }
+        val todayMarkings = ordered.filter { it.workDate == todayText }
+        val currentStart = todayMarkings.indexOfFirst { it.classification?.purpose == "journey_start" }
+        if (currentStart >= 0) return HomeWorkContext(todayText, todayShift, todayMarkings.drop(currentStart))
+        val previousShift = shifts.firstOrNull { it.date == previousText && it.overnight }
+        if (previousShift != null) {
+            val previousMarkings = ordered.filter { it.workDate == previousText }
+            val previousStart = previousMarkings.indexOfFirst { it.classification?.purpose == "journey_start" }
+            if (previousStart >= 0) {
+                return HomeWorkContext(previousText, previousShift, previousMarkings.drop(previousStart) + todayMarkings)
+            }
+        }
+        return HomeWorkContext(todayText, todayShift, todayMarkings)
     }
     /** Aviso organizacional; nunca impede nem altera a marca fiscal. */
     fun breakIssue(markings: List<OwnMarking>, shift: OwnShift?): String? {

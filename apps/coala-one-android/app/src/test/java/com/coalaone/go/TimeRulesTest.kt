@@ -140,6 +140,109 @@ class TimeRulesTest {
         assertEquals(60, TimeRules.recordedBreakMinutes(punches))
         assertNull(TimeRules.workedMinutes(punches.dropLast(1)))
     }
+    @Test fun homeDaySummaryAppearsOnlyAsCompleteAfterTheJourneyEnd() {
+        fun marking(id: String, time: String, purpose: String?) = OwnMarking(id, "2026-10-19", id.drop(1).toLong(),
+            "2026-10-19T$time:00-03:00", "slz", "01", "available",
+            classification = purpose?.let(::MarkingClassification))
+        val shift = OwnShift("2026-10-19", "work", "08:00", "17:00", breakType = "fixed", breakStart = "12:00", breakEnd = "13:00")
+        val open = listOf(marking("r1", "08:02", "journey_start"), marking("r2", "12:00", "break_start"), marking("r3", "13:00", "break_end"))
+        assertEquals(com.coalaone.go.domain.DaySummaryState.IN_PROGRESS,
+            TimeRules.daySummary("2026-10-19", open, shift)?.state)
+        val complete = TimeRules.daySummary("2026-10-19", open + marking("r4", "17:06", "journey_end"), shift)!!
+        assertEquals(com.coalaone.go.domain.DaySummaryState.COMPLETE, complete.state)
+        assertEquals(484, complete.workedMinutes)
+        assertEquals(60, complete.breakMinutes)
+        assertEquals(4, complete.shiftDifferenceMinutes)
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.daySummary("2026-10-19", listOf(marking("r1", "08:02", null)), shift)?.state)
+        val contradictory = listOf(marking("r1", "08:00", "journey_start"), marking("r2", "09:00", "journey_start"),
+            marking("r3", "13:00", "break_end"), marking("r4", "17:00", "journey_end"))
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.daySummary("2026-10-19", contradictory, shift)?.state)
+        assertTrue(TimeRules.homeDaySummary("2026-10-19", open + marking("r4", "17:06", "journey_end"),
+            shift, emptyList(), false, 0)?.message!!.contains("tratamentos"))
+        assertTrue(TimeRules.homeDaySummary("2026-10-19", open + marking("r4", "17:06", "journey_end"),
+            shift, emptyList(), true, 1)?.message!!.contains("offline"))
+    }
+    @Test fun homeDaySummaryHonorsTreatmentsAndLeavesInclusionsWithoutPurposePending() {
+        fun marking(id: String, time: String, purpose: String) = OwnMarking(id, "2026-10-19", id.drop(1).toLong(),
+            "2026-10-19T$time:00-03:00", "slz", "01", "available", classification = MarkingClassification(purpose))
+        val shift = OwnShift("2026-10-19", "work", "08:00", "17:00", breakType = "fixed", breakStart = "12:00", breakEnd = "13:00")
+        val markings = listOf(marking("r1", "08:00", "journey_start"), marking("r2", "08:01", "journey_start"),
+            marking("r3", "12:00", "break_start"), marking("r4", "13:00", "break_end"), marking("r5", "17:00", "journey_end"))
+        val discarded = listOf(Treatment("t1", "a1", "2026-10-19", "discard", originalReceiptId = "r2"))
+        assertEquals(com.coalaone.go.domain.DaySummaryState.COMPLETE,
+            TimeRules.daySummary("2026-10-19", markings, shift, discarded)?.state)
+        val included = discarded + Treatment("t2", "a1", "2026-10-19", "inclusion", markedAt = "2026-10-19T10:00:00-03:00", executionUnitId = "slz")
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.daySummary("2026-10-19", markings, shift, included)?.state)
+        val outside = discarded + Treatment("t3", "a2", "2026-10-19", "inclusion", markedAt = "2026-10-19T19:00:00-03:00", executionUnitId = "slz")
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.homeDaySummary("2026-10-19", markings, shift, outside, true, 0)?.state)
+    }
+    @Test fun homeWorkContextKeepsAnOvernightJourneyOnItsStartDate() {
+        fun marking(id: String, date: String, at: String, purpose: String) = OwnMarking(id, date, id.drop(1).toLong(), at,
+            "slz", "01", "available", classification = MarkingClassification(purpose))
+        val shifts = listOf(
+            OwnShift("2026-10-19", "work", "22:00", "07:00", overnight = true),
+            OwnShift("2026-10-20", "work", "22:00", "07:00", overnight = true),
+        )
+        val overnight = listOf(
+            marking("r1", "2026-10-19", "2026-10-19T22:00:00-03:00", "journey_start"),
+            marking("r2", "2026-10-20", "2026-10-20T02:00:00-03:00", "break_start"),
+            marking("r3", "2026-10-20", "2026-10-20T03:00:00-03:00", "break_end"),
+            marking("r4", "2026-10-20", "2026-10-20T07:00:00-03:00", "journey_end"),
+        )
+        val previous = TimeRules.homeWorkContext(LocalDate.parse("2026-10-20"), shifts, overnight)
+        assertEquals("2026-10-19", previous.date)
+        assertEquals(listOf("r1", "r2", "r3", "r4"), previous.markings.map { it.receiptId })
+        val summary = TimeRules.homeDaySummary(previous.date, previous.markings, previous.shift, emptyList(), true, 0)
+        assertEquals(com.coalaone.go.domain.DaySummaryState.COMPLETE, summary?.state)
+        assertEquals(480, summary?.workedMinutes)
+        val newStart = overnight + marking("r5", "2026-10-20", "2026-10-20T22:00:00-03:00", "journey_start")
+        val current = TimeRules.homeWorkContext(LocalDate.parse("2026-10-20"), shifts, newStart)
+        assertEquals("2026-10-20", current.date)
+        assertEquals(listOf("r5"), current.markings.map { it.receiptId })
+        val duplicateStart = newStart + marking("r6", "2026-10-20", "2026-10-20T22:01:00-03:00", "journey_start") +
+            marking("r7", "2026-10-20", "2026-10-21T07:00:00-03:00", "journey_end")
+        val duplicated = TimeRules.homeWorkContext(LocalDate.parse("2026-10-20"), shifts, duplicateStart)
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.homeDaySummary(duplicated.date, duplicated.markings, duplicated.shift, emptyList(), true, 0)?.state)
+    }
+    @Test fun homeAndDetailSelectTheSameJourneyOnConsecutiveOvernightShifts() {
+        fun marking(id: String, date: String, at: String, purpose: String) = OwnMarking(id, date, id.drop(1).toLong(), at,
+            "slz", "01", "available", classification = MarkingClassification(purpose))
+        val shift = OwnShift("2026-01-31", "work", "22:00", "07:00", overnight = true)
+        val markings = listOf(
+            marking("r1", "2026-01-30", "2026-01-30T22:00:00-03:00", "journey_start"),
+            marking("r2", "2026-01-31", "2026-01-31T07:00:00-03:00", "journey_end"),
+            marking("r3", "2026-01-31", "2026-01-31T22:00:00-03:00", "journey_start"),
+            marking("r4", "2026-02-01", "2026-02-01T07:00:00-03:00", "journey_end"),
+        )
+        val detail = TimeRules.journeyDay("2026-01-31", shift, markings, emptyList())
+        assertEquals(listOf("r3", "r4"), detail.map { it.receiptId })
+        val home = TimeRules.homeWorkContext(LocalDate.parse("2026-02-01"), listOf(shift), markings.drop(1))
+        assertEquals(listOf("r3", "r4"), home.markings.map { it.receiptId })
+        assertEquals(com.coalaone.go.domain.DaySummaryState.COMPLETE,
+            TimeRules.homeDaySummary(home.date, home.markings, home.shift, emptyList(), true, 0)?.state)
+
+        val nextJourney = markings + marking("r5", "2026-02-01", "2026-02-01T22:00:00-03:00", "journey_start")
+        val nextJourneyTreatment = Treatment("t-next", "a-next", "2026-02-01", "inclusion",
+            markedAt = "2026-02-01T23:00:00-03:00", executionUnitId = "slz")
+        val separated = TimeRules.journeyDay("2026-01-31", shift, nextJourney, listOf(nextJourneyTreatment))
+        assertEquals(listOf("r3", "r4"), separated.map { it.receiptId })
+        assertFalse(separated.any { it.included })
+
+        val duplicateEnd = markings + marking("r5", "2026-02-01", "2026-02-01T07:01:00-03:00", "journey_end")
+        val detailWithDuplicate = TimeRules.journeyDay("2026-01-31", shift, duplicateEnd, emptyList())
+        assertEquals(listOf("r3", "r4", "r5"), detailWithDuplicate.map { it.receiptId })
+        assertNull(TimeRules.workedMinutes(detailWithDuplicate))
+        val homeWithDuplicate = TimeRules.homeWorkContext(LocalDate.parse("2026-02-01"), listOf(shift), duplicateEnd.drop(1))
+        assertEquals(listOf("r3", "r4", "r5"), homeWithDuplicate.markings.map { it.receiptId })
+        assertEquals(com.coalaone.go.domain.DaySummaryState.PENDING,
+            TimeRules.homeDaySummary(homeWithDuplicate.date, homeWithDuplicate.markings, homeWithDuplicate.shift,
+                emptyList(), true, 0)?.state)
+    }
     @Test fun dayDetailKeepsChronologyWhenTheShiftCrossesMidnight() {
         fun punch(time: String, at: String, purpose: String) = com.coalaone.go.domain.DayPunch(
             time, null, null, null, purpose = purpose, markedAt = at)

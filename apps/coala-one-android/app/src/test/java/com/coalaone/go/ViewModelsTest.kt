@@ -2,6 +2,7 @@ package com.coalaone.go
 
 import com.coalaone.go.auth.*
 import com.coalaone.go.data.*
+import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.offline.*
 import com.coalaone.go.ui.*
 import com.coalaone.go.push.*
@@ -33,6 +34,7 @@ class ViewModelsTest {
     @After fun tearDown() { Dispatchers.resetMain() }
     private val auth = TestAuth()
     private val mode = RuntimeMode(auth)
+    private val timeQueue = MemoryTimeOfflineQueue()
     private val queue = MemoryQueue()
     private val scheduler = WorkScheduler { }
 
@@ -158,7 +160,7 @@ class ViewModelsTest {
             override suspend fun profile() = ProfileResponse(Profile("Ana"), Modules(stockCount = true))
             override suspend fun avatar(photo: okhttp3.MultipartBody.Part): AvatarResponse { uploads++; return AvatarResponse("https://example.invalid/avatar.jpg") }
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
         assertTrue(vm.profile.value.response!!.modules.stockCount); assertFalse(vm.profile.value.response!!.modules.localPurchase)
         vm.avatar(Document("photo.jpg", "image/jpeg", ByteArray(5 * 1024 * 1024 + 1))); advanceUntilIdle()
         assertEquals(0, uploads); assertNotNull(vm.feedback.value.error)
@@ -178,7 +180,7 @@ class ViewModelsTest {
                 } else ProfileResponse(Profile("Pessoa atual"), Modules(schedule = true))
             }
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler)
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue)
         runCurrent(); firstStarted.await()
         assertNull(vm.profile.value.visibleFor("view-as-user"))
         vm.refresh("view-as-user"); runCurrent()
@@ -203,7 +205,7 @@ class ViewModelsTest {
                 } else ProfileResponse(Profile("Pessoa real"), Modules(schedule = true))
             }
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, storedSelection)
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue, storedSelection)
         assertEquals("view-as-user", vm.profile.value.contextKey)
         runCurrent(); firstStarted.await()
         storedSelection.clear(); vm.refresh("test-owner"); runCurrent()
@@ -228,7 +230,7 @@ class ViewModelsTest {
                 return AvatarResponse("https://example.invalid/new-avatar.jpg")
             }
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
         vm.avatar(pending().receipts.single()); runCurrent(); avatarStarted.await()
         vm.refresh("view-as-user"); runCurrent()
         assertEquals("Pessoa visualizada", vm.profile.value.visibleFor("view-as-user")?.profile?.name)
@@ -251,7 +253,7 @@ class ViewModelsTest {
             override suspend fun timeMonth(month: String) = OwnMonth(month, listOf(OwnShift(LocalDate.now().toString(), "work",
                 shift.first, shift.second, unitId = "unit", unitName = "Unidade", shiftName = "Turno")))
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler)
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue)
         runCurrent()
         val modules = Modules(schedule = true, timeRecording = true)
         vm.loadToday(modules, null, "real-user", force = true); advanceUntilIdle()
@@ -287,7 +289,7 @@ class ViewModelsTest {
                     unitId = "unit", unitName = "Unidade", shiftName = "Turno")))
             }
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
         val modules = Modules(schedule = true, timeRecording = true)
         vm.loadToday(modules, null, "real-user", force = true); runCurrent(); firstStarted.await()
         vm.loadToday(modules, null, "view-as-user", force = true); runCurrent()
@@ -303,7 +305,7 @@ class ViewModelsTest {
             override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
             override suspend fun timeMonth(month: String): OwnMonth = throw IOException("indisponível")
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler); runCurrent()
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
         vm.loadToday(Modules(schedule = true, timeRecording = true), null, "real-user", force = true); advanceUntilIdle()
         assertTrue(vm.today.value.loaded)
         assertEquals(false, vm.today.value.scheduleAvailable)
@@ -314,7 +316,7 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() {
             override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
         }
-        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, InMemoryDeveloperViewAsStore(), updates)
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue, InMemoryDeveloperViewAsStore(), updates)
         runCurrent()
         vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
         assertTrue(vm.today.value.timePunches.isEmpty())
@@ -326,6 +328,125 @@ class ViewModelsTest {
         // An older/empty server response cannot make the just-confirmed count go backwards.
         vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
         assertEquals(listOf("receipt-now"), vm.today.value.timePunches.map { it.receiptId })
+    }
+    @Test fun homeDoesNotTreatAFailedTreatmentReadAsAnEmptyConfirmedList() = runTest {
+        val api = object : ApiService by DemoApi() {
+            override suspend fun adjustments(month: String): OwnAdjustments = throw IOException("indisponível")
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
+        assertEquals(false, vm.today.value.timeTreatmentsAvailable)
+    }
+    @Test fun homeObservesOfflinePunchesWithoutPresentingThemAsOfficial() = runTest {
+        val vm = HomeViewModel(repository(auth), mode, queue, scheduler, timeQueue); runCurrent()
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
+        timeQueue.rows.value += TimeMarkingRow("test-owner", "offline-1", "permit", 1, 0, sealed = byteArrayOf())
+        runCurrent()
+        assertEquals(1, vm.today.value.timeOfflinePending)
+    }
+    @Test fun homeDoesNotOverwriteAnOfflineQueueChangeWhenRemoteReadsFinish() = runTest {
+        val treatmentStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseTreatment = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val api = object : ApiService by DemoApi() {
+            override suspend fun adjustments(month: String): OwnAdjustments {
+                treatmentStarted.complete(Unit)
+                releaseTreatment.await()
+                return OwnAdjustments(emptyList())
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue); runCurrent()
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); runCurrent()
+        treatmentStarted.await()
+        timeQueue.rows.value += TimeMarkingRow("test-owner", "offline-race", "permit", 1, 0, sealed = byteArrayOf())
+        runCurrent()
+        releaseTreatment.complete(Unit); advanceUntilIdle()
+        assertEquals(1, vm.today.value.timeOfflinePending)
+    }
+    @Test fun homeDoesNotRestoreThePreviousJourneyAfterANewStartIsConfirmed() = runTest {
+        val treatmentStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseTreatment = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val updates = TimeSummaryUpdates()
+        val today = LocalDate.now()
+        val previous = today.minusDays(1)
+        fun marking(id: String, date: LocalDate, time: String, purpose: String) = OwnMarking(id, date.toString(),
+            id.drop(1).toLong(), "${date}T$time:00-03:00", "unit", "01", "available",
+            classification = MarkingClassification(purpose))
+        val api = object : ApiService by DemoApi() {
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, listOf(
+                marking("r1", previous, "22:00", "journey_start"),
+                marking("r2", today, "07:00", "journey_end"),
+            ))
+            override suspend fun timeMonth(month: String) = OwnMonth(month, listOf(
+                OwnShift(previous.toString(), "work", "22:00", "07:00", overnight = true),
+                OwnShift(today.toString(), "work", "22:00", "07:00", overnight = true),
+            ))
+            override suspend fun adjustments(month: String): OwnAdjustments {
+                treatmentStarted.complete(Unit)
+                releaseTreatment.await()
+                return OwnAdjustments(emptyList())
+            }
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, timeQueue,
+            InMemoryDeveloperViewAsStore(), updates); runCurrent()
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); runCurrent()
+        treatmentStarted.await()
+        val newStart = marking("r3", today, "22:00", "journey_start")
+        updates.recorded("test-owner", newStart); runCurrent()
+        assertEquals(listOf("r3"), vm.today.value.timePunches.map { it.receiptId })
+        releaseTreatment.complete(Unit); advanceUntilIdle()
+        assertEquals(today.toString(), vm.today.value.timeWorkDate)
+        assertEquals(listOf("r3"), vm.today.value.timePunches.map { it.receiptId })
+    }
+    @Test fun directDayLoadsAnOvernightContinuationAcrossTheMonthBoundary() = runTest {
+        val monthReads = mutableListOf<String>(); val adjustmentReads = mutableListOf<String>()
+        var requestedRange: Pair<String, String>? = null
+        fun marking(id: String, date: String, at: String, purpose: String) = OwnMarking(id, date, id.drop(1).toLong(), at,
+            "unit", "01", "available", classification = MarkingClassification(purpose))
+        val api = object : ApiService by DemoApi() {
+            override suspend fun markings(startDate: String, endDate: String): OwnMarkings {
+                requestedRange = startDate to endDate
+                return OwnMarkings(startDate, endDate, listOf(
+                    marking("r9", "2026-01-31", "2026-01-31T07:00:00-03:00", "journey_end"),
+                    marking("r1", "2026-01-31", "2026-01-31T22:00:00-03:00", "journey_start"),
+                    marking("r2", "2026-02-01", "2026-02-01T02:00:00-03:00", "break_start"),
+                    marking("r3", "2026-02-01", "2026-02-01T03:00:00-03:00", "break_end"),
+                    marking("r4", "2026-02-01", "2026-02-01T07:00:00-03:00", "journey_end"),
+                ))
+            }
+            override suspend fun timeMonth(month: String): OwnMonth {
+                monthReads += month
+                return OwnMonth(month, if (month == "2026-01") listOf(OwnShift("2026-01-31", "work", "22:00", "07:00", overnight = true)) else emptyList())
+            }
+            override suspend fun adjustments(month: String): OwnAdjustments { adjustmentReads += month; return OwnAdjustments(emptyList()) }
+            override suspend fun timeBank(date: String) = TimeBankResponse()
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.loadDay("2026-01-31"); advanceUntilIdle()
+        assertEquals("2026-01-31" to "2026-02-01", requestedRange)
+        assertEquals(listOf("2026-01", "2026-02"), monthReads)
+        assertEquals(listOf("2026-01", "2026-02"), adjustmentReads)
+        val state = vm.state.value
+        val shift = state.shifts.first { it.date == "2026-01-31" }
+        assertEquals(listOf("r1", "r2", "r3", "r4"),
+            TimeRules.journeyDay("2026-01-31", shift, state.markings, state.treatments).map { it.receiptId })
+        assertEquals("2026-01-31", state.bankDate)
+    }
+    @Test fun directDayKeepsLoadedPunchesWhenTheBankReadFails() = runTest {
+        val date = "2026-10-19"
+        val api = object : ApiService by DemoApi() {
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate,
+                listOf(OwnMarking("r1", date, 1, "${date}T08:00:00-03:00", "unit", "01", "available",
+                    classification = MarkingClassification("journey_start"))))
+            override suspend fun timeMonth(month: String) = OwnMonth(month,
+                listOf(OwnShift(date, "work", "08:00", "17:00")))
+            override suspend fun adjustments(month: String) = OwnAdjustments(emptyList())
+            override suspend fun timeBank(date: String): TimeBankResponse = throw IOException("indisponível")
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.loadDay(date); advanceUntilIdle()
+        assertEquals(listOf("r1"), vm.state.value.markings.map { it.receiptId })
+        assertNull(vm.state.value.bankDate)
+        assertNotNull(vm.feedback.value.error)
     }
     @Test fun countRehydratesNewerLocalDraftAndPersistsOwner() = runTest {
         val store = MemoryDrafts()

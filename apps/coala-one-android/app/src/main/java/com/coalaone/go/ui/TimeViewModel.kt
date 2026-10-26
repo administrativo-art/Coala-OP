@@ -96,6 +96,25 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
         }
     }
+    /** Direct Home shortcut: load the selected journey and its possible overnight continuation. */
+    fun loadDay(workDate: String) = serverRun {
+        val date = LocalDate.parse(workDate)
+        val next = date.plusDays(1)
+        val months = listOf(YearMonth.from(date), YearMonth.from(next)).distinct()
+        val options = api.timeOptions(LocalDate.now().toString())
+        val markings = api.markings(date.toString(), next.toString())
+        val monthReads = months.map { api.timeMonth(it.toString()) }
+        val adjustmentReads = months.map { api.adjustments(it.toString()) }
+        mutable.update { current -> current.copy(options = options,
+            clockOffset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime()),
+            today = LocalDate.now(), month = YearMonth.from(date), markings = markings.markings,
+            truncated = markings.truncated || monthReads.any { it.truncated }, shifts = monthReads.flatMap { it.shifts },
+            adjustments = adjustmentReads.flatMap { it.adjustments }, treatments = adjustmentReads.flatMap { it.treatments },
+            bank = null, bankDate = null) }
+        // Punches and treatments are useful by themselves; a bank outage must not blank the direct detail.
+        val bank = api.timeBank(workDate)
+        mutable.update { it.copy(bank = bank, bankDate = workDate) }
+    }
     fun month(month: YearMonth) = serverRun { readMonth(month) }
     fun selectAuxiliaryMonth(month: YearMonth) { mutable.update { it.copy(month = month) } }
     /** Back from the background: only the options and the official reading, so the clock and the block are current. */
