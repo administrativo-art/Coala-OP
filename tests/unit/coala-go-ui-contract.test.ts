@@ -104,7 +104,7 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
   // Banco e espelhos mensais são sob demanda; a pasta de documentos não existe no Go.
   assert.match(time, /"bank" ->[\s\S]*?vm\.loadBank\(\)/);
   assert.match(time, /"mirror" ->[\s\S]*?vm\.loadMirrorYear\(state\.month\.year\)/);
-  assert.doesNotMatch(timeViewModel.split('fun load()')[1]?.split('fun month(')[0] ?? '', /timeBank|ownDocuments|mirror\(/);
+  assert.doesNotMatch(timeViewModel.split('fun load()')[1]?.split('fun loadDay(')[0] ?? '', /timeBank|ownDocuments|mirror\(/);
   assert.match(time, /Triple\("bank", "Banco de horas"/);
   assert.match(time, /Triple\("mirror", "Espelhos mensais"/);
   assert.match(time, /fun MirrorYearTab/);
@@ -185,7 +185,8 @@ test('Troca de turno permanece em Solicitações e consome o contrato central', 
 });
 
 test('Jornada fica direta no início e separa consultas, escala e benefícios', () => {
-  assert.match(activity, /HomeTimeSummary\(visibleToday\)/);
+  assert.match(activity, /HomeTimeSummary\(visibleToday, \{ navigate\("time\/register"\) \}\)/);
+  assert.match(activity, /navigate\("time\/day\/\$date"\)/);
   assert.match(home, /JORNADA DE TRABALHO/);
   assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);
   assert.match(time, /Triple\("records", "Registros"/);

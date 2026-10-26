@@ -223,14 +223,14 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
 }
 
-@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false) {
+@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val context = LocalContext.current
     val online = rememberOnline()
     DisposableEffect(Unit) {
         onDispose { listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() } }
     }
-    LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(startDayDetail) { if (startDayDetail == null) vm.load() else vm.loadDay(startDayDetail) }
     // Back from the background the official reading is taken again (one read), never on a timer.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -241,7 +241,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
         lifecycle.addObserver(observer); onDispose { lifecycle.removeObserver(observer) }
     }
-    var section by rememberSaveable { mutableStateOf("today") }
+    var section by rememberSaveable { mutableStateOf(if (startDayDetail == null) "today" else "day") }
     var confirming by rememberSaveable { mutableStateOf(false) }
     var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming) }
     var capturingLocation by remember { mutableStateOf(false) }
@@ -249,8 +249,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
     var selectedMirror by remember { mutableStateOf(false) }
     var selectedReceiptArchive by remember { mutableStateOf(false) }
-    var detailDate by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailSource by rememberSaveable { mutableStateOf("records") }
+    var detailDate by rememberSaveable { mutableStateOf(startDayDetail) }
+    var detailSource by rememberSaveable { mutableStateOf(if (startDayDetail == null) "records" else "home") }
     asking?.let { date -> AdjustmentScreen(vm, date) { asking = null; vm.clearAdjustment() }; return }
     val units = state.options?.executionUnits.orEmpty()
     val pilotMode = state.options?.mode == "pilot"
@@ -317,7 +317,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     LaunchedEffect(section, state.month, detailDate) {
         when (section) {
             "bank" -> if (state.bankDate != (if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()).toString()) vm.loadBank()
-            "day" -> detailDate?.let { if (state.bankDate != it) vm.loadBank(it) }
+            "day" -> detailDate?.let { if (detailSource != "home" && state.bankDate != it) vm.loadBank(it) }
             "mirror" -> if (state.mirrorYear != state.month.year) vm.loadMirrorYear(state.month.year)
         }
     }
@@ -360,10 +360,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
-    val leave: () -> Unit = { when (section) { "today" -> onBack(); "day" -> section = detailSource; else -> section = "today" } }
+    val leave: () -> Unit = { when (section) { "today" -> onBack(); "day" -> if (detailSource == "home") onBack() else section = detailSource; else -> section = "today" } }
     fun openDay(date: String, source: String) { detailDate = date; detailSource = source; section = "day"; confirming = false }
     Page(screenTitle, feedback, leave, footer = footer, onRefresh = {
-        when (section) { "today" -> vm.load(); "records", "adjustments" -> vm.month(state.month); "bank" -> vm.loadBank(); "day" -> detailDate?.let(vm::loadBank); "mirror" -> vm.loadMirrorYear(state.month.year) }
+        when (section) { "today" -> vm.load(); "records", "adjustments" -> vm.month(state.month); "bank" -> vm.loadBank();
+            "day" -> detailDate?.let { if (detailSource == "home") vm.loadDay(it) else vm.loadBank(it) }; "mirror" -> vm.loadMirrorYear(state.month.year) }
     }, header = {
         TopBar(screenTitle, busy = screenBusy, onBack = leave)
         // A escala escolhe a unidade automaticamente; só há escolha manual quando o dia não tem unidade escalada.
@@ -465,7 +466,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         else if (section == "adjustments") AdjustmentHistoryTab(state, feedback.busy, vm) { openDay(it, "adjustments") }
         else if (section == "bank") BankTab(state, feedback.busy, vm) { openDay(it, "bank") }
         else if (section == "day" && detailDate != null) DayDetail(state, detailDate!!, feedback.busy,
-            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, focus = detailSource)
+            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, focus = if (detailSource == "home") "records" else detailSource)
         else MirrorYearTab(state, feedback.busy, vm) { competence -> vm.openMirror(competence) { selectedMirror = true } }
     }
 }
@@ -671,7 +672,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     onAdjust: (String) -> Unit, focus: String) {
     val date = runCatching { LocalDate.parse(workDate) }.getOrNull() ?: return
     val shift = state.shifts.firstOrNull { it.date == workDate }
-    val punches = TimeRules.day(workDate, state.markings, state.treatments)
+    val punches = TimeRules.journeyDay(workDate, shift, state.markings, state.treatments)
     val pilotDay = state.markings.any { it.workDate == workDate && it.pilot }
     val adjustments = state.adjustments.filter { it.workDate == workDate }.sortedByDescending { it.createdAt }
     val lines = state.bank?.statement?.lines.orEmpty().filter { it.date == workDate }

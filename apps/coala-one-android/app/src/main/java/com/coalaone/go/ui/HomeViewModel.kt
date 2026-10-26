@@ -17,6 +17,8 @@ import javax.inject.Inject
 data class HomeToday(val contextKey: String? = null, val loaded: Boolean = false, val scheduleAvailable: Boolean? = null,
     val hasSchedule: Boolean = false, val shift: String? = null, val shiftShort: String? = null, val shiftUnit: String? = null,
     val timeOptions: TimeOptions? = null, val timeClockOffset: Long? = null, val timePunches: List<OwnMarking> = emptyList(), val timeShift: OwnShift? = null,
+    val timeWorkDate: String? = null, val timeShifts: List<OwnShift> = emptyList(), val timeTreatments: List<Treatment> = emptyList(),
+    val timeTreatmentsAvailable: Boolean? = null, val timeOfflinePending: Int = 0,
     val goalUnit: String? = null, val goalToday: Double? = null, val goalDaily: Double? = null, val goalPercent: Double? = null, val openCounts: List<String> = emptyList(), val repositions: Int? = null)
 /** Never expose a summary loaded for another owner while Compose schedules the next reload. */
 fun HomeToday.visibleFor(contextKey: String) = takeIf { it.contextKey == contextKey } ?: HomeToday(contextKey = contextKey)
@@ -24,6 +26,7 @@ fun HomeToday.visibleFor(contextKey: String) = takeIf { it.contextKey == context
 data class HomeProfile(val contextKey: String? = null, val response: ProfileResponse? = null)
 fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextKey == contextKey }
 @HiltViewModel class HomeViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val scheduler: WorkScheduler,
+    private val timeOfflineQueue: TimeOfflineQueue,
     private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(),
     private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates()) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(HomeProfile())
@@ -71,23 +74,42 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
     private var todayLoadedAt = 0L
     private var todayContextKey: String? = null
     private var todayGeneration = 0L
+    private var timeOfflinePendingCount = 0
     private val confirmedPunches = linkedMapOf<String, OwnMarking>()
     private suspend fun <T> quiet(block: suspend () -> T): T? = try { block() } catch (cause: kotlinx.coroutines.CancellationException) { throw cause } catch (_: Exception) { null }
     private fun mergedPunches(server: List<OwnMarking>) = (server + confirmedPunches.values)
         .associateBy { it.receiptId }.values.sortedBy { it.markedAt }
+    private fun reconciledTime(value: HomeToday): HomeToday {
+        val merged = mergedPunches(value.timePunches)
+        if (value.timeShifts.isEmpty() && merged.isEmpty()) return value
+        val context = TimeRules.homeWorkContext(java.time.LocalDate.now(), value.timeShifts, merged)
+        return value.copy(timeWorkDate = context.date, timeShift = context.shift, timePunches = context.markings,
+            shiftUnit = context.shift?.unitName, shift = TimeRules.shiftText(context.shift),
+            shiftShort = context.shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime?.take(2)}h–${it.endTime?.take(2)}h" })
+    }
     private fun publishToday(contextKey: String, generation: Long, value: HomeToday) {
-        if (todayContextKey == contextKey && todayGeneration == generation) todayMutable.value = value
+        if (todayContextKey == contextKey && todayGeneration == generation) {
+            // Queued or just-confirmed punches can change while remote Home reads are in flight.
+            // Every publication is reconciled so a stale response cannot restore the previous journey.
+            val pending = if (contextKey == mode.identity().uid) timeOfflinePendingCount else 0
+            todayMutable.value = reconciledTime(value).copy(timeOfflinePending = pending)
+        }
     }
 
     private data class TimeSummary(val options: TimeOptions?, val markings: List<OwnMarking>, val month: OwnMonth?, val elapsed: Long)
 
     init {
+        if (!mode.simulation) mode.identity().uid.let { uid -> viewModelScope.launch {
+            timeOfflineQueue.observe(uid).collect { rows ->
+                timeOfflinePendingCount = rows.size
+                if (todayContextKey == uid) todayMutable.value = todayMutable.value.copy(timeOfflinePending = rows.size)
+            }
+        } }
         viewModelScope.launch {
             timeSummaryUpdates.updates.collect { update ->
-                val visibleWorkDate = todayMutable.value.timeOptions?.workDate ?: java.time.LocalDate.now().toString()
-                if (todayContextKey == update.contextKey && update.marking.workDate == visibleWorkDate) {
+                if (todayContextKey == update.contextKey) {
                     confirmedPunches[update.marking.receiptId] = update.marking
-                    todayMutable.value = todayMutable.value.copy(timePunches = mergedPunches(todayMutable.value.timePunches))
+                    todayMutable.value = reconciledTime(todayMutable.value)
                 }
             }
         }
@@ -109,8 +131,10 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
         val generation = ++todayGeneration
         viewModelScope.launch {
             coroutineScope {
-            var next = HomeToday(contextKey = contextKey, loaded = true)
+            var next = HomeToday(contextKey = contextKey, loaded = true,
+                timeOfflinePending = if (contextKey == mode.identity().uid) timeOfflinePendingCount else 0)
             val now = java.time.LocalDate.now()
+            val previous = now.minusDays(1)
             val counts = async { if (modules.stockCount) quiet { repository.countContext().openSessions.map { it.kioskName } } else null }
             val repositions = async { if (modules.repositionReceipt) quiet { repository.repositions().activities.size } else null }
             val goals = async {
@@ -119,14 +143,24 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                     (units.firstOrNull { it.id == goalUnitId } ?: units.firstOrNull())?.let { unit -> unit.name to repository.api.goals(unit.id) }
                 }
             }
+            // Treatments refine the mini-summary, but must not hold back the clock, punch count or shift.
+            val timeTreatments = async {
+                if (!modules.timeRecording) null else {
+                    val months = listOf(previous.toString().take(7), now.toString().take(7)).distinct()
+                    val reads = months.map { month -> quiet { repository.api.adjustments(month).treatments } }
+                    if (reads.any { it == null }) null else reads.filterNotNull().flatten()
+                }
+            }
             val time = async {
                 if (!modules.timeRecording) null else {
                     val elapsed = android.os.SystemClock.elapsedRealtime()
                     coroutineScope {
                         val options = quiet { repository.api.timeOptions(now.toString()) }
-                        val markings = async { quiet { repository.api.markings(now.toString(), now.toString()).markings }.orEmpty() }
+                        val markings = async { quiet { repository.api.markings(previous.toString(), now.toString()).markings }.orEmpty() }
                         val month = async { quiet { repository.api.timeMonth(now.toString().take(7)) } }
-                        TimeSummary(options, markings.await(), month.await(), elapsed)
+                        val previousMonth = async { if (previous.month == now.month) null else quiet { repository.api.timeMonth(previous.toString().take(7)) } }
+                        val currentMonth = month.await()
+                        TimeSummary(options, markings.await(), currentMonth?.copy(shifts = previousMonth.await()?.shifts.orEmpty() + currentMonth.shifts), elapsed)
                     }
                 }
             }
@@ -138,9 +172,12 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                 val options = summary.options
                 val markings = summary.markings
                 val month = summary.month
-                val ownShift = month?.shifts?.firstOrNull { it.date == now.toString() }
+                val shifts = month?.shifts.orEmpty()
+                val context = TimeRules.homeWorkContext(now, shifts, mergedPunches(markings))
+                val ownShift = context.shift
                 next = next.copy(timeOptions = options, timeClockOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed),
-                    timePunches = mergedPunches(markings), timeShift = ownShift, scheduleAvailable = month != null, hasSchedule = ownShift != null,
+                    timePunches = context.markings, timeShift = ownShift, timeWorkDate = context.date, timeShifts = shifts,
+                    scheduleAvailable = month != null, hasSchedule = ownShift != null,
                     shiftUnit = ownShift?.unitName, shift = TimeRules.shiftText(ownShift),
                     shiftShort = ownShift?.let { if (it.type == "day_off") "Folga" else "${it.startTime?.take(2)}h–${it.endTime?.take(2)}h" })
             } else if (modules.schedule) {
@@ -152,6 +189,10 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                     shiftShort = shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime.take(2)}h–${it.endTime.take(2)}h" })
             }
             // Clock, punch count and shift become visible without waiting for unrelated Home modules.
+            publishToday(contextKey, generation, next)
+            val treatments = timeTreatments.await()
+            next = if (treatments == null) next.copy(timeTreatmentsAvailable = false)
+                else next.copy(timeTreatments = treatments, timeTreatmentsAvailable = true)
             publishToday(contextKey, generation, next)
             counts.await()?.let { next = next.copy(openCounts = it) }
             repositions.await()?.let { next = next.copy(repositions = it) }
