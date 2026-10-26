@@ -43,7 +43,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class BreakSegment(val start: String, val end: String)
 @Serializable data class OwnShift(val date: String, val type: String, val startTime: String? = null, val endTime: String? = null, val overnight: Boolean = false, val unitId: String? = null, val unitName: String? = null, val shiftName: String? = null,
     val breakType: String? = null, val breakStart: String? = null, val breakEnd: String? = null, val breakDurationMinutes: Int? = null, val breakWindowStart: String? = null, val breakWindowEnd: String? = null,
-    val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val expectedPunches: Int? = null,
+    val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val breakMinPauseMinutes: Int? = null,
+    val toleranceMinutes: Int? = null, val expectedPunches: Int? = null,
     val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "punch_only", val unitTimeZone: String? = null)
 @Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val truncated: Boolean = false)
 
