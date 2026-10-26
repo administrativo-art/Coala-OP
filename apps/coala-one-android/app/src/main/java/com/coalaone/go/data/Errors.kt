@@ -8,6 +8,18 @@ import java.io.IOException
 enum class ErrorCategory { NETWORK, AUTHENTICATION, PERMISSION, CONFLICT, VALIDATION, RATE_LIMIT, SERVER, CONTRACT }
 class AppFailure(val category: ErrorCategory, val retryable: Boolean, message: String) : IOException(message)
 object Errors {
+    private fun serverField(cause: Throwable, field: String): String? {
+        if (cause !is HttpException) return null
+        return runCatching {
+            val source = cause.response()?.errorBody()?.source() ?: return@runCatching null
+            source.request(Long.MAX_VALUE)
+            val body = source.buffer.clone().readUtf8()
+            kotlinx.serialization.json.Json.parseToJsonElement(body).let { it as? kotlinx.serialization.json.JsonObject }?.get("error")
+                ?.let { it as? kotlinx.serialization.json.JsonObject }?.get(field)
+                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && it.length <= 300 }
+    }
+    fun serverCode(cause: Throwable): String? = serverField(cause, "code")
     fun classify(cause: Throwable): AppFailure = when (cause) {
         is CancellationException -> throw cause
         is AppFailure -> cause
@@ -33,11 +45,7 @@ object Errors {
      */
     fun withServerMessage(cause: Throwable): Throwable {
         if (cause !is HttpException || cause.code() == 401 || cause.code() !in 400..499) return cause
-        val message = runCatching {
-            val body = cause.response()?.errorBody()?.string().orEmpty()
-            kotlinx.serialization.json.Json.parseToJsonElement(body).let { it as? kotlinx.serialization.json.JsonObject }?.get("error")
-                ?.let { it as? kotlinx.serialization.json.JsonObject }?.get("message")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && it.length <= 300 } ?: return cause
+        val message = serverField(cause, "message") ?: return cause
         val category = when (cause.code()) { 403 -> ErrorCategory.PERMISSION; 409 -> ErrorCategory.CONFLICT; 429 -> ErrorCategory.RATE_LIMIT; else -> ErrorCategory.VALIDATION }
         return AppFailure(category, cause.code() == 429, message)
     }

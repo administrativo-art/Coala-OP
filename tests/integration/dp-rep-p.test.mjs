@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
 import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
@@ -12,7 +12,7 @@ const { repPDbAdmin } = await import('../../src/lib/firebase-rep-p-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { classifyOwnRepPMarking, exportOwnRepPReceipts, exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData, REP_P_PILOT_CLASSIFICATION_EVENTS,
-  readRepPPilotMarkingsForBank, recordOwnRepPMarking, repPIdentifiersForTest, repPPilotDayGuardId,
+  issueOwnRepPOfflinePermit, readRepPPilotMarkingsForBank, recordOwnRepPMarking, repPIdentifiersForTest, repPPilotDayGuardId,
   retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { REP_P_LOCATION_EVIDENCE, repPLocationPolicyRef, saveRepPLocationPolicy }
   = await import('../../src/features/dp/rep-p/location-policy.server.ts');
@@ -21,6 +21,8 @@ const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monito
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
+const { canonicalRepPOfflineEvent, hashRepPOfflineEvent, repPDeviceKeyId }
+  = await import('../../src/features/dp/rep-p/offline.ts');
 
 function zipEntries(zip) {
   const entries = new Map();
@@ -398,7 +400,10 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
   context.permissions.app.timeRecording.mark = true;
   const unit = dbAdmin.collection('dp_units').doc(unitId);
   const user = dbAdmin.collection('users').doc(userId);
-  const clock = { async read() { return { instant: new Date('2026-10-22T12:15:42.000Z'), source: 'synthetic-hlb-test',
+  const employee = hrDbAdmin.collection('employees').doc('rep-p-pilot-hr');
+  const cpfField = employee.collection('field_values').doc('employee.cpf');
+  let clockInstant = '2026-10-22T12:15:42.000Z';
+  const clock = { async read() { return { instant: new Date(clockInstant), source: 'synthetic-hlb-test',
     assurance: 'hlb_verified', observedOffsetMs: 8, verifiedAt: new Date(), attestationId: 'b'.repeat(64),
     attestationMode: 'fresh', quorum: 2, observations: [
       { server: '200.20.186.75', status: 'accepted', offsetMs: 6, roundTripMs: 20, stratum: 1 },
@@ -419,6 +424,8 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     await Promise.all([
       unit.set({ name: 'Unidade Piloto', address: 'Rua do Ensaio, 10', cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
       user.set({ isActive: true, username: 'Pessoa Piloto', unitId, unitIds: [unitId] }),
+      employee.set({ auth_uid: userId, name: 'Pessoa Piloto' }),
+      cpfField.set({ value_text: '52998224725' }),
       activeLocationPolicy.set({ schemaVersion: 1, workspaceId, executionUnitId: unitId, revision: 7, mode: 'observe',
         center: { latitude: -1.4558, longitude: -48.4902 }, radiusMeters: 150, maxAccuracyMeters: 100,
         maxAgeSeconds: 60, captureTimeoutMs: 10_000, privacyNoticeUrl: 'https://example.test/privacidade',
@@ -457,6 +464,14 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(recorded.pilot, true);
     assert.equal(recorded.marking.sequence, 1);
     assert.equal(recorded.marking.markedAt, '2026-10-22T09:15:00-0300');
+    assert.deepEqual(recorded.marking.snapshot, {
+      schemaVersion: 2, title: 'Ensaio de registro de ponto', sequence: 1,
+      markedAt: '2026-10-22T09:15:00-0300', hash: recorded.marking.hash,
+      employerName: 'CT SORVETES LTDA', employerCnpj: '14276603000125',
+      employeeName: 'Pessoa Piloto', employeeCpf: '52998224725', unitName: 'Unidade Piloto',
+      workLocation: 'Rua do Ensaio, 10', collectorId: '02', developerName: 'CT SORVETES LTDA',
+      developerCnpj: '14276603000125',
+    });
     assert.equal(recorded.location, null);
     assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 0,
       'o servidor não persiste localização no ensaio, mesmo se um cliente adulterado a enviar');
@@ -490,22 +505,84 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal((await repPDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0);
     assert.equal((await repPDbAdmin.collection('repP_receipts').where('workspaceId', '==', workspaceId).get()).size, 0);
 
+    const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const publicKey = keys.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+    const deviceKeyId = repPDeviceKeyId(publicKey);
+    const permit = await issueOwnRepPOfflinePermit(context, { permitRequestId: 'pilot-permit-request-1',
+      workDate: '2026-10-22', installationId: '11111111-1111-4111-8111-111111111111', deviceKeyId,
+      devicePublicKey: publicKey, keySecurity: 'tee', bootCount: 7, anchorElapsedRealtimeMs: 1_000 }, dependencies);
+    assert.equal(permit.scope, 'pilot');
+    assert.match(permit.permitId, /^pilot_[a-f0-9]{64}$/);
+    const offlineCore = { scope: 'pilot', permitId: permit.permitId, attemptId: 'pilot-offline-attempt-1',
+      executionUnitId: unitId, deviceKeyId, elapsedRealtimeMs: 61_000, bootCount: 7, sequence: 1,
+      previousLocalHash: null, markedAt: '2026-10-22T09:16:00-0300' };
+    const canonical = canonicalRepPOfflineEvent(offlineCore);
+    const localHash = hashRepPOfflineEvent(canonical);
+    const offlineRequest = { attemptId: offlineCore.attemptId, workDate: '2026-10-22', executionUnitId: unitId,
+      channel: 'mobile', declaredPurpose: 'break_start', offline: { scope: 'pilot', permitId: permit.permitId,
+        deviceKeyId, elapsedRealtimeMs: offlineCore.elapsedRealtimeMs, bootCount: 7, sequence: 1,
+        previousLocalHash: null, markedAt: offlineCore.markedAt, localHash,
+        signature: sign('sha256', Buffer.from(canonical), keys.privateKey).toString('base64') } };
+    clockInstant = '2026-10-22T12:20:42.000Z';
+    const synchronized = await recordOwnRepPMarking(context, offlineRequest, dependencies);
+    assert.equal(synchronized.pilot, true);
+    assert.equal(synchronized.marking.sequence, 2);
+    assert.equal(synchronized.marking.markedAt, '2026-10-22T09:16:00-0300');
+    assert.equal((await recordOwnRepPMarking(context, offlineRequest, { ...dependencies, markingEnabled: true,
+      pilotEnabled: false, officialUserIds: new Set() })).status, 'replayed',
+    'uma fila piloto continua no domínio piloto mesmo depois da troca dos gates');
+    await assert.rejects(recordOwnRepPMarking(context, { ...offlineRequest, attemptId: 'pilot-rebooted-attempt',
+      offline: { ...offlineRequest.offline, bootCount: 8 } }, dependencies),
+    { code: 'REP_P_PILOT_OFFLINE_PERMIT_INVALID' });
+    await assert.rejects(recordOwnRepPMarking(context, { ...offlineRequest, attemptId: 'pilot-expired-attempt',
+      offline: { ...offlineRequest.offline, elapsedRealtimeMs: 43_201_001 } }, dependencies),
+    { code: 'REP_P_PILOT_OFFLINE_TIME_INVALID' });
+
+    const secondCore = { ...offlineCore, attemptId: 'pilot-offline-attempt-2', elapsedRealtimeMs: 121_000,
+      sequence: 2, previousLocalHash: localHash, markedAt: '2026-10-22T09:17:00-0300' };
+    const secondCanonical = canonicalRepPOfflineEvent(secondCore);
+    const secondHash = hashRepPOfflineEvent(secondCanonical);
+    const secondRequest = { ...offlineRequest, attemptId: secondCore.attemptId, offline: { ...offlineRequest.offline,
+      elapsedRealtimeMs: secondCore.elapsedRealtimeMs, sequence: 2, previousLocalHash: localHash,
+      markedAt: secondCore.markedAt, localHash: secondHash,
+      signature: sign('sha256', Buffer.from(secondCanonical), keys.privateKey).toString('base64') } };
+    const skippedCore = { ...secondCore, attemptId: 'pilot-offline-skipped-sequence', sequence: 3 };
+    const skippedCanonical = canonicalRepPOfflineEvent(skippedCore);
+    await assert.rejects(recordOwnRepPMarking(context, { ...secondRequest, attemptId: skippedCore.attemptId,
+      offline: { ...secondRequest.offline, sequence: 3, localHash: hashRepPOfflineEvent(skippedCanonical),
+        signature: sign('sha256', Buffer.from(skippedCanonical), keys.privateKey).toString('base64') } }, dependencies),
+    { code: 'REP_P_PILOT_OFFLINE_SEQUENCE_INVALID' });
+    await unit.update({ timeZone: 'America/Belem' });
+    await assert.rejects(recordOwnRepPMarking(context, secondRequest, dependencies),
+      { code: 'REP_P_PILOT_OFFLINE_CONTEXT_CHANGED' });
+    await unit.update({ timeZone: 'America/Fortaleza' });
+    clockInstant = '2026-10-22T12:21:42.000Z';
+    const secondSynchronized = await recordOwnRepPMarking(context, secondRequest, dependencies);
+    assert.equal(secondSynchronized.marking.sequence, 3);
+    assert.equal(secondSynchronized.marking.markedAt, secondCore.markedAt);
+    assert.equal((await hrDbAdmin.collection('repP_pilotOfflinePermits').doc(permit.permitId).get()).get('lastAcceptedSequence'), 2);
+    const storedOffline = await hrDbAdmin.collection('repP_pilotMarkings').doc(synchronized.receiptId).get();
+    assert.equal(storedOffline.get('pilotOfflineEvidence.scope'), 'pilot');
+    assert.equal((await repPDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0,
+      'a contingência do ensaio não cria evento nem NSR oficial');
+
     await assert.rejects(recordOwnRepPMarking({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
       { ...request, attemptId: 'not-allowed' }, { ...dependencies, pilotUserIds: new Set([userId]) }),
     { code: 'REP_P_MARKING_PROFILE_DISABLED' });
   } finally {
-    const [markings, heads, classificationEvents, histories, requests] = await Promise.all([
+    const [markings, heads, classificationEvents, permits, histories, requests] = await Promise.all([
       hrDbAdmin.collection('repP_pilotMarkings').where('employeeId', '==', userId).get(),
       hrDbAdmin.collection('repP_pilotHeads').where('employeeId', '==', userId).get(),
       hrDbAdmin.collection(REP_P_PILOT_CLASSIFICATION_EVENTS).where('employeeId', '==', userId).get(),
+      hrDbAdmin.collection('repP_pilotOfflinePermits').where('employeeId', '==', userId).get(),
       dbAdmin.collection('dp_employmentReferenceHistories').where('userId', '==', userId).get(),
       dbAdmin.collection('dp_employmentReferenceRequests').where('userId', '==', userId).get(),
     ]);
-    await Promise.all([...markings.docs, ...heads.docs, ...classificationEvents.docs, ...histories.docs, ...requests.docs]
+    await Promise.all([...markings.docs, ...heads.docs, ...classificationEvents.docs, ...permits.docs, ...histories.docs, ...requests.docs]
       .map((doc) => doc.ref.delete().catch(() => undefined)));
     const employmentHeadId = createHash('sha256').update(JSON.stringify([workspaceId, userId])).digest('hex');
     await Promise.all([dbAdmin.collection('dp_employmentReferenceHeads').doc(employmentHeadId), activeLocationPolicy,
-      formalAdjustment, pilotDayGuard, unit, user]
+      formalAdjustment, pilotDayGuard, cpfField, employee, unit, user]
       .map((ref) => ref.delete().catch(() => undefined)));
   }
 });

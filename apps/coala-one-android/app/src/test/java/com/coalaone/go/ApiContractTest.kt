@@ -2,6 +2,7 @@ package com.coalaone.go
 
 import com.coalaone.go.data.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import okhttp3.*
@@ -64,6 +65,11 @@ class ApiContractTest {
         assertFalse(json.encodeToString(pair).contains("screenId"))
         assertTrue(json.encodeToString(purchase()).contains("\"companyPaymentMethod\":null"))
         assertFalse(json.encodeToString(purchase()).contains("localId"))
+        val legacyOffline = """{"attemptId":"attempt-v1","workDate":"2026-10-19","executionUnitId":"unit-1","channel":"mobile","offline":{"permitId":"permit-v1","deviceKeyId":"${"a".repeat(64)}","elapsedRealtimeMs":2,"bootCount":1,"sequence":1,"previousLocalHash":null,"markedAt":"2026-10-19T08:00:00-0300","localHash":"${"b".repeat(64)}","signature":"${java.util.Base64.getEncoder().encodeToString(ByteArray(64) { 1 })}"}}"""
+        val restoredV1 = json.decodeFromString<MarkingRequest>(legacyOffline)
+        assertFalse("reidratar uma fila oficial v1 não pode alterar o digest do replay",
+            json.encodeToString(restoredV1).contains("\"scope\""))
+        assertTrue(json.encodeToString(restoredV1.copy(offline = restoredV1.offline?.copy(scope = "pilot"))).contains("\"scope\":\"pilot\""))
         val item = purchase().items.first()
         assertEquals(item.localId, item.copy(quantity = 2.0).localId)
         val fixtures = buildJsonObject { put("count", json.encodeToJsonElement(count)); put("purchase", json.encodeToJsonElement(purchase())); put("receive", json.encodeToJsonElement(receive)); put("pair", json.encodeToJsonElement(pair)); put("cancel", json.encodeToJsonElement(SessionRequest("count"))); put("start", json.encodeToJsonElement(StartCountRequest("unit"))); put("link", json.encodeToJsonElement(LinkWithdrawal("purchase", WithdrawalLink("a".repeat(64), "2026-10-01"))))
@@ -102,6 +108,7 @@ class ApiContractTest {
     }
     @Test fun pontoShowsOnlyThePublicServerMessage() {
         val refused = retrofit2.HttpException(retrofit2.Response.error<Any>(422, """{"error":{"code":"REP_P_TIME_UNAVAILABLE","message":"Hora oficial indisponível.","requestId":"r"}}""".toResponseBody()))
+        assertEquals("REP_P_TIME_UNAVAILABLE", Errors.serverCode(refused))
         val failure = Errors.classify(Errors.withServerMessage(refused)); assertEquals("Hora oficial indisponível.", failure.message); assertEquals(ErrorCategory.VALIDATION, failure.category)
         val crash = retrofit2.HttpException(retrofit2.Response.error<Any>(500, """{"error":{"message":"stack"}}""".toResponseBody()))
         assertFalse(Errors.classify(Errors.withServerMessage(crash)).message!!.contains("stack"))

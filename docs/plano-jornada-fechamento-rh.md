@@ -10,7 +10,7 @@
 
 **Titular do sistema:** CT Sorvetes LTDA — CNPJ 14.276.603/0001-25, informado pelo proprietário em 17/10/2026. O e-CNPJ utilizado é o dessa pessoa jurídica; “Coala” identifica o sistema/marca neste plano.
 
-> CT Sorvetes LTDA usa seu e-CNPJ como titular do sistema; Coala é a marca/produto. O papel documental de desenvolvedora será conferido na Fase 0. INPI, certificados reais e atestados antecedem o piloto com empregados reais. Este documento não declara conformidade já alcançada.
+> CT Sorvetes LTDA usa seu e-CNPJ como titular e desenvolvedora do sistema; Coala é a marca/produto. No uso próprio, a CT Sorvetes também é a empregadora destinatária. As amostras criptográficas foram aprovadas no VALIDAR/ITI em 25/10/2026; INPI e atestados definitivos antecedem o piloto com empregados reais. O [estado documental canônico](rep-p/homologacao/README.md#fonte-canônica-do-estado-documental) prevalece sobre registros históricos deste plano. Este documento não declara conformidade fiscal já alcançada.
 
 ## Documentos deste plano
 
@@ -45,8 +45,8 @@ O sistema registra a jornada real, explica cálculos e preserva evidências. INP
 - Aplicar CLT, regulamentação do ponto e instrumentos coletivos efetivamente aplicáveis, por estabelecimento, categoria e vigência.
 - CCT/ACT não é autorização necessária para adotar REP-P e não bloqueia o início do núcleo técnico. Consultar instrumentos existentes quando aplicáveis à apuração; não exigir a criação de um acordo coletivo apenas para implementar o ponto.
 - REP-P próprio, sem presumir homologação geral pelo MTE. A documentação de conformidade contempla REP-P e PTRP.
-- CT Sorvetes LTDA — CNPJ 14.276.603/0001-25 é a titular informada para os dois componentes; o plano prevê seu e-CNPJ nas assinaturas da desenvolvedora e no depósito direto ao INPI. Confirmar documentalmente esse papel na Fase 0; não usar a marca Coala no lugar da razão social.
-- Responsáveis legal e técnico assinam atestados com certificados pessoais ICP-Brasil; identificar ambos na Fase 0.
+- CT Sorvetes LTDA — CNPJ 14.276.603/0001-25 é a titular e desenvolvedora definida para os dois componentes; seu e-CNPJ assina os documentos da desenvolvedora e a empresa será titular no depósito direto ao INPI. Não usar a marca Coala no lugar da razão social.
+- Tiago Francisco Brasil Batista é o responsável técnico. O responsável legal que assina o atestado deve ser uma pessoa física com poderes para representar a CT Sorvetes; ambos os campos aplicáveis usam certificados pessoais ICP-Brasil.
 - Advogado trabalhista valida enquadramento, regras e instrumentos no início; contador valida eventos, unidades e efeitos de folha. A Fase 7 confirma a implementação final.
 - Separar obrigação legal, interpretação pendente e controle técnico escolhido. Fonte e evidência acompanham a obrigação; teste de eficácia acompanha o controle.
 - Conferir CNAE/enquadramento com o contador. Uso interno não autoriza comercialização.
@@ -127,7 +127,7 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-O portal web permanece on-line. A contingência offline foi implementada localmente somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, bloqueio após reinício, fila cifrada e assinada, envio ordenado e NSR apenas no servidor. Ainda depende de Play Integrity `enforce`, teste físico e homologação jurídica/operacional antes do piloto. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila offline não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
+O portal web permanece on-line. A contingência foi implementada somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, preservação local tanto sem rede quanto após indisponibilidade explícita da HLB, bloqueio após reinício, fila cifrada e assinada e envio ordenado. No escopo oficial, o NSR só nasce no servidor; no ensaio, autorização, assinatura e coleções são segregadas e nunca produzem NSR/ARP/AFD/AEJ. Ainda depende de Play Integrity `enforce` e teste físico antes do piloto oficial. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila local não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
 
 ### 3.8. Estágios
 
@@ -327,7 +327,7 @@ Entrega incremental de interface, **sem retirar escopo**: Fase 2 entrega batida 
 | 4 — Documentos e fiscalização | AEJ, espelho e pacote fiscal | Leiautes, assinaturas e rastreabilidade conferidos |
 | 5 — Fechamento e contador | Eventos, versões, envio, retorno e conciliação | Competência sintética completa |
 | 6 — Validação integrada | Simulação operacional e de falhas | Nenhuma pendência crítica; versão candidata identificada |
-| 7 — Conformidade formal | INPI, certificados reais e atestados REP-P/PTRP | Documentação e versão final validadas |
+| 7 — Conformidade formal | INPI, atestados REP-P/PTRP e conferência dos bytes finais | Documentação e versão final validadas; amostras criptográficas já aprovadas no ITI |
 | 8 — Piloto técnico | Batida real para um usuário, antecipada por decisão do programador (19/10/2026), com comprovantes sem validade até o lançamento total; sem comparação com o Bizneo, pois nada é importado de lá | Batidas, comprovantes e AFD do piloto sem perda nem divergência crítica não resolvida |
 | 9 — Lançamento total | Promoção por estabelecimento depois das Fases 3 a 7; comprovantes passam a valer | Checklist completo; primeiro fechamento acompanhado |
 | 10 — Saída do Bizneo | Histórico independente; encerramento das integrações antigas | Consulta/recuperação verificadas antes do desligamento |
@@ -338,7 +338,7 @@ Decisões do programador alteraram a ordem original: o piloto técnico (Fase 8) 
 
 1. **Fases 1 a 6 — implementação publicada:** jornada, REP-P/PTRP, ausências, ajustes, documentos, fechamento individual/geral, banco de horas, AFD/AEJ e interfaces web/Coala Go estão em produção com a coleta real desligada. Regras e índices do `coala-rh` e as três rotinas agendadas do ponto foram publicados em 21/10/2026.
 2. **Fase 0 — validação jurídica pendente:** decisões de produto estão na [seção 10-B do plano REP-P](plano-rep-p-controle-de-ponto.md); permanecem as confirmações formais e a matriz por requisito.
-3. **Fase 7 — conformidade formal pendente:** validar assinaturas no ITI, obter o certificado do INPI e concluir os atestados assinados com e-CPF fora do sistema.
+3. **Fase 7 — conformidade formal pendente:** as amostras de comprovante/PAdES, AFD/CAdES e e-CPF já foram aprovadas no ITI. Resta obter número/certificado do INPI, conferir os bytes finais e concluir os atestados assinados com e-CPF fora do sistema; a evidência específica do AEJ/CAdES declarada já validada ainda deve ser anexada ao dossiê.
 4. **Fase 8 — piloto controlado pendente:** configurar integralmente Heucilene Ribeiro e Luis, testar em aparelho físico e só então autorizar separadamente a flag e os perfis individuais.
 5. **Fase 9 — código publicado, lançamento total não autorizado:** depende do piloto, dos gates fiscais/jurídicos e do primeiro fechamento acompanhado. `REP_P_MARKING_ENABLED=false` continua impedindo qualquer batida real.
 6. **Fase 10 — pendente:** saída do Bizneo reduzida, sem importação; exportação, custódia e consulta independente devem ser verificadas antes do desligamento.

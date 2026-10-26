@@ -12,8 +12,10 @@ object TimeOfflineRules {
         return fiscalTimestamp.format(Instant.parse(anchorInstant).plusMillis(elapsedRealtimeMs - anchorElapsedRealtimeMs).atZone(ZoneId.of(timeZone)))
     }
     fun canonical(permitId: String, attemptId: String, executionUnitId: String, deviceKeyId: String,
-        elapsedRealtimeMs: Long, bootCount: Int, sequence: Int, previousLocalHash: String?, markedAt: String) =
-        listOf("coala-rep-p-offline-v1", permitId, attemptId, executionUnitId, deviceKeyId, elapsedRealtimeMs.toString(),
+        elapsedRealtimeMs: Long, bootCount: Int, sequence: Int, previousLocalHash: String?, markedAt: String,
+        scope: String = "official") =
+        listOf(if (scope == "pilot") "coala-rep-p-pilot-offline-v1" else "coala-rep-p-offline-v1",
+            permitId, attemptId, executionUnitId, deviceKeyId, elapsedRealtimeMs.toString(),
             bootCount.toString(), sequence.toString(), previousLocalHash.orEmpty(), markedAt).joinToString("\n")
     fun hash(canonical: String) = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
         .joinToString("") { "%02x".format(it) }

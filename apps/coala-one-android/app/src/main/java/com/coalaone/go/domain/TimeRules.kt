@@ -55,12 +55,17 @@ object TimeRules {
         return "UTC$sign%02d:%02d".format(absolute / 3600, absolute % 3600 / 60)
     }
     fun canRecord(options: TimeOptions?, unitId: String?) = options != null && options.eligible && options.markingEnabled && options.officialClock?.available == true && options.executionUnits.any { it.id == unitId }
+    fun canPreserve(options: TimeOptions?, unitId: String?, offlineReady: Boolean) = offlineReady && options != null
+        && options.eligible && options.markingEnabled && options.officialClock?.available == false
+        && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE"
+        && options.executionUnits.any { it.id == unitId }
     /** Why the punch button is off, in words; null when it can be used. */
     fun blockedReason(options: TimeOptions?): String? = when {
         options == null -> null
         !options.eligible -> "O registro de ponto vale para vínculos CLT e de aprendiz ativos hoje."
         !options.markingEnabled -> "O registro de ponto ainda não foi liberado para você."
-        options.officialClock?.available != true -> "Hora Legal Brasileira indisponível. A batida fica bloqueada até ela voltar."
+        options.officialClock?.available == false && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE" -> "Hora Legal Brasileira indisponível. Se este aparelho tiver uma autorização válida, a batida poderá ser preservada para sincronizar depois."
+        options.officialClock?.available != true -> "O registro está indisponível porque a unidade ou sua fonte de horário ainda não está pronta. Tente novamente ou fale com o DP."
         options.executionUnits.isEmpty() -> "Nenhuma unidade de trabalho para hoje. Fale com o DP."
         else -> null
     }

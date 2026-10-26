@@ -6,6 +6,7 @@ export const REP_P_OFFLINE_PERMIT_TTL_MS = 12 * 60 * 60 * 1000;
 export const REP_P_OFFLINE_MAX_PENDING = 20;
 
 export type RepPOfflineEvidence = Readonly<{
+  scope?: 'official' | 'pilot';
   permitId: string;
   deviceKeyId: string;
   elapsedRealtimeMs: number;
@@ -18,6 +19,7 @@ export type RepPOfflineEvidence = Readonly<{
 }>;
 
 export function canonicalRepPOfflineEvent(input: {
+  scope?: 'official' | 'pilot';
   permitId: string;
   attemptId: string;
   executionUnitId: string;
@@ -29,7 +31,8 @@ export function canonicalRepPOfflineEvent(input: {
   markedAt: string;
 }) {
   return [
-    'coala-rep-p-offline-v1', input.permitId, input.attemptId, input.executionUnitId, input.deviceKeyId,
+    input.scope === 'pilot' ? 'coala-rep-p-pilot-offline-v1' : 'coala-rep-p-offline-v1',
+    input.permitId, input.attemptId, input.executionUnitId, input.deviceKeyId,
     String(input.elapsedRealtimeMs), String(input.bootCount), String(input.sequence), input.previousLocalHash ?? '', input.markedAt,
   ].join('\n');
 }

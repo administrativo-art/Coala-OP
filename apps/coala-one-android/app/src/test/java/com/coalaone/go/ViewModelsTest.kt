@@ -664,6 +664,117 @@ class ViewModelsTest {
         assertEquals(0, sends); assertEquals(1, queue.rows.value.size)
         assertNotNull(vm.state.value.lastOffline); assertNull(vm.state.value.last)
     }
+    @Test fun pilotPreservesLocallyWhenHlbIsUnavailableEvenWithInternet() = runTest {
+        var sends = 0
+        val unavailable = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit", "Unidade", true, "America/Fortaleza")),
+            OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"), mode = "pilot")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = unavailable.copy(workDate = workDate)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse { sends++; return DemoApi().mark(request) }
+        }
+        val queue = MemoryTimeOfflineQueue().also { memory -> memory.cachedOptionsValue = unavailable.copy(
+            officialClock = OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza")) }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        assertTrue(vm.state.value.offlineReady)
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(0, sends)
+        assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline)
+    }
+    @Test fun pendingOnlineAttemptIsReplayedInsteadOfBecomingANewLocalPunchDuringHlbOutage() = runTest {
+        var hlbUnavailable = false
+        val sent = mutableListOf<MarkingRequest>()
+        val healthy = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit", "Unidade", true, "America/Fortaleza")),
+            OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate,
+                officialClock = if (hlbUnavailable) OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE") else healthy.officialClock)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sent += request
+                if (sent.size == 1) throw java.io.IOException("resposta perdida")
+                return DemoApi().mark(request)
+            }
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = healthy }
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val vm = timeViewModel(auth, repository(auth, api), saved, queue)
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(vm.hasPendingAttempt())
+
+        hlbUnavailable = true
+        vm.refreshClock(); advanceUntilIdle()
+        assertTrue(TimeRules.canPreserve(vm.state.value.options, vm.state.value.unitId, vm.state.value.offlineReady))
+        vm.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+
+        assertEquals(2, sent.size)
+        assertEquals(sent[0], sent[1])
+        assertTrue(queue.rows.value.isEmpty())
+        assertFalse(vm.hasPendingAttempt())
+        assertNull(saved.get<String>("attemptUnitId"))
+        assertNull(saved.get<String>("attemptPurpose"))
+    }
+    @Test fun definitiveHlbRejectionBecomesALocalPunchButAmbiguousFailureDoesNot() = runTest {
+        var calls = 0
+        val healthy = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit", "Unidade", true, "America/Fortaleza")),
+            OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                calls++
+                throw retrofit2.HttpException(retrofit2.Response.error<Any>(422,
+                    """{"error":{"code":"REP_P_TIME_UNAVAILABLE","message":"Hora oficial indisponível."}}""".toResponseBody()))
+            }
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = healthy }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline)
+        assertFalse(vm.hasPendingAttempt())
+    }
+    @Test fun lostResponseThenDefinitiveHlbRejectionPreservesOnePunchWithTheOriginalUnitAndPurpose() = runTest {
+        var calls = 0
+        val sent = mutableListOf<MarkingRequest>()
+        val options = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit-a", "Unidade A", true, "America/Fortaleza"),
+                ExecutionUnit("unit-b", "Unidade B", true, "America/Fortaleza")),
+            OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = options.copy(workDate = workDate)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sent += request; calls++
+                if (calls == 1) throw java.io.IOException("resposta perdida")
+                throw retrofit2.HttpException(retrofit2.Response.error<Any>(422,
+                    """{"error":{"code":"REP_P_TIME_UNAVAILABLE","message":"Hora oficial indisponível."}}""".toResponseBody()))
+            }
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = options }
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val first = timeViewModel(auth, repository(auth, api), saved, queue)
+        first.load(); advanceUntilIdle()
+        first.unit("unit-b")
+        first.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(first.hasPendingAttempt())
+
+        val restored = timeViewModel(auth, repository(auth, api), saved, queue)
+        restored.load(); advanceUntilIdle()
+        restored.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+
+        assertEquals(2, sent.size)
+        assertEquals(sent[0], sent[1])
+        assertEquals(1, queue.rows.value.size)
+        assertEquals(listOf("unit-b"), queue.capturedUnitIds)
+        assertEquals(listOf("journey_start"), queue.capturedPurposes)
+        assertFalse(restored.hasPendingAttempt())
+    }
     @Test fun offlineSyncStopsAtFirstFailureToPreserveTheSignedSequence() = runTest {
         val queue = MemoryTimeOfflineQueue()
         fun pending(id: String, sequence: Int) = TimeMarkingRow("test-owner", id, "permit", sequence, sequence.toLong(), sealed = byteArrayOf()) to
