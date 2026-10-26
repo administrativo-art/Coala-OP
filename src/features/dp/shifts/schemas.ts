@@ -59,6 +59,11 @@ const bulkReplacePatchSchema = z.object({
   }
 });
 
+const bulkCreateEntrySchema = z.object({
+  userId: z.string().trim().min(1).max(180),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).strict();
+
 export const bulkWorkShiftSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('replace'),
@@ -69,7 +74,32 @@ export const bulkWorkShiftSchema = z.discriminatedUnion('action', [
     action: z.literal('delete'),
     shiftIds: z.array(z.string().trim().min(1).max(180)).min(1).max(200),
   }).strict(),
+  z.object({
+    action: z.literal('create'),
+    shiftDefinitionId: z.string().trim().min(1).max(180),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    entries: z.array(bulkCreateEntrySchema).min(1).max(200),
+  }).strict(),
 ]).superRefine((input, context) => {
+  if (input.action === 'create') {
+    if (input.startTime === input.endTime) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'O início e o fim do turno não podem ser iguais.',
+        path: ['endTime'],
+      });
+    }
+    const keys = input.entries.map((entry) => `${entry.userId}::${entry.date}`);
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A seleção contém a mesma colaboradora em uma data mais de uma vez.',
+        path: ['entries'],
+      });
+    }
+    return;
+  }
   if (new Set(input.shiftIds).size !== input.shiftIds.length) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
