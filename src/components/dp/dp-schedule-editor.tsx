@@ -102,6 +102,7 @@ import {
   formatVacationPeriod,
 } from '@/lib/dp-vacation-schedule-rules';
 import { DPBulkShiftEditPanel } from '@/components/dp/dp-bulk-shift-edit-dialog';
+import { DPBulkShiftCreatePanel } from '@/components/dp/dp-bulk-shift-create-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1500,6 +1501,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [prevExpanded, setPrevExpanded] = useState(false);
   const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set());
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
+  const [bulkCreateActive, setBulkCreateActive] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
   const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
   const [vtDialogOpen, setVtDialogOpen] = useState(false);
@@ -1636,6 +1638,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   function resetBulkSelection() {
     setBulkSelectionActive(false);
     setSelectedShiftIds([]);
+  }
+
+  function resetBulkCreate() {
+    setBulkCreateActive(false);
   }
 
   React.useEffect(() => {
@@ -2472,11 +2478,19 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             </Button>
           )
         )}
-        {canEdit && !bulkSelectionActive && (
-          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
-            <Sparkles className="mr-2 h-4 w-4" />
-            Editar em lote
-          </Button>
+        {canEdit && !bulkSelectionActive && !bulkCreateActive && (
+          <div className="flex items-center gap-2">
+            {schedule.unitId ? (
+              <Button size="sm" variant="outline" onClick={() => setBulkCreateActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+                <Plus className="mr-2 h-4 w-4" />
+                Preencher em lote
+              </Button>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Alterar em lote
+            </Button>
+          </div>
         )}
         {canEdit && (
           <Button
@@ -2571,7 +2585,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
       <div className={cn(
         'grid items-start',
-        bulkSelectionActive && 'min-[1180px]:grid-cols-[minmax(0,1fr)_314px]',
+        (bulkSelectionActive || bulkCreateActive) && 'min-[1180px]:grid-cols-[minmax(0,1fr)_314px]',
       )}>
         <div className={cn('min-w-0 space-y-4', embedded && 'px-[22px] pb-5 pt-[14px]')}>
       {/* Stats boxes */}
@@ -3146,6 +3160,20 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             applyShiftsBatch={applyShiftsBatch}
             onApplied={resetBulkSelection}
             onCancel={resetBulkSelection}
+          />
+        )}
+        {canEdit && bulkCreateActive && schedule.unitId && (
+          <DPBulkShiftCreatePanel
+            people={bulkPeople.map((person) => ({ id: person.id, name: person.username }))}
+            dates={days.map((day) => ({ date: day.date, label: String(day.day), dowLabel: day.dowLabel }))}
+            shiftDefinitions={shiftDefinitions}
+            existingShifts={workShifts}
+            dayOffDatesByUser={dayOffOccupied}
+            vacationDatesByUser={vacationDatesByUser}
+            siblingOccupied={siblingOccupied}
+            applyShiftsBatch={applyShiftsBatch}
+            onApplied={resetBulkCreate}
+            onCancel={resetBulkCreate}
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -47,6 +47,9 @@ export async function applyWorkShiftBulkChange(params: {
 }) {
   const { context, scheduleId, input, requestId } = params;
   assertEditPermission(context);
+  if (input.action === 'create') {
+    return applyWorkShiftBulkCreate({ context, scheduleId, input, requestId });
+  }
   const replacePatch = input.action === 'replace' ? input.patch : null;
 
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
@@ -495,5 +498,364 @@ export async function applyWorkShiftBulkChange(params: {
     });
 
     return { updated: selected.length, action: input.action };
+  });
+}
+
+type BulkCreateInput = Extract<BulkWorkShiftInput, { action: 'create' }>;
+
+type BulkCreateSkipped = {
+  userId: string;
+  date: string;
+  reason: 'already_filled' | 'day_off' | 'vacation';
+};
+
+async function applyWorkShiftBulkCreate(params: {
+  context: ServerUserContext;
+  scheduleId: string;
+  input: BulkCreateInput;
+  requestId: string;
+}) {
+  const { context, scheduleId, input, requestId } = params;
+  const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
+  const definitionRef = dbAdmin.collection('dp_shiftDefinitions').doc(input.shiftDefinitionId);
+
+  return dbAdmin.runTransaction(async (transaction) => {
+    const scheduleSnapshot = await transaction.get(scheduleRef);
+    if (!scheduleSnapshot.exists) {
+      throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+    }
+    if (scheduleSnapshot.get('locked') === true) {
+      throw new AppError({ code: 'DP_SHIFT_SCHEDULE_LOCKED', kind: 'CONFLICT', safeMessage: 'A escala está trancada.' });
+    }
+
+    const scheduleUnitId = scheduleSnapshot.get('unitId');
+    if (typeof scheduleUnitId !== 'string' || !scheduleUnitId) {
+      throw new AppError({
+        code: 'DP_SHIFT_BULK_REQUIRES_UNIT_SCHEDULE',
+        kind: 'VALIDATION',
+        safeMessage: 'O preenchimento em lote exige uma escala vinculada a uma unidade.',
+      });
+    }
+    if (!canAccessUnit(context.userDoc, scheduleUnitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+      throw new AppError({
+        code: 'DP_SHIFT_UNIT_FORBIDDEN',
+        kind: 'AUTHORIZATION',
+        safeMessage: 'Sem acesso à unidade desta escala.',
+      });
+    }
+
+    const unitSnapshot = await transaction.get(dbAdmin.collection('dp_units').doc(scheduleUnitId));
+    if (!unitSnapshot.exists || unitSnapshot.get('isArchived') === true) {
+      throw new AppError({ code: 'DP_SHIFT_UNIT_UNAVAILABLE', kind: 'EXPECTED_BUSINESS', safeMessage: 'A unidade da escala não existe ou está arquivada.' });
+    }
+
+    const scheduleMonth = Number(scheduleSnapshot.get('month'));
+    const scheduleYear = Number(scheduleSnapshot.get('year'));
+    const expectedPeriod = `${scheduleYear}-${String(scheduleMonth).padStart(2, '0')}`;
+    if (!Number.isInteger(scheduleMonth) || !Number.isInteger(scheduleYear)) {
+      throw new AppError({
+        code: 'DP_SHIFT_BULK_SCHEDULE_PERIOD_INVALID',
+        kind: 'DATA_INTEGRITY',
+        safeMessage: 'A competência da escala está inválida.',
+      });
+    }
+    if (input.entries.some((entry) => !entry.date.startsWith(`${expectedPeriod}-`))) {
+      throw new AppError({
+        code: 'DP_SHIFT_OUTSIDE_SCHEDULE_PERIOD',
+        kind: 'VALIDATION',
+        safeMessage: 'Uma das datas não pertence à competência desta escala.',
+      });
+    }
+
+    const definitionSnapshot = await transaction.get(definitionRef);
+    if (!definitionSnapshot.exists) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'O turno escolhido não existe mais.' });
+    }
+    if (definitionSnapshot.get('isArchived') === true) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_ARCHIVED', kind: 'CONFLICT', safeMessage: 'O turno escolhido está arquivado. Selecione um turno ativo.' });
+    }
+    if (definitionSnapshot.get('startTime') !== input.startTime || definitionSnapshot.get('endTime') !== input.endTime) {
+      throw new AppError({
+        code: 'DP_SHIFT_DEFINITION_TIME_MISMATCH',
+        kind: 'DATA_INTEGRITY',
+        safeMessage: 'Os horários não correspondem ao turno escolhido. Atualize a tela e tente novamente.',
+      });
+    }
+    const crossesMidnight = input.endTime < input.startTime;
+    if (crossesMidnight && definitionSnapshot.get('overnight') !== true) {
+      throw new AppError({
+        code: 'DP_SHIFT_OVERNIGHT_DEFINITION_REQUIRED',
+        kind: 'VALIDATION',
+        safeMessage: 'Para atravessar a meia-noite, selecione um turno noturno.',
+      });
+    }
+
+    const userIds = [...new Set(input.entries.map((entry) => entry.userId))];
+    const userSnapshots = await transaction.getAll(...userIds.map((userId) => dbAdmin.collection('users').doc(userId)));
+    const usersById = new Map(userSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    userSnapshots.forEach((snapshot) => {
+      if (!snapshot.exists || snapshot.get('isActive') === false) {
+        throw new AppError({ code: 'DP_SHIFT_USER_UNAVAILABLE', kind: 'EXPECTED_BUSINESS', safeMessage: 'Uma colaboradora escolhida não existe ou está inativa.' });
+      }
+    });
+
+    const primaryUnitIds = [...new Set(userSnapshots.map((snapshot) => {
+      const userUnitId = snapshot.get('unitId');
+      return typeof userUnitId === 'string' && userUnitId ? userUnitId : scheduleUnitId;
+    }))];
+    const primaryUnitSnapshots = await transaction.getAll(...primaryUnitIds.map((unitId) => dbAdmin.collection('dp_units').doc(unitId)));
+    const primaryUnitsById = new Map(primaryUnitSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+    primaryUnitSnapshots.forEach((snapshot) => {
+      if (!snapshot.exists || snapshot.get('isArchived') === true) {
+        throw new AppError({ code: 'DP_SHIFT_PRIMARY_UNIT_UNAVAILABLE', kind: 'DATA_INTEGRITY', safeMessage: 'A unidade principal de uma colaboradora não existe ou está arquivada.' });
+      }
+    });
+    const groupIds = [...new Set(primaryUnitSnapshots
+      .map((snapshot) => snapshot.get('groupId'))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0))];
+    const groupSnapshots = groupIds.length > 0
+      ? await transaction.getAll(...groupIds.map((groupId) => dbAdmin.collection('dp_unitGroups').doc(groupId)))
+      : [];
+    const groupsById = new Map(groupSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+
+    const journeysSnapshot = await transaction.get(
+      dbAdmin.collection('dp_journeys')
+        .where('status', 'in', ['published', 'archived'])
+        .limit(JOURNEY_QUERY_LIMIT + 1),
+    );
+    if (journeysSnapshot.size > JOURNEY_QUERY_LIMIT) {
+      throw new AppError({ code: 'DP_SHIFT_JOURNEY_CATALOG_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há jornadas demais para resolver esta atribuição com segurança.' });
+    }
+    const journeys = journeysSnapshot.docs.map((document) => ({ id: document.id, ...document.data() } as DPJourney));
+
+    const occupancyByUser = new Map<string, QueryDocumentSnapshot[]>();
+    const vacationsByUser = new Map<string, QueryDocumentSnapshot[]>();
+    for (const userId of userIds) {
+      const dates = input.entries.filter((entry) => entry.userId === userId).map((entry) => entry.date).sort();
+      const occupancySnapshot = await transaction.get(
+        dbAdmin.collectionGroup('shifts')
+          .where('userId', '==', userId)
+          .where('date', '>=', dates[0])
+          .where('date', '<=', dates[dates.length - 1])
+          .limit(OCCUPANCY_QUERY_LIMIT),
+      );
+      const vacationSnapshot = await transaction.get(
+        dbAdmin.collection('dp_vacations').where('userId', '==', userId).limit(VACATION_QUERY_LIMIT),
+      );
+      if (occupancySnapshot.size === OCCUPANCY_QUERY_LIMIT || vacationSnapshot.size === VACATION_QUERY_LIMIT) {
+        throw new AppError({
+          code: 'DP_SHIFT_BULK_VALIDATION_LIMIT_REACHED',
+          kind: 'DATA_INTEGRITY',
+          safeMessage: 'Há registros demais para validar o preenchimento em lote com segurança.',
+        });
+      }
+      occupancyByUser.set(userId, occupancySnapshot.docs.filter(isScheduleShift));
+      vacationsByUser.set(userId, vacationSnapshot.docs);
+    }
+
+    const skipped: BulkCreateSkipped[] = [];
+    const candidates = input.entries.filter((entry) => {
+      const occupancy = occupancyByUser.get(entry.userId) ?? [];
+      const sameDate = occupancy.filter((document) => document.get('date') === entry.date);
+      const hasDayOff = sameDate.some((document) => document.get('type') === 'day_off');
+      const hasCurrentScheduleOccupancy = sameDate.some((document) => scheduleIdFromShift(document) === scheduleId);
+      if (hasDayOff || hasCurrentScheduleOccupancy) {
+        skipped.push({ userId: entry.userId, date: entry.date, reason: hasDayOff ? 'day_off' : 'already_filled' });
+        return false;
+      }
+      const approvedVacation = (vacationsByUser.get(entry.userId) ?? []).some((document) => (
+        document.get('status') === 'APPROVED'
+        && document.get('recordType') === 'gozo'
+        && typeof document.get('startDate') === 'string'
+        && typeof document.get('endDate') === 'string'
+        && document.get('startDate') <= entry.date
+        && document.get('endDate') >= entry.date
+      ));
+      if (approvedVacation) {
+        skipped.push({ userId: entry.userId, date: entry.date, reason: 'vacation' });
+        return false;
+      }
+      return true;
+    });
+
+    const now = Timestamp.now();
+    const definition = { id: definitionSnapshot.id, ...definitionSnapshot.data() } as DPShiftDefinition;
+    const plannedWrites: Array<{
+      shiftRef: DocumentReference;
+      referenceRef: DocumentReference;
+      userId: string;
+      date: string;
+      payload: Record<string, unknown>;
+      reference: DPShiftReference;
+      hasConflict: boolean;
+    }> = [];
+
+    for (const entry of candidates) {
+      const userSnapshot = usersById.get(entry.userId);
+      if (!userSnapshot) throw new AppError({ code: 'DP_SHIFT_USER_UNAVAILABLE', kind: 'EXPECTED_BUSINESS', safeMessage: 'Uma colaboradora escolhida não existe ou está inativa.' });
+      const primaryUnitId = typeof userSnapshot.get('unitId') === 'string' && userSnapshot.get('unitId')
+        ? String(userSnapshot.get('unitId')) : scheduleUnitId;
+      const primaryUnitSnapshot = primaryUnitsById.get(primaryUnitId);
+      if (!primaryUnitSnapshot) throw new AppError({ code: 'DP_SHIFT_PRIMARY_UNIT_UNAVAILABLE', kind: 'DATA_INTEGRITY', safeMessage: 'A unidade principal da colaboradora não existe ou está arquivada.' });
+      const unitGroupId = typeof primaryUnitSnapshot.get('groupId') === 'string' ? String(primaryUnitSnapshot.get('groupId')) : undefined;
+      const unitGroupSnapshot = unitGroupId ? groupsById.get(unitGroupId) : undefined;
+      const unitOrganizationId = typeof primaryUnitSnapshot.get('organizationId') === 'string'
+        ? String(primaryUnitSnapshot.get('organizationId'))
+        : unitGroupSnapshot?.exists && typeof unitGroupSnapshot.get('organizationId') === 'string'
+          ? String(unitGroupSnapshot.get('organizationId')) : undefined;
+      const journeyResolution = resolveDPJourney({
+        journeys,
+        target: {
+          collaboratorId: entry.userId,
+          ...(typeof userSnapshot.get('jobRoleId') === 'string' ? { jobRoleId: String(userSnapshot.get('jobRoleId')) } : {}),
+          jobFunctionIds: Array.isArray(userSnapshot.get('jobFunctionIds')) ? userSnapshot.get('jobFunctionIds') : [],
+          unitId: primaryUnitId,
+          ...(unitGroupId ? { unitGroupId } : {}),
+          ...(unitOrganizationId ? { unitOrganizationId } : {}),
+        },
+        date: entry.date,
+      });
+      if (journeyResolution.status === 'none') {
+        throw new AppError({ code: 'DP_SHIFT_JOURNEY_NOT_FOUND', kind: 'EXPECTED_BUSINESS', safeMessage: 'Nenhuma jornada vigente se aplica a uma colaboradora escolhida.' });
+      }
+      if (journeyResolution.status === 'ambiguous') {
+        throw new AppError({ code: 'DP_SHIFT_JOURNEY_AMBIGUOUS', kind: 'CONFLICT', safeMessage: 'Mais de uma jornada com a mesma prioridade se aplica a uma colaboradora escolhida.' });
+      }
+      if (!isShiftDefinitionCompatibleWithJourney({
+        journeyId: journeyResolution.journey.id,
+        journeyAllowedShiftDefinitionIds: journeyResolution.journey.allowedShiftDefinitionIds,
+        shiftDefinitionId: input.shiftDefinitionId,
+        shiftJourneyIds: definitionSnapshot.get('journeyIds'),
+      })) {
+        throw new AppError({ code: 'DP_SHIFT_NOT_ALLOWED_BY_JOURNEY', kind: 'VALIDATION', safeMessage: 'O turno escolhido não é permitido pela jornada de uma das colaboradoras.' });
+      }
+
+      let assignment: DPShiftAssignment;
+      try {
+        assignment = resolveDPShiftAssignment({
+          executionUnitId: scheduleUnitId,
+          executionUnitExternalId: typeof unitSnapshot.get('externalId') === 'string' ? unitSnapshot.get('externalId') : undefined,
+          user: userSnapshot.data() ?? {},
+        });
+      } catch {
+        throw new AppError({ code: 'DP_SHIFT_EXTERNAL_ORIGIN_REQUIRED', kind: 'DATA_INTEGRITY', safeMessage: 'A unidade de origem de uma colaboradora precisa estar definida antes da cobertura.' });
+      }
+      if (assignment.assignmentKind === 'external_coverage') {
+        throw new AppError({ code: 'DP_SHIFT_EXTERNAL_REASON_REQUIRED', kind: 'VALIDATION', safeMessage: 'Coberturas externas devem ser lançadas individualmente, com o motivo registrado.' });
+      }
+      const occupancy = occupancyByUser.get(entry.userId) ?? [];
+      const hasCrossConflict = occupancy.some((document) => (
+        document.get('date') === entry.date
+        && document.get('type') !== 'day_off'
+        && scheduleIdFromShift(document) !== scheduleId
+      ));
+      const shiftRef = scheduleRef.collection('shifts').doc();
+      const referenceRef = dbAdmin.collection('dp_shiftReferenceHistory').doc();
+      const reference = buildDPShiftReference({
+        collaboratorId: entry.userId,
+        user: userSnapshot.data() ?? {},
+        journey: journeyResolution.journey,
+        resolvedBy: journeyResolution.resolvedBy,
+        definition,
+        executionUnitId: scheduleUnitId,
+        date: entry.date,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        capturedAt: now.toDate().toISOString(),
+      });
+      plannedWrites.push({
+        shiftRef,
+        referenceRef,
+        userId: entry.userId,
+        date: entry.date,
+        hasConflict: hasCrossConflict,
+        reference,
+        payload: {
+          scheduleId,
+          unitId: scheduleUnitId,
+          userId: entry.userId,
+          userName: userSnapshot.get('username') ?? null,
+          date: entry.date,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          overnight: crossesMidnight,
+          type: 'work',
+          hasConflict: hasCrossConflict,
+          assignmentKind: assignment.assignmentKind,
+          countsTowardGoals: assignment.countsTowardGoals,
+          journeyResolution: {
+            journeyId: journeyResolution.journey.id,
+            lineageId: journeyResolution.journey.lineageId,
+            version: journeyResolution.journey.version,
+            name: journeyResolution.journey.name,
+            resolvedBy: journeyResolution.resolvedBy,
+            validationMode: journeyResolution.journey.scaleValidation?.mode ?? 'consecutive_days',
+            maxConsecutiveWorkDays: journeyResolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
+            resolvedAt: now,
+          },
+          referenceRevisionId: referenceRef.id,
+          updatedAt: now,
+          createdAt: now,
+          shiftDefinitionId: input.shiftDefinitionId,
+        },
+      });
+    }
+
+    if (plannedWrites.length > 0 && operationalGuardRequested()) {
+      const slices = plannedWrites.flatMap(({ userId, date }) => shiftOccupancySlices({
+        beneficiaryUid: userId,
+        date,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        addsOccupancy: true,
+      }));
+      await guardOccupancyWrite(transaction, context.workspace_id, slices, plannedWrites.length * 2 + 2);
+    }
+
+    plannedWrites.forEach(({ shiftRef, referenceRef, payload, userId, date, reference }) => {
+      transaction.create(shiftRef, payload);
+      transaction.create(referenceRef, {
+        workspaceId: context.workspace_id,
+        scheduleId,
+        shiftId: shiftRef.id,
+        shiftPath: shiftRef.path,
+        userId,
+        actorId: context.decoded.uid,
+        requestId,
+        event: 'created',
+        previousRevisionId: null,
+        reference,
+        capturedAt: now,
+      });
+    });
+    if (plannedWrites.length > 0) {
+      transaction.update(scheduleRef, {
+        shiftCount: FieldValue.increment(plannedWrites.length),
+        goalEligibilityVersion: FieldValue.increment(1),
+        journeyValidationVersion: FieldValue.increment(1),
+      });
+    }
+    transaction.set(dbAdmin.collection('actionLogs').doc(), {
+      workspace_id: context.workspace_id,
+      user_id: context.decoded.uid,
+      username: context.userDoc.username ?? null,
+      module: 'dp.schedules',
+      action: 'shifts_bulk_created',
+      metadata: {
+        request_id: requestId,
+        schedule_id: scheduleId,
+        shift_count: plannedWrites.length,
+        skipped_count: skipped.length,
+        selected_count: input.entries.length,
+        shift_definition_id: input.shiftDefinitionId,
+        dates: [...new Set(input.entries.map((entry) => entry.date))],
+        user_ids: userIds,
+      },
+      ip_address: null,
+      timestamp: now,
+      ttl: Timestamp.fromMillis(now.toMillis() + AUDIT_TTL_MS),
+    });
+
+    return { created: plannedWrites.length, skipped, action: 'create' as const };
   });
 }

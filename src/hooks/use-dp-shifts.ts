@@ -92,7 +92,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   }, [scheduleId]);
 
   const applyShiftsBatch = useCallback(async (input: BulkWorkShiftInput) => {
-    if (!scheduleId || input.shiftIds.length === 0) return;
+    if (!scheduleId) return;
     await authenticatedApiRequest(`/api/dp/schedules/${encodeURIComponent(scheduleId)}/shifts/bulk`, {
       method: 'POST',
       json: input,
