@@ -32,7 +32,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val adjustments: List<Adjustment> = emptyList(), val treatments: List<Treatment> = emptyList(), val truncated: Boolean = false, val last: MarkingResponse? = null, val sentAdjustment: Adjustment? = null,
     val bank: TimeBankResponse? = null, val bankDate: String? = null, val mirror: MirrorStatus? = null, val mirrorCompetence: String? = null,
     val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
-    val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null, val offlineIssue: String? = null,
+    val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null,
+    val offlineIssue: String? = null, val offlineReady: Boolean = false,
     val journeyTrackingActive: Boolean = false)
 
 /** Ponto: punch, today, history, receipts and adjustment requests, all through the web routes. Nothing is polled. */
@@ -53,7 +54,13 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     private var pendingLocation: LocationAttempt?
         get() = saved.get<String>("attemptLocation")?.let { encoded -> runCatching { Json.decodeFromString<LocationAttempt>(encoded) }.getOrNull() }
         set(value) { saved["attemptLocation"] = value?.let(Json::encodeToString) }
-    private fun clearAttempt() { attempt = null; pendingLocation = null }
+    private var attemptUnitId: String?
+        get() = saved["attemptUnitId"]
+        set(value) { saved["attemptUnitId"] = value }
+    private var attemptPurpose: String?
+        get() = saved["attemptPurpose"]
+        set(value) { saved["attemptPurpose"] = value }
+    private fun clearAttempt() { attempt = null; pendingLocation = null; attemptUnitId = null; attemptPurpose = null }
     private fun serverRun(notice: String? = null, work: suspend () -> Unit) = run(notice) { try { work() } catch (cause: Exception) { throw Errors.withServerMessage(cause) } }
     init {
         auth.current?.uid?.let { uid -> viewModelScope.launch { offlineQueue.observe(uid).collect { rows ->
@@ -62,17 +69,25 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     }
 
     private suspend fun refreshPermit(options: TimeOptions, elapsed: Long) {
-        if (options.mode == "pilot") {
-            mutable.update { it.copy(offlineIssue = null) }
+        if (options.mode !in setOf("official", "pilot")) {
+            mutable.update { it.copy(offlineIssue = null, offlineReady = false) }
             return
         }
         val uid = auth.current?.uid ?: return
         try {
-            val request = offlineQueue.permitRequest(uid, options.workDate, elapsed) ?: return
-            offlineQueue.savePermit(uid, api.offlinePermit(request).permit)
-            mutable.update { it.copy(offlineIssue = null) }
+            offlineQueue.permitRequest(uid, options.workDate, elapsed, options.mode)?.let { request ->
+                offlineQueue.savePermit(uid, api.offlinePermit(request).permit)
+            }
+            updateContingencyState(uid, options, elapsed, null)
         } catch (cause: CancellationException) { throw cause }
-        catch (cause: Exception) { mutable.update { it.copy(offlineIssue = Errors.classify(cause).message) } }
+        catch (cause: Exception) { updateContingencyState(uid, options, elapsed, Errors.classify(cause).message) }
+    }
+    private suspend fun updateContingencyState(uid: String, options: TimeOptions, elapsed: Long, issue: String?) {
+        val cached = offlineQueue.cachedOptions(uid, elapsed)?.takeIf { it.mode == options.mode }
+        val ready = cached != null
+        val fallbackOffset = cached?.officialClock?.let { TimeRules.clockOffset(it, elapsed) }
+        mutable.update { current -> current.copy(offlineReady = ready, offlineIssue = if (ready) null else issue,
+            clockOffset = if (options.officialClock?.available == true) current.clockOffset else fallbackOffset) }
     }
 
     /** Options of today and the month on screen; read when the screen opens and on pull-to-refresh. */
@@ -138,33 +153,47 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     }
     /** A new unit is a new attempt; the same attempt is resent until the server answers, so a retry never duplicates. */
     fun unit(id: String) { if (mutable.value.unitId != id) { clearAttempt(); mutable.update { it.copy(unitId = id) } } }
+    fun hasPendingAttempt() = attempt != null
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
         var state = mutable.value
         if (!online) {
-            require(state.options?.mode != "pilot") { "O ensaio pré-homologação exige conexão com a internet." }
-            val uid = auth.current?.uid ?: error("Sessão expirada.")
-            val unitId = state.unitId ?: error("Escolha a unidade.")
-            val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
-            clearAttempt()
-            mutable.update { it.copy(lastOffline = captured) }
-            updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose)
-            offlineScheduler.schedule(uid)
+            require(attempt == null) { "Há uma tentativa anterior aguardando confirmação. Conecte-se para reenviar a mesma batida sem duplicá-la." }
+            preserveLocally(state, declaredPurpose)
             return@serverRun
         }
         // A block caused only by the official clock is read again on tap: the server may already be back.
         if (!TimeRules.canRecord(state.options, state.unitId) && state.options?.officialClock?.available != true) { refreshOptions(); state = mutable.value }
-        require(TimeRules.canRecord(state.options, state.unitId)) { TimeRules.blockedReason(state.options) ?: "Escolha a unidade." }
-        val zone = TimeRules.unitZone(state.options, state.unitId)
-        val pending = attempt ?: (TimeRules.newAttempt() to TimeRules.workDate(officialNow(state), zone)).also { attempt = it }
-        val locationEnabled = state.options?.executionUnits?.firstOrNull { it.id == state.unitId }?.locationPolicy?.mode != "disabled"
+        if (attempt == null && TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)) {
+            preserveLocally(state, declaredPurpose)
+            return@serverRun
+        }
+        val replaying = attempt != null
+        require(replaying || TimeRules.canRecord(state.options, state.unitId)) { TimeRules.blockedReason(state.options) ?: "Escolha a unidade." }
+        val selectedUnitId = if (replaying) attemptUnitId ?: state.unitId else state.unitId
+        require(selectedUnitId != null) { "Escolha a unidade." }
+        val selectedPurpose = if (replaying) attemptPurpose ?: declaredPurpose else declaredPurpose
+        val zone = TimeRules.unitZone(state.options, selectedUnitId)
+        val pending = attempt ?: (TimeRules.newAttempt() to TimeRules.workDate(officialNow(state), zone)).also {
+            attempt = it; attemptUnitId = selectedUnitId; attemptPurpose = selectedPurpose
+        }
+        if (attemptUnitId == null) attemptUnitId = selectedUnitId
+        if (attemptPurpose == null) attemptPurpose = selectedPurpose
+        val locationEnabled = state.options?.executionUnits?.firstOrNull { it.id == selectedUnitId }?.locationPolicy?.mode != "disabled"
         val location = if (locationEnabled) pendingLocation ?: capturedLocation
             ?: failedLocationAttempt(status = "unavailable") else null
         pendingLocation = location
-        val result = try { api.mark(MarkingRequest(pending.first, pending.second, state.unitId!!, declaredPurpose = declaredPurpose, locationAttempt = location)) }
+        val result = try { api.mark(MarkingRequest(pending.first, pending.second, selectedUnitId, declaredPurpose = selectedPurpose, locationAttempt = location)) }
         catch (cause: retrofit2.HttpException) {
             // 409: the attempt clashes with one already recorded. Start over from what the server holds.
             if (cause.code() == 409) { clearAttempt(); readMonth(YearMonth.now()) }
+            // The server explicitly guarantees this attempt was not recorded. It is then safe to preserve a new,
+            // signed local attempt; network failures and other ambiguous answers keep replaying the original one.
+            if (Errors.serverCode(cause) == "REP_P_TIME_UNAVAILABLE" && state.offlineReady) {
+                clearAttempt()
+                preserveLocally(state.copy(unitId = selectedUnitId), selectedPurpose)
+                return@serverRun
+            }
             throw cause
         }
         clearAttempt()
@@ -172,10 +201,19 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         auth.current?.uid?.let { uid ->
             timeSummaryUpdates.recorded(uid, OwnMarking(result.receiptId, pending.second, result.marking.nsr,
                 result.marking.markedAt, result.marking.executionUnitId, "01", result.receiptStatus,
-                result.receiptIssue, MarkingClassification(declaredPurpose), result.pilot))
+                result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot))
         }
-        updateJourneyLocation(state, pending.second, result.marking.executionUnitId, declaredPurpose)
+        updateJourneyLocation(state, pending.second, result.marking.executionUnitId, selectedPurpose)
         readMonth(YearMonth.from(LocalDate.parse(pending.second)))
+    }
+    private suspend fun preserveLocally(state: TimeState, declaredPurpose: String) {
+        require(attempt == null) { "Há uma tentativa anterior aguardando confirmação. Conecte-se para reenviar a mesma batida sem duplicá-la." }
+        val uid = auth.current?.uid ?: error("Sessão expirada.")
+        val unitId = state.unitId ?: error("Escolha a unidade.")
+        val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
+        mutable.update { it.copy(lastOffline = captured) }
+        updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose)
+        offlineScheduler.schedule(uid)
     }
     private fun updateJourneyLocation(state: TimeState, workDate: String, unitId: String, purpose: String) {
         val shift = state.shifts.firstOrNull { it.date == workDate && it.type == "work" }
@@ -213,8 +251,10 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     private fun officialNow(state: TimeState) = state.clockOffset?.let { android.os.SystemClock.elapsedRealtime() + it } ?: System.currentTimeMillis()
     private suspend fun refreshOptions() {
         val options = api.timeOptions(LocalDate.now().toString())
-        mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime())) }
+        val elapsed = android.os.SystemClock.elapsedRealtime()
+        mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, elapsed)) }
         reconcileJourneyAvailability(options)
+        refreshPermit(options, elapsed)
     }
     fun dismissLast() { mutable.update { it.copy(last = null) } }
     fun dismissOffline() { mutable.update { it.copy(lastOffline = null) } }

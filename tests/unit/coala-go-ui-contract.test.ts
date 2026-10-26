@@ -137,19 +137,21 @@ test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovant
   assert.doesNotMatch(timeOfflineStore, /nsr|receiptId/);
 });
 
-test('ensaio nominal é identificado no Coala Go e nunca se apresenta como registro oficial ou contingência offline', () => {
+test('ensaio nominal e sua contingência segregada nunca se apresentam como registro oficial', () => {
   assert.match(timeModels, /data class TimeOptions\([\s\S]*?val mode: String = "official"/);
   assert.match(timeModels, /data class MarkingResponse\([\s\S]*?val pilot: Boolean = false/);
   assert.match(timeModels, /data class OwnMarking\([\s\S]*?val pilot: Boolean = false/);
   assert.match(time, /Sequência do ensaio/);
   assert.match(time, /Teste sem validade como REP-P e fora do fechamento oficial/);
-  assert.match(time, /O ensaio pré-homologação exige internet/);
+  assert.match(time, /Aguardando sincronização do ensaio/);
+  assert.match(time, /nada será enviado ao registro fiscal oficial/);
   assert.match(time, /Os comprovantes do ensaio ficam fora do pacote oficial/);
   assert.match(time, /Exportar comprovantes oficiais do mês/);
-  assert.match(timeViewModel, /require\(state\.options\?\.mode != "pilot"\)/);
+  assert.match(timeViewModel, /TimeRules\.canPreserve/);
   assert.match(timeViewModel, /val officialMarkings = state\.markings\.filterNot \{ it\.pilot \}/);
   assert.match(timeViewModel, /Não há comprovantes oficiais neste mês/);
-  assert.match(timeViewModel, /if \(options\.mode == "pilot"\)/);
+  assert.match(timeOfflineStore, /current\.scope == scope/);
+  assert.match(timeOfflineStore, /permit\.scope/);
 });
 
 test('Detalhe do dia é único e o acompanhamento entre unidades respeita início, intervalo e fim', () => {

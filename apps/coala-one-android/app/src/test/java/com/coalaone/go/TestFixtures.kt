@@ -43,15 +43,19 @@ class MemoryDrafts : CountDraftStore {
 class MemoryTimeOfflineQueue : TimeOfflineQueue {
     val rows = MutableStateFlow<List<TimeMarkingRow>>(emptyList())
     var savedPermit: OfflinePermit? = null
+    var cachedOptionsValue: TimeOptions? = null
     var readyRows = emptyList<Pair<TimeMarkingRow, MarkingRequest>>()
     val syncedIds = mutableListOf<String>()
     val failures = mutableListOf<Pair<String, AppFailure>>()
+    val capturedUnitIds = mutableListOf<String>()
+    val capturedPurposes = mutableListOf<String>()
     override fun observe(uid: String) = rows
-    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long) = null
+    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long, scope: String) = null
     override suspend fun savePermit(uid: String, permit: OfflinePermit) { savedPermit = permit }
     override suspend fun permit(uid: String) = savedPermit
-    override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? = null
+    override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? = cachedOptionsValue
     override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String): CapturedOfflineMarking {
+        capturedUnitIds += executionUnitId; capturedPurposes += declaredPurpose
         val id = java.util.UUID.randomUUID().toString(); rows.value += TimeMarkingRow(uid, id, "permit", rows.value.size + 1, 0, sealed = byteArrayOf())
         return CapturedOfflineMarking(id, "2026-10-19T08:00:00-0300", "2026-10-19")
     }

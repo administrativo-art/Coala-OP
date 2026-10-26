@@ -33,7 +33,8 @@ import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_E
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
-import { REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt, type RepPPilotReceiptSnapshot } from './pilot-receipt';
+import { isValidRepPPilotReceiptSnapshot, REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt,
+  type RepPPilotReceiptSnapshot } from './pilot-receipt';
 import { repPOfficialMarkingEnabled, repPOfficialUserIds } from './runtime-config';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
@@ -45,6 +46,7 @@ const ATTEMPTS = 'repP_attempts';
 const EXPORT_AUDIT = 'repP_exportAudit';
 const RECEIPTS = 'repP_receipts';
 const OFFLINE_PERMITS = 'repP_offlinePermits';
+const PILOT_OFFLINE_PERMITS = 'repP_pilotOfflinePermits';
 const PILOT_HEADS = 'repP_pilotHeads';
 const PILOT_MARKINGS = 'repP_pilotMarkings';
 const ADJUSTMENT_REQUESTS = 'ptrp_adjustmentRequests';
@@ -63,6 +65,7 @@ const RECEIPT_RETRY_MAX_MS = 30 * 60_000;
 const MAX_HISTORY_MARKINGS = 300;
 const MAX_PENDING_RECEIPTS = 100;
 const CT_SORVETES_CNPJ = '14276603000125';
+const CT_SORVETES_LEGAL_NAME = 'CT SORVETES LTDA';
 
 type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
@@ -124,7 +127,7 @@ type EstablishmentDocument = {
 };
 
 type OfflinePermitDocument = {
-  schemaVersion: 1; workspaceId: string; employeeId: string; requestDigest: string;
+  schemaVersion: 1; scope?: 'official' | 'pilot'; workspaceId: string; employeeId: string; requestDigest: string;
   permitId: string; installationId: string; deviceKeyId: string; devicePublicKey: string;
   keySecurity: 'tee' | 'strongbox'; bootCount: number; anchorElapsedRealtimeMs: number;
   anchorInstant: string; issuedAt: string; expiresAt: string; establishmentId: string;
@@ -335,11 +338,84 @@ export async function provisionRepPReferenceData(input: {
 
 function offlinePermitDto(permit: OfflinePermitDocument) {
   return {
+    scope: permit.scope ?? 'official',
     permitId: permit.permitId, installationId: permit.installationId, deviceKeyId: permit.deviceKeyId,
     keySecurity: permit.keySecurity, bootCount: permit.bootCount,
     anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, anchorInstant: permit.anchorInstant,
     issuedAt: permit.issuedAt, expiresAt: permit.expiresAt, units: permit.units,
   };
+}
+
+function assertOfflineDeviceKey(input: RepPOfflinePermitRequest) {
+  let calculatedKeyId: string;
+  try { calculatedKeyId = repPDeviceKeyId(input.devicePublicKey); }
+  catch { throw fail('REP_P_OFFLINE_DEVICE_KEY_INVALID', 'A chave segura deste aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
+  if (calculatedKeyId !== input.deviceKeyId) {
+    throw fail('REP_P_OFFLINE_DEVICE_KEY_MISMATCH', 'A identidade criptográfica deste aparelho não confere.', 'DATA_INTEGRITY');
+  }
+}
+
+/** Autorização segregada para ensaiar a contingência sem tocar ARP, NSR, AFD, AEJ ou fechamento. */
+async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: RepPOfflinePermitRequest, deps: Dependencies) {
+  if (!deps.pilotEnabled || !markingAllowedForProfile(context) || !deps.pilotUserIds.has(context.decoded.uid)) {
+    throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
+  }
+  assertOfflineDeviceKey(input);
+  const requestDigest = digest(['pilot-offline-permit', context.workspace_id, context.decoded.uid, input]);
+  const permitId = `pilot_${digest(['offline-permit', context.workspace_id, context.decoded.uid, input.permitRequestId])}`;
+  const permitRef = deps.pilotDb.collection(PILOT_OFFLINE_PERMITS).doc(permitId);
+  const existing = await permitRef.get();
+  if (existing.exists) {
+    const stored = existing.data() as OfflinePermitDocument;
+    if (stored.scope !== 'pilot' || stored.workspaceId !== context.workspace_id
+      || stored.employeeId !== context.decoded.uid || stored.requestDigest !== requestDigest) {
+      throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Autorização de ensaio reutilizada com conteúdo diferente.', 'CONFLICT');
+    }
+    return offlinePermitDto(stored);
+  }
+  const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
+    userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
+  if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há vínculo histórico válido para ativar a contingência de ensaio.', 'DATA_INTEGRITY');
+  if (!['clt', 'apprenticeship'].includes(reference.period.employmentRelationshipType)) {
+    throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
+  }
+  if (reference.period.employer.cnpj !== CT_SORVETES_CNPJ) {
+    throw fail('REP_P_PILOT_EMPLOYER_UNSUPPORTED', 'O ensaio está limitado ao empregador homologado.', 'DATA_INTEGRITY');
+  }
+  const unitDocs = await Promise.all([...new Set(reference.period.unitIds)].slice(0, 30)
+    .map((unitId) => deps.mainDb.collection('dp_units').doc(unitId).get()));
+  const units = unitDocs.filter((unit) => unit.exists && isBrazilTimeZone(unit.get('timeZone'))).map((unit) => ({
+    id: unit.id, name: String(unit.get('name') ?? unit.id), timeZone: String(unit.get('timeZone')),
+  }));
+  if (!units.length) throw fail('REP_P_PILOT_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade antes do ensaio.', 'DATA_INTEGRITY');
+  const reading = await deps.clock.read();
+  assertTrustedRepPClockReading(reading);
+  if (!units.some((unit) => civilDateFromRepPTimestamp(formatRepPAfdTimestamp(reading.instant, unit.timeZone)) === input.workDate)) {
+    throw fail('REP_P_WORK_DATE_MISMATCH', 'A data do aparelho não corresponde à Hora Legal das unidades.', 'VALIDATION');
+  }
+  const issuedAt = reading.instant.toISOString();
+  const permit: OfflinePermitDocument = {
+    schemaVersion: 1, scope: 'pilot', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
+    permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
+    devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
+    anchorElapsedRealtimeMs: input.anchorElapsedRealtimeMs, anchorInstant: issuedAt, issuedAt,
+    expiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PERMIT_TTL_MS).toISOString(),
+    establishmentId: `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`,
+    employerCnpj: reference.period.employer.cnpj, units, status: 'active', lastAcceptedSequence: 0,
+    lastAcceptedHash: null,
+  };
+  try { await permitRef.create({ ...permit, createdAt: Timestamp.now() }); }
+  catch (cause) {
+    const code = (cause as { code?: number | string } | null)?.code;
+    if (code !== 6 && code !== 'already-exists' && !String((cause as Error | null)?.message).includes('ALREADY_EXISTS')) throw cause;
+    const stored = (await permitRef.get()).data() as OfflinePermitDocument | undefined;
+    if (!stored || stored.scope !== 'pilot' || stored.requestDigest !== requestDigest
+      || stored.employeeId !== context.decoded.uid) {
+      throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Não foi possível confirmar a autorização de ensaio.', 'CONFLICT');
+    }
+    return offlinePermitDto(stored);
+  }
+  return offlinePermitDto(permit);
 }
 
 /** Autoriza o Coala Go oficial a preservar marcações durante uma queda de rede. */
@@ -348,14 +424,12 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   if (!parsed.success) throw fail('REP_P_OFFLINE_PERMIT_INPUT_INVALID', 'Solicitação de contingência inválida.');
   const input: RepPOfflinePermitRequest = parsed.data;
   const deps = { ...defaults, ...injected };
+  if (!deps.markingEnabled && deps.pilotEnabled) return issueOwnPilotOfflinePermit(context, input, deps);
   if (!deps.markingEnabled) throw fail('REP_P_MARKING_DISABLED', 'O registro de ponto ainda não foi liberado.', 'AUTHORIZATION');
   if (!markingAllowedForProfile(context) || !markingAllowedForOfficialUser(context, deps)) {
     throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
   }
-  let calculatedKeyId: string;
-  try { calculatedKeyId = repPDeviceKeyId(input.devicePublicKey); }
-  catch { throw fail('REP_P_OFFLINE_DEVICE_KEY_INVALID', 'A chave segura deste aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
-  if (calculatedKeyId !== input.deviceKeyId) throw fail('REP_P_OFFLINE_DEVICE_KEY_MISMATCH', 'A identidade criptográfica deste aparelho não confere.', 'DATA_INTEGRITY');
+  assertOfflineDeviceKey(input);
 
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const permitId = digest(['offline-permit', context.workspace_id, context.decoded.uid, input.permitRequestId]);
@@ -394,7 +468,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   }
   const issuedAt = reading.instant.toISOString();
   const permit: OfflinePermitDocument = {
-    schemaVersion: 1, workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
+    schemaVersion: 1, scope: 'official', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
     anchorElapsedRealtimeMs: input.anchorElapsedRealtimeMs, anchorInstant: issuedAt, issuedAt,
@@ -423,6 +497,7 @@ function validPilotMarking(value: unknown): value is PilotMarkingDocument {
     && item.markingId === item.receiptId && Number.isSafeInteger(item.sequence) && item.sequence >= 1
     && /^\d{4}-\d{2}-\d{2}$/.test(item.workDate) && item.recordedDate === item.workDate
     && item.nsr === item.sequence && /^[a-f0-9]{64}$/.test(item.hash)
+    && isValidRepPPilotReceiptSnapshot(item.snapshot)
     && (!item.classification || Number.isSafeInteger(item.classificationRevision) && Number(item.classificationRevision) >= 1)
     && ['pending', 'issued'].includes(item.status));
 }
@@ -457,12 +532,47 @@ async function issuePilotReceipt(deps: Dependencies, marking: PilotMarkingDocume
   }
 }
 
+async function preparePilotOfflineMarking(context: ServerUserContext, input: RepPMarkingRequest, deps: Dependencies) {
+  const evidence = input.offline;
+  if (!evidence || evidence.scope !== 'pilot' || input.channel !== 'mobile') {
+    throw fail('REP_P_PILOT_OFFLINE_INPUT_INVALID', 'Marcação local do ensaio inválida.');
+  }
+  const permitRef = deps.pilotDb.collection(PILOT_OFFLINE_PERMITS).doc(evidence.permitId);
+  const permitSnapshot = await permitRef.get();
+  const permit = permitSnapshot.data() as OfflinePermitDocument | undefined;
+  if (!permitSnapshot.exists || !permit || permit.schemaVersion !== 1 || permit.scope !== 'pilot'
+    || permit.status !== 'active' || permit.workspaceId !== context.workspace_id
+    || permit.employeeId !== context.decoded.uid || permit.permitId !== evidence.permitId
+    || permit.deviceKeyId !== evidence.deviceKeyId || permit.bootCount !== evidence.bootCount) {
+    throw fail('REP_P_PILOT_OFFLINE_PERMIT_INVALID', 'A autorização local do ensaio não é válida para esta conta e aparelho.', 'AUTHORIZATION');
+  }
+  const permittedUnit = permit.units.find((unit) => unit.id === input.executionUnitId);
+  if (!permittedUnit) throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_PERMIT', 'A unidade não pertence à autorização local.', 'AUTHORIZATION');
+  let markedAt: string;
+  try {
+    markedAt = deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
+      anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+      timeZone: permittedUnit.timeZone });
+  } catch { throw fail('REP_P_PILOT_OFFLINE_TIME_INVALID', 'A hora preservada no aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
+  if (evidence.markedAt !== markedAt || civilDateFromRepPTimestamp(markedAt) !== input.workDate
+    || Date.parse(markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.parse(permit.expiresAt)) {
+    throw fail('REP_P_PILOT_OFFLINE_TIME_MISMATCH', 'A hora preservada não corresponde à autorização do ensaio.', 'DATA_INTEGRITY');
+  }
+  if (!verifyRepPOfflineEvidence({ scope: 'pilot', permitId: evidence.permitId, attemptId: input.attemptId,
+    executionUnitId: input.executionUnitId, deviceKeyId: evidence.deviceKeyId,
+    elapsedRealtimeMs: evidence.elapsedRealtimeMs, bootCount: evidence.bootCount,
+    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, markedAt,
+    publicKeyBase64: permit.devicePublicKey, localHash: evidence.localHash, signature: evidence.signature })) {
+    throw fail('REP_P_PILOT_OFFLINE_SIGNATURE_INVALID', 'A assinatura da marcação preservada é inválida.', 'DATA_INTEGRITY');
+  }
+  return { evidence, permit, permitRef, permittedUnit, markedAt };
+}
+
 /**
  * Ensaio nominal anterior à homologação: usa Hora Legal, vínculo e unidade reais, mas fica fora da ARP.
  * Não produz NSR fiscal, AFD, AEJ, espelho ou fechamento e o PDF traz aviso ostensivo de ausência de validade.
  */
 async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMarkingRequest, deps: Dependencies) {
-  if (input.offline) throw fail('REP_P_PILOT_OFFLINE_UNAVAILABLE', 'O modo de ensaio exige conexão com a internet.', 'VALIDATION');
   const { locationAttempt: _ignoredLocationAttempt, ...pilotInput } = input;
   void _ignoredLocationAttempt;
   const requestDigest = digest([context.workspace_id, context.decoded.uid, pilotInput]);
@@ -487,17 +597,34 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   if (!reference.period.unitIds.includes(input.executionUnitId)) {
     throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
   }
-  const executionUnit = await deps.mainDb.collection('dp_units').doc(input.executionUnitId).get();
+  const [identity, executionUnit] = await Promise.all([
+    loadStrictIdentity(deps.hrDb, context.decoded.uid),
+    deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
+  ]);
   if (!executionUnit.exists) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
   const timeZone = String(executionUnit.get('timeZone') ?? '');
   if (!isBrazilTimeZone(timeZone)) throw fail('REP_P_PILOT_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade antes do ensaio.', 'DATA_INTEGRITY');
-  const employeeName = String(context.userDoc.username ?? '').trim();
+  const employeeName = identity.name;
+  const employeeCpf = identity.cpf;
+  const employerCnpj = reference.period.employer.cnpj;
+  if (employerCnpj !== CT_SORVETES_CNPJ) {
+    throw fail('REP_P_PILOT_EMPLOYER_UNSUPPORTED', 'O ensaio está limitado ao empregador homologado.', 'DATA_INTEGRITY');
+  }
+  const employerName = CT_SORVETES_LEGAL_NAME;
   const unitName = String(executionUnit.get('name') ?? '').trim();
   const workLocation = String(executionUnit.get('address') ?? '').trim();
-  if (!employeeName || !unitName || !workLocation) throw fail('REP_P_PILOT_IDENTITY_INCOMPLETE', 'Nome da pessoa ou cadastro da unidade incompleto.', 'DATA_INTEGRITY');
+  if (!employeeName || !employerName || !unitName || !workLocation) {
+    throw fail('REP_P_PILOT_IDENTITY_INCOMPLETE', 'Identificação da pessoa, empregador ou unidade incompleta.', 'DATA_INTEGRITY');
+  }
+  const offline = input.offline ? await preparePilotOfflineMarking(context, input, deps) : null;
+  if (offline && (offline.permit.employerCnpj !== employerCnpj
+    || offline.permittedUnit.timeZone !== timeZone || offline.permit.establishmentId !== `pilot_${digest([context.workspace_id, employerCnpj])}`)) {
+    throw fail('REP_P_PILOT_OFFLINE_CONTEXT_CHANGED', 'O vínculo ou a unidade mudou depois da autorização local.', 'CONFLICT');
+  }
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
-  const markedAt = formatRepPAfdTimestamp(reading.instant, timeZone);
+  const markedAt = offline?.markedAt ?? formatRepPAfdTimestamp(reading.instant, timeZone);
+  const recordedAt = formatRepPAfdTimestamp(reading.instant, timeZone);
   if (civilDateFromRepPTimestamp(markedAt) !== input.workDate) {
     throw fail('REP_P_WORK_DATE_MISMATCH', 'A data do ensaio não corresponde à Hora Legal da unidade.', 'VALIDATION');
   }
@@ -510,8 +637,8 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   const collectorId = input.channel === 'mobile' ? '01' as const : '02' as const;
   const establishmentId = `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`;
   const committed = await deps.pilotDb.runTransaction(async (transaction) => {
-    const [[prior, head, dayGuard], adjustments] = await Promise.all([
-      transaction.getAll(markingRef, headRef, dayGuardRef),
+    const [[prior, head, dayGuard, currentPermit], adjustments] = await Promise.all([
+      transaction.getAll(markingRef, headRef, dayGuardRef, ...(offline ? [offline.permitRef] : [])),
       transaction.get(adjustmentQuery),
     ]);
     const raced = prior.data();
@@ -526,6 +653,17 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       throw fail('REP_P_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
         'Este dia já possui solicitação formal de ajuste e não pode receber batida de ensaio.', 'CONFLICT');
     }
+    if (offline) {
+      const current = currentPermit?.data() as OfflinePermitDocument | undefined;
+      if (!current || current.scope !== 'pilot' || current.status !== 'active'
+        || current.deviceKeyId !== offline.evidence.deviceKeyId || current.bootCount !== offline.evidence.bootCount) {
+        throw fail('REP_P_PILOT_OFFLINE_PERMIT_REVOKED', 'A autorização local do ensaio foi revogada.', 'AUTHORIZATION');
+      }
+      if (offline.evidence.sequence !== current.lastAcceptedSequence + 1
+        || offline.evidence.previousLocalHash !== current.lastAcceptedHash) {
+        throw fail('REP_P_PILOT_OFFLINE_SEQUENCE_INVALID', 'A sequência local do ensaio está incompleta ou fora de ordem.', 'CONFLICT');
+      }
+    }
     const lastSequence = head.exists ? Number(head.get('lastSequence')) : 0;
     if (!Number.isSafeInteger(lastSequence) || lastSequence < 0) {
       throw fail('REP_P_PILOT_SEQUENCE_CORRUPT', 'A sequência do ensaio está inconsistente.', 'DATA_INTEGRITY');
@@ -534,8 +672,9 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
     const hash = digest(['rep-p-pilot-v1', context.workspace_id, context.decoded.uid, input.attemptId,
       sequence, markedAt, reference.historyId, reference.revision, reference.period.employerUnitId,
       input.executionUnitId, collectorId]);
-    const snapshot: RepPPilotReceiptSnapshot = { schemaVersion: 1, title: REP_P_PILOT_RECEIPT_TITLE,
-      sequence, markedAt, hash, employeeName, unitName, workLocation, collectorId };
+    const snapshot: RepPPilotReceiptSnapshot = { schemaVersion: 2, title: REP_P_PILOT_RECEIPT_TITLE,
+      sequence, markedAt, hash, employerName, employerCnpj, employeeName, employeeCpf, unitName, workLocation,
+      collectorId, developerName: CT_SORVETES_LEGAL_NAME, developerCnpj: CT_SORVETES_CNPJ };
     const classifiedAt = Timestamp.now();
     const organizationalClassification = input.declaredPurpose ? {
       classification: { purpose: input.declaredPurpose, source: 'declared' as const, status: 'confirmed' as const,
@@ -544,7 +683,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
     } : {};
     const marking: PilotMarkingDocument = { schemaVersion: 1, mode: 'pilot', workspaceId: context.workspace_id,
       employeeId: context.decoded.uid, requestDigest, markingId: receiptId, receiptId, sequence, nsr: sequence,
-      workDate: input.workDate, recordedDate: input.workDate, markedAt, recordedAt: markedAt,
+      workDate: input.workDate, recordedDate: input.workDate, markedAt, recordedAt,
       employerUnitId: reference.period.employerUnitId,
       executionUnitId: input.executionUnitId, establishmentId, collectorId, hash, employeeName, unitName,
       workLocation, status: 'pending', snapshot, locationSummary: null, ...organizationalClassification };
@@ -553,6 +692,13 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
         observedOffsetMs: reading.observedOffsetMs, verifiedAt: reading.verifiedAt.toISOString(),
         serverInstant: reading.instant.toISOString(), attestationId: reading.attestationId,
         attestationMode: reading.attestationMode, quorum: reading.quorum, observations: reading.observations },
+      ...(offline ? { pilotOfflineEvidence: { scope: 'pilot', permitId: offline.permit.permitId,
+        installationId: offline.permit.installationId, deviceKeyId: offline.evidence.deviceKeyId,
+        keySecurity: offline.permit.keySecurity, bootCount: offline.evidence.bootCount,
+        sequence: offline.evidence.sequence, previousLocalHash: offline.evidence.previousLocalHash,
+        localHash: offline.evidence.localHash, signature: offline.evidence.signature,
+        elapsedRealtimeMs: offline.evidence.elapsedRealtimeMs, permitIssuedAt: offline.permit.issuedAt,
+        permitExpiresAt: offline.permit.expiresAt } } : {}),
       createdAt: Timestamp.now() });
     if (input.declaredPurpose) {
       const classificationEventRef = deps.pilotDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
@@ -566,6 +712,8 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       employeeId: context.decoded.uid, lastSequence: sequence, updatedAt: Timestamp.now() });
     transaction.set(dayGuardRef, { schemaVersion: 1, mode: 'pilot', domain: 'pilot', workspaceId: context.workspace_id,
       employeeId: context.decoded.uid, workDate: input.workDate, updatedAt: Timestamp.now() }, { merge: true });
+    if (offline) transaction.update(offline.permitRef, { lastAcceptedSequence: offline.evidence.sequence,
+      lastAcceptedHash: offline.evidence.localHash, lastAcceptedAt: Timestamp.now() });
     return { status: 'recorded' as const, marking, locationEvidence: null };
   });
   if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
@@ -578,6 +726,15 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (!parsed.success) throw fail('REP_P_MARKING_INPUT_INVALID', 'Solicitação de marcação inválida.');
   const input: RepPMarkingRequest = parsed.data;
   const deps = { ...defaults, ...injected };
+  // Uma fila piloto emitida antes da troca de flags termina sempre no domínio piloto. A autorização assinada e
+  // ainda válida basta para sincronizar; desligar o piloto impede novas autorizações, não promove nem apaga a fila.
+  if (input.offline?.scope === 'pilot') {
+    if (!markingAllowedForProfile(context)) {
+      throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
+        safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
+    }
+    return recordOwnPilotMarking(context, input, deps);
+  }
   if (!deps.markingEnabled && !deps.pilotEnabled) {
     throw new AppError({ code: 'REP_P_MARKING_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
@@ -728,7 +885,9 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
 async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: RepPMarkingRequest,
   deps: Dependencies) {
   const evidence = input.offline;
-  if (!evidence || input.channel !== 'mobile') throw fail('REP_P_OFFLINE_INPUT_INVALID', 'Marcação offline inválida.');
+  if (!evidence || (evidence.scope !== undefined && evidence.scope !== 'official') || input.channel !== 'mobile') {
+    throw fail('REP_P_OFFLINE_INPUT_INVALID', 'Marcação offline inválida.');
+  }
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
   const existingAttempt = await attemptRef.get();
@@ -767,7 +926,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     || Date.parse(expectedMarkedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.parse(permit.expiresAt)) {
     throw fail('REP_P_OFFLINE_TIME_MISMATCH', 'A hora da marcação não corresponde à autorização offline.', 'DATA_INTEGRITY');
   }
-  if (!verifyRepPOfflineEvidence({ permitId: evidence.permitId, attemptId: input.attemptId,
+  if (!verifyRepPOfflineEvidence({ scope: 'official', permitId: evidence.permitId, attemptId: input.attemptId,
     executionUnitId: input.executionUnitId, deviceKeyId: evidence.deviceKeyId,
     elapsedRealtimeMs: evidence.elapsedRealtimeMs, bootCount: evidence.bootCount,
     sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash,

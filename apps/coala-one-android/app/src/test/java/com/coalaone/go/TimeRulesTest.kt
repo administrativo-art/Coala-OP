@@ -46,8 +46,15 @@ class TimeRulesTest {
         val displayOnly = options.copy(eligible = false, markingEnabled = false, executionUnits = emptyList())
         assertTrue(displayOnly.officialClock?.available == true)
         assertFalse(TimeRules.canRecord(displayOnly, null))
-        assertFalse(TimeRules.canRecord(options.copy(officialClock = OfficialClock(false)), "slz"))
-        assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false)))!!.contains("Hora Legal Brasileira"))
+        assertFalse(TimeRules.canRecord(options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE")), "slz"))
+        assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE")))!!.contains("Hora Legal Brasileira"))
+    }
+    @Test fun localPreservationOnlyCoversAnExplicitHlbOutage() {
+        val hlbOutage = options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"), mode = "pilot")
+        assertTrue(TimeRules.canPreserve(hlbOutage, "slz", offlineReady = true))
+        assertFalse(TimeRules.canPreserve(hlbOutage.copy(officialClock = OfficialClock(false, issue = "REP_P_ESTABLISHMENT_NOT_READY")), "slz", offlineReady = true))
+        assertFalse(TimeRules.canPreserve(hlbOutage.copy(officialClock = OfficialClock(false, issue = "REP_P_PILOT_UNIT_TIME_ZONE_MISSING")), "slz", offlineReady = true))
+        assertFalse(TimeRules.canPreserve(hlbOutage, "slz", offlineReady = false))
     }
     @Test fun labelsAreSuggestedByOrderAsOnTheWeb() {
         val shift = OwnShift("2026-10-19", "work", "08:00", "16:00", breakType = "fixed", breakStart = "12:00", breakEnd = "13:00")

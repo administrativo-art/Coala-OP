@@ -25,6 +25,8 @@ export const repPLocationAttemptSchema = z.discriminatedUnion('status', [
 ]);
 
 export const repPOfflineEvidenceSchema = z.object({
+  // Ausência preserva o contrato v1 oficial e, principalmente, o digest de tentativas já enviadas.
+  scope: z.enum(['official', 'pilot']).optional(),
   permitId: id,
   deviceKeyId: sha256,
   elapsedRealtimeMs: safeElapsed,

@@ -19,7 +19,7 @@ data class CapturedOfflineMarking(val id: String, val markedAt: String, val work
 
 interface TimeOfflineQueue {
     fun observe(uid: String): Flow<List<TimeMarkingRow>>
-    suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long): OfflinePermitRequest?
+    suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long, scope: String): OfflinePermitRequest?
     suspend fun savePermit(uid: String, permit: OfflinePermit)
     suspend fun permit(uid: String): OfflinePermit?
     suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions?
@@ -34,11 +34,11 @@ interface TimeOfflineQueue {
     private val mutex = Mutex()
     private fun owner(uid: String) = vault.owner(uid)
     override fun observe(uid: String) = database.timeOffline().observe(owner(uid))
-    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long): OfflinePermitRequest? {
+    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long, scope: String): OfflinePermitRequest? {
         val key = identity.key(uid); val bootCount = identity.bootCount()
         require(bootCount >= 0) { "O aparelho não informou sua sequência de inicialização." }
         val current = permit(uid)
-        if (current != null && current.deviceKeyId == key.keyId && current.bootCount == bootCount
+        if (current != null && current.scope == scope && current.deviceKeyId == key.keyId && current.bootCount == bootCount
             && elapsedRealtimeMs >= current.anchorElapsedRealtimeMs
             && elapsedRealtimeMs - current.anchorElapsedRealtimeMs < 10 * 60 * 60 * 1000L) return null
         return OfflinePermitRequest(UUID.randomUUID().toString(), workDate, identity.installationId(), key.keyId,
@@ -63,7 +63,7 @@ interface TimeOfflineQueue {
         val instant = Instant.parse(permit.anchorInstant).plusMillis(elapsedRealtimeMs - permit.anchorElapsedRealtimeMs)
         return TimeOptions(markedAt.take(10), true, true,
             permit.units.map { ExecutionUnit(it.id, it.name, timeZone = it.timeZone) },
-            OfficialClock(true, instant.toString(), first.timeZone))
+            OfficialClock(true, instant.toString(), first.timeZone), mode = permit.scope)
     }
     override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String) = withContext(Dispatchers.IO) { mutex.withLock {
         val permit = permit(uid) ?: error("Conecte o aparelho antes de usar o ponto offline.")
@@ -83,10 +83,10 @@ interface TimeOfflineQueue {
         val workDate = markedAt.take(10)
         val attemptId = UUID.randomUUID().toString()
         val canonical = TimeOfflineRules.canonical(permit.permitId, attemptId, executionUnitId, permit.deviceKeyId,
-            elapsedRealtimeMs, bootCount, sequence, previousHash, markedAt)
+            elapsedRealtimeMs, bootCount, sequence, previousHash, markedAt, permit.scope)
         val hash = TimeOfflineRules.hash(canonical)
         val evidence = OfflineMarkingEvidence(permit.permitId, permit.deviceKeyId, elapsedRealtimeMs, bootCount,
-            sequence, previousHash, markedAt, hash, identity.sign(uid, canonical))
+            sequence, previousHash, markedAt, hash, identity.sign(uid, canonical), permit.scope)
         val request = MarkingRequest(attemptId, workDate, executionUnitId, declaredPurpose = declaredPurpose, offline = evidence)
         val sealed = vault.seal(uid, "time-marking:$attemptId", json.encodeToString(request).toByteArray())
         database.timeOffline().insert(TimeMarkingRow(owner(uid), attemptId, permit.permitId, sequence,
