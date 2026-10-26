@@ -8,6 +8,8 @@ import com.coalaone.go.offline.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,7 +24,8 @@ fun HomeToday.visibleFor(contextKey: String) = takeIf { it.contextKey == context
 data class HomeProfile(val contextKey: String? = null, val response: ProfileResponse? = null)
 fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextKey == contextKey }
 @HiltViewModel class HomeViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val scheduler: WorkScheduler,
-    private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore()) : FeedbackViewModel() {
+    private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(),
+    private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates()) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(HomeProfile())
     val profile = mutable.asStateFlow()
     private var profileContextKey: String? = null
@@ -68,7 +71,27 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
     private var todayLoadedAt = 0L
     private var todayContextKey: String? = null
     private var todayGeneration = 0L
+    private val confirmedPunches = linkedMapOf<String, OwnMarking>()
     private suspend fun <T> quiet(block: suspend () -> T): T? = try { block() } catch (cause: kotlinx.coroutines.CancellationException) { throw cause } catch (_: Exception) { null }
+    private fun mergedPunches(server: List<OwnMarking>) = (server + confirmedPunches.values)
+        .associateBy { it.receiptId }.values.sortedBy { it.markedAt }
+    private fun publishToday(contextKey: String, generation: Long, value: HomeToday) {
+        if (todayContextKey == contextKey && todayGeneration == generation) todayMutable.value = value
+    }
+
+    private data class TimeSummary(val options: TimeOptions?, val markings: List<OwnMarking>, val month: OwnMonth?, val elapsed: Long)
+
+    init {
+        viewModelScope.launch {
+            timeSummaryUpdates.updates.collect { update ->
+                val visibleWorkDate = todayMutable.value.timeOptions?.workDate ?: java.time.LocalDate.now().toString()
+                if (todayContextKey == update.contextKey && update.marking.workDate == visibleWorkDate) {
+                    confirmedPunches[update.marking.receiptId] = update.marking
+                    todayMutable.value = todayMutable.value.copy(timePunches = mergedPunches(todayMutable.value.timePunches))
+                }
+            }
+        }
+    }
     /**
      * Read once when the home opens and again on pull-to-refresh or after two minutes away, never on a timer.
      * A module that is off is not asked; a failure only leaves its line out.
@@ -78,38 +101,65 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
             todayContextKey = contextKey
             todayLoadedAt = 0L
             todayGeneration++
+            confirmedPunches.clear()
             todayMutable.value = HomeToday(contextKey = contextKey)
         }
         if (!force && System.currentTimeMillis() - todayLoadedAt < 120_000) return
         todayLoadedAt = System.currentTimeMillis()
         val generation = ++todayGeneration
         viewModelScope.launch {
+            coroutineScope {
             var next = HomeToday(contextKey = contextKey, loaded = true)
             val now = java.time.LocalDate.now()
-            if (modules.stockCount) quiet { repository.countContext().openSessions.map { it.kioskName } }?.let { next = next.copy(openCounts = it) }
-            if (modules.repositionReceipt) quiet { repository.repositions().activities.size }?.let { next = next.copy(repositions = it) }
+            val counts = async { if (modules.stockCount) quiet { repository.countContext().openSessions.map { it.kioskName } } else null }
+            val repositions = async { if (modules.repositionReceipt) quiet { repository.repositions().activities.size } else null }
+            val goals = async {
+                if (!modules.goals) null else quiet {
+                    val units = repository.api.goalUnits().units
+                    (units.firstOrNull { it.id == goalUnitId } ?: units.firstOrNull())?.let { unit -> unit.name to repository.api.goals(unit.id) }
+                }
+            }
+            val time = async {
+                if (!modules.timeRecording) null else {
+                    val elapsed = android.os.SystemClock.elapsedRealtime()
+                    coroutineScope {
+                        val options = quiet { repository.api.timeOptions(now.toString()) }
+                        val markings = async { quiet { repository.api.markings(now.toString(), now.toString()).markings }.orEmpty() }
+                        val month = async { quiet { repository.api.timeMonth(now.toString().take(7)) } }
+                        TimeSummary(options, markings.await(), month.await(), elapsed)
+                    }
+                }
+            }
+            val schedule = async {
+                if (modules.timeRecording || !modules.schedule) null else quiet { repository.api.schedule(now.year, now.monthValue) }
+            }
             if (modules.timeRecording) {
-                val elapsed = android.os.SystemClock.elapsedRealtime()
-                val options = quiet { repository.api.timeOptions(now.toString()) }
-                val markings = quiet { repository.api.markings(now.toString(), now.toString()).markings }.orEmpty()
-                val month = quiet { repository.api.timeMonth(now.toString().take(7)) }
+                val summary = time.await()!!
+                val options = summary.options
+                val markings = summary.markings
+                val month = summary.month
                 val ownShift = month?.shifts?.firstOrNull { it.date == now.toString() }
-                next = next.copy(timeOptions = options, timeClockOffset = TimeRules.clockOffset(options?.officialClock, elapsed),
-                    timePunches = markings, timeShift = ownShift, scheduleAvailable = month != null, hasSchedule = ownShift != null,
+                next = next.copy(timeOptions = options, timeClockOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed),
+                    timePunches = mergedPunches(markings), timeShift = ownShift, scheduleAvailable = month != null, hasSchedule = ownShift != null,
                     shiftUnit = ownShift?.unitName, shift = TimeRules.shiftText(ownShift),
                     shiftShort = ownShift?.let { if (it.type == "day_off") "Folga" else "${it.startTime?.take(2)}h–${it.endTime?.take(2)}h" })
             } else if (modules.schedule) {
-                val schedule = quiet { repository.api.schedule(now.year, now.monthValue) }
-                val found = schedule?.units?.firstNotNullOfOrNull { unit -> unit.shifts.firstOrNull { it.date == now.toString() && unit.people.getOrNull(it.person)?.isMe == true }?.let { unit.name to it } }
+                val scheduleResult = schedule.await()
+                val found = scheduleResult?.units?.firstNotNullOfOrNull { unit -> unit.shifts.firstOrNull { it.date == now.toString() && unit.people.getOrNull(it.person)?.isMe == true }?.let { unit.name to it } }
                 val shift = found?.second
-                next = next.copy(scheduleAvailable = schedule != null, hasSchedule = found != null,
+                next = next.copy(scheduleAvailable = scheduleResult != null, hasSchedule = found != null,
                     shiftUnit = found?.first, shift = shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime}–${it.endTime} · ${it.shiftName}" },
                     shiftShort = shift?.let { if (it.type == "day_off") "Folga" else "${it.startTime.take(2)}h–${it.endTime.take(2)}h" })
             }
-            if (modules.goals) quiet { val units = repository.api.goalUnits().units; (units.firstOrNull { it.id == goalUnitId } ?: units.firstOrNull())?.let { unit -> unit.name to repository.api.goals(unit.id) } }?.let { (name, data) ->
+            // Clock, punch count and shift become visible without waiting for unrelated Home modules.
+            publishToday(contextKey, generation, next)
+            counts.await()?.let { next = next.copy(openCounts = it) }
+            repositions.await()?.let { next = next.copy(repositions = it) }
+            goals.await()?.let { (name, data) ->
                 data.goals.firstOrNull()?.let { goal -> next = next.copy(goalUnit = name, goalToday = goal.days.firstOrNull { it.date == data.today }?.value, goalDaily = goal.summary.dailyTarget, goalPercent = goal.summary.percentOfTarget) }
             }
-            if (todayContextKey == contextKey && todayGeneration == generation) todayMutable.value = next
+            publishToday(contextKey, generation, next.copy(timePunches = mergedPunches(next.timePunches)))
+            }
         }
     }
     fun avatar(document: Document) {

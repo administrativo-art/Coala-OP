@@ -309,6 +309,24 @@ class ViewModelsTest {
         assertEquals(false, vm.today.value.scheduleAvailable)
         assertNull(vm.today.value.shift)
     }
+    @Test fun homeShowsAConfirmedPunchImmediatelyAndKeepsItAcrossServerReconciliation() = runTest {
+        val updates = TimeSummaryUpdates()
+        val api = object : ApiService by DemoApi() {
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, emptyList())
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, InMemoryDeveloperViewAsStore(), updates)
+        runCurrent()
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
+        assertTrue(vm.today.value.timePunches.isEmpty())
+        val date = LocalDate.now().toString()
+        val marking = OwnMarking("receipt-now", date, 99, "${date}T12:00:00-03:00", "unit", "01", "available",
+            classification = MarkingClassification("break_start"))
+        updates.recorded("test-owner", marking); runCurrent()
+        assertEquals(listOf("receipt-now"), vm.today.value.timePunches.map { it.receiptId })
+        // An older/empty server response cannot make the just-confirmed count go backwards.
+        vm.loadToday(Modules(timeRecording = true), null, "test-owner", force = true); advanceUntilIdle()
+        assertEquals(listOf("receipt-now"), vm.today.value.timePunches.map { it.receiptId })
+    }
     @Test fun countRehydratesNewerLocalDraftAndPersistsOwner() = runTest {
         val store = MemoryDrafts()
         val session = countSession()

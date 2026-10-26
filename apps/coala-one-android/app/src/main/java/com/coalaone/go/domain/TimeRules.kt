@@ -14,6 +14,11 @@ import java.util.UUID
 data class DayPunch(val time: String, val nsr: Long?, val receiptId: String?, val receiptStatus: String?, val discarded: Boolean = false, val included: Boolean = false, val unitId: String? = null,
     val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false)
 
+enum class BreakLevel { NEUTRAL, INFO, WARN, DANGER, OK }
+data class BreakStatus(val level: BreakLevel, val headline: String, val detail: String?, val usedMinutes: Int,
+    val totalMinutes: Int, val pausesDone: Int, val plannedPauses: Int?, val inPause: Boolean,
+    val countdownSeconds: Long? = null, val countdownLabel: String? = null)
+
 /**
  * Rules of the Ponto and Solicitações screens, kept off the UI so they run in unit tests. They follow the web
  * "Registro de ponto" (src/features/dp/rep-p) and the server schemas; the server stays the authority.
@@ -118,6 +123,132 @@ object TimeRules {
         if (shift.breakType != "fixed") return 0
         shift.breakSegments?.takeIf { it.isNotEmpty() }?.let { return it.sumOf { segment -> clockSpan(segment.start, segment.end) } }
         return if (shift.breakStart != null && shift.breakEnd != null) clockSpan(shift.breakStart, shift.breakEnd) else 0
+    }
+    fun plannedPauses(shift: OwnShift): Int? = when {
+        shift.breakType == "fixed" -> shift.breakSegments?.size ?: 1
+        shift.breakSplit == "multiple" -> shift.breakPauseCount
+        else -> 1
+    }
+
+    /** Live organizational guidance. It never blocks or changes the fiscal punch. */
+    fun breakStatus(shift: OwnShift?, markings: List<OwnMarking>, nowEpochMillis: Long, zone: ZoneId): BreakStatus? {
+        if (shift == null || shift.type != "work" || shift.breakType == null || shift.breakType == "none" || shift.endTime == null) return null
+        val total = plannedBreakMinutes(shift)
+        if (total <= 0) return null
+        val planned = plannedPauses(shift)
+        fun result(level: BreakLevel, headline: String, detail: String?, used: Int = 0, pauses: Int = 0,
+            inPause: Boolean = false, countdown: Long? = null, countdownLabel: String? = null) =
+            BreakStatus(level, headline, detail, used, total, pauses, planned, inPause, countdown, countdownLabel)
+        if (markings.any { it.classification?.purpose == null }) return result(BreakLevel.NEUTRAL,
+            "Classifique as batidas para acompanhar o intervalo",
+            "A classificação organiza os avisos e pode ser alterada sem modificar o horário registrado.")
+
+        data class ClosedPause(val seconds: Long)
+        val ordered = markings.sortedBy { markingInstant(it.markedAt) }
+        val closed = mutableListOf<ClosedPause>()
+        var pauseStart: Instant? = null
+        ordered.forEach { marking ->
+            val instant = markingInstant(marking.markedAt) ?: return@forEach
+            when (marking.classification?.purpose) {
+                "break_start" -> pauseStart = instant
+                "break_end" -> pauseStart?.let { start ->
+                    closed += ClosedPause(java.time.Duration.between(start, instant).seconds.coerceAtLeast(0)); pauseStart = null
+                }
+            }
+        }
+        val now = Instant.ofEpochMilli(nowEpochMillis)
+        val closedSeconds = closed.sumOf { it.seconds }
+        val currentSeconds = pauseStart?.let { java.time.Duration.between(it, now).seconds.coerceAtLeast(0) } ?: 0L
+        val usedSeconds = closedSeconds + currentSeconds
+        val used = (usedSeconds / 60).toInt()
+        val remainingSeconds = (total * 60L - usedSeconds).coerceAtLeast(0)
+        val remaining = ((remainingSeconds + 59) / 60).toInt()
+        val inPause = pauseStart != null
+        val progress = if (planned == 1) null else "Usados $used de $total min · ${closed.size}" +
+            (planned?.let { " de $it" } ?: "") + " ${if (closed.size == 1 && planned == null) "pausa" else "pausas"}"
+        val tolerance = shift.toleranceMinutes ?: 0
+        val journeyEnded = ordered.lastOrNull()?.classification?.purpose == "journey_end"
+        if (journeyEnded && used < total) return result(BreakLevel.DANGER, "Jornada finalizada sem o intervalo completo",
+            "Foram classificados $used de $total min de intervalo. A batida continua válida e o dia segue para conferência.", used, closed.size)
+        if (usedSeconds > (total + tolerance) * 60L) return result(BreakLevel.DANGER, "Intervalo passou de $total min ($used min)",
+            if (tolerance > 0) "Tolerância de $tolerance min da jornada excedida." else "A jornada não tem tolerância.", used, closed.size, inPause)
+
+        val nowZoned = now.atZone(zone)
+        val startMinute = shift.startTime?.let(::clockMinutes) ?: 0
+        fun timeline(value: String): Int {
+            val minute = clockMinutes(value)
+            return if (shift.overnight && minute < startMinute) minute + 1440 else minute
+        }
+        var nowMinute = nowZoned.hour * 60 + nowZoned.minute
+        if (shift.overnight && nowMinute < startMinute) nowMinute += 1440
+        fun hhmm(minute: Int): String {
+            val normalized = Math.floorMod(minute, 1440)
+            return String.format(Locale.ROOT, "%02d:%02d", normalized / 60, normalized % 60)
+        }
+        fun inMinutes(value: Int) = if (value <= 0) "agora" else "em $value min"
+        fun left(value: Int) = if (value == 1) "falta 1 min" else "faltam $value min"
+
+        if (shift.breakType == "fixed") {
+            val segments = shift.breakSegments?.takeIf { it.isNotEmpty() }
+                ?: if (shift.breakStart != null && shift.breakEnd != null) listOf(BreakSegment(shift.breakStart, shift.breakEnd)) else emptyList()
+            if (segments.isEmpty()) return null
+            if (closed.size >= segments.size && !inPause) return result(BreakLevel.OK, "Intervalo feito · $used min", null, used, closed.size)
+            val index = closed.size.coerceAtMost(segments.lastIndex)
+            val segment = segments[index]
+            val start = timeline(segment.start)
+            var end = timeline(segment.end)
+            if (end < start) end += 1440
+            val label = if (segments.size > 1) "${index + 1}ª pausa " else "Intervalo "
+            if (inPause) {
+                val secondsToEnd = (end - nowMinute) * 60L - nowZoned.second
+                val back = Math.ceil(secondsToEnd / 60.0).toInt()
+                val passed = Math.ceil(kotlin.math.abs(secondsToEnd) / 60.0).toInt()
+                return result(if (secondsToEnd < -tolerance * 60L) BreakLevel.DANGER else if (secondsToEnd <= 120) BreakLevel.WARN else BreakLevel.INFO,
+                    if (secondsToEnd < 0) "Passou do fim do intervalo há $passed min" else "Em intervalo · volte às ${segment.end} (${left(back.coerceAtLeast(0))})",
+                    progress, used, closed.size, true, secondsToEnd, "Fim do intervalo")
+            }
+            if (nowMinute > end) return result(BreakLevel.DANGER, "$label${segment.start}–${segment.end} não foi feita",
+                "Registre a saída para o intervalo assim que puder.", used, closed.size)
+            if (nowMinute >= start) return result(BreakLevel.WARN, "${label}começou às ${segment.start} · termina às ${segment.end}",
+                "Registre a saída para o intervalo.", used, closed.size)
+            val ahead = start - nowMinute
+            return result(if (ahead <= 15) BreakLevel.INFO else BreakLevel.NEUTRAL,
+                "$label${segment.start}–${segment.end} · começa ${inMinutes(ahead)}", progress, used, closed.size)
+        }
+
+        if (remainingSeconds == 0L && !inPause) return result(BreakLevel.OK, "Intervalo feito · $used min", null, used, closed.size)
+        if (!inPause && shift.breakSplit == "multiple" && shift.breakMinPauseMinutes != null &&
+            closed.lastOrNull()?.seconds?.let { it < shift.breakMinPauseMinutes * 60L } == true) {
+            val last = (closed.last().seconds / 60).toInt()
+            return result(BreakLevel.WARN, "Pausa de $last min abaixo do mínimo de ${shift.breakMinPauseMinutes} min",
+                "A batida continua válida. Complete o tempo de intervalo previsto nas próximas pausas.", used, closed.size)
+        }
+        val windowStart = if (shift.breakType == "staggered") shift.breakWindowStart?.let(::timeline) else null
+        val windowEnd = if (shift.breakType == "staggered") shift.breakWindowEnd?.let(::timeline) else null
+        val endMinute = timeline(shift.endTime)
+        val limit = minOf(windowEnd ?: Int.MAX_VALUE, endMinute) - remaining
+        val where = if (windowEnd != null) "dentro da janela" else "antes do fim do turno"
+        if (inPause) {
+            val currentPauseSeconds = currentSeconds
+            val countdown = if (planned == 1) remainingSeconds else shift.breakMinPauseMinutes?.let { (it * 60L - currentPauseSeconds).coerceAtLeast(0) }
+            val countdownLabel = if (planned == 1) "Fim do intervalo" else countdown?.let { "Mínimo desta pausa" }
+            return result(if (remainingSeconds <= 120) BreakLevel.WARN else BreakLevel.INFO,
+                if (planned == 1) "Em intervalo · volte às ${hhmm(nowMinute + remaining)} (${left(remaining)})"
+                else "Em pausa há ${(currentPauseSeconds / 60)} min · restam $remaining min de intervalo",
+                progress, used, closed.size, true, countdown, countdownLabel)
+        }
+        if (windowStart != null && nowMinute < windowStart) {
+            val ahead = windowStart - nowMinute
+            return result(if (ahead <= 15) BreakLevel.INFO else BreakLevel.NEUTRAL,
+                "Janela ${shift.breakWindowStart}–${shift.breakWindowEnd} abre ${inMinutes(ahead)}", "Inicie o intervalo até ${hhmm(limit)}.", used, closed.size)
+        }
+        val toLimit = limit - nowMinute
+        if (toLimit < 0) return result(BreakLevel.DANGER,
+            if (windowEnd != null && nowMinute > windowEnd) "A janela fechou sem o intervalo completo" else "Limite para iniciar passou (era ${hhmm(limit)})",
+            "Faltam $remaining min de intervalo.", used, closed.size)
+        return result(if (toLimit <= 10) BreakLevel.WARN else if (windowEnd != null) BreakLevel.INFO else BreakLevel.NEUTRAL,
+            "${if (closed.isNotEmpty()) "Faltam $remaining min de intervalo" else "Faça $total min de intervalo"} · inicie até ${hhmm(limit)}",
+            if (toLimit <= 10) "Faltam $toLimit min para o limite $where." else progress ?: "Limite $where.", used, closed.size)
     }
     fun plannedWorkMinutes(shift: OwnShift?): Int? {
         if (shift == null || shift.type != "work" || shift.startTime == null || shift.endTime == null) return null

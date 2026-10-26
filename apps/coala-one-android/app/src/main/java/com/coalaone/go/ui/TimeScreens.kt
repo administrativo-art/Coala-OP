@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.coalaone.go.data.*
+import com.coalaone.go.domain.BreakLevel
+import com.coalaone.go.domain.BreakStatus
 import com.coalaone.go.domain.DayPunch
 import com.coalaone.go.domain.TimeRules
 import kotlinx.coroutines.delay
@@ -197,7 +199,31 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
 }
 
-@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit) {
+@Composable private fun BreakNoticeCard(status: BreakStatus) {
+    val (ink, background) = when (status.level) {
+        BreakLevel.DANGER -> Tokens.danger to Tokens.dangerBg
+        BreakLevel.WARN -> Tokens.warning to Tokens.warningBg
+        BreakLevel.INFO -> Tokens.info to Tokens.infoBg
+        BreakLevel.OK -> Tokens.okInk to Tokens.okBg
+        BreakLevel.NEUTRAL -> Tokens.muted to Tokens.soft
+    }
+    Column(Modifier.fillMaxWidth().background(background, RoundedCornerShape(14.dp)).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("INTERVALO", color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Bold))
+        Text(status.headline, color = ink, style = MaterialTheme.typography.titleMedium)
+        status.countdownSeconds?.let { seconds ->
+            val exceeded = seconds < 0
+            val absolute = kotlin.math.abs(seconds)
+            val clock = String.format(java.util.Locale.ROOT, "%02d:%02d", absolute / 60, absolute % 60)
+            Text("${status.countdownLabel ?: "Cronômetro"} · ${if (exceeded) "+" else ""}$clock",
+                color = ink, style = MaterialTheme.typography.headlineSmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
+        }
+        status.detail?.let { Text(it, color = ink, style = MaterialTheme.typography.bodySmall) }
+        Text("Aviso de apoio; o registro de ponto continua disponível.", color = ink.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+    }
+}
+
+@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val context = LocalContext.current
     val online = rememberOnline()
@@ -217,6 +243,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
     var section by rememberSaveable { mutableStateOf("today") }
     var confirming by rememberSaveable { mutableStateOf(false) }
+    var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming) }
     var capturingLocation by remember { mutableStateOf(false) }
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
@@ -241,14 +268,21 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val locationPolicy = selectedUnit?.locationPolicy ?: LocationPolicy()
     val screenBusy = feedback.busy || capturingLocation
     val zone = TimeRules.unitZone(state.options, state.unitId)
-    var confirmationNow by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
-    LaunchedEffect(state.clockOffset, confirming) {
-        while (confirming) {
-            confirmationNow = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)
-            delay(1000 - confirmationNow % 1000)
+    var officialNow by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
+    LaunchedEffect(state.clockOffset) {
+        while (true) {
+            officialNow = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)
+            delay(1000 - officialNow % 1000)
         }
     }
-    val confirmationTime = TimeRules.clockText(confirmationNow, zone)
+    LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
+        if (pendingDirectRecord && TimeRules.canRecord(state.options, state.unitId)) {
+            confirming = true
+            pendingDirectRecord = false
+        }
+    }
+    val confirmationTime = TimeRules.clockText(officialNow, zone)
+    val breakStatus = TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
     val scope = rememberCoroutineScope()
     fun captureAndRecord() {
         val purpose = declaredPurpose ?: return
@@ -364,10 +398,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     Action("Encerrar acompanhamento", secondary = true) { vm.stopJourneyLocation() }
                 }
             }
-            TimeRules.breakIssue(todayMarkings, todayShift)?.let { issue ->
-                Text(issue, color = Tokens.warning, style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
-            }
+            breakStatus?.let { BreakNoticeCard(it) }
             TimeRules.blockedReason(state.options)?.let { reason ->
                 Column(Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(reason, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
