@@ -10,6 +10,7 @@ import { createFirstAccessLink } from "@/lib/first-access-links";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
+import { ensureEmployeeDocumentFolderProfile } from "@/lib/hr/employee-document-folder-profile.server";
 import { canDelegateUnitAccess } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
@@ -232,6 +233,12 @@ export async function POST(request: NextRequest) {
       created_at: nowTimestamp,
       updated_at: nowTimestamp,
     }, { merge: true });
+    await ensureEmployeeDocumentFolderProfile({
+      employeeId: hrEmployeeId,
+      relationshipType: userData.employmentRelationshipType,
+      actorId: actor.decoded.uid,
+      source: "manual_user_creation",
+    });
 
     const firstAccess = await createFirstAccessLink({
       userId: authUser.uid,
@@ -291,6 +298,7 @@ export async function POST(request: NextRequest) {
         authAdmin.deleteUser(createdUserId),
         dbAdmin.collection("users").doc(createdUserId).delete(),
         hrDbAdmin.collection("employees").doc(createdUserId).delete(),
+        hrDbAdmin.collection("employeeDocumentFolderProfiles").doc(createdUserId).delete(),
       ]);
     }
     const message = error instanceof Error ? error.message : "Falha ao criar usuário.";

@@ -52,6 +52,7 @@ import {
 } from "@/lib/hr/employee-document-options";
 import { employeeDocumentSignatureIndicator } from "@/lib/hr/employee-document-signature";
 import type { DocumentVisibilityConfig, NormalizedFieldVisibility } from "@/types/rh";
+import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-templates";
 
 const STATUS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_STATUSES.map((status) => [status.id, status.label]));
 const ACCESS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_ACCESS_LEVELS.map((level) => [level.id, level.label]));
@@ -114,7 +115,7 @@ type DocumentFolderNode = {
   children: DocumentFolderNode[];
 };
 
-function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents: DocumentRow[]): DocumentFolderNode[] {
+function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents: DocumentRow[], templateFolders: EmployeeDossierFolder[] = []): DocumentFolderNode[] {
   const roots: DocumentFolderNode[] = [];
   const addPath = (segments: string[]) => {
     let level = roots;
@@ -130,6 +131,8 @@ function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents
     }
   };
 
+  const categoryTemplateFolders = templateFolders.filter((folder) => folder.category === category);
+  for (const folder of categoryTemplateFolders) addPath(folder.path);
   const resolvedPaths = documents.map((document) => resolveEmployeeDocumentFolderPath({
     category,
     documentTypeCode: document.documentTypeCode,
@@ -137,7 +140,7 @@ function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents
     destinationTrail: document.destinationTrail,
   })).filter((path) => path.length > 0);
   const processPosition = employeeDocumentProcessPosition(category);
-  if (processPosition !== "before" || resolvedPaths.length === 0) {
+  if (categoryTemplateFolders.length === 0 && (processPosition !== "before" || resolvedPaths.length === 0)) {
     for (const definition of getEmployeeDocumentSubfolders(category)) addPath([definition.label]);
   }
   for (const path of resolvedPaths) addPath(path);
@@ -405,6 +408,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
   const [expandedVerificationId, setExpandedVerificationId] = useState<string | null>(null);
   const [documentVisibility, setDocumentVisibility] = useState<DocumentVisibilityConfig | null>(null);
+  const [templateFolders, setTemplateFolders] = useState<EmployeeDossierFolder[]>([]);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   useEffect(() => () => {
@@ -445,8 +449,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     }
     setLoading(true);
     try {
-      const data = await request(`/api/hr/employee-documents?employeeId=${encodeURIComponent(userId)}`);
+      const [data, folderData] = await Promise.all([
+        request(`/api/hr/employee-documents?employeeId=${encodeURIComponent(userId)}`),
+        request(`/api/hr/employee-document-folder-profile?employeeId=${encodeURIComponent(userId)}`),
+      ]);
       setItems(data.documents ?? []);
+      setTemplateFolders(Array.isArray(folderData.folderProfile?.folders) ? folderData.folderProfile.folders : []);
       if (canManage) {
         const [batches, visibility] = await Promise.all([
           request(`/api/hr/employee-documents/batches?employeeId=${encodeURIComponent(userId)}`),
@@ -494,7 +502,13 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     () => items.filter((item) => normalizeEmployeeDocumentCategory(item.category as EmployeeDocumentCategoryId) === category && !item.deletedAt),
     [items, category],
   );
-  const folderTree = useMemo(() => buildDocumentFolderTree(category, categoryItems), [category, categoryItems]);
+  const visibleCategories = useMemo(() => {
+    if (!templateFolders.length) return EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES;
+    const available = new Set(templateFolders.map((folder) => folder.category));
+    for (const item of items) available.add(normalizeEmployeeDocumentCategory(item.category as EmployeeDocumentCategoryId));
+    return EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.filter((entry) => available.has(entry.id));
+  }, [items, templateFolders]);
+  const folderTree = useMemo(() => buildDocumentFolderTree(category, categoryItems, templateFolders), [category, categoryItems, templateFolders]);
   const rootFolderSummaries = useMemo(() => folderTree.map((folder) => {
     const logicalDocuments = new Set<string>();
     for (const item of categoryItems) {
@@ -1065,7 +1079,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
-          {EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.map(({ id, label }) => {
+          {visibleCategories.map(({ id, label }) => {
             const catActive = category === id;
             const catSelected = catActive && activeFolderPath.length === 0;
             const expanded = catActive && expandedCategory === id && folderTree.length > 0;

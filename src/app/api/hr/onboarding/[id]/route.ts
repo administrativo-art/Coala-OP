@@ -14,6 +14,7 @@ import { createFirstAccessLink } from '@/lib/first-access-links';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { ensureEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
 import { mergeBizneoEmployee } from '@/lib/hr/merge-bizneo-employee';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
@@ -545,6 +546,12 @@ async function createPjUserFromOnboarding(params: {
     created_at: startTimestamp,
     updated_at: startTimestamp,
   }, { merge: true });
+  await ensureEmployeeDocumentFolderProfile({
+    employeeId: authUser.uid,
+    relationshipType: 'pj',
+    actorId: params.actorId,
+    source: 'recruitment_onboarding',
+  });
   const firstAccessLink = await createFirstAccessLink({
     userId: authUser.uid,
     onboardingId: params.processId,
@@ -722,6 +729,12 @@ async function createCollaboratorFromOnboarding(params: {
         }
       : {}),
   }, { merge: true });
+  await ensureEmployeeDocumentFolderProfile({
+    employeeId,
+    relationshipType: relationship,
+    actorId: params.actorId,
+    source: 'recruitment_onboarding',
+  });
 
   if (hasExplicitImageVoiceDecision) {
     const eventId = asString(onboardingImageVoiceConsent.protocolo) ?? `onboarding_${params.processId}`;
