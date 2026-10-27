@@ -167,6 +167,110 @@ class ViewModelsTest {
         vm.avatar(pending().receipts.single()); advanceUntilIdle()
         assertEquals(1, uploads); assertEquals("https://example.invalid/avatar.jpg", vm.profile.value.response!!.profile.avatarUrl)
     }
+    @Test fun homeKeepsPointReachableWhenProfileCannotLoadOffline() = runTest {
+        val cached = DemoApi().timeOptions(LocalDate.now().toString())
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse = throw IOException("sem conexão")
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw IOException("sem conexão")
+            override suspend fun markings(startDate: String, endDate: String): OwnMarkings = throw IOException("sem conexão")
+            override suspend fun timeMonth(month: String): OwnMonth = throw IOException("sem conexão")
+            override suspend fun adjustments(month: String): OwnAdjustments = throw IOException("sem conexão")
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        advanceUntilIdle()
+        assertNull(vm.profile.value.response)
+        assertNotNull(vm.feedback.value.error)
+        assertEquals("test-owner", vm.today.value.contextKey)
+        assertEquals(cached, vm.today.value.timeOptions)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.today.value.timeClockSource)
+        assertEquals(false, vm.today.value.timeMarkingsAvailable)
+    }
+    @Test fun offlineHomeShowsOnlyPointAndNeverUsesFallbackForViewAs() {
+        val modules = Modules(localPurchase = true, stockCount = true, schedule = true, timeRecording = true, requests = true)
+        val failed = HomeProfile("test-owner", ProfileResponse(Profile("Ana"), modules), unavailable = true)
+        val fallback = failed.modulesForHome("test-owner", viewingAnotherUser = false)
+        assertNotNull(fallback)
+        assertTrue(fallback!!.timeRecording)
+        assertFalse(fallback.localPurchase)
+        assertFalse(fallback.stockCount)
+        assertFalse(fallback.schedule)
+        assertFalse(fallback.requests)
+        assertNull(failed.modulesForHome("test-owner", viewingAnotherUser = true))
+        assertNull(failed.modulesForHome("another-context", viewingAnotherUser = false))
+        assertEquals(modules, failed.copy(unavailable = false).modulesForHome("test-owner", viewingAnotherUser = false))
+    }
+    @Test fun failedRefreshReplacesPreviousModulesWithPointOnlyAndRecoversOnline() = runTest {
+        var offline = false
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                if (offline) throw IOException("sem conexão")
+                return ProfileResponse(Profile("Ana"), Modules(stockCount = true, timeRecording = true))
+            }
+            override suspend fun timeOptions(workDate: String): TimeOptions = if (offline) throw IOException("sem conexão")
+                else DemoApi().timeOptions(workDate)
+        }
+        val cached = DemoApi().timeOptions(LocalDate.now().toString())
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        advanceUntilIdle()
+        assertTrue(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+
+        offline = true
+        vm.refresh("test-owner"); advanceUntilIdle()
+        val fallback = vm.profile.value.modulesForHome("test-owner", false)!!
+        assertTrue(fallback.timeRecording)
+        assertFalse(fallback.stockCount)
+        assertEquals(cached, vm.today.value.timeOptions)
+
+        offline = false
+        vm.refresh("test-owner"); advanceUntilIdle()
+        assertFalse(vm.profile.value.unavailable)
+        assertTrue(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+    }
+    @Test fun failedRefreshFallbackWinsOverAnOlderHomeLoadInFlight() = runTest {
+        val oldLoadStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseOldLoad = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var offline = false
+        var optionReads = 0
+        val cached = DemoApi().timeOptions(LocalDate.now().toString()).copy(mode = "pilot")
+        val online = cached.copy(mode = "official")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                if (offline) throw IOException("sem conexão")
+                return ProfileResponse(Profile("Ana"), Modules(stockCount = true, timeRecording = true))
+            }
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                optionReads++
+                if (optionReads == 1) {
+                    oldLoadStarted.complete(Unit)
+                    releaseOldLoad.await()
+                    return online.copy(workDate = workDate)
+                }
+                throw IOException("sem conexão")
+            }
+            override suspend fun markings(startDate: String, endDate: String): OwnMarkings {
+                if (offline) throw IOException("sem conexão")
+                return DemoApi().markings(startDate, endDate)
+            }
+        }
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        runCurrent()
+        vm.loadToday(Modules(stockCount = true, timeRecording = true), null, "test-owner", force = true)
+        runCurrent(); oldLoadStarted.await()
+
+        offline = true
+        vm.refresh("test-owner"); advanceUntilIdle()
+        assertEquals("pilot", vm.today.value.timeOptions?.mode)
+        assertFalse(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+
+        releaseOldLoad.complete(Unit); advanceUntilIdle()
+        assertEquals("pilot", vm.today.value.timeOptions?.mode)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.today.value.timeClockSource)
+        assertEquals(false, vm.today.value.timeMarkingsAvailable)
+        assertEquals(2, optionReads)
+    }
     @Test fun homeProfileHidesThePreviousTargetAndDiscardsALateResponse() = runTest {
         val firstStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
         val releaseFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
