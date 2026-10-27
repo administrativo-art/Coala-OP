@@ -57,7 +57,8 @@ test("ARP do REP-P no banco dedicado não é acessível a nenhum cliente, nem ad
 
 test("coleções do ensaio REP-P no RH não são acessíveis por clientes", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-pilot", firestore: { rules: rules.rh } });
-  const collections = ["repP_pilotHeads", "repP_pilotMarkings", "repP_pilotOfflinePermits", "repP_pilotClassificationEvents", "repP_pilotDayGuards"];
+  const collections = ["repP_pilotHeads", "repP_pilotMarkings", "repP_pilotOfflinePermits", "repP_pilotClassificationEvents", "repP_pilotDayGuards",
+    "repP_pilotAdjustmentRequests"];
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       for (const collectionName of collections) await setDoc(doc(context.firestore(), collectionName, "private"), { protected: true });

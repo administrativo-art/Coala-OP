@@ -25,6 +25,11 @@ export function repPOfficialStartReached(now = new Date(), environment: RuntimeE
   return dateInBrazil(now) >= repPOfficialStartDate(environment);
 }
 
+/** A civil date belongs to the pre-official pilot only before the immutable cutover date. */
+export function repPPilotWorkDateAllowed(workDate: string, officialStartDate = repPOfficialStartDate()): boolean {
+  return validDate(workDate) && workDate < officialStartDate;
+}
+
 export function repPOfficialMarkingEnabled(
   now = new Date(),
   environment: RuntimeEnvironment = process.env,

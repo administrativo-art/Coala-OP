@@ -413,9 +413,11 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
         onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} markingMode={options?.mode ?? null} />
-      {adjustDate && !readOnly && options?.mode === "official" && !days.find((day) => day.date === adjustDate)?.allMarkings.some((item) => item.pilot) ? (
+      {adjustDate && !readOnly && (options?.mode === "official" || options?.mode === "pilot") ? (
         <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
           originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
+          scope={days.find((day) => day.date === adjustDate)?.allMarkings.some((item) => item.pilot)
+            || (options.mode === "pilot" && adjustDate === today) ? "pilot" : "official"}
           onClose={() => setAdjustDate(null)} onSubmitted={() => setReloadKey((current) => current + 1)} />
       ) : null}
       {reportId && adjustments.find((item) => item.id === reportId) ? (() => {
