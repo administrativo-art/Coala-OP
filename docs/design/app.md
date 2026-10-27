@@ -398,6 +398,8 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 
 ## Acessibilidade
 
+No Ponto sem internet, dados ainda não consultados aparecem como indisponíveis, nunca como ausência de turno/batidas. Sem autorização local, a tela explica falta, vencimento ou reinício e mantém a ação bloqueada. A finalidade exige escolha quando o histórico não foi confirmado. Pedidos de ajuste precisam de conexão. A distribuição é pelo APK direto; a verificação da instalação usa certificado de hardware Android e assinatura do Coala Go, sem exigir loja.
+
 **Como está hoje**, a manter em tela nova:
 
 - Áreas de toque de 44 dp ou mais.

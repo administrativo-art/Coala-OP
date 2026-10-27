@@ -18,7 +18,7 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_API_KEY` | apiKey pública Firebase |
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
-| `COALA_FIREBASE_SENDER_ID` | Número do projeto Google para Play Integrity |
+| `COALA_FIREBASE_SENDER_ID` | Número do projeto Firebase/FCM |
 | `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 32; crescente nas atualizações Go |
 | `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.27 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
@@ -101,11 +101,11 @@ de forma geral. Atualmente, a lista inclui `administrativo@coalashakes.com` e
 ## Bibliotecas adicionais (integrações)
 
 - AndroidX Activity, Fragment, Lifecycle, Core e Test: integração de Compose, ciclo de vida, FileProvider, BiometricPrompt e instrumentação.
-- Google Play Integrity: implementação nativa da atestação existente.
+- Atestação Android de hardware: verifica a assinatura do APK direto e o aparelho no servidor, sem depender de loja.
 - ZXing **core**: CameraX entrega imagens mas não decodifica QR; decodificador local para `COALA-SIGNAGE`, sem rede ou armazenamento externo.
 - kotlinx-coroutines-play-services: adaptação cancelável de Tasks Firebase/Integrity.
 - JUnit, MockWebServer e WorkManager Testing: testes JVM/HTTP e instrumentação, sem dependências de produção adicionais.
 
 ## Limites de homologação
 
-Compilação/testes locais não comprovam Firebase real, Play Integrity reconhecendo release sideloaded, câmera física, biometria real nem atualização Go sobre Go. O responsável autorizou retirar o legado antes desse aceite por não haver usuários; as lacunas continuam explicitadas na matriz, sem equivaler a homologação de produção.
+Compilação/testes locais não comprovam Firebase real, atestação de hardware validando o APK release, câmera física, biometria real nem atualização Go sobre Go. O responsável autorizou retirar o legado antes desse aceite por não haver usuários; as lacunas continuam explicitadas na matriz, sem equivaler a homologação de produção.

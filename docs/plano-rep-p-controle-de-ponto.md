@@ -94,7 +94,7 @@ O portal web permanece on-line. O Coala Go preserva marcações sem rede somente
 
 Requisição tem identificador idempotente. Reenvio da mesma tentativa não duplica; duas marcações distintas não podem ser eliminadas por terem horários próximos.
 
-Offline é facultativo (L5, item 52). O incremento local de 21/10/2026 implementa no Coala Go fila cifrada por conta, chave P-256 em TEE/StrongBox, âncora da Hora Legal + relógio monotônico, cadeia e assinatura locais, limite de 20 pendentes, bloqueio após reinício, sincronização ordenada e modo `1` no registro 7 do AFD. NSR e comprovante só nascem no servidor. Ainda são gates do piloto: teste em aparelho físico e perda/retorno de rede, Play Integrity de release em modo `enforce`, revisão jurídica/Doc Brown, operação dos casos bloqueados e todas as pendências gerais do REP-P.
+Offline é facultativo (L5, item 52). O incremento local de 21/10/2026 implementa no Coala Go fila cifrada por conta, chave P-256 em TEE/StrongBox, âncora da Hora Legal + relógio monotônico, cadeia e assinatura locais, limite de 20 pendentes, bloqueio após reinício, sincronização ordenada e modo `1` no registro 7 do AFD. NSR e comprovante só nascem no servidor. Ainda são gates do piloto: teste em aparelho físico e perda/retorno de rede, verificação de hardware e assinatura do APK direto em modo `enforce`, revisão jurídica/Doc Brown, operação dos casos bloqueados e todas as pendências gerais do REP-P.
 
 ### 5.5. NSR e ARP
 
@@ -360,7 +360,7 @@ Todos os IDs permanecem com implementação/eficácia **não verificadas**. Uma 
 | R11 | O | Extração mínima das últimas 48 h | L5 item 40 | 2: download independente do RH |
 | R12 | O | AFD oficial extraível pelo REP-P | L6; L5 itens 38/39 | 2/4: formato e simulação fiscal |
 | R13 | O | AFD CAdES destacado pelo desenvolvedor | L5 itens 28/33 | 2/7: assinatura real e arquivo verificados |
-| R14 | O por decisão de produto | Web on-line; contingência implementada no Coala Go para falta de rede ou indisponibilidade explícita da HLB, pré-autorizada por 12 h, fila cifrada/assinada e sincronização modo 1. O ensaio usa autorização e domínio criptográfico segregados, sem NSR/ARP/AFD/AEJ | L5 item 52; AFD 004 registro 7 | Embora facultativa na Portaria, é requisito do Coala para prontidão; fluxo automatizado do ensaio passou, faltam aparelho físico e Play Integrity `enforce` |
+| R14 | O por decisão de produto | Web on-line; contingência implementada no Coala Go para falta de rede ou indisponibilidade explícita da HLB, pré-autorizada por 12 h, fila cifrada/assinada e sincronização modo 1. O ensaio usa autorização e domínio criptográfico segregados, sem NSR/ARP/AFD/AEJ | L5 item 52; AFD 004 registro 7 | Embora facultativa na Portaria, é requisito do Coala para prontidão; fluxo automatizado do ensaio passou, faltam aparelho físico e atestação do APK direto `enforce` |
 | R15 | D | Sem localização/biometria no MVP | Escopo e L10 | Antes do piloto: conferir dados coletados |
 | P1 | O | Tratamentos identificados e originais preservados | L3 art. 82; L5 itens 55/56 | 3: inclusão/desconsideração/reversão |
 | P2 | O | AEJ no leiaute e pares por jornada | L7; L5 itens 51/56–59 | 4: casos inclusive virada de dia |
