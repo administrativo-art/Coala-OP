@@ -17,14 +17,10 @@ export const EMPLOYEE_DOCUMENT_CATEGORIES = [
 
 export type EmployeeDocumentCategoryId = (typeof EMPLOYEE_DOCUMENT_CATEGORIES)[number]["id"];
 
-// `contracts` permanece aceito para documentos legados, mas a navegação e os
-// novos arquivamentos o consolidam em Admissão > Contrato.
-export const EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES = EMPLOYEE_DOCUMENT_CATEGORIES.filter(
-  (category) => category.id !== "contracts",
-);
+export const EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES = EMPLOYEE_DOCUMENT_CATEGORIES;
 
 export function normalizeEmployeeDocumentCategory(category: EmployeeDocumentCategoryId): EmployeeDocumentCategoryId {
-  return category === "contracts" ? "admission" : category;
+  return category;
 }
 
 // Taxonomia fixa por natureza. Processos como competência, férias e afastamentos
@@ -51,6 +47,8 @@ export const EMPLOYEE_DOCUMENT_SUBFOLDERS: Partial<Record<EmployeeDocumentCatego
   contracts: [
     { id: "contract", label: "Contrato", typeCodes: ["EMPLOYMENT_CONTRACT"] },
     { id: "probation", label: "Experiência e prorrogações", typeCodes: ["PROBATION_CONTRACT", "PROBATION_EXTENSION"] },
+    { id: "service_provider_main", label: "Contrato principal", typeCodes: ["SERVICE_PROVIDER_CONTRACT_PJ", "SERVICE_PROVIDER_CONTRACT_PF"] },
+    { id: "service_provider_addenda", label: "Aditivos", typeCodes: ["SERVICE_PROVIDER_CONTRACT_ADDENDUM"] },
     { id: "contract_terms", label: "Aditivos e termos", typeCodes: [], typeLabels: ["Aditivo contratual", "Termo de confidencialidade", "Outro contrato"] },
   ],
   work_schedule: [
@@ -193,6 +191,17 @@ export function resolveEmployeeDocumentFolderPath(input: {
   destinationTrail?: readonly string[] | null;
 }): string[] {
   if (input.category === "pending_classification") return [];
+  if (input.category === "contracts") {
+    if (input.documentTypeCode === "SERVICE_PROVIDER_CONTRACT_PJ") {
+      return ["Prestação de serviços PJ", "Contrato principal"];
+    }
+    if (input.documentTypeCode === "SERVICE_PROVIDER_CONTRACT_ADDENDUM") {
+      return ["Prestação de serviços PJ", "Aditivos"];
+    }
+    if (input.documentTypeCode === "SERVICE_PROVIDER_CONTRACT_PF") {
+      return ["Histórico PF", "Contrato principal"];
+    }
+  }
   const definitions = getEmployeeDocumentSubfolders(input.category);
   const subfolderId = resolveEmployeeDocumentSubfolder(input.category, input.documentTypeCode, input.documentTypeLabel);
   const fixedLabel = definitions.find((definition) => definition.id === subfolderId)?.label;
@@ -234,6 +243,9 @@ export const EMPLOYEE_DOCUMENT_TYPES_BY_CATEGORY: Record<EmployeeDocumentCategor
   contracts: [
     "Contrato de experiência",
     "Contrato de trabalho",
+    "Contrato de prestação de serviços PJ",
+    "Aditivo ao contrato de prestação de serviços PJ",
+    "Contrato de prestação de serviços PF",
     "Prorrogação de contrato",
     "Aditivo contratual",
     "Termo de confidencialidade",
@@ -465,6 +477,33 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
     defaultAccessLevel: "restricted",
     aliases: ["contrato inicial", "contrato empregado"],
     classificationHints: ["Contrato laboral sem foco exclusivo em experiência."],
+  },
+  {
+    code: "SERVICE_PROVIDER_CONTRACT_PJ",
+    label: "Contrato de prestação de serviços PJ",
+    category: "contracts",
+    folderCode: "SERVICE_PROVIDER_CONTRACTS",
+    defaultAccessLevel: "restricted",
+    aliases: ["contrato pj", "contrato de prestação de serviços", "contrato da prestadora"],
+    classificationHints: ["Contrato civil ou empresarial de prestação de serviços com pessoa jurídica; não é admissão nem contrato de trabalho."],
+  },
+  {
+    code: "SERVICE_PROVIDER_CONTRACT_ADDENDUM",
+    label: "Aditivo ao contrato de prestação de serviços PJ",
+    category: "contracts",
+    folderCode: "SERVICE_PROVIDER_CONTRACTS",
+    defaultAccessLevel: "restricted",
+    aliases: ["aditivo pj", "aditivo de prestação de serviços", "termo aditivo da prestadora"],
+    classificationHints: ["Altera ou prorroga um contrato de prestação de serviços PJ; não é aditivo trabalhista."],
+  },
+  {
+    code: "SERVICE_PROVIDER_CONTRACT_PF",
+    label: "Contrato de prestação de serviços PF",
+    category: "contracts",
+    folderCode: "SERVICE_PROVIDER_CONTRACTS",
+    defaultAccessLevel: "restricted",
+    aliases: ["contrato pf", "prestação de serviços pessoa física"],
+    classificationHints: ["Contrato histórico de prestação de serviços com pessoa física; não é contrato de trabalho."],
   },
   {
     code: "PROBATION_CONTRACT",

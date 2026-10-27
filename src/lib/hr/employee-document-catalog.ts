@@ -189,6 +189,9 @@ const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
   EMPLOYEE_REGISTRATION: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: [] },
   ADMISSION_DATA_FORM: { processCategory: "ADMISSION", duplicateStrategy: "VERSION", duplicateKeys: ["admissionDate"] },
   EMPLOYMENT_CONTRACT: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
+  SERVICE_PROVIDER_CONTRACT_PJ: { processCategory: "NONE", duplicateStrategy: "VERSION", duplicateKeys: ["startDate"] },
+  SERVICE_PROVIDER_CONTRACT_ADDENDUM: { processCategory: "NONE", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
+  SERVICE_PROVIDER_CONTRACT_PF: { processCategory: "NONE", duplicateStrategy: "VERSION", duplicateKeys: ["startDate"] },
   PROBATION_CONTRACT: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
   PROBATION_EXTENSION: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
   DISCIPLINARY_WARNING: {

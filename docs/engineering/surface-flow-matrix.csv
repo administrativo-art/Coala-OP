@@ -294,6 +294,7 @@ api,src/app/api/hr/employee-documents/cleanup/route.ts,,docs/engineering/flows/e
 api,src/app/api/hr/employee-documents/confirm/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/item/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/reanalyze/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/hr/employee-document-folder-profile/route.ts,,docs/engineering/flows/employee-documents.md,GET retorna somente o modelo de pastas do colaborador; exige acesso RH perfil proprio quando aplicavel e escopo da unidade; sem documentos ou escrita.
 api,src/app/api/hr/employee-documents/publication/route.ts,,docs/engineering/flows/employee-documents.md,POST publica ou retira documento da pasta do colaborador; so DP autorizado com edicao; politica do tipo; retirar exige motivo; auditoria.
 api,src/app/api/hr/employee-documents/publication-policy/route.ts,,docs/engineering/flows/employee-documents.md,GET e PUT da matriz completa de publicacao por tipo; so DP autorizado; UNKNOWN_DOCUMENT permanece nunca.
 api,src/app/api/hr/employee-documents/classification/route.ts,,docs/engineering/flows/employee-documents.md,POST classifica documento legado ainda desconhecido sem publica-lo; confere DP e unidade do titular e audita.

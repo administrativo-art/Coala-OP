@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { listOwnPublishedDocuments } from '@/features/hr/documents/publication.server';
+import { listOwnPublishedDocuments, readOwnDocumentFolderProfile } from '@/features/hr/documents/publication.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -30,5 +30,10 @@ const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUse
   },
 });
 
-export const GET = secureRoute({ contract, enforcer }, async ({ security }) =>
-  NextResponse.json({ documents: await listOwnPublishedDocuments(security.actor) }, { headers: { 'Cache-Control': 'private, no-store' } }));
+export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
+  const [documents, folderProfile] = await Promise.all([
+    listOwnPublishedDocuments(security.actor),
+    readOwnDocumentFolderProfile(security.actor),
+  ]);
+  return NextResponse.json({ documents, folderProfile }, { headers: { 'Cache-Control': 'private, no-store' } });
+});

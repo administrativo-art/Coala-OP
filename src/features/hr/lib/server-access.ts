@@ -12,7 +12,7 @@ import {
   type FormalizationAction,
 } from "@/lib/hr-formalization-permissions";
 
-function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
+export function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
     isDefaultAdmin ||
     hasFormalizationPermission(permissions, "view", isDefaultAdmin) ||

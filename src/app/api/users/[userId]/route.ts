@@ -8,6 +8,7 @@ import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
+import { ensureEmployeeDocumentFolderProfile } from "@/lib/hr/employee-document-folder-profile.server";
 import { AppError } from "@/lib/observability";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
@@ -510,6 +511,18 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
           updated_at: Timestamp.now(),
         }, { merge: true });
       }
+    }
+
+    if (hasOwn(payload, "employmentRelationshipType") && valuesDiffer(payload.employmentRelationshipType, existingUser.employmentRelationshipType)) {
+      const employeeId = typeof existingUser.hrEmployeeId === "string" && existingUser.hrEmployeeId.trim()
+        ? existingUser.hrEmployeeId.trim()
+        : userId;
+      await ensureEmployeeDocumentFolderProfile({
+        employeeId,
+        relationshipType: payload.employmentRelationshipType,
+        actorId: actor.decoded.uid,
+        source: "user_relationship_update",
+      });
     }
 
     if (hasOwn(payload, "needsTransportVoucher") || hasOwn(payload, "transportVoucherValue")) {
