@@ -929,6 +929,55 @@ class ViewModelsTest {
         vm.classify("r2", "journey_end"); advanceUntilIdle()
         assertEquals(workDate, vm.state.value.journeyClosurePromptDate)
     }
+    @Test fun coldOfflineStartWithoutPermitExplainsTheBlockAndDoesNotClaimEmptyHistory() = runTest {
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw IOException("sem conexão")
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.load(); advanceUntilIdle()
+        assertFalse(vm.state.value.offlineReady)
+        assertFalse(vm.state.value.monthDataAvailable)
+        assertTrue(vm.state.value.offlineIssue.orEmpty().contains("ainda não recebeu autorização"))
+        assertNull(vm.feedback.value.error)
+    }
+    @Test fun offlineClockResumeRestoresThePermitInsteadOfShowingAGenericNetworkFailure() = runTest {
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) }
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw IOException("sem conexão")
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.refreshClock(); advanceUntilIdle()
+        assertTrue(vm.state.value.offlineReady)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
+        assertNull(vm.feedback.value.error)
+    }
+    @Test fun authorizationRefusalIsNotHandledAsOfflineNetworkFallback() = runTest {
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) }
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw AppFailure(ErrorCategory.PERMISSION, false, "Sem acesso")
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        assertFalse(vm.state.value.offlineReady)
+        assertEquals("Sem acesso", vm.feedback.value.error)
+    }
+    @Test fun failedHistoryReadCannotReplaceAnExplicitServerBlockWithAnOlderPermit() = runTest {
+        for (blocked in listOf(
+            DemoApi().timeOptions(LocalDate.now().toString()).copy(eligible = false),
+            DemoApi().timeOptions(LocalDate.now().toString()).copy(markingEnabled = false),
+            DemoApi().timeOptions(LocalDate.now().toString()).copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_NOT_CONFIGURED")),
+        )) {
+            val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) }
+            val api = object : ApiService by DemoApi() {
+                override suspend fun timeOptions(workDate: String) = blocked
+                override suspend fun markings(startDate: String, endDate: String): OwnMarkings = throw IOException("sem conexão")
+            }
+            val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+            vm.load(); advanceUntilIdle()
+            assertFalse(vm.state.value.offlineReady)
+            assertEquals(blocked, vm.state.value.options)
+        }
+    }
     @Test fun coldOfflineStartUsesAStillValidLocalAuthorization() = runTest {
         val cached = DemoApi().timeOptions(LocalDate.now().toString())
         val api = object : ApiService by DemoApi() {

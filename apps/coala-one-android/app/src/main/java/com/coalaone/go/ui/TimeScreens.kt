@@ -183,6 +183,22 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
 }
 
+@Composable internal fun TimeDayOverview(state: TimeState, shift: OwnShift?, punches: List<DayPunch>, enabled: Boolean,
+    onReceipt: (DayPunch) -> Unit) {
+    CardBlock {
+        Text(dayTitle(state.today), style = MaterialTheme.typography.titleMedium)
+        Text(if (state.monthDataAvailable) TimeRules.shiftText(shift) ?: "Sem turno na escala de hoje"
+            else "Escala indisponível. Conecte para consultar.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        if (state.monthDataAvailable) TimeRules.breakText(shift)?.let {
+            Text(it, color = Tokens.info, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+        }
+        HorizontalDivider(color = Tokens.border)
+        if (!state.monthDataAvailable) Text("Batidas não consultadas. Os registros já feitos continuam no servidor.", color = Tokens.muted)
+        else if (punches.isEmpty()) Text("Nenhuma batida hoje.", color = Tokens.muted)
+        if (state.monthDataAvailable) PunchList(punches, enabled, state.options?.executionUnits.orEmpty(), onReceipt)
+    }
+}
+
 /** Digital clock with seconds (Portaria 671, Anexo IX), from the official reading plus the phone's elapsed time. */
 @Composable private fun OfficialClockCard(state: TimeState, online: Boolean) {
     val zone = TimeRules.unitZone(state.options, state.unitId)
@@ -271,7 +287,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val todayShift = state.shifts.firstOrNull { it.date == today }
     val todayMarkings = state.markings.filter { it.workDate == today }
     val suggestedPurpose = TimeRules.suggestedPurpose(todayMarkings, todayShift)
-    val suggestionReliable = todayMarkings.isEmpty() || todayMarkings.all { it.classification?.purpose != null }
+    val suggestionReliable = state.monthDataAvailable && (todayMarkings.isEmpty() || todayMarkings.all { it.classification?.purpose != null })
     var declaredPurpose by rememberSaveable(today, state.markings.size, suggestionReliable) {
         mutableStateOf(if (suggestionReliable) suggestedPurpose else null)
     }
@@ -293,8 +309,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
     }
     LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
-        if (pendingDirectRecord && ((pendingAttempt && online) || TimeRules.canRecord(state.options, state.unitId)
-                || if (online) canPreserve else canPreserveOffline)) {
+        if (pendingDirectRecord && (if (online) pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve
+                else !pendingAttempt && canPreserveOffline)) {
             confirming = true
             pendingDirectRecord = false
         }
@@ -302,7 +318,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val confirmationTime = TimeRules.clockText(officialNow, zone)
     val declaredJourneyEnd = todayMarkings.sortedBy { it.markedAt }.lastOrNull()?.classification?.purpose == "journey_end"
     val cycleClosed = state.closedJourneyDate == today || TimeRules.autoJourneyCycleClosed(today, todayShift, todayMarkings, officialNow, zone)
-    val breakStatus = if (cycleClosed) null else TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
+    val breakStatus = if (cycleClosed || !state.monthDataAvailable) null else TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
     val scope = rememberCoroutineScope()
     fun captureAndRecord() {
         val purpose = declaredPurpose ?: return
@@ -409,7 +425,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 }
             }
         } else {
-            if (!pendingAttempt && (TimeRules.canRecord(state.options, state.unitId) || canPreserve))
+            if (state.monthDataAvailable && !pendingAttempt && (TimeRules.canRecord(state.options, state.unitId) || canPreserve))
                 Text("Próxima: " + TimeRules.nextPunchText(todayPunches.count { !it.discarded }, todayShift, if (suggestionReliable) suggestedPurpose else null) +
                     if (suggestionReliable) " · sugerida" else "", color = Tokens.muted, style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -422,8 +438,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 cycleClosed -> "Registrar nova batida"
                 else -> "Registrar ponto"
             }, screenBusy,
-                enabled = !(!online && pendingAttempt) && (pendingAttempt || TimeRules.canRecord(state.options, state.unitId)
-                    || if (online) canPreserve else canPreserveOffline)) { confirming = true }
+                enabled = if (online) pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve
+                    else !pendingAttempt && canPreserveOffline) { confirming = true }
         }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
@@ -468,12 +484,12 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             }
             breakStatus?.let { BreakNoticeCard(it) }
             // One block for the reason and the contingency issue, instead of two stacked warnings.
-            val blocked = TimeRules.blockedReason(state.options, state.offlineReady)
+            val blocked = if (!online && !state.offlineReady) state.offlineIssue else TimeRules.blockedReason(state.options, state.offlineReady)
             if (blocked != null || state.offlineIssue != null) {
                 Column(Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     blocked?.let { Text(it, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)) }
-                    state.offlineIssue?.let { issue -> Text("A contingência local não pôde ser renovada: $issue", color = Tokens.warning, style = MaterialTheme.typography.bodySmall) }
-                    if (blocked != null && state.options?.officialClock?.available != true) TextButton({ vm.refreshClock() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Tentar de novo", color = Tokens.wine) }
+                    state.offlineIssue?.takeIf { it != blocked }?.let { issue -> Text("Ponto sem internet indisponível: $issue", color = Tokens.warning, style = MaterialTheme.typography.bodySmall) }
+                    if (online && (!state.offlineReady || blocked != null)) TextButton({ vm.retryOfflineAuthorization() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Verificar novamente", color = Tokens.wine) }
                 }
             }
             if (state.offlineRows.isNotEmpty()) {
@@ -521,16 +537,9 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
                 Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
-            CardBlock {
-                Text(dayTitle(state.today), style = MaterialTheme.typography.titleMedium)
-                Text(TimeRules.shiftText(todayShift) ?: "Sem turno na escala de hoje", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                TimeRules.breakText(todayShift)?.let { Text(it, color = Tokens.info, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)) }
-                HorizontalDivider(color = Tokens.border)
-                if (todayPunches.isEmpty()) Text("Nenhuma batida hoje.", color = Tokens.muted)
-                PunchList(todayPunches, !feedback.busy, units) { receipt = it to markedAtOf(it) }
-            }
+            TimeDayOverview(state, todayShift, todayPunches, !feedback.busy) { receipt = it to markedAtOf(it) }
             if (todayMarkings.any { it.pilot }) Text("No ensaio, o pedido de ajuste é uma simulação: pode ser analisado pelo DP, mas não altera ponto, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            Action(if (todayMarkings.any { it.pilot }) "Simular pedido de ajuste" else "Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
+            Action(if (todayMarkings.any { it.pilot }) "Simular pedido de ajuste" else "Pedir ajuste de ponto", secondary = true, enabled = online && !feedback.busy) { asking = today }
             Text("CONSULTAS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             listOf(
                 Triple("records", "Registros", "Batidas e detalhes de cada dia"),

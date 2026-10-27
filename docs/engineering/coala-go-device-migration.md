@@ -8,7 +8,7 @@ O responsável confirmou que ninguém utiliza o app antigo e autorizou sua remo�
 2. Baixar pela página `/app`, botão "Baixar Coala Go"; caminho publicado `/app/CoalaGo.apk`, versão 0.3.25/code30.
 3. Instalar em aparelho piloto Android8+ e fazer login com conta de homologação autorizada.
 4. Conferir permissões, fotos, contagem, recebimento, compra/revisão/offline, escala, metas e Signage. Ensaiar câmera, biometria e reinício sem perda da fila.
-5. Homologar Play Integrity: o cadastro Firebase não comprova reconhecimento Play nem libera enforcement. Não enfraquecer o gate para contornar essa configuração.
+5. Homologar a [verificação de hardware e assinatura do APK direto](android-direct-apk-attestation.md): o cadastro Firebase não comprova a instalação. Decisão de 27/10/2026 elimina publicação em loja; a autorização offline continua exigindo passe verificado no servidor.
 6. Expandir o uso somente após registrar aceite das lacunas na [matriz](coala-go-parity.md).
 
 ## Atualizações e recuperação
