@@ -6,7 +6,7 @@ import retrofit2.HttpException
 import java.io.IOException
 
 enum class ErrorCategory { NETWORK, AUTHENTICATION, PERMISSION, CONFLICT, VALIDATION, RATE_LIMIT, SERVER, CONTRACT }
-class AppFailure(val category: ErrorCategory, val retryable: Boolean, message: String) : IOException(message)
+class AppFailure(val category: ErrorCategory, val retryable: Boolean, message: String, val code: String? = null) : IOException(message)
 object Errors {
     private fun serverField(cause: Throwable, field: String): String? {
         if (cause !is HttpException) return null
@@ -47,6 +47,6 @@ object Errors {
         if (cause !is HttpException || cause.code() == 401 || cause.code() !in 400..499) return cause
         val message = serverField(cause, "message") ?: return cause
         val category = when (cause.code()) { 403 -> ErrorCategory.PERMISSION; 409 -> ErrorCategory.CONFLICT; 429 -> ErrorCategory.RATE_LIMIT; else -> ErrorCategory.VALIDATION }
-        return AppFailure(category, cause.code() == 429, message)
+        return AppFailure(category, cause.code() == 429, message, serverCode(cause))
     }
 }

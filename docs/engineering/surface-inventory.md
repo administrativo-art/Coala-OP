@@ -432,7 +432,7 @@ Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/system-notices/daily` | POST | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) | [system-notices](flows/system-notices.md) |
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
-| `/api/mobile/app-attestation` | POST | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/mobile/app-attestation` | POST, GET | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [android-direct-apk-attestation](android-direct-apk-attestation.md) |
 | `/api/mobile/profile` | GET | [src/app/api/mobile/profile/route.ts](../../src/app/api/mobile/profile/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/mobile/profile/photo` | POST | [src/app/api/mobile/profile/photo/route.ts](../../src/app/api/mobile/profile/photo/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/mobile/push/devices` | POST, DELETE | [src/app/api/mobile/push/devices/route.ts](../../src/app/api/mobile/push/devices/route.ts) | [coala-go-parity](coala-go-parity.md) |

@@ -23,6 +23,8 @@ interface TimeOfflineQueue {
     suspend fun savePermit(uid: String, permit: OfflinePermit)
     suspend fun permit(uid: String): OfflinePermit?
     suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions?
+    suspend fun unavailableReason(uid: String, elapsedRealtimeMs: Long): String =
+        "Este aparelho ainda não recebeu autorização para ponto sem internet. Conecte-o e abra Ponto para verificar a autorização."
     suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String): CapturedOfflineMarking
     suspend fun ready(uid: String): List<Pair<TimeMarkingRow, MarkingRequest>>
     suspend fun synced(uid: String, id: String)
@@ -39,6 +41,7 @@ interface TimeOfflineQueue {
         require(bootCount >= 0) { "O aparelho não informou sua sequência de inicialização." }
         val current = permit(uid)
         if (current != null && current.scope == scope && current.deviceKeyId == key.keyId && current.bootCount == bootCount
+            && TimeOfflineRules.permitIssue(current, bootCount, elapsedRealtimeMs) == null
             && elapsedRealtimeMs >= current.anchorElapsedRealtimeMs
             && elapsedRealtimeMs - current.anchorElapsedRealtimeMs < 10 * 60 * 60 * 1000L) return null
         return OfflinePermitRequest(UUID.randomUUID().toString(), workDate, identity.installationId(), key.keyId,
@@ -56,8 +59,8 @@ interface TimeOfflineQueue {
     }
     override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? {
         val permit = permit(uid) ?: return null
-        if (permit.bootCount != identity.bootCount() || elapsedRealtimeMs < permit.anchorElapsedRealtimeMs
-            || elapsedRealtimeMs - permit.anchorElapsedRealtimeMs > 12 * 60 * 60 * 1000L) return null
+        if (TimeOfflineRules.permitIssue(permit, identity.bootCount(), elapsedRealtimeMs) != null) return null
+        if (runCatching { identity.key(uid).keyId }.getOrNull() != permit.deviceKeyId) return null
         val first = permit.units.firstOrNull() ?: return null
         val markedAt = TimeOfflineRules.markedAt(permit.anchorInstant, permit.anchorElapsedRealtimeMs, elapsedRealtimeMs, first.timeZone)
         val instant = Instant.parse(permit.anchorInstant).plusMillis(elapsedRealtimeMs - permit.anchorElapsedRealtimeMs)
@@ -65,9 +68,19 @@ interface TimeOfflineQueue {
             permit.units.map { ExecutionUnit(it.id, it.name, timeZone = it.timeZone) },
             OfficialClock(true, instant.toString(), first.timeZone), mode = permit.scope)
     }
+    override suspend fun unavailableReason(uid: String, elapsedRealtimeMs: Long): String {
+        val current = permit(uid)
+        TimeOfflineRules.permitIssue(current, identity.bootCount(), elapsedRealtimeMs)?.let { return it }
+        if (runCatching { identity.key(uid).keyId }.getOrNull() != current?.deviceKeyId)
+            return "A chave segura desta autorização não está mais disponível. Conecte-o para renovar."
+        return "A autorização local não pôde ser recuperada. Conecte-o e tente novamente."
+    }
     override suspend fun capture(uid: String, executionUnitId: String, elapsedRealtimeMs: Long, declaredPurpose: String) = withContext(Dispatchers.IO) { mutex.withLock {
         val permit = permit(uid) ?: error("Conecte o aparelho antes de usar o ponto offline.")
         val bootCount = identity.bootCount()
+        val issue = TimeOfflineRules.permitIssue(permit, bootCount, elapsedRealtimeMs)
+        require(issue == null) { issue.orEmpty() }
+        require(identity.key(uid).keyId == permit.deviceKeyId) { "A chave segura desta autorização mudou. Conecte-o para renovar." }
         require(bootCount >= 0 && permit.bootCount == bootCount) { "O aparelho foi reiniciado. Conecte-o antes de registrar outro ponto." }
         require(elapsedRealtimeMs >= permit.anchorElapsedRealtimeMs) { "A hora segura do aparelho não pôde ser confirmada." }
         val elapsed = elapsedRealtimeMs - permit.anchorElapsedRealtimeMs
