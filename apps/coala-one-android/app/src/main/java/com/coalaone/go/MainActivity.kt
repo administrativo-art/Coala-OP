@@ -161,7 +161,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
 }
 @Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit, onDetails: (String) -> Unit) {
     val options = today.timeOptions
-    val clock = options?.officialClock
     val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
     val zone = TimeRules.unitZone(options, unitId)
     var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)) }
@@ -171,52 +170,92 @@ private fun installUpdate(context: android.content.Context, file: File) {
             delay(1000 - official % 1000)
         }
     }
-    val times = today.timePunches.sortedBy { it.markedAt }.joinToString(" · ") { TimeRules.minuteOf(it.markedAt) }
+    // The permit anchor is never presented as a Hora Legal confirmed now.
+    val local = today.timeClockSource == com.coalaone.go.domain.ClockSource.LOCAL_PERMIT
+    val showTime = today.timeClockSource != com.coalaone.go.domain.ClockSource.NONE && today.timeClockOffset != null
+    val pilot = options?.mode == "pilot"
     val workDate = today.timeWorkDate ?: options?.workDate ?: java.time.LocalDate.now().toString()
     val summary = TimeRules.homeDaySummary(workDate, today.timePunches, today.timeShift, today.timeTreatments,
         today.timeTreatmentsAvailable, today.timeOfflinePending)
+    val punches = TimeRules.journeyDay(workDate, today.timeShift, today.timePunches, today.timeTreatments).filter { !it.discarded }
+    val planned = TimeRules.plannedPunchTimes(today.timeShift)
+    val classified = today.timePunches.all { it.classification?.purpose != null }
+    val nextPurpose = if (classified) TimeRules.suggestedPurpose(today.timePunches.sortedBy { it.markedAt }, today.timeShift) else null
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
-            if (clock?.available == true && today.timeClockOffset != null) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+            Text(if (local) "HORA ANCORADA PELA AUTORIZAÇÃO LOCAL" else "HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            if (pilot) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.accentSoft, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp))
+            if (showTime) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
         }
-        if (clock?.available == true && today.timeClockOffset != null) {
+        if (showTime) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
                 style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
             val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
-            unitName?.let { Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall) }
-            Text(if (times.isBlank()) "Nenhuma batida hoje" else "${today.timePunches.size} ${if (today.timePunches.size == 1) "batida" else "batidas"} hoje", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+            listOfNotNull(unitName, TimeRules.shiftText(today.timeShift)).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
+                Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+            }
+            if (local) Text(if (options?.officialClock?.available == false) "Hora Legal indisponível. Sua batida será preservada neste aparelho."
+                else "Sem internet. Sua batida será preservada neste aparelho.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
         }
-        summary?.let { day ->
-            HorizontalDivider(color = Tokens.onDark4.copy(alpha = .45f), modifier = Modifier.padding(vertical = 7.dp))
-            Row(Modifier.fillMaxWidth().clickable { onDetails(workDate) }.padding(vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("RESUMO DA JORNADA", color = Tokens.onDark4,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-                    if (day.state == com.coalaone.go.domain.DaySummaryState.COMPLETE) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            HomeTimeMetric("Trabalhado", TimeRules.durationText(day.workedMinutes ?: 0), Modifier.weight(1f))
-                            HomeTimeMetric("Intervalo", TimeRules.durationText(day.breakMinutes ?: 0), Modifier.weight(1f))
-                            HomeTimeMetric("Dif. da escala", day.shiftDifferenceMinutes?.let { TimeRules.durationText(it, true) } ?: "—", Modifier.weight(1f))
-                        }
-                        day.plannedBreakMinutes?.takeIf { it > 0 }?.let {
-                            Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
-                        }
-                        Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
-                    } else Text(day.message.orEmpty(), color = if (day.state == com.coalaone.go.domain.DaySummaryState.PENDING) Tokens.warning else Tokens.onDark2,
-                        style = MaterialTheme.typography.bodySmall)
+        HorizontalDivider(color = Tokens.onDark4.copy(alpha = .45f), modifier = Modifier.padding(vertical = 7.dp))
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Ver o dia") { onDetails(workDate) },
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("RESUMO DA JORNADA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+                val state = summary?.state
+                Text(when {
+                    punches.isEmpty() -> "Nenhuma batida hoje"
+                    state == com.coalaone.go.domain.DaySummaryState.COMPLETE -> "Jornada encerrada às ${punches.last().time}"
+                    state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS && punches.last().purpose == "break_start" -> "Em intervalo desde ${punches.last().time}"
+                    state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS -> "Em jornada desde ${punches.first().time}"
+                    else -> "${punches.size} ${if (punches.size == 1) "batida" else "batidas"} hoje"
+                }, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
+                when {
+                    state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS && showTime -> TimeRules.workedSoFarMinutes(punches, official)?.let {
+                        Text("${TimeRules.durationText(it)} trabalhadas até agora · ${if (local) "prévia aproximada" else "prévia"}", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+                    }
+                    state == com.coalaone.go.domain.DaySummaryState.PENDING -> Text(summary.message.orEmpty(), color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    else -> Unit
                 }
-                Text("Ver ›", color = Tokens.onDark2, style = MaterialTheme.typography.labelMedium)
+            }
+            Text("Ver dia ›", color = Tokens.onDark2, style = MaterialTheme.typography.labelMedium)
+        }
+        // The day's sequence: done punches, the next one and the planned rest.
+        val slots = maxOf(planned.size, punches.size + if (planned.isEmpty() && punches.isNotEmpty() && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE) 1 else 0)
+        if (slots > 0) Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (0 until slots).forEach { index ->
+                val done = punches.getOrNull(index)
+                val next = done == null && index == punches.size
+                val label = when { index == 0 -> "Início"; index == slots - 1 && planned.isNotEmpty() -> "Fim"; index % 2 == 1 -> "Intervalo"; else -> "Volta" }
+                Column(Modifier.weight(1f).background(if (next) Tokens.pink.copy(alpha = .12f) else Tokens.onDark.copy(alpha = .06f), RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(done?.time ?: planned.getOrNull(index) ?: "—", color = when { done != null -> Tokens.onDark; next -> Tokens.pink; else -> Tokens.onDark4 },
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                    Text(if (next) "Próxima" else label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
+                }
             }
         }
+        summary?.takeIf { it.state == com.coalaone.go.domain.DaySummaryState.COMPLETE }?.let { day ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HomeTimeMetric("Trabalhado", TimeRules.durationText(day.workedMinutes ?: 0), Modifier.weight(1f))
+                HomeTimeMetric("Intervalo", TimeRules.durationText(day.breakMinutes ?: 0), Modifier.weight(1f))
+                HomeTimeMetric("Dif. da escala", day.shiftDifferenceMinutes?.let { TimeRules.durationText(it, true) } ?: "—", Modifier.weight(1f))
+            }
+            day.plannedBreakMinutes?.takeIf { it > 0 }?.let {
+                Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+            }
+            Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+        }
         Spacer(Modifier.height(5.dp))
+        if (summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
+            Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
+                style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
-        Action("Registrar ponto", dark = true, onClick = onRecord)
+        Action(when { local && pilot -> "Preservar ensaio neste aparelho"; local -> "Preservar ponto neste aparelho"; else -> "Registrar ponto" }, dark = true, onClick = onRecord)
     }
 }
 @Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
