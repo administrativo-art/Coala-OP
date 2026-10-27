@@ -35,8 +35,8 @@ interface ApiService {
     @POST("api/signage/mobile/screens") suspend fun pair(@Body request: PairScreen): PairResponse
     // Ponto and Solicitações reuse the web routes; the punch goes out as channel "mobile" (AFD collector 01).
     @GET("api/dp/time-recording/options") suspend fun timeOptions(@Query("workDate") workDate: String): TimeOptions
-    @POST("api/dp/time-recording/offline-permits") suspend fun offlinePermit(@Body request: OfflinePermitRequest): OfflinePermitResponse
-    @POST("api/dp/time-recording/markings") suspend fun mark(@Body request: MarkingRequest): MarkingResponse
+    @POST("api/dp/time-recording/offline-permits") suspend fun offlinePermit(@Body request: OfflinePermitRequest, @Header("X-Coala-Local-Owner") expectedOwner: String? = null): OfflinePermitResponse
+    @POST("api/dp/time-recording/markings") suspend fun mark(@Body request: MarkingRequest, @Header("X-Coala-Local-Owner") expectedOwner: String? = null): MarkingResponse
     @PATCH("api/dp/time-recording/markings/{receiptId}/classification") suspend fun classifyMarking(@Path("receiptId") receiptId: String, @Body request: ClassificationUpdate): ClassificationResult
     @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
     @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
