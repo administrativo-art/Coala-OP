@@ -16,25 +16,34 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class SyncedOfflineMarking(val request: com.coalaone.go.data.MarkingRequest, val response: com.coalaone.go.data.MarkingResponse)
+data class TimeOfflineSyncResult(val complete: Boolean, val confirmed: List<SyncedOfflineMarking>)
+
 @Singleton class TimeOfflineSync @Inject constructor(private val auth: AuthGateway, private val queue: TimeOfflineQueue,
     private val repository: ApiRepository) {
     private val mutex = Mutex()
-    suspend fun sync(uid: String): Boolean = mutex.withLock {
-        if (auth.current?.uid != uid) return@withLock false
+    suspend fun syncWithResult(uid: String): TimeOfflineSyncResult = mutex.withLock {
+        if (auth.current?.uid != uid) return@withLock TimeOfflineSyncResult(false, emptyList())
+        val confirmed = mutableListOf<SyncedOfflineMarking>()
         for ((row, request) in queue.ready(uid)) {
-            if (auth.current?.uid != uid) return@withLock false
-            try { repository.api.mark(request); queue.synced(uid, row.id) }
+            if (auth.current?.uid != uid) return@withLock TimeOfflineSyncResult(false, confirmed)
+            try {
+                val response = repository.api.mark(request)
+                queue.synced(uid, row.id)
+                confirmed += SyncedOfflineMarking(request, response)
+            }
             catch (cause: CancellationException) { throw cause }
             catch (cause: Exception) {
                 val failure = Errors.classify(cause)
                 queue.failed(uid, row.id, failure)
                 // A corrente assinada é estritamente sequencial. Não envie as sucessoras enquanto esta
                 // marcação não tiver sido aceita ou saneada, para não bloqueá-las artificialmente.
-                return@withLock !failure.retryable
+                return@withLock TimeOfflineSyncResult(!failure.retryable, confirmed)
             }
         }
-        true
+        TimeOfflineSyncResult(true, confirmed)
     }
+    suspend fun sync(uid: String): Boolean = syncWithResult(uid).complete
 }
 
 @HiltWorker class TimeOfflineWorker @AssistedInject constructor(@Assisted context: Context, @Assisted params: WorkerParameters,

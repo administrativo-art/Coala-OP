@@ -57,12 +57,13 @@ import kotlinx.serialization.Serializable
 @Serializable data class JourneyLocationBatch(val events: List<JourneyLocationEvent>)
 @Serializable data class JourneyLocationAccepted(val acceptedEventIds: List<String>, val stopRequested: Boolean = false)
 
-@Serializable data class AdjustmentTarget(val receiptId: String, val nsr: Long, val markedAt: String, val executionUnitId: String)
+@Serializable data class AdjustmentTarget(val receiptId: String, val nsr: Long? = null, val pilotSequence: Long? = null, val markedAt: String, val executionUnitId: String)
 @Serializable data class AdjustmentInclusion(val markedAt: String, val executionUnitId: String)
 @Serializable data class AdjustmentAct(val action: String, val role: String, val at: String, val reason: String? = null)
 @Serializable data class AdjustmentOperation(val kind: String, val target: AdjustmentTarget? = null, val inclusion: AdjustmentInclusion? = null)
 @Serializable data class Adjustment(val id: String, val workDate: String, val kind: String, val status: String, val version: Int, val target: AdjustmentTarget? = null, val inclusion: AdjustmentInclusion? = null,
-    val operations: List<AdjustmentOperation> = emptyList(), val reason: String, val acts: List<AdjustmentAct> = emptyList(), val createdAt: String, val decidedAt: String? = null)
+    val operations: List<AdjustmentOperation> = emptyList(), val reason: String, val acts: List<AdjustmentAct> = emptyList(), val createdAt: String, val decidedAt: String? = null,
+    val scope: String = "official")
 @Serializable data class Treatment(val id: String, val adjustmentId: String, val workDate: String, val type: String, val originalReceiptId: String? = null, val markedAt: String? = null, val executionUnitId: String? = null)
 @Serializable data class OwnAdjustments(val adjustments: List<Adjustment>, val treatments: List<Treatment> = emptyList())
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
@@ -70,7 +71,9 @@ import kotlinx.serialization.Serializable
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val targetReceiptId: String? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val newTime: String? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val executionUnitId: String? = null)
-@Serializable data class AdjustmentRequest(val attemptId: String, val workDate: String, val operations: List<AdjustmentRequestOperation>, val reason: String)
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+@Serializable data class AdjustmentRequest(val attemptId: String, val workDate: String, val operations: List<AdjustmentRequestOperation>, val reason: String,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val scope: String? = null)
 @Serializable data class AdjustmentCreated(val adjustment: Adjustment)
 
 // Banco e espelho: consultas pessoais, sem ações de DP no aplicativo.

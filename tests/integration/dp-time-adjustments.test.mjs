@@ -10,7 +10,7 @@ const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { repPDbAdmin } = await import('../../src/lib/firebase-rep-p-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
-const { createOwnAdjustment, decideAdjustment, listAdjustmentsForReview, listOwnAdjustments, TREATMENTS, CLOSURES }
+const { createOwnAdjustment, decideAdjustment, listAdjustmentsForReview, listOwnAdjustments, ADJUSTMENTS, TREATMENTS, CLOSURES, PILOT_ADJUSTMENTS }
   = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
 
@@ -112,6 +112,7 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
     permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
   const titular = { decoded: { uid: userId }, userDoc: { id: userId, username: 'Maria', unitIds: [unitId] }, profileId: null,
     permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  titular.permissions.app.timeRecording.mark = true;
   const reviewerPermissions = structuredClone(defaultGuestPermissions);
   reviewerPermissions.dp.requests.review = true;
   const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitId] }, profileId: null,
@@ -243,4 +244,93 @@ test('ajuste de ponto: titular pede, outro decide com justificativa, original fi
   await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-09`).set({ status: 'closed' });
   await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-09-10', kind: 'include', newTime: '08:00',
     reason: 'Esqueci de bater a entrada.' }, deps), { code: 'PTRP_COMPETENCE_CLOSED' });
+});
+
+test('ajuste do ensaio percorre solicitação e decisão sem criar tratamento ou tocar o fechamento', async () => {
+  const prefix = `pilot-adjustment-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const userId = `${prefix}-employee`;
+  const reviewerId = `${prefix}-reviewer`;
+  const unitId = `${prefix}-unit`;
+  const workDate = '2026-10-11';
+  const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin` }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const titular = { decoded: { uid: userId }, userDoc: { id: userId, username: 'Maria', unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  titular.permissions.app.timeRecording.mark = true;
+  const reviewerPermissions = structuredClone(defaultGuestPermissions); reviewerPermissions.dp.requests.review = true;
+  const reviewer = { decoded: { uid: reviewerId }, userDoc: { id: reviewerId, unitIds: [unitId] }, profileId: null,
+    permissions: reviewerPermissions, isDefaultAdmin: false, workspace_id: workspaceId };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin,
+    clock: { async read() { return { instant: new Date('2026-10-12T12:00:00.000Z') }; } },
+    officialMarkingEnabled: false, pilotEnabled: true, pilotUserIds: new Set([userId]) };
+  await Promise.all([
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Quiosque piloto', address: 'Rua do ensaio, 1',
+      cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
+    dbAdmin.collection('users').doc(userId).set({ isActive: true, unitId, unitIds: [unitId] }),
+  ]);
+  await publishEmploymentReference(admin, { userId, expectedRevision: 0, requestId: `${prefix}-ref`, periods: [{
+    validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId],
+    jobFunctionIds: [], sourceDocumentId: 'admission', sourceReason: 'Vínculo do ensaio de ajuste' }] });
+  const receiptId = `pilot_${'a'.repeat(58)}${prefix.slice(-6)}`.slice(0, 70);
+  await hrDbAdmin.collection('repP_pilotMarkings').doc(receiptId).set({ workspaceId, employeeId: userId,
+    recordedDate: workDate, workDate, markedAt: `${workDate}T08:00:00-0300`, executionUnitId: unitId, sequence: 4, mode: 'pilot' });
+  await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-10`).set({ workspaceId, status: 'closed', version: 1 });
+
+  const pilotPayload = { attemptId: randomUUID(), scope: 'pilot', workDate, kind: 'correct',
+    targetReceiptId: receiptId, newTime: '08:05', reason: 'Simulação para conferir todo o fluxo do DP.' };
+  await assert.rejects(createOwnAdjustment(titular, pilotPayload, { ...deps, pilotEnabled: false }),
+    { code: 'REP_P_PILOT_ADJUSTMENT_FORBIDDEN' });
+  await assert.rejects(createOwnAdjustment(titular, pilotPayload, { ...deps, officialMarkingEnabled: true }),
+    { code: 'REP_P_PILOT_ADJUSTMENT_FORBIDDEN' });
+  await assert.rejects(createOwnAdjustment(titular, pilotPayload, { ...deps, pilotUserIds: new Set() }),
+    { code: 'REP_P_PILOT_ADJUSTMENT_FORBIDDEN' });
+  const titularWithoutMarking = { ...titular, permissions: structuredClone(defaultGuestPermissions) };
+  await assert.rejects(createOwnAdjustment(titularWithoutMarking, pilotPayload, deps),
+    { code: 'REP_P_PILOT_ADJUSTMENT_FORBIDDEN' });
+
+  // O servidor resolve o domínio: cliente antigo (sem scope) ou adulterado (official) não cria ajuste fiscal no piloto.
+  const omittedScope = await createOwnAdjustment(titular, { attemptId: randomUUID(), workDate: '2026-10-09',
+    kind: 'include', newTime: '08:00', reason: 'Cliente antigo durante o ensaio nominal.' }, deps);
+  const forgedOfficialScope = await createOwnAdjustment(titular, { attemptId: randomUUID(), scope: 'official', workDate: '2026-10-08',
+    kind: 'include', newTime: '08:00', reason: 'Cliente adulterado tentando selecionar o domínio fiscal.' }, deps);
+  assert.equal(omittedScope.scope, 'pilot');
+  assert.equal(forgedOfficialScope.scope, 'pilot');
+  assert.equal((await hrDbAdmin.collection(ADJUSTMENTS).where('workspaceId', '==', workspaceId).get()).empty, true);
+  assert.equal((await hrDbAdmin.collection(TREATMENTS).where('workspaceId', '==', workspaceId).get()).empty, true);
+  await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), scope: 'pilot', workDate: '2026-11-01',
+    kind: 'include', newTime: '08:00', reason: 'Tentativa de ensaio na data do corte oficial.' }, deps),
+  { code: 'REP_P_PILOT_CUTOVER_REACHED' });
+
+  const officialWorkDate = '2026-10-10';
+  const officialReceipt = `${prefix}-official-receipt`;
+  await repPDbAdmin.collection('repP_receipts').doc(officialReceipt).set({ workspaceId, employeeId: userId,
+    recordedDate: officialWorkDate, status: 'issued', snapshot: { nsr: 31, markedAt: `${officialWorkDate}T08:00:00-0300`, executionUnitId: unitId } });
+  await assert.rejects(createOwnAdjustment(titular, { attemptId: randomUUID(), scope: 'pilot', workDate: officialWorkDate,
+    kind: 'include', newTime: '08:05', reason: 'Requisição adulterada sobre um dia oficial.' }, deps),
+  { code: 'REP_P_PILOT_ADJUSTMENT_DAY_FORBIDDEN' });
+
+  const { repPPilotDayGuardId } = await import('../../src/features/dp/rep-p/service.server.ts');
+  const guard = hrDbAdmin.collection('repP_pilotDayGuards').doc(repPPilotDayGuardId(workspaceId, userId, workDate));
+  await guard.set({ schemaVersion: 1, mode: 'official', domain: 'adjustment', workspaceId, employeeId: userId, workDate });
+  await assert.rejects(createOwnAdjustment(titular, pilotPayload, deps), { code: 'REP_P_ADJUSTMENT_DAY_DOMAIN_CONFLICT' });
+  await guard.delete();
+
+  const created = await createOwnAdjustment(titular, pilotPayload, deps);
+  assert.equal(created.scope, 'pilot');
+  assert.equal(created.status, 'in_review');
+  assert.equal(created.target.pilotSequence, 4);
+  assert.equal(created.target.nsr, undefined);
+  assert.equal((await listOwnAdjustments(titular, { month: '2026-10' }, deps)).adjustments.some((item) => item.id === created.id), true);
+  assert.equal((await listAdjustmentsForReview(reviewer, deps)).adjustments.some((item) => item.id === created.id), true);
+
+  const approved = await decideAdjustment(reviewer, created.id,
+    { action: 'approve', expectedVersion: 1, reason: 'Simulação conferida pelo responsável do DP.' }, deps);
+  assert.equal(approved.scope, 'pilot');
+  assert.equal(approved.status, 'approved');
+  assert.equal((await hrDbAdmin.collection(PILOT_ADJUSTMENTS).doc(created.id).get()).get('status'), 'approved');
+  assert.equal((await hrDbAdmin.collection(TREATMENTS).where('adjustmentId', '==', created.id).get()).empty, true);
+  assert.equal((await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-10`).get()).get('version'), 1);
+  await assert.rejects(createOwnAdjustment(titular, { ...pilotPayload, newTime: '08:10' }, deps),
+    { code: 'PTRP_ADJUSTMENT_ATTEMPT_CONFLICT' });
 });
