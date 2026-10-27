@@ -176,7 +176,8 @@ import javax.inject.Singleton
         val approvedDay = LocalDate.now().minusDays(1)
         val pendingDay = LocalDate.now().minusDays(2)
         val original = simulatedMarkings.first { it.workDate == approvedDay.toString() && it.markedAt.contains("12:02") }
-        val target = AdjustmentTarget(original.receiptId, original.nsr, original.markedAt, original.executionUnitId)
+        val target = AdjustmentTarget(receiptId = original.receiptId, nsr = original.nsr,
+            markedAt = original.markedAt, executionUnitId = original.executionUnitId)
         val corrected = AdjustmentInclusion(zoned(approvedDay, "12:00"), original.executionUnitId)
         val approved = Adjustment(
             id = "simulation-adjustment-approved", workDate = approvedDay.toString(), kind = "correct", status = "approved", version = 2,
