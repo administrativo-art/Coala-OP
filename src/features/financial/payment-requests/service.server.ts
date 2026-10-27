@@ -14,6 +14,7 @@ import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity
 import { assertExpenseBoletoTarget, expenseBoletoAttachmentId, expenseBoletoSchema } from "./expense-boleto";
 import { inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
 import { assertSalaryPaymentTarget } from "./salary-payment";
+import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -117,6 +118,19 @@ export async function createPaymentRequest(input: {
       } : null,
       WORKSPACE_ID,
     );
+  }
+  if (input.sourceType === "expense_complement") {
+    if (input.beneficiaryReference.sourceType !== "employee") {
+      throw new Error("O complemento deve usar o colaborador favorecido da despesa.");
+    }
+    await assertExpenseComplementPaymentTarget({
+      sourceId: input.sourceId,
+      expenseId: input.expenseId ?? "",
+      beneficiaryReference: input.beneficiaryReference,
+      amount: input.amount,
+      description: input.description,
+      scheduledFor: input.scheduledFor,
+    });
   }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
   if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
