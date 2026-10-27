@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **502**
-- Totalmente contratados: **157**
+- Arquivos de rota: **503**
+- Totalmente contratados: **158**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -313,6 +313,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/consents/image-voice/[employeeId]` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/consents/image-voice/[employeeId]/route.ts](../../src/app/api/hr/consents/image-voice/[employeeId]/route.ts) |
 | `/api/hr/departments` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/departments/route.ts](../../src/app/api/hr/departments/route.ts) |
 | `/api/hr/departments/[departmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/departments/[departmentId]/route.ts](../../src/app/api/hr/departments/[departmentId]/route.ts) |
+| `/api/hr/employee-document-folder-profile` | GET ✓ | `CONTRACTED` | [src/app/api/hr/employee-document-folder-profile/route.ts](../../src/app/api/hr/employee-document-folder-profile/route.ts) |
 | `/api/hr/employee-documents` | DELETE, GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) |
 | `/api/hr/employee-documents/access` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/access/route.ts](../../src/app/api/hr/employee-documents/access/route.ts) |
 | `/api/hr/employee-documents/analyze-upload` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/analyze-upload/route.ts](../../src/app/api/hr/employee-documents/analyze-upload/route.ts) |
