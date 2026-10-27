@@ -39,6 +39,7 @@ import androidx.navigation.navArgument
 import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
 import com.coalaone.go.domain.TimeRules
+import com.coalaone.go.data.Modules
 import com.coalaone.go.ui.*
 import android.Manifest
 import android.os.Build
@@ -208,6 +209,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 Text("RESUMO DA JORNADA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                 val state = summary?.state
                 Text(when {
+                    punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas indisponíveis sem conexão"
                     punches.isEmpty() -> "Nenhuma batida hoje"
                     state == com.coalaone.go.domain.DaySummaryState.COMPLETE -> "Jornada encerrada às ${punches.last().time}"
                     state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS && punches.last().purpose == "break_start" -> "Em intervalo desde ${punches.last().time}"
@@ -226,7 +228,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         }
         // The day's sequence: done punches, the next one and the planned rest.
         val slots = maxOf(planned.size, punches.size + if (planned.isEmpty() && punches.isNotEmpty() && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE) 1 else 0)
-        if (slots > 0) Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (today.timeMarkingsAvailable != false && slots > 0) Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             (0 until slots).forEach { index ->
                 val done = punches.getOrNull(index)
                 val next = done == null && index == punches.size
@@ -251,7 +253,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.height(5.dp))
-        if (summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
+        if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
             Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
                 style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
@@ -276,6 +278,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
     // A recomposição ocorre antes do LaunchedEffect: filtre perfil e resumo antigos de forma síncrona.
     val state = profileState.visibleFor(dataOwner)
     val visibleToday = today.visibleFor(dataOwner)
+    // When the profile cannot be refreshed offline, keep only the Point entry. Opening it
+    // never grants access by itself: TimeViewModel still requires a valid local permit.
+    val visibleModules = profileState.modulesForHome(dataOwner, developerViewAs.targetUserId != null)
     val visiblePendingCount = if (developerViewAs.targetUserId == null) pending.size else 0
     val goalUnit = remember(owner) { context.getSharedPreferences("goals", android.content.Context.MODE_PRIVATE).getString("unit:$owner", null) }
     // A entrada e o retorno de qualquer módulo refazem o resumo; o contexto impede vazamento entre alvo DEV e ator real.
@@ -316,39 +321,42 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Action("Baixar atualização", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
-        state?.modules?.let { modules ->
-            if (modules.timeRecording) HomeTimeSummary(visibleToday, { navigate("time/register") }) { date -> navigate("time/day/$date") }
-            val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
-            if (journey.isNotEmpty()) {
-                Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    journey.forEach { (_, title, route) ->
-                        val badge = if (route == "time") visibleToday.timePunches.takeIf { it.isNotEmpty() }?.size?.let { "$it batida${if (it == 1) "" else "s"}" } else visibleToday.shiftShort
-                        val subtitle = if (route == "schedule") when {
-                            !visibleToday.loaded -> "Carregando turno de hoje"
-                            visibleToday.scheduleAvailable == false -> "Turno de hoje indisponível · atualizar"
-                            visibleToday.shift != null -> "Hoje · ${visibleToday.shift}"
-                            else -> "Sem turno hoje · ver escala"
-                        } else null
-                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge, subtitle = subtitle) { navigate(route) }
-                    }
-                    if (journey.size == 1) Spacer(Modifier.weight(1f))
-                }
+        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate)
+    }
+}
+@Composable internal fun HomeModuleContent(modules: Modules?, visibleToday: HomeToday, visiblePendingCount: Int,
+    navigate: (String) -> Unit) {
+    modules ?: return
+    if (modules.timeRecording) HomeTimeSummary(visibleToday, { navigate("time/register") }) { date -> navigate("time/day/$date") }
+    val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
+    if (journey.isNotEmpty()) {
+        Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            journey.forEach { (_, title, route) ->
+                val badge = if (route == "time") visibleToday.timePunches.takeIf { it.isNotEmpty() }?.size?.let { "$it batida${if (it == 1) "" else "s"}" } else visibleToday.shiftShort
+                val subtitle = if (route == "schedule") when {
+                    !visibleToday.loaded -> "Carregando turno de hoje"
+                    visibleToday.scheduleAvailable == false -> "Turno de hoje indisponível · atualizar"
+                    visibleToday.shift != null -> "Hoje · ${visibleToday.shift}"
+                    else -> "Sem turno hoje · ver escala"
+                } else null
+                HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), badge = badge, subtitle = subtitle) { navigate(route) }
             }
-            val tiles = listOf(Triple(modules.requests, "Solicitações", "requests"), Triple(modules.localPurchase, "Compra local", "purchase"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
-            if (tiles.isNotEmpty()) Text("OUTROS SERVIÇOS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
-            tiles.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { (_, title, route) ->
-                        val badge = when (route) { "count" -> "Em curso".takeIf { visibleToday.openCounts.isNotEmpty() }; "receive" -> visibleToday.repositions?.takeIf { it > 0 }?.toString(); "goals" -> visibleToday.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
-                        HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), pending = if (route == "purchase") visiblePendingCount else 0, badge = badge, badgeWarm = route == "count") { navigate(route) }
-                    }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-            if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
+            if (journey.size == 1) Spacer(Modifier.weight(1f))
         }
     }
+    val tiles = listOf(Triple(modules.requests, "Solicitações", "requests"), Triple(modules.localPurchase, "Compra local", "purchase"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+    if (tiles.isNotEmpty()) Text("OUTROS SERVIÇOS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
+    tiles.chunked(2).forEach { row ->
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { (_, title, route) ->
+                val badge = when (route) { "count" -> "Em curso".takeIf { visibleToday.openCounts.isNotEmpty() }; "receive" -> visibleToday.repositions?.takeIf { it > 0 }?.toString(); "goals" -> visibleToday.goalPercent?.let { "${Math.round(it)}%" }; else -> null }
+                HomeTile(title, route, Modifier.weight(1f).fillMaxHeight(), pending = if (route == "purchase") visiblePendingCount else 0, badge = badge, badgeWarm = route == "count") { navigate(route) }
+            }
+            if (row.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+    if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
 @Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
