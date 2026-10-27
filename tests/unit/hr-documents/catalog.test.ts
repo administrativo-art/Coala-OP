@@ -50,4 +50,10 @@ describe("catálogo das duas macros documentais", () => {
     assert.equal(getDocumentTypeConfig("VACCINATION_RECORD").category, "personal");
     assert.equal(getDocumentTypeConfig("SCHOOL_ATTENDANCE").category, "personal");
   });
+
+  test("catálogo distingue contratos civis PJ/PF de documentos admissionais", () => {
+    assert.equal(getDocumentTypeConfig("SERVICE_PROVIDER_CONTRACT_PJ").category, "contracts");
+    assert.equal(getDocumentTypeConfig("SERVICE_PROVIDER_CONTRACT_ADDENDUM").category, "contracts");
+    assert.equal(getDocumentTypeConfig("SERVICE_PROVIDER_CONTRACT_PF").category, "contracts");
+  });
 });

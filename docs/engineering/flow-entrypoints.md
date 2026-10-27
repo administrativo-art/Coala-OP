@@ -554,7 +554,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
 
-Arquivos locais percorridos: 37.
+Arquivos locais percorridos: 38.
 
 Chamadas candidatas encontradas:
 
@@ -987,6 +987,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/collaborators/` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `/api/hr/departments` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/route.ts`](../../src/app/api/hr/departments/route.ts)
 - `/api/hr/departments/` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/[departmentId]/route.ts`](../../src/app/api/hr/departments/%5BdepartmentId%5D/route.ts)
+- `/api/hr/employee-document-folder-profile` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
 - `/api/hr/employee-documents` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
 - `/api/hr/employee-documents/access` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
 - `/api/hr/employee-documents/analyze-upload` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/analyze-upload/route.ts`](../../src/app/api/hr/employee-documents/analyze-upload/route.ts)
