@@ -178,10 +178,11 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                 val ownShift = context.shift
                 val officialOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed)
                 // Without the network or the Hora Legal, the home shows the anchor of a valid local permit under its own name.
-                val permitOffset = if (officialOffset != null || contextKey != mode.identity().uid) null
-                    else quiet { timeOfflineQueue.cachedOptions(contextKey, summary.elapsed) }?.takeIf { options == null || it.mode == options.mode }
-                        ?.let { TimeRules.clockOffset(it.officialClock, summary.elapsed) }
-                next = next.copy(timeOptions = options, timeClockOffset = officialOffset ?: permitOffset,
+                val cachedOptions = if (officialOffset != null || contextKey != mode.identity().uid) null
+                    else quiet { timeOfflineQueue.cachedOptions(contextKey, summary.elapsed) }
+                        ?.takeIf { options == null || it.mode == options.mode }
+                val permitOffset = cachedOptions?.let { TimeRules.clockOffset(it.officialClock, summary.elapsed) }
+                next = next.copy(timeOptions = options ?: cachedOptions, timeClockOffset = officialOffset ?: permitOffset,
                     timeClockSource = when { officialOffset != null -> com.coalaone.go.domain.ClockSource.OFFICIAL
                         permitOffset != null -> com.coalaone.go.domain.ClockSource.LOCAL_PERMIT
                         else -> com.coalaone.go.domain.ClockSource.NONE },

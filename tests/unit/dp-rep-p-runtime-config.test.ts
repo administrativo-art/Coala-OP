@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialStartReached, repPOfficialUserIds } from '../../src/features/dp/rep-p/runtime-config';
+import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialStartReached, repPOfficialUserIds,
+  repPPilotWorkDateAllowed } from '../../src/features/dp/rep-p/runtime-config';
 
 describe('configuração de rollout do REP-P', () => {
   it('mantém o modo oficial bloqueado antes de 01/11/2026', () => {
@@ -21,5 +22,11 @@ describe('configuração de rollout do REP-P', () => {
   it('lê somente os UIDs da allowlist oficial', () => {
     const ids = repPOfficialUserIds({ REP_P_OFFICIAL_USER_IDS: ' first , second,, first ' });
     assert.deepEqual([...ids], ['first', 'second']);
+  });
+
+  it('separa os dias do ensaio e do oficial por uma fronteira civil sem sobreposição', () => {
+    assert.equal(repPPilotWorkDateAllowed('2026-10-31', '2026-11-01'), true);
+    assert.equal(repPPilotWorkDateAllowed('2026-11-01', '2026-11-01'), false);
+    assert.equal(repPPilotWorkDateAllowed('2026-11-02', '2026-11-01'), false);
   });
 });

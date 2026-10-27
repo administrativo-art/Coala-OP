@@ -22,8 +22,8 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Antes, pedido e depois: a original fica guardada; desconsiderada aparece riscada e a incluída em verde. */
-export function AdjustmentComparison({ originals, kind, targetReceiptId, newMarkedAt }: {
-  originals: Marking[]; kind: Kind; targetReceiptId: string | null; newMarkedAt: string | null;
+export function AdjustmentComparison({ originals, kind, targetReceiptId, newMarkedAt, scope = "official" }: {
+  originals: Marking[]; kind: Kind; targetReceiptId: string | null; newMarkedAt: string | null; scope?: "official" | "pilot";
 }) {
   const before = originals.filter((item) => item.treatment !== "included");
   const discarded = kind !== "include" && targetReceiptId ? before.find((item) => item.receiptId === targetReceiptId) ?? null : null;
@@ -48,7 +48,8 @@ export function AdjustmentComparison({ originals, kind, targetReceiptId, newMark
         ...(discarded ? [chip(clock(discarded.markedAt), "discarded", "d")] : []),
         ...(newMarkedAt && kind !== "discard" ? [chip(clock(newMarkedAt), "included", "i")] : []),
       ])}
-      {row("Depois, se aprovado (o que vale no fechamento)", after.map((item, index) => chip(item.time, item.state, `a${index}`)))}
+      {row(scope === "pilot" ? "Resultado da simulação (sem efeito no ponto)" : "Depois, se aprovado (o que vale no fechamento)",
+        after.map((item, index) => chip(item.time, item.state, `a${index}`)))}
     </div>
   );
 }
@@ -66,7 +67,7 @@ function AdjustmentOperationsComparison({ originals, adjustment }: { originals: 
   return <div className="space-y-3">
     <Field label="Antes">{chips(before.map((item) => ({ time: clock(item.markedAt) })))}</Field>
     <Field label="Pedido">{chips(operations.flatMap((item) => [...(item.target ? [{ time: clock(item.target.markedAt), state: "discarded" as const }] : []), ...(item.inclusion ? [{ time: clock(item.inclusion.markedAt), state: "included" as const }] : [])]))}</Field>
-    <Field label="Depois, se aprovado">{chips(after.map((time) => ({ time })))}</Field>
+    <Field label={adjustment.scope === "pilot" ? "Resultado simulado (sem efeito)" : "Depois, se aprovado"}>{chips(after.map((time) => ({ time })))}</Field>
   </div>;
 }
 
@@ -77,7 +78,9 @@ export function AdjustmentReport({ adjustment, originals, names }: { adjustment:
   return (
     <>
       <div className="flex items-center justify-between gap-2">
-        <StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>{ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
+        <div className="flex items-center gap-2"><StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>
+          {adjustment.scope === "pilot" && adjustment.status === "approved" ? "Simulação aprovada · sem efeito no ponto" : ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
+          {adjustment.scope === "pilot" ? <StatusPill variant="warn">Simulação do ensaio</StatusPill> : null}</div>
         <span className="font-ds-mono text-[11px] text-ds-ink-faint">{adjustment.id.slice(0, 10)}</span>
       </div>
       <PanelSection title="Antigo × novo">
@@ -85,7 +88,7 @@ export function AdjustmentReport({ adjustment, originals, names }: { adjustment:
       </PanelSection>
       <PanelSection title="Dados do pedido">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Batidas originais">{operations.flatMap((item) => item.target ? [`${clock(item.target.markedAt)} · NSR ${item.target.nsr}`] : []).join("; ") || "— (inclusão)"}</Field>
+          <Field label="Batidas originais">{operations.flatMap((item) => item.target ? [`${clock(item.target.markedAt)} · ${adjustment.scope === "pilot" ? "sequência" : "NSR"} ${adjustment.scope === "pilot" ? item.target.pilotSequence : item.target.nsr}`] : []).join("; ") || "— (inclusão)"}</Field>
           <Field label="Horários novos">{operations.flatMap((item) => item.inclusion ? [clock(item.inclusion.markedAt)] : []).join("; ") || "— (só desconsiderar)"}</Field>
           <Field label="Tratamento">{adjustment.kind === "include" ? "Inclusão" : adjustment.kind === "discard" ? "Desconsideração" : "Desconsideração + inclusão"}</Field>
           <Field label="Dia">{adjustment.workDate.split("-").reverse().join("/")}</Field>
@@ -108,14 +111,17 @@ export function AdjustmentReport({ adjustment, originals, names }: { adjustment:
           {adjustment.status === "in_review" ? <li className="text-xs text-ds-ink-muted">Aguardando decisão do gestor ou do DP.</li> : null}
         </ol>
       </PanelSection>
-      <p className="text-xs text-ds-ink-muted">A batida original continua guardada no registro oficial; o ajuste aparece no espelho e no documento de fechamento do mês.</p>
+      <p className={cn("text-xs", adjustment.scope === "pilot" ? "font-semibold text-ds-warn" : "text-ds-ink-muted")}>
+        {adjustment.scope === "pilot" ? "Simulação segregada: a decisão não cria tratamento e não altera ponto, banco, espelho, folha, AFD ou AEJ."
+          : "A batida original continua guardada no registro oficial; o ajuste aparece no espelho e no documento de fechamento do mês."}
+      </p>
     </>
   );
 }
 
 /** Pedido de ajuste pelo titular: escolher, justificar, conferir o resumo e enviar; depois mostra o relatório. */
-export function AdjustmentRequestPanel({ open, workDate, originals, request, onClose, onSubmitted }: {
-  open: boolean; workDate: string; originals: Marking[]; request: Request; onClose: () => void; onSubmitted: (adjustment: AdjustmentView) => void;
+export function AdjustmentRequestPanel({ open, workDate, originals, request, scope = "official", onClose, onSubmitted }: {
+  open: boolean; workDate: string; originals: Marking[]; request: Request; scope?: "official" | "pilot"; onClose: () => void; onSubmitted: (adjustment: AdjustmentView) => void;
 }) {
   const effective = originals.filter((item) => item.treatment !== "discarded" && item.treatment !== "included");
   const [step, setStep] = useState<"form" | "summary" | "done">("form");
@@ -137,7 +143,7 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, onC
     setError(null);
     try {
       const result = await request<{ adjustment: AdjustmentView }>("/api/dp/time-recording/adjustments", { method: "POST",
-        json: { attemptId, workDate, kind, ...(needsTarget ? { targetReceiptId: targetId } : {}), ...(needsTime ? { newTime } : {}), reason: reason.trim() },
+        json: { attemptId, workDate, kind, ...(needsTarget ? { targetReceiptId: targetId } : {}), ...(needsTime ? { newTime } : {}), reason: reason.trim(), scope },
         fallbackError: "Não foi possível enviar o pedido de ajuste." });
       setSaved(result.adjustment);
       setStep("done");
@@ -151,7 +157,8 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, onC
 
   return (
     <SidePanel open={open} onOpenChange={(next) => { if (!next && !sending) onClose(); }} kicker={workDate.split("-").reverse().join("/")}
-      title={step === "done" ? "Pedido de ajuste enviado" : "Pedir ajuste de ponto"} subtitle="Quem decide é o seu gestor ou o DP. A batida original nunca é apagada.">
+      title={step === "done" ? (scope === "pilot" ? "Simulação enviada" : "Pedido de ajuste enviado") : (scope === "pilot" ? "Simular ajuste" : "Pedir ajuste de ponto")}
+      subtitle={scope === "pilot" ? "O DP testa a análise; nenhuma decisão altera o ponto oficial." : "Quem decide é o seu gestor ou o DP. A batida original nunca é apagada."}>
       {step === "done" && saved ? <AdjustmentReport adjustment={saved} originals={originals} /> : (
         <>
           <ol className="flex items-center gap-2 text-xs font-bold" aria-label="Etapas do pedido">
@@ -199,14 +206,16 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, onC
                 <textarea rows={4} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)}
                   className="w-full rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-sm text-ds-ink"
                   placeholder="Ex.: o celular descarregou na saída; saí às 16:20 com a gerente." />
-                <p className="text-xs text-ds-ink-muted">{reason.trim().length} caracteres · mínimo 10. Os primeiros 150 vão para o arquivo oficial do fechamento; o texto completo fica no pedido. Não descreva diagnóstico.</p>
+                <p className="text-xs text-ds-ink-muted">{reason.trim().length} caracteres · mínimo 10. {scope === "pilot"
+                  ? "O texto fica somente na simulação e não entra em arquivo oficial."
+                  : "Os primeiros 150 vão para o arquivo oficial do fechamento; o texto completo fica no pedido."} Não descreva diagnóstico.</p>
               </PanelSection>
               <Button type="button" variant="primary-modal" disabled={!valid} onClick={() => setStep("summary")}>Concluir</Button>
             </>
           ) : (
             <>
               <PanelSection title="Antigo × novo">
-                <AdjustmentComparison originals={originals} kind={kind} targetReceiptId={needsTarget ? targetId : null} newMarkedAt={draftNew} />
+                <AdjustmentComparison originals={originals} kind={kind} targetReceiptId={needsTarget ? targetId : null} newMarkedAt={draftNew} scope={scope} />
               </PanelSection>
               <PanelSection title="Resumo">
                 <div className="grid grid-cols-2 gap-4">
@@ -214,8 +223,9 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, onC
                   <Field label="Dia">{workDate.split("-").reverse().join("/")}</Field>
                   <div className="col-span-2"><Field label="Justificativa"><span className="whitespace-pre-wrap font-normal">{reason.trim()}</span></Field></div>
                 </div>
-                <p className="rounded-ds-md bg-ds-info-bg px-3 py-2 text-xs text-ds-info">
-                  O pedido fica registrado em seu nome, com data e hora oficiais. A batida original não é apagada: se aprovado, ela fica marcada como desconsiderada e o horário novo entra como incluído, com a sua justificativa.
+                <p className={cn("rounded-ds-md px-3 py-2 text-xs", scope === "pilot" ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-info-bg text-ds-info")}>
+                  {scope === "pilot" ? "SIMULAÇÃO: o pedido e a decisão ficam separados do PTRP e não produzem tratamento, banco, espelho, folha, AFD ou AEJ."
+                    : "O pedido fica registrado em seu nome, com data e hora oficiais. A batida original não é apagada: se aprovado, ela fica marcada como desconsiderada e o horário novo entra como incluído, com a sua justificativa."}
                 </p>
               </PanelSection>
               {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}

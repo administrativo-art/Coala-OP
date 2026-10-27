@@ -63,6 +63,9 @@ object TimeRules {
         && options.eligible && options.markingEnabled && options.officialClock?.available == false
         && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE"
         && options.executionUnits.any { it.id == unitId }
+    /** Offline preservation requires a still-valid local permit; cached options may contain the permit anchor as available. */
+    fun canPreserveOffline(options: TimeOptions?, unitId: String?, offlineReady: Boolean) = offlineReady && options != null
+        && options.eligible && options.markingEnabled && options.executionUnits.any { it.id == unitId }
     /** Why the punch button is off, in words; null when it can be used. */
     fun blockedReason(options: TimeOptions?, offlineReady: Boolean = false): String? = when {
         options == null -> null
@@ -121,6 +124,13 @@ object TimeRules {
             }
             else -> "journey_start"
         }
+    }
+    /** Visual cycle only: it never creates or blocks a punch. Overnight and unknown shifts remain open. */
+    fun autoJourneyCycleClosed(workDate: String, shift: OwnShift?, markings: List<OwnMarking>, nowEpochMillis: Long, zone: ZoneId): Boolean {
+        if (shift == null || shift.type != "work" || shift.overnight || shift.endTime == null) return false
+        if (markings.sortedBy { markingInstant(it.markedAt) }.lastOrNull()?.classification?.purpose != "journey_end") return false
+        val closesAt = LocalDate.parse(workDate).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return nowEpochMillis >= closesAt
     }
     /** Times the shift plans for each expected punch, null where it plans none (flexible break). */
     fun plannedPunchTimes(shift: OwnShift?): List<String?> {

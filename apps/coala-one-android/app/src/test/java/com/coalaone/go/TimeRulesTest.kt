@@ -88,6 +88,12 @@ class TimeRulesTest {
         assertFalse(TimeRules.canPreserve(hlbOutage.copy(officialClock = OfficialClock(false, issue = "REP_P_PILOT_UNIT_TIME_ZONE_MISSING")), "slz", offlineReady = true))
         assertFalse(TimeRules.canPreserve(hlbOutage, "slz", offlineReady = false))
     }
+    @Test fun offlinePreservationAlwaysRequiresAValidPermitAndEligibleUnit() {
+        assertTrue(TimeRules.canPreserveOffline(options.copy(mode = "pilot"), "slz", offlineReady = true))
+        assertFalse(TimeRules.canPreserveOffline(options, "slz", offlineReady = false))
+        assertFalse(TimeRules.canPreserveOffline(options.copy(eligible = false), "slz", offlineReady = true))
+        assertFalse(TimeRules.canPreserveOffline(options, "other", offlineReady = true))
+    }
     @Test fun labelsAreSuggestedByOrderAsOnTheWeb() {
         val shift = OwnShift("2026-10-19", "work", "08:00", "16:00", breakType = "fixed", breakStart = "12:00", breakEnd = "13:00")
         assertEquals(4, TimeRules.expectedPunches(shift))
@@ -112,6 +118,19 @@ class TimeRulesTest {
             marking("r4", "14:00", "break_start"), marking("r5", "14:10", "break_end")), split))
         val endedWithoutBreak = listOf(marking("r1", "08:00", "journey_start"), marking("r2", "16:00", "journey_end"))
         assertTrue(TimeRules.breakIssue(endedWithoutBreak, split)!!.contains("0 de 20 min"))
+    }
+    @Test fun visualCycleAutoClosesAtLocalMidnightOnlyForDaytimeShift() {
+        fun marking(purpose: String) = OwnMarking("r1", "2026-10-19", 1,
+            "2026-10-19T17:00:00-03:00", "slz", "01", "available", classification = MarkingClassification(purpose))
+        val zone = ZoneId.of("America/Fortaleza")
+        val daytime = OwnShift("2026-10-19", "work", "08:00", "17:00")
+        val before = java.time.OffsetDateTime.parse("2026-10-19T23:59:59-03:00").toInstant().toEpochMilli()
+        val after = java.time.OffsetDateTime.parse("2026-10-20T00:00:00-03:00").toInstant().toEpochMilli()
+        assertFalse(TimeRules.autoJourneyCycleClosed("2026-10-19", daytime, listOf(marking("journey_end")), before, zone))
+        assertTrue(TimeRules.autoJourneyCycleClosed("2026-10-19", daytime, listOf(marking("journey_end")), after, zone))
+        assertFalse(TimeRules.autoJourneyCycleClosed("2026-10-19", daytime.copy(overnight = true), listOf(marking("journey_end")), after, zone))
+        assertFalse(TimeRules.autoJourneyCycleClosed("2026-10-19", daytime, listOf(marking("break_end")), after, zone))
+        assertFalse(TimeRules.autoJourneyCycleClosed("2026-10-19", null, listOf(marking("journey_end")), after, zone))
     }
     @Test fun liveBreakStatusCoversFixedWindowFlexibleAndMinimumPause() {
         fun marking(id: String, time: String, purpose: String) = OwnMarking(id, "2026-10-19", id.drop(1).toLong(),

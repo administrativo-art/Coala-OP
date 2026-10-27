@@ -16,6 +16,7 @@ const legacyAdjustmentSchema = z.object({
   newTime: time.optional(),
   executionUnitId: id.optional(),
   reason,
+  scope: z.enum(['official', 'pilot']).optional(),
 }).strict().superRefine((value, context) => {
   if (value.kind !== 'include' && !value.targetReceiptId) {
     context.addIssue({ code: 'custom', path: ['targetReceiptId'], message: 'Escolha a batida.' });
@@ -39,7 +40,7 @@ const adjustmentOperationSchema = z.discriminatedUnion('kind', [
 const multiAdjustmentSchema = z.object({
   attemptId: z.string().uuid(), workDate: civilDate,
   operations: z.array(adjustmentOperationSchema).min(1, 'Inclua ao menos uma alteração.').max(8, 'Um pedido aceita até oito alterações.'),
-  reason,
+  reason, scope: z.enum(['official', 'pilot']).optional(),
 }).strict().superRefine((value, context) => {
   const kinds = new Set(value.operations.map((item) => item.kind));
   if (kinds.size > 1) context.addIssue({ code: 'custom', path: ['operations'], message: 'Um pedido reúne apenas alterações do mesmo tipo.' });
@@ -53,6 +54,7 @@ export const createAdjustmentSchema = z.union([multiAdjustmentSchema, legacyAdju
   if ('operations' in value) return value;
   return {
     attemptId: value.attemptId, workDate: value.workDate, reason: value.reason,
+    scope: 'scope' in value ? value.scope : undefined,
     operations: [{ kind: value.kind, ...(value.targetReceiptId ? { targetReceiptId: value.targetReceiptId } : {}),
       ...(value.newTime ? { newTime: value.newTime } : {}), ...(value.executionUnitId ? { executionUnitId: value.executionUnitId } : {}) }],
   };
