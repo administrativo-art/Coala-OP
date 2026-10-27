@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **502 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **503 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -336,6 +336,7 @@ Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/hr/consents/image-voice/[employeeId]` | GET, POST | [src/app/api/hr/consents/image-voice/[employeeId]/route.ts](../../src/app/api/hr/consents/image-voice/%5BemployeeId%5D/route.ts) | [consents](flows/consents.md) |
 | `/api/hr/departments` | GET, POST | [src/app/api/hr/departments/route.ts](../../src/app/api/hr/departments/route.ts) | [organization](flows/organization.md) |
 | `/api/hr/departments/[departmentId]` | PATCH | [src/app/api/hr/departments/[departmentId]/route.ts](../../src/app/api/hr/departments/%5BdepartmentId%5D/route.ts) | [organization](flows/organization.md) |
+| `/api/hr/employee-document-folder-profile` | GET | [src/app/api/hr/employee-document-folder-profile/route.ts](../../src/app/api/hr/employee-document-folder-profile/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents` | GET, POST, PATCH, DELETE | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/access` | POST | [src/app/api/hr/employee-documents/access/route.ts](../../src/app/api/hr/employee-documents/access/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/analyze-upload` | POST | [src/app/api/hr/employee-documents/analyze-upload/route.ts](../../src/app/api/hr/employee-documents/analyze-upload/route.ts) | [employee-documents](flows/employee-documents.md) |

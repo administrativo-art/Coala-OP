@@ -16,6 +16,7 @@ import { AppError } from '@/lib/observability/app-error';
 import { getDocumentTypeConfig, activeDocumentTypeCodes } from '@/lib/hr/employee-document-catalog';
 import { EMPLOYEE_DOCUMENT_TYPE_CATALOG } from '@/lib/hr/employee-document-options';
 import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
+import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
 
 const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
@@ -42,6 +43,7 @@ function ownEmployeeIds(context: ServerUserContext) {
 const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
   id, displayName: text(data.displayName) ?? text(data.documentType) ?? 'Documento', documentType: text(data.documentType), documentTypeCode: text(data.documentTypeCode),
   category: text(data.category), mimeType: text(data.mimeType), size: typeof data.size === 'number' ? data.size : null,
+  destinationTrail: Array.isArray(data.destinationTrail) ? data.destinationTrail.filter((entry: unknown): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : [],
   publishedAt: (data.publication as DocumentPublication | undefined)?.at ?? null,
 });
 
@@ -56,6 +58,17 @@ export async function listOwnPublishedDocuments(context: ServerUserContext, inje
   return snapshot.docs.filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
     .map((doc) => publicView(doc.id, doc.data()))
     .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
+}
+
+export async function readOwnDocumentFolderProfile(context: ServerUserContext) {
+  const profile = await readEmployeeDocumentFolderProfile(ownEmployeeIds(context));
+  if (!profile) return null;
+  return {
+    templateId: profile.templateId ?? null,
+    templateVersion: profile.templateVersion ?? null,
+    templateLabel: profile.templateLabel ?? null,
+    folders: Array.isArray(profile.folders) ? profile.folders : [],
+  };
 }
 
 /** Abre um documento da própria pasta: titular e publicado, senão "não encontrado" (sem revelar que existe). */

@@ -71,6 +71,24 @@ describe("taxonomia híbrida de pastas", () => {
     }), ["Contrato"]);
   });
 
+  test("prestação de serviços não é tratada como admissão e separa contrato, aditivos e histórico PF", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "contracts",
+      documentTypeCode: "SERVICE_PROVIDER_CONTRACT_PJ",
+      documentTypeLabel: "Contrato de prestação de serviços PJ",
+    }), ["Prestação de serviços PJ", "Contrato principal"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "contracts",
+      documentTypeCode: "SERVICE_PROVIDER_CONTRACT_ADDENDUM",
+      documentTypeLabel: "Aditivo ao contrato de prestação de serviços PJ",
+    }), ["Prestação de serviços PJ", "Aditivos"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "contracts",
+      documentTypeCode: "SERVICE_PROVIDER_CONTRACT_PF",
+      documentTypeLabel: "Contrato de prestação de serviços PF",
+    }), ["Histórico PF", "Contrato principal"]);
+  });
+
   test("recibos e pagamentos de férias compartilham a mesma pasta", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "vacations",
