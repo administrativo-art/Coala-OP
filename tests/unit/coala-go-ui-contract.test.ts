@@ -122,7 +122,18 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
 });
 
 test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovante antes da sincronização', () => {
-  assert.match(time, /Registrar ponto offline/);
+  // Sem rede ou sem Hora Legal a batida é preservada, nunca "registrada"; a hora vem da autorização local com nome próprio.
+  assert.match(time, /Preservar ponto neste aparelho/);
+  assert.doesNotMatch(time, /Registrar ponto offline/);
+  // "HORA LEGAL BRASILEIRA" só é o rótulo quando a fonte não é a autorização local.
+  for (const source of [time, activity]) {
+    assert.match(source, /Text\(if \(local\) "HORA ANCORADA PELA AUTORIZAÇÃO LOCAL" else "HORA LEGAL BRASILEIRA"/);
+    assert.equal(source.match(/"HORA LEGAL BRASILEIRA"/g)?.length, 1);
+  }
+  assert.match(time, /Esta hora é apenas informativa: o comprovante terá a hora gravada pelo servidor\./);
+  // O reenvio mantém a finalidade da tentativa original.
+  assert.match(time, /Definida na tentativa original; não pode ser trocada no reenvio\./);
+  assert.match(timeViewModel, /PendingAttempt\(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource\)/);
   assert.match(time, /Ainda não há NSR nem comprovante oficial/);
   assert.match(timeViewModel, /offlineQueue\.capture/);
   assert.match(timeViewModel, /lastOffline/);

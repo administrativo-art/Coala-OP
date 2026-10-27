@@ -1,6 +1,7 @@
 package com.coalaone.go.ui
 
 import com.coalaone.go.data.*
+import com.coalaone.go.domain.ClockSource
 import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.auth.AuthGateway
 import com.coalaone.go.offline.*
@@ -27,7 +28,7 @@ import java.time.YearMonth
 import java.util.UUID
 import javax.inject.Inject
 
-data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = null, val unitId: String? = null,
+data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = null, val clockSource: ClockSource = ClockSource.NONE, val unitId: String? = null,
     val today: LocalDate = LocalDate.now(), val month: YearMonth = YearMonth.now(), val markings: List<OwnMarking> = emptyList(), val shifts: List<OwnShift> = emptyList(),
     val adjustments: List<Adjustment> = emptyList(), val treatments: List<Treatment> = emptyList(), val truncated: Boolean = false, val last: MarkingResponse? = null, val sentAdjustment: Adjustment? = null,
     val bank: TimeBankResponse? = null, val bankDate: String? = null, val mirror: MirrorStatus? = null, val mirrorCompetence: String? = null,
@@ -35,6 +36,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null,
     val offlineIssue: String? = null, val offlineReady: Boolean = false,
     val journeyTrackingActive: Boolean = false)
+/** The attempt the screen resends as is: its purpose and unit cannot change, and the time is when it was first tried. */
+data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTriedAt: Long?, val firstTriedSource: String? = null)
 
 /** Ponto: punch, today, history, receipts and adjustment requests, all through the web routes. Nothing is polled. */
 @HiltViewModel class TimeViewModel @Inject constructor(private val repository: ApiRepository, private val saved: androidx.lifecycle.SavedStateHandle,
@@ -60,7 +63,15 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     private var attemptPurpose: String?
         get() = saved["attemptPurpose"]
         set(value) { saved["attemptPurpose"] = value }
-    private fun clearAttempt() { attempt = null; pendingLocation = null; attemptUnitId = null; attemptPurpose = null }
+    private var attemptFirstTriedAt: Long?
+        get() = saved["attemptFirstTriedAt"]
+        set(value) { saved["attemptFirstTriedAt"] = value }
+    /** Where that first time came from: OFFICIAL, LOCAL_PERMIT or DEVICE (no reading; the phone clock). */
+    private var attemptFirstTriedSource: String?
+        get() = saved["attemptFirstTriedSource"]
+        set(value) { saved["attemptFirstTriedSource"] = value }
+    private fun clearAttempt() { attempt = null; pendingLocation = null; attemptUnitId = null; attemptPurpose = null; attemptFirstTriedAt = null; attemptFirstTriedSource = null }
+    private fun sourceOf(offset: Long?) = if (offset != null) ClockSource.OFFICIAL else ClockSource.NONE
     private fun serverRun(notice: String? = null, work: suspend () -> Unit) = run(notice) { try { work() } catch (cause: Exception) { throw Errors.withServerMessage(cause) } }
     init {
         auth.current?.uid?.let { uid -> viewModelScope.launch { offlineQueue.observe(uid).collect { rows ->
@@ -86,8 +97,10 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val cached = offlineQueue.cachedOptions(uid, elapsed)?.takeIf { it.mode == options.mode }
         val ready = cached != null
         val fallbackOffset = cached?.officialClock?.let { TimeRules.clockOffset(it, elapsed) }
-        mutable.update { current -> current.copy(offlineReady = ready, offlineIssue = if (ready) null else issue,
-            clockOffset = if (options.officialClock?.available == true) current.clockOffset else fallbackOffset) }
+        // The permit anchor is shown as such, never as a Hora Legal confirmed now.
+        mutable.update { current -> if (options.officialClock?.available == true) current.copy(offlineReady = ready, offlineIssue = if (ready) null else issue)
+            else current.copy(offlineReady = ready, offlineIssue = if (ready) null else issue, clockOffset = fallbackOffset,
+                clockSource = if (fallbackOffset != null) ClockSource.LOCAL_PERMIT else ClockSource.NONE) }
     }
 
     /** Options of today and the month on screen; read when the screen opens and on pull-to-refresh. */
@@ -98,7 +111,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
             auth.current?.uid?.let { offlineSync.sync(it) }
             val options = api.timeOptions(today.toString())
             val offset = TimeRules.clockOffset(options.officialClock, elapsed)
-            mutable.update { state -> state.copy(options = options, clockOffset = offset, today = today,
+            mutable.update { state -> state.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset), today = today,
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
             reconcileJourneyAvailability(options)
             refreshPermit(options, elapsed)
@@ -106,8 +119,10 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         } catch (cause: IOException) {
             val uid = auth.current?.uid ?: throw cause
             val options = offlineQueue.cachedOptions(uid, elapsed) ?: throw cause
-            mutable.update { state -> state.copy(options = options,
-                clockOffset = TimeRules.clockOffset(options.officialClock, elapsed), today = today,
+            val offset = TimeRules.clockOffset(options.officialClock, elapsed)
+            // Cached options carry the permit anchor; without the network it is not a Hora Legal read now.
+            mutable.update { state -> state.copy(options = options, clockOffset = offset,
+                clockSource = if (offset != null) ClockSource.LOCAL_PERMIT else ClockSource.NONE, today = today,
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
         }
     }
@@ -120,8 +135,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
         val markings = api.markings(date.toString(), next.toString())
         val monthReads = months.map { api.timeMonth(it.toString()) }
         val adjustmentReads = months.map { api.adjustments(it.toString()) }
-        mutable.update { current -> current.copy(options = options,
-            clockOffset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime()),
+        val offset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime())
+        mutable.update { current -> current.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset),
             today = LocalDate.now(), month = YearMonth.from(date), markings = markings.markings,
             truncated = markings.truncated || monthReads.any { it.truncated }, shifts = monthReads.flatMap { it.shifts },
             adjustments = adjustmentReads.flatMap { it.adjustments }, treatments = adjustmentReads.flatMap { it.treatments },
@@ -136,7 +151,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     fun refreshClock() = serverRun {
         val options = api.timeOptions(LocalDate.now().toString())
         val elapsed = android.os.SystemClock.elapsedRealtime()
-        mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, elapsed)) }
+        val offset = TimeRules.clockOffset(options.officialClock, elapsed)
+        mutable.update { it.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset)) }
         reconcileJourneyAvailability(options)
         refreshPermit(options, elapsed)
     }
@@ -154,6 +170,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     /** A new unit is a new attempt; the same attempt is resent until the server answers, so a retry never duplicates. */
     fun unit(id: String) { if (mutable.value.unitId != id) { clearAttempt(); mutable.update { it.copy(unitId = id) } } }
     fun hasPendingAttempt() = attempt != null
+    fun pendingAttempt(): PendingAttempt? = attempt?.let { PendingAttempt(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource) }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
         var state = mutable.value
@@ -169,13 +186,14 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
             return@serverRun
         }
         val replaying = attempt != null
-        require(replaying || TimeRules.canRecord(state.options, state.unitId)) { TimeRules.blockedReason(state.options) ?: "Escolha a unidade." }
+        require(replaying || TimeRules.canRecord(state.options, state.unitId)) { TimeRules.blockedReason(state.options, state.offlineReady) ?: "Escolha a unidade." }
         val selectedUnitId = if (replaying) attemptUnitId ?: state.unitId else state.unitId
         require(selectedUnitId != null) { "Escolha a unidade." }
         val selectedPurpose = if (replaying) attemptPurpose ?: declaredPurpose else declaredPurpose
         val zone = TimeRules.unitZone(state.options, selectedUnitId)
         val pending = attempt ?: (TimeRules.newAttempt() to TimeRules.workDate(officialNow(state), zone)).also {
-            attempt = it; attemptUnitId = selectedUnitId; attemptPurpose = selectedPurpose
+            attempt = it; attemptUnitId = selectedUnitId; attemptPurpose = selectedPurpose; attemptFirstTriedAt = officialNow(state)
+            attemptFirstTriedSource = if (state.clockOffset == null) "DEVICE" else state.clockSource.name
         }
         if (attemptUnitId == null) attemptUnitId = selectedUnitId
         if (attemptPurpose == null) attemptPurpose = selectedPurpose
@@ -252,7 +270,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     private suspend fun refreshOptions() {
         val options = api.timeOptions(LocalDate.now().toString())
         val elapsed = android.os.SystemClock.elapsedRealtime()
-        mutable.update { it.copy(options = options, clockOffset = TimeRules.clockOffset(options.officialClock, elapsed)) }
+        val offset = TimeRules.clockOffset(options.officialClock, elapsed)
+        mutable.update { it.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset)) }
         reconcileJourneyAvailability(options)
         refreshPermit(options, elapsed)
     }

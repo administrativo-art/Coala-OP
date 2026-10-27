@@ -47,7 +47,39 @@ class TimeRulesTest {
         assertTrue(displayOnly.officialClock?.available == true)
         assertFalse(TimeRules.canRecord(displayOnly, null))
         assertFalse(TimeRules.canRecord(options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE")), "slz"))
-        assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE")))!!.contains("Hora Legal Brasileira"))
+        val hlbOutage = options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"))
+        // The message follows the device state: a valid permit preserves, none blocks.
+        assertEquals("Sem autorização local válida. A batida fica bloqueada até a Hora Legal voltar.", TimeRules.blockedReason(hlbOutage))
+        assertEquals("Hora Legal indisponível. Sua batida será preservada neste aparelho.", TimeRules.blockedReason(hlbOutage, offlineReady = true))
+        assertEquals("Hora Legal indisponível. Seu ensaio será preservado neste aparelho.", TimeRules.blockedReason(hlbOutage.copy(mode = "pilot"), offlineReady = true))
+        assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false, issue = "REP_P_ESTABLISHMENT_NOT_READY")), offlineReady = true)!!.contains("fonte de horário"))
+    }
+    @Test fun nextPunchAndPlannedTimesFollowTheShift() {
+        val shift = OwnShift("2026-10-19", "work", "08:00", "17:00", breakType = "fixed", breakStart = "12:00", breakEnd = "13:00")
+        assertEquals(4, TimeRules.expectedPunches(shift))
+        assertEquals(listOf("08:00", "12:00", "13:00", "17:00"), TimeRules.plannedPunchTimes(shift))
+        assertEquals("2ª de 4 · Início do intervalo", TimeRules.nextPunchText(1, shift, "break_start"))
+        assertEquals("Batida extra", TimeRules.nextPunchText(4, shift, null))
+        assertEquals("1ª batida · Início da jornada", TimeRules.nextPunchText(0, null, "journey_start"))
+        assertTrue(TimeRules.plannedPunchTimes(null).isEmpty())
+    }
+    @Test fun workedSoFarCountsTheOpenSegmentAndStopsDuringTheBreak() {
+        fun punch(time: String, purpose: String) = com.coalaone.go.domain.DayPunch(time, 1, "r$time", "available", purpose = purpose, markedAt = "2026-10-19T$time:00-0300")
+        val now = Instant.parse("2026-10-19T14:47:00Z").toEpochMilli() // 11:47 em São Luís
+        assertEquals(225, TimeRules.workedSoFarMinutes(listOf(punch("08:02", "journey_start")), now))
+        assertEquals(238, TimeRules.workedSoFarMinutes(listOf(punch("08:02", "journey_start"), punch("12:00", "break_start")), now))
+        assertNull(TimeRules.workedSoFarMinutes(listOf(punch("08:02", "break_end")), now))
+    }
+    @Test fun recordsDayReadsMissingPunchesAndCycleProgress() {
+        val shift = OwnShift("2026-10-16", "work", "08:00", "12:00")
+        val today = LocalDate.parse("2026-10-19")
+        assertEquals(com.coalaone.go.domain.RecordDayState.MISSING, TimeRules.recordDay("2026-10-16", emptyList(), shift, emptyList(), today).first)
+        assertEquals(com.coalaone.go.domain.RecordDayState.EMPTY, TimeRules.recordDay("2026-10-19", emptyList(), shift.copy(date = "2026-10-19"), emptyList(), today).first)
+        assertEquals(56 to 181, TimeRules.cycleProgress(TimeBankCycle("2026-09-01", "2027-02-28", 1), LocalDate.parse("2026-10-26")))
+        assertEquals(181 to 181, TimeRules.cycleProgress(TimeBankCycle("2026-09-01", "2027-02-28", 1), LocalDate.parse("2027-05-01")))
+        assertEquals("credit", TimeRules.bankGroup("bank_credit"))
+        assertEquals("payroll", TimeRules.bankGroup("payroll_discount"))
+        assertEquals("review", TimeRules.bankGroup("review_required"))
     }
     @Test fun localPreservationOnlyCoversAnExplicitHlbOutage() {
         val hlbOutage = options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"), mode = "pilot")
