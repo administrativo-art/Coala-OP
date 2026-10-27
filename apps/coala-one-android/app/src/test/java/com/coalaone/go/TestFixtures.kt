@@ -44,13 +44,14 @@ class MemoryTimeOfflineQueue : TimeOfflineQueue {
     val rows = MutableStateFlow<List<TimeMarkingRow>>(emptyList())
     var savedPermit: OfflinePermit? = null
     var cachedOptionsValue: TimeOptions? = null
+    var permitRequestValue: OfflinePermitRequest? = null
     var readyRows = emptyList<Pair<TimeMarkingRow, MarkingRequest>>()
     val syncedIds = mutableListOf<String>()
     val failures = mutableListOf<Pair<String, AppFailure>>()
     val capturedUnitIds = mutableListOf<String>()
     val capturedPurposes = mutableListOf<String>()
     override fun observe(uid: String) = rows
-    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long, scope: String) = null
+    override suspend fun permitRequest(uid: String, workDate: String, elapsedRealtimeMs: Long, scope: String) = permitRequestValue
     override suspend fun savePermit(uid: String, permit: OfflinePermit) { savedPermit = permit }
     override suspend fun permit(uid: String) = savedPermit
     override suspend fun cachedOptions(uid: String, elapsedRealtimeMs: Long): TimeOptions? = cachedOptionsValue

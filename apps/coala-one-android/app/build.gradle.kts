@@ -42,8 +42,8 @@ android {
         applicationId = "coalaone.go"
         minSdk = 26
         targetSdk = 36
-        versionCode = configured("COALA_VERSION_CODE", "32").toInt()
-        versionName = configured("COALA_VERSION_NAME", "0.3.27")
+        versionCode = configured("COALA_VERSION_CODE", "33").toInt()
+        versionName = configured("COALA_VERSION_NAME", "0.3.28")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoted(configured("COALA_API_BASE_URL", "https://op.coalashakes.com")))
         buildConfigField("String", "FIREBASE_API_KEY", quoted(configured("COALA_FIREBASE_API_KEY")))
@@ -135,7 +135,6 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-messaging")
-    implementation("com.google.android.play:integrity:1.4.0")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")

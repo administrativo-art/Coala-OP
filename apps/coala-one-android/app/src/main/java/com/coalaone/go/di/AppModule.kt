@@ -44,7 +44,7 @@ import javax.inject.Singleton
             if (uid == null) null else {
                 val token = auth.token(); val proof = attestation.token()
                 if (auth.current?.uid != uid) throw AppFailure(ErrorCategory.AUTHENTICATION, false, "A conta mudou. Tente novamente.")
-                ApiCredentials(uid, token, proof)
+                ApiCredentials(uid, token, proof, attestation.currentFailure())
             }
         }).build()
     }

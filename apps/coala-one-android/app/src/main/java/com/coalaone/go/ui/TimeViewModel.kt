@@ -35,6 +35,7 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
     val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null,
     val offlineIssue: String? = null, val offlineReady: Boolean = false,
+    val monthDataAvailable: Boolean = false,
     val journeyTrackingActive: Boolean = false, val journeyClosurePromptDate: String? = null,
     val closedJourneyDate: String? = null)
 /** The attempt the screen resends as is: its purpose and unit cannot change, and the time is when it was first tried. */
@@ -44,7 +45,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
 @HiltViewModel class TimeViewModel @Inject constructor(private val repository: ApiRepository, private val saved: androidx.lifecycle.SavedStateHandle,
     private val auth: AuthGateway, private val offlineQueue: TimeOfflineQueue, private val offlineSync: TimeOfflineSync,
     private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
-    private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates()) : FeedbackViewModel() {
+    private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates(),
+    private val appAttestation: AppAttestation? = null) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState(closedJourneyDate = saved.get<String>("closedJourneyDate")))
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -92,7 +94,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             }
             updateContingencyState(uid, options, elapsed, null)
         } catch (cause: CancellationException) { throw cause }
-        catch (cause: Exception) { updateContingencyState(uid, options, elapsed, Errors.classify(cause).message) }
+        catch (cause: Exception) { updateContingencyState(uid, options, elapsed, Errors.classify(Errors.withServerMessage(cause)).message) }
     }
     private suspend fun updateContingencyState(uid: String, options: TimeOptions, elapsed: Long, issue: String?) {
         val cached = offlineQueue.cachedOptions(uid, elapsed)?.takeIf { it.mode == options.mode }
@@ -120,15 +122,29 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             refreshPermit(options, elapsed)
             readMonth(mutable.value.month)
         } catch (cause: IOException) {
-            val uid = auth.current?.uid ?: throw cause
-            val options = offlineQueue.cachedOptions(uid, elapsed) ?: throw cause
-            val offset = TimeRules.clockOffset(options.officialClock, elapsed)
-            // Cached options carry the permit anchor; without the network it is not a Hora Legal read now.
-            mutable.update { state -> state.copy(options = options, clockOffset = offset,
-                clockSource = if (offset != null) ClockSource.LOCAL_PERMIT else ClockSource.NONE, today = today,
-                unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id,
-                offlineReady = true, offlineIssue = null) }
+            mutable.update { it.copy(monthDataAvailable = false) }
+            restoreLocalAuthorization(cause, elapsed)
         }
+    }
+    private suspend fun restoreLocalAuthorization(cause: IOException, elapsed: Long) {
+        // AppFailure extends IOException too; an explicit access refusal must never open contingency.
+        if (Errors.classify(cause).category != ErrorCategory.NETWORK) throw cause
+        val uid = auth.current?.uid ?: throw cause
+        val known = mutable.value.options
+        val explicitBlock = known != null && (!known.eligible || !known.markingEnabled
+            || known.officialClock?.available == false && known.officialClock.issue != "REP_P_TIME_UNAVAILABLE")
+        if (explicitBlock) {
+            mutable.update { it.copy(offlineReady = false, offlineIssue = TimeRules.blockedReason(known, false)) }
+            return
+        }
+        val cached = offlineQueue.cachedOptions(uid, elapsed)?.takeIf { known == null || it.mode == known.mode }
+        val offset = TimeRules.clockOffset(cached?.officialClock, elapsed)
+        val issue = if (cached == null) offlineQueue.unavailableReason(uid, elapsed) else null
+        mutable.update { current -> current.copy(options = cached ?: current.options, clockOffset = offset,
+            clockSource = if (offset != null) ClockSource.LOCAL_PERMIT else ClockSource.NONE,
+            unitId = cached?.let { options -> current.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } }
+                ?: options.executionUnits.firstOrNull()?.id } ?: current.unitId,
+            offlineReady = cached != null, offlineIssue = issue) }
     }
     private fun reconcileSyncedMarkings(markings: List<SyncedOfflineMarking>) {
         val latest = markings.maxByOrNull { it.response.marking.markedAt } ?: return
@@ -150,7 +166,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val adjustmentReads = months.map { api.adjustments(it.toString()) }
         val offset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime())
         mutable.update { current -> current.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset),
-            today = LocalDate.now(), month = YearMonth.from(date), markings = markings.markings,
+            today = LocalDate.now(), month = YearMonth.from(date), monthDataAvailable = true, markings = markings.markings,
             truncated = markings.truncated || monthReads.any { it.truncated }, shifts = monthReads.flatMap { it.shifts },
             adjustments = adjustmentReads.flatMap { it.adjustments }, treatments = adjustmentReads.flatMap { it.treatments },
             bank = null, bankDate = null) }
@@ -161,21 +177,25 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun month(month: YearMonth) = serverRun { readMonth(month) }
     fun selectAuxiliaryMonth(month: YearMonth) { mutable.update { it.copy(month = month) } }
     /** Back from the background: only the options and the official reading, so the clock and the block are current. */
+    fun retryOfflineAuthorization() { appAttestation?.retry(); refreshClock() }
     fun refreshClock() = serverRun {
-        val options = api.timeOptions(LocalDate.now().toString())
         val elapsed = android.os.SystemClock.elapsedRealtime()
-        val offset = TimeRules.clockOffset(options.officialClock, elapsed)
-        mutable.update { it.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset)) }
-        reconcileJourneyAvailability(options)
-        refreshPermit(options, elapsed)
+        try {
+            val options = api.timeOptions(LocalDate.now().toString())
+            val offset = TimeRules.clockOffset(options.officialClock, elapsed)
+            mutable.update { it.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset)) }
+            reconcileJourneyAvailability(options)
+            refreshPermit(options, elapsed)
+        } catch (cause: IOException) { restoreLocalAuthorization(cause, elapsed) }
     }
     private suspend fun readMonth(month: YearMonth) {
+        mutable.update { it.copy(monthDataAvailable = false) }
         val (start, end) = TimeRules.monthRange(month)
         val key = month.toString()
         val markings = api.markings(start, end); val shifts = api.timeMonth(key); val adjustments = api.adjustments(key)
         mutable.update { current ->
             val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
-            current.copy(month = month, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
+            current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments,
                 unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true } ?: current.unitId)
         }
