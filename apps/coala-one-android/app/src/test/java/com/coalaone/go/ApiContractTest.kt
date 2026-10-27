@@ -74,6 +74,26 @@ class ApiContractTest {
             assertNull(server.takeRequest().getHeader("Authorization"))
         }
     }
+    @Test fun ownedTimeRequestsRejectViewAsAtDispatchAndNeverTransmitInternalOwnershipHeaders() = runTest {
+        MockWebServer().use { server ->
+            var target: String? = "other-person"
+            val client = OkHttpClient.Builder().addInterceptor(AuthenticationInterceptor(server.url("/"), { target }) {
+                ApiCredentials("owner", "token", "proof")
+            }).build()
+            val api = Retrofit.Builder().baseUrl(server.url("/")).client(client)
+                .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build().create(ApiService::class.java)
+            val request = MarkingRequest("attempt", "2026-10-27", "unit")
+            val refused = runCatching { api.mark(request, "owner") }.exceptionOrNull()
+            assertTrue(refused is AppFailure); assertEquals(0, server.requestCount)
+            target = null
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """{"status":"recorded","receiptId":"receipt","receiptStatus":"available","marking":{"nsr":1,"markedAt":"2026-10-27T12:00:00-0300","executionUnitId":"unit"}}"""))
+            api.mark(request, "owner")
+            val sent = server.takeRequest()
+            assertNull(sent.getHeader("X-Coala-Local-Owner")); assertNull(sent.getHeader(DEVELOPER_VIEW_AS_HEADER))
+            assertEquals("Bearer token", sent.getHeader("Authorization"))
+        }
+    }
     @Test fun serializedPayloadsSatisfyExactLegacyShapesAndGenerateCrossLanguageFixtures() {
         val count = com.coalaone.go.domain.Rules.countRequest(countSession(), mapOf("lot" to CountDraft(exit = "1")), true)
         val receive = ReceiveRequest("a", listOf(ReceiptRow("b", "l", 1.0, "")))

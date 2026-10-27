@@ -55,11 +55,19 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
 @AndroidEntryPoint class MainActivity : FragmentActivity() {
     private val session: SessionViewModel by viewModels()
     @Inject lateinit var images: ImageLoader
+    @Inject lateinit var timeOfflineScheduler: com.coalaone.go.offline.TimeOfflineScheduler
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { CoalaTheme {
             val identity by session.state.collectAsStateWithLifecycle()
+            val online = rememberOnline()
+            val viewAs by session.developerViewAs.collectAsStateWithLifecycle()
+            LaunchedEffect(identity.identity?.uid, identity.loading, identity.locked, viewAs.targetUserId, online) {
+                val uid = identity.identity?.uid
+                if (uid != null && !identity.loading && !identity.locked && viewAs.targetUserId == null && !session.mode.simulation)
+                    timeOfflineScheduler.prepare(uid)
+            }
             // Screens stay out of screenshots and recents, except for the accounts that send captures for app review.
             val captureAllowed = !identity.locked && identity.identity?.email?.lowercase() in SCREEN_CAPTURE_ACCOUNTS
             LaunchedEffect(captureAllowed) {
@@ -185,7 +193,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (local) "HORA ANCORADA PELA AUTORIZAÇÃO LOCAL" else "HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            Text(if (local) "HORÁRIO DO REGISTRO" else "HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
             if (pilot) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.accentSoft, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp))
             if (showTime) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
         }
@@ -196,8 +204,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             listOfNotNull(unitName, TimeRules.shiftText(today.timeShift)).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
             }
-            if (local) Text(if (options?.officialClock?.available == false) "Hora Legal indisponível. Sua batida será preservada neste aparelho."
-                else "Sem internet. Sua batida será preservada neste aparelho.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
+            if (local) Text("Seu ponto será salvo neste aparelho e enviado depois.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
@@ -257,7 +264,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
                 style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
-        Action(when { local && pilot -> "Preservar ensaio neste aparelho"; local -> "Preservar ponto neste aparelho"; else -> "Registrar ponto" }, dark = true, onClick = onRecord)
+        Action("Registrar ponto", dark = true, onClick = onRecord)
     }
 }
 @Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
@@ -285,7 +292,11 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val goalUnit = remember(owner) { context.getSharedPreferences("goals", android.content.Context.MODE_PRIVATE).getString("unit:$owner", null) }
     // A entrada e o retorno de qualquer módulo refazem o resumo; o contexto impede vazamento entre alvo DEV e ator real.
     LaunchedEffect(state?.modules, dataOwner) { state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }
-    LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
+    val online = rememberOnline()
+    LaunchedEffect(dataOwner, online) {
+        vm.refresh(dataOwner)
+        state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) }
+    }
     val currentModules by rememberUpdatedState(state?.modules)
     val currentDataOwner by rememberUpdatedState(dataOwner)
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -411,7 +422,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         if (developerViewAs.targetUserId == null) CardBlock {
             Text("Acesso sem internet", style = MaterialTheme.typography.titleMedium)
             Text(
-                if (sessionState.localUnlockEnabled) "A biometria está pronta para abrir o Coala Go sem conexão. A autorização das batidas é preparada automaticamente ao abrir Ponto online."
+                if (sessionState.localUnlockEnabled) "Use a biometria para abrir o Coala Go mesmo sem conexão."
                 else "O app oferece a biometria após o login para liberar o acesso sem conexão. Se você pulou essa etapa, pode ativá-la aqui.",
                 color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             if (!sessionState.localUnlockEnabled) Action("Ativar biometria", sessionState.busy, enabled = !sessionState.busy, onClick = onPrepareBiometric)
