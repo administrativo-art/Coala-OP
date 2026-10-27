@@ -126,11 +126,11 @@ import javax.inject.Singleton
         listOf("08:03", "12:00").forEachIndexed { index, time -> simulatedMarkings += OwnMarking("sim-$today-$index", today.toString(), 200L + index, zoned(today, time), unit.id, "01", if (index == 1) "pending" else "available", classification = MarkingClassification(purposes[index])) }
     } }
     override suspend fun timeOptions(workDate: String) = TimeOptions(workDate, true, true, listOf(ExecutionUnit(unit.id, unit.name, true), ExecutionUnit(units[1].id, units[1].name)), OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), journeyLocationEnabled = true)
-    override suspend fun offlinePermit(request: OfflinePermitRequest) = OfflinePermitResponse(OfflinePermit(
+    override suspend fun offlinePermit(request: OfflinePermitRequest, expectedOwner: String?) = OfflinePermitResponse(OfflinePermit(
         "simulation-offline-permit", request.installationId, request.deviceKeyId, request.keySecurity, request.bootCount,
         request.anchorElapsedRealtimeMs, java.time.Instant.now().toString(), java.time.Instant.now().toString(),
         java.time.Instant.now().plusSeconds(12 * 60 * 60).toString(), listOf(OfflinePermitUnit(unit.id, unit.name, "America/Fortaleza"))))
-    override suspend fun mark(request: MarkingRequest): MarkingResponse {
+    override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
         seedMarkings()
         val nsr = 300L + simulatedMarkings.size
         val at = java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(-3)).withNano(0).toString()

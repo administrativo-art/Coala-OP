@@ -49,9 +49,9 @@ class TimeRulesTest {
         assertFalse(TimeRules.canRecord(options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE")), "slz"))
         val hlbOutage = options.copy(officialClock = OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"))
         // The message follows the device state: a valid permit preserves, none blocks.
-        assertEquals("Sem autorização local válida. A batida fica bloqueada até a Hora Legal voltar.", TimeRules.blockedReason(hlbOutage))
-        assertEquals("Hora Legal indisponível. Sua batida será preservada neste aparelho.", TimeRules.blockedReason(hlbOutage, offlineReady = true))
-        assertEquals("Hora Legal indisponível. Seu ensaio será preservado neste aparelho.", TimeRules.blockedReason(hlbOutage.copy(mode = "pilot"), offlineReady = true))
+        assertEquals("Não foi possível registrar agora. Tente novamente em instantes.", TimeRules.blockedReason(hlbOutage))
+        assertEquals("Seu ponto será salvo neste aparelho e enviado depois.", TimeRules.blockedReason(hlbOutage, offlineReady = true))
+        assertEquals("Seu ensaio será salvo neste aparelho e enviado depois.", TimeRules.blockedReason(hlbOutage.copy(mode = "pilot"), offlineReady = true))
         assertTrue(TimeRules.blockedReason(options.copy(officialClock = OfficialClock(false, issue = "REP_P_ESTABLISHMENT_NOT_READY")), offlineReady = true)!!.contains("fonte de horário"))
     }
     @Test fun nextPunchAndPlannedTimesFollowTheShift() {
