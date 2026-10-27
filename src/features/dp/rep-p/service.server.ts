@@ -35,7 +35,7 @@ import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, rend
 import { buildRepPReceiptArchive } from './receipt-archive';
 import { isValidRepPPilotReceiptSnapshot, REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt,
   type RepPPilotReceiptSnapshot } from './pilot-receipt';
-import { repPOfficialMarkingEnabled, repPOfficialUserIds } from './runtime-config';
+import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialUserIds, repPPilotWorkDateAllowed } from './runtime-config';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -70,7 +70,7 @@ const CT_SORVETES_LEGAL_NAME = 'CT SORVETES LTDA';
 type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
   receiptSigner: RepPPadesSigner; markingEnabled: boolean; officialUserIds: ReadonlySet<string>;
-  pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>;
+  pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>; officialStartDate: string;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
@@ -113,6 +113,7 @@ const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb:
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: repPOfficialMarkingEnabled(),
   officialUserIds: repPOfficialUserIds(),
+  officialStartDate: repPOfficialStartDate(),
   pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
   pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
   fiscalStore: fiscalArtifactStore };
@@ -587,6 +588,9 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
     }
     return { status: 'replayed' as const, marking: existingData, pilot: true as const,
       location: storedLocationSummary(existingData.locationSummary), ...await issuePilotReceipt(deps, existingData) };
+  }
+  if (!repPPilotWorkDateAllowed(input.workDate, deps.officialStartDate)) {
+    throw fail('REP_P_PILOT_CUTOVER_REACHED', 'O ensaio não aceita marcações na data de início do período oficial.', 'CONFLICT');
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });

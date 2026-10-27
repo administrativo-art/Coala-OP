@@ -184,14 +184,19 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 }
 
 /** Digital clock with seconds (Portaria 671, Anexo IX), from the official reading plus the phone's elapsed time. */
-@Composable private fun OfficialClockCard(state: TimeState) {
+@Composable private fun OfficialClockCard(state: TimeState, online: Boolean) {
     val zone = TimeRules.unitZone(state.options, state.unitId)
     // Monotonic clock plus the official offset: changing the phone's hour does not move the time shown.
     var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
     LaunchedEffect(state.clockOffset) { while (true) { official = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0); delay(1000 - official % 1000) } }
     // The permit anchor is shown under its own name; only a confirmed reading is "Hora Legal Brasileira".
-    val local = state.clockSource == ClockSource.LOCAL_PERMIT
-    val showTime = state.clockSource != ClockSource.NONE && state.clockOffset != null
+    val visibleSource = when {
+        online -> state.clockSource
+        state.offlineReady && state.clockOffset != null -> ClockSource.LOCAL_PERMIT
+        else -> ClockSource.NONE
+    }
+    val local = visibleSource == ClockSource.LOCAL_PERMIT
+    val showTime = visibleSource != ClockSource.NONE && state.clockOffset != null
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(if (local) "HORA ANCORADA PELA AUTORIZAÇÃO LOCAL" else "HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
@@ -277,7 +282,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val screenBusy = feedback.busy || capturingLocation
     val pendingAttempt = vm.hasPendingAttempt()
     val canPreserve = !pendingAttempt && TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)
-    val preserving = !pendingAttempt && (!online || canPreserve)
+    val canPreserveOffline = !pendingAttempt && TimeRules.canPreserveOffline(state.options, state.unitId, state.offlineReady)
+    val preserving = if (online) canPreserve else canPreserveOffline
     val zone = TimeRules.unitZone(state.options, state.unitId)
     var officialNow by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
     LaunchedEffect(state.clockOffset) {
@@ -287,13 +293,16 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
     }
     LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
-        if (pendingDirectRecord && (TimeRules.canRecord(state.options, state.unitId) || canPreserve)) {
+        if (pendingDirectRecord && ((pendingAttempt && online) || TimeRules.canRecord(state.options, state.unitId)
+                || if (online) canPreserve else canPreserveOffline)) {
             confirming = true
             pendingDirectRecord = false
         }
     }
     val confirmationTime = TimeRules.clockText(officialNow, zone)
-    val breakStatus = TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
+    val declaredJourneyEnd = todayMarkings.sortedBy { it.markedAt }.lastOrNull()?.classification?.purpose == "journey_end"
+    val cycleClosed = state.closedJourneyDate == today || TimeRules.autoJourneyCycleClosed(today, todayShift, todayMarkings, officialNow, zone)
+    val breakStatus = if (cycleClosed) null else TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
     val scope = rememberCoroutineScope()
     fun captureAndRecord() {
         val purpose = declaredPurpose ?: return
@@ -410,9 +419,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 pendingAttempt -> "Conecte para reenviar a batida"
                 preserving && pilotMode -> "Preservar ensaio neste aparelho"
                 preserving -> "Preservar ponto neste aparelho"
+                cycleClosed -> "Registrar nova batida"
                 else -> "Registrar ponto"
             }, screenBusy,
-                enabled = !(!online && pendingAttempt) && (pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve)) { confirming = true }
+                enabled = !(!online && pendingAttempt) && (pendingAttempt || TimeRules.canRecord(state.options, state.unitId)
+                    || if (online) canPreserve else canPreserveOffline)) { confirming = true }
         }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
@@ -424,10 +435,10 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }, header = {
         TopBar(screenTitle, busy = screenBusy, onBack = leave)
         // A escala escolhe a unidade automaticamente; só há escolha manual quando o dia não tem unidade escalada.
-        if (section == "today" && (todayShift?.unitId == null || todayShift?.executionUnitPolicy == "free") && units.size > 1) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), screenBusy || confirming) { vm.unit(it) }
+        if (section == "today" && (todayShift?.unitId == null || todayShift?.executionUnitPolicy == "free") && units.size > 1) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), screenBusy || confirming || pendingAttempt) { vm.unit(it) }
     }) {
         if (section == "today") {
-            OfficialClockCard(state)
+            OfficialClockCard(state, online)
             if (todayShift?.executionUnitPolicy == "free" && todayShift.locationTrackingPolicy == "workday") {
                 CardBlock {
                     Text("Entre unidades", style = MaterialTheme.typography.titleMedium)
@@ -497,6 +508,19 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     Action("Ok", secondary = true) { vm.dismissLast() }
                 }
             }
+            if (state.journeyClosurePromptDate == today) CardBlock(selected = true) {
+                Text("Jornada registrada", style = MaterialTheme.typography.titleMedium)
+                Text("Deseja encerrar o acompanhamento deste ciclo? Isso conclui apenas os avisos e o resumo; uma nova batida continua sempre disponível.",
+                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                FooterPair("Deixar em aberto", !feedback.busy, { vm.deferJourneyClosure() }, "Encerrar agora", !feedback.busy) { vm.closeJourneyCycle(today) }
+            } else if (declaredJourneyEnd && !cycleClosed) CardBlock {
+                Text("Fim da jornada registrado", style = MaterialTheme.typography.titleMedium)
+                Text("O ciclo continua aberto. Você pode encerrá-lo agora ou registrar outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                Action("Encerrar ciclo", secondary = true, enabled = !feedback.busy) { vm.closeJourneyCycle(today) }
+            } else if (cycleClosed) CardBlock(selected = true) {
+                Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
+                Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
             CardBlock {
                 Text(dayTitle(state.today), style = MaterialTheme.typography.titleMedium)
                 Text(TimeRules.shiftText(todayShift) ?: "Sem turno na escala de hoje", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -505,8 +529,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 if (todayPunches.isEmpty()) Text("Nenhuma batida hoje.", color = Tokens.muted)
                 PunchList(todayPunches, !feedback.busy, units) { receipt = it to markedAtOf(it) }
             }
-            if (todayMarkings.any { it.pilot }) Text("Ajustes formais ficam indisponíveis no ensaio; a classificação de cada batida continua editável.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            else Action("Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
+            if (todayMarkings.any { it.pilot }) Text("No ensaio, o pedido de ajuste é uma simulação: pode ser analisado pelo DP, mas não altera ponto, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            Action(if (todayMarkings.any { it.pilot }) "Simular pedido de ajuste" else "Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
             Text("CONSULTAS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             listOf(
                 Triple("records", "Registros", "Batidas e detalhes de cada dia"),
@@ -803,9 +827,9 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                 val pilotDay = state.markings.any { it.workDate == key && it.pilot }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.weight(1f)) { Action("Detalhar dia", enabled = !busy) { onDay(key) } }
-                    if (!pilotDay) Box(Modifier.weight(1f)) { Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) } }
+                    Box(Modifier.weight(1f)) { Action(if (pilotDay) "Simular ajuste" else "Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) } }
                 }
-                if (pilotDay) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                if (pilotDay) Text("A simulação não produz tratamento nem efeito fiscal.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -851,8 +875,9 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                     Text(runCatching { dayTitle(LocalDate.parse(adjustment.workDate)) }.getOrDefault(adjustment.workDate), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                     Text(listOf(TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == adjustment.kind }?.second ?: adjustment.kind, times).filter { it.isNotBlank() }.joinToString(" · "),
                         style = MaterialTheme.typography.titleMedium)
+                    if (adjustment.scope == "pilot") Text("SIMULAÇÃO DO ENSAIO", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = .5.sp))
                 }
-                StatusChip(TimeRules.ADJUSTMENT_STATUS[adjustment.status]?.substringBefore(" ·") ?: adjustment.status, ink, background)
+                StatusChip(if (adjustment.scope == "pilot" && adjustment.status == "approved") "Simulação aprovada" else TimeRules.ADJUSTMENT_STATUS[adjustment.status]?.substringBefore(" ·") ?: adjustment.status, ink, background)
                 DropdownChevron(open, Tokens.muted)
             }
             if (open) {
@@ -864,7 +889,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                             Text("Batida original", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                             Text(operation.target?.let { TimeRules.minuteOf(it.markedAt) } ?: "—", color = Tokens.faint,
                                 style = MaterialTheme.typography.titleLarge.copy(fontFamily = CodeFont, textDecoration = if (operation.target != null && operation.kind != "include") TextDecoration.LineThrough else null))
-                            operation.target?.let { Text("Registro oficial ${it.nsr}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) }
+                            operation.target?.let { Text(if (adjustment.scope == "pilot") "Sequência do ensaio ${it.pilotSequence ?: "—"}" else "Registro oficial ${it.nsr ?: "—"}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) }
                         }
                         Text("→", color = Tokens.faint, style = MaterialTheme.typography.titleMedium)
                         Column(Modifier.weight(1f)) {
@@ -887,7 +912,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                         }
                     }
                 }
-                if (adjustment.status == "in_review") Text("A batida original continua no registro; nada é apagado.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+                if (adjustment.scope == "pilot") Text("A decisão testa o fluxo e não altera o ponto, o banco, o espelho ou a folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                else if (adjustment.status == "in_review") Text("A batida original continua no registro; nada é apagado.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
                 Action("Ver dia", secondary = true, enabled = !busy) { onDay(adjustment.workDate) }
             }
         }
@@ -948,14 +974,14 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         adjustments.forEach { adjustment ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == adjustment.kind }?.second ?: adjustment.kind, modifier = Modifier.weight(1f))
-                StatusChip(TimeRules.ADJUSTMENT_STATUS[adjustment.status] ?: adjustment.status,
+                StatusChip(if (adjustment.scope == "pilot" && adjustment.status == "approved") "Simulação aprovada · sem efeito" else TimeRules.ADJUSTMENT_STATUS[adjustment.status] ?: adjustment.status,
                     if (adjustment.status == "approved") Tokens.okInk else if (adjustment.status == "in_review") Tokens.warning else Tokens.muted,
                     if (adjustment.status == "approved") Tokens.okBg else if (adjustment.status == "in_review") Tokens.warningBg else Tokens.soft)
             }
         }
     }
-    if (pilotDay) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-    else Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(workDate) }
+    if (pilotDay) Text("A simulação pode ser analisada pelo DP, mas não altera ponto, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    Action(if (pilotDay) "Simular ajuste deste dia" else "Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(workDate) }
 }
 
 @Composable private fun AdjustmentWeekPicker(value: String, today: LocalDate, enabled: Boolean, onChange: (String) -> Unit) {
@@ -1001,6 +1027,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     val punches = TimeRules.day(date, state.markings, state.treatments)
     val choices = punches.filter { !it.discarded && !it.included && it.receiptId != null }
     val sent = state.sentAdjustment
+    val pilotSimulation = state.markings.any { it.workDate == date && it.pilot }
+        || (date == state.today.toString() && state.options?.mode == "pilot")
     val kindLabel = TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == kind }?.second.orEmpty()
     fun operations() = when (kind) {
         "include" -> includedTimes.filter { it.isNotBlank() }.map { AdjustmentRequestOperation("include", newTime = it, executionUnitId = state.unitId) }
@@ -1008,7 +1036,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         else -> selectedTargets.map { AdjustmentRequestOperation("correct", targetReceiptId = it, newTime = correctedTimes[it].orEmpty(), executionUnitId = state.unitId) }
     }
     fun check(): Boolean = try { TimeRules.adjustmentRequest(attemptId, date, operations(), reason, state.today); problem = null; true } catch (cause: IllegalArgumentException) { problem = cause.message; false }
-    Page("Pedir ajuste", feedback.copy(error = problem ?: feedback.error), onClose, footer = {
+    Page(if (pilotSimulation) "Simular ajuste" else "Pedir ajuste", feedback.copy(error = problem ?: feedback.error), onClose, footer = {
         when {
             sent != null -> Action("Concluir") { onClose() }
             review -> FooterPair("Editar", !feedback.busy, { review = false }, "Enviar pedido", !feedback.busy) { vm.requestAdjustment(attemptId, date, operations(), reason) }
@@ -1017,8 +1045,9 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }) {
         if (sent != null) {
             CardBlock(selected = true) {
-                Text("Pedido enviado", style = MaterialTheme.typography.titleMedium)
-                Text("O DP analisa e decide. Você acompanha a situação no Histórico do dia ${fullDate(sent.workDate)}.", color = Tokens.muted)
+                Text(if (sent.scope == "pilot") "Simulação enviada" else "Pedido enviado", style = MaterialTheme.typography.titleMedium)
+                Text(if (sent.scope == "pilot") "O DP pode analisar todo o fluxo. A decisão não altera ponto, banco, espelho ou folha."
+                    else "O DP analisa e decide. Você acompanha a situação no Histórico do dia ${fullDate(sent.workDate)}.", color = Tokens.muted)
             }
             return@Page
         }
@@ -1029,14 +1058,19 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                 SummaryLine("Dia", fullDate(date))
                 SummaryLine("Batidas registradas", punches.filter { !it.discarded }.joinToString(" · ") { it.time }.ifBlank { "Nenhuma" })
                 SummaryLine("Pedido", kindLabel)
-                if (kind != "include") SummaryLine("Batidas escolhidas", selectedTargets.mapNotNull { id -> choices.firstOrNull { it.receiptId == id }?.let { "${it.time} · registro oficial ${it.nsr}" } }.joinToString("; "))
+                if (kind != "include") SummaryLine("Batidas escolhidas", selectedTargets.mapNotNull { id -> choices.firstOrNull { it.receiptId == id }?.let { "${it.time} · ${if (it.pilot) "sequência do ensaio" else "registro oficial"} ${it.nsr}" } }.joinToString("; "))
                 if (kind == "include") SummaryLine("Horários informados", includedTimes.filter { it.isNotBlank() }.joinToString(" · "))
                 if (kind == "correct") SummaryLine("Correções", selectedTargets.mapNotNull { id -> choices.firstOrNull { it.receiptId == id }?.let { "${it.time} → ${correctedTimes[id].orEmpty()}" } }.joinToString("; "))
                 SummaryLine("Justificativa", reason.trim())
             }
-            Text("A batida original nunca é apagada. Se o DP aprovar, o ajuste entra no ponto com a identificação de quem pediu e de quem decidiu.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Text(if (pilotSimulation) "SIMULAÇÃO · A aprovação serve somente para testar o fluxo e não produz tratamento ou efeito fiscal."
+                else "A batida original nunca é apagada. Se o DP aprovar, o ajuste entra no ponto com a identificação de quem pediu e de quem decidiu.",
+                color = if (pilotSimulation) Tokens.warning else Tokens.muted, style = MaterialTheme.typography.bodySmall)
             return@Page
         }
+        if (pilotSimulation) Text("SIMULAÇÃO DO ENSAIO · O pedido e a decisão ficam separados do ponto oficial e não entram no fechamento.",
+            color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
         AdjustmentWeekPicker(date, state.today, !feedback.busy) { date = it }
         Text("O que aconteceu?", style = MaterialTheme.typography.titleMedium)
         TimeRules.ADJUSTMENT_KINDS.forEach { (id, label) ->
@@ -1070,7 +1104,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                         selectedTargets = if (selected) selectedTargets - id else selectedTargets + id
                     }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(selected, null)
-                        Text("${punch.time} · registro oficial ${punch.nsr}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                        Text("${punch.time} · ${if (punch.pilot) "sequência do ensaio" else "registro oficial"} ${punch.nsr}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                     }
                     if (kind == "correct" && selected) LabeledInput("Horário correto", correctedTimes[id].orEmpty(), !feedback.busy, placeholder = "00:00") { next ->
                         correctedTimes = correctedTimes + (id to next.filter { char -> char.isDigit() || char == ':' }.take(5))

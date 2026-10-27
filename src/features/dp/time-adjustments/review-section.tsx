@@ -69,7 +69,7 @@ export function AdjustmentReviewSection({ firebaseUser, people }: { firebaseUser
         <LiftRow key={item.id} table onClick={() => { setSelected(item); setSelectedClassification(null); setReason(""); setDecisionError(null); }} className="flex items-center justify-between gap-3">
           <span className="min-w-0">
             <span className="block truncate text-sm font-extrabold text-ds-ink">{item.employeeName ?? "Titular"}</span>
-            <span className="block text-sm text-ds-ink">{ADJUSTMENT_KIND_LABELS[item.kind].title} · {item.workDate.split("-").reverse().join("/")}</span>
+            <span className="block text-sm text-ds-ink">{item.scope === "pilot" ? "Simulação · " : ""}{ADJUSTMENT_KIND_LABELS[item.kind].title} · {item.workDate.split("-").reverse().join("/")}</span>
           </span>
           <StatusPill variant="info">Em análise</StatusPill>
         </LiftRow>
@@ -84,12 +84,12 @@ export function AdjustmentReviewSection({ firebaseUser, people }: { firebaseUser
         </LiftRow>
       ))}
       {selected ? (
-        <SidePanel open onOpenChange={(next) => { if (!next && !busy) setSelected(null); }} kicker="Ajuste de ponto"
+        <SidePanel open onOpenChange={(next) => { if (!next && !busy) setSelected(null); }} kicker={selected.scope === "pilot" ? "Simulação de ajuste" : "Ajuste de ponto"}
           title={selected.employeeName ?? "Titular"} subtitle={`${ADJUSTMENT_KIND_LABELS[selected.kind].title} · ${selected.workDate.split("-").reverse().join("/")}`}>
           <AdjustmentReport adjustment={selected} names={names}
             originals={(selected.operations?.length ? selected.operations.map((operation) => operation.target).filter(Boolean) : selected.target ? [selected.target] : [])
-              .map((target) => ({ receiptId: target!.receiptId, markedAt: target!.markedAt, nsr: target!.nsr }))} />
-          <PanelSection title="Decisão" aside="justificativa obrigatória">
+              .map((target) => ({ receiptId: target!.receiptId, markedAt: target!.markedAt, nsr: target!.nsr ?? target!.pilotSequence ?? 0 }))} />
+          <PanelSection title="Decisão" aside={selected.scope === "pilot" ? "sem efeito fiscal" : "justificativa obrigatória"}>
             <textarea rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)}
               className="w-full rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-sm text-ds-ink"
               placeholder="Ex.: conferido com a gerente da unidade e com a câmera do quiosque." />
@@ -98,7 +98,7 @@ export function AdjustmentReviewSection({ firebaseUser, people }: { firebaseUser
             <div className="flex gap-2">
               <Button type="button" variant="ds-secondary" disabled={busy || reason.trim().length < 10} onClick={() => void decide("reject")}>Recusar</Button>
               <Button type="button" variant="primary-modal" className="flex-1" loading={busy} loadingLabel="Registrando…"
-                disabled={reason.trim().length < 10} onClick={() => void decide("approve")}>Aprovar ajuste</Button>
+                disabled={reason.trim().length < 10} onClick={() => void decide("approve")}>{selected.scope === "pilot" ? "Aprovar simulação" : "Aprovar ajuste"}</Button>
             </div>
           </PanelSection>
         </SidePanel>

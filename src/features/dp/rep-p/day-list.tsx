@@ -166,7 +166,7 @@ export type ClassificationActions = {
 
 export function adjustmentStateOf(day: DayView, today: string, readOnly: boolean, markingMode: "official" | "pilot" | "disabled" | null) {
   if (readOnly || day.date > today) return "hidden" as const;
-  if (markingMode === "pilot" || day.allMarkings.some((marking) => marking.pilot)) return "pilot" as const;
+  if (day.allMarkings.some((marking) => marking.pilot) || (markingMode === "pilot" && day.date === today)) return "pilot" as const;
   return markingMode === "official" ? "available" as const : "hidden" as const;
 }
 
@@ -292,7 +292,9 @@ export function DayPanel({ day, today, unitNames, receipts, classifications, onC
               className="flex w-full items-center justify-between gap-2 rounded-ds-sm py-1 text-left text-sm hover:bg-ds-warm/60">
               <span><span className="block font-bold text-ds-ink">{ADJUSTMENT_KIND_LABELS[adjustment.kind].title}</span>
                 <span className="block text-xs text-ds-ink-muted">ver relatório</span></span>
-              <StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>{ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
+              <StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>
+                {adjustment.scope === "pilot" && adjustment.status === "approved" ? "Simulação aprovada · sem efeito" : ADJUSTMENT_STATUS_LABELS[adjustment.status]}
+              </StatusPill>
             </button>
           ))}
         </PanelSection>
@@ -355,7 +357,10 @@ export function DayPanel({ day, today, unitNames, receipts, classifications, onC
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> A classificação organiza a jornada e os avisos. Alterá-la não muda o horário nem o registro fiscal da batida.
         </p>
         {adjustmentState === "pilot" ? (
-          <p className="rounded-ds-sm bg-ds-warn-bg px-3 py-2 text-xs text-ds-warn">Batidas de ensaio não aceitam correção formal. Você pode ajustar somente a classificação usada nesta prévia.</p>
+          <div className="space-y-2 rounded-ds-sm bg-ds-warn-bg px-3 py-2 text-xs text-ds-warn">
+            <p>A solicitação será uma simulação analisável pelo DP, sem alterar ponto, banco, espelho, folha ou documentos fiscais.</p>
+            <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAdjustment(day.date)}>Simular correção das batidas</Button>
+          </div>
         ) : null}
         {adjustmentState === "available" ? (
           <div className="space-y-2">

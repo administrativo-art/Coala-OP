@@ -17,15 +17,21 @@ import javax.inject.Inject
 data class HomeToday(val contextKey: String? = null, val loaded: Boolean = false, val scheduleAvailable: Boolean? = null,
     val hasSchedule: Boolean = false, val shift: String? = null, val shiftShort: String? = null, val shiftUnit: String? = null,
     val timeOptions: TimeOptions? = null, val timeClockOffset: Long? = null, val timePunches: List<OwnMarking> = emptyList(), val timeShift: OwnShift? = null,
-    val timeWorkDate: String? = null, val timeShifts: List<OwnShift> = emptyList(), val timeTreatments: List<Treatment> = emptyList(),
+    val timeWorkDate: String? = null, val timeShifts: List<OwnShift> = emptyList(), val timeMarkingsAvailable: Boolean? = null,
+    val timeTreatments: List<Treatment> = emptyList(),
     val timeTreatmentsAvailable: Boolean? = null, val timeOfflinePending: Int = 0,
     val timeClockSource: com.coalaone.go.domain.ClockSource = com.coalaone.go.domain.ClockSource.NONE,
     val goalUnit: String? = null, val goalToday: Double? = null, val goalDaily: Double? = null, val goalPercent: Double? = null, val openCounts: List<String> = emptyList(), val repositions: Int? = null)
 /** Never expose a summary loaded for another owner while Compose schedules the next reload. */
 fun HomeToday.visibleFor(contextKey: String) = takeIf { it.contextKey == contextKey } ?: HomeToday(contextKey = contextKey)
 /** Profile and module grants must never be rendered for a different real/view-as identity. */
-data class HomeProfile(val contextKey: String? = null, val response: ProfileResponse? = null)
+data class HomeProfile(val contextKey: String? = null, val response: ProfileResponse? = null, val unavailable: Boolean = false)
 fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextKey == contextKey }
+fun HomeProfile.modulesForHome(contextKey: String, viewingAnotherUser: Boolean): Modules? {
+    if (this.contextKey != contextKey) return null
+    if (unavailable) return Modules(timeRecording = true).takeIf { !viewingAnotherUser }
+    return response?.modules
+}
 @HiltViewModel class HomeViewModel @Inject constructor(private val repository: ApiRepository, private val mode: RuntimeMode, private val queue: UploadQueue, private val scheduler: WorkScheduler,
     private val timeOfflineQueue: TimeOfflineQueue,
     private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore(),
@@ -59,13 +65,19 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
             try {
                 val response = repository.profile()
                 if (profileContextKey == contextKey && profileGeneration == generation) {
-                    mutable.value = HomeProfile(contextKey, response)
+                    mutable.value = HomeProfile(contextKey, response, unavailable = false)
                     feedbackMutable.value = feedbackMutable.value.copy(busy = false)
                 }
             } catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
             catch (cause: Exception) {
                 if (profileContextKey == contextKey && profileGeneration == generation) {
+                    mutable.value = mutable.value.copy(unavailable = true)
                     feedbackMutable.value = Feedback(error = Errors.classify(cause).message)
+                    // Losing the profile endpoint must not hide the legal point entry. The
+                    // Point screen still enforces the cached permit and all server gates.
+                    if (contextKey == mode.identity().uid) {
+                        loadToday(Modules(timeRecording = true), null, contextKey, force = true)
+                    }
                 }
             }
         }
@@ -97,7 +109,7 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
         }
     }
 
-    private data class TimeSummary(val options: TimeOptions?, val markings: List<OwnMarking>, val month: OwnMonth?, val elapsed: Long)
+    private data class TimeSummary(val options: TimeOptions?, val markings: List<OwnMarking>?, val month: OwnMonth?, val elapsed: Long)
 
     init {
         if (!mode.simulation) mode.identity().uid.let { uid -> viewModelScope.launch {
@@ -157,7 +169,7 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                     val elapsed = android.os.SystemClock.elapsedRealtime()
                     coroutineScope {
                         val options = quiet { repository.api.timeOptions(now.toString()) }
-                        val markings = async { quiet { repository.api.markings(previous.toString(), now.toString()).markings }.orEmpty() }
+                        val markings = async { quiet { repository.api.markings(previous.toString(), now.toString()).markings } }
                         val month = async { quiet { repository.api.timeMonth(now.toString().take(7)) } }
                         val previousMonth = async { if (previous.month == now.month) null else quiet { repository.api.timeMonth(previous.toString().take(7)) } }
                         val currentMonth = month.await()
@@ -174,18 +186,20 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                 val markings = summary.markings
                 val month = summary.month
                 val shifts = month?.shifts.orEmpty()
-                val context = TimeRules.homeWorkContext(now, shifts, mergedPunches(markings))
+                val context = TimeRules.homeWorkContext(now, shifts, mergedPunches(markings.orEmpty()))
                 val ownShift = context.shift
                 val officialOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed)
                 // Without the network or the Hora Legal, the home shows the anchor of a valid local permit under its own name.
-                val permitOffset = if (officialOffset != null || contextKey != mode.identity().uid) null
-                    else quiet { timeOfflineQueue.cachedOptions(contextKey, summary.elapsed) }?.takeIf { options == null || it.mode == options.mode }
-                        ?.let { TimeRules.clockOffset(it.officialClock, summary.elapsed) }
-                next = next.copy(timeOptions = options, timeClockOffset = officialOffset ?: permitOffset,
+                val cachedOptions = if (officialOffset != null || contextKey != mode.identity().uid) null
+                    else quiet { timeOfflineQueue.cachedOptions(contextKey, summary.elapsed) }
+                        ?.takeIf { options == null || it.mode == options.mode }
+                val permitOffset = cachedOptions?.let { TimeRules.clockOffset(it.officialClock, summary.elapsed) }
+                next = next.copy(timeOptions = options ?: cachedOptions, timeClockOffset = officialOffset ?: permitOffset,
                     timeClockSource = when { officialOffset != null -> com.coalaone.go.domain.ClockSource.OFFICIAL
                         permitOffset != null -> com.coalaone.go.domain.ClockSource.LOCAL_PERMIT
                         else -> com.coalaone.go.domain.ClockSource.NONE },
                     timePunches = context.markings, timeShift = ownShift, timeWorkDate = context.date, timeShifts = shifts,
+                    timeMarkingsAvailable = markings != null,
                     scheduleAvailable = month != null, hasSchedule = ownShift != null,
                     shiftUnit = ownShift?.unitName, shift = TimeRules.shiftText(ownShift),
                     shiftShort = ownShift?.let { if (it.type == "day_off") "Folga" else "${it.startTime?.take(2)}h–${it.endTime?.take(2)}h" })

@@ -35,7 +35,8 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
     val offlineRows: List<TimeMarkingRow> = emptyList(), val lastOffline: CapturedOfflineMarking? = null,
     val offlineIssue: String? = null, val offlineReady: Boolean = false,
-    val journeyTrackingActive: Boolean = false)
+    val journeyTrackingActive: Boolean = false, val journeyClosurePromptDate: String? = null,
+    val closedJourneyDate: String? = null)
 /** The attempt the screen resends as is: its purpose and unit cannot change, and the time is when it was first tried. */
 data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTriedAt: Long?, val firstTriedSource: String? = null)
 
@@ -44,7 +45,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     private val auth: AuthGateway, private val offlineQueue: TimeOfflineQueue, private val offlineSync: TimeOfflineSync,
     private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
     private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates()) : FeedbackViewModel() {
-    private val mutable = MutableStateFlow(TimeState())
+    private val mutable = MutableStateFlow(TimeState(closedJourneyDate = saved.get<String>("closedJourneyDate")))
     val state = mutable.asStateFlow()
     private val api get() = repository.api
     /**
@@ -107,8 +108,10 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun load() = serverRun {
         val today = LocalDate.now()
         val elapsed = android.os.SystemClock.elapsedRealtime()
+        var synced = emptyList<SyncedOfflineMarking>()
         try {
-            auth.current?.uid?.let { offlineSync.sync(it) }
+            auth.current?.uid?.let { synced = offlineSync.syncWithResult(it).confirmed }
+            reconcileSyncedMarkings(synced)
             val options = api.timeOptions(today.toString())
             val offset = TimeRules.clockOffset(options.officialClock, elapsed)
             mutable.update { state -> state.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset), today = today,
@@ -123,8 +126,18 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             // Cached options carry the permit anchor; without the network it is not a Hora Legal read now.
             mutable.update { state -> state.copy(options = options, clockOffset = offset,
                 clockSource = if (offset != null) ClockSource.LOCAL_PERMIT else ClockSource.NONE, today = today,
-                unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
+                unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id,
+                offlineReady = true, offlineIssue = null) }
         }
+    }
+    private fun reconcileSyncedMarkings(markings: List<SyncedOfflineMarking>) {
+        val latest = markings.maxByOrNull { it.response.marking.markedAt } ?: return
+        val workDate = latest.request.workDate
+        if (saved.get<String>("closedJourneyDate") == workDate) saved["closedJourneyDate"] = null
+        mutable.update { it.copy(
+            closedJourneyDate = saved.get<String>("closedJourneyDate"),
+            journeyClosurePromptDate = workDate.takeIf { latest.request.declaredPurpose == "journey_end" },
+        ) }
     }
     /** Direct Home shortcut: load the selected journey and its possible overnight continuation. */
     fun loadDay(workDate: String) = serverRun {
@@ -167,8 +180,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
                 unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true } ?: current.unitId)
         }
     }
-    /** A new unit is a new attempt; the same attempt is resent until the server answers, so a retry never duplicates. */
-    fun unit(id: String) { if (mutable.value.unitId != id) { clearAttempt(); mutable.update { it.copy(unitId = id) } } }
+    /** A pending attempt is immutable: its unit is changed only after a conclusive server answer. */
+    fun unit(id: String) { if (attempt == null && mutable.value.unitId != id) mutable.update { it.copy(unitId = id) } }
     fun hasPendingAttempt() = attempt != null
     fun pendingAttempt(): PendingAttempt? = attempt?.let { PendingAttempt(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource) }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
@@ -176,6 +189,9 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         var state = mutable.value
         if (!online) {
             require(attempt == null) { "Há uma tentativa anterior aguardando confirmação. Conecte-se para reenviar a mesma batida sem duplicá-la." }
+            require(TimeRules.canPreserveOffline(state.options, state.unitId, state.offlineReady)) {
+                "Sem autorização local válida. Conecte-se para preparar a contingência antes de registrar sem internet."
+            }
             preserveLocally(state, declaredPurpose)
             return@serverRun
         }
@@ -215,7 +231,11 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             throw cause
         }
         clearAttempt()
-        mutable.update { it.copy(last = result) }
+        // Every newly confirmed punch reopens a previously closed visual cycle. A new end punch then asks again.
+        if (saved.get<String>("closedJourneyDate") == pending.second) saved["closedJourneyDate"] = null
+        mutable.update { it.copy(last = result,
+            journeyClosurePromptDate = pending.second.takeIf { selectedPurpose == "journey_end" },
+            closedJourneyDate = saved.get<String>("closedJourneyDate")) }
         auth.current?.uid?.let { uid ->
             timeSummaryUpdates.recorded(uid, OwnMarking(result.receiptId, pending.second, result.marking.nsr,
                 result.marking.markedAt, result.marking.executionUnitId, "01", result.receiptStatus,
@@ -252,7 +272,18 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             journeyLocation?.reconcile(shift, before.workDate, before.executionUnitId,
                 TimeRules.unitZone(state.options, before.executionUnitId), state.markings, policyActive,
                 state.options?.journeyLocationEnabled == true)
-            mutable.update { it.copy(journeyTrackingActive = journeyLocation?.isActive() == true) }
+            val classifiedAsEnd = purpose == "journey_end"
+            val isLastPunchOfDay = state.markings.filter { it.workDate == before.workDate }
+                .maxByOrNull { it.markedAt }?.receiptId == receiptId
+            val wasClosed = state.closedJourneyDate == before.workDate
+            val shouldPromptForEnd = classifiedAsEnd && isLastPunchOfDay
+            if (wasClosed && (!classifiedAsEnd || shouldPromptForEnd)) saved["closedJourneyDate"] = null
+            mutable.update { it.copy(
+                journeyTrackingActive = journeyLocation?.isActive() == true,
+                closedJourneyDate = if (wasClosed && (!classifiedAsEnd || shouldPromptForEnd)) null else it.closedJourneyDate,
+                journeyClosurePromptDate = if (shouldPromptForEnd) before.workDate
+                    else if (it.journeyClosurePromptDate == before.workDate) null else it.journeyClosurePromptDate,
+            ) }
         }
     }
     private fun reconcileJourneyAvailability(options: TimeOptions) {
@@ -264,6 +295,17 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         journeyLocation?.stop()
         mutable.update { it.copy(journeyTrackingActive = false) }
         feedbackMutable.update { it.copy(notice = "Acompanhamento encerrado neste aparelho.") }
+    }
+    /** Organizational closure only. A later punch always remains available and reopens the visual cycle. */
+    fun closeJourneyCycle(workDate: String) {
+        saved["closedJourneyDate"] = workDate
+        journeyLocation?.stop()
+        mutable.update { it.copy(closedJourneyDate = workDate, journeyClosurePromptDate = null, journeyTrackingActive = false) }
+        feedbackMutable.update { it.copy(notice = "Ciclo da jornada encerrado. Se precisar, você ainda pode registrar uma nova batida.") }
+    }
+    fun deferJourneyClosure() {
+        mutable.update { it.copy(journeyClosurePromptDate = null) }
+        feedbackMutable.update { it.copy(notice = "O ciclo continua aberto e pode ser encerrado depois.") }
     }
     /** Official time from the monotonic clock: changing the phone's hour does not move it. Phone time only without a reading. */
     private fun officialNow(state: TimeState) = state.clockOffset?.let { android.os.SystemClock.elapsedRealtime() + it } ?: System.currentTimeMillis()
@@ -337,12 +379,16 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val competence = mutable.value.month.toString()
         then(cacheFile(directory, "time-documents", "espelho-ponto-$competence.pdf", api.mirrorPdf(competence)))
     }
-    fun requestAdjustment(attemptId: String, workDate: String, operations: List<AdjustmentRequestOperation>, reason: String) = serverRun("Pedido de ajuste enviado ao DP.") {
+    fun requestAdjustment(attemptId: String, workDate: String, operations: List<AdjustmentRequestOperation>, reason: String) = serverRun {
         val state = mutable.value
         val unitToday = LocalDate.parse(TimeRules.workDate(officialNow(state), TimeRules.unitZone(state.options, state.unitId)))
+        val pilot = state.markings.any { it.workDate == workDate && it.pilot }
+            || (workDate == unitToday.toString() && state.options?.mode == "pilot")
         val request = TimeRules.adjustmentRequest(attemptId, workDate, operations.map { operation -> operation.copy(executionUnitId = operation.executionUnitId ?: state.unitId) }, reason, unitToday)
+            .copy(scope = if (pilot) "pilot" else null)
         val created = api.requestAdjustment(request).adjustment
         mutable.update { it.copy(sentAdjustment = created) }
+        feedbackMutable.update { it.copy(notice = if (pilot) "Simulação de ajuste enviada ao DP." else "Pedido de ajuste enviado ao DP.") }
         readMonth(YearMonth.from(LocalDate.parse(workDate)))
     }
     fun clearAdjustment() { mutable.update { it.copy(sentAdjustment = null) } }

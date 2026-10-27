@@ -167,6 +167,110 @@ class ViewModelsTest {
         vm.avatar(pending().receipts.single()); advanceUntilIdle()
         assertEquals(1, uploads); assertEquals("https://example.invalid/avatar.jpg", vm.profile.value.response!!.profile.avatarUrl)
     }
+    @Test fun homeKeepsPointReachableWhenProfileCannotLoadOffline() = runTest {
+        val cached = DemoApi().timeOptions(LocalDate.now().toString())
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse = throw IOException("sem conexão")
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw IOException("sem conexão")
+            override suspend fun markings(startDate: String, endDate: String): OwnMarkings = throw IOException("sem conexão")
+            override suspend fun timeMonth(month: String): OwnMonth = throw IOException("sem conexão")
+            override suspend fun adjustments(month: String): OwnAdjustments = throw IOException("sem conexão")
+        }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        advanceUntilIdle()
+        assertNull(vm.profile.value.response)
+        assertNotNull(vm.feedback.value.error)
+        assertEquals("test-owner", vm.today.value.contextKey)
+        assertEquals(cached, vm.today.value.timeOptions)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.today.value.timeClockSource)
+        assertEquals(false, vm.today.value.timeMarkingsAvailable)
+    }
+    @Test fun offlineHomeShowsOnlyPointAndNeverUsesFallbackForViewAs() {
+        val modules = Modules(localPurchase = true, stockCount = true, schedule = true, timeRecording = true, requests = true)
+        val failed = HomeProfile("test-owner", ProfileResponse(Profile("Ana"), modules), unavailable = true)
+        val fallback = failed.modulesForHome("test-owner", viewingAnotherUser = false)
+        assertNotNull(fallback)
+        assertTrue(fallback!!.timeRecording)
+        assertFalse(fallback.localPurchase)
+        assertFalse(fallback.stockCount)
+        assertFalse(fallback.schedule)
+        assertFalse(fallback.requests)
+        assertNull(failed.modulesForHome("test-owner", viewingAnotherUser = true))
+        assertNull(failed.modulesForHome("another-context", viewingAnotherUser = false))
+        assertEquals(modules, failed.copy(unavailable = false).modulesForHome("test-owner", viewingAnotherUser = false))
+    }
+    @Test fun failedRefreshReplacesPreviousModulesWithPointOnlyAndRecoversOnline() = runTest {
+        var offline = false
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                if (offline) throw IOException("sem conexão")
+                return ProfileResponse(Profile("Ana"), Modules(stockCount = true, timeRecording = true))
+            }
+            override suspend fun timeOptions(workDate: String): TimeOptions = if (offline) throw IOException("sem conexão")
+                else DemoApi().timeOptions(workDate)
+        }
+        val cached = DemoApi().timeOptions(LocalDate.now().toString())
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        advanceUntilIdle()
+        assertTrue(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+
+        offline = true
+        vm.refresh("test-owner"); advanceUntilIdle()
+        val fallback = vm.profile.value.modulesForHome("test-owner", false)!!
+        assertTrue(fallback.timeRecording)
+        assertFalse(fallback.stockCount)
+        assertEquals(cached, vm.today.value.timeOptions)
+
+        offline = false
+        vm.refresh("test-owner"); advanceUntilIdle()
+        assertFalse(vm.profile.value.unavailable)
+        assertTrue(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+    }
+    @Test fun failedRefreshFallbackWinsOverAnOlderHomeLoadInFlight() = runTest {
+        val oldLoadStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val releaseOldLoad = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var offline = false
+        var optionReads = 0
+        val cached = DemoApi().timeOptions(LocalDate.now().toString()).copy(mode = "pilot")
+        val online = cached.copy(mode = "official")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun profile(): ProfileResponse {
+                if (offline) throw IOException("sem conexão")
+                return ProfileResponse(Profile("Ana"), Modules(stockCount = true, timeRecording = true))
+            }
+            override suspend fun timeOptions(workDate: String): TimeOptions {
+                optionReads++
+                if (optionReads == 1) {
+                    oldLoadStarted.complete(Unit)
+                    releaseOldLoad.await()
+                    return online.copy(workDate = workDate)
+                }
+                throw IOException("sem conexão")
+            }
+            override suspend fun markings(startDate: String, endDate: String): OwnMarkings {
+                if (offline) throw IOException("sem conexão")
+                return DemoApi().markings(startDate, endDate)
+            }
+        }
+        val offlineQueue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val vm = HomeViewModel(repository(auth, api), mode, queue, scheduler, offlineQueue)
+        runCurrent()
+        vm.loadToday(Modules(stockCount = true, timeRecording = true), null, "test-owner", force = true)
+        runCurrent(); oldLoadStarted.await()
+
+        offline = true
+        vm.refresh("test-owner"); advanceUntilIdle()
+        assertEquals("pilot", vm.today.value.timeOptions?.mode)
+        assertFalse(vm.profile.value.modulesForHome("test-owner", false)!!.stockCount)
+
+        releaseOldLoad.complete(Unit); advanceUntilIdle()
+        assertEquals("pilot", vm.today.value.timeOptions?.mode)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.today.value.timeClockSource)
+        assertEquals(false, vm.today.value.timeMarkingsAvailable)
+        assertEquals(2, optionReads)
+    }
     @Test fun homeProfileHidesThePreviousTargetAndDiscardsALateResponse() = runTest {
         val firstStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
         val releaseFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
@@ -658,7 +762,9 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest): MarkingResponse {
             sends++; return DemoApi().mark(request)
         } }
-        val queue = MemoryTimeOfflineQueue(); val repository = repository(auth, api)
+        val queue = MemoryTimeOfflineQueue().also {
+            it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString())
+        }; val repository = repository(auth, api)
         val vm = timeViewModel(auth, repository, androidx.lifecycle.SavedStateHandle(), queue)
         vm.load(); advanceUntilIdle(); vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
         assertEquals(0, sends); assertEquals(1, queue.rows.value.size)
@@ -745,6 +851,127 @@ class ViewModelsTest {
         assertNotNull(vm.state.value.clockOffset)
         assertEquals("Hora Legal indisponível. Seu ensaio será preservado neste aparelho.",
             TimeRules.blockedReason(vm.state.value.options, vm.state.value.offlineReady))
+    }
+    @Test fun changingUnitDoesNotDiscardOrMutateAPendingAttempt() = runTest {
+        val options = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit-a", "Unidade A", true, "America/Fortaleza"),
+                ExecutionUnit("unit-b", "Unidade B", false, "America/Fortaleza")),
+            OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
+        val sent = mutableListOf<MarkingRequest>()
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = options.copy(workDate = workDate)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+                sent += request
+                if (sent.size == 1) throw java.io.IOException("resposta perdida")
+                return DemoApi().mark(request)
+            }
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(),
+            MemoryTimeOfflineQueue().also { it.cachedOptionsValue = options })
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(vm.hasPendingAttempt())
+
+        vm.unit("unit-b")
+        assertEquals("unit-a", vm.state.value.unitId)
+        assertEquals("unit-a", vm.pendingAttempt()?.unitId)
+        vm.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+
+        assertEquals(2, sent.size)
+        assertEquals(sent[0], sent[1])
+    }
+    @Test fun confirmedJourneyEndCanCloseLaterAndANewPunchReopensTheVisualCycle() = runTest {
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val vm = timeViewModel(auth, repository(auth, DemoApi()), saved,
+            MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) })
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+        val workDate = vm.state.value.last!!.marking.markedAt.take(10)
+        assertEquals(workDate, vm.state.value.journeyClosurePromptDate)
+
+        vm.deferJourneyClosure()
+        assertNull(vm.state.value.journeyClosurePromptDate)
+        assertNull(vm.state.value.closedJourneyDate)
+        vm.closeJourneyCycle(workDate)
+        assertEquals(workDate, vm.state.value.closedJourneyDate)
+        assertEquals(workDate, saved.get<String>("closedJourneyDate"))
+
+        vm.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+        assertNull(vm.state.value.closedJourneyDate)
+        assertNull(saved.get<String>("closedJourneyDate"))
+        assertEquals(workDate, vm.state.value.journeyClosurePromptDate)
+    }
+    @Test fun reclassifyingAnIntermediatePunchAsJourneyEndDoesNotOfferToCloseTheDay() = runTest {
+        val workDate = LocalDate.now().toString()
+        var firstPurpose = "journey_start"
+        var secondPurpose = "break_start"
+        fun rows() = listOf(
+            OwnMarking("r1", workDate, 1, "${workDate}T08:00:00-03:00", "unit", "01", "available",
+                classification = MarkingClassification(firstPurpose)),
+            OwnMarking("r2", workDate, 2, "${workDate}T12:00:00-03:00", "unit", "01", "available",
+                classification = MarkingClassification(secondPurpose)),
+        )
+        val api = object : ApiService by DemoApi() {
+            override suspend fun markings(startDate: String, endDate: String) = OwnMarkings(startDate, endDate, rows())
+            override suspend fun timeMonth(month: String) = OwnMonth(month,
+                listOf(OwnShift(workDate, "work", "08:00", "17:00")))
+            override suspend fun adjustments(month: String) = OwnAdjustments(emptyList())
+            override suspend fun classifyMarking(receiptId: String, request: ClassificationUpdate): ClassificationResult {
+                if (receiptId == "r1") firstPurpose = request.purpose else secondPurpose = request.purpose
+                return ClassificationResult(MarkingClassification(request.purpose))
+            }
+        }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(),
+            MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(workDate) })
+        vm.load(); advanceUntilIdle()
+        vm.classify("r1", "journey_end"); advanceUntilIdle()
+        assertNull(vm.state.value.journeyClosurePromptDate)
+        vm.classify("r2", "journey_end"); advanceUntilIdle()
+        assertEquals(workDate, vm.state.value.journeyClosurePromptDate)
+    }
+    @Test fun coldOfflineStartUsesAStillValidLocalAuthorization() = runTest {
+        val cached = DemoApi().timeOptions(LocalDate.now().toString())
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions = throw IOException("sem conexão")
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = cached }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        assertTrue(vm.state.value.offlineReady)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
+        vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline)
+    }
+    @Test fun syncedOfflineJourneyEndReopensAClosedCycleAndAsksAgain() = runTest {
+        val workDate = "2026-10-19"
+        val saved = androidx.lifecycle.SavedStateHandle(mapOf("closedJourneyDate" to workDate))
+        val queue = MemoryTimeOfflineQueue().also {
+            val row = TimeMarkingRow("test-owner", "offline-end", "permit", 1, 0, sealed = byteArrayOf())
+            it.rows.value = listOf(row)
+            it.readyRows = listOf(row to MarkingRequest("offline-end", workDate, "unit", declaredPurpose = "journey_end"))
+            it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString())
+        }
+        val vm = timeViewModel(auth, repository(auth, DemoApi()), saved, queue)
+        vm.load(); advanceUntilIdle()
+        assertEquals(listOf("offline-end"), queue.syncedIds)
+        assertNull(vm.state.value.closedJourneyDate)
+        assertNull(saved.get<String>("closedJourneyDate"))
+        assertEquals(workDate, vm.state.value.journeyClosurePromptDate)
+    }
+    @Test fun offlinePunchWithoutAValidPermitIsRejectedBeforeCapture() = runTest {
+        val queue = MemoryTimeOfflineQueue()
+        val vm = timeViewModel(auth, repository(auth, DemoApi()), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        queue.cachedOptionsValue = null
+        // Simulate a permit that became invalid after the screen had loaded.
+        val field = TimeViewModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val state = field.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<TimeState>
+        state.value = state.value.copy(offlineReady = false)
+        vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(queue.rows.value.isEmpty())
+        assertTrue(vm.feedback.value.error.orEmpty().contains("Sem autorização local válida"))
     }
     @Test fun definitiveHlbRejectionBecomesALocalPunchButAmbiguousFailureDoesNot() = runTest {
         var calls = 0
