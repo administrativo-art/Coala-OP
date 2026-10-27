@@ -21,6 +21,10 @@ data class BreakStatus(val level: BreakLevel, val headline: String, val detail: 
 enum class DaySummaryState { IN_PROGRESS, COMPLETE, PENDING }
 data class DaySummary(val state: DaySummaryState, val workedMinutes: Int? = null, val breakMinutes: Int? = null,
     val plannedBreakMinutes: Int? = null, val shiftDifferenceMinutes: Int? = null, val message: String? = null)
+/** Where the clock on screen comes from: the confirmed Hora Legal, the anchor of a valid local permit, or nothing. */
+enum class ClockSource { OFFICIAL, LOCAL_PERMIT, NONE }
+/** How a day reads in Registros; the monthly closing remains the authority. */
+enum class RecordDayState { COMPLETE, IN_PROGRESS, REVIEW, MISSING, EMPTY }
 data class HomeWorkContext(val date: String, val shift: OwnShift?, val markings: List<OwnMarking>)
 
 /**
@@ -60,11 +64,15 @@ object TimeRules {
         && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE"
         && options.executionUnits.any { it.id == unitId }
     /** Why the punch button is off, in words; null when it can be used. */
-    fun blockedReason(options: TimeOptions?): String? = when {
+    fun blockedReason(options: TimeOptions?, offlineReady: Boolean = false): String? = when {
         options == null -> null
         !options.eligible -> "O registro de ponto vale para vínculos CLT e de aprendiz ativos hoje."
         !options.markingEnabled -> "O registro de ponto ainda não foi liberado para você."
-        options.officialClock?.available == false && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE" -> "Hora Legal Brasileira indisponível. Se este aparelho tiver uma autorização válida, a batida poderá ser preservada para sincronizar depois."
+        options.officialClock?.available == false && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE" -> when {
+            !offlineReady -> "Sem autorização local válida. A batida fica bloqueada até a Hora Legal voltar."
+            options.mode == "pilot" -> "Hora Legal indisponível. Seu ensaio será preservado neste aparelho."
+            else -> "Hora Legal indisponível. Sua batida será preservada neste aparelho."
+        }
         options.officialClock?.available != true -> "O registro está indisponível porque a unidade ou sua fonte de horário ainda não está pronta. Tente novamente ou fale com o DP."
         options.executionUnits.isEmpty() -> "Nenhuma unidade de trabalho para hoje. Fale com o DP."
         else -> null
@@ -113,6 +121,28 @@ object TimeRules {
             }
             else -> "journey_start"
         }
+    }
+    /** Times the shift plans for each expected punch, null where it plans none (flexible break). */
+    fun plannedPunchTimes(shift: OwnShift?): List<String?> {
+        val expected = expectedPunches(shift) ?: return emptyList()
+        val planned = shift ?: return emptyList()
+        val middle: List<String?> = when {
+            expected == 2 -> emptyList()
+            planned.breakType == "fixed" && !planned.breakSegments.isNullOrEmpty() -> planned.breakSegments.flatMap { listOf(it.start, it.end) }
+            planned.breakType == "fixed" -> listOf(planned.breakStart, planned.breakEnd)
+            else -> List(expected - 2) { null }
+        }
+        return (listOf(planned.startTime) + middle + listOf(planned.endTime)).take(expected).let { it + List(expected - it.size) { null } }
+    }
+    /** "2ª de 4 · Início do intervalo": position of the next punch and its suggested purpose. */
+    fun nextPunchText(done: Int, shift: OwnShift?, purpose: String?): String {
+        val expected = expectedPunches(shift)
+        val position = when {
+            expected != null && done >= expected -> "Batida extra"
+            expected != null -> "${done + 1}ª de $expected"
+            else -> "${done + 1}ª batida"
+        }
+        return listOfNotNull(position, purpose?.let(::purposeLabel)).joinToString(" · ")
     }
     fun suggestedLabel(index: Int, expected: Int?): String = when {
         index == 0 -> "Entrada"
@@ -281,6 +311,26 @@ object TimeRules {
         if (active.size < 2 || active.size % 2 != 0) return null
         return active.chunked(2).sumOf { pair -> punchSpan(pair[0], pair[1]) }
     }
+    /** Worked time of a journey still open, up to now. Null when the sequence needs conferência. Preliminary. */
+    fun workedSoFarMinutes(punches: List<DayPunch>, nowEpochMillis: Long): Int? {
+        val active = orderedPunches(punches)
+        if (active.isEmpty() || active.any { it.purpose == null } || !validPurposeSequence(active)) return null
+        val closed = active.chunked(2).filter { it.size == 2 }.sumOf { pair -> punchSpan(pair[0], pair[1]) }
+        if (active.size % 2 == 0) return closed
+        val start = instantOf(active.last()) ?: return null
+        return closed + java.time.Duration.between(start, java.time.Instant.ofEpochMilli(nowEpochMillis)).toMinutes().coerceAtLeast(0).toInt()
+    }
+    /** One day of Registros: its reading and, when the journey is complete, the worked time. */
+    fun recordDay(date: String, markings: List<OwnMarking>, shift: OwnShift?, treatments: List<Treatment>, today: LocalDate): Pair<RecordDayState, Int?> {
+        val summary = daySummary(date, markings, shift, treatments)
+        val past = runCatching { LocalDate.parse(date).isBefore(today) }.getOrDefault(false)
+        return when {
+            summary == null -> (if (past && shift?.type == "work") RecordDayState.MISSING else RecordDayState.EMPTY) to null
+            summary.state == DaySummaryState.COMPLETE -> RecordDayState.COMPLETE to summary.workedMinutes
+            summary.state == DaySummaryState.IN_PROGRESS && !past -> RecordDayState.IN_PROGRESS to null
+            else -> RecordDayState.REVIEW to null
+        }
+    }
     fun recordedBreakMinutes(punches: List<DayPunch>): Int {
         val active = orderedPunches(punches)
         val declared = active.filter { it.purpose == "break_start" || it.purpose == "break_end" }
@@ -440,6 +490,28 @@ object TimeRules {
         val sign = if (signed && minutes > 0) "+" else if (minutes < 0) "−" else ""
         val absolute = Math.abs(minutes)
         return "$sign${absolute / 60}h${String.format("%02d", absolute % 60)}"
+    }
+    /** Filter group of a bank line: credit, debit, payroll or review. */
+    fun bankGroup(nature: String) = when (nature) {
+        "bank_credit" -> "credit"
+        "bank_debit" -> "debit"
+        "payroll_overtime", "payroll_discount" -> "payroll"
+        else -> "review"
+    }
+    /** Days elapsed and total days of the bank cycle, both inclusive, capped at the cycle. */
+    fun cycleProgress(cycle: TimeBankCycle, today: LocalDate): Pair<Int, Int>? = runCatching {
+        val start = LocalDate.parse(cycle.start); val end = LocalDate.parse(cycle.end)
+        val total = java.time.temporal.ChronoUnit.DAYS.between(start, end).toInt() + 1
+        val elapsed = (java.time.temporal.ChronoUnit.DAYS.between(start, today).toInt() + 1).coerceIn(0, total)
+        elapsed to total
+    }.getOrNull()?.takeIf { it.second > 0 }
+    /** One act of an adjustment's trail, in the person's words. */
+    fun adjustmentActText(act: AdjustmentAct): String = when (act.action) {
+        "requested" -> "Enviado por você"
+        "approved" -> "Aprovado pelo gestor ou DP"
+        "rejected" -> "Recusado pelo gestor ou DP"
+        "cancelled" -> if (act.role == "titular") "Cancelado por você" else "Cancelado pelo gestor ou DP"
+        else -> act.action
     }
     fun bankNatureText(nature: String) = when (nature) {
         "bank_credit" -> "Crédito no banco"

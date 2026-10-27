@@ -717,6 +717,35 @@ class ViewModelsTest {
         assertNull(saved.get<String>("attemptUnitId"))
         assertNull(saved.get<String>("attemptPurpose"))
     }
+    @Test fun pendingAttemptShowsItsOriginalPurposeAndClockSourceNamesThePermitAnchor() = runTest {
+        var hlbUnavailable = false
+        val healthy = TimeOptions(LocalDate.now().toString(), true, true,
+            listOf(ExecutionUnit("unit", "Unidade", true, "America/Fortaleza")),
+            OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate,
+                officialClock = if (hlbUnavailable) OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE") else healthy.officialClock)
+            override suspend fun mark(request: MarkingRequest): MarkingResponse = throw java.io.IOException("resposta perdida")
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = healthy }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(); advanceUntilIdle()
+        assertEquals(com.coalaone.go.domain.ClockSource.OFFICIAL, vm.state.value.clockSource)
+        vm.record(true, declaredPurpose = "break_start"); advanceUntilIdle()
+        val pending = vm.pendingAttempt()
+        assertEquals("break_start", pending?.purpose)
+        assertEquals("unit", pending?.unitId)
+        assertNotNull(pending?.firstTriedAt)
+        assertEquals("OFFICIAL", pending?.firstTriedSource)
+
+        hlbUnavailable = true
+        vm.refreshClock(); advanceUntilIdle()
+        // The permit anchor keeps the clock running, but under its own name.
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
+        assertNotNull(vm.state.value.clockOffset)
+        assertEquals("Hora Legal indisponível. Seu ensaio será preservado neste aparelho.",
+            TimeRules.blockedReason(vm.state.value.options, vm.state.value.offlineReady))
+    }
     @Test fun definitiveHlbRejectionBecomesALocalPunchButAmbiguousFailureDoesNot() = runTest {
         var calls = 0
         val healthy = TimeOptions(LocalDate.now().toString(), true, true,
