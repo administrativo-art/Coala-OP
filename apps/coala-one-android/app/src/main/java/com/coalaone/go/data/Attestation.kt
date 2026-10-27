@@ -36,8 +36,7 @@ interface AppAttestation {
         val uid = auth.current?.uid ?: return@withLock null
         val now = System.currentTimeMillis()
         cached?.takeIf { it.first == uid && it.second.expiresAt - 300_000 > now }?.let { return@withLock it.second.token }
-        val refusedForUser = lastFailure?.let { it.first == uid && !it.second.retryable } == true
-        if (refusedForUser || now < retryAt || BuildConfig.LOCAL_TEST) return@withLock null
+        if (lastFailure?.first == uid && now < retryAt || BuildConfig.LOCAL_TEST) return@withLock null
         try {
             val bearer = auth.token()
             val endpoint = "${BuildConfig.API_BASE_URL.trimEnd('/')}/api/mobile/app-attestation"
@@ -66,7 +65,8 @@ interface AppAttestation {
             val failure = Errors.classify(cause)
             if (auth.current?.uid == uid) {
                 lastFailure = uid to failure
-                retryAt = if (failure.retryable) now + 30_000 else 0
+                // Retry silently after a bounded delay; a refusal must not require a technical button.
+                retryAt = now + if (failure.retryable) 30_000 else 5 * 60_000
             }
             null
         }

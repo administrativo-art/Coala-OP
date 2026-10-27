@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-27: candidata de preparo e renovação silenciosos do Coala Go na entrada, retorno da rede e manutenção periódica. Abertura offline consulta diretamente a autorização salva; sincronização recupera pendências, valida a confirmação e preserva cadeias bloqueadas. A interface mantém Registrar ponto e distingue unidade da escala da unidade de execução quando divergem. O teste público do Galaxy teve o formato de exportação corrigido, e os logs da 0.3.28 confirmaram atestação e emissão de autorização. Testes da candidata são registrados no chamado; o grupo permanece Traçado.
+
 2026-10-27: correção em andamento da autorização offline para distribuição por APK direto. Atestação de hardware Android substitui a dependência de reconhecimento Play no cliente novo; HLB e gates da contingência permanecem obrigatórios. A tela distingue dados não consultados de dia sem escala/batidas. Homologação física registrada no chamado; grupo continua Traçado.
 
 2026-10-27: o Registro REP-P ganhou candidata local para simular pedidos de ajuste no ensaio em coleção segregada e para confirmar o encerramento organizacional após `Fim da jornada`. A simulação não cria tratamento nem participa de PTRP/ARP/AFD/AEJ/espelho/fechamento; o encerramento não bloqueia nova batida e não fabrica marcação. Também foram corrigidos os estados de autorização offline, tentativa pendente e cache da Home. Testes integrados, revisão final independente e aparelho físico permanecem gates; o grupo continua Traçado.

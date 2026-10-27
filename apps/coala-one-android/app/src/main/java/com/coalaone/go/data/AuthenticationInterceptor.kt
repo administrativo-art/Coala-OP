@@ -18,11 +18,14 @@ class AuthenticationInterceptor(private val origin: HttpUrl, private val viewAsU
         if (sameOrigin && request.url.encodedPath.startsWith("/api/") && !public) {
             val credentials = runBlocking { provider.credentials() } ?: throw AppFailure(ErrorCategory.AUTHENTICATION, false, "Entre novamente.")
             if (expectedOwner != null && credentials.uid != expectedOwner) throw AppFailure(ErrorCategory.AUTHENTICATION, false, "O envio pertence a outra conta. Entre com a conta original.")
+            val targetUser = viewAsUserId()?.takeIf(String::isNotBlank)
+            if (expectedOwner != null && targetUser != null && request.url.encodedPath.startsWith("/api/dp/time-recording/"))
+                throw AppFailure(ErrorCategory.CONFLICT, true, "O envio será retomado ao sair da visualização de outra pessoa.")
             if (request.url.encodedPath == "/api/dp/time-recording/offline-permits" && credentials.attestation == null)
                 credentials.attestationFailure?.let { throw it }
             builder.header("Authorization", "Bearer ${credentials.token}")
             credentials.attestation?.let { builder.header("X-Coala-App-Attestation", it) }
-            viewAsUserId()?.takeIf(String::isNotBlank)?.let { builder.header(DEVELOPER_VIEW_AS_HEADER, it) }
+            targetUser?.let { builder.header(DEVELOPER_VIEW_AS_HEADER, it) }
         }
         return chain.proceed(builder.build())
     }

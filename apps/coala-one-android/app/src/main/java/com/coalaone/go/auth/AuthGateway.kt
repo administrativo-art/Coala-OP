@@ -33,6 +33,10 @@ interface AuthGateway {
         val user = firebase.currentUser ?: error("Sessão expirada")
         user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("Conta sem e-mail"), password)).await()
     }
-    override suspend fun token(forceRefresh: Boolean) = firebase.currentUser?.getIdToken(forceRefresh)?.await()?.token ?: error("Sessão expirada")
+    override suspend fun token(forceRefresh: Boolean): String = try {
+        firebase.currentUser?.getIdToken(forceRefresh)?.await()?.token ?: error("Sessão expirada")
+    } catch (cause: com.google.firebase.FirebaseNetworkException) {
+        throw com.coalaone.go.data.Errors.classify(cause)
+    }
     override fun signOut() = firebase.signOut()
 }

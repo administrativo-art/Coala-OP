@@ -2,7 +2,7 @@
 
 Kotlin, Jetpack Compose/Material 3, MVVM com ViewModel e StateFlow, Navigation Compose, Hilt, Retrofit/OkHttp, kotlinx.serialization, Coil, Room com payloads AES-256-GCM/Android Keystore, WorkManager, CameraX/seletor do sistema, BiometricPrompt e Firebase Auth nativo.
 
-O ponto offline usa um banco Room separado: uma autorização on-line de até 12 horas ancora a Hora Legal ao relógio monotônico; cada batida é cifrada, encadeada e assinada por chave P-256 do Android Keystore protegida por TEE/StrongBox. Após o primeiro login, o app oferece automaticamente o desbloqueio local por biometria; se a pessoa pular, pode ativá-lo no Perfil. Ao abrir Ponto online, a autorização das batidas é preparada automaticamente e, depois disso, a pessoa pode reabrir o app sem conexão para preservar batidas até a internet voltar. Reiniciar o aparelho invalida a autorização. O app mantém até 20 pendentes e sincroniza em ordem pelo WorkManager. Enquanto estiver apenas local, a interface nunca apresenta NSR nem comprovante.
+O ponto offline usa um banco Room separado: uma autorização on-line de até 12 horas ancora a Hora Legal ao relógio monotônico; cada batida é cifrada, encadeada e assinada por chave P-256 do Android Keystore protegida por TEE/StrongBox. Após o primeiro login, o app oferece automaticamente o desbloqueio local por biometria; se a pessoa pular, pode ativá-lo no Perfil. A preparação ocorre silenciosamente na entrada/desbloqueio, nas mudanças de rede e em manutenção periódica com rede a cada quatro horas; autorização recente evita novas chamadas, e a renovação é elegível após seis horas. Não é necessário abrir Ponto para preparar o aparelho. Reiniciar o aparelho invalida a autorização. O app mantém até 20 pendentes, confirma gravação local somente depois do insert cifrado e sincroniza em ordem pelo WorkManager, recuperando agendamentos na entrada/manutenção. Enquanto estiver apenas local, a interface nunca apresenta NSR nem comprovante. Android pode adiar trabalho de fundo; desinstalação ou limpeza dos dados remove pendências ainda locais.
 
 Turnos configurados como **Entre unidades** podem habilitar localização durante a jornada. O serviço Android em primeiro plano começa no Início da jornada declarado, pausa no intervalo, retoma na volta e termina no Fim da jornada ou pelo limite de segurança. A fila é cifrada por usuário e sincronizada com rede; a trilha é acessória, separada da evidência fiscal do ponto, e nunca bloqueia nem altera a batida. Notificações gerais continuam voluntárias no Perfil; o indicador técnico do serviço existe apenas enquanto o acompanhamento está ativo.
 
@@ -19,8 +19,8 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Firebase/FCM |
-| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 33; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.28 |
+| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 34; crescente nas atualizações Go |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.29 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.

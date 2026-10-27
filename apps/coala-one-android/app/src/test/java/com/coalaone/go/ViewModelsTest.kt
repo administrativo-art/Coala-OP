@@ -716,7 +716,7 @@ class ViewModelsTest {
     @Test fun punchRetriesTheSameAttemptAndDateUntilTheServerAnswersAndStartsOverAfterConflict() = runTest {
         val sent = mutableListOf<MarkingRequest>(); var failures = mutableListOf<Throwable>(java.io.IOException("lost"))
         val api = object : ApiService by DemoApi() {
-            override suspend fun mark(request: MarkingRequest): MarkingResponse { sent += request; failures.removeFirstOrNull()?.let { throw it }; return DemoApi().mark(request) }
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse { sent += request; failures.removeFirstOrNull()?.let { throw it }; return DemoApi().mark(request) }
         }
         val saved = androidx.lifecycle.SavedStateHandle()
         val repository = repository(auth, api)
@@ -742,7 +742,7 @@ class ViewModelsTest {
                     unit.copy(locationPolicy = LocationPolicy("observe", 1, 10_000, 100.0, "https://example.test/privacidade"))
                 })
             }
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 sent += request
                 if (first) { first = false; throw java.io.IOException("lost") }
                 return DemoApi().mark(request)
@@ -759,7 +759,7 @@ class ViewModelsTest {
     }
     @Test fun offlinePunchStaysLocalWithoutPretendingItHasAnNsr() = runTest {
         var sends = 0
-        val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest): MarkingResponse {
+        val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
             sends++; return DemoApi().mark(request)
         } }
         val queue = MemoryTimeOfflineQueue().also {
@@ -777,7 +777,7 @@ class ViewModelsTest {
             OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE"), mode = "pilot")
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = unavailable.copy(workDate = workDate)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse { sends++; return DemoApi().mark(request) }
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse { sends++; return DemoApi().mark(request) }
         }
         val queue = MemoryTimeOfflineQueue().also { memory -> memory.cachedOptionsValue = unavailable.copy(
             officialClock = OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza")) }
@@ -798,7 +798,7 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate,
                 officialClock = if (hlbUnavailable) OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE") else healthy.officialClock)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 sent += request
                 if (sent.size == 1) throw java.io.IOException("resposta perdida")
                 return DemoApi().mark(request)
@@ -831,7 +831,7 @@ class ViewModelsTest {
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate,
                 officialClock = if (hlbUnavailable) OfficialClock(false, issue = "REP_P_TIME_UNAVAILABLE") else healthy.officialClock)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse = throw java.io.IOException("resposta perdida")
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse = throw java.io.IOException("resposta perdida")
         }
         val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = healthy }
         val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
@@ -849,7 +849,7 @@ class ViewModelsTest {
         // The permit anchor keeps the clock running, but under its own name.
         assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
         assertNotNull(vm.state.value.clockOffset)
-        assertEquals("Hora Legal indisponível. Seu ensaio será preservado neste aparelho.",
+        assertEquals("Seu ensaio será salvo neste aparelho e enviado depois.",
             TimeRules.blockedReason(vm.state.value.options, vm.state.value.offlineReady))
     }
     @Test fun changingUnitDoesNotDiscardOrMutateAPendingAttempt() = runTest {
@@ -860,7 +860,7 @@ class ViewModelsTest {
         val sent = mutableListOf<MarkingRequest>()
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = options.copy(workDate = workDate)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 sent += request
                 if (sent.size == 1) throw java.io.IOException("resposta perdida")
                 return DemoApi().mark(request)
@@ -1020,7 +1020,7 @@ class ViewModelsTest {
         state.value = state.value.copy(offlineReady = false)
         vm.record(false, declaredPurpose = "journey_start"); advanceUntilIdle()
         assertTrue(queue.rows.value.isEmpty())
-        assertTrue(vm.feedback.value.error.orEmpty().contains("Sem autorização local válida"))
+        assertTrue(vm.feedback.value.error.orEmpty().contains("Conecte-se à internet"))
     }
     @Test fun definitiveHlbRejectionBecomesALocalPunchButAmbiguousFailureDoesNot() = runTest {
         var calls = 0
@@ -1029,7 +1029,7 @@ class ViewModelsTest {
             OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = healthy.copy(workDate = workDate)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 calls++
                 throw retrofit2.HttpException(retrofit2.Response.error<Any>(422,
                     """{"error":{"code":"REP_P_TIME_UNAVAILABLE","message":"Hora oficial indisponível."}}""".toResponseBody()))
@@ -1054,7 +1054,7 @@ class ViewModelsTest {
             OfficialClock(true, java.time.Instant.now().toString(), "America/Fortaleza"), mode = "pilot")
         val api = object : ApiService by DemoApi() {
             override suspend fun timeOptions(workDate: String) = options.copy(workDate = workDate)
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 sent += request; calls++
                 if (calls == 1) throw java.io.IOException("resposta perdida")
                 throw retrofit2.HttpException(retrofit2.Response.error<Any>(422,
@@ -1080,6 +1080,72 @@ class ViewModelsTest {
         assertEquals(listOf("journey_start"), queue.capturedPurposes)
         assertFalse(restored.hasPendingAttempt())
     }
+    @Test fun openingOfflineReadsTheLocalPermitWithoutWaitingForAnyNetworkRequest() = runTest {
+        var reads = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun timeOptions(workDate: String): TimeOptions { reads++; error("Network must not be called") }
+        }
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle(), queue)
+        vm.load(online = false); advanceUntilIdle()
+        assertTrue(vm.state.value.offlineReady)
+        assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
+        assertEquals(0, reads)
+        vm.refreshClock(online = false); advanceUntilIdle()
+        assertEquals(0, reads)
+    }
+    @Test fun aSchedulingFailureCannotHideAnAlreadySavedPunch() = runTest {
+        val queue = MemoryTimeOfflineQueue().also { it.cachedOptionsValue = DemoApi().timeOptions(LocalDate.now().toString()) }
+        val repo = repository(auth)
+        val vm = TimeViewModel(repo, androidx.lifecycle.SavedStateHandle(), auth, queue, TimeOfflineSync(auth, queue, repo),
+            TimeOfflineWorkScheduler { error("scheduler interrupted") })
+        vm.load(online = false); advanceUntilIdle()
+        vm.record(online = false, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertEquals(1, queue.rows.value.size)
+        assertNotNull(vm.state.value.lastOffline)
+        assertNull(vm.feedback.value.error)
+    }
+    @Test fun invalidConfirmationAndViewAsNeverMarkLocalPunchesAsSent() = runTest {
+        val queue = MemoryTimeOfflineQueue()
+        queue.readyRows = listOf(TimeMarkingRow("test-owner", "first", "permit", 1, 0, sealed = byteArrayOf()) to
+            MarkingRequest("first", "2026-10-27", "unit"))
+        var sends = 0
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
+                sends++
+                return MarkingResponse("unknown", "", "pending", marking = RecordedMarking(1, "2026-10-27T12:00:00-0300", "other-unit"))
+            }
+        }
+        val viewAs = InMemoryDeveloperViewAsStore().also { it.select("other") }
+        val sync = TimeOfflineSync(auth, queue, repository(auth, api), viewAs)
+        assertFalse(sync.sync("test-owner")); assertEquals(0, sends)
+        viewAs.clear()
+        sync.sync("test-owner")
+        assertEquals(1, sends); assertTrue(queue.syncedIds.isEmpty())
+        assertEquals(1, queue.failures.size)
+    }
+    @Test fun switchingAccountOrViewAsDuringTheReplyKeepsTheOriginalAttemptPending() = runTest {
+        for (switchAccount in listOf(true, false)) {
+            auth.mutable.value = Identity("test-owner", "test@example.invalid")
+            val queue = MemoryTimeOfflineQueue()
+            val request = MarkingRequest("original-attempt", "2026-10-27", "unit")
+            queue.readyRows = listOf(TimeMarkingRow("test-owner", request.attemptId, "permit", 1, 0, sealed = byteArrayOf()) to request)
+            val viewAs = InMemoryDeveloperViewAsStore()
+            var expected: String? = null
+            val api = object : ApiService by DemoApi() {
+                override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
+                    expected = expectedOwner
+                    if (switchAccount) auth.mutable.value = Identity("other", null) else viewAs.select("other")
+                    return MarkingResponse("recorded", "receipt", "available",
+                        marking = RecordedMarking(1, "2026-10-27T12:00:00-0300", "unit"))
+                }
+            }
+            assertFalse(TimeOfflineSync(auth, queue, repository(auth, api), viewAs).sync("test-owner"))
+            assertEquals("test-owner", expected)
+            assertTrue(queue.syncedIds.isEmpty()); assertTrue(queue.failures.isEmpty())
+            assertEquals(request, queue.readyRows.single().second)
+        }
+    }
     @Test fun offlineSyncStopsAtFirstFailureToPreserveTheSignedSequence() = runTest {
         val queue = MemoryTimeOfflineQueue()
         fun pending(id: String, sequence: Int) = TimeMarkingRow("test-owner", id, "permit", sequence, sequence.toLong(), sealed = byteArrayOf()) to
@@ -1087,7 +1153,7 @@ class ViewModelsTest {
         queue.readyRows = listOf(pending("first", 1), pending("second", 2))
         var sends = 0
         val api = object : ApiService by DemoApi() {
-            override suspend fun mark(request: MarkingRequest): MarkingResponse {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
                 sends++
                 throw IOException("offline")
             }

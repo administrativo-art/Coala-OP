@@ -46,7 +46,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     private val auth: AuthGateway, private val offlineQueue: TimeOfflineQueue, private val offlineSync: TimeOfflineSync,
     private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
     private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates(),
-    private val appAttestation: AppAttestation? = null) : FeedbackViewModel() {
+    private val appAttestation: AppAttestation? = null,
+    private val offlinePreparation: TimeOfflinePreparation? = null) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState(closedJourneyDate = saved.get<String>("closedJourneyDate")))
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -89,7 +90,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         }
         val uid = auth.current?.uid ?: return
         try {
-            offlineQueue.permitRequest(uid, options.workDate, elapsed, options.mode)?.let { request ->
+            if (offlinePreparation != null) offlinePreparation.prepare(uid, options, elapsed)
+            else offlineQueue.permitRequest(uid, options.workDate, elapsed, options.mode)?.let { request ->
                 offlineQueue.savePermit(uid, api.offlinePermit(request).permit)
             }
             updateContingencyState(uid, options, elapsed, null)
@@ -107,9 +109,14 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     }
 
     /** Options of today and the month on screen; read when the screen opens and on pull-to-refresh. */
-    fun load() = serverRun {
+    fun load(online: Boolean = true) = serverRun {
         val today = LocalDate.now()
         val elapsed = android.os.SystemClock.elapsedRealtime()
+        if (!online) {
+            mutable.update { it.copy(monthDataAvailable = false) }
+            restoreLocalAuthorization(IOException("offline"), elapsed)
+            return@serverRun
+        }
         var synced = emptyList<SyncedOfflineMarking>()
         try {
             auth.current?.uid?.let { synced = offlineSync.syncWithResult(it).confirmed }
@@ -178,8 +185,12 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun selectAuxiliaryMonth(month: YearMonth) { mutable.update { it.copy(month = month) } }
     /** Back from the background: only the options and the official reading, so the clock and the block are current. */
     fun retryOfflineAuthorization() { appAttestation?.retry(); refreshClock() }
-    fun refreshClock() = serverRun {
+    fun refreshClock(online: Boolean = true) = serverRun {
         val elapsed = android.os.SystemClock.elapsedRealtime()
+        if (!online) {
+            restoreLocalAuthorization(IOException("offline"), elapsed)
+            return@serverRun
+        }
         try {
             val options = api.timeOptions(LocalDate.now().toString())
             val offset = TimeRules.clockOffset(options.officialClock, elapsed)
@@ -210,7 +221,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         if (!online) {
             require(attempt == null) { "Há uma tentativa anterior aguardando confirmação. Conecte-se para reenviar a mesma batida sem duplicá-la." }
             require(TimeRules.canPreserveOffline(state.options, state.unitId, state.offlineReady)) {
-                "Sem autorização local válida. Conecte-se para preparar a contingência antes de registrar sem internet."
+                "Conecte-se à internet para registrar o ponto."
             }
             preserveLocally(state, declaredPurpose)
             return@serverRun
@@ -269,9 +280,12 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val uid = auth.current?.uid ?: error("Sessão expirada.")
         val unitId = state.unitId ?: error("Escolha a unidade.")
         val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
+        // The row is already durable. A scheduling/location failure must not turn its acknowledgement into an error.
+        runCatching { offlineScheduler.schedule(uid) }
         mutable.update { it.copy(lastOffline = captured) }
-        updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose)
-        offlineScheduler.schedule(uid)
+        try { updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose) }
+        catch (cause: CancellationException) { throw cause }
+        catch (_: Exception) { /* The independent location trail never invalidates a saved punch. */ }
     }
     private fun updateJourneyLocation(state: TimeState, workDate: String, unitId: String, purpose: String) {
         val shift = state.shifts.firstOrNull { it.date == workDate && it.type == "work" }
