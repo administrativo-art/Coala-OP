@@ -72,9 +72,9 @@ object TimeRules {
         !options.eligible -> "O registro de ponto vale para vínculos CLT e de aprendiz ativos hoje."
         !options.markingEnabled -> "O registro de ponto ainda não foi liberado para você."
         options.officialClock?.available == false && options.officialClock?.issue == "REP_P_TIME_UNAVAILABLE" -> when {
-            !offlineReady -> "Sem autorização local válida. A batida fica bloqueada até a Hora Legal voltar."
-            options.mode == "pilot" -> "Hora Legal indisponível. Seu ensaio será preservado neste aparelho."
-            else -> "Hora Legal indisponível. Sua batida será preservada neste aparelho."
+            !offlineReady -> "Não foi possível registrar agora. Tente novamente em instantes."
+            options.mode == "pilot" -> "Seu ensaio será salvo neste aparelho e enviado depois."
+            else -> "Seu ponto será salvo neste aparelho e enviado depois."
         }
         options.officialClock?.available != true -> "O registro está indisponível porque a unidade ou sua fonte de horário ainda não está pronta. Tente novamente ou fale com o DP."
         options.executionUnits.isEmpty() -> "Nenhuma unidade de trabalho para hoje. Fale com o DP."

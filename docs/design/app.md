@@ -33,6 +33,8 @@ Nenhuma tela foi conferida em emulador ou aparelho neste levantamento. Medidas, 
 
 ## Princípios
 
+**Decidido em 27/10/2026 — ponto offline transparente:** preparação e renovação são automáticas, sem tela de autorização/atestação nem status técnico de prontidão. A ação principal permanece **Registrar ponto** com e sem internet. A fonte local é rotulada **Horário do registro**, e a confirmação local informa que o ponto foi salvo no aparelho e será enviado automaticamente. Comprovante e confirmação oficial aparecem somente depois do envio confirmado. O selo de ensaio permanece explícito. Quando a unidade escalada não está liberada no vínculo, mostrar unidade da escala e unidade de registro separadamente; o seletor oferece somente unidades já liberadas. A tela não altera o vínculo.
+
 1. **Decidido — a barra escura mostra dados, não gestos.** A barra do início traz marca, saudação, função e avatar, e nada mais: sem alça, sem deslize, sem resumo que abre. Para quem registra ponto, a hora oficial, o turno e as batidas do dia ficam num cartão informativo imediatamente abaixo; registrar continua exigindo abrir **Ponto**. Protegido por `coala-go-ui-contract.test.ts` (proíbe `TodayHeader`, `draggable` e "Deslize para").
 2. **Decidido — toda seta de lista ou de seção que abre é a seta desenhada `DropdownChevron`.** Nunca um caractere (`⌄`, `⌃`, `▾`, `▼`). Detalhes em [Seta de dropdown](#seta-de-dropdown).
 3. **Decidido — a Escala abre em "Todas as unidades".** Detalhes em [Comportamento de abertura das telas](#comportamento-de-abertura-das-telas).

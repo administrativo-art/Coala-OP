@@ -43,7 +43,7 @@ interface TimeOfflineQueue {
         if (current != null && current.scope == scope && current.deviceKeyId == key.keyId && current.bootCount == bootCount
             && TimeOfflineRules.permitIssue(current, bootCount, elapsedRealtimeMs) == null
             && elapsedRealtimeMs >= current.anchorElapsedRealtimeMs
-            && elapsedRealtimeMs - current.anchorElapsedRealtimeMs < 10 * 60 * 60 * 1000L) return null
+            && elapsedRealtimeMs - current.anchorElapsedRealtimeMs < TIME_OFFLINE_RENEW_AFTER_MS) return null
         return OfflinePermitRequest(UUID.randomUUID().toString(), workDate, identity.installationId(), key.keyId,
             key.publicKey, key.security, bootCount, elapsedRealtimeMs)
     }
@@ -107,8 +107,13 @@ interface TimeOfflineQueue {
         CapturedOfflineMarking(attemptId, markedAt, workDate)
     } }
     override suspend fun ready(uid: String) = withContext(Dispatchers.IO) {
-        database.timeOffline().list(owner(uid)).filter { it.state == "READY" }.map { row -> row to
-            json.decodeFromString<MarkingRequest>(vault.open(uid, "time-marking:${row.id}", row.sealed).decodeToString()) }
+        // A blocked member stops its signed chain across worker retries too.
+        val blockedPermits = mutableSetOf<String>()
+        database.timeOffline().list(owner(uid)).filter { it.state != "CONFIRMED" }.mapNotNull { row ->
+            if (row.state != "READY") { blockedPermits += row.permitId; null }
+            else if (row.permitId in blockedPermits) null
+            else row to json.decodeFromString<MarkingRequest>(vault.open(uid, "time-marking:${row.id}", row.sealed).decodeToString())
+        }
     }
     override suspend fun synced(uid: String, id: String) = database.timeOffline().state(owner(uid), id, "CONFIRMED")
     override suspend fun failed(uid: String, id: String, failure: AppFailure) = database.timeOffline().state(owner(uid), id,

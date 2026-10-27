@@ -23,6 +23,7 @@ object Errors {
     fun classify(cause: Throwable): AppFailure = when (cause) {
         is CancellationException -> throw cause
         is AppFailure -> cause
+        is com.google.firebase.FirebaseNetworkException -> AppFailure(ErrorCategory.NETWORK, true, "Sem conexão. Seus dados pendentes continuam no aparelho.")
         is HttpException -> when (cause.code()) {
             401 -> AppFailure(ErrorCategory.AUTHENTICATION, false, "Entre novamente para continuar.")
             403 -> AppFailure(ErrorCategory.PERMISSION, false, "Seu perfil não permite esta ação, ou a atestação foi recusada.")

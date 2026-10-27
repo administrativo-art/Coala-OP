@@ -112,7 +112,7 @@ fun shortDate(value: String?): String? {
                     modifier = Modifier.fillMaxWidth().background(Tokens.warningBg).padding(horizontal = 20.dp, vertical = 10.dp))
             }
             // What survives without a connection is said in words, not left for the person to guess.
-            if (!online) Text("Sem conexão. Rascunhos, notas de compra e o ponto previamente autorizado ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            if (!online) Text("Sem conexão. Os registros salvos neste aparelho serão enviados quando a conexão voltar. Algumas consultas precisam de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp).background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             val body: @Composable () -> Unit = {
                 // Cada rota começa no topo. Sem a chave, o mesmo slot do Compose herdava a

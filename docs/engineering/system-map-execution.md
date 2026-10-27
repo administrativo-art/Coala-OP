@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-10-27: retomada no Galaxy confirmou versão 0.3.28/code33, atestação HTTP 200 e autorização offline HTTP 201 às 21:11:27Z. A recusa do teste local anterior vinha de exportação sem provider; formato real passou. Candidata local adiciona TimeOfflinePreparation/worker automático, recuperação da fila e linguagem operacional simples; mudanças de vínculo não estão incluídas. Uso do mapa e resultados no registro privado attestation-galaxy. Telemetria atribuível indisponível.
+
 2026-10-27: diagnóstico de ponto offline 0.3.27 confirmou recusa 403 na autorização por atestação de aplicativo. Implementação do fluxo de hardware Android para APK direto e estados explícitos de dados/autorização indisponíveis; guia em `android-direct-apk-attestation.md`. Nenhum gate de conformidade é promovido por essa alteração.
 
 2026-10-27: candidata local do Coala Go separa pedidos simulados do ensaio em `repP_pilotAdjustmentRequests`, com domínio piloto reservado e sem tratamentos ou consumidores fiscais; a fila administrativa identifica a simulação. Depois de uma resposta conclusiva classificada como `Fim da jornada`, o app oferece encerrar ou adiar o ciclo organizacional, mantendo **Registrar nova batida** sempre disponível; o corte automático à meia-noite vale apenas para jornada diurna com escala. A contingência passa a exigir autorização válida também após queda de rede, preserva fuso/modo na Home e impede troca de unidade durante replay. Verificações integradas e aparelho físico seguem pendentes; `dp-time-recording` permanece Traçado.
