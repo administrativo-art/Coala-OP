@@ -38,6 +38,22 @@ class ApiContractTest {
             assertNull(external.takeRequest().getHeader("Authorization"))
         } }
     }
+    @Test fun offlinePermitKeepsThePublicVerificationFailureWithoutBlockingOrdinaryMonitorCalls() {
+        MockWebServer().use { server ->
+            val failure = AppFailure(ErrorCategory.PERMISSION, false, "A assinatura desta instalação não foi verificada.", "MOBILE_KEY_ATTESTATION_REJECTED")
+            val client = OkHttpClient.Builder().addInterceptor(AuthenticationInterceptor(server.url("/")) {
+                ApiCredentials("u", "token", null, failure)
+            }).build()
+            val refused = assertThrows(AppFailure::class.java) { client.newCall(Request.Builder()
+                .url(server.url("/api/dp/time-recording/offline-permits")).post("{}".toRequestBody()).build()).execute() }
+            assertEquals("MOBILE_KEY_ATTESTATION_REJECTED", refused.code)
+            assertEquals(failure.message, refused.message)
+            assertEquals(0, server.requestCount)
+            server.enqueue(MockResponse().setBody("{}"))
+            client.newCall(Request.Builder().url(server.url("/api/mobile/profile")).build()).execute().close()
+            assertEquals(1, server.requestCount)
+        }
+    }
     @Test fun developerViewAsHeaderStaysOnTheAuthenticatedApiOrigin() {
         MockWebServer().use { server -> MockWebServer().use { external ->
             val client = OkHttpClient.Builder().addInterceptor(AuthenticationInterceptor(server.url("/"), { "target-user" }) { ApiCredentials("developer", "token", "proof") }).build()

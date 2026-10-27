@@ -40,7 +40,7 @@ function authenticatedUidForAttestation(request: NextRequest, effectiveUid: stri
   }
 }
 
-function secret() {
+export function mobileAttestationSecret() {
   const value = process.env.MOBILE_APP_ATTESTATION_SECRET?.trim();
   if (!value || value.length < 32) {
     throw new AppError({ code: "MOBILE_ATTESTATION_NOT_CONFIGURED", kind: "UNEXPECTED_APPLICATION", safeMessage: "A verificação do aplicativo não está configurada." });
@@ -50,7 +50,7 @@ function secret() {
 
 /** Só informa: a chamada traz atestação válida do Coala Go para este uid? Sem segredo configurado, não. */
 export function hasValidMobileAttestation(request: NextRequest, uid: string) {
-  try { return verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid)); } catch { return false; }
+  try { return verifyMobileAttestation(mobileAttestationSecret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid)); } catch { return false; }
 }
 
 export function currentMobileAttestationMode() {
@@ -75,7 +75,7 @@ export function assertMobileAppAttested(request: NextRequest, uid: string) {
 
 function assertMobileAppAttestedWithMode(request: NextRequest, uid: string, mode: ReturnType<typeof mobileAttestationMode>) {
   if (mode === "off") return;
-  if (verifyMobileAttestation(secret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid))) return;
+  if (verifyMobileAttestation(mobileAttestationSecret(), request.headers.get(MOBILE_ATTESTATION_HEADER), authenticatedUidForAttestation(request, uid))) return;
   if (mode === "monitor") {
     console.info("[mobile-app-attestation] chamada sem atestado válido", { path: request.nextUrl.pathname });
     return;
@@ -85,7 +85,7 @@ function assertMobileAppAttestedWithMode(request: NextRequest, uid: string, mode
 
 /**
  * Offline time recording is a stronger boundary than the other mobile routes: it must never be
- * enabled while Play Integrity is only disabled or being monitored.
+ * enabled while the app proof is disabled or only being monitored.
  */
 export function assertOfficialMobileApp(request: NextRequest, uid: string) {
   const mode = currentOfflineAttestationMode();
@@ -99,7 +99,7 @@ export function assertOfficialMobileApp(request: NextRequest, uid: string) {
 /** Exchanges a Play Integrity token, decoded by Google, for the short-lived pass. */
 export async function issueMobileAttestation(input: { uid: string; integrityToken: string; nonce: string; packageName?: MobilePackage }) {
   const packageName = mobilePackageSchema.parse(input.packageName ?? MOBILE_ATTESTATION_PACKAGE);
-  const signingSecret = secret();
+  const signingSecret = mobileAttestationSecret();
   googleAuth ??= new GoogleAuth({ scopes: [PLAY_INTEGRITY_SCOPE] });
   const accessToken = await googleAuth.getAccessToken();
   const response = await fetch(`https://playintegrity.googleapis.com/v1/${packageName}:decodeIntegrityToken`, {

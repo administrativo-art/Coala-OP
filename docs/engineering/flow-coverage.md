@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-27: correção em andamento da autorização offline para distribuição por APK direto. Atestação de hardware Android substitui a dependência de reconhecimento Play no cliente novo; HLB e gates da contingência permanecem obrigatórios. A tela distingue dados não consultados de dia sem escala/batidas. Homologação física registrada no chamado; grupo continua Traçado.
+
 2026-10-27: o Registro REP-P ganhou candidata local para simular pedidos de ajuste no ensaio em coleção segregada e para confirmar o encerramento organizacional após `Fim da jornada`. A simulação não cria tratamento nem participa de PTRP/ARP/AFD/AEJ/espelho/fechamento; o encerramento não bloqueia nova batida e não fabrica marcação. Também foram corrigidos os estados de autorização offline, tentativa pendente e cache da Home. Testes integrados, revisão final independente e aparelho físico permanecem gates; o grupo continua Traçado.
 
 2026-10-26: o [Registro REP-P](flows/dp-time-recording.md) ganhou clareza local na prévia web: orientação da escala antes da primeira batida, intervalo somente após o início real, memória numérica do dia, fatos das ocorrências, faixa noturna física e resumo compacto do banco com acesso ao extrato dedicado. A apuração e os contratos fiscais permanecem inalterados; validação visual integrada e publicação desta candidata seguem pendentes. O grupo permanece Traçado.
