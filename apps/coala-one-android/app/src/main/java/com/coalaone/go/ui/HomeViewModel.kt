@@ -19,6 +19,7 @@ data class HomeToday(val contextKey: String? = null, val loaded: Boolean = false
     val timeOptions: TimeOptions? = null, val timeClockOffset: Long? = null, val timePunches: List<OwnMarking> = emptyList(), val timeShift: OwnShift? = null,
     val timeWorkDate: String? = null, val timeShifts: List<OwnShift> = emptyList(), val timeTreatments: List<Treatment> = emptyList(),
     val timeTreatmentsAvailable: Boolean? = null, val timeOfflinePending: Int = 0,
+    val timeClockSource: com.coalaone.go.domain.ClockSource = com.coalaone.go.domain.ClockSource.NONE,
     val goalUnit: String? = null, val goalToday: Double? = null, val goalDaily: Double? = null, val goalPercent: Double? = null, val openCounts: List<String> = emptyList(), val repositions: Int? = null)
 /** Never expose a summary loaded for another owner while Compose schedules the next reload. */
 fun HomeToday.visibleFor(contextKey: String) = takeIf { it.contextKey == contextKey } ?: HomeToday(contextKey = contextKey)
@@ -175,7 +176,15 @@ fun HomeProfile.visibleFor(contextKey: String) = response.takeIf { this.contextK
                 val shifts = month?.shifts.orEmpty()
                 val context = TimeRules.homeWorkContext(now, shifts, mergedPunches(markings))
                 val ownShift = context.shift
-                next = next.copy(timeOptions = options, timeClockOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed),
+                val officialOffset = TimeRules.clockOffset(options?.officialClock, summary.elapsed)
+                // Without the network or the Hora Legal, the home shows the anchor of a valid local permit under its own name.
+                val permitOffset = if (officialOffset != null || contextKey != mode.identity().uid) null
+                    else quiet { timeOfflineQueue.cachedOptions(contextKey, summary.elapsed) }?.takeIf { options == null || it.mode == options.mode }
+                        ?.let { TimeRules.clockOffset(it.officialClock, summary.elapsed) }
+                next = next.copy(timeOptions = options, timeClockOffset = officialOffset ?: permitOffset,
+                    timeClockSource = when { officialOffset != null -> com.coalaone.go.domain.ClockSource.OFFICIAL
+                        permitOffset != null -> com.coalaone.go.domain.ClockSource.LOCAL_PERMIT
+                        else -> com.coalaone.go.domain.ClockSource.NONE },
                     timePunches = context.markings, timeShift = ownShift, timeWorkDate = context.date, timeShifts = shifts,
                     scheduleAvailable = month != null, hasSchedule = ownShift != null,
                     shiftUnit = ownShift?.unitName, shift = TimeRules.shiftText(ownShift),

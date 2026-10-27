@@ -11,6 +11,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -32,6 +35,7 @@ import androidx.core.content.FileProvider
 import com.coalaone.go.data.*
 import com.coalaone.go.domain.BreakLevel
 import com.coalaone.go.domain.BreakStatus
+import com.coalaone.go.domain.ClockSource
 import com.coalaone.go.domain.DayPunch
 import com.coalaone.go.domain.TimeRules
 import kotlinx.coroutines.delay
@@ -181,21 +185,24 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 
 /** Digital clock with seconds (Portaria 671, Anexo IX), from the official reading plus the phone's elapsed time. */
 @Composable private fun OfficialClockCard(state: TimeState) {
-    val clock = state.options?.officialClock
     val zone = TimeRules.unitZone(state.options, state.unitId)
     // Monotonic clock plus the official offset: changing the phone's hour does not move the time shown.
     var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
     LaunchedEffect(state.clockOffset) { while (true) { official = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0); delay(1000 - official % 1000) } }
+    // The permit anchor is shown under its own name; only a confirmed reading is "Hora Legal Brasileira".
+    val local = state.clockSource == ClockSource.LOCAL_PERMIT
+    val showTime = state.clockSource != ClockSource.NONE && state.clockOffset != null
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            Text(if (local) "HORA ANCORADA PELA AUTORIZAÇÃO LOCAL" else "HORA LEGAL BRASILEIRA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
             if (state.options?.mode == "pilot") Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.accentSoft, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp))
-            if (clock?.available == true && state.clockOffset != null) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+            if (showTime) Text(TimeRules.utcOffsetLabel(zone, official), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
         }
-        if (clock?.available == true && state.clockOffset != null) {
+        if (showTime) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark, style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
             val unitName = state.options?.executionUnits?.firstOrNull { it.id == state.unitId }?.name
             unitName?.let { Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall) }
+            if (local) Text("Hora Legal não confirmada agora · contingência ativa", color = Tokens.pink, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
         } else Text(if (state.options == null) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
     }
 }
@@ -328,21 +335,49 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     // One main action: the punch, confirmed in the footer itself; the history has no footer.
     val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today") null else { {
         if (confirming) {
+            val pending = vm.pendingAttempt()
+            val lockedPurpose = pending?.purpose
             if (pilotMode) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = .8.sp))
-            Text("HORÁRIO A REGISTRAR", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-            Text(confirmationTime, style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
-            Text(unitName, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            Text("O que este registro representa?", style = MaterialTheme.typography.titleMedium)
-            TimeRules.PUNCH_PURPOSES.forEach { (id, label) ->
-                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(enabled = !screenBusy, role = Role.RadioButton) { declaredPurpose = id }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(declaredPurpose == id, null, enabled = !screenBusy); Text(label)
-                    if (suggestionReliable && id == suggestedPurpose) Text(" · sugerida", color = Tokens.wine, style = MaterialTheme.typography.bodySmall)
+            val (heading, time, origin) = when {
+                // A replay resends the first attempt: its time is shown as such, the server keeps the official one.
+                pending != null -> Triple("REENVIAR A MESMA BATIDA",
+                    pending.firstTriedAt?.let { TimeRules.clockText(it, TimeRules.unitZone(state.options, pending.unitId)) } ?: "—",
+                    listOfNotNull(when (pending.firstTriedSource) {
+                        "OFFICIAL" -> "Primeira tentativa · Hora Legal"
+                        "LOCAL_PERMIT" -> "Primeira tentativa · hora ancorada, informativa"
+                        else -> "Primeira tentativa · hora do aparelho, informativa"
+                    }, units.firstOrNull { it.id == pending.unitId }?.name).joinToString(" · "))
+                preserving -> Triple("HORÁRIO A PRESERVAR", confirmationTime, listOf(unitName, "hora ancorada pela autorização local").filter { it.isNotBlank() }.joinToString(" · "))
+                else -> Triple("HORÁRIO A REGISTRAR", confirmationTime, unitName)
+            }
+            Text(heading, color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+            Text(time, style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
+            Text(origin, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (lockedPurpose != null) {
+                Text("O que este registro representa", style = MaterialTheme.typography.titleMedium)
+                Column(Modifier.fillMaxWidth().background(Tokens.accentSoft, RoundedCornerShape(14.dp)).border(2.dp, Tokens.accent, RoundedCornerShape(14.dp)).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(TimeRules.purposeLabel(lockedPurpose), style = MaterialTheme.typography.titleMedium)
+                    Text("Definida na tentativa original; não pode ser trocada no reenvio.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                Text("O que este registro representa?", style = MaterialTheme.typography.titleMedium)
+                TimeRules.PUNCH_PURPOSES.forEach { (id, label) ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !screenBusy, role = Role.RadioButton) { declaredPurpose = id }, verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(declaredPurpose == id, null, enabled = !screenBusy); Text(label)
+                        if (suggestionReliable && id == suggestedPurpose) Text(" · sugerida", color = Tokens.wine, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
-            if (preserving) Text(if (online) "A Hora Legal não pôde ser confirmada agora. A marcação ficará preservada neste aparelho até o servidor validá-la."
-                else "A marcação ficará preservada neste aparelho até a conexão voltar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (pendingAttempt) Text("Uma tentativa anterior ainda aguarda confirmação. O aplicativo reenviará exatamente a mesma batida para evitar duplicidade.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (!preserving && locationPolicy.mode != "disabled") {
+            if (pending != null) Text("O servidor não confirmou a tentativa anterior. O Coala Go reenvia exatamente a mesma batida; se ela já tiver sido gravada, nada é duplicado. Esta hora é apenas informativa: o comprovante terá a hora gravada pelo servidor.",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            else if (preserving) Text(when {
+                pilotMode && online -> "A Hora Legal não pôde ser confirmada agora. Este ensaio fica preservado neste aparelho e será sincronizado depois, mas continua fora do fechamento oficial e sem comprovante REP-P."
+                pilotMode -> "Sem conexão. Este ensaio fica preservado neste aparelho e será sincronizado depois, mas continua fora do fechamento oficial e sem comprovante REP-P."
+                online -> "A Hora Legal não pôde ser confirmada agora. A marcação ficará preservada neste aparelho até o servidor validá-la."
+                else -> "A marcação ficará preservada neste aparelho até a conexão voltar."
+            }, color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            if (pending == null && !preserving && locationPolicy.mode != "disabled") {
                 Text("Ao confirmar, o Coala Go fará uma leitura pontual de localização apenas para esta batida. O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade.",
                     color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 locationPolicy.privacyNoticeUrl?.let { url ->
@@ -350,17 +385,33 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                         enabled = !screenBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Aviso de privacidade", color = Tokens.wine) }
                 }
             }
-            FooterPair("Voltar", !screenBusy, { confirming = false }, if (preserving) "Preservar no aparelho" else "Confirmar ponto",
-                !screenBusy && declaredPurpose != null) {
+            val purpose = lockedPurpose ?: declaredPurpose
+            FooterPair("Voltar", !screenBusy, { confirming = false }, when {
+                pending != null -> "Reenviar batida"
+                preserving && pilotMode -> "Preservar ensaio no aparelho"
+                preserving -> "Preservar no aparelho"
+                else -> "Confirmar ponto"
+            }, !screenBusy && purpose != null) {
                 confirming = false
                 when {
-                    preserving || pendingAttempt || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> declaredPurpose?.let { vm.record(online, declaredPurpose = it) }
+                    preserving || pendingAttempt || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> purpose?.let { vm.record(online, declaredPurpose = it) }
                     hasPointLocationPermission(context) -> captureAndRecord()
                     else -> locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
             }
         } else {
-            Action(when { pendingAttempt && online -> "Confirmar tentativa pendente"; pendingAttempt -> "Conecte para confirmar a tentativa"; canPreserve -> "Preservar ponto neste aparelho"; online -> "Registrar ponto"; else -> "Registrar ponto offline" }, screenBusy,
+            if (!pendingAttempt && (TimeRules.canRecord(state.options, state.unitId) || canPreserve))
+                Text("Próxima: " + TimeRules.nextPunchText(todayPunches.count { !it.discarded }, todayShift, if (suggestionReliable) suggestedPurpose else null) +
+                    if (suggestionReliable) " · sugerida" else "", color = Tokens.muted, style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            // Without the network or the Hora Legal the punch is preserved, never "registered": the label says so.
+            Action(when {
+                pendingAttempt && online -> "Reenviar a mesma batida"
+                pendingAttempt -> "Conecte para reenviar a batida"
+                preserving && pilotMode -> "Preservar ensaio neste aparelho"
+                preserving -> "Preservar ponto neste aparelho"
+                else -> "Registrar ponto"
+            }, screenBusy,
                 enabled = !(!online && pendingAttempt) && (pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve)) { confirming = true }
         }
     } }
@@ -405,15 +456,15 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 }
             }
             breakStatus?.let { BreakNoticeCard(it) }
-            TimeRules.blockedReason(state.options)?.let { reason ->
+            // One block for the reason and the contingency issue, instead of two stacked warnings.
+            val blocked = TimeRules.blockedReason(state.options, state.offlineReady)
+            if (blocked != null || state.offlineIssue != null) {
                 Column(Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(reason, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
-                    if (state.options?.officialClock?.available != true) TextButton({ vm.refreshClock() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Tentar de novo", color = Tokens.wine) }
+                    blocked?.let { Text(it, color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)) }
+                    state.offlineIssue?.let { issue -> Text("A contingência local não pôde ser renovada: $issue", color = Tokens.warning, style = MaterialTheme.typography.bodySmall) }
+                    if (blocked != null && state.options?.officialClock?.available != true) TextButton({ vm.refreshClock() }, enabled = !feedback.busy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Tentar de novo", color = Tokens.wine) }
                 }
             }
-            state.offlineIssue?.let { issue -> Text("A contingência local não pôde ser renovada: $issue",
-                color = Tokens.warning, style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp)) }
             if (state.offlineRows.isNotEmpty()) {
                 val blocked = state.offlineRows.count { it.state == "BLOCKED" }
                 Text(if (blocked == 0) "${state.offlineRows.size} ${if (state.offlineRows.size == 1) "marcação preservada aguarda" else "marcações preservadas aguardam"} sincronização."
@@ -497,53 +548,128 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
 }
 
+private fun competenceTitle(competence: String) = runCatching {
+    java.time.YearMonth.parse(competence).atDay(1).format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) }
+}.getOrDefault(competence)
+
+/** Filter row of the consultations: pills that scroll sideways when they do not fit. */
+@Composable private fun FilterRow(values: List<Pair<String, String>>, selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        values.forEach { (id, label) -> PillChoice(label, selected == id, enabled) { onSelect(id) } }
+    }
+}
+
+/** Count over a label, tappable as a filter; the tone repeats what the text says. */
+@Composable private fun CountTile(value: String, label: String, ink: Color, background: Color, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).background(background).border(if (selected) 2.dp else 1.dp, if (selected) Tokens.accent else Tokens.border, RoundedCornerShape(14.dp))
+        .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(value, color = ink, style = MaterialTheme.typography.titleLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
+        Text(label, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private fun purposeColor(purpose: String?) = when (purpose) {
+    "journey_start" -> Tokens.ok
+    "break_start", "break_end" -> Tokens.info
+    "journey_end" -> Tokens.ink
+    else -> Tokens.faint
+}
+
+/** Times of a day, each with the dot of its purpose; discarded punches stay struck. */
+@Composable private fun PunchTimes(punches: List<DayPunch>) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        punches.forEach { punch ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(7.dp).background(purposeColor(if (punch.discarded) null else punch.purpose), RoundedCornerShape(50)))
+                Text(punch.time, color = if (punch.discarded) Tokens.faint else Tokens.ink,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold,
+                        textDecoration = if (punch.discarded) TextDecoration.LineThrough else null))
+            }
+        }
+    }
+}
+
 @Composable private fun BankTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onDay: (String) -> Unit) {
     AuxiliaryMonthPicker(state, busy, vm)
     val response = state.bank
     val statement = response?.statement
+    var filter by rememberSaveable { mutableStateOf("all") }
     when {
         response == null && !busy -> EmptyState("Banco ainda não carregado", "Puxe a tela para baixo para tentar novamente.")
         response?.policy == null -> EmptyState("Sem política de banco de horas", "O DP ainda não vinculou uma política vigente para este período.")
         statement == null -> EmptyState("Extrato indisponível", "Não há apuração disponível para este período.")
         else -> {
             CardBlock(selected = true) {
-                val balanceStatus = when {
-                    response.previewCompetences.isNotEmpty() -> "provisório"
-                    statement.missing.isNotEmpty() || statement.settlementOutdated -> "pendente de reapuração"
-                    else -> "fechado"
+                val (balanceStatus, statusInk, statusBg) = when {
+                    response.previewCompetences.isNotEmpty() -> Triple("Prévia · mês aberto", Tokens.info, Tokens.infoBg)
+                    statement.missing.isNotEmpty() || statement.settlementOutdated -> Triple("Pendente de reapuração", Tokens.warning, Tokens.warningBg)
+                    else -> Triple("Fechado", Tokens.okInk, Tokens.okBg)
                 }
-                Text("Saldo $balanceStatus", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                Text(TimeRules.durationText(statement.balanceMinutes, true), style = MaterialTheme.typography.headlineLarge,
-                    color = if (statement.balanceMinutes < 0) Tokens.warning else Tokens.ink)
-                statement.cycle?.let { Text("Ciclo ${fullDate(it.start)} a ${fullDate(it.end)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
-                Text("Créditos ${TimeRules.durationText(statement.credit)} · débitos ${TimeRules.durationText(statement.debit)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            }
-            if (response.previewCompetences.isNotEmpty()) Text("Prévia: o mês aberto pode mudar até o fechamento.", color = Tokens.warning,
-                style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
-            if (statement.missing.isNotEmpty()) Text("Falta apurar: ${statement.missing.joinToString()}", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (statement.nightMinutes > 0) Text("${TimeRules.durationText(statement.nightMinutes)} em período noturno. Hora reduzida e adicional seguem para conferência da folha.",
-                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (statement.lines.isEmpty()) EmptyState("Nenhum lançamento neste ciclo")
-            statement.lines.asReversed().take(100).forEach { item ->
-                var open by rememberSaveable(item.date, item.line.nature, item.line.minutes) { mutableStateOf(false) }
-                CardBlock {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button, onClickLabel = if (open) "Ocultar detalhes" else "Mostrar detalhes") { open = !open },
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            Text(TimeRules.bankNatureText(item.line.nature), style = MaterialTheme.typography.titleMedium)
-                            Text(fullDate(item.date), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                        }
-                        val signedMinutes = when (item.line.nature) { "bank_credit" -> item.line.minutes; "bank_debit" -> -item.line.minutes; else -> 0 }
-                        Text(if (signedMinutes == 0) TimeRules.durationText(item.line.minutes) else TimeRules.durationText(signedMinutes, true),
-                            color = if (item.line.nature == "bank_debit") Tokens.warning else Tokens.ink, style = MaterialTheme.typography.titleMedium)
-                        DropdownChevron(open, Tokens.muted)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Saldo do ciclo", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                        Text(TimeRules.durationText(statement.balanceMinutes, true), style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold),
+                            color = if (statement.balanceMinutes < 0) Tokens.warning else Tokens.ink)
                     }
-                    if (open) {
-                        HorizontalDivider(color = Tokens.border)
-                        SummaryLine("Motivo", TimeRules.bankReasonText(item.line.reason))
-                        SummaryLine("Competência", item.competence)
-                        SummaryLine("Apuração", if (item.closureVersion > 0) "Fechamento versão ${item.closureVersion}" else "Prévia do mês em aberto")
-                        Action("Ver dia", secondary = true, enabled = !busy) { onDay(item.date) }
+                    StatusChip(balanceStatus, statusInk, statusBg)
+                }
+                statement.cycle?.let { cycle ->
+                    Text("Ciclo ${fullDate(cycle.start)} a ${fullDate(cycle.end)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    TimeRules.cycleProgress(cycle, state.today)?.let { (elapsed, total) ->
+                        LinearProgressIndicator(progress = { elapsed.toFloat() / total }, color = Tokens.ink, trackColor = Tokens.greyBg,
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50))
+                                .semantics { contentDescription = "Ciclo do banco: dia $elapsed de $total" })
+                        Text(if (elapsed >= total) "Ciclo encerrado" else "Dia $elapsed de $total · faltam ${total - elapsed} dias", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatBox("Créditos", TimeRules.durationText(statement.credit), Modifier.weight(1f))
+                    StatBox("Débitos", TimeRules.durationText(statement.debit), Modifier.weight(1f))
+                    StatBox("Para a folha", TimeRules.durationText(statement.payroll + statement.discount), Modifier.weight(1f))
+                }
+            }
+            val notices = listOfNotNull(
+                "O mês aberto pode mudar até o fechamento.".takeIf { response.previewCompetences.isNotEmpty() },
+                statement.missing.takeIf { it.isNotEmpty() }?.let { "Falta apurar: ${it.joinToString()}" },
+                statement.nightMinutes.takeIf { it > 0 }?.let { "${TimeRules.durationText(it)} em período noturno. Hora reduzida e adicional seguem para conferência da folha." },
+                statement.lines.count { TimeRules.bankGroup(it.line.nature) == "review" }.takeIf { it > 0 }?.let { "$it ${if (it == 1) "lançamento" else "lançamentos"} a conferir pelo DP." })
+            if (notices.isNotEmpty()) Column(Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (response.previewCompetences.isNotEmpty()) "Prévia: antes do fechamento" else "Antes de conferir", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                notices.forEach { Text("• $it", color = Tokens.warning, style = MaterialTheme.typography.bodySmall) }
+            }
+            if (statement.lines.isEmpty()) EmptyState("Nenhum lançamento neste ciclo")
+            else {
+                FilterRow(listOf("all" to "Todos", "credit" to "Créditos", "debit" to "Débitos", "payroll" to "Folha", "review" to "A conferir"), filter, !busy) { filter = it }
+                val shown = statement.lines.asReversed().take(100).filter { filter == "all" || TimeRules.bankGroup(it.line.nature) == filter }
+                if (shown.isEmpty()) EmptyState("Nenhum lançamento neste filtro")
+                shown.groupBy { it.competence }.forEach { (competence, items) ->
+                    val closure = items.maxOf { it.closureVersion }
+                    val monthMinutes = items.sumOf { when (it.line.nature) { "bank_credit" -> it.line.minutes; "bank_debit" -> -it.line.minutes; else -> 0 } }
+                    CardBlock {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${competenceTitle(competence)} · ${if (closure > 0) "fechado versão $closure" else "prévia"}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Text(TimeRules.durationText(monthMinutes, true), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
+                        }
+                        items.forEach { item ->
+                            var open by rememberSaveable(item.date, item.line.nature, item.line.minutes) { mutableStateOf(false) }
+                            HorizontalDivider(color = Tokens.border)
+                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = if (open) "Ocultar detalhes" else "Mostrar detalhes") { open = !open },
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(TimeRules.bankReasonText(item.line.reason), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                                    Text("${shortDate(item.date) ?: item.date} · ${TimeRules.bankNatureText(item.line.nature)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                                }
+                                val signedMinutes = when (item.line.nature) { "bank_credit" -> item.line.minutes; "bank_debit" -> -item.line.minutes; else -> 0 }
+                                Text(if (signedMinutes == 0) TimeRules.durationText(item.line.minutes) else TimeRules.durationText(signedMinutes, true),
+                                    color = if (item.line.nature == "bank_debit") Tokens.warning else Tokens.ink, style = MaterialTheme.typography.titleMedium.copy(fontFamily = CodeFont))
+                                DropdownChevron(open, Tokens.muted)
+                            }
+                            if (open) {
+                                SummaryLine("Competência", competenceTitle(item.competence))
+                                SummaryLine("Apuração", if (item.closureVersion > 0) "Fechamento versão ${item.closureVersion}" else "Prévia do mês em aberto")
+                                Action("Ver dia", secondary = true, enabled = !busy) { onDay(item.date) }
+                            }
+                        }
                     }
                 }
             }
@@ -554,6 +680,15 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 
 @Composable private fun MirrorYearTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onMirror: (String) -> Unit) {
     val year = state.month.year
+    // The latest closed competence of the year loaded, one tap away.
+    val latest = state.mirrors.entries.filter { it.value.closure?.status == "closed" }.maxByOrNull { it.key }
+    if (state.mirrorYear == year) latest?.let { (competence, status) ->
+        CardBlock(selected = true) {
+            Text("Último espelho disponível", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Text("${competenceTitle(competence)} · versão ${status.closure?.version ?: "—"}", style = MaterialTheme.typography.titleMedium)
+            Action("Abrir espelho", enabled = !busy) { onMirror(competence) }
+        }
+    }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         NavSquare("‹", "Ano anterior", !busy) { vm.selectAuxiliaryMonth(state.month.minusYears(1)) }
         Text("$year", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
@@ -568,26 +703,44 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             row.forEach { month ->
                 val status = state.mirrors[month.toString()]
                 val closed = status?.closure?.status == "closed"
-                val label = when {
-                    status == null && busy -> "Carregando"
-                    closed && status?.mirror != null -> "Disponível"
-                    closed -> "Fechado"
-                    status?.closure != null -> "Reaberto"
-                    month == current -> "Em aberto"
-                    else -> "Sem fechamento"
+                val (label, tone) = when {
+                    status == null && busy -> "Carregando" to Tokens.muted
+                    closed && status?.mirror != null -> "Disponível" to Tokens.okInk
+                    closed -> "Fechado" to Tokens.okInk
+                    status?.closure != null -> "Reaberto" to Tokens.warning
+                    month == current -> "Em aberto" to Tokens.wine
+                    else -> "Sem fechamento" to Tokens.muted
                 }
                 Card(onClick = { onMirror(month.toString()) }, enabled = closed && !busy, modifier = Modifier.weight(1f).fillMaxHeight(),
-                    shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, if (closed) Tokens.border else Tokens.fieldBorder),
+                    shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(if (month == current) 1.5.dp else 1.dp,
+                        when { month == current -> Tokens.accent; closed -> Tokens.border; else -> Tokens.fieldBorder }),
                     colors = CardDefaults.cardColors(containerColor = if (closed) Tokens.surface else Tokens.soft,
                         disabledContainerColor = Tokens.soft, disabledContentColor = Tokens.muted)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(month.atDay(1).format(DateTimeFormatter.ofPattern("MMM", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium)
-                        Text(label, color = if (closed) Tokens.okInk else Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
-                        status?.closure?.takeIf { closed }?.let { Text("Versão ${it.version}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(month.atDay(1).format(DateTimeFormatter.ofPattern("MMM", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(50)))
+                        }
+                        Text(label, color = tone, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp, fontWeight = FontWeight.Bold))
+                        when {
+                            closed -> status?.closure?.let { Text("Versão ${it.version}${if (status.mirror != null) " · abrir" else ""}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) }
+                            month == current -> Text("fecha após ${month.atEndOfMonth().format(DateTimeFormatter.ofPattern("dd/MM"))}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+                        }
                     }
                 }
             }
             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(Triple(Tokens.okInk, "Disponível", "mês fechado; o documento é preparado na primeira abertura."),
+            Triple(Tokens.wine, "Em aberto", "mês corrente, ainda sem espelho."),
+            Triple(Tokens.warning, "Reaberto", "o DP reabriu a competência; aguarde o novo fechamento."),
+            Triple(Tokens.muted, "Sem fechamento", "não houve apuração do mês.")).forEach { (tone, title, hint) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(50)))
+                Text("$title: $hint", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -597,78 +750,145 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     val first = state.month.atDay(1)
     val officialMarkings = state.markings.filterNot { it.pilot }
     val hasPilotMarkings = state.markings.any { it.pilot }
+    var filter by rememberSaveable { mutableStateOf("all") }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         NavSquare("‹", "Mês anterior", !busy) { vm.month(state.month.minusMonths(1)) }
         Text(first.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
         NavSquare("›", "Próximo mês", !busy && state.month.isBefore(java.time.YearMonth.from(state.today))) { vm.month(state.month.plusMonths(1)) }
     }
     if (state.truncated) Text("O mês tem mais registros do que esta lista mostra; o espelho completo fica no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-    Action("Exportar comprovantes oficiais do mês", secondary = true,
-        enabled = !busy && !state.truncated && officialMarkings.isNotEmpty(), onClick = onArchive)
-    if (hasPilotMarkings) Text("Os comprovantes do ensaio ficam fora do pacote oficial. Abra cada batida para salvar ou compartilhar o comprovante identificado como ensaio.",
-        color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
     val last = if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     val days = generateSequence(last) { it.minusDays(1) }.takeWhile { !it.isBefore(first) }.toList()
         .filter { date -> state.markings.any { it.workDate == date.toString() } || state.shifts.any { it.date == date.toString() } || state.treatments.any { it.workDate == date.toString() } }
+    val readings = days.associateWith { date -> TimeRules.recordDay(date.toString(), state.markings, state.shifts.firstOrNull { it.date == date.toString() }, state.treatments, state.today) }
+    val withAdjustment = state.adjustments.filter { it.status == "in_review" }.map { it.workDate }.toSet()
+    val toReview = days.filter { readings[it]?.first in setOf(com.coalaone.go.domain.RecordDayState.MISSING, com.coalaone.go.domain.RecordDayState.REVIEW) }
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CountTile("${days.count { d -> state.markings.any { it.workDate == d.toString() } }}", "dias com batida", Tokens.ink, Tokens.surface, filter == "all", Modifier.weight(1f).fillMaxHeight()) { filter = "all" }
+        CountTile("${toReview.size}", "a conferir", if (toReview.isEmpty()) Tokens.ink else Tokens.warning, if (toReview.isEmpty()) Tokens.surface else Tokens.warningBg, filter == "review", Modifier.weight(1f).fillMaxHeight()) { filter = "review" }
+        CountTile("${withAdjustment.count { d -> days.any { it.toString() == d } }}", "ajuste em análise", if (withAdjustment.isEmpty()) Tokens.ink else Tokens.amberInk, if (withAdjustment.isEmpty()) Tokens.surface else Tokens.amberBg, filter == "adjustment", Modifier.weight(1f).fillMaxHeight()) { filter = "adjustment" }
+    }
+    val shown = when (filter) { "review" -> toReview; "adjustment" -> days.filter { it.toString() in withAdjustment }; else -> days }
     if (days.isEmpty()) EmptyState("Nenhuma batida neste mês")
-    days.forEach { date ->
+    else if (shown.isEmpty()) EmptyState(if (filter == "review") "Nenhum dia a conferir" else "Nenhum ajuste em análise", "Toque em \"dias com batida\" para ver o mês inteiro.")
+    shown.forEach { date ->
         val key = date.toString()
         val shift = state.shifts.firstOrNull { it.date == key }
         val punches = TimeRules.day(key, state.markings, state.treatments)
+        val (reading, worked) = readings[date] ?: (com.coalaone.go.domain.RecordDayState.EMPTY to null)
         var open by rememberSaveable(key) { mutableStateOf(false) }
         CardBlock {
-            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button, onClickLabel = if (open) "Recolher dia" else "Abrir dia") { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(dayTitle(date), style = MaterialTheme.typography.titleMedium)
-                    Text(punches.filter { !it.discarded }.joinToString(" · ") { it.time }.ifBlank { TimeRules.shiftText(shift) ?: "Sem batidas" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = if (open) "Recolher dia" else "Abrir dia") { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(dayTitle(date) + if (date == state.today) " · hoje" else "", style = MaterialTheme.typography.titleMedium)
+                    if (punches.isEmpty()) Text(TimeRules.shiftText(shift)?.let { "Escala $it · nenhuma batida" } ?: "Sem batidas", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    else PunchTimes(punches)
                 }
-                if (state.adjustments.any { it.workDate == key && it.status == "in_review" }) StatusChip("Ajuste em análise", Tokens.warning, Tokens.warningBg)
+                when {
+                    key in withAdjustment -> StatusChip("Ajuste em análise", Tokens.amberInk, Tokens.amberBg)
+                    reading == com.coalaone.go.domain.RecordDayState.MISSING -> StatusChip("Sem batida", Tokens.warning, Tokens.warningBg)
+                    reading == com.coalaone.go.domain.RecordDayState.REVIEW -> StatusChip("A conferir", Tokens.warning, Tokens.warningBg)
+                    reading == com.coalaone.go.domain.RecordDayState.IN_PROGRESS -> StatusChip("Em andamento", Tokens.wine, Tokens.accentSoft)
+                    // Calculated from the punches on the phone: always a preview, the closing is the reference.
+                    worked != null -> Column(horizontalAlignment = Alignment.End) {
+                        Text(TimeRules.durationText(worked), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
+                        Text("prévia", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+                    }
+                }
                 DropdownChevron(open, Tokens.muted)
             }
             if (open) {
                 TimeRules.shiftText(shift)?.let { Text("Escala: $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
                 PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
-                Action("Detalhar dia", enabled = !busy) { onDay(key) }
-                if (state.markings.any { it.workDate == key && it.pilot }) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                else Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) }
+                val pilotDay = state.markings.any { it.workDate == key && it.pilot }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { Action("Detalhar dia", enabled = !busy) { onDay(key) } }
+                    if (!pilotDay) Box(Modifier.weight(1f)) { Action("Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) } }
+                }
+                if (pilotDay) Text("Ajuste formal indisponível para batidas de ensaio.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+    if (days.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        listOf("journey_start" to "Início", "break_start" to "Intervalo", "journey_end" to "Fim").forEach { (purpose, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(7.dp).background(purposeColor(purpose), RoundedCornerShape(50)))
+                Text(label, color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+            }
+        }
+    }
+    CardBlock {
+        Text("Comprovantes oficiais de ${first.format(DateTimeFormatter.ofPattern("MMMM", ptBR))}", style = MaterialTheme.typography.titleMedium)
+        Text("${officialMarkings.size} ${if (officialMarkings.size == 1) "batida oficial" else "batidas oficiais"} · ensaios ficam fora do pacote", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        Action("Exportar comprovantes oficiais do mês", secondary = true,
+            enabled = !busy && !state.truncated && officialMarkings.isNotEmpty(), onClick = onArchive)
+        if (hasPilotMarkings) Text("Os comprovantes do ensaio ficam fora do pacote oficial. Abra cada batida para salvar ou compartilhar o comprovante identificado como ensaio.",
+            color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable private fun AdjustmentHistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onDay: (String) -> Unit) {
     AuxiliaryMonthPicker(state, busy, vm)
+    var filter by rememberSaveable { mutableStateOf("all") }
     if (state.adjustments.isEmpty() && !busy) EmptyState("Nenhum ajuste neste mês", "Os pedidos enviados aparecem aqui com a decisão do gestor ou do DP.")
-    state.adjustments.groupBy { it.workDate }.toSortedMap(reverseOrder()).forEach { (workDate, rows) ->
-        var open by rememberSaveable(workDate) { mutableStateOf(false) }
-        CardBlock {
-            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button) { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (state.adjustments.isNotEmpty()) {
+        val counts = state.adjustments.groupingBy { it.status }.eachCount()
+        FilterRow(listOf("all" to "Todos ${state.adjustments.size}", "in_review" to "Em análise ${counts["in_review"] ?: 0}",
+            "approved" to "Aprovados ${counts["approved"] ?: 0}", "rejected" to "Recusados ${counts["rejected"] ?: 0}") +
+            (counts["cancelled"]?.let { listOf("cancelled" to "Cancelados $it") } ?: emptyList()), filter, !busy) { filter = it }
+    }
+    val shown = state.adjustments.filter { filter == "all" || it.status == filter }.sortedWith(compareByDescending<Adjustment> { it.workDate }.thenByDescending { it.createdAt })
+    if (state.adjustments.isNotEmpty() && shown.isEmpty()) EmptyState("Nenhum ajuste nesta situação")
+    shown.forEach { adjustment ->
+        var open by rememberSaveable(adjustment.id) { mutableStateOf(false) }
+        val operations = adjustment.operations.ifEmpty { listOf(AdjustmentOperation(adjustment.kind, adjustment.target, adjustment.inclusion)) }
+        val times = operations.mapNotNull { it.inclusion?.markedAt ?: it.target?.markedAt }.joinToString(" · ") { TimeRules.minuteOf(it) }
+        val (ink, background) = when (adjustment.status) { "approved" -> Tokens.okInk to Tokens.okBg; "in_review" -> Tokens.amberInk to Tokens.amberBg; else -> Tokens.muted to Tokens.soft }
+        CardBlock(selected = open && adjustment.status == "in_review") {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = if (open) "Recolher pedido" else "Abrir pedido") { open = !open },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(fullDate(workDate), style = MaterialTheme.typography.titleMedium)
-                    Text("${rows.size} ${if (rows.size == 1) "solicitação" else "solicitações"}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    Text(runCatching { dayTitle(LocalDate.parse(adjustment.workDate)) }.getOrDefault(adjustment.workDate), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    Text(listOf(TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == adjustment.kind }?.second ?: adjustment.kind, times).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.titleMedium)
                 }
-                val summary = rows.groupingBy { it.status }.eachCount().entries.joinToString(" · ") { (status, count) -> "$count ${TimeRules.ADJUSTMENT_STATUS[status]?.substringBefore(" ·")?.lowercase() ?: status}" }
-                Text(summary, color = if (rows.any { it.status == "in_review" }) Tokens.warning else Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                StatusChip(TimeRules.ADJUSTMENT_STATUS[adjustment.status]?.substringBefore(" ·") ?: adjustment.status, ink, background)
                 DropdownChevron(open, Tokens.muted)
             }
             if (open) {
-                rows.sortedByDescending { it.createdAt }.forEachIndexed { index, adjustment ->
-                    if (index > 0) HorizontalDivider(color = Tokens.border)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == adjustment.kind }?.second ?: adjustment.kind, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        StatusChip(TimeRules.ADJUSTMENT_STATUS[adjustment.status] ?: adjustment.status,
-                            if (adjustment.status == "approved") Tokens.okInk else if (adjustment.status == "in_review") Tokens.warning else Tokens.muted,
-                            if (adjustment.status == "approved") Tokens.okBg else if (adjustment.status == "in_review") Tokens.warningBg else Tokens.soft)
+                operations.forEach { operation ->
+                    // Before and after side by side: the original is struck, never removed from the record.
+                    Row(Modifier.fillMaxWidth().background(Tokens.soft, RoundedCornerShape(14.dp)).border(1.dp, Tokens.border, RoundedCornerShape(14.dp)).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Batida original", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                            Text(operation.target?.let { TimeRules.minuteOf(it.markedAt) } ?: "—", color = Tokens.faint,
+                                style = MaterialTheme.typography.titleLarge.copy(fontFamily = CodeFont, textDecoration = if (operation.target != null && operation.kind != "include") TextDecoration.LineThrough else null))
+                            operation.target?.let { Text("Registro oficial ${it.nsr}", color = Tokens.faint, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) }
+                        }
+                        Text("→", color = Tokens.faint, style = MaterialTheme.typography.titleMedium)
+                        Column(Modifier.weight(1f)) {
+                            Text(if (operation.kind == "discard") "Pedido" else "Horário informado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                            Text(operation.inclusion?.let { TimeRules.minuteOf(it.markedAt) } ?: "Desconsiderar", style = MaterialTheme.typography.titleLarge.copy(fontFamily = CodeFont))
+                        }
                     }
-                    val operations = adjustment.operations.ifEmpty { listOf(AdjustmentOperation(adjustment.kind, adjustment.target, adjustment.inclusion)) }
-                    val originals = operations.mapNotNull { it.target }.joinToString("; ") { "${TimeRules.minuteOf(it.markedAt)} · registro oficial ${it.nsr}" }
-                    val inclusions = operations.mapNotNull { it.inclusion }.joinToString(" · ") { TimeRules.minuteOf(it.markedAt) }
-                    if (originals.isNotBlank()) Text("Batidas originais: $originals", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                    if (inclusions.isNotBlank()) Text("Horários informados: $inclusions", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                    Text(adjustment.reason, style = MaterialTheme.typography.bodySmall)
-                    Text("${adjustment.acts.size} ${if (adjustment.acts.size == 1) "ato registrado" else "atos registrados"} na trilha.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
                 }
-                Action("Ver dia", secondary = true, enabled = !busy) { onDay(workDate) }
+                Text("“${adjustment.reason}”", style = MaterialTheme.typography.bodySmall)
+                if (adjustment.acts.isNotEmpty()) {
+                    Text("TRILHA", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+                    adjustment.acts.sortedBy { it.at }.forEach { act ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                            Box(Modifier.padding(top = 5.dp).size(8.dp).background(if (act.action == "approved") Tokens.ok else if (act.action == "rejected") Tokens.warning else Tokens.ink, RoundedCornerShape(50)))
+                            Column {
+                                Text(TimeRules.adjustmentActText(act), style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                                Text(listOfNotNull(shortDate(act.at), act.reason).joinToString(" · "),
+                                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+                if (adjustment.status == "in_review") Text("A batida original continua no registro; nada é apagado.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+                Action("Ver dia", secondary = true, enabled = !busy) { onDay(adjustment.workDate) }
             }
         }
     }
