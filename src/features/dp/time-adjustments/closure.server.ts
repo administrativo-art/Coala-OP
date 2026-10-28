@@ -20,6 +20,7 @@ import {
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
 import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
+import { belongsToTimeClosureRoster } from '@/lib/hr/employment-relationship';
 
 const ABSENCES = 'dp_absenceRequests';
 /** Acima disso o fechamento é recusado: lista truncada não pode virar documento de fechamento. */
@@ -35,7 +36,7 @@ async function readActiveOperationalRoster() {
   const snapshot = await dbAdmin.collection('users').limit(PEOPLE_LIMIT + 1).get();
   if (snapshot.size > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'Há pessoas demais para congelar o fechamento numa única versão.', 'CONFLICT');
   return snapshot.docs
-    .filter((doc) => doc.get('isActive') !== false && doc.get('operacional') !== false)
+    .filter((doc) => doc.get('isActive') !== false && belongsToTimeClosureRoster(doc.get('employmentRelationshipType')))
     .map((doc) => ({ uid: doc.id, name: typeof doc.get('username') === 'string' && doc.get('username').trim() ? doc.get('username').trim() : null }));
 }
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin,
