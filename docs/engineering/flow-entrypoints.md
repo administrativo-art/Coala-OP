@@ -2217,7 +2217,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/ferias/[userId]/page.tsx`](../../src/app/dashboard/dp/ferias/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/ferias/page.tsx`](../../src/app/dashboard/dp/ferias/page.tsx).
 
-Arquivos locais percorridos: 29.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 

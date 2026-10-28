@@ -68,7 +68,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [index.ts](../../src/types/index.ts) |
 | `dashboard/dp/fechamento` | [page.tsx](../../src/app/dashboard/dp/fechamento/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [closure-section.tsx](../../src/features/dp/time-adjustments/closure-section.tsx) |
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
-| `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
+| `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx) |
 | `dashboard/dp` | [page.tsx](../../src/app/dashboard/dp/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [use-dp-schedules-shifts.ts](../../src/hooks/use-dp-schedules-shifts.ts) |
 | `dashboard/dp/requests` | [page.tsx](../../src/app/dashboard/dp/requests/page.tsx) | [hr-requests-page.tsx](../../src/features/hr/requests/hr-requests-page.tsx) |
 | `dashboard/dp/schedules/[id]` | [page.tsx](../../src/app/dashboard/dp/schedules/[id]/page.tsx) | [dp-context.tsx](../../src/components/dp-context.tsx), [dp-schedule-editor.tsx](../../src/components/dp/dp-schedule-editor.tsx) |
