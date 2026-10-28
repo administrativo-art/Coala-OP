@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { mirrorPdf } from '@/features/dp/time-adjustments/mirror.server';
 import { mirrorQuerySchema } from '@/features/dp/time-adjustments/schemas';
-import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { requireAuthenticatedUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
 import { defineSecurityContract } from '@/lib/security/route-contract';
@@ -23,7 +23,7 @@ const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUse
   id: 'dp-time-mirror-pdf-v1',
   guarantees: ['authenticated-user', 'active-user', 'authorization:owner-or-time-closure', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
-    const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
+    const actor = await requireAuthenticatedUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     const parsed = mirrorQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
     if (!parsed.success) throw new AppError({ code: 'PTRP_MIRROR_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Competência inválida.' });
     return { actor, input: parsed.data, resource: { workspaceId: actor.workspace_id } };

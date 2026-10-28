@@ -434,3 +434,7 @@ No Ponto sem internet, dados ainda não consultados aparecem como indisponíveis
 - Os trechos marcados "Como está hoje" não passaram por decisão de design. Se um deles for contestado, o código atual não serve de argumento.
 - O protótipo `Coala One App - Prototipo` não foi reaberto para este levantamento; diferenças entre ele e o app não estão listadas aqui.
 - Os pontos fora do padrão de [Cores](#cores) (hex solto) e de [Ícones de interface](#ícones-de-interface) (caracteres como ícone) seguem abertas.
+
+### Ciclo de contingência v2 na candidata local
+
+Preparo e renovação continuam automáticos e invisíveis como operação técnica:24horas para iniciar e24horas do primeiro registro. Encerrar ciclo só informa conclusão autoritativa depois da confirmação servidor e do envio de pendências; a visualização de cliente legado é identificada como local. O próximo preparo é tentado automaticamente, sem botão de autorização. Batida local confirmada no armazenamento reabre a visualização do novo ciclo, mantendo separadas confirmação local e confirmação fiscal. O [guia REP](../engineering/flows/dp-time-recording.md) descreve os limites e a recuperação; sem mudança de layout ou componentes visuais.

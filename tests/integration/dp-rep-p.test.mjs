@@ -18,6 +18,9 @@ const { REP_P_LOCATION_EVIDENCE, repPLocationPolicyRef, saveRepPLocationPolicy }
   = await import('../../src/features/dp/rep-p/location-policy.server.ts');
 const { readEmployeeTimeRecordingMonth } = await import('../../src/features/dp/rep-p/employee-month.server.ts');
 const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monitor.server.ts');
+const { recordRepPAvailabilityNotification } = await import('../../src/features/dp/rep-p/availability.server.ts');
+const { generateRepPAfd } = await import('../../src/features/dp/rep-p/afd.ts');
+const { readRepPForAej, readRepPMarkingsForMirror } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
@@ -39,7 +42,7 @@ function zipEntries(zip) {
   return entries;
 }
 
-test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo original em AFD assinado', async () => {
+test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo original em AFD assinado', async (t) => {
   const prefix = 'rep-p-integration';
   const workspaceId = 'coala-one';
   const userId = `${prefix}-employee`;
@@ -73,7 +76,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     },
   };
   const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true, fiscalStore,
+    markingEnabled: true, officialUserIds: new Set([userId]), fiscalStore,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -146,7 +149,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(options.executionUnits.find((unit) => unit.id === employerUnitId).locationPolicy.mode, 'disabled');
     assert.deepEqual(await listOwnRepPExecutionUnits({ ...context, decoded: { uid: `${prefix}-nobody` } },
       { workDate: '2026-10-18' }, dependencies), {
-      workDate: '2026-10-18', eligible: false, markingEnabled: true, mode: 'official', journeyLocationEnabled: false,
+      workDate: '2026-10-18', eligible: false, markingEnabled: false, mode: 'official', journeyLocationEnabled: false,
       executionUnits: [], officialClock: { available: true, instant: '2026-10-18T11:15:42.000Z', timeZone: 'America/Belem' },
     });
 
@@ -360,6 +363,145 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       && doc.get('trustedClock.quorum') === 2 && doc.get('trustedClock.observations').length === 2));
     assert.ok(markingEvents.every((doc) => doc.get('capture') === undefined && doc.get('location') === undefined));
     assert.ok(attemptSnapshot.docs.every((doc) => doc.get('capture') === undefined && doc.get('location') === undefined));
+
+    // Simulações de GPS: toda falha de posição permanece acessória e não bloqueia o ponto.
+    const policyInput = {
+      expectedRevision: 2, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
+      radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
+      privacyNoticeUrl: 'https://example.test/privacidade', legalBasisReference: 'Aditivo LGPD de teste sintético',
+      retentionDays: 1_825, participantUserIds: [userId], activationConfirmation: true,
+    };
+    const policyDeps = { mainDb: dbAdmin, repDb: repPDbAdmin };
+    const restricted = { ...context, isDefaultAdmin: false,
+      userDoc: { id: userId, unitAccessScope: 'selected', unitAccessUnitIds: ['other-unit'] } };
+    await assert.rejects(saveRepPLocationPolicy(restricted, executionUnitId, policyInput, policyDeps),
+      { code: 'DP_TIME_LOCATION_POLICY_FORBIDDEN' });
+    for (const invalid of [{ privacyNoticeUrl: null }, { privacyNoticeUrl: 'http://example.test/privacy' },
+      { legalBasisReference: null }, { activationConfirmation: false }, { participantUserIds: [] }]) {
+      await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, { ...policyInput, ...invalid }, policyDeps),
+        { code: 'DP_TIME_LOCATION_POLICY_INPUT_INVALID' });
+    }
+    await saveRepPLocationPolicy(context, executionUnitId, policyInput, policyDeps);
+    const cases = [
+      ['outside', { ...mobileLocation, latitude: -1.4525 }, 'outside'],
+      ['approximate', { ...mobileLocation, accuracyMeters: 500 }, 'indeterminate'],
+      ['denied', { status: 'denied', elapsedMs: 10 }, 'indeterminate'],
+      ['gps-off', { status: 'unavailable', elapsedMs: 10 }, 'indeterminate'],
+      ['timeout', { status: 'timeout', elapsedMs: 10_000 }, 'indeterminate'],
+      ['unsupported', { status: 'unsupported', elapsedMs: 0 }, 'indeterminate'],
+      ['stale', { ...mobileLocation, capturedAt: '2026-10-18T11:00:00.000Z' }, 'indeterminate'],
+    ];
+    for (const [name, capture, evaluation] of cases) {
+      const input = { attemptId: `simulation-${name}`, workDate: '2026-10-18', executionUnitId,
+        channel: 'mobile', locationAttempt: { ...capture, captureId: `capture-${name}` } };
+      const result = await recordOwnRepPMarking(context, input, dependencies);
+      assert.equal(result.status, 'recorded', name);
+      assert.equal(result.location.evaluation, evaluation, name);
+      const replay = await recordOwnRepPMarking(context, input, dependencies);
+      assert.equal(replay.status, 'replayed', name);
+      assert.equal(replay.marking.nsr, result.marking.nsr, name);
+    }
+    const finalEvidence = await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get();
+    assert.equal(finalEvidence.size, 2 + cases.length, 'reenvio não duplica evidência');
+    assert.ok(finalEvidence.docs.every((doc) => doc.get('expiresAt') instanceof Timestamp));
+    const finalEvents = await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
+    assert.equal(finalEvents.size, 5 + cases.length);
+    assert.ok(finalEvents.docs.every((doc) => doc.get('capture') === undefined && doc.get('location') === undefined));
+    const policyAudit = await repPLocationPolicyRef(repPDbAdmin, workspaceId, executionUnitId).collection('audit').get();
+    assert.equal(policyAudit.size, 3, 'ativações e alterações da política são auditadas');
+
+    await t.test('AFD particionado na meia-noite do fuso da execução preserva todos os NSRs entre páginas', async () => {
+      const at = (instant) => ({ async read() { return { ...(await clock.read()), instant: new Date(instant) }; } });
+      const previousDay = await recordOwnRepPMarking(context, { attemptId: 'boundary-before-midnight',
+        workDate: '2026-10-17', executionUnitId, channel: 'mobile' },
+      { ...dependencies, clock: at('2026-10-18T03:59:30Z') });
+      const nextDay = await recordOwnRepPMarking(context, { attemptId: 'boundary-after-midnight',
+        workDate: '2026-10-18', executionUnitId, channel: 'mobile' },
+      { ...dependencies, clock: at('2026-10-18T04:00:30Z') });
+      assert.ok(previousDay.marking.markedAt.startsWith('2026-10-17T23:59:'));
+      assert.ok(nextDay.marking.markedAt.startsWith('2026-10-18T00:00:'));
+      const exportDeps = { ...dependencies, clock: at('2026-10-19T12:00:00Z') };
+      const range = { establishmentId, startDate: '2026-10-17', endDate: '2026-10-18' };
+      const full = await exportSignedRepPAfd(context, range, exportDeps);
+      for (const afdPageSize of [1, 2, 3, 4]) {
+        assert.equal((await exportSignedRepPAfd(context, range, { ...exportDeps, afdPageSize })).sha256, full.sha256);
+      }
+      const rows = (value) => Buffer.from(value.afdBase64, 'base64').toString('latin1').split('\r\n')
+        .filter((line) => !line.startsWith('999999999') && /^[24567]$/.test(line[9] ?? ''));
+      const oldPart = await exportSignedRepPAfd(context, { ...range, endDate: '2026-10-17' }, { ...exportDeps, afdPageSize: 1 });
+      const newPart = await exportSignedRepPAfd(context, { ...range, startDate: '2026-10-18' }, { ...exportDeps, afdPageSize: 2 });
+      const partitioned = [...rows(oldPart), ...rows(newPart)].sort((a, b) => Number(a.slice(0, 9)) - Number(b.slice(0, 9)));
+      assert.deepEqual(partitioned, rows(full));
+      assert.equal(new Set(partitioned.map((line) => Number(line.slice(0, 9)))).size, partitioned.length);
+      assert.ok(rows(oldPart).some((line) => line.includes(previousDay.marking.hash)));
+      assert.equal(rows(oldPart).some((line) => line.includes(nextDay.marking.hash)), false);
+      assert.ok(rows(newPart).some((line) => line.includes(nextDay.marking.hash)));
+    });
+
+    await t.test('AFD mantém fotografia única quando uma batida entra entre duas páginas', async () => {
+      const source = repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId);
+      const before = (await source.get()).docs.map((doc) => doc.get('nsr')).sort((a, b) => a - b);
+      let newMarking;
+      let intercepted = false;
+      const snapshotDb = {
+        collection: (name) => repPDbAdmin.collection(name),
+        runTransaction: (callback, options) => repPDbAdmin.runTransaction(async (transaction) => {
+          const wrapped = new Proxy(transaction, { get(target, property) {
+            if (property === 'get') return async (query) => {
+              const page = await target.get(query);
+              if (!intercepted && page.size) {
+                intercepted = true;
+                newMarking = await recordOwnRepPMarking(context, { attemptId: 'marking-during-afd-export',
+                  workDate: '2026-10-18', executionUnitId, channel: 'mobile' }, dependencies);
+              }
+              return page;
+            };
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          } });
+          return callback(wrapped);
+        }, options),
+      };
+      const range = { establishmentId, startDate: '2026-10-17', endDate: '2026-10-18' };
+      const exported = await exportSignedRepPAfd(context, range, { ...dependencies, repDb: snapshotDb, afdPageSize: 1 });
+      const nsrs = (pkg) => Buffer.from(pkg.afdBase64, 'base64').toString('latin1').split('\r\n')
+        .filter((line) => !line.startsWith('999999999') && /^[24567]$/.test(line[9] ?? ''))
+        .map((line) => Number(line.slice(0, 9)));
+      assert.ok(intercepted && newMarking);
+      assert.deepEqual(nsrs(exported), before, 'a batida nova não pode vazar apenas para páginas posteriores');
+      const after = await exportSignedRepPAfd(context, range, { ...dependencies, afdPageSize: 1 });
+      assert.deepEqual(nsrs(after), [...before, newMarking.marking.nsr].sort((a, b) => a - b));
+    });
+
+    await t.test('reenvios concorrentes da batida e do monitor compartilham NSR sem colisão', async () => {
+      const ref = repPDbAdmin.collection('repP_establishments').doc(establishmentId);
+      const before = (await ref.get()).get('lastNsr');
+      const incident = { incidentId: `${prefix}-concurrent-monitor`, state: 'open', startedAt: 1792321200,
+        policyName: 'synthetic-policy', conditionName: 'synthetic-condition' };
+      const input = { attemptId: 'marking-monitor-concurrent', workDate: '2026-10-18', executionUnitId, channel: 'mobile' };
+      const notify = () => recordRepPAvailabilityNotification(workspaceId, incident,
+        { repDb: repPDbAdmin, clock, markingEnabled: true });
+      try {
+        const [one, replay, eventOne, eventReplay] = await Promise.all([
+          recordOwnRepPMarking(context, input, dependencies), recordOwnRepPMarking(context, input, dependencies), notify(), notify(),
+        ]);
+        assert.equal(one.marking.nsr, replay.marking.nsr);
+        assert.equal(eventOne.events + eventReplay.events, 1);
+        assert.equal((await ref.get()).get('lastNsr'), before + 2);
+        const added = (await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId)
+          .where('nsr', '>', before).get()).docs.map((doc) => doc.data());
+        assert.deepEqual(added.map((row) => row.nsr).sort((a, b) => a - b), [before + 1, before + 2]);
+        assert.deepEqual(added.map((row) => row.recordType).sort(), ['6', '7']);
+        const closed = await recordRepPAvailabilityNotification(workspaceId,
+          { ...incident, state: 'closed', endedAt: 1792321500 }, { repDb: repPDbAdmin, clock, markingEnabled: true });
+        assert.equal(closed.events, 1);
+        assert.equal((await ref.get()).get('lastNsr'), before + 3);
+      } finally {
+        const incidents = await repPDbAdmin.collection('repP_availabilityIncidents').where('establishmentId', '==', establishmentId).get();
+        for (const doc of incidents.docs) await doc.ref.delete();
+        await repPDbAdmin.collection('repP_availabilityStates').doc(establishmentId).delete();
+      }
+    });
     allRefs.push(...eventSnapshot.docs.map((doc) => doc.ref), ...attemptSnapshot.docs.map((doc) => doc.ref),
       ...exportAudit.docs.map((doc) => doc.ref), ...locationEvidence.docs.map((doc) => doc.ref));
   } finally {
@@ -391,7 +533,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
   }
 });
 
-test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento oficial', async () => {
+test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento oficial', async (t) => {
   const workspaceId = 'coala-one-pilot';
   const userId = 'rep-p-pilot-employee';
   const unitId = 'rep-p-pilot-unit';
@@ -569,6 +711,61 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     await assert.rejects(recordOwnRepPMarking({ ...context, decoded: { uid: 'rep-p-pilot-not-allowed' } },
       { ...request, attemptId: 'not-allowed' }, { ...dependencies, pilotUserIds: new Set([userId]) }),
     { code: 'REP_P_MARKING_PROFILE_DISABLED' });
+
+    await t.test('corte oficial drena fila piloto no domínio original sem promovê-la a AFD, AEJ ou espelho', async () => {
+      clockInstant = '2026-11-01T12:00:00.000Z';
+      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false, officialUserIds: new Set([userId]),
+        officialStartDate: '2026-11-01' };
+      const queuedCore = { ...secondCore, attemptId: 'pilot-pending-at-cutover', elapsedRealtimeMs: 181_000,
+        sequence: 3, previousLocalHash: secondHash, markedAt: '2026-10-22T09:18:00-0300' };
+      const queuedCanonical = canonicalRepPOfflineEvent(queuedCore);
+      const queuedHash = hashRepPOfflineEvent(queuedCanonical);
+      const queued = { ...offlineRequest, attemptId: queuedCore.attemptId, offline: { ...offlineRequest.offline,
+        elapsedRealtimeMs: queuedCore.elapsedRealtimeMs, sequence: 3, previousLocalHash: secondHash,
+        markedAt: queuedCore.markedAt, localHash: queuedHash,
+        signature: sign('sha256', Buffer.from(queuedCanonical), keys.privateKey).toString('base64') } };
+      const drained = await recordOwnRepPMarking(context, queued, officialDeps);
+      assert.equal(drained.pilot, true);
+      assert.equal(drained.marking.sequence, 4);
+      assert.equal((await repPDbAdmin.collection('repP_events').where('workspaceId', '==', workspaceId).get()).size, 0);
+      await assert.rejects(recordOwnRepPMarking(context, { ...request, attemptId: 'new-pilot-on-official-date', workDate: '2026-11-01' },
+        { ...officialDeps, markingEnabled: false, pilotEnabled: true, pilotUserIds: new Set([userId]) }),
+      { code: 'REP_P_PILOT_CUTOVER_REACHED' });
+      await assert.rejects(recordOwnRepPMarking(context, { ...queued, attemptId: 'promoted-pilot-attempt',
+        offline: { ...queued.offline, scope: 'official' } }, officialDeps), { code: 'REP_P_OFFLINE_PERMIT_INVALID' });
+
+      const establishmentId = repPIdentifiersForTest.establishmentKey(workspaceId, '14276603000125');
+      const profile = { establishmentId, employerCnpj: '14276603000125', employerLegalName: 'CT Sorvetes LTDA',
+        inpiRegistration: '1234567890123', developerCnpj: '14276603000125' };
+      try {
+        await provisionRepPReferenceData({ workspaceId, responsibleCpf: '52998224725', timeZone: 'America/Fortaleza', profile,
+          employee: { userId, cpf: '52998224725', name: 'Pessoa Piloto' }, workLocation: 'Rua do Ensaio, 10' }, officialDeps);
+        const official = await recordOwnRepPMarking(context, { attemptId: 'first-official-after-cutover',
+          workDate: '2026-11-01', executionUnitId: unitId, channel: 'browser' }, officialDeps);
+        assert.equal(official.marking.nsr, 3, 'os quatro ensaios anteriores não consomem a sequência fiscal');
+        const events = (await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get()).docs.map((doc) => doc.data());
+        const afd = generateRepPAfd({ profile, startDate: '2026-10-22', endDate: '2026-11-01',
+          generatedAt: '2026-11-01T09:00:00-0300', events });
+        assert.equal(afd.counts['7'], 1);
+        assert.ok(afd.bytes.toString('latin1').includes(official.marking.hash));
+        assert.equal(afd.bytes.toString('latin1').includes(queuedHash), false);
+        const aej = await readRepPForAej(workspaceId, establishmentId, '2026-10-22', '2026-11-01', officialDeps);
+        const mirror = await readRepPMarkingsForMirror(workspaceId, userId, '2026-10-22', '2026-11-01', officialDeps);
+        assert.deepEqual(aej.markings.map((row) => [row.nsr, row.workDate]), [[3, '2026-11-01']]);
+        assert.deepEqual(mirror.markings.map((row) => [row.nsr, row.workDate]), [[3, '2026-11-01']]);
+        assert.equal((await recordOwnRepPMarking(context, queued, officialDeps)).status, 'replayed');
+        assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), 3);
+      } finally {
+        for (const collection of ['repP_events', 'repP_receipts']) {
+          const rows = await repPDbAdmin.collection(collection).where('establishmentId', '==', establishmentId).get();
+          for (const doc of rows.docs) await doc.ref.delete();
+        }
+        const attempts = await repPDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get();
+        for (const doc of attempts.docs) await doc.ref.delete();
+        await repPDbAdmin.collection('repP_employees').doc(repPIdentifiersForTest.employeeKey(establishmentId, userId)).delete();
+        await repPDbAdmin.collection('repP_establishments').doc(establishmentId).delete();
+      }
+    });
   } finally {
     const [markings, heads, classificationEvents, permits, histories, requests] = await Promise.all([
       hrDbAdmin.collection('repP_pilotMarkings').where('employeeId', '==', userId).get(),

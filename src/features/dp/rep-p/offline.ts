@@ -3,6 +3,10 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { formatRepPAfdTimestamp } from './clock';
 
 export const REP_P_OFFLINE_PERMIT_TTL_MS = 12 * 60 * 60 * 1000;
+export const REP_P_OFFLINE_PREPARATION_TTL_MS = 24 * 60 * 60 * 1000;
+export const REP_P_OFFLINE_CYCLE_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type RepPOfflineCycleEvidence = Readonly<{ id: string; startedElapsedRealtimeMs: number }>;
 export const REP_P_OFFLINE_MAX_PENDING = 20;
 
 export type RepPOfflineEvidence = Readonly<{
@@ -16,6 +20,7 @@ export type RepPOfflineEvidence = Readonly<{
   markedAt: string;
   localHash: string;
   signature: string;
+  cycle?: RepPOfflineCycleEvidence;
 }>;
 
 export function canonicalRepPOfflineEvent(input: {
@@ -29,11 +34,14 @@ export function canonicalRepPOfflineEvent(input: {
   sequence: number;
   previousLocalHash: string | null;
   markedAt: string;
+  cycle?: RepPOfflineCycleEvidence;
 }) {
+  const cycle = input.cycle;
   return [
-    input.scope === 'pilot' ? 'coala-rep-p-pilot-offline-v1' : 'coala-rep-p-offline-v1',
+    `coala-rep-p${input.scope === 'pilot' ? '-pilot' : ''}-offline-v${cycle ? 2 : 1}`,
     input.permitId, input.attemptId, input.executionUnitId, input.deviceKeyId,
     String(input.elapsedRealtimeMs), String(input.bootCount), String(input.sequence), input.previousLocalHash ?? '', input.markedAt,
+    ...(cycle ? [cycle.id, String(cycle.startedElapsedRealtimeMs)] : []),
   ].join('\n');
 }
 
@@ -66,12 +74,36 @@ export function verifyRepPOfflineEvidence(input: Parameters<typeof canonicalRepP
 
 export function deriveRepPOfflineMarkedAt(input: {
   anchorInstant: string; anchorElapsedRealtimeMs: number; elapsedRealtimeMs: number; timeZone: string;
+  maxElapsedMs?: number;
 }) {
   const anchor = Date.parse(input.anchorInstant);
   const elapsed = input.elapsedRealtimeMs - input.anchorElapsedRealtimeMs;
   if (!Number.isFinite(anchor) || !Number.isSafeInteger(input.anchorElapsedRealtimeMs)
-    || !Number.isSafeInteger(input.elapsedRealtimeMs) || elapsed < 0 || elapsed > REP_P_OFFLINE_PERMIT_TTL_MS) {
+    || !Number.isSafeInteger(input.elapsedRealtimeMs) || elapsed < 0 || elapsed > (input.maxElapsedMs ?? REP_P_OFFLINE_PERMIT_TTL_MS)) {
     throw new TypeError('Âncora temporal offline inválida.');
   }
   return formatRepPAfdTimestamp(new Date(anchor + elapsed), input.timeZone);
+}
+
+export function offlineCycleWindow(input: { anchorInstant: string; anchorElapsedRealtimeMs: number;
+  startedElapsedRealtimeMs: number; elapsedRealtimeMs: number; preparationExpiresAt: string }) {
+  const anchor = Date.parse(input.anchorInstant);
+  const startDelta = input.startedElapsedRealtimeMs - input.anchorElapsedRealtimeMs;
+  const currentDelta = input.elapsedRealtimeMs - input.anchorElapsedRealtimeMs;
+  if (!Number.isFinite(anchor) || !Number.isSafeInteger(input.startedElapsedRealtimeMs)
+    || !Number.isSafeInteger(input.elapsedRealtimeMs) || startDelta < 0 || startDelta > REP_P_OFFLINE_PREPARATION_TTL_MS
+    || currentDelta < startDelta || currentDelta - startDelta > REP_P_OFFLINE_CYCLE_TTL_MS
+    || !Number.isFinite(Date.parse(input.preparationExpiresAt)) || anchor + startDelta > Date.parse(input.preparationExpiresAt)) {
+    throw new TypeError('Janela do ciclo offline inválida.');
+  }
+  return { startedAt: anchor + startDelta, capturedAt: anchor + currentDelta,
+    expiresAt: anchor + startDelta + REP_P_OFFLINE_CYCLE_TTL_MS };
+}
+
+export function canonicalRepPCycleAction(input: { action: 'online' | 'close'; scope: 'official' | 'pilot';
+  permitId: string; cycleId: string; startedElapsedRealtimeMs: number; elapsedRealtimeMs: number;
+  bootCount: number; deviceKeyId: string; receiptId: string; lastSequence: number }) {
+  return [`coala-rep-p-${input.scope}-cycle-v2`, input.action, input.permitId, input.cycleId,
+    String(input.startedElapsedRealtimeMs), String(input.elapsedRealtimeMs), String(input.bootCount), input.deviceKeyId,
+    input.receiptId, String(input.lastSequence)].join('\n');
 }

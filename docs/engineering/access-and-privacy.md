@@ -44,7 +44,7 @@ Complemento transversal da etapa 8, em 2026-09-26. Estes percursos não dependem
 
 ### Visualização assistida exclusiva do desenvolvimento
 
-O Sistema e o Coala Go oferecem **Visualizar como usuário** exclusivamente quando a identidade autenticada tem o e-mail exato `administrativo@cialashakes.com`. A opção fica no menu da foto/perfil. O seletor mostra somente usuários ativos e a API `GET/POST/DELETE /api/auth/view-as` repete a autorização no servidor; ocultar o item na interface não é o controle de acesso. Iniciar e encerrar a visualização geram eventos `developer_view_as_started` e `developer_view_as_stopped` em `actionLogs`, sempre atribuídos ao UID real e com o alvo nos metadados.
+O Sistema e o Coala Go oferecem **Visualizar como usuário** exclusivamente quando a identidade autenticada tem o e-mail exato `administrativo@coalashakes.com`. A opção fica no menu da foto/perfil. O seletor mostra somente usuários ativos e a API `GET/POST/DELETE /api/auth/view-as` repete a autorização no servidor; ocultar o item na interface não é o controle de acesso. Iniciar e encerrar a visualização geram eventos `developer_view_as_started` e `developer_view_as_stopped` em `actionLogs`, sempre atribuídos ao UID real e com o alvo nos metadados.
 
 A identidade real do Firebase continua responsável pela sessão, atestação mobile e auditoria. Em leitura, `requireUser` projeta usuário, perfil e permissões do alvo para reproduzir sua experiência. Qualquer método diferente de `GET`, `HEAD` ou `OPTIONS` que passe por essa fronteira é recusado enquanto o modo estiver ativo; a faixa persistente **Visualizando como … · somente leitura** permite sair imediatamente. Foto, senha, atualização do aplicativo e notificações também ficam indisponíveis no perfil mobile visualizado. A ferramenta não concede ao alvo as permissões do desenvolvedor e não permite visualizar conta inativa ou o próprio usuário como alvo.
 
@@ -101,3 +101,20 @@ Dados: `privacyRequests` e `securityIncidents` no principal. GET filtra `workspa
 - [Upload operacional](../../src/app/api/uploads/operations/route.ts) distingue assinatura de reposição, documento de despacho e comprovante de compra; valida tamanho e assinatura inicial do arquivo, exige permissão e existência do alvo. Reposição confere unidades; o ramo de recibo não compara explicitamente seu workspace ao contexto. Storage e vínculo posterior são operações separadas. O upload patrimonial tem contrato próprio; não transferir garantias entre as duas rotas.
 
 Os achados e os próximos testes necessários estão na [auditoria ampliada](surface-audit.md). Nenhuma dessas rotas foi chamada contra produção.
+
+## Correções de autorização nas exportações REP-P — candidata local
+
+A [revisão integrada](../rep-p/homologacao/seguranca-exportacao-rep-p.md) verificou rotas reais com Auth/Firestore emulados. `verifyAuthWithUser` compara a versão da sessão com o cadastro já lido; `auth-server` usa somente o perfil atual de `users`, sem recuperar atribuição removida do claim. Cadastro legado sem versão equivale a zero; mismatch ou versão inválida é recusado. Nenhuma leitura recorrente nova foi adicionada.
+
+As três rotas GET de ZIP de comprovantes, comprovante individual e PDF de espelho usam o ator autenticado real, mesmo em Visualizar como. Consulta administrativa explícita de espelho continua exigindo permissão e unidade no servidor; reemissão POST mantém a restrição de escrita do modo suporte. Perfil pessoal não exporta AFD/AEJ; gestor limitado não recebe escopo fiscal global.
+
+Preflight de metadados no destino:16 usuários, todos com perfil canônico, seis referências existentes, sem dados pessoais expostos nem escrita. Correções ainda locais; isso não certifica todas as superfícies callable nem ativa localização.
+
+## Consulta de localização — permissão expressa
+
+A candidata acrescenta `dp.timeRecording.readLocation`, falsa por padrão inclusive para admin. `buildPermissionSet` e o provider cliente preservam somente a concessão expressa do perfil atual para esse campo no caso admin; as outras permissões administrativas mantêm a regra existente. Titular consulta seus próprios dados com UID real. Consulta de terceiros exige também `dp.view` e unidade permitida; `manageTime`, fechamento e leitura de ponto não conferem a nova permissão.
+
+O [serviço](../../src/features/dp/rep-p/location-access.server.ts) filtra por pessoa/workspace/unidade/dia e grava auditoria sem coordenadas antes da resposta. O painel só consulta por ação, sem mapas externos. [Política interna](../rep-p/privacidade/politica-interna-localizacao.md) define RH como entrada de pedidos de documentos e atendimento interno, preservando o canal formal do termo. Minutas e código local não autorizam ativar coleta real nem conceder acesso a perfis existentes.
+
+
+2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.

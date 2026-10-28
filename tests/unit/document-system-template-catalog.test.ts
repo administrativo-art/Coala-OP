@@ -270,9 +270,9 @@ test("consentimento de imagem integra o pacote inicial sem perder a alteração 
   assert.ok(template?.variables.includes("integration.image_voice_authorized_mark"));
 });
 
-test("fontes v4 removem vigência fixa e mantêm índice do encerramento alinhado à esquerda", async () => {
+test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinhado à esquerda", async () => {
   const lgpd = systemDocumentTemplateById("system-admission-lgpd-awareness-term");
-  assert.equal(lgpd?.version, 4);
+  assert.equal(lgpd?.version, 5);
   assert.equal(lgpd?.fieldMapping?.term_effective_date, undefined);
   assert.equal(lgpd?.variables.includes("term_effective_date"), false);
 
@@ -280,6 +280,21 @@ test("fontes v4 removem vigência fixa e mantêm índice do encerramento alinhad
   const lgpdXml = new PizZip(lgpdSource).file("word/document.xml")?.asText() ?? "";
   assert.equal(lgpdXml.includes("Vigência:"), false);
   assert.equal(lgpdXml.includes("Versão 1.0"), false);
+  assert.ok(lgpdXml.includes("3-A. Localização no registro de ponto e durante a jornada"));
+  assert.ok(lgpdXml.indexOf("3. Finalidades do tratamento") < lgpdXml.indexOf("3-A. Localização"));
+  assert.ok(lgpdXml.indexOf("3-A. Localização") < lgpdXml.indexOf("4. Dados de saúde"));
+  // A revisão acrescenta somente a seção 3-A: modelos históricos e demais partes ficam preservados.
+  const previous = new PizZip(await readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/03-termo-lgpd-v4.docx")));
+  const current = new PizZip(lgpdSource);
+  assert.deepEqual(Object.keys(current.files).sort(), Object.keys(previous.files).sort());
+  for (const name of Object.keys(previous.files).filter((name) => name !== "word/document.xml" && !previous.files[name].dir)) {
+    assert.deepEqual(current.file(name)?.asUint8Array(), previous.file(name)?.asUint8Array(), name);
+  }
+  const paragraphs = lgpdXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) ?? [];
+  const clauseStart = paragraphs.findIndex((p) => p.includes("3-A. Localização"));
+  const clauseEnd = paragraphs.findIndex((p) => p.includes("4. Dados de saúde"));
+  assert.equal(clauseEnd - clauseStart, 10);
+  assert.equal(lgpdXml.replace(paragraphs.slice(clauseStart, clauseEnd).join(""), ""), previous.file("word/document.xml")?.asText());
 
   const closing = systemDocumentTemplateById("system-admission-bundle-closing-term");
   assert.equal(closing?.version, 4);

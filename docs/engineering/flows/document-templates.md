@@ -1,5 +1,9 @@
 # Modelos documentais: cadastro, mapeamento e publicação
 
+27/10/2026 — [validação integrada LGPD v5](../../rep-p/homologacao/lgpd-v5-validacao-integrada.md): gerador com cadastros/emuladores, PDF no conversor oficial e pacote completo de 24 páginas aprovados. Confirmada precedência de modelo armazenado publicado sobre o catálogo estático; a consulta posterior dos dois registros LGPD no banco `coala` real retornou inexistência, sem necessidade de migração e sem alteração de históricos. Nenhum envio à Autentique ou publicação foi executado.
+
+27/10/2026 — candidata local: `system-admission-lgpd-awareness-term` passa à versão 5, com a seção 3-A aprovada para localização. A [matriz e seu hash](../../modelos-documentos/admissionais/README.md) preservam a v4; documentos já gerados/assinados não são reescritos. Ainda sem publicação. A mudança não ativa localização nem implementa a permissão de consulta.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.

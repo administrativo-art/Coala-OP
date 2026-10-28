@@ -12,8 +12,10 @@ import { describe, it } from 'node:test';
 const ARP_WRITERS = [
   'src/features/dp/rep-p/availability.server.ts',
   'src/features/dp/rep-p/competence-fence.server.ts',
+  'src/features/dp/rep-p/location-access.server.ts',
   'src/features/dp/rep-p/location-policy.server.ts',
   'src/features/dp/rep-p/monitor.server.ts',
+  'src/features/dp/rep-p/offline-cycle.server.ts',
   'src/features/dp/rep-p/service.server.ts',
   'src/features/dp/time-adjustments/service.server.ts',
 ];

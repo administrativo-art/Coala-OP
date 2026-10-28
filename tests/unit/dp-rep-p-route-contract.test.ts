@@ -10,6 +10,7 @@ const options = readFileSync('src/app/api/dp/time-recording/options/route.ts', '
 const journeyLocation = readFileSync('src/app/api/dp/time-recording/journey-location/route.ts', 'utf8');
 const journeyLocationService = readFileSync('src/features/dp/rep-p/journey-location.server.ts', 'utf8');
 const offlinePermit = readFileSync('src/app/api/dp/time-recording/offline-permits/route.ts', 'utf8');
+const offlineCycle = readFileSync('src/app/api/dp/time-recording/offline-cycles/route.ts', 'utf8');
 const pending = readFileSync('src/app/api/dp/time-recording/pending-receipts/route.ts', 'utf8');
 const signerStatus = readFileSync('src/app/api/dp/time-recording/signer-status/route.ts', 'utf8');
 const receipt = readFileSync('src/app/api/dp/time-recording/receipts/[receiptId]/route.ts', 'utf8');
@@ -52,6 +53,9 @@ describe('REP-P API route contracts', () => {
   });
 
   it('issues offline permits only to the attested mobile owner', () => {
+    assert.match(offlineCycle, /authorization: \{ kind: 'owner' \}/);
+    assert.match(offlineCycle, /assertOfficialMobileApp\(request, actor\.decoded\.uid\)/);
+    assert.match(offlineCycle, /export const POST = secureRoute/);
     assert.match(offlinePermit, /authorization: \{ kind: 'owner' \}/);
     assert.match(offlinePermit, /resourceScope: \{ kind: 'owner' \}/);
     assert.match(offlinePermit, /assertOfficialMobileApp\(request, actor\.decoded\.uid\)/);
@@ -86,6 +90,8 @@ describe('REP-P API route contracts', () => {
   });
 
   it('serves receipts only to their owner, with a side-effect free GET and a separate retry', () => {
+    assert.match(receipt, /ownerEnforcer\('dp-rep-p-receipt-read-v1', requireAuthenticatedUser\)/);
+    assert.match(receipt, /ownerEnforcer\('dp-rep-p-receipt-retry-v1', requireUser\)/);
     assert.match(receipt, /authorization: \{ kind: 'owner' \}/);
     assert.match(receipt, /employeeId: actor\.decoded\.uid/);
     assert.match(receipt, /export const GET = secureRoute/);
@@ -96,6 +102,7 @@ describe('REP-P API route contracts', () => {
   });
 
   it('exports a private receipt archive only to its owner and marks completeness in the response', () => {
+    assert.match(receiptArchive, /await requireAuthenticatedUser\(request\)/);
     assert.match(receiptArchive, /authorization: \{ kind: 'owner' \}/);
     assert.match(receiptArchive, /employeeId: actor\.decoded\.uid/);
     assert.match(receiptArchive, /export const GET = secureRoute/);

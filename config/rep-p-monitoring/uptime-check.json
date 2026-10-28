@@ -1,0 +1,16 @@
+{
+  "displayName": "Coala REP-P — sonda do coletor",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": { "project_id": "smart-converter-752gf", "host": "op.coalashakes.com" }
+  },
+  "httpCheck": {
+    "requestMethod": "GET", "useSsl": true, "validateSsl": true, "port": 443,
+    "path": "/api/dp/time-recording/availability",
+    "acceptedResponseStatusCodes": [{ "statusValue": 200 }]
+  },
+  "period": "60s", "timeout": "10s",
+  "selectedRegions": ["USA", "EUROPE", "SOUTH_AMERICA"],
+  "contentMatchers": [{ "content": "\"status\":\"ok\"", "matcher": "CONTAINS_STRING" }],
+  "userLabels": { "component": "rep-p", "purpose": "collector-availability" }
+}

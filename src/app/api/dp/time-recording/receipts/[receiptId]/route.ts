@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { getOwnRepPReceipt, retryOwnRepPReceipt } from '@/features/dp/rep-p/service.server';
-import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { requireAuthenticatedUser, requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
 import { defineSecurityContract } from '@/lib/security/route-contract';
@@ -26,12 +26,12 @@ const retryContract = defineSecurityContract({ ...base, id: 'dp.time-recording.r
   surface: { method: 'POST', path }, effects: { mode: 'write', audit: 'server-authoritative' } });
 
 // O dono é sempre o usuário autenticado; o serviço recusa comprovante de outra pessoa como inexistente.
-function ownerEnforcer(id: string) {
+function ownerEnforcer(id: string, authenticate: typeof requireUser) {
   return defineSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, undefined, ReceiptResource>({
     id,
     guarantees: ['authenticated-user', 'active-user', 'owner-checked'],
     async enforce({ request, routeContext }) {
-      const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
+      const actor = await authenticate(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
       if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'REP_P_RECEIPT_QUERY_INVALID', kind: 'VALIDATION' });
       const { receiptId } = await routeContext.params;
       return { actor, input: undefined,
@@ -40,7 +40,7 @@ function ownerEnforcer(id: string) {
   });
 }
 
-export const GET = secureRoute({ contract: readContract, enforcer: ownerEnforcer('dp-rep-p-receipt-read-v1') }, async ({ security }) => {
+export const GET = secureRoute({ contract: readContract, enforcer: ownerEnforcer('dp-rep-p-receipt-read-v1', requireAuthenticatedUser) }, async ({ security }) => {
   const receipt = await getOwnRepPReceipt(security.actor, security.resource.receiptId);
   return new NextResponse(new Uint8Array(receipt.bytes), { headers: {
     'Content-Type': 'application/pdf',
@@ -50,7 +50,7 @@ export const GET = secureRoute({ contract: readContract, enforcer: ownerEnforcer
   } });
 });
 
-export const POST = secureRoute({ contract: retryContract, enforcer: ownerEnforcer('dp-rep-p-receipt-retry-v1') }, async ({ security }) => {
+export const POST = secureRoute({ contract: retryContract, enforcer: ownerEnforcer('dp-rep-p-receipt-retry-v1', requireUser) }, async ({ security }) => {
   const result = await retryOwnRepPReceipt(security.actor, security.resource.receiptId);
   return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 });

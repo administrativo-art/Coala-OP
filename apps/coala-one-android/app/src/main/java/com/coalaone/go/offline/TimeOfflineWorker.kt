@@ -29,14 +29,15 @@ data class TimeOfflineSyncResult(val complete: Boolean, val confirmed: List<Sync
         for ((row, request) in queue.ready(uid)) {
             if (auth.current?.uid != uid || viewAs.current() != null) return@withLock TimeOfflineSyncResult(false, confirmed)
             try {
+                if (row.sequence == 0) require(request.onlineScope == (if (row.permitId.startsWith("online:pilot:")) "pilot" else "official")) { "O escopo protegido desta tentativa não confere." }
                 val response = repository.api.mark(request, uid)
                 if (auth.current?.uid != uid || viewAs.current() != null)
                     return@withLock TimeOfflineSyncResult(false, confirmed)
                 check(response.status in setOf("recorded", "replayed") && response.receiptId.isNotBlank()
                     && response.receiptStatus in setOf("available", "pending")
                     && response.marking.executionUnitId == request.executionUnitId
-                    && response.pilot == (request.offline?.scope == "pilot")) { "A resposta não confirmou esta batida." }
-                queue.synced(uid, row.id)
+                    && response.pilot == (if (request.offline != null) request.offline.scope == "pilot" else row.permitId.startsWith("online:pilot:"))) { "A resposta não confirmou esta batida." }
+                queue.confirmed(uid, row.id, request, response)
                 confirmed += SyncedOfflineMarking(request, response)
             }
             catch (cause: CancellationException) { throw cause }

@@ -36,6 +36,7 @@ export const repPOfflineEvidenceSchema = z.object({
   markedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00[+-]\d{4}$/),
   localHash: sha256,
   signature: z.string().min(80).max(256).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  cycle: z.object({ id, startedElapsedRealtimeMs: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).strict().optional(),
 }).strict();
 
 export const repPMarkingSchema = z.object({
@@ -46,9 +47,11 @@ export const repPMarkingSchema = z.object({
   // Compatibilidade com clientes antigos: a ausência fica pendente; o servidor nunca inventa uma
   // declaração do trabalhador. As interfaces atuais exigem a escolha antes de confirmar.
   declaredPurpose: z.enum(['journey_start', 'break_start', 'break_end', 'journey_end']).optional(),
+  onlineScope: z.enum(['official', 'pilot']).optional(),
   offline: repPOfflineEvidenceSchema.optional(),
   locationAttempt: repPLocationAttemptSchema.optional(),
 }).strict().superRefine((value, context) => {
+  if (value.onlineScope && (value.offline || value.channel !== 'mobile')) context.addIssue({ code: 'custom', path: ['onlineScope'], message: 'Escopo online exclusivo do aplicativo.' });
   if (value.offline && value.channel !== 'mobile') context.addIssue({ code: 'custom', path: ['channel'], message: 'Marcação offline exige o Coala Go.' });
   if (value.offline && value.locationAttempt) context.addIssue({ code: 'custom', path: ['locationAttempt'],
     message: 'A contingência offline não aceita localização sem assinatura criptográfica própria.' });
@@ -59,6 +62,7 @@ export const repPMarkingClassificationSchema = z.object({
 }).strict();
 
 export const repPOfflinePermitSchema = z.object({
+  protocolVersion: z.literal(2).optional(),
   permitRequestId: id,
   workDate: date,
   installationId: z.string().uuid(),
@@ -68,6 +72,15 @@ export const repPOfflinePermitSchema = z.object({
   bootCount: z.number().int().nonnegative().max(1_000_000),
   anchorElapsedRealtimeMs: safeElapsed,
 }).strict();
+
+export const repPOfflineCycleActionSchema = z.object({
+  action: z.literal('close'), scope: z.enum(['official', 'pilot']),
+  permitId: id, cycleId: id, startedElapsedRealtimeMs: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), elapsedRealtimeMs: safeElapsed,
+  bootCount: z.number().int().nonnegative().max(1_000_000), deviceKeyId: sha256, receiptId: id,
+  lastSequence: z.number().int().nonnegative().max(10_000),
+  signature: z.string().min(80).max(256).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+}).strict();
+export type RepPOfflineCycleAction = z.infer<typeof repPOfflineCycleActionSchema>;
 
 export const repPAfdExportSchema = z.object({
   establishmentId: id,

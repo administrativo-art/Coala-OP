@@ -9,6 +9,33 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class TimeRulesTest {
+    @Test fun v2PreparationAndCycleHaveIndependentTwentyFourHourDeadlines() {
+        val rules = com.coalaone.go.domain.TimeOfflineRules
+        val start = Instant.parse("2026-10-27T23:00:00Z")
+        val hour = 3_600_000L
+        val permit = OfflinePermit("permit", "install", "key", "tee", 7, 1000, start.toString(), start.toString(),
+            start.plusSeconds(48 * 3600).toString(), listOf(OfflinePermitUnit("unit", "Unit", "America/Belem")),
+            protocolVersion = 2, preparationExpiresAt = start.plusSeconds(24 * 3600).toString())
+        assertNull(rules.permitIssue(permit, 7, 1000 + 24 * hour))
+        assertNotNull(rules.permitIssue(permit, 7, 1001 + 24 * hour))
+        val cycle = OfflineCycle("first", start.plusSeconds(23 * 3600).toString(), start.plusSeconds(47 * 3600).toString())
+        assertNull(rules.permitIssue(permit, 7, 1000 + 47 * hour, cycle))
+        assertNotNull(rules.permitIssue(permit, 7, 1001 + 47 * hour, cycle))
+        assertNotNull(rules.permitIssue(permit, 8, 1000 + 24 * hour, cycle))
+        assertNotNull(rules.permitIssue(permit, 7, 999, cycle))
+        assertNotNull(rules.permitIssue(permit.copy(protocolVersion = null), 7, 1000 + 13 * hour))
+    }
+    @Test fun cycleIdentityAndFirstMonotonicInstantArePartOfTheVersionTwoCanonicalPayload() {
+        val rules = com.coalaone.go.domain.TimeOfflineRules
+        val cycle = OfflineCycleEvidence("first", 1000)
+        val canonical = rules.canonical("permit", "first", "unit", "key", 1000, 7, 1, null,
+            "2026-10-27T20:00:00-0300", "pilot", cycle)
+        assertEquals("coala-rep-p-pilot-offline-v2\npermit\nfirst\nunit\nkey\n1000\n7\n1\n\n2026-10-27T20:00:00-0300\nfirst\n1000", canonical)
+        assertNotEquals(canonical, rules.canonical("permit", "first", "unit", "key", 1000, 7, 1, null,
+            "2026-10-27T20:00:00-0300", "pilot", cycle.copy(startedElapsedRealtimeMs = 1001)))
+        assertEquals("coala-rep-p-pilot-offline-v1", rules.canonical("permit", "first", "unit", "key", 1000, 7, 1, null,
+            "2026-10-27T20:00:00-0300", "pilot").lineSequence().first())
+    }
     @Test fun visualThemeFollowsTheHourInsteadOfTheDevicePreference() {
         assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(0))
         assertTrue(com.coalaone.go.ui.timeBasedDarkTheme(5))

@@ -44,7 +44,9 @@ const ANCHORS: Record<string, AnchorDefinition[]> = {
   ],
   "system-admission-lgpd-awareness-term": [
     { page: 1, phrase: "TERMO DE CIÊNCIA SOBRE O TRATAMENTO DE DADOS PESSOAIS" },
-    { page: 9, phrase: "compreende que a assinatura registra ciência" },
+    { page: 4, phrase: "3-A. Localização no registro de ponto e durante a jornada" },
+    { page: 5, phrase: "Ciência e fundamento" },
+    { page: 10, phrase: "compreende que a assinatura registra ciência" },
   ],
   "system-admission-image-voice-consent": [
     { page: 1, phrase: "TERMO DE CONSENTIMENTO PARA USO DE IMAGEM E VOZ" },

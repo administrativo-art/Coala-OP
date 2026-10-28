@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **505**
-- Totalmente contratados: **160**
+- Arquivos de rota: **507**
+- Totalmente contratados: **162**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -121,12 +121,14 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/employees/[employeeUid]` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/[employeeUid]/route.ts) |
 | `/api/dp/time-recording/fiscal-options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) |
 | `/api/dp/time-recording/journey-location` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) |
+| `/api/dp/time-recording/location-access` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-access/route.ts](../../src/app/api/dp/time-recording/location-access/route.ts) |
 | `/api/dp/time-recording/location-policies/[unitId]` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-policies/[unitId]/route.ts](../../src/app/api/dp/time-recording/location-policies/[unitId]/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
 | `/api/dp/time-recording/markings/[receiptId]/classification` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts](../../src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts) |
 | `/api/dp/time-recording/mirrors` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) |
 | `/api/dp/time-recording/mirrors/pdf` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) |
 | `/api/dp/time-recording/month` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) |
+| `/api/dp/time-recording/offline-cycles` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-cycles/route.ts](../../src/app/api/dp/time-recording/offline-cycles/route.ts) |
 | `/api/dp/time-recording/offline-permits` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-permits/route.ts](../../src/app/api/dp/time-recording/offline-permits/route.ts) |
 | `/api/dp/time-recording/options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) |
 | `/api/dp/time-recording/pending-receipts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) |
