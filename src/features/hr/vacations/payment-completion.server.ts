@@ -4,13 +4,18 @@ import { createHash } from 'node:crypto';
 import { getStorage } from 'firebase-admin/storage';
 import { PDFDocument } from 'pdf-lib';
 
-import { createAutentiqueDocument, resendAutentiqueSignatures } from '@/lib/autentique.server';
+import {
+  createAutentiqueDocument,
+  getAutentiqueDocumentSignatures,
+  resendAutentiqueSignatures,
+} from '@/lib/autentique.server';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError, reportSystemError } from '@/lib/observability';
 import type { DPVacationSignatureParticipant, DPVacationWorkflow } from '@/types';
 
+import { vacationParticipantsFromProvider, type VacationSigner } from './autentique-participants.server';
 import { downloadVacationAutentiqueSignedPdf } from './autentique-signed-pdf.server';
 import { saveImmutableVacationPdf } from './immutable-pdf.server';
 import { vacationReceiptSignatureMessage } from './emails';
@@ -215,21 +220,10 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
       }],
     });
     const sentAt = new Date().toISOString();
-    const participants = created.document.signatures.flatMap((signature): DPVacationSignatureParticipant[] => {
-      const providerSignatureId = String(signature.public_id ?? '').trim();
-      if (!providerSignatureId) return [];
-      return [{
-        party: 'employee',
-        providerSignatureId,
-        name: String(signature.name ?? signature.user?.name ?? employeeName),
-        email: String(signature.email ?? signature.user?.email ?? employeeEmail).toLowerCase(),
-        avatarUrl: userSnapshot.get('avatarUrl') ?? null,
-        status: 'sent',
-        invitedAt: sentAt,
-        emailSentAt: signature.email_events?.sent ?? null,
-        emailDeliveredAt: signature.email_events?.delivered ?? null,
-        emailOpenedAt: signature.email_events?.opened ?? null,
-      }];
+    const participants = vacationParticipantsFromProvider({
+      signatures: created.document.signatures,
+      signers: [{ party: 'employee', name: employeeName, email: employeeEmail, avatarUrl: userSnapshot.get('avatarUrl') ?? null }],
+      invitedAt: sentAt,
     });
     await requestRef.set({
       status: 'sent',
@@ -430,6 +424,65 @@ export async function retryVacationReceiptSignature(vacationId: string) {
     return { sent: true, resent: true, signatureRequestId: workflow.receiptSignature.signatureRequestId ?? null };
   }
   return ensureVacationReceiptSignatureSent(vacationId);
+}
+
+function signersFromRequest(value: unknown): VacationSigner[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): VacationSigner[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const signer = entry as Record<string, unknown>;
+    const email = typeof signer.email === 'string' ? signer.email.trim() : '';
+    const name = typeof signer.name === 'string' ? signer.name.trim() : '';
+    if (!email || !name) return [];
+    return [{
+      party: 'employee',
+      name,
+      email,
+      avatarUrl: typeof signer.avatarUrl === 'string' ? signer.avatarUrl : null,
+    }];
+  });
+}
+
+// Consulta a Autentique diretamente: o recibo não depende do webhook para reconhecer a assinatura.
+export async function refreshVacationReceiptSignatureFromProvider(vacationId: string) {
+  const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
+  const snapshot = await vacationRef.get();
+  if (!snapshot.exists) throw notFound();
+  const workflow = snapshot.get('workflow') as DPVacationWorkflow | undefined;
+  const signatureRequestId = workflow?.receiptSignature.signatureRequestId;
+  if (!signatureRequestId) {
+    throw conflict('DP_VACATION_RECEIPT_SIGNATURE_NOT_SENT', 'O recibo ainda não foi enviado para assinatura.');
+  }
+  const requestRef = hrDbAdmin.collection('hrSignatureRequests').doc(signatureRequestId);
+  const request = await requestRef.get();
+  if (!request.exists || request.get('vacationId') !== vacationId || request.get('purpose') !== 'vacation_receipt') {
+    throw conflict('DP_VACATION_RECEIPT_SIGNATURE_NOT_FOUND', 'A solicitação de assinatura do recibo não foi encontrada.');
+  }
+  const providerDocumentId = typeof request.get('providerDocumentId') === 'string' ? String(request.get('providerDocumentId')) : '';
+  if (providerDocumentId) {
+    const provider = await getAutentiqueDocumentSignatures(providerDocumentId);
+    const participants = vacationParticipantsFromProvider({
+      signatures: provider.signatures,
+      signers: signersFromRequest(request.get('signers')),
+      invitedAt: workflow.receiptSignature.sentAt ?? String(request.get('sentAt') ?? new Date().toISOString()),
+    });
+    const now = new Date().toISOString();
+    const signedAt = participants
+      .map((participant) => participant.signedAt)
+      .filter((value): value is string => typeof value === 'string' && Boolean(value))
+      .sort()
+      .at(-1) ?? now;
+    // set com merge mescla mapas; o mapa de participantes é substituído para remover entradas que não assinam.
+    await requestRef.update({
+      status: provider.completed ? 'signed' : request.get('status') === 'signed' ? 'signed' : 'sent',
+      participants: participantMap(participants),
+      ...(provider.signedUrl ? { signedFileUrl: provider.signedUrl } : {}),
+      ...(provider.completed ? { signedAt } : {}),
+      reconciledAt: now,
+      updatedAt: now,
+    });
+  }
+  return syncVacationReceiptSignatureRequest({ vacationId, signatureRequestId });
 }
 
 export async function syncVacationReceiptSignatureRequest(params: {
