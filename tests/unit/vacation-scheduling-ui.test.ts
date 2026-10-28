@@ -90,8 +90,9 @@ test('página do colaborador separa período concessivo, aquisitivo, anteriores 
 });
 
 test('página do colaborador diz a situação de hoje, o próximo passo e desenha a regra do prazo', () => {
-  assert.match(profile, /<PersonBand label="Hoje"/);
-  assert.match(profile, /<PersonBand label="O que fazer agora"/);
+  assert.match(profile, /<PersonStatusBar today=\{nowText\}/);
+  assert.match(profile, /label="próximo direito"/);
+  assert.doesNotMatch(profile, /label="hoje"/);
   assert.match(profile, /<VacationRuleTimeline cycle=\{shownConcessive\}/);
   assert.match(profile, /gozados · \{Math\.max\(0, shownConcessive\.takenDays - enjoyedDays\)\} agendados/);
 });
@@ -210,4 +211,17 @@ test('drawers de férias ocupam a viewport e mantêm conteúdo rolável entre ca
   assert.match(drawer, /height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh'/);
   assert.match(editor, /min-h-0 flex-1 space-y-4 overflow-y-auto/);
   assert.match(editor, /flex shrink-0 justify-end/);
+});
+
+test('painel de etapas não troca de parcela quando a trilha escolhida é concluída', () => {
+  assert.match(profile, /const drawerWorkflowVacation = workflowVacations\.find\(vacation => vacation\.id === selectedWorkflowVacationId\);/);
+  assert.match(profile, /open=\{workflowDrawerOpen && Boolean\(drawerWorkflowVacation\)\}/);
+  assert.match(profile, /if \(selectedWorkflowVacationId\) setWorkflowDrawerOpen\(false\);/);
+  assert.match(workflow, /workflow\.status === 'active' && workflow\.currentStage === 'scheduling' && canApprove/);
+});
+
+test('Panorama lista empregados CLT e aprendizes, não só quem é operacional', () => {
+  assert.match(manager, /activeUsers\.filter\(hasVacationEntitlement\)/);
+  assert.match(manager, /\['clt', 'apprenticeship'\]\.includes\(user\.employmentRelationshipType\)/);
+  assert.doesNotMatch(manager, /activeUsers\.filter\(user => user\.operacional === true\)/);
 });

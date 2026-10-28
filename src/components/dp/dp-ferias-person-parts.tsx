@@ -13,12 +13,26 @@ const BAND_TONE: Record<BandTone, string> = {
   danger: 'border-ds-confirm-border bg-ds-confirm-bg text-ds-confirm-ink',
 };
 
-/** Faixa de uma frase só, para "Hoje" e "O que fazer agora". */
-export function PersonBand({ label, text, tone }: { label: string; text: string; tone: BandTone }) {
+/**
+ * Faixa única da página individual: a situação de hoje à esquerda e, só quando houver ação, o próximo passo à direita.
+ */
+export function PersonStatusBar({ today, todayTone, action }: {
+  today: string;
+  todayTone: BandTone;
+  action?: { text: string; tone: BandTone } | null;
+}) {
   return (
-    <div className={cn('flex flex-col gap-0.5 rounded-ds-btn-lg border px-4 py-3', BAND_TONE[tone])}>
-      <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] opacity-80">{label}</span>
-      <span className="text-[14px] font-extrabold">{text}</span>
+    <div className={cn('flex flex-col gap-3 rounded-ds-btn-lg border px-4 py-3 md:flex-row md:items-center md:justify-between', BAND_TONE[todayTone])}>
+      <span className="flex flex-col gap-0.5">
+        <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] opacity-80">Hoje</span>
+        <span className="text-[14px] font-extrabold">{today}</span>
+      </span>
+      {action ? (
+        <span className={cn('flex flex-col gap-0.5 rounded-ds-btn border px-3 py-2 md:max-w-[55%]', BAND_TONE[action.tone])}>
+          <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] opacity-80">O que fazer agora</span>
+          <span className="text-[13px] font-extrabold">{action.text}</span>
+        </span>
+      ) : null}
     </div>
   );
 }
