@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
+import { serializedTimestampParts } from "@/lib/firestore-serialized-timestamp";
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
@@ -195,6 +196,9 @@ function cleanPayload(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(cleanPayload);
   }
+
+  const timestamp = serializedTimestampParts(value);
+  if (timestamp) return new Timestamp(timestamp.seconds, timestamp.nanoseconds);
 
   if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
     return Object.fromEntries(
