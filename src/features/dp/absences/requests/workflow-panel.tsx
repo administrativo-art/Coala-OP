@@ -22,6 +22,7 @@ import { AbsencePreviewPanel } from './preview-panel';
 import { isAbsenceReviewOverdue } from './review-sla';
 import type { AbsenceActionInput } from './workflow-schemas';
 import type { AbsenceRequestDto, AbsenceRequestStatus } from './workflow-types';
+import { AbsenceCoverageSection } from '../coverage/coverage-section';
 
 const statusLabels: Record<AbsenceRequestStatus, string> = {
   draft: 'Rascunho', submitted: 'Enviada', in_review: 'Em análise', adjustments_requested: 'Ajustes solicitados',
@@ -48,12 +49,14 @@ function quantity(value: AbsenceRequestDto) {
   return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(value.quantity)} ${value.unit === 'day' ? (value.quantity === 1 ? 'dia' : 'dias') : (value.quantity === 1 ? 'hora' : 'horas')}`;
 }
 
-export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refreshKey = 0, initialFilters }: {
+export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refreshKey = 0, initialFilters, onCountChange }: {
   firebaseUser: FirebaseUser | null;
   scope: 'mine' | 'review' | 'team';
   people?: Array<{ id: string; username: string }>;
   refreshKey?: number;
   initialFilters?: AbsenceListFilters;
+  /** Quantidade carregada na lista; `more` indica que há outra página. */
+  onCountChange?: (count: { value: number; more: boolean } | null) => void;
 }) {
   const { units } = useDP();
   const [filterDraft, setFilterDraft] = useState<AbsenceListFilters>(initialFilters ?? (scope === 'team' ? { status: 'in_review' } : {}));
@@ -85,6 +88,8 @@ export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refre
   identityRef.current = identity;
   const beneficiaryName = (request: AbsenceRequestDto) => request.beneficiaryName?.trim()
     || people.find((person) => person.id === request.beneficiaryUid)?.username.trim() || null;
+
+  useEffect(() => { onCountChange?.(loaded ? { value: items.length, more: Boolean(cursor) } : null); }, [cursor, items.length, loaded, onCountChange]);
 
   const load = useCallback(async (next?: string) => {
     if (!firebaseUser) return;
@@ -353,6 +358,8 @@ export function AbsenceWorkflowSection({ firebaseUser, scope, people = [], refre
           {operationalError ? <p role="alert" className="text-xs text-ds-danger">{operationalError}</p> : null}
           {operationalMessage ? <p role="status" className="text-xs text-ds-ink-muted">{operationalMessage}</p> : null}
         </PanelSection>
+        {selected.status === 'approved' && selected.operational?.operationallyApplied && scope !== 'mine'
+          ? <AbsenceCoverageSection key={selected.id} firebaseUser={firebaseUser} requestId={selected.id} /> : null}
         {selected.preflight ? <PanelSection title="Conferência antes da decisão">
           <PanelField label="Aprovadores previstos">{selected.preflight.approvers.length ? selected.preflight.approvers.map((person) => person.name).join(', ') : selected.preflight.approvalPending ? 'Definição pendente' : 'Fluxo automático'}</PanelField>
           {selected.preflight.approvalSlaHours ? <PanelField label="Prazo por etapa humana">{selected.preflight.approvalSlaHours} horas corridas</PanelField> : null}

@@ -1,27 +1,31 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, Info } from "lucide-react";
+import { CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, Eye, Info } from "lucide-react";
 import Link from "next/link";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { ScheduledDarkTheme } from "@/components/theme/scheduled-dark-theme";
 import { BackButton } from "@/components/navigation/back-button";
 import { errorMessageOf } from "@/components/patterns/panel-form";
-import { Segmented } from "@/components/patterns/segmented";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
-import { MirrorCard } from "@/features/dp/time-adjustments/mirror-card";
 import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
 import type { AdjustmentView, TreatmentView } from "@/features/dp/time-adjustments/types";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-import { buildMonthView, type DayAbsence, type DayMarking, type DayShift, type DayView, type DayIncident } from "./day-model";
-import { AbsencesAndAlerts, DAY_GRID, DayCard, DayPanel, INCIDENTS, type ClassificationActions, type ReceiptActions } from "./day-list";
+import { buildMonthView, type DayAbsence, type DayMarking, type DayShift, type DayView } from "./day-model";
+import { DAY_GRID, DayCard, type ClassificationActions, type ReceiptActions } from "./day-list";
+import { DayDetailPanel } from "./day-detail";
+import type { BankStatementLine } from "@/features/dp/time-bank/core";
 import { saveFile } from "./marking-ui";
-import { hm, RecordStrip, type MarkingPurpose } from "./record-strip";
+import { hm, PURPOSE_DOT, RecordStrip, type MarkingPurpose } from "./record-strip";
+import { AdjustmentsHistory, MirrorsGrid } from "./time-recording-views";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
 import { LocationAccessPanel } from "./location-access-panel";
 
@@ -37,6 +41,15 @@ type EmployeeMonthPayload = {
   treatments: TreatmentView[];
   unitNames: Record<string, string>;
 };
+
+export type TimeRecordingView = "records" | "adjustments" | "time-bank" | "mirrors";
+export function parseTimeRecordingView(value: string | undefined): TimeRecordingView {
+  return value === "adjustments" || value === "time-bank" || value === "mirrors" ? value : "records";
+}
+type BankPayload = { policy: { id: string; version: number; name: string; enabled: boolean } | null;
+  statement: { balanceMinutes: number; cycle: { start: string; end: string } | null; lines: BankStatementLine[];
+    reviewDays: Array<{ date: string; issues: string[] }> } | null;
+  previewCompetences?: string[] };
 
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 // Ausências da conta "minhas" filtram pela data de início; 40 dias antes do mês pegam as que começaram no mês anterior.
@@ -56,7 +69,7 @@ function addDays(date: string, days: number) {
 
 export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   employeeUid?: string;
-  initialView?: "records" | "time-bank";
+  initialView?: TimeRecordingView;
 } = {}) {
   const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const readOnly = Boolean(employeeUid);
@@ -91,6 +104,9 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [employeeUnitNames, setEmployeeUnitNames] = useState<Record<string, string>>({});
 
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [bank, setBank] = useState<BankPayload | null>(null);
+  const [bankUnavailable, setBankUnavailable] = useState(false);
   const monthStart = `${month}-01`;
   const monthEnd = addDays(`${shiftMonth(month, 1)}-01`, -1);
 
@@ -148,6 +164,20 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
     return () => { cancelled = true; };
   }, [employeeUid, firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
 
+  // Extrato do banco no ciclo do mês aberto: alimenta o cartão "Banco de horas" e a política aplicada em cada dia.
+  // Uma leitura por troca de mês ou batida, a mesma que o cartão do banco já fazia.
+  useEffect(() => {
+    if (!firebaseUser) return;
+    let cancelled = false;
+    const date = monthEnd < today ? monthEnd : today;
+    setBankUnavailable(false);
+    request<BankPayload>(`/api/dp/time-recording/time-bank?${new URLSearchParams({ date, ...(employeeUid ? { employeeUid } : {}) })}`,
+      { fallbackError: "Não foi possível ler o banco de horas." })
+      .then((payload) => { if (!cancelled) setBank(payload); })
+      .catch(() => { if (!cancelled) { setBank(null); setBankUnavailable(true); } });
+    return () => { cancelled = true; };
+  }, [employeeUid, firebaseUser, monthEnd, today, request, reloadKey]);
+
   const days = useMemo(() => buildMonthView({
     month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences, treatments,
   }), [month, today, schedule, history, absences, treatments]);
@@ -166,13 +196,14 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
     ? Object.entries(employeeUnitNames)
     : options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [employeeUnitNames, options, readOnly]);
 
+  const adjustmentDates = useMemo(() => new Set(adjustments.filter((item) => item.status === "in_review").map((item) => item.workDate)), [adjustments]);
   const matches = useCallback((day: DayView) => {
+    if (filter === "marks") return day.markings.length > 0;
     if (filter === "alert") return day.incidents.length > 0;
+    if (filter === "review") return adjustmentDates.has(day.date);
     if (filter === "absence") return day.absence !== null;
-    if (filter.startsWith("incident:")) return day.incidents.includes(filter.slice(9) as DayIncident);
-    if (filter.startsWith("absence:")) return day.absence?.id === filter.slice(8);
     return true;
-  }, [filter]);
+  }, [filter, adjustmentDates]);
   const past = days.filter((day) => day.date <= today);
   const future = days.filter((day) => day.date > today);
   // Hoje primeiro e os dias anteriores em seguida, agrupados por semana (domingo a sábado).
@@ -186,10 +217,12 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   }, [past]);
   const alertDays = days.filter((day) => day.incidents.length).length;
   const absenceDays = days.filter((day) => day.absence).length;
+  const markedDays = days.filter((day) => day.markings.length).length;
+  const reviewDays = days.filter((day) => adjustmentDates.has(day.date)).length;
+  const inReview = adjustments.filter((item) => item.status === "in_review").length;
   const registered = days.reduce((sum, day) => sum + day.workedMinutes, 0);
   const balance = days.reduce((sum, day) => sum + (day.balanceMinutes ?? 0), 0);
-  const filterLabel = filter.startsWith("incident:") ? INCIDENTS[filter.slice(9) as DayIncident].label
-    : filter.startsWith("absence:") ? absences.find((item) => item.id === filter.slice(8))?.typeName ?? null : null;
+  const filterLabel = ({ marks: "Dias com batida", alert: "A conferir", review: "Ajuste em análise", absence: "Com ausência" } as Record<string, string>)[filter] ?? null;
   const filtered = days.filter((day) => day.date <= today && matches(day)).length;
 
   const changeMonth = (delta: number) => { setMonth((current) => shiftMonth(current, delta)); setFilter("all"); setOpenDate(null); };
@@ -259,8 +292,25 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
 
   if (!canView) return <p className="p-6 text-ds-ink-muted">Sem permissão para consultar este registro de ponto.</p>;
 
+  const viewHref = (view: TimeRecordingView) => view === "records" ? baseHref : `${baseHref}?view=${view}`;
+  const bankBalance = bank?.statement?.balanceMinutes ?? null;
+  const bankPreview = Boolean(bank?.previewCompetences?.length);
+  const VIEW_CARDS: Array<{ view: TimeRecordingView; title: string; value: string; hint: string; tone?: string; chip?: { label: string; variant: "warn" | "info" | "neutral" } }> = [
+    { view: "records", title: "Registros", value: hm(registered), hint: `registradas em ${MONTHS[Number(month.slice(5, 7)) - 1]}`,
+      chip: alertDays ? { label: `${alertDays} a conferir`, variant: "warn" } : undefined },
+    { view: "adjustments", title: "Histórico de ajustes", value: String(adjustments.length), hint: `${inReview} em análise · pedidos do mês`,
+      chip: inReview ? { label: `${inReview} em análise`, variant: "info" } : undefined },
+    { view: "time-bank", title: "Banco de horas", value: bankBalance === null ? "—" : hm(bankBalance, true),
+      hint: bank?.policy ? (bank.policy.enabled ? bank.statement?.cycle ? `ciclo ${bank.statement.cycle.start.split("-").reverse().join("/")} a ${bank.statement.cycle.end.split("-").reverse().join("/")}` : "saldo do ciclo" : "banco desligado na política")
+        : bankUnavailable ? "indisponível agora" : "sem política de horas",
+      tone: bankBalance === null ? undefined : bankBalance < 0 ? "text-ds-danger" : bankBalance > 0 ? "text-ds-ok" : undefined,
+      chip: bankBalance !== null ? { label: bankPreview ? "Prévia" : "Fechado", variant: "neutral" } : undefined },
+    { view: "mirrors", title: "Espelhos mensais", value: monthLabel(currentMonth).split(" ")[0], hint: `${monthLabel(currentMonth).split(" ")[0]} fecha após ${`${addDays(`${shiftMonth(currentMonth, 1)}-01`, -1).slice(8, 10)}/${currentMonth.slice(5, 7)}`}` },
+  ];
+
   return (
     <PageContainer variant="wide" className="space-y-5 pb-8">
+      <ScheduledDarkTheme />
       <header className="flex items-center gap-3">
         <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
           label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="ghost" size="sm" className="-ml-2" />
@@ -270,35 +320,12 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
         </div>
       </header>
 
-      <nav className="flex w-fit items-center gap-1 rounded-ds-md border border-ds-border bg-ds-surface p-1" aria-label="Ponto e banco de horas">
-        <Link href={baseHref} className={cn("rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors",
-          initialView === "records" ? "bg-ds-ink text-white" : "text-ds-ink-muted hover:bg-ds-warm hover:text-ds-ink")}>Registro de ponto</Link>
-        <Link href={`${baseHref}?view=time-bank`} className={cn("rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors",
-          initialView === "time-bank" ? "bg-ds-ink text-white" : "text-ds-ink-muted hover:bg-ds-warm hover:text-ds-ink")}>Banco de horas</Link>
-      </nav>
-
-      {initialView === "time-bank" ? (
-        <>
-          {readOnly ? (
-            <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
-              <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
-              <p><strong className="text-ds-ink">Modo de conferência.</strong> O DP pode consultar e analisar o extrato, mas não registra batidas em nome do colaborador.</p>
-            </div>
-          ) : null}
-          <section id="banco-de-horas" className="scroll-mt-28 space-y-3">
-            <div>
-              <h2 className="text-lg font-extrabold text-ds-ink">Resumo e extrato detalhado</h2>
-              <p className="text-sm text-ds-ink-muted">Saldo, créditos, débitos, dias em revisão, ciclo vigente e cada lançamento que compõe o banco.</p>
-            </div>
-            <TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} detailed />
-          </section>
-        </>
-      ) : (
-        <>
       {readOnly ? (
         <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
           <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
-          <p><strong className="text-ds-ink">Modo de conferência.</strong> Esta tela permite analisar escala, batidas, ausências, ajustes, alertas e saldo. Ela não registra ponto em nome do colaborador.</p>
+          {initialView === "time-bank"
+            ? <p><strong className="text-ds-ink">Modo de conferência.</strong> O DP pode consultar e analisar o extrato, mas não registra batidas em nome do colaborador.</p>
+            : <p><strong className="text-ds-ink">Modo de conferência.</strong> Esta tela permite analisar escala, batidas, ausências, ajustes, alertas e saldo. Ela não registra ponto em nome do colaborador.</p>}
         </div>
       ) : <>
         {options?.mode === "pilot" ? (
@@ -306,20 +333,43 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
             <strong>Ensaio controlado.</strong> As batidas aparecem aqui e na prévia do banco de horas, mas ficam fora do fechamento, do AFD e do AEJ.
           </div>
         ) : null}
-        <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded} />
+        <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded}
+          dialogOpen={recordOpen} onDialogOpenChange={setRecordOpen} />
       </>}
 
-      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-          {!readOnly || permissions.dp?.timeRecording?.readLocation === true ? <LocationAccessPanel key={employeeUid ?? firebaseUser?.uid} firebaseUser={firebaseUser} employeeUid={employeeUid} units={unitNames} today={today} /> : null}
-          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} readOnly={readOnly} />
-          {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
-          {/* Só aparece com o mês fechado pelo DP. */}
-          {!readOnly || canReadClosure ? <MirrorCard key={month} firebaseUser={firebaseUser} competence={month} employeeUid={employeeUid} /> : null}
-          {/* Só aparece com o banco ligado na política; soma os meses já fechados do ciclo. */}
-          <div id="banco-de-horas" className="min-w-0 scroll-mt-28"><TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} detailHref={`${baseHref}?view=time-bank`} /></div>
-        </aside>
+      {!readOnly || permissions.dp?.timeRecording?.readLocation === true ? (
+        <LocationAccessPanel key={employeeUid ?? firebaseUser?.uid} firebaseUser={firebaseUser} employeeUid={employeeUid} units={unitNames} today={today} />
+      ) : null}
 
+      {/* Consultas por cartões, como no Coala Go; cada uma tem endereço próprio (?view=). */}
+      <nav aria-label="Consultas do ponto" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {VIEW_CARDS.map((card) => (
+          <Link key={card.view} href={viewHref(card.view)} aria-current={initialView === card.view ? "page" : undefined}
+            className={cn("flex min-w-0 flex-col gap-1 rounded-ds-card border bg-ds-surface px-4 py-3 transition-colors hover:border-ds-ink-faint",
+              initialView === card.view ? "border-ds-ink shadow-[inset_0_0_0_1px_var(--ds-ink)]" : "border-ds-border")}>
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-sm font-extrabold text-ds-ink">{card.title}</span>
+              {card.chip ? <StatusPill variant={card.chip.variant}>{card.chip.label}</StatusPill> : null}
+            </span>
+            <span className={cn("font-ds-mono text-xl font-extrabold capitalize tabular-nums text-ds-ink", card.tone)}>{card.value}</span>
+            <span className="truncate text-xs text-ds-ink-muted">{card.hint}</span>
+          </Link>
+        ))}
+      </nav>
+
+      {initialView === "time-bank" ? (
+        <section id="banco-de-horas" className="scroll-mt-28 space-y-3">
+          <div>
+            <h2 className="text-lg font-extrabold text-ds-ink">Resumo e extrato detalhado</h2>
+            <p className="text-sm text-ds-ink-muted">Saldo, créditos, débitos, dias em revisão, ciclo vigente e cada lançamento que compõe o banco.</p>
+          </div>
+          <TimeBankCard firebaseUser={firebaseUser} employeeUid={employeeUid} detailed />
+        </section>
+      ) : initialView === "mirrors" ? (
+        !readOnly || canReadClosure
+          ? <MirrorsGrid firebaseUser={firebaseUser} today={today} employeeUid={employeeUid} />
+          : <p className="text-sm text-ds-ink-muted">Os espelhos deste colaborador exigem a permissão de fechamento do ponto.</p>
+      ) : (
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -330,8 +380,6 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
                   className="px-2 text-ds-ink-muted hover:text-ds-ink disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
               </div>
               {month !== currentMonth ? <button type="button" onClick={() => setMonth(currentMonth)} className="text-xs font-bold text-ds-ink-2 underline">Voltar para hoje</button> : null}
-              <Segmented<string> aria-label="Filtrar dias" value={filter} onChange={setFilter}
-                options={[{ value: "all", label: "Todos" }, { value: "alert", label: `A conferir · ${alertDays}` }, { value: "absence", label: `Com ausência · ${absenceDays}` }]} />
             </div>
             <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ds-ink-muted">
               <span><strong className="text-sm text-ds-ink">{hm(registered)}</strong> registradas</span>
@@ -339,82 +387,127 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
             </p>
           </div>
 
-          {filterLabel ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-ds-btn-lg border border-ds-accent-ink/20 bg-ds-accent-row px-3 py-2 text-sm">
-              <span className="text-ds-ink-muted">Filtrando:</span>
-              <strong className="text-ds-ink">{filterLabel}</strong>
-              <span className="text-ds-ink-muted">· {filtered} {filtered === 1 ? "dia" : "dias"}</span>
-              <button type="button" onClick={() => setFilter("all")} className="ml-auto text-xs font-bold text-ds-accent-ink underline">Limpar filtro</button>
-            </div>
-          ) : null}
-
           {loadError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{loadError}</p> : null}
-          {history?.truncated || schedule?.truncated ? (
-            <p className="text-xs text-ds-caution">O mês tem mais registros do que esta tela mostra de uma vez; confira os dias no fechamento.</p>
-          ) : null}
 
-          <div className="space-y-2">
-            <div className={cn(DAY_GRID, "hidden px-[18px] pb-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint md:grid")}>
-              <span>Dia</span><span>Escala</span><span>Batidas</span><span>Total</span><span>Saldo (prévia)</span><span>A conferir</span>
-            </div>
-            {loading && !schedule ? (
-              Array.from({ length: 6 }, (_, index) => (
-                <div key={index} className="flex items-center gap-4 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-[18px] py-4" aria-hidden>
-                  <span className="h-10 w-14 animate-pulse rounded-ds-md bg-ds-warm" />
-                  <span className="h-4 w-24 animate-pulse rounded bg-ds-warm" />
-                  <span className="h-3 flex-1 animate-pulse rounded-full bg-ds-warm" />
-                </div>
-              ))
-            ) : past.length === 0 && future.length === 0 ? null : (
-              <>
-                {future.length && filter === "all" ? (
-                  <button type="button" onClick={() => setShowFuture((current) => !current)}
-                    className="flex w-full items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface/60 px-4 py-2.5 text-left text-xs font-bold text-ds-ink-muted hover:bg-ds-surface">
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", !showFuture && "-rotate-90")} aria-hidden />
-                    Próximos dias ({future.length})
+          {initialView === "adjustments" ? (
+            <AdjustmentsHistory adjustments={adjustments} onOpen={setReportId} onOpenDay={(date) => setOpenDate(date)} />
+          ) : (
+            <>
+              {/* Contagens que filtram a lista; clicar de novo limpa. */}
+              <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Filtrar dias">
+                {([["marks", markedDays, "dias com batida", "text-ds-ink"], ["alert", alertDays, "a conferir", "text-ds-caution"],
+                  ["review", reviewDays, "com ajuste em análise", "text-ds-info"]] as const).map(([value, count, label, tone]) => (
+                  <button key={value} type="button" aria-pressed={filter === value} onClick={() => { setFilter(filter === value ? "all" : value); setShowFuture(false); }}
+                    className={cn("flex items-center gap-3 rounded-ds-btn-lg border bg-ds-surface px-4 py-2.5 text-left transition-colors hover:border-ds-ink-faint",
+                      filter === value ? "border-ds-ink shadow-[inset_0_0_0_1px_var(--ds-ink)]" : "border-ds-border")}>
+                    <span className={cn("font-ds-mono text-[22px] font-extrabold tabular-nums", tone)}>{count}</span>
+                    <span className="text-[12.5px] font-semibold text-ds-ink-muted">{label}</span>
                   </button>
-                ) : null}
-                {showFuture && filter === "all" ? [...future].reverse().map((day) => (
-                  <div key={day.date} className="flex items-center gap-3 rounded-ds-btn-lg border border-dashed border-ds-border px-4 py-2 text-xs text-ds-ink-muted">
-                    <span className="w-24 font-bold">{day.date.slice(8, 10)}/{day.date.slice(5, 7)}</span>
-                    {day.absence ? <span>{day.absence.typeName}</span>
-                      : day.shift?.type === "work" ? <span>{day.shift.shiftName ?? "Turno"} · {day.shift.startTime}–{day.shift.endTime}</span>
-                        : <span>{day.shift ? "Folga" : "Sem escala"}</span>}
-                  </div>
-                )) : null}
-                {weeks.map((week) => {
-                  const visible = week.filter(matches);
-                  if (!visible.length) return null;
-                  const worked = week.reduce((sum, day) => sum + day.workedMinutes, 0);
-                  const weekAlerts = week.filter((day) => day.incidents.length).length;
-                  const first = week[week.length - 1].date;
-                  const last = week[0].date;
-                  return (
-                    <Fragment key={first}>
-                      <div className="flex flex-wrap items-center gap-3 px-1 pb-0.5 pt-4 text-xs first:pt-1">
-                        <strong className="text-ds-ink">{first.slice(8, 10)}/{first.slice(5, 7)} a {last.slice(8, 10)}/{last.slice(5, 7)}</strong>
-                        <span className="tabular-nums text-ds-ink-2"><strong className="text-ds-ink">{hm(worked)}</strong> registradas</span>
-                        {weekAlerts ? <span className="font-bold text-ds-danger">{weekAlerts} {weekAlerts === 1 ? "dia a conferir" : "dias a conferir"}</span> : <span className="text-ds-ink-muted">nada a conferir</span>}
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ds-ink-muted">
+                  {([["journey_start", "Início da jornada"], ["break_start", "Intervalo"], ["journey_end", "Fim da jornada"]] as const).map(([purpose, label]) => (
+                    <span key={purpose} className="inline-flex items-center gap-1.5"><span aria-hidden className={cn("h-2 w-2 rounded-full", PURPOSE_DOT[purpose as MarkingPurpose])} />{label}</span>
+                  ))}
+                  <span className="inline-flex items-center gap-1.5"><span aria-hidden className="h-2 w-2 rounded-full border border-dashed border-ds-ink-faint" />Sem classificação</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {absenceDays ? (
+                    <button type="button" aria-pressed={filter === "absence"} onClick={() => setFilter(filter === "absence" ? "all" : "absence")}
+                      className={cn("rounded-ds-pill border px-3 py-1 text-xs font-bold", filter === "absence" ? "border-ds-ink bg-ds-ink text-white" : "border-ds-border bg-ds-surface text-ds-ink-2")}>
+                      Com ausência · {absenceDays}
+                    </button>
+                  ) : null}
+                  {!readOnly ? <Button type="button" variant="ds-secondary" size="sm" onClick={() => setAbsenceDate("")}><CalendarPlus className="h-4 w-4" aria-hidden /> Solicitar ausência</Button> : null}
+                </div>
+              </div>
+              {absencesUnavailable ? <p className="text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
+
+              {filterLabel ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-ds-btn-lg border border-ds-accent-ink/20 bg-ds-accent-row px-3 py-2 text-sm">
+                  <span className="text-ds-ink-muted">Filtrando:</span>
+                  <strong className="text-ds-ink">{filterLabel}</strong>
+                  <span className="text-ds-ink-muted">· {filtered} {filtered === 1 ? "dia" : "dias"}</span>
+                  <button type="button" onClick={() => setFilter("all")} className="ml-auto text-xs font-bold text-ds-accent-ink underline">Limpar filtro</button>
+                </div>
+              ) : null}
+
+              {history?.truncated || schedule?.truncated ? (
+                <p className="text-xs text-ds-caution">O mês tem mais registros do que esta tela mostra de uma vez; confira os dias no fechamento.</p>
+              ) : null}
+
+              <div className="space-y-2">
+                <div className={cn(DAY_GRID, "hidden px-[18px] pb-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint md:grid")}>
+                  <span>Dia</span><span>Escala</span><span>Batidas</span><span>Total</span><span>Saldo (prévia)</span><span>A conferir</span>
+                </div>
+                {loading && !schedule ? (
+                  Array.from({ length: 6 }, (_, index) => (
+                    <div key={index} className="flex items-center gap-4 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-[18px] py-4" aria-hidden>
+                      <span className="h-10 w-14 animate-pulse rounded-ds-md bg-ds-warm" />
+                      <span className="h-4 w-24 animate-pulse rounded bg-ds-warm" />
+                      <span className="h-3 flex-1 animate-pulse rounded-full bg-ds-warm" />
+                    </div>
+                  ))
+                ) : past.length === 0 && future.length === 0 ? null : (
+                  <>
+                    {future.length && filter === "all" ? (
+                      <button type="button" onClick={() => setShowFuture((current) => !current)}
+                        className="flex w-full items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface/60 px-4 py-2.5 text-left text-xs font-bold text-ds-ink-muted hover:bg-ds-surface">
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", !showFuture && "-rotate-90")} aria-hidden />
+                        Próximos dias ({future.length})
+                      </button>
+                    ) : null}
+                    {showFuture && filter === "all" ? [...future].reverse().map((day) => (
+                      <div key={day.date} className="flex items-center gap-3 rounded-ds-btn-lg border border-dashed border-ds-border px-4 py-2 text-xs text-ds-ink-muted">
+                        <span className="w-24 font-bold">{day.date.slice(8, 10)}/{day.date.slice(5, 7)}</span>
+                        {day.absence ? <span>{day.absence.typeName}</span>
+                          : day.shift?.type === "work" ? <span>{day.shift.shiftName ?? "Turno"} · {day.shift.startTime}–{day.shift.endTime}</span>
+                            : <span>{day.shift ? "Folga" : "Sem escala"}</span>}
                       </div>
-                      {visible.map((day) => <DayCard key={day.date} day={day} today={today} selected={openDate === day.date} onOpen={() => setOpenDate(day.date)} />)}
-                    </Fragment>
-                  );
-                })}
-                {past.length === 0 ? <p className="rounded-[18px] border border-dashed border-ds-border bg-ds-surface p-6 text-center text-sm text-ds-ink-muted">Este mês ainda não começou.</p> : null}
-              </>
-            )}
-          </div>
-          <p className="flex items-center gap-1.5 text-xs text-ds-ink-muted">
-            <Info className="h-3.5 w-3.5" aria-hidden /> Saldo e itens a conferir são uma prévia; a apuração oficial é feita no fechamento do ponto.
-          </p>
+                    )) : null}
+                    {weeks.map((week) => {
+                      const visible = week.filter(matches);
+                      if (!visible.length) return null;
+                      const worked = week.reduce((sum, day) => sum + day.workedMinutes, 0);
+                      const weekAlerts = week.filter((day) => day.incidents.length).length;
+                      const first = week[week.length - 1].date;
+                      const last = week[0].date;
+                      return (
+                        <Fragment key={first}>
+                          <div className="flex flex-wrap items-center gap-3 px-1 pb-0.5 pt-4 text-xs first:pt-1">
+                            <strong className="text-ds-ink">{first.slice(8, 10)}/{first.slice(5, 7)} a {last.slice(8, 10)}/{last.slice(5, 7)}</strong>
+                            <span className="tabular-nums text-ds-ink-2"><strong className="text-ds-ink">{hm(worked)}</strong> registradas</span>
+                            {weekAlerts ? <span className="font-bold text-ds-danger">{weekAlerts} {weekAlerts === 1 ? "dia a conferir" : "dias a conferir"}</span> : <span className="text-ds-ink-muted">nada a conferir</span>}
+                          </div>
+                          {visible.map((day) => <DayCard key={day.date} day={day} today={today} selected={openDate === day.date}
+                            reviewing={adjustmentDates.has(day.date)} onOpen={() => setOpenDate(day.date)} />)}
+                        </Fragment>
+                      );
+                    })}
+                    {past.length === 0 ? <p className="rounded-[18px] border border-dashed border-ds-border bg-ds-surface p-6 text-center text-sm text-ds-ink-muted">Este mês ainda não começou.</p> : null}
+                  </>
+                )}
+              </div>
+              <p className="flex items-center gap-1.5 text-xs text-ds-ink-muted">
+                <Info className="h-3.5 w-3.5" aria-hidden /> Saldo e itens a conferir são uma prévia; a apuração oficial é feita no fechamento do ponto.
+              </p>
+            </>
+          )}
         </div>
-      </div>
-      <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
-        today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications} onClose={() => setOpenDate(null)}
+      )}
+
+      <DayDetailPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
+        days={days} today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications}
+        onClose={() => setOpenDate(null)} onNavigate={setOpenDate}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}
         adjustments={adjustments.filter((item) => item.workDate === openDate)}
         onRequestAdjustment={(date) => { setOpenDate(null); setAdjustDate(date); }}
-        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} markingMode={options?.mode ?? null} />
+        onOpenAdjustment={(id) => { setOpenDate(null); setReportId(id); }} readOnly={readOnly} markingMode={options?.mode ?? null}
+        bank={bank ? { policy: bank.policy, lines: bank.statement?.lines.filter((item) => item.date === openDate) ?? [],
+          reviewIssues: bank.statement?.reviewDays.find((item) => item.date === openDate)?.issues ?? [],
+          preview: Boolean(openDate && bank.previewCompetences?.includes(openDate.slice(0, 7))) } : bankUnavailable ? "unavailable" : null}
+        onRecord={!readOnly && openDate === today && marking.canRecord ? () => { setOpenDate(null); setRecordOpen(true); } : undefined} />
       {adjustDate && !readOnly && (options?.mode === "official" || options?.mode === "pilot") ? (
         <AdjustmentRequestPanel key={adjustDate} open workDate={adjustDate} request={request}
           originals={days.find((day) => day.date === adjustDate)?.allMarkings ?? []}
@@ -433,8 +526,6 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
       })() : null}
       {!readOnly ? <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
         firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} /> : null}
-        </>
-      )}
     </PageContainer>
   );
 }

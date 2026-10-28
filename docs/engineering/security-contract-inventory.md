@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **505**
-- Totalmente contratados: **160**
+- Arquivos de rota: **507**
+- Totalmente contratados: **162**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -83,6 +83,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/templates/[id]/text` | GET | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/[id]/text/route.ts) |
 | `/api/documents/templates/[id]/workflow` | PATCH | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/[id]/workflow/route.ts) |
 | `/api/dp/absence-availability/[requestId]/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts) |
+| `/api/dp/absence-coverage/[requestId]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-coverage/[requestId]/route.ts](../../src/app/api/dp/absence-coverage/[requestId]/route.ts) |
+| `/api/dp/absence-coverage/[requestId]/candidates` | GET ✓ | `CONTRACTED` | [src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts](../../src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts) |
 | `/api/dp/absence-operational/[requestId]/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts) |
 | `/api/dp/absence-retention` | GET ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/route.ts](../../src/app/api/dp/absence-retention/route.ts) |
 | `/api/dp/absence-retention/[caseId]/decision` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/[caseId]/decision/route.ts](../../src/app/api/dp/absence-retention/[caseId]/decision/route.ts) |

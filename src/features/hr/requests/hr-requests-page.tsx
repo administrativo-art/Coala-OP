@@ -1,20 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, FileSignature, FileText, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, FileSignature, FileText, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
 import { EmptyResults, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
 import { ControlSearch } from "@/components/patterns/control-panel";
 import { HeroChip } from "@/components/patterns/hero-chip";
 import { PageHero } from "@/components/patterns/page-hero";
+import { Segmented } from "@/components/patterns/segmented";
 import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
-import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
-import { FiscalExportsCard } from "@/features/dp/time-adjustments/fiscal-exports-card";
 import { AdjustmentReviewSection } from "@/features/dp/time-adjustments/review-section";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
@@ -34,6 +33,21 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 type Filter = "pending" | "completed" | "all";
+type Tab = "analyze" | "follow" | "documents";
+type AnalyzeFilter = "all" | "transport" | "absences" | "adjustments" | "coverage";
+type FollowFilter = "all" | "transport" | "absences";
+type DocumentFilter = "all" | "terms" | "retention";
+
+const TABS: Array<{ value: Tab; label: string }> = [
+  { value: "analyze", label: "Para analisar" },
+  { value: "follow", label: "Acompanhamento" },
+  { value: "documents", label: "Pendências de documento" },
+];
+
+function countLabel(count: { value: number; more: boolean } | number | null) {
+  if (count === null) return "…";
+  return typeof count === "number" ? count : count.more ? `${count.value}+` : count.value;
+}
 
 export function HrRequestsPage() {
   const { firebaseUser, permissions, isDefaultAdmin, activeUsers } = useAuth();
@@ -49,17 +63,21 @@ export function HrRequestsPage() {
   const [dailyValue, setDailyValue] = useState("");
   const [signature, setSignature] = useState<CollaboratorRequestSignature | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
-  const [absenceQueueOpen, setAbsenceQueueOpen] = useState(false);
-  const [absenceTeamOpen, setAbsenceTeamOpen] = useState(false);
-  const [absenceRetentionOpen, setAbsenceRetentionOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("analyze");
+  const [analyzeFilter, setAnalyzeFilter] = useState<AnalyzeFilter>("all");
+  const [followFilter, setFollowFilter] = useState<FollowFilter>("all");
+  const [documentFilter, setDocumentFilter] = useState<DocumentFilter>("all");
+  const [absenceReviewCount, setAbsenceReviewCount] = useState<{ value: number; more: boolean } | null>(null);
+  const [absenceTeamCount, setAbsenceTeamCount] = useState<{ value: number; more: boolean } | null>(null);
+  const [adjustmentCount, setAdjustmentCount] = useState<number | null>(null);
+  const [coverageCount, setCoverageCount] = useState<number | null>(null);
+  const [absencePickerOpen, setAbsencePickerOpen] = useState(false);
   const [absenceCreateOpen, setAbsenceCreateOpen] = useState(false);
   const [absenceBeneficiaryUid, setAbsenceBeneficiaryUid] = useState("");
   const [absenceRefreshKey, setAbsenceRefreshKey] = useState(0);
-  const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({ status: 'in_review' });
+  const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({});
   const canReview = isDefaultAdmin || permissions.dp?.requests?.review === true;
   const canViewAbsences = isDefaultAdmin || permissions.dp?.requests?.view === true;
-  const canSeeClosure = isDefaultAdmin || permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
-  const canExportFiscalFiles = isDefaultAdmin || permissions.dp?.settings?.manageTime === true;
   const canViewResponsibilityTasks = isDefaultAdmin || permissions.dp?.schedules?.edit === true
     || permissions.dp?.responsibilities?.manage === true
     || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true;
@@ -67,12 +85,10 @@ export function HrRequestsPage() {
   const absenceBeneficiary = eligibleBeneficiaries.find((person) => person.id === absenceBeneficiaryUid);
 
   useEffect(() => {
+    setAbsencePickerOpen(false);
     setAbsenceCreateOpen(false);
     setAbsenceBeneficiaryUid('');
-    setAbsenceQueueOpen(false);
-    setAbsenceTeamOpen(false);
-    setAbsenceRetentionOpen(false);
-    setAbsenceTeamFilters({ status: 'in_review' });
+    setAbsenceTeamFilters({});
   }, [firebaseUser?.uid]);
 
   const load = useCallback(async () => {
@@ -123,13 +139,15 @@ export function HrRequestsPage() {
   const visible = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
     return items.filter((item) => {
-      if (filter === "pending" && item.status !== "pending") return false;
-      if (filter === "completed" && item.status === "pending") return false;
-      if (!term) return true;
+      if (tab === "analyze" && item.status !== "pending") return false;
+      if (tab === "documents" && !(item.status === "approved" && item.documentStatus === "failed")) return false;
+      if (tab === "follow" && filter === "pending" && item.status !== "pending") return false;
+      if (tab === "follow" && filter === "completed" && item.status === "pending") return false;
+      if (tab !== "follow" || !term) return true;
       return [item.employeeName, item.details, TRANSPORT_VOUCHER_ACTION_LABELS[item.action]]
         .some((value) => value.toLocaleLowerCase("pt-BR").includes(term));
     });
-  }, [filter, items, search]);
+  }, [filter, items, search, tab]);
 
   const runAction = async (input: Record<string, unknown>, success: string) => {
     if (!firebaseUser || !selected || busy) return;
@@ -175,69 +193,104 @@ export function HrRequestsPage() {
     }
   };
 
+  const analyzeTotal = [counts.pending, canReview ? absenceReviewCount?.value ?? 0 : 0, canReview ? adjustmentCount ?? 0 : 0,
+    canViewResponsibilityTasks ? coverageCount ?? 0 : 0].reduce((sum, value) => sum + value, 0);
+  const transportList = (emptyText: string) => <section className="space-y-3">
+    <div>
+      <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Benefícios</p>
+      <h2 className="text-lg font-extrabold text-ds-ink">Vale-transporte</h2>
+    </div>
+    <ListShell minWidth={820}>
+      {loading ? <ListSkeleton rows={3} /> : error ? (
+        <div className="p-8 text-center"><p className="text-sm font-bold text-ds-danger">{error}</p><Button className="mt-3" variant="ds-secondary" onClick={() => void load()}>Tentar novamente</Button></div>
+      ) : visible.length ? visible.map((item) => <RequestRow key={item.id} request={item} showEmployee selected={selected?.id === item.id} onOpen={() => setSelected(item)} />)
+        : search.trim() && tab === "follow" ? <EmptyResults title="Nenhuma solicitação encontrada." onClear={() => setSearch("")} />
+          : <p className="p-6 text-center text-sm text-ds-ink-muted">{emptyText}</p>}
+    </ListShell>
+  </section>;
+
   return (
     <div className="system-standard-page space-y-5 pb-8 font-ds">
+      <Segmented aria-label="Seções de solicitações" value={tab} onChange={(value) => { setTab(value); setSearch(""); }} options={TABS} className="max-w-full overflow-x-auto" />
+
       <PageHero
         kicker="Departamento Pessoal · Gestão do colaborador"
         title="Solicitações dos colaboradores"
-        subtitle="Analise pedidos, aplique benefícios e acompanhe termos sem perder a trilha."
-        chips={<>
-          <HeroChip value={counts.pending} label="aguardando análise" tone="warning" active={filter === "pending"} onClick={() => setFilter("pending")} />
-          <HeroChip value={counts.approved} label="aprovadas" tone="info" active={filter === "completed"} onClick={() => setFilter("completed")} />
-          <HeroChip value={counts.documentPending} label="termos pendentes" tone={counts.documentPending ? "danger" : "neutral"} />
-          <HeroChip value={items.length} label="todas" active={filter === "all"} onClick={() => setFilter("all")} />
+        subtitle={tab === "analyze" ? "O que espera a sua decisão, de qualquer tipo." : tab === "follow" ? "Tudo o que a equipe pediu, em qualquer situação." : "Termos que não foram gerados e comprovantes no fim da guarda."}
+        actions={<>
+          <Button variant="on-dark-secondary" size="xl" onClick={() => { void load(); setAbsenceRefreshKey((value) => value + 1); }} disabled={loading}><RefreshCw className="h-4 w-4" />Atualizar</Button>
+          {canReview ? <Button variant="primary-page" size="xl" onClick={() => setAbsencePickerOpen(true)}><Plus className="h-4 w-4" />Nova ausência</Button> : null}
+        </>}
+        chips={tab === "analyze" ? <>
+          <HeroChip value={analyzeTotal} label="todos" tone="warning" active={analyzeFilter === "all"} onClick={() => setAnalyzeFilter("all")} />
+          <HeroChip value={counts.pending} label="vale-transporte" tone="warning" active={analyzeFilter === "transport"} onClick={() => setAnalyzeFilter("transport")} />
+          {canReview ? <HeroChip value={countLabel(absenceReviewCount)} label="ausências" tone="warning" active={analyzeFilter === "absences"} onClick={() => setAnalyzeFilter("absences")} /> : null}
+          {canReview ? <HeroChip value={countLabel(adjustmentCount)} label="ajustes de ponto" tone="warning" active={analyzeFilter === "adjustments"} onClick={() => setAnalyzeFilter("adjustments")} /> : null}
+          {canViewResponsibilityTasks ? <HeroChip value={countLabel(coverageCount)} label="turnos sem cobertura" tone="danger" active={analyzeFilter === "coverage"} onClick={() => setAnalyzeFilter("coverage")} /> : null}
+        </> : tab === "follow" ? <>
+          <HeroChip value={items.length + (canViewAbsences ? absenceTeamCount?.value ?? 0 : 0)} label="todas" active={followFilter === "all"} onClick={() => setFollowFilter("all")} />
+          <HeroChip value={items.length} label="vale-transporte" tone="info" active={followFilter === "transport"} onClick={() => setFollowFilter("transport")} />
+          {canViewAbsences ? <HeroChip value={countLabel(absenceTeamCount)} label="ausências" tone="info" active={followFilter === "absences"} onClick={() => setFollowFilter("absences")} /> : null}
+        </> : <>
+          <HeroChip value={counts.documentPending} label="todas" active={documentFilter === "all"} onClick={() => setDocumentFilter("all")} />
+          <HeroChip value={counts.documentPending} label="termo com falha" tone="danger" active={documentFilter === "terms"} onClick={() => setDocumentFilter("terms")} />
+          {canReview ? <HeroChip value="—" label="retenção de comprovantes" active={documentFilter === "retention"} onClick={() => setDocumentFilter("retention")} /> : null}
         </>}
       >
-        <div className="flex flex-wrap gap-2"><ControlSearch value={search} onChange={setSearch} placeholder="Buscar colaborador ou solicitação" /><Button variant="on-dark-secondary" size="xl" onClick={() => void load()} disabled={loading}><RefreshCw className="h-4 w-4" />Atualizar</Button></div>
+        {tab === "follow" && followFilter !== "absences" ? <div className="flex flex-wrap items-center gap-2">
+          <ControlSearch value={search} onChange={setSearch} placeholder="Buscar vale-transporte por colaborador" />
+          <Segmented aria-label="Situação do vale-transporte" value={filter} onChange={setFilter} options={[
+            { value: "all", label: "Todas" }, { value: "pending", label: "Aguardando" }, { value: "completed", label: "Concluídas" },
+          ]} />
+        </div> : null}
       </PageHero>
 
-      <div className="flex items-baseline gap-2"><span className="text-[28px] font-extrabold">{visible.length}</span><span className="text-[13px] text-ds-ink-faint">de {items.length} solicitações</span></div>
-      <ListShell minWidth={820}>
-        {loading ? <ListSkeleton rows={6} /> : error ? (
-          <div className="p-8 text-center"><p className="text-sm font-bold text-ds-danger">{error}</p><Button className="mt-3" variant="ds-secondary" onClick={() => void load()}>Tentar novamente</Button></div>
-        ) : visible.length ? visible.map((item) => <RequestRow key={item.id} request={item} showEmployee selected={selected?.id === item.id} onOpen={() => setSelected(item)} />) : (
-          <EmptyResults title="Nenhuma solicitação encontrada." onClear={() => { setSearch(""); setFilter("all"); }} />
-        )}
-      </ListShell>
+      {tab === "analyze" ? <div className="space-y-6">
+        <div hidden={!["all", "transport"].includes(analyzeFilter)}>{transportList("Nenhum vale-transporte aguardando análise.")}</div>
+        {canReview ? <div hidden={!["all", "absences"].includes(analyzeFilter)}>
+          <AbsenceWorkflowSection key={`review:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="review" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} onCountChange={setAbsenceReviewCount} />
+        </div> : null}
+        {canReview ? <div hidden={!["all", "adjustments"].includes(analyzeFilter)} className="space-y-3">
+          <div>
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Ponto</p>
+            <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
+            <p className="text-xs text-ds-ink-muted">Pedidos para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
+          </div>
+          <AdjustmentReviewSection key={`adjustments:${absenceRefreshKey}`} firebaseUser={firebaseUser} people={activeUsers} onCountChange={setAdjustmentCount} />
+        </div> : null}
+        {canViewResponsibilityTasks ? <div hidden={!["all", "coverage"].includes(analyzeFilter)}>
+          <ResponsibilityTaskSection key={`coverage:${absenceRefreshKey}`} firebaseUser={firebaseUser} people={activeUsers}
+            canManage={isDefaultAdmin || permissions.dp?.responsibilities?.manage === true}
+            canWorkSchedules={isDefaultAdmin || permissions.dp?.schedules?.edit === true}
+            canReceiveGaps={isDefaultAdmin || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true}
+            canResolveAny={isDefaultAdmin} onCountChange={setCoverageCount} />
+        </div> : null}
+      </div> : null}
 
-      {canReview || canViewAbsences ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
-        <h2 className="text-lg font-extrabold text-ds-ink">Ausências</h2>
-        {canReview ? <div className="space-y-2"><label className="block space-y-1.5 text-xs font-bold text-ds-ink">Colaborador para novo pedido
-          <Select value={absenceBeneficiaryUid} onValueChange={setAbsenceBeneficiaryUid}><SelectTrigger className="h-11 rounded-ds-btn border-ds-border-input"><SelectValue placeholder="Selecione uma pessoa" /></SelectTrigger><SelectContent>{eligibleBeneficiaries.map((person) => <SelectItem key={person.id} value={person.id}>{person.username}</SelectItem>)}</SelectContent></Select>
-        </label><Button variant="primary-page" disabled={!absenceBeneficiaryUid} onClick={() => setAbsenceCreateOpen(true)}>Preparar ausência para colaborador</Button><p className="text-xs text-ds-ink-muted">A permissão e a lotação são conferidas novamente pelo servidor. O pedido começa como rascunho.</p></div> : null}
-        <div className="flex flex-wrap gap-2">
-          {canReview ? <Button variant="ds-secondary" onClick={() => setAbsenceQueueOpen((open) => !open)}>{absenceQueueOpen ? 'Ocultar fila de ausências' : 'Ver fila de ausências'}</Button> : null}
-          {canViewAbsences ? <Button variant="ds-secondary" onClick={() => setAbsenceTeamOpen((open) => !open)}>{absenceTeamOpen ? 'Ocultar pedidos da equipe' : 'Ver pedidos da equipe'}</Button> : null}
-          {canReview ? <Button variant="ds-secondary" onClick={() => setAbsenceRetentionOpen((open) => !open)}>{absenceRetentionOpen ? 'Ocultar retenção de documentos' : 'Ver retenção de documentos'}</Button> : null}
-        </div>
-        {absenceQueueOpen ? <AbsenceWorkflowSection firebaseUser={firebaseUser} scope="review" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} /> : null}
-        {absenceTeamOpen ? <AbsenceWorkflowSection key={`team:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="team" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} initialFilters={absenceTeamFilters} /> : null}
-        {absenceRetentionOpen ? <AbsenceRetentionSection firebaseUser={firebaseUser} /> : null}
-        {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setAbsenceTeamOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
-      </section> : null}
+      {tab === "follow" ? <div className="space-y-6">
+        <div hidden={!["all", "transport"].includes(followFilter)}>{transportList("Nenhuma solicitação de vale-transporte.")}</div>
+        {canViewAbsences ? <div hidden={!["all", "absences"].includes(followFilter)}>
+          <AbsenceWorkflowSection key={`team:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="team" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} initialFilters={absenceTeamFilters} onCountChange={setAbsenceTeamCount} />
+        </div> : null}
+      </div> : null}
 
-      {canReview ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
-        <h2 className="text-lg font-extrabold text-ds-ink">Ajustes de ponto</h2>
-        <p className="text-xs text-ds-ink-muted">Pedidos dos colaboradores para incluir ou desconsiderar batidas. A batida original nunca é apagada; aprovar cria o tratamento identificado.</p>
-        <AdjustmentReviewSection firebaseUser={firebaseUser} people={activeUsers} />
-      </section> : null}
+      {tab === "documents" ? <div className="space-y-6">
+        <div hidden={!["all", "terms"].includes(documentFilter)}>{transportList("Nenhum termo com falha de geração.")}</div>
+        {canReview ? <div hidden={!["all", "retention"].includes(documentFilter)}><AbsenceRetentionSection firebaseUser={firebaseUser} /></div> : null}
+      </div> : null}
 
-      {canSeeClosure ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
-        <h2 className="text-lg font-extrabold text-ds-ink">Fechamento do ponto</h2>
-        <p className="text-xs text-ds-ink-muted">Congela o mês com a declaração de cada pessoa: todos os ajustes de ponto e ausências, inclusive recusados e cancelados. Pedido sem decisão impede o fechamento.</p>
-        <CompetenceClosureSection firebaseUser={firebaseUser} people={activeUsers} />
-      </section> : null}
-
-      {canExportFiscalFiles ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
-        <h2 className="text-lg font-extrabold text-ds-ink">Exportação fiscal AFD e AEJ</h2>
-        <FiscalExportsCard firebaseUser={firebaseUser} />
-      </section> : null}
-
-      {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}
-        canManage={isDefaultAdmin || permissions.dp?.responsibilities?.manage === true}
-        canWorkSchedules={isDefaultAdmin || permissions.dp?.schedules?.edit === true}
-        canReceiveGaps={isDefaultAdmin || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true}
-        canResolveAny={isDefaultAdmin} /> : null}
+      <SidePanel open={absencePickerOpen} onOpenChange={setAbsencePickerOpen} kicker="Solicitação para a equipe" title="Nova ausência" subtitle="O pedido começa como rascunho. Você confere o resumo antes de enviar.">
+        <PanelSection title="Para quem">
+          <label className="block space-y-1.5 text-[12px] font-extrabold text-ds-ink">Colaborador
+            <Select value={absenceBeneficiaryUid} onValueChange={setAbsenceBeneficiaryUid}><SelectTrigger className="h-11 rounded-ds-btn border-ds-border-input"><SelectValue placeholder="Selecione uma pessoa" /></SelectTrigger><SelectContent>{eligibleBeneficiaries.map((person) => <SelectItem key={person.id} value={person.id}>{person.username}</SelectItem>)}</SelectContent></Select>
+          </label>
+          <div className="flex items-center justify-end gap-3 border-t border-ds-divider pt-3">
+            {!absenceBeneficiaryUid ? <span className="text-xs text-ds-ink-muted">Escolha um colaborador.</span> : null}
+            <Button variant="primary-modal" size="md" disabled={!absenceBeneficiaryUid} onClick={() => { setAbsencePickerOpen(false); setAbsenceCreateOpen(true); }}>Preencher ausência</Button>
+          </div>
+        </PanelSection>
+      </SidePanel>
+      {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setTab("follow"); setFollowFilter("absences"); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
 
       <SidePanel
         open={Boolean(selected)}

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -188,12 +189,12 @@ fun shortDate(value: String?): String? {
     Text(label, color = ink, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(50)).background(fill).border(1.dp, line, RoundedCornerShape(50)).selectable(selected, enabled, Role.RadioButton, onClick).padding(horizontal = 13.dp, vertical = 8.dp))
 }
 /** Label above a plain input, as the prototype draws quantities and notes. */
-@Composable fun LabeledInput(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, placeholder: String = "", alert: Color? = null, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+@Composable fun LabeledInput(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, placeholder: String = "", alert: Color? = null, modifier: Modifier = Modifier, keyboardType: KeyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Text, visualTransformation: VisualTransformation = VisualTransformation.None, onChange: (String) -> Unit) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (label.isNotBlank()) Text(label, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
         OutlinedTextField(value, onValueChange = onChange, enabled = enabled, singleLine = true, shape = RoundedCornerShape(12.dp), placeholder = { if (placeholder.isNotBlank()) Text(placeholder, color = Tokens.faint) },
             colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Tokens.soft, focusedContainerColor = Tokens.soft, disabledContainerColor = Tokens.soft, unfocusedBorderColor = alert ?: Tokens.fieldBorder, focusedBorderColor = alert ?: Tokens.accent),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label.ifBlank { placeholder } }, keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Text))
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label.ifBlank { placeholder } }, keyboardOptions = KeyboardOptions(keyboardType = keyboardType), visualTransformation = visualTransformation)
     }
 }
 @Composable fun SectionLabel(text: String) { Text(text.uppercase(Locale.forLanguageTag("pt-BR")), color = Tokens.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp, start = 4.dp)) }

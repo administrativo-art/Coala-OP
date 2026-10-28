@@ -855,6 +855,65 @@
   }
 }
 
+/*
+ * Tema escuro por horário, igual ao Coala Go (docs/design/README.md, "Tema escuro"): claro das 06h às 17h59 e escuro das
+ * 18h às 05h59 pela hora do aparelho. Só vale nas telas que montam <ScheduledDarkTheme />, já revisadas para os tokens;
+ * as demais continuam claras. Valores da paleta escura de `apps/coala-one-android/.../ui/Theme.kt`.
+ */
+@layer base {
+  :root[data-ds-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c0c10;
+    --ds-bg-page: #0c0c10;
+    --ds-bg-topbar: #121218;
+    --ds-surface: #1c1c24;
+    --ds-surface-warm: #18181f;
+    --ds-surface-input: #24242e;
+    --ds-surface-muted: #24242e;
+    --ds-surface-seg: #1c1c24;
+    --ds-border: #2e2e3a;
+    --ds-border-input: #3f3f4d;
+    --ds-divider: #26262f;
+    --ds-border-footer: #2e2e3a;
+    --ds-ink: #f3f2ee;
+    --ds-ink-2: #c8c7d0;
+    --ds-ink-muted: #a9a8b3;
+    --ds-ink-faint: #8e8d99;
+    --ds-indicator-zero: #6f6e80;
+    --ds-accent-ink: #f08bb1;
+    --ds-accent-ink-hover: #f6a9c6;
+    --ds-accent-soft: #3a1826;
+    --ds-accent-row: #2a1820;
+    --ds-modal-accent-soft: #23234a;
+    --ds-modal-accent-ink: #b4b4ff;
+    --ds-ok-bg: #12301f;      --ds-ok: #7ee2a8;
+    --ds-warn-bg: #3a2413;    --ds-warn: #fdba74;
+    --ds-danger-bg: #3b1620;  --ds-danger: #ff8fa3;
+    --ds-caution: #f5c46b;    --ds-caution-bg: #33280f;  --ds-caution-border: #5c4718;
+    --ds-caution-tile: #fef3c7; --ds-caution-tile-ink: #92400e;
+    --ds-trouble-bg: #2e161b; --ds-trouble-border: #5a2531;
+    --ds-info-bg: #17223f;    --ds-info: #93b4ff;
+    --ds-neutral-bg: #24242e; --ds-neutral: #a9a8b3;
+    --ds-alert-bg: #33280f;   --ds-alert-border: #5c4718; --ds-alert-ink: #f5d9a3;
+    --ds-confirm-bg: #2e161b; --ds-confirm-border: #5a2531; --ds-confirm-ink: #ffc2cf;
+    --ds-disabled: #4a4a58;
+    --ds-scrim: rgba(0,0,0,.6);
+    /* Componentes shadcn usados nessas telas (diálogos, menus, campos). */
+    --background: 240 12% 13%;
+    --foreground: 48 18% 94%;
+    --card: 240 12% 13%;
+    --card-foreground: 48 18% 94%;
+    --popover: 240 12% 13%;
+    --popover-foreground: 48 18% 94%;
+    --secondary: 240 12% 16%;
+    --secondary-foreground: 245 6% 80%;
+    --muted: 240 12% 16%;
+    --muted-foreground: 245 6% 68%;
+    --border: 240 12% 20%;
+    --input: 240 10% 27%;
+  }
+}
+
 
 /* Nome do sistema na barra da Programação do Instagram: batimento duplo e brilho rosa. */
 @keyframes coala-pulse-name {

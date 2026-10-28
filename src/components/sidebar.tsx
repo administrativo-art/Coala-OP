@@ -16,7 +16,7 @@ import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import { BellRing,
   ChevronDown, X, LayoutDashboard, Package, ListTodo,
-  CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
+  CalendarCheck, CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
@@ -187,6 +187,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               permissions.dp?.vacation?.viewAll ||
               permissions.stock.uniforms?.view ||
               permissions.dp?.view ||
+              permissions.dp?.timeClosure?.close ||
+              permissions.dp?.timeClosure?.reopen ||
               canViewCollaboratorPanel,
             children: [
               {
@@ -197,13 +199,19 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 icon: UserCircle,
                 show: permissions.dp?.collaborators?.view,
               },
+              {
+                label: "Fechamento do ponto",
+                href: "/dashboard/dp/fechamento",
+                icon: CalendarCheck,
+                show: permissions.dp?.timeClosure?.close || permissions.dp?.timeClosure?.reopen,
+              },
               // Caminho fixo para a tela completa; não depende das opções do ponto, que podem falhar e esconder o atalho da barra.
               { label: "Registro de ponto", href: "/dashboard/collaborator/time-recording", icon: Clock3, show: canViewCollaboratorPanel },
-              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
               { label: "Uniforme", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
               { label: "Solicitações", href: "/dashboard/dp/requests", icon: Inbox, show: permissions.dp?.requests?.view },
+              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
               { label: "Desligamento", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
             ],
           },

@@ -15,5 +15,9 @@ export function canAccessDpRoute(permissions: PermissionSet, pathname: string) {
     return permissions.dp?.requests?.view === true;
   }
 
+  if (isRouteWithin(pathname, "/dashboard/dp/fechamento")) {
+    return permissions.dp?.timeClosure?.close === true || permissions.dp?.timeClosure?.reopen === true;
+  }
+
   return false;
 }
