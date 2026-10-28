@@ -1,27 +1,27 @@
 # Monitoração REP no ambiente publicado
 
-Conferência em 27/10/2026, projeto `smart-converter-752gf`. Estado observado por comandos somente leitura, sem implantação ou criação de incidente.
+Conferência inicial em 27/10/2026; reconciliação publicada em 28/10/2026 no projeto `smart-converter-752gf`. A coleta fiscal permanece desligada durante o ensaio.
 
 | Item | Evidência observada | Estado |
 | --- | --- | --- |
 | Sonda HTTPS do coletor | `GET https://op.coalashakes.com/api/dp/time-recording/availability` retornou `200`, corpo `{"status":"ok"}` | Disponível na consulta realizada |
-| Relay `repPAvailabilityAlertRelay` | `gcloud functions describe ... --gen2 --region=southamerica-east1` retornou 404; listagem v2 pelo nome não retornou função | Não localizado |
-| Uptime check específico REP | `gcloud monitoring uptime list-configs` retornou somente o check de `/login` | Ausente na listagem |
-| Alert policy REP | `gcloud monitoring policies list --filter='displayName:REP'` retornou lista vazia | Ausente na seleção |
+| Relay `repPAvailabilityAlertRelay` | Função Gen 2 ativa em `southamerica-east1`, com retry e segredo dedicado, ligada ao tópico `rep-p-availability-alerts` | Publicado |
+| Uptime check específico REP | `coala-rep-p-sonda-do-coletor-dvUG2UbsBbU`, HTTPS, 200 + `status:ok`, cinco verificadores | Publicado |
+| Alert policy REP | `Coala REP-P — disponibilidade externa`, condição de 120 s e canal Pub/Sub dedicado | Criada desabilitada; habilitar para o ensaio |
 | Rota do relay sem credencial | `POST` com corpo vazio retornou `401`; nenhuma credencial ou mensagem válida foi enviada | Recusa pública conferida |
 | Tópico `rep-p-availability-alerts` | Existe com `messageRetentionDuration=604800s` | Retenção de sete dias |
-| Assinatura do tópico | `gcloud pubsub subscriptions list --filter='topic:rep-p-availability-alerts'` retornou lista vazia | Sem consumidor localizado |
+| Assinatura do tópico | Assinatura Eventarc criada pelo gatilho da função, retry habilitado e retenção de 24 h | Publicada |
 
 Não considerar `200` isolado como ensaio do monitor, do relay ou da recuperação. Nenhum evento 08/07 publicado foi comprovado nesta conferência. O nome de display de policy e condição é validado literalmente pela rota, conforme o payload documentado pelo Google.
 
-## Configuração preparada
+## Configuração publicada
 
-- [Uptime check](../../../config/rep-p-monitoring/uptime-check.json): HTTPS com validação de certificado, status 200 e conteúdo esperado, período de 60 segundos e três regiões selecionadas. A região USA pode gerar múltiplos verificadores; não confundir três regiões com exatamente três sondas.
-- [Policy desabilitada](../../../config/rep-p-monitoring/alert-policy.template.json): falha em pelo menos dois verificadores, sustentada por 120 segundos; notificações de abertura e fechamento. Substituir os dois marcadores pelo ID do check e resource name do canal Pub/Sub existente; não enviar o arquivo com marcadores à API. A policy começa desabilitada para permitir conferência antes do ensaio.
-- O segredo dedicado ainda não existe no projeto: a tentativa de rollout de 28/10/2026 falhou ao resolver `REP_P_AVAILABILITY_MONITOR_SECRET`. A referência foi removida do `apphosting.yaml`; criar a versão pelo mecanismo oficial e conceder acesso ao runtime são pré-requisitos para publicar o relay. O valor nunca deve ser lido, copiado ou colocado em arquivo local.
-- A Function já existente no código recebe somente o tópico dedicado, valida tamanho, entrega à rota autenticada e lança erro em falha HTTP para permitir redelivery. Não acessar banco fiscal pelo relay.
+- [Uptime check](../../../config/rep-p-monitoring/uptime-check.json): HTTPS com validação de certificado, status 200 e conteúdo esperado, período de 60 segundos e cinco verificadores selecionados (South America, Europe e três localidades dos EUA).
+- [Template da policy](../../../config/rep-p-monitoring/alert-policy.template.json): falha em pelo menos dois verificadores, sustentada por 120 segundos; notificações de abertura e fechamento. A policy materializada foi criada desabilitada para permitir conferência antes do ensaio.
+- O segredo dedicado `REP_P_AVAILABILITY_MONITOR_SECRET` possui versão ativa e acesso somente aos runtimes necessários; seu valor nunca deve ser lido, copiado ou colocado em arquivo local.
+- A Function recebe somente o tópico dedicado, valida tamanho, entrega à rota autenticada e lança erro em falha HTTP para permitir redelivery. Não acessa o banco fiscal pelo relay.
 
-Esses arquivos são configuração proposta, não recursos criados. Criação de check/policy, deploy do relay e implantação do App Hosting são operações reais de publicação. O `AGENTS.md` requer autorização própria para publicação; a conferência e a preparação não a substituem. Não alterar IAM nem criar chaves para contornar falha de permissão.
+Os recursos acima já foram publicados; a policy permanece desabilitada até o início da janela de ensaio. Não alterar IAM nem criar chaves para contornar falha de permissão.
 
 ## Sequência concreta para publicação e ensaio
 

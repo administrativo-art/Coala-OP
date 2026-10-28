@@ -126,6 +126,8 @@ env:
     value: "Coala REP-P — disponibilidade externa"
   - variable: REP_P_AVAILABILITY_CONDITION_NAME
     value: "REP-P indisponível em sondagens externas"
+  - variable: REP_P_AVAILABILITY_MONITOR_SECRET
+    secret: REP_P_AVAILABILITY_MONITOR_SECRET
   # Ensaio nominal pré-homologação: grava fora da ARP e nunca participa do fechamento/AFD/AEJ.
   - variable: REP_P_PILOT_ENABLED
     value: "true"
