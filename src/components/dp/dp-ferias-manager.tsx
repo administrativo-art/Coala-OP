@@ -45,6 +45,15 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Férias da CLT valem para empregados e aprendizes. Cadastros antigos sem vínculo informado seguem pelo critério
+ * anterior (operacional), para ninguém sumir do Panorama até o vínculo ser preenchido.
+ */
+function hasVacationEntitlement(user: User) {
+  if (user.employmentRelationshipType) return ['clt', 'apprenticeship'].includes(user.employmentRelationshipType);
+  return user.operacional === true;
+}
+
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
 }
@@ -115,8 +124,8 @@ export function DPFeriasManager() {
   const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
 
   const people = useMemo<Person[]>(() => {
-    const operational = activeUsers.filter(user => user.operacional === true);
-    return operational
+    const entitled = activeUsers.filter(hasVacationEntitlement);
+    return entitled
       .filter(user => unitFilter === '__all__' || user.unitIds?.includes(unitFilter))
       .filter(user => user.username.toLowerCase().includes(search.toLowerCase()))
       .flatMap((user): Person[] => {

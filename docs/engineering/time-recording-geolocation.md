@@ -669,8 +669,8 @@ Pergunta preparada para o advogado: **a captura pontual e, separadamente, a cole
 ## Referências
 
 - [Portaria MTP nº 671/2021 e fontes REP-P conferidas](../rep-p/referencias/README.md)
-- [Plano REP-P, documentos e conformidade](../plano-rep-p-controle-de-ponto.md)
-- [Plano de jornada e fechamento](../plano-jornada-fechamento-rh.md)
+- [Plano REP-P, documentos e conformidade](../planos/plano-rep-p-controle-de-ponto.md)
+- [Plano de jornada e fechamento](../planos/plano-jornada-fechamento-rh.md)
 - [Fluxo implementado do registro de ponto](flows/dp-time-recording.md)
 - [Acesso e privacidade](access-and-privacy.md)
 - [Lei nº 13.709/2018](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm)

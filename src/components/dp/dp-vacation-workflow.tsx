@@ -892,7 +892,7 @@ export function DPVacationWorkflowPanel({
           <Badge variant="outline" className="rounded-full border-amber-200 bg-white text-[10px] font-black text-amber-800">
             Responsável: {action.owner}
           </Badge>
-          {workflow.currentStage === 'scheduling' && canApprove && record.status !== 'APPROVED' ? (
+          {workflow.status === 'active' && workflow.currentStage === 'scheduling' && canApprove && record.status !== 'APPROVED' && record.status !== 'REJECTED' ? (
             <Button size="sm" className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]" onClick={() => onApprove(record)}>
               Aprovar agendamento
             </Button>
