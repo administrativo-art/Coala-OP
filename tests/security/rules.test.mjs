@@ -38,7 +38,7 @@ const rules = {
 test("ARP do REP-P no banco dedicado não é acessível a nenhum cliente, nem administrador", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-arp", firestore: { rules: rules.rep } });
   const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_offlinePermits", "repP_exportAudit",
-    "repP_locationPolicies", "repP_locationEvidence", "repP_locationReviews"];
+    "repP_locationPolicies", "repP_locationEvidence", "repP_locationReviews", "repP_locationAccessAudit", "repP_offlineCycles", "repP_offlineCycleHeads"];
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "rh_access_cache/owner"), { active: true, isDefaultAdmin: true, sessionVersion: 1 });
@@ -55,10 +55,10 @@ test("ARP do REP-P no banco dedicado não é acessível a nenhum cliente, nem ad
   } finally { await env.cleanup(); }
 });
 
-test("coleções do ensaio REP-P no RH não são acessíveis por clientes", async () => {
+test("coleções do ensaio REP-P e da localização de jornada no RH não são acessíveis por clientes", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-pilot", firestore: { rules: rules.rh } });
   const collections = ["repP_pilotHeads", "repP_pilotMarkings", "repP_pilotOfflinePermits", "repP_pilotClassificationEvents", "repP_pilotDayGuards",
-    "repP_pilotAdjustmentRequests"];
+    "repP_pilotAdjustmentRequests", "dp_journeyLocationSessions", "dp_journeyLocationEvents", "repP_offlineCycles", "repP_offlineCycleHeads"];
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       for (const collectionName of collections) await setDoc(doc(context.firestore(), collectionName, "private"), { protected: true });

@@ -338,7 +338,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       appUser.profileId === adminProfileId;
 
     if (isDefaultAdminProfile) {
-      setPermissions(defaultAdminPermissions);
+      setPermissions(produce(defaultAdminPermissions, (draft) => {
+        draft.dp.timeRecording!.readLocation = userProfile?.permissions?.dp?.timeRecording?.readLocation === true;
+      }));
       setPermissionsReady(true);
       return;
     }

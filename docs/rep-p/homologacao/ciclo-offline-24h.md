@@ -1,0 +1,35 @@
+# Ciclo offline de 24 horas — candidata local
+
+Decisão aprovada em 28/10/2026: o último preparo confirmado pelo servidor permite iniciar um ciclo em até 24 horas; a primeira batida fixa outras 24 horas para esse ciclo. Uma preparação pode, portanto, cobrir até 48 horas desde a âncora original. Reconectar, renovar login ou consultar opções não prorroga um ciclo ativo. Encerramento confirmado termina a autorização e dispara automaticamente a preparação seguinte.
+
+Exemplo: preparo no dia1 às20h; primeira batida offline no dia2 às08h; limite do ciclo no dia3 às08h. Sem primeira batida, aquele preparo deixa de permitir início no dia2 às20h. Sem preparo válido, o relógio civil do aparelho não cria autorização.
+
+## Implementação e proteção
+
+- Protocolo2 negociado explicitamente. Identidade do titular, workspace, escopo oficial/piloto, instalação, chave protegida e boot vinculam o preparo. Um lease transacional reserva o aparelho mesmo antes da primeira sincronização.
+- Primeira online preserva instante HLB, propósito e comprovante na tentativa idempotente persistida na mesma transação do original (no piloto, no documento da marcação nominal). O registro fiscal e o AFD não recebem esses campos auxiliares. O ciclo auxiliar é projetado após o commit; sua falha não desfaz o ponto. A requisição online fixa o escopo oficial/piloto e é preservada cifrada antes do envio e sua resposta perdida é recuperada pelo mesmo identificador; não vira uma nova batida offline por falha ambígua. Falha explícita da Hora Legal permite preservar nova captura local. Login expirado permite repetir o original após reautenticação. Falha local ao cifrar/salvar impede o POST e conserva a tentativa para repetir. Após corte, tentativa online piloto só confirma original piloto existente; tentativa ainda não aceita é recusada para saneamento, sem criar NSR oficial. Replay de original oficial continua possível após desativação da flag, sem permitir nova batida.
+- Primeira offline fixa o ciclo com prova assinada; servidor verifica janela, assinatura, sequência e cadeia antes de atribuir NSR. Usa tempo monotônico, não alteração do relógio civil. Não aceita preparação anterior a um encerramento para abrir outro ciclo.
+- Uma primeira offline anterior que chega depois de uma online pode antecipar e encurtar o ciclo auxiliar, sem alterar originais, hashes ou NSR. Uma entrega histórica de ciclo disjunto não toma o controle do ciclo atual. Nova jornada online após vencimento exige a declaração de início; mera reconexão não reinicia a janela.
+- Encerramento pelo titular em POST `/api/dp/time-recording/offline-cycles` exige autenticação, atestação, assinatura, último comprovante e sequência confirmada. Fila pendente impede encerramento. Repetição é idempotente. O encerramento legado é informado como visual; somente confirmação v2 fechada encerra a autorização.
+- Coleções `repP_offlineCycles` e `repP_offlineCycleHeads` são auxiliares, sem acesso direto por cliente. Não há nova permissão administrativa. A consulta de coordenadas continua com seu controle separado.
+- Room1→2 acrescenta a tabela cifrada do ciclo e preserva permissões e marcações existentes. V1 mantém canônico, prazo de12horas e filas seladas. Após inscrição v2, novas emissões v1 são recusadas; capturas anteriores à inscrição e replays permanecem sincronizáveis. Uma captura posterior inválida continua preservada para conferência.
+
+## Validação local
+
+A evidência privada fica no registro de desenvolvimento `rep-p-availability-location`. Os testes abrangem limites em milissegundos, início offline e noturno, assinatura adulterada, segregação oficial/piloto, outro aparelho, renovação sem extensão, primeira online e resposta perdida, entrega atrasada, replay, encerramento e compatibilidade v1. Testes de API verificam titular e atestação; regras recusam acesso direto às coleções auxiliares. A migração foi exercitada em SQLite real num emulador Android35, incluindo rollback atômico e preservação dos bytes cifrados.
+
+Resultado final local:109testes Android,24testes unitários TypeScript e25verificações de integração/API/regras passaram; checagem de tipos, lint, contratos e documentação passaram. Migração instrumentada:2testes passaram. A revisão final avalia somente a candidata local.
+
+O emulador não comprova TEE, GPS ou comportamento físico no Galaxy. O ensaio físico deve incluir perda e retorno da rede, expiração, reinício, retomada do app, encerramento, sincronização e recuperação de resposta perdida. A monitoração publicada precisa de ensaio separado.
+
+## Implantação e limites
+
+Candidata local, sem publicação nesta etapa. Implantar o backend compatível antes do APK; ativar v2 em novo ciclo limpo, após conferir as filas antigas. Não reconstruir retroativamente uma jornada legada aberta. As flags de coleta fiscal e acompanhamento não são ativadas por esta mudança.
+
+A projeção lê candidatos online por titular e ordem de commit do servidor, com cursor e limite de1por transação, no máximo128por chamada. Emissão e sincronização v2 conferem candidatos ainda pendentes na própria transação: estado auxiliar atrasado não autoriza uma nova janela. Se a ordem de commit divergir da HLB ou um candidato anterior ao encerramento chegar depois dele, ambos originais são preservados; apenas contingência é bloqueada para saneamento. Isso é um limite operacional conhecido, sem recuperação automática de ordem ambígua.
+
+Um aparelho offline não recebe imediatamente uma revogação do servidor: a janela de exposição permanece limitada pelo preparo e ciclo. Reinício ou troca de chave exige conexão; o relógio civil não renova o prazo. Recusas definitivas preservam a evidência bloqueada para saneamento e não autorizam criar outra captura para substituir uma tentativa ambígua.
+
+## Preflight de custo
+
+Acesso por IDs determinísticos a head, ciclo e preparo; sem listagem integral, polling novo ou listener. Estimativa conservadora de até12leituras e4escritas auxiliares por ponto online em operação sem fila de reconciliação (inclui consultas vazias e projeção). Cada candidato atrasado exige leituras e escritas adicionais; limite128por chamada, sem varredura ilimitada. Cenário5pessoas ×4pontos ×22dias =440pontos/mês: até5.280leituras e1.760escritas auxiliares, além dos acessos existentes. É cenário estimado, não medição de fatura. Preparação periódica existente permanece a cada4horas, reaproveitando preparo recente e mantendo o prazo original do ciclo ativo.

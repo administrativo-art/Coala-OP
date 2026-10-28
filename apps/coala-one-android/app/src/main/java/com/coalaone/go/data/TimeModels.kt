@@ -13,29 +13,42 @@ import kotlinx.serialization.Serializable
 @Serializable data class TimeOptions(val workDate: String, val eligible: Boolean, val markingEnabled: Boolean,
     val executionUnits: List<ExecutionUnit>, val officialClock: OfficialClock? = null, val journeyLocationEnabled: Boolean = false,
     val mode: String = "official")
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class OfflinePermitRequest(val permitRequestId: String, val workDate: String, val installationId: String,
-    val deviceKeyId: String, val devicePublicKey: String, val keySecurity: String, val bootCount: Int, val anchorElapsedRealtimeMs: Long)
+    val deviceKeyId: String, val devicePublicKey: String, val keySecurity: String, val bootCount: Int, val anchorElapsedRealtimeMs: Long,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val protocolVersion: Int? = null)
 @Serializable data class OfflinePermitUnit(val id: String, val name: String, val timeZone: String)
 @Serializable data class OfflinePermit(val permitId: String, val installationId: String, val deviceKeyId: String, val keySecurity: String,
     val bootCount: Int, val anchorElapsedRealtimeMs: Long, val anchorInstant: String, val issuedAt: String, val expiresAt: String,
-    val units: List<OfflinePermitUnit>, val scope: String = "official")
+    val units: List<OfflinePermitUnit>, val scope: String = "official", val protocolVersion: Int? = null,
+    val preparationExpiresAt: String? = null, val cycle: OfflineCycle? = null)
+@Serializable data class OfflineCycleEvidence(val id: String, val startedElapsedRealtimeMs: Long)
+@Serializable data class OfflineCycle(val id: String, val startedAt: String, val expiresAt: String,
+    val startedElapsedRealtimeMs: Long? = null, val permitId: String? = null, val status: String = "active",
+    val lastReceiptId: String? = null, val lastElapsedRealtimeMs: Long? = null)
+@Serializable data class OfflineCycleAction(val action: String, val scope: String, val permitId: String, val cycleId: String,
+    val startedElapsedRealtimeMs: Long, val elapsedRealtimeMs: Long, val bootCount: Int, val deviceKeyId: String,
+    val receiptId: String, val lastSequence: Int, val signature: String)
+@Serializable data class OfflineCycleResponse(val cycle: OfflineCycle, val status: String)
 @Serializable data class OfflinePermitResponse(val permit: OfflinePermit)
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class OfflineMarkingEvidence(val permitId: String, val deviceKeyId: String, val elapsedRealtimeMs: Long,
     val bootCount: Int, val sequence: Int, val previousLocalHash: String? = null, val markedAt: String,
     val localHash: String, val signature: String,
-    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val scope: String = "official")
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val scope: String = "official",
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val cycle: OfflineCycleEvidence? = null)
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable data class MarkingRequest(val attemptId: String, val workDate: String, val executionUnitId: String, val channel: String = "mobile",
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val declaredPurpose: String? = null,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val offline: OfflineMarkingEvidence? = null,
-    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val locationAttempt: LocationAttempt? = null)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val locationAttempt: LocationAttempt? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val onlineScope: String? = null)
 @Serializable data class LocationAttempt(val captureId: String, val status: String, val elapsedMs: Long,
     val capturedAt: String? = null, val latitude: Double? = null, val longitude: Double? = null, val accuracyMeters: Double? = null)
 @Serializable data class LocationSummary(val captureStatus: String, val evaluation: String)
 @Serializable data class RecordedMarking(val nsr: Long, val markedAt: String, val executionUnitId: String)
 @Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null,
-    val marking: RecordedMarking, val location: LocationSummary? = null, val pilot: Boolean = false)
+    val marking: RecordedMarking, val location: LocationSummary? = null, val pilot: Boolean = false, val offlineCycle: OfflineCycle? = null)
 @Serializable data class MarkingClassification(val purpose: String, val source: String = "declared", val status: String = "confirmed")
 @Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null,
     val classification: MarkingClassification? = null, val pilot: Boolean = false)

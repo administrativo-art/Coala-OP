@@ -486,7 +486,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/time-recording/page.tsx).
 
-Arquivos locais percorridos: 50.
+Arquivos locais percorridos: 51.
 
 Chamadas candidatas encontradas:
 
@@ -498,6 +498,7 @@ Chamadas candidatas encontradas:
 - `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
 - `/api/dp/time-recording/adjustments` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/employees/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/employees/[employeeUid]/route.ts`](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts)
+- `/api/dp/time-recording/location-access` — interface [`src/features/dp/rep-p/location-access-panel.tsx`](../../src/features/dp/rep-p/location-access-panel.tsx); rota candidata [`src/app/api/dp/time-recording/location-access/route.ts`](../../src/app/api/dp/time-recording/location-access/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/markings/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/mirrors` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/route.ts`](../../src/app/api/dp/time-recording/mirrors/route.ts)
@@ -522,6 +523,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.requests.review` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.timeClosure.close` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
 - `dp.timeClosure.reopen` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
+- `dp.timeRecording.readLocation` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
 - `dp.timeRecording.view` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
 
 ## `dre`
@@ -1073,6 +1075,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.settings.manageUnits` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.timeClosure.close` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.timeClosure.reopen` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
+- `dp.timeRecording.readLocation` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.timeRecording.view` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.vacation.approve` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.manageSettings` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1681,6 +1684,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.settings.manageUnits` — [`src/components/dp/dp-settings-units.tsx`](../../src/components/dp/dp-settings-units.tsx)
 - `dp.timeClosure.close` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.timeClosure.reopen` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.timeRecording.readLocation` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.timeRecording.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.approve` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.manageSettings` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)

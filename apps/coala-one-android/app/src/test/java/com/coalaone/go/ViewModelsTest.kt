@@ -893,6 +893,7 @@ class ViewModelsTest {
         assertNull(vm.state.value.journeyClosurePromptDate)
         assertNull(vm.state.value.closedJourneyDate)
         vm.closeJourneyCycle(workDate)
+        advanceUntilIdle()
         assertEquals(workDate, vm.state.value.closedJourneyDate)
         assertEquals(workDate, saved.get<String>("closedJourneyDate"))
 
@@ -992,6 +993,97 @@ class ViewModelsTest {
         assertEquals(1, queue.rows.value.size)
         assertNotNull(vm.state.value.lastOffline)
     }
+    @Test fun lostOnlineReplyIsRecoveredFromTheDurableOriginalWithoutAnotherCapture() = runTest {
+        val base = MemoryTimeOfflineQueue()
+        val queued = object : TimeOfflineQueue by base {
+            override suspend fun beginOnline(uid: String, request: MarkingRequest, scope: String) {
+                val row = TimeMarkingRow(uid, request.attemptId, "online:$scope:${request.attemptId}", 0, 0, sealed = byteArrayOf())
+                base.rows.value = listOf(row); base.readyRows = listOf(row to request)
+            }
+            override suspend fun hasPending(uid: String) = base.readyRows.isNotEmpty()
+            override suspend fun confirmed(uid: String, id: String, request: MarkingRequest, response: MarkingResponse) {
+                base.synced(uid, id); base.readyRows = base.readyRows.filterNot { it.first.id == id }
+            }
+        }
+        val requests = mutableListOf<MarkingRequest>()
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
+                requests += request
+                if (requests.size == 1) throw java.io.IOException("synthetic lost reply")
+                return MarkingResponse("replayed", "confirmed-original", "pending", null,
+                    RecordedMarking(3, "${request.workDate}T08:00:00-0300", request.executionUnitId))
+            }
+        }
+        val repo = repository(auth, api)
+        val vm = TimeViewModel(repo, androidx.lifecycle.SavedStateHandle(), auth, queued,
+            TimeOfflineSync(auth, queued, repo), TimeOfflineWorkScheduler { })
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(vm.hasPendingAttempt())
+        assertEquals(1, base.readyRows.size)
+        vm.load(); advanceUntilIdle()
+        assertEquals(2, requests.size)
+        assertEquals(requests[0], requests[1])
+        assertNull(requests[1].offline)
+        assertFalse(vm.hasPendingAttempt())
+        assertTrue(base.readyRows.isEmpty())
+    }
+
+    @Test fun failedOnlineJournalDoesNotSendAndRetriesTheSameAttempt() = runTest {
+        val base = MemoryTimeOfflineQueue()
+        var failJournal = true
+        val protected = mutableListOf<MarkingRequest>()
+        val queue = object : TimeOfflineQueue by base {
+            override suspend fun beginOnline(uid: String, request: MarkingRequest, scope: String) {
+                protected += request
+                if (failJournal) throw java.io.IOException("synthetic vault unavailable")
+            }
+        }
+        val sent = mutableListOf<MarkingRequest>()
+        val api = object : ApiService by DemoApi() {
+            override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
+                sent += request
+                return DemoApi().mark(request, expectedOwner)
+            }
+        }
+        val repo = repository(auth, api)
+        val vm = TimeViewModel(repo, androidx.lifecycle.SavedStateHandle(), auth, queue,
+            TimeOfflineSync(auth, queue, repo), TimeOfflineWorkScheduler { })
+        vm.load(); advanceUntilIdle()
+        vm.record(true, declaredPurpose = "journey_start"); advanceUntilIdle()
+        assertTrue(vm.hasPendingAttempt()); assertTrue(sent.isEmpty())
+        failJournal = false
+        vm.record(true, declaredPurpose = "journey_end"); advanceUntilIdle()
+        assertEquals(1, sent.size)
+        assertEquals(protected[0], sent[0])
+    }
+
+    @Test fun versionTwoClosureRequiresClosedAcknowledgementBeforeSuccess() = runTest {
+        val base = MemoryTimeOfflineQueue()
+        var confirmed = 0
+        val queued = object : TimeOfflineQueue by base {
+            override suspend fun closeCycleAction(uid: String, elapsedRealtimeMs: Long) = OfflineCycleAction("close", "official",
+                "permit", "cycle", 1000, 2000, 7, "key", "receipt", 0, "synthetic")
+            override suspend fun confirmCycle(uid: String, response: OfflineCycleResponse) { confirmed++ }
+        }
+        var closed = false
+        val api = object : ApiService by DemoApi() {
+            override suspend fun offlineCycle(request: OfflineCycleAction, expectedOwner: String?) = OfflineCycleResponse(
+                OfflineCycle("cycle", "2026-10-27T08:00:00Z", "2026-10-28T08:00:00Z"), if (closed) "closed" else "active")
+        }
+        val repo = repository(auth, api)
+        val vm = TimeViewModel(repo, androidx.lifecycle.SavedStateHandle(), auth, queued,
+            TimeOfflineSync(auth, queued, repo), TimeOfflineWorkScheduler { })
+        val date = LocalDate.now().toString()
+        vm.closeJourneyCycle(date); advanceUntilIdle()
+        assertNull(vm.state.value.closedJourneyDate)
+        assertEquals(0, confirmed)
+        closed = true
+        vm.closeJourneyCycle(date); advanceUntilIdle()
+        assertEquals(date, vm.state.value.closedJourneyDate)
+        assertEquals(1, confirmed)
+    }
+
     @Test fun syncedOfflineJourneyEndReopensAClosedCycleAndAsksAgain() = runTest {
         val workDate = "2026-10-19"
         val saved = androidx.lifecycle.SavedStateHandle(mapOf("closedJourneyDate" to workDate))

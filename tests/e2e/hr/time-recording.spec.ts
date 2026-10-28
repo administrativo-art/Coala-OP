@@ -40,6 +40,15 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
     employee: { uid: 'employee-e2e', name: 'Heucilene E2E' }, schedule: { month, shifts: [shift], truncated: false },
     history: { markings: [marking], truncated: false }, absences: [], adjustments: [], treatments: [], unitNames: { 'unit-e2e': 'Unidade E2E' },
   }) }));
+  const locationBodies: Record<string, unknown>[] = [];
+  await page.route('**/api/dp/time-recording/location-access', (route) => {
+    const input = route.request().postDataJSON() as Record<string, unknown>;
+    locationBodies.push(input);
+    return route.fulfill({ status: locationBodies.length === 3 ? 403 : 200, contentType: 'application/json', body: JSON.stringify(
+      locationBodies.length === 1 ? { entries: [{ id: 'synthetic-location', capturedAt: `${today}T12:00:00Z`,
+        position: { latitude: -1.45583, longitude: -48.50444, accuracyMeters: 15 } }], nextCursor: 'synthetic-location', auditId: 'synthetic-audit' }
+        : { entries: [], nextCursor: null, auditId: 'synthetic-audit-2' }) });
+  });
 
   await page.goto('/dashboard/collaborator/time-recording', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Registro de ponto' })).toBeVisible();
@@ -47,9 +56,25 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
   await expect(page.getByRole('button', { name: /Registrar 2ª de 4/ })).toBeDisabled();
   await expect(page.getByText('Turno E2E').first()).toBeVisible();
   await expect(page.getByText('08:00').first()).toBeVisible();
+  const location = page.getByRole('region', { name: 'Consulta de localização' });
+  await expect(location).toBeVisible();
+  expect(locationBodies).toHaveLength(0);
+  await location.getByRole('button', { name: 'Consultar localização' }).click();
+  await expect(location.getByText(/-1.45583, -48.50444/)).toBeVisible();
+  await location.screenshot({ path: '.ai-work/development-technology/rep-p-availability-location/location-panel.png' });
+  expect(locationBodies[0]).toMatchObject({ employeeUid: E2E_USER.uid, reason: 'own_data', source: 'marking', unitId: 'unit-e2e', workDate: today });
+  await location.getByRole('button', { name: 'Próxima página' }).click();
+  await expect(location.getByText('Nenhuma localização disponível nesta página.')).toBeVisible();
+  await expect(location.getByText(/-1.45583, -48.50444/)).toHaveCount(0);
+  expect(locationBodies[1].cursor).toBe('synthetic-location');
+  await location.getByLabel('Captura').selectOption('journey');
+  await location.getByRole('button', { name: 'Consultar localização' }).click();
+  await expect(location.getByRole('alert')).toBeVisible();
+  await expect(location.getByText('Nenhuma localização disponível nesta página.')).toHaveCount(0);
 
   await page.goto('/dashboard/dp/collaborators/employee-e2e/time-recording', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Heucilene E2E')).toBeVisible();
+  await expect(page.getByText('Heucilene E2E')).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole('region', { name: 'Consulta de localização' })).toHaveCount(0);
   await expect(page.getByText('Modo de conferência.')).toBeVisible();
   await expect(page.getByText('Ela não registra ponto em nome do colaborador.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Registrar .*batida/ })).toHaveCount(0);

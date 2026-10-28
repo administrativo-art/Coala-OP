@@ -23,6 +23,7 @@ import { AbsencesAndAlerts, DAY_GRID, DayCard, DayPanel, INCIDENTS, type Classif
 import { saveFile } from "./marking-ui";
 import { hm, RecordStrip, type MarkingPurpose } from "./record-strip";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
+import { LocationAccessPanel } from "./location-access-panel";
 
 type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
 type HistoryPayload = { markings: HistoryItem[]; truncated: boolean };
@@ -310,6 +311,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {!readOnly || permissions.dp?.timeRecording?.readLocation === true ? <LocationAccessPanel key={employeeUid ?? firebaseUser?.uid} firebaseUser={firebaseUser} employeeUid={employeeUid} units={unitNames} today={today} /> : null}
           <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} readOnly={readOnly} />
           {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
           {/* Só aparece com o mês fechado pelo DP. */}

@@ -74,7 +74,13 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     private var attemptFirstTriedSource: String?
         get() = saved["attemptFirstTriedSource"]
         set(value) { saved["attemptFirstTriedSource"] = value }
-    private fun clearAttempt() { attempt = null; pendingLocation = null; attemptUnitId = null; attemptPurpose = null; attemptFirstTriedAt = null; attemptFirstTriedSource = null }
+    private var attemptOwnerUid: String?
+        get() = saved["attemptOwnerUid"]
+        set(value) { saved["attemptOwnerUid"] = value }
+    private var attemptScope: String?
+        get() = saved["attemptScope"]
+        set(value) { saved["attemptScope"] = value }
+    private fun clearAttempt() { attempt = null; pendingLocation = null; attemptUnitId = null; attemptPurpose = null; attemptFirstTriedAt = null; attemptFirstTriedSource = null; attemptOwnerUid = null; attemptScope = null }
     private fun sourceOf(offset: Long?) = if (offset != null) ClockSource.OFFICIAL else ClockSource.NONE
     private fun serverRun(notice: String? = null, work: suspend () -> Unit) = run(notice) { try { work() } catch (cause: Exception) { throw Errors.withServerMessage(cause) } }
     init {
@@ -154,6 +160,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             offlineReady = cached != null, offlineIssue = issue) }
     }
     private fun reconcileSyncedMarkings(markings: List<SyncedOfflineMarking>) {
+        if (attempt?.first?.let { id -> markings.any { it.request.attemptId == id } } == true) clearAttempt()
         val latest = markings.maxByOrNull { it.response.marking.markedAt } ?: return
         val workDate = latest.request.workDate
         if (saved.get<String>("closedJourneyDate") == workDate) saved["closedJourneyDate"] = null
@@ -217,6 +224,11 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun pendingAttempt(): PendingAttempt? = attempt?.let { PendingAttempt(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource) }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
+        val owner = auth.current?.uid ?: error("Entre novamente.")
+        if (attempt != null && attemptOwnerUid != null && attemptOwnerUid != owner) {
+            clearAttempt() // Its durable row remains sealed for the original owner.
+            error("Retome o envio pendente pela conta original.")
+        }
         var state = mutable.value
         if (!online) {
             require(attempt == null) { "Há uma tentativa anterior aguardando confirmação. Conecte-se para reenviar a mesma batida sem duplicá-la." }
@@ -225,6 +237,17 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             }
             preserveLocally(state, declaredPurpose)
             return@serverRun
+        }
+        // Preparation may fail independently; a legitimate online punch remains available.
+        if (attempt == null) runCatching {
+            auth.current?.uid?.let { offlinePreparation?.prepare(it) }
+        }.onFailure { if (it is CancellationException) throw it }
+        if (attempt == null && offlineQueue.hasPending(auth.current?.uid ?: error("Entre novamente."))) {
+            if (TimeRules.canPreserveOffline(state.options, state.unitId, state.offlineReady)) {
+                preserveLocally(state, declaredPurpose)
+                return@serverRun
+            }
+            error("Aguarde a confirmação do envio anterior antes de registrar outra batida.")
         }
         // A block caused only by the official clock is read again on tap: the server may already be back.
         if (!TimeRules.canRecord(state.options, state.unitId) && state.options?.officialClock?.available != true) { refreshOptions(); state = mutable.value }
@@ -241,6 +264,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val pending = attempt ?: (TimeRules.newAttempt() to TimeRules.workDate(officialNow(state), zone)).also {
             attempt = it; attemptUnitId = selectedUnitId; attemptPurpose = selectedPurpose; attemptFirstTriedAt = officialNow(state)
             attemptFirstTriedSource = if (state.clockOffset == null) "DEVICE" else state.clockSource.name
+            attemptOwnerUid = owner; attemptScope = state.options?.mode ?: "official"
         }
         if (attemptUnitId == null) attemptUnitId = selectedUnitId
         if (attemptPurpose == null) attemptPurpose = selectedPurpose
@@ -248,18 +272,41 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val location = if (locationEnabled) pendingLocation ?: capturedLocation
             ?: failedLocationAttempt(status = "unavailable") else null
         pendingLocation = location
-        val result = try { api.mark(MarkingRequest(pending.first, pending.second, selectedUnitId, declaredPurpose = selectedPurpose, locationAttempt = location)) }
+        val onlineRequest = MarkingRequest(pending.first, pending.second, selectedUnitId, declaredPurpose = selectedPurpose, locationAttempt = location, onlineScope = attemptScope)
+        try { offlineQueue.beginOnline(owner, onlineRequest, attemptScope ?: "official") }
+        catch (cause: CancellationException) { throw cause }
+        catch (cause: Exception) {
+            mutable.update { it.copy(offlineReady = false) }
+            throw com.coalaone.go.data.AppFailure(com.coalaone.go.data.ErrorCategory.SERVER, true, "Não foi possível proteger o envio no aparelho. Tente novamente; a tentativa continua preservada.")
+        }
+        val result = try { api.mark(onlineRequest, owner) }
         catch (cause: retrofit2.HttpException) {
             // 409: the attempt clashes with one already recorded. Start over from what the server holds.
             if (cause.code() == 409) { clearAttempt(); readMonth(YearMonth.now()) }
             // The server explicitly guarantees this attempt was not recorded. It is then safe to preserve a new,
             // signed local attempt; network failures and other ambiguous answers keep replaying the original one.
             if (Errors.serverCode(cause) == "REP_P_TIME_UNAVAILABLE" && state.offlineReady) {
+                offlineQueue.discardUnrecordedOnline(owner, pending.first)
                 clearAttempt()
                 preserveLocally(state.copy(unitId = selectedUnitId), selectedPurpose)
                 return@serverRun
             }
+            val classified = Errors.classify(cause)
+            // Renewing login must allow the identical durable attempt to be retried.
+            val failure = if (classified.category == com.coalaone.go.data.ErrorCategory.AUTHENTICATION)
+                com.coalaone.go.data.AppFailure(classified.category, true, classified.message.orEmpty(), classified.code)
+                else classified
+            offlineQueue.failed(owner, pending.first, failure)
             throw cause
+        } catch (cause: CancellationException) { throw cause }
+        catch (cause: Exception) { runCatching { offlineScheduler.schedule(owner) }; throw cause }
+        require(auth.current?.uid == owner) { "A batida será conferida ao retornar à conta original." }
+        auth.current?.uid?.let { uid ->
+            try { offlineQueue.confirmed(uid, pending.first, onlineRequest, result) }
+            catch (cause: CancellationException) { throw cause }
+            catch (_: Exception) {
+                mutable.update { it.copy(offlineReady = false, offlineIssue = "O ponto está registrado. Conecte o aparelho para voltar a registrar sem internet.") }
+            }
         }
         clearAttempt()
         // Every newly confirmed punch reopens a previously closed visual cycle. A new end punch then asks again.
@@ -273,6 +320,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
                 result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot))
         }
         updateJourneyLocation(state, pending.second, result.marking.executionUnitId, selectedPurpose)
+        if (auth.current?.uid == owner) mutable.value.options?.let { refreshPermit(it, android.os.SystemClock.elapsedRealtime()) }
         readMonth(YearMonth.from(LocalDate.parse(pending.second)))
     }
     private suspend fun preserveLocally(state: TimeState, declaredPurpose: String) {
@@ -282,7 +330,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val captured = offlineQueue.capture(uid, unitId, android.os.SystemClock.elapsedRealtime(), declaredPurpose)
         // The row is already durable. A scheduling/location failure must not turn its acknowledgement into an error.
         runCatching { offlineScheduler.schedule(uid) }
-        mutable.update { it.copy(lastOffline = captured) }
+        if (saved.get<String>("closedJourneyDate") == captured.workDate) saved["closedJourneyDate"] = null
+        mutable.update { it.copy(lastOffline = captured, closedJourneyDate = saved.get<String>("closedJourneyDate")) }
         try { updateJourneyLocation(state, captured.workDate, unitId, declaredPurpose) }
         catch (cause: CancellationException) { throw cause }
         catch (_: Exception) { /* The independent location trail never invalidates a saved punch. */ }
@@ -330,12 +379,31 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         mutable.update { it.copy(journeyTrackingActive = false) }
         feedbackMutable.update { it.copy(notice = "Acompanhamento encerrado neste aparelho.") }
     }
-    /** Organizational closure only. A later punch always remains available and reopens the visual cycle. */
-    fun closeJourneyCycle(workDate: String) {
+    /** Close the authorization only after every local punch has reached the server. */
+    fun closeJourneyCycle(workDate: String) = serverRun {
+        val uid = auth.current?.uid ?: error("Entre novamente.")
+        offlineSync.sync(uid)
+        // Refresh server context without renewing an active cycle's deadline.
+        runCatching { offlinePreparation?.prepare(uid, refreshCycle = true) }
+            .onFailure { if (it is CancellationException) throw it }
+        val closing = offlineQueue.closeCycleAction(uid, android.os.SystemClock.elapsedRealtime())
+        if (closing != null) {
+            val response = api.offlineCycle(closing, uid)
+            require(response.status == "closed") { "O servidor ainda não confirmou o encerramento." }
+            offlineQueue.confirmCycle(uid, response)
+        }
         saved["closedJourneyDate"] = workDate
         journeyLocation?.stop()
-        mutable.update { it.copy(closedJourneyDate = workDate, journeyClosurePromptDate = null, journeyTrackingActive = false) }
-        feedbackMutable.update { it.copy(notice = "Ciclo da jornada encerrado. Se precisar, você ainda pode registrar uma nova batida.") }
+        mutable.update { it.copy(closedJourneyDate = workDate, journeyClosurePromptDate = null, journeyTrackingActive = false,
+            offlineReady = if (closing != null) false else it.offlineReady) }
+        feedbackMutable.update { it.copy(notice = if (closing != null) "Ciclo da jornada encerrado." else "Visualização da jornada encerrada neste aparelho.") }
+        if (closing != null) {
+            runCatching {
+                offlinePreparation?.prepare(uid)
+                mutable.value.options?.let { updateContingencyState(uid, it, android.os.SystemClock.elapsedRealtime(), null) }
+            }.onFailure { if (it is CancellationException) throw it }
+            runCatching { offlineScheduler.prepare(uid) }
+        }
     }
     fun deferJourneyClosure() {
         mutable.update { it.copy(journeyClosurePromptDate = null) }

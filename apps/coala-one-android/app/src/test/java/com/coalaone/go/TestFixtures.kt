@@ -61,7 +61,10 @@ class MemoryTimeOfflineQueue : TimeOfflineQueue {
         return CapturedOfflineMarking(id, "2026-10-19T08:00:00-0300", "2026-10-19")
     }
     override suspend fun ready(uid: String) = readyRows
-    override suspend fun synced(uid: String, id: String) { syncedIds += id; rows.value = rows.value.filterNot { it.id == id } }
+    override suspend fun synced(uid: String, id: String) {
+        if (readyRows.any { it.first.id == id } || rows.value.any { it.id == id }) syncedIds += id
+        rows.value = rows.value.filterNot { it.id == id }
+    }
     override suspend fun failed(uid: String, id: String, failure: AppFailure) { failures += id to failure }
 }
 fun pending() = PendingUpload("11111111-1111-4111-8111-111111111111", "2026-10-01T12:00:00Z", "Compra", "cash_withdrawal", listOf(Document("nota.jpg", "image/jpeg", byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 1))), emptyList())

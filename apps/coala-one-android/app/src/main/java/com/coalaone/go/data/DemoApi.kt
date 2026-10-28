@@ -130,6 +130,8 @@ import javax.inject.Singleton
         "simulation-offline-permit", request.installationId, request.deviceKeyId, request.keySecurity, request.bootCount,
         request.anchorElapsedRealtimeMs, java.time.Instant.now().toString(), java.time.Instant.now().toString(),
         java.time.Instant.now().plusSeconds(12 * 60 * 60).toString(), listOf(OfflinePermitUnit(unit.id, unit.name, "America/Fortaleza"))))
+    override suspend fun offlineCycle(request: OfflineCycleAction, expectedOwner: String?): OfflineCycleResponse =
+        throw UnsupportedOperationException("O modo demonstrativo não utiliza autorização de ciclo v2.")
     override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
         seedMarkings()
         val nsr = 300L + simulatedMarkings.size

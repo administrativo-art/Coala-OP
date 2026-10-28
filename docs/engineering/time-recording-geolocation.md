@@ -11,7 +11,7 @@
 - posição ausente, recusada, imprecisa ou externa não bloqueia, invalida, desconta nem pune automaticamente;
 - localização é acessória: não há justificativa especial por batida nem fila disciplinar; os direitos gerais da LGPD continuam pelo canal da empresa;
 - coordenada exata e evidência permanecem por 1.825 dias (cinco anos), com `expiresAt` e TTL do Firestore;
-- acesso direto do cliente às políticas e evidências é negado; qualquer consulta futura de coordenada exata será somente por DP/diretoria expressamente autorizados, escopada e auditada;
+- acesso direto do cliente às políticas e evidências é negado; na candidata local, a consulta é pelo titular real ou por permissão expressa do DP/diretoria, escopada e auditada, sem concessão automática a administradores;
 - política central por unidade contém a lista nominal do piloto. Ativar a unidade não coleta de outros colaboradores, e o servidor ignora coordenadas enviadas por cliente fora dessa lista;
 - piloto inicial: Heucilene Ribeiro e Luis, depois de ambos constarem na lista da unidade e receberem o aviso/cláusula aplicável;
 - cláusula LGPD nos documentos da empresa e aditivo para os colaboradores atuais; o aceite informa o tratamento, mas não é usado tecnicamente como consentimento revogável para validar a batida.
@@ -310,7 +310,7 @@ A coleção `repP_locationEvidence` tem regras `deny all` para clientes e TTL pr
 
 ## Conferência administrativa
 
-**Decisão atual:** não há fila de justificativa ou resolução por batida no piloto em observação. A coleção `repP_locationReviews` permanece reservada e negada ao cliente, mas não recebe documentos. Coordenadas exatas não são expostas em listas nem na interface atual. Se uma consulta administrativa de detalhe for implementada depois, ela deverá exigir autorização expressa do DP/diretoria, escopo de unidade e auditoria de cada acesso.
+**Decisão atual:** não há fila de justificativa ou resolução por batida no piloto em observação. A coleção `repP_locationReviews` permanece reservada e negada ao cliente, mas não recebe documentos. A candidata local oferece consulta separada por pessoa/unidade/dia/fonte, com titular real ou permissão expressa `dp.timeRecording.readLocation`, paginação e auditoria antes de devolver coordenadas. A implantação permanece pendente; ver contrato no [guia REP](flows/dp-time-recording.md).
 
 O modelo abaixo fica como proposta histórica para uma eventual fase de conferência e não descreve função ativa.
 
@@ -354,7 +354,7 @@ Todas as rotas novas ou alteradas devem usar `secureRoute`, schema estrito, erro
 | `GET /api/dp/time-recording/location-policies/[unitId]` | `dp.settings.manageTime` e escopo da unidade | Lê a política atual para configuração |
 | `PUT /api/dp/time-recording/location-policies/[unitId]` | `dp.settings.manageTime` e escopo da unidade | Cria revisão imutável da política |
 
-Não existe rota de leitura de coordenadas no piloto. Gestão de unidade não concede automaticamente leitura da localização de pessoas. Se o detalhe for criado depois, somente DP/diretoria expressamente autorizados poderão ler, sempre com escopo e auditoria. Administrador padrão também deverá ficar sujeito à auditoria.
+A candidata local acrescenta `POST /api/dp/time-recording/location-access`, ainda não publicado. Gestão de unidade não concede automaticamente leitura da localização de pessoas. Titular usa sua identidade real; terceiros exigem concessão expressa `dp.timeRecording.readLocation`, escopo de unidade e auditoria antes da resposta, inclusive administradores.
 
 As consultas administrativas exigem `workspaceId`, conjunto de unidades autorizado, período máximo, paginação e limite. Nenhuma rota lista evidências sem filtro temporal. O detalhe deve gravar auditoria antes de devolver coordenadas exatas.
 
@@ -431,7 +431,7 @@ Não selecionar consentimento como base por conveniência técnica. A base deve 
 
 ### Retenção
 
-O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclusive a coordenada exata. Cada documento recebe `expiresAt` calculado a partir do instante da batida, e `firestore.rep.indexes.json` configura TTL na coleção `repP_locationEvidence`. A marcação fiscal e seu comprovante permanecem fora desse descarte. Coordenadas não são copiadas para eventos/recibos da ARP, AFD, AEJ, auditorias genéricas ou data warehouse. Suspensão futura por litígio exigirá remover/controlar o vencimento antes da data; não existe botão de deleção manual na interface.
+O prazo operacional definido pelo projeto é de 1.825 dias (cinco anos) para a evidência completa, inclusive a coordenada exata; a justificativa e a aprovação jurídica desse prazo para cada modalidade continuam pendentes no RIPD. Cada documento recebe `expiresAt` calculado a partir do instante da batida, e `firestore.rep.indexes.json` configura TTL na coleção `repP_locationEvidence`. A marcação fiscal e seu comprovante permanecem fora desse descarte. Coordenadas não são copiadas para eventos/recibos da ARP, AFD, AEJ, auditorias genéricas ou data warehouse. Suspensão futura por litígio exigirá remover/controlar o vencimento antes da data; não existe botão de deleção manual na interface.
 
 ## Segurança e limites probatórios
 
@@ -441,7 +441,7 @@ O prazo aprovado é de 1.825 dias (cinco anos) para a evidência completa, inclu
 | Reenvio com outra posição | `requestDigest` cobre `locationAttempt`; mesmo `attemptId` com conteúdo diferente retorna conflito | Novo `attemptId` representa nova tentativa válida |
 | Política alterada durante a batida | Cabeçalho e revisão lidos na transação do `coala-rep-p`; snapshot e digest na evidência | A política não prova onde o aparelho realmente estava |
 | GPS impreciso | Círculo de precisão e resultado `indeterminate` | `accuracyMeters` também é declarado pelo cliente |
-| Acesso indevido | Coleções server-only e nenhuma rota de leitura de coordenadas no piloto | IAM do Admin SDK precisa de revisão operacional; futura leitura exigirá permissão, escopo e auditoria |
+| Acesso indevido | Coleções server-only; consulta na candidata com permissão expressa, unidade e auditoria antes da resposta | Publicar, revisar concessões nominais e conferir IAM do runtime |
 | Vazamento em logs | Proibir coordenadas em erro, log, métrica, tracing e analytics | Dumps e ferramentas administrativas exigem controle próprio |
 | Uso disciplinar automatizado | Nenhum efeito de folha, PTRP ou RH e nenhuma fila disciplinar | Qualquer uso humano futuro ainda dependerá de política e treinamento |
 | Dependência de mapa | Nenhuma API de mapa no caminho da batida | Mapa opcional de configuração cria fornecedor adicional |
@@ -476,7 +476,7 @@ Falha ao interpretar uma captura válida ou política inconsistente não deve se
 Índices previstos no `coala-rep-p`:
 
 - política: leitura por ID determinístico, sem consulta composta;
-- evidência: ID determinístico igual ao evento e TTL em `expiresAt`; não há consulta administrativa no piloto.
+- evidência: ID determinístico igual ao evento e TTL em `expiresAt`; consulta da candidata por pessoa/workspace/unidade/dia, com limite e cursor de ID.
 
 No volume de referência de 50 pessoas, quatro batidas por dia e 26 dias, são cerca de 5.200 batidas mensais. Para participantes de unidade ativa, a solução acrescenta uma leitura de política e uma escrita de evidência por batida. Com evidências entre 0,8 e 1,5 KiB, o crescimento esperado é de aproximadamente 4 a 8 MiB por mês, antes de índices, backups e PITR.
 
@@ -531,8 +531,8 @@ O intervalo é deliberadamente amplo porque o custo muda principalmente com a te
 ### Incremento 3 — direitos do titular (canal geral; fila específica retirada do piloto)
 
 - atender solicitações pelos canais gerais de privacidade da empresa;
-- manter coordenadas sem rota de consulta durante o piloto;
-- antes de qualquer tela futura, criar autorização específica, escopo de unidade e auditoria de leitura;
+- desenho inicial: manter coordenadas sem rota de consulta; a candidata posterior acrescentou consulta auditada, descrita acima;
+- autorização específica, escopo de unidade e auditoria de leitura foram implementados na candidata posterior, sem ativação real;
 - documentar suspensão do TTL para litígio ou investigação formal.
 
 ### Incremento 4 — piloto em observação (aguarda publicação, cláusula/aditivo e parâmetros reais)
@@ -645,7 +645,7 @@ A homologação exige ainda navegador real com permissão concedida/negada, apar
 4. Reenvio do mesmo `attemptId` não duplica batida nem evidência.
 5. ARP, AFD, hash e comprovante permanecem sem coordenadas e passam nos testes anteriores.
 6. Evidência registra política, precisão, cálculo, confiança e digest aplicados no instante da transação.
-7. Coordenadas exatas são server-only e não possuem rota de leitura no piloto; qualquer leitura administrativa futura será autorizada, limitada por unidade e auditada.
+7. Coordenadas exatas são server-only; a rota de consulta da candidata exige titular real ou permissão expressa, limite por unidade/dia/pessoa e auditoria antes da resposta. Regras cliente permanecem deny all.
 8. Nenhum alerta geográfico gera efeito automático em PTRP, folha, escala, ausência ou disciplina.
 9. Feature flag e política por unidade permitem desligamento sem migração ou perda da marcação.
 10. Retenção, frequência, aviso, acesso do titular, auditoria, eliminação, RIPD, base legal e responsáveis estão aprovados antes do primeiro piloto real; até lá, `DP_JOURNEY_LOCATION_ENABLED` permanece falso.

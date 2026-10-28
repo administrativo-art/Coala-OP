@@ -79,10 +79,11 @@ const profileRoute = readFileSync('src/app/api/mobile/profile/route.ts', 'utf8')
 const filePaths = readFileSync('apps/coala-one-android/app/src/main/res/xml/file_paths.xml', 'utf8');
 
 test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e não oferece "Todas as unidades"', () => {
-  assert.match(timeModels, /data class MarkingRequest\([\s\S]*?val channel: String = "mobile"[\s\S]*?val offline: OfflineMarkingEvidence\? = null,[\s\S]*?val locationAttempt: LocationAttempt\? = null\)/);
+  assert.match(timeModels, /data class MarkingRequest\([\s\S]*?val channel: String = "mobile"[\s\S]*?val offline: OfflineMarkingEvidence\? = null,[\s\S]*?val locationAttempt: LocationAttempt\? = null,[\s\S]*?val onlineScope: String\? = null\)/);
   // The same attempt and work date are resent until the server answers, kept in saved state; 409 starts over.
   assert.match(timeViewModel, /saved\["attemptId"\] = value\?\.first; saved\["attemptDate"\] = value\?\.second/);
-  assert.match(timeViewModel, /api\.mark\(MarkingRequest\(pending\.first, pending\.second,/);
+  assert.match(timeViewModel, /val onlineRequest = MarkingRequest\(pending\.first, pending\.second,/);
+  assert.match(timeViewModel, /offlineQueue\.beginOnline\(owner, onlineRequest[\s\S]*?api\.mark\(onlineRequest, owner\)/);
   assert.match(timeViewModel, /cause\.code\(\) == 409\) \{ clearAttempt\(\)/);
   assert.match(timeViewModel, /TimeRules\.workDate\(officialNow\(state\), zone\)/);
   assert.match(time, /UnitPickerHeader\(units\.map \{ it\.id to it\.name \}, state\.unitId\.orEmpty\(\)/);
@@ -139,14 +140,16 @@ test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovant
   assert.match(timeViewModel, /offlineQueue\.capture/);
   assert.match(timeViewModel, /lastOffline/);
   assert.match(timeOfflineStore, /MAX_PENDING_MARKINGS = 20/);
-  assert.match(timeOfflineStore, /12 \* 60 \* 60 \* 1000L/);
+  assert.match(timeOfflineStore, /TimeOfflineRules\.permitIssue/);
+  assert.match(timeOfflineStore, /protocolVersion = 2/);
   assert.match(timeOfflineStore, /TimeOfflineRules\.markedAt/);
   assert.match(timeOfflineStore, /declaredPurpose = declaredPurpose/);
   assert.match(timeOfflineStore, /identity\.sign/);
   assert.match(timeDeviceIdentity, /AndroidKeyStore/);
   assert.match(timeDeviceIdentity, /ECGenParameterSpec\("secp256r1"\)/);
   assert.match(timeOfflineWorker, /ExistingWorkPolicy\.APPEND_OR_REPLACE/);
-  assert.doesNotMatch(timeOfflineStore, /nsr|receiptId/);
+  assert.doesNotMatch(timeOfflineStore, /nsr/);
+  // Server receipt identifiers may be cached for signed close; local capture never invents an NSR.
 });
 
 test('ensaio nominal e sua contingência segregada nunca se apresentam como registro oficial', () => {

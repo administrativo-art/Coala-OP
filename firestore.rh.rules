@@ -200,6 +200,8 @@ service cloud.firestore {
     match /repP_pilotHeads/{id} { allow read, write: if false; }
     match /repP_pilotMarkings/{id} { allow read, write: if false; }
     match /repP_pilotOfflinePermits/{id} { allow read, write: if false; }
+    match /repP_offlineCycles/{id} { allow read, write: if false; }
+    match /repP_offlineCycleHeads/{id} { allow read, write: if false; }
     match /repP_pilotClassificationEvents/{id} { allow read, write: if false; }
     match /repP_pilotDayGuards/{id} { allow read, write: if false; }
     match /repP_pilotAdjustmentRequests/{id} { allow read, write: if false; }
