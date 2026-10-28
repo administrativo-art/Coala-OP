@@ -11,7 +11,7 @@ Este fluxo separa quatro responsabilidades:
 
 Férias não pertencem a este domínio: continuam no módulo próprio, com aquisição, concessão e efeitos específicos. Pessoa jurídica também não usa ausência trabalhista; eventual indisponibilidade contratual de PJ deve ser tratada em outro fluxo. Os vínculos elegíveis aqui são CLT, Aprendiz e Estágio, cada um com regras configuráveis e sem presumir que compartilham os mesmos limites.
 
-Este documento descreve o domínio de ausências. As **Etapas 1, 2 e 3 estão em produção** desde 17/10/2026: catálogo e pedidos no banco `coala-rh` (recibo `active`) e aplicação na escala com `DP_ABSENCE_OPERATIONAL_GUARD=on` e recibo operacional `ready`. O teste controlado na tela e a homologação funcional pelo DP continuam pendentes. A antiga Etapa 4 foi absorvida pelas Fases 3 e 5 do [plano mestre de ponto, jornada e fechamento](../../plano-jornada-fechamento-rh.md#6-fases).
+Este documento descreve o domínio de ausências. As **Etapas 1, 2 e 3 estão em produção** desde 17/10/2026: catálogo e pedidos no banco `coala-rh` (recibo `active`) e aplicação na escala com `DP_ABSENCE_OPERATIONAL_GUARD=on` e recibo operacional `ready`. O teste controlado na tela e a homologação funcional pelo DP continuam pendentes. A antiga Etapa 4 foi absorvida pelas Fases 3 e 5 do [plano mestre de ponto, jornada e fechamento](../../planos/plano-jornada-fechamento-rh.md#6-fases).
 
 ## Banco e versionamento — decisão de 14/10/2026
 
@@ -43,7 +43,7 @@ O dispatcher do outbox grava avisos privados somente em `coala.userNotifications
 
 Limitações para liberação real: cutover/migração não executados, gate operacional restrito a demo, bootstrap e índices ainda não comprovados em produção e Storage real não exercitado. Desligamento/vínculo inválido bloqueia aprovação; divergência válida exige confirmação DP. Retenção revalida desligamento e revisão do cadastro antes de permitir remoção pelo custodiante; não há exclusão automática. A integração identificada do sistema continua pendente. O SLA foi fixado em 24 horas corridas por etapa humana; vencimento apenas sinaliza atraso e não aprova, rejeita nem troca o responsável automaticamente. Prazo e atraso são dados internos de gestão e auditoria e não são devolvidos ao solicitante. Storage, `coala` e RH não formam transação distribuída. A Etapa 2 está fechada como implementação local, mas só pode ser declarada liberada depois do cutover, homologação e publicação coordenados.
 
-**Decisão de 14/10/2026:** as próximas etapas devem preservar a separação entre marcação original, ocorrência aprovada e tratamento da jornada, conforme a Portaria MTP nº 671/2021. As definições abaixo são contratos para implementação futura, não funcionalidades já entregues nem declaração de conformidade do produto. O registrador próprio está no [plano de REP-P](../../plano-rep-p-controle-de-ponto.md) e o tratamento no [plano de Jornada e Fechamento](../../plano-jornada-fechamento-rh.md).
+**Decisão de 14/10/2026:** as próximas etapas devem preservar a separação entre marcação original, ocorrência aprovada e tratamento da jornada, conforme a Portaria MTP nº 671/2021. As definições abaixo são contratos para implementação futura, não funcionalidades já entregues nem declaração de conformidade do produto. O registrador próprio está no [plano de REP-P](../../planos/plano-rep-p-controle-de-ponto.md) e o tratamento no [plano de Jornada e Fechamento](../../planos/plano-jornada-fechamento-rh.md).
 
 ## Etapa 1 — catálogo e governança das regras (implementada)
 
@@ -239,7 +239,7 @@ A análise deve respeitar escopo de unidade e separar `view`, `review` e eventua
 
 ## Etapa 4 — ponto, folha, integrações e indicadores
 
-**Revisão de 17/10/2026:** esta etapa passa a ser executada dentro do [plano mestre](../../plano-jornada-fechamento-rh.md#6-fases): a parte de ponto na Fase 3 (PTRP) e a parte de folha na Fase 5 (eventos e fechamento). O ponto oficial futuro é o REP-P do Coala; não haverá projeção de justificativas no Bizneo, que sai no longo prazo. Os itens abaixo continuam como requisitos dessas fases.
+**Revisão de 17/10/2026:** esta etapa passa a ser executada dentro do [plano mestre](../../planos/plano-jornada-fechamento-rh.md#6-fases): a parte de ponto na Fase 3 (PTRP) e a parte de folha na Fase 5 (eventos e fechamento). O ponto oficial futuro é o REP-P do Coala; não haverá projeção de justificativas no Bizneo, que sai no longo prazo. Os itens abaixo continuam como requisitos dessas fases.
 
 Somente depois da ocorrência aprovada e do PTRP validado:
 

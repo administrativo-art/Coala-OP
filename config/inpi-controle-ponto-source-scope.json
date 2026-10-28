@@ -66,7 +66,7 @@
     "apps/coala-one-android/app/src/main/java/com/coalaone/go/ui/TimeViewModel.kt",
     "docs/engineering/flows/dp-time-recording.md",
     "docs/engineering/time-recording-geolocation.md",
-    "docs/plano-rep-p-controle-de-ponto.md",
+    "docs/planos/plano-rep-p-controle-de-ponto.md",
     "docs/rep-p/homologacao/inpi.md",
     "tests/helpers/rep-p-test-certificate.ts",
     "tests/integration/absence-tacit-approval.test.mjs",

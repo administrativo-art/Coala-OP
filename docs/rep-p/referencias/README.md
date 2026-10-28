@@ -2,7 +2,7 @@
 
 **Última conferência:** 2026-10-18, por Doc Brown (revisão orientativa; não é parecer jurídico). Conferência parcial: os itens marcados "não conferido" seguem pendentes da Fase 0. O código lê a data em [`norms-registry.ts`](../../../src/features/dp/rep-p/norms-registry.ts); o teste exige que as duas concordem. A central de avisos abre "Revisão das normas do ponto vencida" 30 dias depois.
 
-A cada conferência: procurar alterações no gov.br e no Diário Oficial, atualizar a tabela (versão, hash, situação), refletir mudanças na [matriz de requisitos](../../plano-rep-p-controle-de-ponto.md#11-matriz-de-requisitos-legais), nos testes e nas pendências, e atualizar a data aqui e em `norms-registry.ts`.
+A cada conferência: procurar alterações no gov.br e no Diário Oficial, atualizar a tabela (versão, hash, situação), refletir mudanças na [matriz de requisitos](../../planos/plano-rep-p-controle-de-ponto.md#11-matriz-de-requisitos-legais), nos testes e nas pendências, e atualizar a data aqui e em `norms-registry.ts`.
 
 | # | Fonte | Versão / publicação | Link oficial | Situação em 18/10/2026 | O que exige do sistema |
 |---|---|---|---|---|---|
