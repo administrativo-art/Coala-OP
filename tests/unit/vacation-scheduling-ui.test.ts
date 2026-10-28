@@ -225,3 +225,8 @@ test('Panorama lista empregados CLT e aprendizes, não só quem é operacional',
   assert.match(manager, /\['clt', 'apprenticeship'\]\.includes\(user\.employmentRelationshipType\)/);
   assert.doesNotMatch(manager, /activeUsers\.filter\(user => user\.operacional === true\)/);
 });
+
+test('Panorama marca com um selo discreto quem está em gozo hoje', () => {
+  assert.match(manager, /onVacationUntil: enjoying\?\.endDate \? parseISO\(enjoying\.endDate\) : undefined/);
+  assert.match(manager, /Em gozo até \{format\(person\.onVacationUntil, 'dd\/MM'\)\}/);
+});
