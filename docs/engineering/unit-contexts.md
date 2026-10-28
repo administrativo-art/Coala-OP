@@ -11,6 +11,8 @@ Use este mapa ao alterar cadastro, escala, ponto, metas, permissões ou fechamen
 | Execução da batida | `executionUnitId` validado pelo servidor contra o vínculo histórico ou cobertura escalada | Local e fuso do registro; endereço no comprovante | `employerUnitId`, CNPJ, NSR ou hora fiscal informados pelo aparelho |
 | Empregador fiscal | Revisão histórica do vínculo (`employerUnitId` e CNPJ) | Estabelecimento REP-P, ARP e documentos fiscais | Unidade operacional em que ocorreu cada turno |
 
+Na escala do DP, a lista diária de pessoas sem turno usa apenas os vínculos operacionais habituais (`users.unitIds` e quiosques atribuídos). Um turno ou DSR de cobertura aparece na data do lançamento, mas não inclui a pessoa nessa lista durante todo o mês. O cartão da cobertura identifica a unidade de origem quando registrada; para membros da equipe sem lançamento, o rótulo é “Sem turno neste dia”.
+
 ## Percurso obrigatório de investigação
 
 1. Parta do cadastro e confirme `unitId`, `unitIds`, escopo de visualização e revisão histórica do vínculo na data.
