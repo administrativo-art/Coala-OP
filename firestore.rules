@@ -1030,6 +1030,7 @@ service cloud.firestore {
     match /dp_absenceOccupancyClocks/{id} { allow read, write: if false; }
     match /dp_absenceOperationalMarkers/{id} { allow read, write: if false; }
     match /dp_absenceOperationalAvailability/{id} { allow read, write: if false; }
+    match /dp_personAgendaClocks/{id} { allow read, write: if false; }
 
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
