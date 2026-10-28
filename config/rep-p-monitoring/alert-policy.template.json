@@ -7,8 +7,8 @@
     "displayName": "REP-P indisponível em sondagens externas",
     "conditionThreshold": {
       "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND metric.label.check_id=\"__UPTIME_CHECK_ID__\"",
-      "aggregations": [{ "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["resource.label.host", "resource.label.project_id"] }],
-      "comparison": "COMPARISON_GT", "thresholdValue": 1, "duration": "120s", "trigger": { "count": 1 },
+      "aggregations": [{ "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_FRACTION_TRUE", "crossSeriesReducer": "REDUCE_MEAN", "groupByFields": ["resource.label.host", "resource.label.project_id"] }],
+      "comparison": "COMPARISON_LT", "thresholdValue": 1, "duration": "120s", "trigger": { "count": 1 },
       "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
     }
   }],
