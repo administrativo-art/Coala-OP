@@ -7,7 +7,7 @@ Conferência inicial em 27/10/2026; reconciliação publicada em 28/10/2026 no p
 | Sonda HTTPS do coletor | `GET https://op.coalashakes.com/api/dp/time-recording/availability` retornou `200`, corpo `{"status":"ok"}` | Disponível na consulta realizada |
 | Relay `repPAvailabilityAlertRelay` | Função Gen 2 ativa em `southamerica-east1`, com retry e segredo dedicado, ligada ao tópico `rep-p-availability-alerts` | Publicado |
 | Uptime check específico REP | `coala-rep-p-sonda-do-coletor-dvUG2UbsBbU`, HTTPS, 200 + `status:ok`, cinco verificadores | Publicado |
-| Alert policy REP | `Coala REP-P — disponibilidade externa`, condição de 120 s e canal Pub/Sub dedicado | Criada desabilitada; habilitar para o ensaio |
+| Alert policy REP | `Coala REP-P — disponibilidade externa`, policy habilitada, condição booleana de 120 s e canal Pub/Sub dedicado | Publicada e habilitada |
 | Rota do relay sem credencial | `POST` com corpo vazio retornou `401`; nenhuma credencial ou mensagem válida foi enviada | Recusa pública conferida |
 | Tópico `rep-p-availability-alerts` | Existe com `messageRetentionDuration=604800s` | Retenção de sete dias |
 | Assinatura do tópico | Assinatura Eventarc criada pelo gatilho da função, retry habilitado e retenção de 24 h | Publicada |
@@ -21,7 +21,14 @@ Não considerar `200` isolado como ensaio do monitor, do relay ou da recuperaç�
 - O segredo dedicado `REP_P_AVAILABILITY_MONITOR_SECRET` possui versão ativa e acesso somente aos runtimes necessários; seu valor nunca deve ser lido, copiado ou colocado em arquivo local.
 - A Function recebe somente o tópico dedicado, valida tamanho, entrega à rota autenticada e lança erro em falha HTTP para permitir redelivery. Não acessa o banco fiscal pelo relay.
 
-Os recursos acima já foram publicados; a policy permanece desabilitada até o início da janela de ensaio. Não alterar IAM nem criar chaves para contornar falha de permissão.
+Os recursos acima já foram publicados e a policy está habilitada. Não alterar IAM nem criar chaves para contornar falha de permissão.
+
+## Ensaio executado em 28/10/2026
+
+- Transporte sintético de abertura, reenvio e fechamento no tópico dedicado: relay respondeu `official-collection-disabled`, com `establishments: 0` e `events: 0` em todas as entregas; nenhum NSR foi consumido.
+- Falha controlada da sonda: matcher temporariamente impossível, sem derrubar a rota. Os cinco verificadores reportaram `false`, a policy abriu e o relay recebeu as notificações. O payload aberto com `ended_at: null` foi aceito após a correção do contrato; o fechamento com timestamp também foi entregue.
+- Recuperação: matcher original restaurado; os cinco verificadores voltaram a `true` e a notificação de fechamento foi entregue. O incidente induzido não representa indisponibilidade real do coletor.
+- A policy usa `ALIGN_FRACTION_TRUE` + `REDUCE_MEAN` para a métrica booleana `check_passed`; o template foi alinhado à configuração materializada.
 
 ## Sequência concreta para publicação e ensaio
 
