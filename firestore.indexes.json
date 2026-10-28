@@ -1,6 +1,11 @@
 
 {
   "indexes": [
+    { "collectionGroup": "dp_schedules", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "year", "order": "ASCENDING" },
+      { "fieldPath": "month", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" }

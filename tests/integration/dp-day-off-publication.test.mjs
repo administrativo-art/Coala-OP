@@ -16,6 +16,7 @@ const { deleteDPSchedule } = await import('../../src/features/dp/schedules/delet
 const { createEmployeeGoal } = await import('../../src/features/goals/employee-goals/service.server.ts');
 const { transitionGoalPeriod } = await import('../../src/features/goals/period-status/service.server.ts');
 const { saveWorkShift } = await import('../../src/features/dp/shifts/service.server.ts');
+const { listExternalCoverageCandidates } = await import('../../src/features/dp/external-candidates/service.server.ts');
 const {
   createShiftDefinition,
   createTimeConfig,
@@ -525,6 +526,8 @@ test('deriva cobertura externa no servidor e exige permissão e motivo', async (
   const workScheduleId = 'integration-external-coverage-schedule';
   const executionUnitId = 'integration-external-coverage-unit';
   const originUnitId = 'integration-external-origin-unit';
+  const secondOriginUnitId = 'integration-external-second-origin-unit';
+  const financialUnitId = 'integration-external-financial-unit';
   const externalUserId = 'integration-external-coverage-user';
   const goalKioskId = 'integration-external-coverage-kiosk';
   const goalPeriodId = 'integration-external-coverage-period';
@@ -540,6 +543,8 @@ test('deriva cobertura externa no servidor e exige permissão e motivo', async (
       scheduleRef.delete(),
       dbAdmin.collection('dp_units').doc(executionUnitId).delete(),
       dbAdmin.collection('dp_units').doc(originUnitId).delete(),
+      dbAdmin.collection('dp_units').doc(secondOriginUnitId).delete(),
+      dbAdmin.collection('dp_units').doc(financialUnitId).delete(),
       dbAdmin.collection('users').doc(externalUserId).delete(),
       dbAdmin.collection('kiosks').doc(goalKioskId).delete(),
       dbAdmin.collection('kiosks').doc(originKioskId).delete(),
@@ -563,7 +568,10 @@ test('deriva cobertura externa no servidor e exige permissão e motivo', async (
     scheduleRef.set({ name: 'Setembro de 2026', year: 2026, month: 9, unitId: executionUnitId, shiftCount: 0, locked: false, createdAt: new Date() }),
     dbAdmin.collection('dp_units').doc(executionUnitId).set({ name: 'Unidade de execução', createdAt: new Date() }),
     dbAdmin.collection('dp_units').doc(originUnitId).set({ name: 'Unidade de origem', createdAt: new Date() }),
-    dbAdmin.collection('users').doc(externalUserId).set({ username: 'Cobertura externa', isActive: true, unitId: originUnitId, unitIds: [originUnitId] }),
+    dbAdmin.collection('dp_units').doc(secondOriginUnitId).set({ name: 'Segunda unidade operacional', createdAt: new Date() }),
+    dbAdmin.collection('dp_units').doc(financialUnitId).set({ name: 'Unidade financeira', createdAt: new Date() }),
+    dbAdmin.collection('users').doc(externalUserId).set({ username: 'Cobertura externa', isActive: true,
+      unitId: financialUnitId, unitIds: [originUnitId, secondOriginUnitId] }),
     dbAdmin.collection('kiosks').doc(goalKioskId).set({ name: 'Unidade de execução' }),
     dbAdmin.collection('kiosks').doc(originKioskId).set({ name: 'Unidade de origem' }),
     dbAdmin.collection('goalPeriods').doc(goalPeriodId).set({
@@ -605,6 +613,11 @@ test('deriva cobertura externa no servidor e exige permissão e motivo', async (
     }),
     seedPublishedCompanyJourney(journeyId),
   ]);
+
+  const candidate = (await listExternalCoverageCandidates({ context, scheduleId: workScheduleId,
+    search: 'Cobertura externa', limit: 5 })).candidates.find((person) => person.id === externalUserId);
+  assert.deepEqual(candidate?.affiliatedUnitNames, ['Unidade de origem', 'Segunda unidade operacional']);
+  assert.equal(candidate?.originUnitName, 'Unidade de origem');
 
   const input = {
     userId: externalUserId,
@@ -659,7 +672,7 @@ test('deriva cobertura externa no servidor e exige permissão e motivo', async (
   assert.equal(persisted.get('originUnitId'), originUnitId);
   assert.equal(persisted.get('countsTowardGoals'), false);
   assert.equal(persisted.get('exceptionReason'), input.exceptionReason);
-  assert.equal((await dbAdmin.collection('users').doc(externalUserId).get()).get('unitId'), originUnitId);
+  assert.equal((await dbAdmin.collection('users').doc(externalUserId).get()).get('unitId'), financialUnitId);
   await assert.rejects(
     () => createEmployeeGoal({
       context,

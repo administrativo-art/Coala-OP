@@ -452,7 +452,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             if (todayShift?.unitId != null && todayShift.unitId != state.unitId) CardBlock {
                 Text("Escala: ${todayShift.unitName ?: "unidade escalada"}", style = MaterialTheme.typography.titleMedium)
                 Text("Este ponto será registrado em $unitName.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                if (units.none { it.id == todayShift.unitId }) Text("A unidade da escala não está entre as unidades liberadas para você. Fale com o DP para conferir o vínculo.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                if (units.none { it.id == todayShift.unitId }) Text("A unidade da escala não está liberada para este dia. Peça ao DP para conferir o vínculo ou registrar a cobertura nesta escala.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             }
             if (todayShift?.executionUnitPolicy == "free" && todayShift.locationTrackingPolicy == "workday") {
                 CardBlock {
