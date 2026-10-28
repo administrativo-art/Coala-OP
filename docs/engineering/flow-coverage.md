@@ -1,10 +1,22 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
+
+2026-10-27: [LGPD v5 integrada](../rep-p/homologacao/lgpd-v5-validacao-integrada.md) passou com emuladores, conversor oficial e pacote de oito modelos/24 páginas. Golden dirigido atualizado; a consulta posterior não encontrou modelo LGPD armazenado nem override no destino (`coala`), dispensando migração. Sem publicação ou promoção do grupo inteiro a Verificado.
+
+2026-10-27: termo LGPD v5 preparado localmente com seção 3-A aprovada, referência/hash do catálogo atualizados e v4 preservada. Testes do catálogo aprovados e dez páginas inspecionadas. Publicação, aditivo dos atuais e gates de localização continuam pendentes; sem promoção de cobertura.
+
+2026-10-27: [ensaio local de disponibilidade e localização](../rep-p/homologacao/ensaio-disponibilidade-localizacao-2026-10-27.md) verificou eventos tipo 6 concorrentes/idempotentes, AFD, captura acessória e ciclo da jornada no emulador. Consulta auditada de coordenadas, configuração/documentos de privacidade, monitoração publicada e Galaxy permanecem pendentes; o grupo continua Traçado.
+
+2026-10-27: candidata local de máscara de horário nos pedidos de ajuste do Coala Go, para inclusão e correção (`1350` → `13:50`). Contratos e validação de horário permanecem iguais; testes direcionados e limites constam no registro go-adjustment-time-input. Grupo permanece Traçado.
+
 2026-10-27: candidata de preparo e renovação silenciosos do Coala Go na entrada, retorno da rede e manutenção periódica. Abertura offline consulta diretamente a autorização salva; sincronização recupera pendências, valida a confirmação e preserva cadeias bloqueadas. A interface mantém Registrar ponto e distingue unidade da escala da unidade de execução quando divergem. O teste público do Galaxy teve o formato de exportação corrigido, e os logs da 0.3.28 confirmaram atestação e emissão de autorização. Testes da candidata são registrados no chamado; o grupo permanece Traçado.
 
 2026-10-27: correção em andamento da autorização offline para distribuição por APK direto. Atestação de hardware Android substitui a dependência de reconhecimento Play no cliente novo; HLB e gates da contingência permanecem obrigatórios. A tela distingue dados não consultados de dia sem escala/batidas. Homologação física registrada no chamado; grupo continua Traçado.
 
 2026-10-27: o Registro REP-P ganhou candidata local para simular pedidos de ajuste no ensaio em coleção segregada e para confirmar o encerramento organizacional após `Fim da jornada`. A simulação não cria tratamento nem participa de PTRP/ARP/AFD/AEJ/espelho/fechamento; o encerramento não bloqueia nova batida e não fabrica marcação. Também foram corrigidos os estados de autorização offline, tentativa pendente e cache da Home. Testes integrados, revisão final independente e aparelho físico permanecem gates; o grupo continua Traçado.
+
+2026-10-27: a página Solicitações do DP passou a ter as abas Para analisar, Acompanhamento e Pendências de documento; o [fechamento do ponto](flows/dp-time-recording.md) ganhou página própria em Gestão do colaborador, a exportação AFD/AEJ foi para Configurações → Tempo e a [aprovação de ausência](flows/dp-absences.md) ganhou a etapa de cobertura do turno com elegibilidade por jornada e escala. Código local, sem publicação; revisão Doc Brown e E2E pendentes.
 
 2026-10-26: o [Registro REP-P](flows/dp-time-recording.md) ganhou clareza local na prévia web: orientação da escala antes da primeira batida, intervalo somente após o início real, memória numérica do dia, fatos das ocorrências, faixa noturna física e resumo compacto do banco com acesso ao extrato dedicado. A apuração e os contratos fiscais permanecem inalterados; validação visual integrada e publicação desta candidata seguem pendentes. O grupo permanece Traçado.
 
@@ -41,7 +53,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
-| `dp-time-recording` | 2 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela própria na barra lateral, conferência individual pelo perfil e resumo diário preliminar na Home do Coala Go; [georreferenciamento](time-recording-geolocation.md) implementado localmente para web/Coala Go; validação oficial, gates fiscais/jurídicos e aparelho real pendentes |
+| `dp-time-recording` | 3 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela própria na barra lateral, fechamento do ponto em página própria, conferência individual pelo perfil e resumo diário preliminar na Home do Coala Go; [georreferenciamento](time-recording-geolocation.md) implementado localmente para web/Coala Go; validação oficial, gates fiscais/jurídicos e aparelho real pendentes |
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
@@ -104,3 +116,10 @@ Atualização de 2026-10-01: o relatório de [Insights do Instagram](flows/insta
 Atualização local de 2026-10-02: Insights ganhou navegação entre Visão geral, Resultados, Público, Conteúdo e Anúncios. Foram conectadas quebras agregadas de seguidores e visualizações por `follow_type`, paginação explícita das publicações e leitura da conta/campanhas de anúncios; mensagens continuam fora do escopo, e anúncios permanecem somente leitura. As permissões existentes são reutilizadas. `npm run check` passou com 1.755 testes e o build de produção concluiu; os validadores de inventário, matriz, documentos e pontos de entrada também passaram. O build emitiu avisos em módulos fora deste fluxo (`firebase-rh`/top-level await e `protobufjs`/dependência dinâmica). Não houve consulta Meta nesta etapa, navegador, gravação de dados, commit ou publicação; o fluxo permanece sem homologação integrada.
 
 Atualização local de 2026-10-02: a operação [Uber SFTP](uber-sftp-integration.md) recebeu pré-voo de rede, destino do Scheduler, conector de rollback e política de retry testáveis sem serviços reais. A superfície `uberSftpDailySync` permanece sem homologação integrada: falta comprovar importação com viagens e o IP efetivo após Direct VPC. O grupo `expenses` continua Traçado.
+
+### Incremento de consulta da localização
+
+Consulta de coordenadas traçada em `location-access.server.ts` e `POST /api/dp/time-recording/location-access`, com painel na visão pessoal/administrativa, concessão expressa `dp.timeRecording.readLocation`, unidade/dia/pessoa, paginação e auditoria antes da resposta. Evidências dirigidas e limites estão no [guia REP](flows/dp-time-recording.md). Minutas de política/RIPD e plano de monitoração não representam aprovação nem ensaio publicado concluído.
+
+
+2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.

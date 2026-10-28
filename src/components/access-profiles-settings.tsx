@@ -105,6 +105,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   manageShifts: "Gerenciar turnos",
   manageCalendars: "Gerenciar calendários",
   manageTime: "Gerenciar jornadas e horas",
+  readLocation: "Consultar coordenadas com auditoria",
   manageAbsences: "Gerenciar tipos de ausência",
   dashboard: "Visão geral",
   cashFlow: "Fluxo de caixa",

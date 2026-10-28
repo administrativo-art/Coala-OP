@@ -22,11 +22,18 @@ e não aparece como opção manual.
 
 ## Modelos operacionais
 
+Atualização local de 27/10/2026: o termo LGPD passa à versão 5, com a seção
+3-A aprovada sobre localização no ponto e acompanhamento entre unidades.
+A v4 permanece preservada. A v5 está preparada no código e ainda não foi
+publicada; o estado publicado acima descreve o kit anterior. Documentos já
+gerados ou assinados não são reescritos. Para colaboradores que já receberam
+o termo anterior, a comunicação complementar/aditivo será um documento próprio.
+
 | Ordem | Arquivo operacional | SHA-256 | Assinatura |
 |---:|---|---|---|
 | 1 | `01-contrato-experiencia-v4.docx` | `081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
-| 3 | `03-termo-lgpd-v4.docx` | `c5bc23d9a942b57daeb94d6185187552c4520c82b30cc071f589a9c94d50e1a5` | Pacote |
+| 3 | `03-termo-lgpd-v5.docx` | `0dd7f0309096dd7e7a938d8789fcb297c1a25b78f56f22ee135ae3be0edb2ba2` | Pacote |
 | 4 | `04-imagem-voz-v4.docx` | `a266bbf3ffa1e4e3fa06108b57f5755879151a1af4e99497ac099d27856d9a0a` | Pacote; autorização facultativa |
 | 5 | `05-metas-premios-v2.docx` | `a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745` | Pacote |
 | 6A | `06-vale-transporte-solicitacao-v2.docx` | `cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb` | Pacote |
@@ -43,7 +50,32 @@ modalidade de vale-transporte é escolhida a partir da decisão vigente; quando 
 decisão muda, o documento anterior é marcado como `Substituído`, sem apagar o
 histórico.
 
+## Validação integrada da LGPD v5
+
+O [ensaio integrado](../../rep-p/homologacao/lgpd-v5-validacao-integrada.md)
+exercitou o gerador, Firestore/Storage emulados, conversor oficial e pacote dos
+oito modelos. O pacote fictício teve 24 páginas, LGPD nas páginas 7–16 e
+encerramento/assinaturas previstas na página 24. Textos longos, cinco campos
+obrigatórios, idempotência e preservação da v4 passaram. O golden da LGPD
+foi atualizado para v5/10 páginas após conversão e inspeção.
+
+Conferência posterior em produção (banco `coala`, projeto
+`smart-converter-752gf`): não existem
+`companyDocumentTemplates/system-admission-lgpd-awareness-term` nem
+`systemDocumentTemplateStates/system-admission-lgpd-awareness-term`. Não há
+v4 armazenada nem override de workflow a migrar; a geração usa o catálogo.
+A consulta foi somente de leitura, sem alterar documentos ou permissões.
+
 ## Geração e composição
+
+O script `scripts/prepare-lgpd-v5.py` reproduz a v5 a partir da v4 com hash
+fixo e insere somente a seção 3-A antes da seção 4. Os demais componentes do
+DOCX e os cinco campos parametrizados existentes são preservados. As dez
+páginas da matriz v5 foram renderizadas e inspecionadas; os testes do catálogo
+validam hash, posição da cláusula e preservação integral do conteúdo anterior.
+A atualização documental não ativa coleta, não concede acesso a coordenadas
+e não substitui a definição da base legal/frequência, aviso contextual e
+demais gates da localização.
 
 1. O RH seleciona e gera os documentos aplicáveis.
 2. O sistema resolve cadastro, empresa responsável, datas e campos manuais.

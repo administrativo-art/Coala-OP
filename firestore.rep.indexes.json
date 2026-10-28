@@ -1,5 +1,8 @@
 {
   "indexes": [
+    {"collectionGroup": "repP_locationEvidence", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "executionUnitId", "order": "ASCENDING"}, {"fieldPath": "recordedDate", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
+    {"collectionGroup": "repP_attempts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "cycleCandidate.committedAt", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
+
     { "collectionGroup": "repP_events", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "establishmentId", "order": "ASCENDING" },
@@ -28,6 +31,17 @@
     ] }
   ],
   "fieldOverrides": [
-    { "collectionGroup": "repP_locationEvidence", "fieldPath": "expiresAt", "ttl": true, "indexes": [] }
-  ]
+  {
+    "collectionGroup": "repP_locationAccessAudit",
+    "fieldPath": "expiresAt",
+    "ttl": true,
+    "indexes": []
+  },
+  {
+    "collectionGroup": "repP_locationEvidence",
+    "fieldPath": "expiresAt",
+    "ttl": true,
+    "indexes": []
+  }
+]
 }

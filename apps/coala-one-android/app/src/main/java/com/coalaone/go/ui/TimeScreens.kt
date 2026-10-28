@@ -1092,8 +1092,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
             Text("Horários que faltaram", style = MaterialTheme.typography.titleMedium)
             includedTimes.forEachIndexed { index, value ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabeledInput("Horário ${index + 1}", value, !feedback.busy, placeholder = "00:00", modifier = Modifier.weight(1f)) { next ->
-                        includedTimes = includedTimes.toMutableList().also { it[index] = next.filter { char -> char.isDigit() || char == ':' }.take(5) }
+                    LabeledTimeInput("Horário ${index + 1}", value, !feedback.busy, modifier = Modifier.weight(1f)) { next ->
+                        includedTimes = includedTimes.toMutableList().also { it[index] = next }
                     }
                     if (includedTimes.size > 1) TextButton({ includedTimes = includedTimes.filterIndexed { position, _ -> position != index } }, enabled = !feedback.busy) { Text("Remover", color = Tokens.danger) }
                 }
@@ -1114,8 +1114,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                         Checkbox(selected, null)
                         Text("${punch.time} · ${if (punch.pilot) "sequência do ensaio" else "registro oficial"} ${punch.nsr}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                     }
-                    if (kind == "correct" && selected) LabeledInput("Horário correto", correctedTimes[id].orEmpty(), !feedback.busy, placeholder = "00:00") { next ->
-                        correctedTimes = correctedTimes + (id to next.filter { char -> char.isDigit() || char == ':' }.take(5))
+                    if (kind == "correct" && selected) LabeledTimeInput("Horário correto", correctedTimes[id].orEmpty(), !feedback.busy) { next ->
+                        correctedTimes = correctedTimes + (id to next)
                     }
                 }
             }
@@ -1341,9 +1341,12 @@ private fun swapShift(value: ShiftSwapShift) = "${fullDate(value.date)} · ${val
         }
         DateField("Início", start, !feedback.busy) { start = it; if (end < it) end = it }
         DateField("Fim", end, !feedback.busy) { end = it }
-        if (unit == "hour") Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LabeledInput("Das", startTime, !feedback.busy, placeholder = "00:00", modifier = Modifier.weight(1f)) { startTime = it.filter { c -> c.isDigit() || c == ':' }.take(5) }
-            LabeledInput("Até", endTime, !feedback.busy, placeholder = "00:00", modifier = Modifier.weight(1f)) { endTime = it.filter { c -> c.isDigit() || c == ':' }.take(5) }
+        if (unit == "hour") Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LabeledTimeInput("Das", startTime, !feedback.busy, modifier = Modifier.weight(1f), showHint = false) { startTime = it }
+                LabeledTimeInput("Até", endTime, !feedback.busy, modifier = Modifier.weight(1f), showHint = false) { endTime = it }
+            }
+            TimeInputHint()
         }
         NoteInput("Motivo (opcional)", reason, 1000, "Explique a ausência, se quiser (mínimo de 10 caracteres)", !feedback.busy) { reason = it }
         Text(if (type?.attachmentRequired == true) "Atestado ou documento (obrigatório)" else "Atestado ou documento (opcional)", style = MaterialTheme.typography.titleMedium)

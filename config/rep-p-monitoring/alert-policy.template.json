@@ -1,0 +1,18 @@
+{
+  "displayName": "Coala REP-P — disponibilidade externa",
+  "enabled": false,
+  "combiner": "OR",
+  "notificationChannels": ["__NOTIFICATION_CHANNEL_RESOURCE__"],
+  "conditions": [{
+    "displayName": "REP-P indisponível em sondagens externas",
+    "conditionThreshold": {
+      "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND metric.label.check_id=\"__UPTIME_CHECK_ID__\"",
+      "aggregations": [{ "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["resource.label.host", "resource.label.project_id"] }],
+      "comparison": "COMPARISON_GT", "thresholdValue": 1, "duration": "120s", "trigger": { "count": 1 },
+      "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+    }
+  }],
+  "alertStrategy": { "autoClose": "604800s", "notificationPrompts": ["OPENED", "CLOSED"] },
+  "documentation": { "mimeType": "text/markdown", "content": "Sonda externa do coletor REP-P. Correlacionar falha da sonda, Hora Legal e disponibilidade real. Relay Pub/Sub entrega ao App Hosting; nunca escreve na ARP. Não ativar coleta fiscal para ensaiar o monitor." },
+  "userLabels": { "component": "rep-p" }
+}

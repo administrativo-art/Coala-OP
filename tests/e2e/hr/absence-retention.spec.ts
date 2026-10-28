@@ -58,7 +58,7 @@ test('custodiante decide retenção e confirma a exclusão definitiva separadame
   });
 
   await page.goto('/dashboard/dp/requests', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Ver retenção de documentos' }).click();
+  await page.getByRole('radio', { name: 'Pendências de documento' }).click();
   await expect(page.getByText('Selecione uma unidade para consultar a retenção.')).toBeVisible();
   await page.getByRole('combobox', { name: 'Unidade da retenção' }).click();
   await page.getByRole('option', { name: 'CD E2E' }).click();

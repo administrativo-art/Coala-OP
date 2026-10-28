@@ -26,6 +26,7 @@ src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx,active,dp-ti
 src/app/dashboard/dp/collaborators/page.tsx,active,people-access,
 src/app/dashboard/dp/documents/page.tsx,active,employee-documents,
 src/app/dashboard/dp/ferias/[userId]/page.tsx,active,vacations,
+src/app/dashboard/dp/fechamento/page.tsx,active,dp-time-recording,Fechamento mensal do ponto em página própria; saiu de Solicitações.
 src/app/dashboard/dp/ferias/page.tsx,active,vacations,
 src/app/dashboard/dp/page.tsx,active,dp-overview,
 src/app/dashboard/dp/schedules/[id]/page.tsx,active,dp-schedules,

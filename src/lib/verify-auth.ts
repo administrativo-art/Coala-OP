@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { requiresProfileCompliance } from '@/features/hr/profile-compliance-access.server';
 import { authAdmin, dbAdmin } from './firebase-admin';
+import { sessionVersionsMatch } from './session-version';
+import { AppError } from './observability/app-error';
 
 /**
  * Verifica o Firebase ID Token enviado no header Authorization: Bearer <token>.
@@ -19,6 +21,12 @@ export async function verifyAuthWithUser(
   const userSnap = await dbAdmin.collection('users').doc(decoded.uid).get();
   if (!userSnap.exists) throw new Error('Usuário não encontrado.');
   if (userSnap.get('isActive') === false) throw new Error('Conta inativa.');
+  if (!sessionVersionsMatch(decoded.sessionVersion, userSnap.get('sessionVersion'))) {
+    throw new AppError({
+      code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', reportable: false,
+      safeMessage: 'Sua sessão expirou. Entre novamente.',
+    });
+  }
   if (options.enforceProfileCompliance !== false) {
     if (requiresProfileCompliance(userSnap.data() ?? {}, req)) {
       throw new Error('Atualização cadastral obrigatória pendente.');

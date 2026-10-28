@@ -37,6 +37,10 @@ const DPSettingsOvertime = dynamic(
   () => import("@/components/dp/dp-settings-overtime").then((m) => m.DPSettingsOvertime),
   { ssr: false }
 );
+const FiscalExportsCard = dynamic(
+  () => import("@/features/dp/time-adjustments/fiscal-exports-card").then((m) => m.FiscalExportsCard),
+  { ssr: false }
+);
 const DPSettingsAbsences = dynamic(
   () => import("@/components/dp/dp-settings-absences").then((m) => m.DPSettingsAbsences),
   { ssr: false }
@@ -430,7 +434,7 @@ function DepartmentSubtabs({
 }
 
 export default function SettingsPage() {
-  const { permissions, isDefaultAdmin, user } = useAuth();
+  const { permissions, isDefaultAdmin, user, firebaseUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canManageGlobalTime = Boolean(
@@ -608,6 +612,13 @@ export default function SettingsPage() {
       content: <DPSettingsOvertime />,
     },
     {
+      value: "fiscal-exports",
+      label: "Exportação AFD e AEJ",
+      title: "Exportação AFD e AEJ",
+      description: "Gere os arquivos fiscais do ponto para a fiscalização, por estabelecimento e período.",
+      content: <FiscalExportsCard firebaseUser={firebaseUser} />,
+    },
+    {
       value: "absences",
       label: "Ausências",
       title: "Ausências",
@@ -696,6 +707,9 @@ export default function SettingsPage() {
     if (tab.value === "work-journeys" || tab.value === "overtime") {
       return canManageGlobalTime;
     }
+    if (tab.value === "fiscal-exports") {
+      return !!(isDefaultAdmin || permissions.dp?.settings?.manageTime);
+    }
     if (tab.value === "absences") {
       return canManageAbsences;
     }
@@ -734,9 +748,9 @@ export default function SettingsPage() {
       value: "journey",
       label: "Tempo",
       title: "Tempo",
-      description: "Configure jornadas, turnos, ausências, hora extra e calendários de trabalho.",
+      description: "Configure jornadas, turnos, ausências, hora extra e calendários de trabalho, e exporte os arquivos fiscais do ponto.",
       content: null,
-      children: pickPersonalTabs(["work-journeys", "shifts", "absences", "overtime", "calendars"]),
+      children: pickPersonalTabs(["work-journeys", "shifts", "absences", "overtime", "calendars", "fiscal-exports"]),
     },
     {
       value: "documents",

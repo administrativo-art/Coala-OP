@@ -138,10 +138,14 @@
       "safeAreaProfile": "coala-letterhead-v2"
     },
     "system-admission-lgpd-awareness-term": {
-      "sourcePath": "docs/modelos-documentos/admissionais/03-termo-lgpd-v2.docx",
-      "sourceHash": "70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265",
-      "pageCount": 9,
+      "sourcePath": "docs/modelos-documentos/admissionais/03-termo-lgpd-v5.docx",
+      "sourceHash": "0dd7f0309096dd7e7a938d8789fcb297c1a25b78f56f22ee135ae3be0edb2ba2",
+      "pageCount": 10,
       "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
         {
           "width": 595.3,
           "height": 841.89
@@ -190,15 +194,16 @@
         }
       ],
       "wordsPerPage": [
-        274,
-        323,
-        329,
-        298,
-        292,
+        296,
+        310,
+        334,
+        386,
+        321,
+        290,
+        268,
+        259,
         277,
-        263,
-        267,
-        187
+        162
       ],
       "anchors": [
         {
@@ -210,12 +215,28 @@
           "yMax": 115.97
         },
         {
-          "page": 9,
+          "page": 4,
+          "phrase": "3-A. Localização no registro de ponto e durante a jornada",
+          "xMin": 80.1,
+          "yMin": 167.42,
+          "xMax": 388.56,
+          "yMax": 183.28
+        },
+        {
+          "page": 5,
+          "phrase": "Ciência e fundamento",
+          "xMin": 113.91,
+          "yMin": 72.03,
+          "xMax": 218.96,
+          "yMax": 85.45
+        },
+        {
+          "page": 10,
           "phrase": "compreende que a assinatura registra ciência",
           "xMin": 102.27,
-          "yMin": 423.78,
+          "yMin": 370.08,
           "xMax": 304.51,
-          "yMax": 437.2
+          "yMax": 383.5
         }
       ],
       "safeAreaProfile": "coala-letterhead-v2"

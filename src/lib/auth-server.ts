@@ -79,7 +79,9 @@ export function buildPermissionSet(
   isDefaultAdmin: boolean
 ) {
   if (isDefaultAdmin) {
-    return clonePermissionSet(defaultAdminPermissions, "defaultAdminPermissions");
+    const permissions = clonePermissionSet(defaultAdminPermissions, "defaultAdminPermissions");
+    permissions.dp.timeRecording!.readLocation = profilePermissions?.dp?.timeRecording?.readLocation === true;
+    return permissions;
   }
 
   const merged = clonePermissionSet(defaultGuestPermissions, "defaultGuestPermissions");
@@ -139,9 +141,7 @@ async function buildServerUserContext(
   const profileId =
     typeof userData.profileId === "string" && userData.profileId
       ? userData.profileId
-      : typeof decoded.profileId === "string" && decoded.profileId
-        ? decoded.profileId
-        : null;
+      : null;
 
   let profilePermissions: Partial<PermissionSet> | undefined;
   let isProfileDefaultAdmin = false;
@@ -155,7 +155,10 @@ async function buildServerUserContext(
     }
   }
 
-  const isDefaultAdmin = isTokenDefaultAdmin || isProfileDefaultAdmin;
+  // O perfil atual é autoritativo. Um token emitido com perfil não pode recuperar
+  // permissões/administração quando sua atribuição foi removida do cadastro.
+  const tokenHadProfile = typeof decoded.profileId === "string" && Boolean(decoded.profileId);
+  const isDefaultAdmin = profileId ? isProfileDefaultAdmin : !tokenHadProfile && isTokenDefaultAdmin;
   const userDoc = {
     id: userSnap.id,
     ...(userData as Omit<User, "id">),

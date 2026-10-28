@@ -9,8 +9,9 @@ import org.junit.Test
 class TimeOfflinePreparationTest {
     private val auth = TestAuth()
     private val permit = OfflinePermit("permit", "installation", "key", "tee", 273, 1000,
-        "2026-10-27T12:00:00Z", "2026-10-27T12:00:00Z", "2026-10-28T00:00:00Z",
-        listOf(OfflinePermitUnit("unit", "Unidade", "America/Belem")), "pilot")
+        "2026-10-27T12:00:00Z", "2026-10-27T12:00:00Z", "2026-10-29T12:00:00Z",
+        listOf(OfflinePermitUnit("unit", "Unidade", "America/Belem")), "pilot", protocolVersion = 2,
+        preparationExpiresAt = "2026-10-28T12:00:00Z")
     private val options = TimeOptions("2026-10-27", true, true, listOf(ExecutionUnit("unit", "Unidade")),
         OfficialClock(true, "2026-10-27T12:00:00Z", "America/Belem"), mode = "pilot")
     private fun queue() = MemoryTimeOfflineQueue().also {

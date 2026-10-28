@@ -21,7 +21,7 @@ class AuthenticationInterceptor(private val origin: HttpUrl, private val viewAsU
             val targetUser = viewAsUserId()?.takeIf(String::isNotBlank)
             if (expectedOwner != null && targetUser != null && request.url.encodedPath.startsWith("/api/dp/time-recording/"))
                 throw AppFailure(ErrorCategory.CONFLICT, true, "O envio será retomado ao sair da visualização de outra pessoa.")
-            if (request.url.encodedPath == "/api/dp/time-recording/offline-permits" && credentials.attestation == null)
+            if (request.url.encodedPath in setOf("/api/dp/time-recording/offline-permits", "/api/dp/time-recording/offline-cycles") && credentials.attestation == null)
                 credentials.attestationFailure?.let { throw it }
             builder.header("Authorization", "Bearer ${credentials.token}")
             credentials.attestation?.let { builder.header("X-Coala-App-Attestation", it) }

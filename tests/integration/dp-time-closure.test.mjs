@@ -268,7 +268,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.deepEqual((await readClosingSummary(closer, competence, packageDeps)).overdue.map((item) => item.uid), [otherUserId]);
     await checkOverdueClosingPackages(workspaceId, packageDeps);
     assert.equal(notices.opened.length, 1);
-    assert.deepEqual([notices.opened[0].audience, notices.opened[0].category, notices.opened[0].path], ['dp.time-closure', 'dp.time-closing', '/dashboard/dp/requests']);
+    assert.deepEqual([notices.opened[0].audience, notices.opened[0].category, notices.opened[0].path], ['dp.time-closure', 'dp.time-closing', '/dashboard/dp/fechamento']);
     // Só a assinatura fecha a pessoa; não existe mais liberação administrativa sem assinatura.
     await otherPack.update({ status: 'signed', signedAt: '2026-10-20T13:00:00.000Z' });
     await checkOverdueClosingPackages(workspaceId, packageDeps);

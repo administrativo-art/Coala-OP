@@ -109,7 +109,7 @@ test('Pessoal organiza tempo sem quebrar o valor legado de deep link', () => {
   assert.match(page, /children: pickPersonalTabs\(\["roles", "organogram", "access-profiles", "profile-fields"\]\)/);
   assert.doesNotMatch(page, /value: "collaborator-profile",\s*label:/);
   assert.match(page, /requestedTab === "collaborator-profile"/);
-  assert.match(page, /children: pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars"\]\)/);
+  assert.match(page, /children: pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars", "fiscal-exports"\]\)/);
   assert.match(page, /children: pickPersonalTabs\(\["profile-compliance", "login-access", "privacy", "audit"\]\)/);
 });
 

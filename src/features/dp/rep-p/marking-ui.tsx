@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { StatusPill } from "@/components/ui/status-pill";
+import { cn } from "@/lib/utils";
 
 import { formatOfficialClock, officialClockOffsetMs } from "./official-clock";
 import type { RepPLocationCaptureState, RepPLocationPolicyForCollector, RepPMarkingPayload,
@@ -45,15 +46,19 @@ export function OfficialClockDisplay({ clock, tone = "light" }: { clock: RepPOff
   }, [clock]);
   if (!clock) return null;
   if (!clock.available) {
-    return <p className={tone === "dark" ? "text-sm font-semibold text-ds-caution-tile" : "text-sm font-semibold text-ds-warn"}>
-      Hora oficial indisponível: o registro de ponto está temporariamente bloqueado.</p>;
+    return (
+      <p className={tone === "dark" ? "max-w-[220px] text-ds-caution-tile" : "text-ds-warn"} role="status">
+        <strong className={cn("block font-ds-mono font-extrabold leading-none tabular-nums", tone === "dark" ? "text-[30px] text-ds-on-dark-muted" : "text-3xl")}>--:--:--</strong>
+        <span className="mt-1 block text-[11px] font-semibold">Hora Legal indisponível: o registro volta quando a hora oficial responder.</span>
+      </p>
+    );
   }
   if (tone === "dark") {
     return (
       <p aria-live="off">
         <strong className="block font-ds-mono text-[30px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-white">
           {formatOfficialClock(now + offset, clock.timeZone)}</strong>
-        <span className="mt-1 block text-[11px] text-ds-on-dark-muted">Hora oficial · {utcOffsetLabel(clock.timeZone)}</span>
+        <span className="mt-1 block text-[11px] text-ds-on-dark-muted">Hora Legal Brasileira · {utcOffsetLabel(clock.timeZone)}</span>
       </p>
     );
   }

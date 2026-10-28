@@ -5,7 +5,7 @@ import test from 'node:test';
 import { defaultAdminPermissions, defaultGuestPermissions } from '../../src/types/index';
 
 const page = readFileSync('src/features/dp/rep-p/my-time-recording-page.tsx', 'utf8');
-const dayPanel = readFileSync('src/features/dp/rep-p/day-list.tsx', 'utf8');
+const dayPanel = readFileSync('src/features/dp/rep-p/day-list.tsx', 'utf8') + readFileSync('src/features/dp/rep-p/day-detail.tsx', 'utf8');
 const route = readFileSync('src/app/api/dp/time-recording/employees/[employeeUid]/route.ts', 'utf8');
 const service = readFileSync('src/features/dp/rep-p/employee-month.server.ts', 'utf8');
 const access = readFileSync('src/features/dp/rep-p/employee-time-access.server.ts', 'utf8');
@@ -33,5 +33,5 @@ test('modo de conferência não oferece batida nem ações pessoais', () => {
   assert.match(page, /adjustDate && !readOnly && \(options\?\.mode === "official" \|\| options\?\.mode === "pilot"\)/);
   assert.match(dayPanel, /if \(readOnly \|\| day\.date > today\) return "hidden"/);
   assert.match(dayPanel, /markingMode === "official" \? "available"/);
-  assert.match(dayPanel, /day\.incidents\.includes\("missing"\) && !readOnly/);
+  assert.match(dayPanel, /incident === "missing" && !readOnly/);
 });

@@ -409,7 +409,7 @@ export async function checkOverdueClosingPackages(workspaceId: string, injected:
     await deps.notices.open({ workspaceId, category: 'dp.time-closing', dedupeKey: key, severity: 'warning', audience: 'dp.time-closure',
       title: `Fechamento de ${monthLabel(entry.competence)} não finalizado`,
       body: `${entry.count} ${entry.count === 1 ? 'fechamento individual está' : 'fechamentos individuais estão'} pendente${entry.count === 1 ? '' : 's'}: sem assinatura em 24 horas, recusado ou com falha no envio. O fechamento geral aguarda a assinatura de todos.`,
-      path: '/dashboard/dp/requests' });
+      path: '/dashboard/dp/fechamento' });
   }
   await deps.notices.resolve(workspaceId, [...overdueByClosure.keys()], false);
   return { checked: packs.size, overdueClosures: overdueByClosure.size };

@@ -24,8 +24,9 @@ import { isBrazilTimeZone, repPInstantMs, repPMarkingTimeZone } from './time-zon
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
 import { fiscalArtifactStore, persistFiscalArtifactPair,
   type FiscalArtifactStore, type PersistedFiscalArtifacts } from './fiscal-artifact-storage.server';
-import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS,
+import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS, REP_P_OFFLINE_PREPARATION_TTL_MS, REP_P_OFFLINE_CYCLE_TTL_MS,
   verifyRepPOfflineEvidence } from './offline';
+import { applyOfflineCycleAction, createOfflineCyclePermit, loadOfflineCycle, reconcileOnlineCycles, readOfflineCycleDto } from './offline-cycle.server';
 import { evaluateRepPLocation, repPLocationEvidenceDigest, repPLocationSummary,
   REP_P_LOCATION_RETENTION_DAYS, type RepPLocationAttempt, type RepPLocationPolicySnapshot } from './location';
 import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_EVIDENCE,
@@ -133,10 +134,12 @@ type OfflinePermitDocument = {
   keySecurity: 'tee' | 'strongbox'; bootCount: number; anchorElapsedRealtimeMs: number;
   anchorInstant: string; issuedAt: string; expiresAt: string; establishmentId: string;
   employerCnpj: string; units: Array<{ id: string; name: string; timeZone: string }>;
-  status: 'active' | 'revoked'; lastAcceptedSequence: number; lastAcceptedHash: string | null;
+  protocolVersion?: 2; preparationExpiresAt?: string; cycle?: import('./offline-cycle.server').OfflineCycleDto;
+  status: 'active' | 'revoked' | 'closed'; lastAcceptedSequence: number; lastAcceptedHash: string | null;
 };
 
 type PilotMarkingDocument = {
+  cycleId?: string;
   schemaVersion: 1; mode: 'pilot'; workspaceId: string; employeeId: string; requestDigest: string;
   markingId: string; receiptId: string; sequence: number; nsr: number; workDate: string; recordedDate: string;
   markedAt: string; recordedAt: string; employerUnitId: string; executionUnitId: string;
@@ -340,11 +343,18 @@ export async function provisionRepPReferenceData(input: {
 function offlinePermitDto(permit: OfflinePermitDocument) {
   return {
     scope: permit.scope ?? 'official',
+    ...(permit.protocolVersion === 2 ? { protocolVersion: 2, preparationExpiresAt: permit.preparationExpiresAt, ...(permit.cycle ? { cycle: permit.cycle } : {}) } : {}),
     permitId: permit.permitId, installationId: permit.installationId, deviceKeyId: permit.deviceKeyId,
     keySecurity: permit.keySecurity, bootCount: permit.bootCount,
     anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, anchorInstant: permit.anchorInstant,
     issuedAt: permit.issuedAt, expiresAt: permit.expiresAt, units: permit.units,
   };
+}
+
+async function replayOfflinePermitDto(db: Firestore, context: ServerUserContext, stored: OfflinePermitDocument) {
+  if (stored.protocolVersion !== 2) return offlinePermitDto(stored);
+  const cycle = await reconcileOnlineCycles(db, context, stored.scope ?? 'official');
+  return offlinePermitDto({ ...stored, ...(cycle?.permitId === stored.permitId ? { cycle } : {}) });
 }
 
 function assertOfflineDeviceKey(input: RepPOfflinePermitRequest) {
@@ -361,6 +371,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
   if (!deps.pilotEnabled || !markingAllowedForProfile(context) || !deps.pilotUserIds.has(context.decoded.uid)) {
     throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
   }
+  if (input.protocolVersion === 2) await reconcileOnlineCycles(deps.pilotDb, context, 'pilot');
   assertOfflineDeviceKey(input);
   const requestDigest = digest(['pilot-offline-permit', context.workspace_id, context.decoded.uid, input]);
   const permitId = `pilot_${digest(['offline-permit', context.workspace_id, context.decoded.uid, input.permitRequestId])}`;
@@ -372,7 +383,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
       || stored.employeeId !== context.decoded.uid || stored.requestDigest !== requestDigest) {
       throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Autorização de ensaio reutilizada com conteúdo diferente.', 'CONFLICT');
     }
-    return offlinePermitDto(stored);
+    return replayOfflinePermitDto(deps.pilotDb, context, stored);
   }
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
@@ -400,12 +411,15 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
     anchorElapsedRealtimeMs: input.anchorElapsedRealtimeMs, anchorInstant: issuedAt, issuedAt,
-    expiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PERMIT_TTL_MS).toISOString(),
+    ...(input.protocolVersion === 2 ? { protocolVersion: 2 as const,
+      preparationExpiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PREPARATION_TTL_MS).toISOString() } : {}),
+    expiresAt: new Date(reading.instant.getTime() + (input.protocolVersion === 2
+      ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : REP_P_OFFLINE_PERMIT_TTL_MS)).toISOString(),
     establishmentId: `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`,
     employerCnpj: reference.period.employer.cnpj, units, status: 'active', lastAcceptedSequence: 0,
     lastAcceptedHash: null,
   };
-  try { await permitRef.create({ ...permit, createdAt: Timestamp.now() }); }
+  try { return offlinePermitDto(await createOfflineCyclePermit(deps.pilotDb, permitRef, permit) as OfflinePermitDocument); }
   catch (cause) {
     const code = (cause as { code?: number | string } | null)?.code;
     if (code !== 6 && code !== 'already-exists' && !String((cause as Error | null)?.message).includes('ALREADY_EXISTS')) throw cause;
@@ -414,7 +428,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
       || stored.employeeId !== context.decoded.uid) {
       throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Não foi possível confirmar a autorização de ensaio.', 'CONFLICT');
     }
-    return offlinePermitDto(stored);
+    return replayOfflinePermitDto(deps.pilotDb, context, stored);
   }
   return offlinePermitDto(permit);
 }
@@ -430,6 +444,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   if (!markingAllowedForProfile(context) || !markingAllowedForOfficialUser(context, deps)) {
     throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
   }
+  if (input.protocolVersion === 2) await reconcileOnlineCycles(deps.repDb, context, 'official');
   assertOfflineDeviceKey(input);
 
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
@@ -440,7 +455,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
     const stored = existing.data() as OfflinePermitDocument;
     if (stored.workspaceId !== context.workspace_id || stored.employeeId !== context.decoded.uid
       || stored.requestDigest !== requestDigest) throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Autorização offline reutilizada com conteúdo diferente.', 'CONFLICT');
-    return offlinePermitDto(stored);
+    return replayOfflinePermitDto(deps.repDb, context, stored);
   }
 
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
@@ -473,11 +488,14 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
     anchorElapsedRealtimeMs: input.anchorElapsedRealtimeMs, anchorInstant: issuedAt, issuedAt,
-    expiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PERMIT_TTL_MS).toISOString(),
+    ...(input.protocolVersion === 2 ? { protocolVersion: 2 as const,
+      preparationExpiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PREPARATION_TTL_MS).toISOString() } : {}),
+    expiresAt: new Date(reading.instant.getTime() + (input.protocolVersion === 2
+      ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : REP_P_OFFLINE_PERMIT_TTL_MS)).toISOString(),
     establishmentId, employerCnpj: reference.period.employer.cnpj, units, status: 'active',
     lastAcceptedSequence: 0, lastAcceptedHash: null,
   };
-  try { await permitRef.create({ ...permit, createdAt: Timestamp.now() }); }
+  try { return offlinePermitDto(await createOfflineCyclePermit(deps.repDb, permitRef, permit) as OfflinePermitDocument); }
   catch (cause) {
     const code = (cause as { code?: number | string } | null)?.code;
     if (code !== 6 && code !== 'already-exists' && !String((cause as Error | null)?.message).includes('ALREADY_EXISTS')) throw cause;
@@ -486,7 +504,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
     if (!stored || stored.requestDigest !== requestDigest || stored.employeeId !== context.decoded.uid) {
       throw fail('REP_P_OFFLINE_PERMIT_CONFLICT', 'Não foi possível confirmar a autorização offline.', 'CONFLICT');
     }
-    return offlinePermitDto(stored);
+    return replayOfflinePermitDto(deps.repDb, context, stored);
   }
   return offlinePermitDto(permit);
 }
@@ -553,6 +571,7 @@ async function preparePilotOfflineMarking(context: ServerUserContext, input: Rep
   try {
     markedAt = deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
       anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+      maxElapsedMs: permit.protocolVersion === 2 ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : undefined,
       timeZone: permittedUnit.timeZone });
   } catch { throw fail('REP_P_PILOT_OFFLINE_TIME_INVALID', 'A hora preservada no aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
   if (evidence.markedAt !== markedAt || civilDateFromRepPTimestamp(markedAt) !== input.workDate
@@ -562,7 +581,7 @@ async function preparePilotOfflineMarking(context: ServerUserContext, input: Rep
   if (!verifyRepPOfflineEvidence({ scope: 'pilot', permitId: evidence.permitId, attemptId: input.attemptId,
     executionUnitId: input.executionUnitId, deviceKeyId: evidence.deviceKeyId,
     elapsedRealtimeMs: evidence.elapsedRealtimeMs, bootCount: evidence.bootCount,
-    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, markedAt,
+    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, cycle: evidence.cycle, markedAt,
     publicKeyBase64: permit.devicePublicKey, localHash: evidence.localHash, signature: evidence.signature })) {
     throw fail('REP_P_PILOT_OFFLINE_SIGNATURE_INVALID', 'A assinatura da marcação preservada é inválida.', 'DATA_INTEGRITY');
   }
@@ -586,8 +605,13 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       || existingData.employeeId !== context.decoded.uid || existingData.requestDigest !== requestDigest) {
       throw fail('REP_P_PILOT_ATTEMPT_CONFLICT', 'Tentativa de ensaio reutilizada com conteúdo diferente.', 'CONFLICT');
     }
+    const receipt = await issuePilotReceipt(deps, existingData);
     return { status: 'replayed' as const, marking: existingData, pilot: true as const,
-      location: storedLocationSummary(existingData.locationSummary), ...await issuePilotReceipt(deps, existingData) };
+      offlineCycle: input.offline ? await readOfflineCycleDto(deps.pilotDb, context, input.offline.cycle?.id) : await reconcileOnlineCyclesBestEffort(deps.pilotDb, context, 'pilot'),
+      location: storedLocationSummary(existingData.locationSummary), ...receipt };
+  }
+  if (!input.offline && input.onlineScope === 'pilot' && (deps.markingEnabled || !deps.pilotEnabled || !deps.pilotUserIds.has(context.decoded.uid))) {
+    throw fail('REP_P_PILOT_ONLINE_REPLAY_ONLY', 'Esta tentativa foi preparada no piloto. Confira o envio anterior; ela não será convertida em ponto oficial.', 'CONFLICT');
   }
   if (!repPPilotWorkDateAllowed(input.workDate, deps.officialStartDate)) {
     throw fail('REP_P_PILOT_CUTOVER_REACHED', 'O ensaio não aceita marcações na data de início do período oficial.', 'CONFLICT');
@@ -620,6 +644,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   if (!employeeName || !employerName || !unitName || !workLocation) {
     throw fail('REP_P_PILOT_IDENTITY_INCOMPLETE', 'Identificação da pessoa, empregador ou unidade incompleta.', 'DATA_INTEGRITY');
   }
+  if (input.offline?.cycle) await reconcileOnlineCycles(deps.pilotDb, context, 'pilot');
   const offline = input.offline ? await preparePilotOfflineMarking(context, input, deps) : null;
   if (offline && (offline.permit.employerCnpj !== employerCnpj
     || offline.permittedUnit.timeZone !== timeZone || offline.permit.establishmentId !== `pilot_${digest([context.workspace_id, employerCnpj])}`)) {
@@ -653,6 +678,9 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       }
       return { status: 'replayed' as const, marking: raced, locationEvidence: null };
     }
+    const cycle = offline ? await loadOfflineCycle(transaction, deps.pilotDb, context, offline.permit,
+      offline.evidence, input.attemptId, reading.instant.getTime())
+      : null;
     if (!adjustments.empty || dayGuard.get('domain') === 'adjustment') {
       throw fail('REP_P_PILOT_DAY_ADJUSTMENT_FORBIDDEN',
         'Este dia já possui solicitação formal de ajuste e não pode receber batida de ensaio.', 'CONFLICT');
@@ -691,7 +719,8 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       employerUnitId: reference.period.employerUnitId,
       executionUnitId: input.executionUnitId, establishmentId, collectorId, hash, employeeName, unitName,
       workLocation, status: 'pending', snapshot, locationSummary: null, ...organizationalClassification };
-    transaction.create(markingRef, { ...marking, employmentHistoryId: reference.historyId,
+    const cycleInfo = cycle?.commit(receiptId);
+    transaction.create(markingRef, { ...marking, ...(offline ? {} : { cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId } }), attemptId: input.attemptId, employmentHistoryId: reference.historyId,
       employmentRevision: reference.revision, trustedClock: { source: reading.source, assurance: reading.assurance,
         observedOffsetMs: reading.observedOffsetMs, verifiedAt: reading.verifiedAt.toISOString(),
         serverInstant: reading.instant.toISOString(), attestationId: reading.attestationId,
@@ -702,7 +731,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
         sequence: offline.evidence.sequence, previousLocalHash: offline.evidence.previousLocalHash,
         localHash: offline.evidence.localHash, signature: offline.evidence.signature,
         elapsedRealtimeMs: offline.evidence.elapsedRealtimeMs, permitIssuedAt: offline.permit.issuedAt,
-        permitExpiresAt: offline.permit.expiresAt } } : {}),
+        permitExpiresAt: offline.permit.expiresAt, ...(offline.evidence.cycle ? { cycle: offline.evidence.cycle } : {}) } } : {}),
       createdAt: Timestamp.now() });
     if (input.declaredPurpose) {
       const classificationEventRef = deps.pilotDb.collection(REP_P_PILOT_CLASSIFICATION_EVENTS)
@@ -718,11 +747,39 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       employeeId: context.decoded.uid, workDate: input.workDate, updatedAt: Timestamp.now() }, { merge: true });
     if (offline) transaction.update(offline.permitRef, { lastAcceptedSequence: offline.evidence.sequence,
       lastAcceptedHash: offline.evidence.localHash, lastAcceptedAt: Timestamp.now() });
-    return { status: 'recorded' as const, marking, locationEvidence: null };
+    return { status: 'recorded' as const, marking, offlineCycle: cycleInfo ?? null, locationEvidence: null };
   });
   if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
-  return { status: committed.status, marking: committed.marking, pilot: true as const,
-    location: storedLocationSummary(committed.marking.locationSummary), ...await issuePilotReceipt(deps, committed.marking) };
+  const receipt = await issuePilotReceipt(deps, committed.marking);
+  return { status: committed.status, marking: committed.marking, offlineCycle: input.offline ? ('offlineCycle' in committed ? committed.offlineCycle : undefined) : await reconcileOnlineCyclesBestEffort(deps.pilotDb, context, 'pilot'), pilot: true as const,
+    location: storedLocationSummary(committed.marking.locationSummary), ...receipt };
+}
+
+async function reconcileOnlineCyclesBestEffort(db: Firestore, context: ServerUserContext, scope: 'official' | 'pilot') {
+  try { return await reconcileOnlineCycles(db, context, scope, 2); }
+  catch { return undefined; } // Original and receipt survive; offline remains blocked until reconciliation.
+}
+
+async function readOwnOfficialOnlineReplay(context: ServerUserContext, input: RepPMarkingRequest, deps: Dependencies) {
+  const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
+  const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
+  const existingAttempt = await attemptRef.get();
+  if (existingAttempt.exists) {
+    if (existingAttempt.get('workspaceId') !== context.workspace_id
+      || existingAttempt.get('employeeId') !== context.decoded.uid
+      || existingAttempt.get('requestDigest') !== requestDigest) {
+      throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
+    }
+    const prior = existingAttempt.get('marking') as RepPMarkingCandidate;
+    if (!verifyRepPMarkingCandidate(prior)) {
+      throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
+    }
+    const receipt = await settleRepPReceipt(deps, prior);
+    return { status: 'replayed' as const, marking: prior,
+      offlineCycle: await reconcileOnlineCyclesBestEffort(deps.repDb, context, 'official'),
+      location: storedLocationSummary(existingAttempt.get('locationSummary')), ...receipt };
+  }
+  return null;
 }
 
 export async function recordOwnRepPMarking(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
@@ -739,6 +796,16 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     }
     return recordOwnPilotMarking(context, input, deps);
   }
+  if (input.onlineScope === 'pilot') {
+    if (!markingAllowedForProfile(context)) throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O perfil não permite registro de ponto.', 'AUTHORIZATION');
+    return recordOwnPilotMarking(context, input, deps);
+  }
+  if (input.onlineScope === 'official' && !deps.markingEnabled) {
+    if (!markingAllowedForProfile(context)) throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O perfil não permite registro de ponto.', 'AUTHORIZATION');
+    const replay = await readOwnOfficialOnlineReplay(context, input, deps);
+    if (replay) return replay;
+    throw fail('REP_P_MARKING_DISABLED', 'A marcação oficial ainda não está habilitada.', 'AUTHORIZATION');
+  }
   if (!deps.markingEnabled && !deps.pilotEnabled) {
     throw new AppError({ code: 'REP_P_MARKING_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
@@ -753,20 +820,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (input.offline) return recordOwnOfflineRepPMarking(context, input, deps);
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
-  const existingAttempt = await attemptRef.get();
-  if (existingAttempt.exists) {
-    if (existingAttempt.get('workspaceId') !== context.workspace_id
-      || existingAttempt.get('employeeId') !== context.decoded.uid
-      || existingAttempt.get('requestDigest') !== requestDigest) {
-      throw fail('REP_P_ATTEMPT_CONFLICT', 'Tentativa reutilizada com conteúdo diferente.', 'CONFLICT');
-    }
-    const prior = existingAttempt.get('marking') as RepPMarkingCandidate;
-    if (!verifyRepPMarkingCandidate(prior)) {
-      throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa persistida inconsistente.', 'DATA_INTEGRITY');
-    }
-    return { status: 'replayed' as const, marking: prior,
-      location: storedLocationSummary(existingAttempt.get('locationSummary')), ...await settleRepPReceipt(deps, prior) };
-  }
+  const replay = await readOwnOfficialOnlineReplay(context, input, deps);
+  if (replay) return replay;
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há vínculo histórico válido para a data da marcação.', 'DATA_INTEGRITY');
@@ -852,7 +907,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
         quorum: reading.quorum, observations: reading.observations }, createdAt: Timestamp.now() });
     transaction.create(attemptRef, { workspaceId: context.workspace_id, employeeId: context.decoded.uid,
-      requestDigest, marking: prepared.marking, locationSummary: location.summary, createdAt: Timestamp.now() });
+      requestDigest, marking: prepared.marking, cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId: eventRef.id }, locationSummary: location.summary, createdAt: Timestamp.now() });
     transaction.update(establishmentRef, { lastNsr: prepared.marking.nsr, lastType7Hash: prepared.marking.hash,
       lastType7Nsr: prepared.marking.nsr });
     // O comprovante nasce pendente na mesma unidade atômica: a batida nunca depende da assinatura,
@@ -881,8 +936,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       } : null };
   });
   if (committed.locationEvidence) await persistLocationEvidenceBestEffort(deps, committed.locationEvidence);
-  return { status: committed.status, marking: committed.marking, location: committed.location,
-    ...await settleRepPReceipt(deps, committed.marking) };
+  const receipt = await settleRepPReceipt(deps, committed.marking);
+  return { status: committed.status, marking: committed.marking, offlineCycle: await reconcileOnlineCyclesBestEffort(deps.repDb, context, 'official'), location: committed.location, ...receipt };
 }
 
 /** Sincroniza uma marcação preservada pelo Coala Go; o NSR só nasce nesta transação no servidor. */
@@ -906,9 +961,11 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       throw fail('REP_P_ATTEMPT_CORRUPT', 'Tentativa offline persistida inconsistente.', 'DATA_INTEGRITY');
     }
     return { status: 'replayed' as const, marking: prior,
+      offlineCycle: await readOfflineCycleDto(deps.repDb, context, evidence.cycle?.id),
       location: storedLocationSummary(existingAttempt.get('locationSummary')), ...await settleRepPReceipt(deps, prior) };
   }
 
+  if (evidence.cycle) await reconcileOnlineCycles(deps.repDb, context, 'official');
   const permitRef = deps.repDb.collection(OFFLINE_PERMITS).doc(evidence.permitId);
   const permitSnapshot = await permitRef.get();
   const permit = permitSnapshot.data() as OfflinePermitDocument | undefined;
@@ -924,6 +981,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
   try {
     expectedMarkedAt = deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
       anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+      maxElapsedMs: permit.protocolVersion === 2 ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : undefined,
       timeZone: permittedUnit.timeZone });
   } catch { throw fail('REP_P_OFFLINE_TIME_INVALID', 'A hora preservada no aparelho não pôde ser validada.', 'DATA_INTEGRITY'); }
   if (evidence.markedAt !== expectedMarkedAt || civilDateFromRepPTimestamp(expectedMarkedAt) !== input.workDate
@@ -933,7 +991,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
   if (!verifyRepPOfflineEvidence({ scope: 'official', permitId: evidence.permitId, attemptId: input.attemptId,
     executionUnitId: input.executionUnitId, deviceKeyId: evidence.deviceKeyId,
     elapsedRealtimeMs: evidence.elapsedRealtimeMs, bootCount: evidence.bootCount,
-    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash,
+    sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, cycle: evidence.cycle,
     markedAt: evidence.markedAt, publicKeyBase64: permit.devicePublicKey,
     localHash: evidence.localHash, signature: evidence.signature })) {
     throw fail('REP_P_OFFLINE_SIGNATURE_INVALID', 'A assinatura da marcação preservada no aparelho é inválida.', 'DATA_INTEGRITY');
@@ -1008,6 +1066,8 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       || evidence.previousLocalHash !== currentPermitData.lastAcceptedHash) {
       throw fail('REP_P_OFFLINE_SEQUENCE_INVALID', 'A sequência das marcações offline está incompleta ou fora de ordem.', 'CONFLICT');
     }
+    const cycle = await loadOfflineCycle(transaction, deps.repDb, context, permit, evidence,
+      input.attemptId, reading.instant.getTime());
     const prepared = prepareRepPMarking({ attemptId: input.attemptId, workspaceId: context.workspace_id,
       employeeId: context.decoded.uid, employeeCpf: identity.cpf, employmentHistoryId: reference.historyId,
       employmentRevision: reference.revision, employerUnitId: reference.period.employerUnitId,
@@ -1027,12 +1087,13 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       markedAt: new Date(expectedMarkedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')),
       workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
+    cycle?.commit(eventRef.id);
     transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       offlineEvidence: { permitId: permit.permitId, installationId: permit.installationId,
         deviceKeyId: evidence.deviceKeyId, keySecurity: permit.keySecurity, bootCount: evidence.bootCount,
         sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, localHash: evidence.localHash,
         signature: evidence.signature, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
-        permitIssuedAt: permit.issuedAt, permitExpiresAt: permit.expiresAt },
+        permitIssuedAt: permit.issuedAt, permitExpiresAt: permit.expiresAt, ...(evidence.cycle ? { cycle: evidence.cycle } : {}) },
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
         verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
@@ -1681,4 +1742,12 @@ export async function repPEstablishmentForEmployer(workspaceId: string, employer
   const id = establishmentKey(workspaceId, employerCnpj);
   const data = (await deps.repDb.collection(ESTABLISHMENTS).doc(id).get()).data();
   return { establishmentId: id, timeZone: typeof data?.timeZone === 'string' ? data.timeZone : null };
+}
+
+/** Owner-only auxiliary state; failure cannot undo an already committed online marking. */
+export async function applyOwnRepPOfflineCycleAction(context: ServerUserContext, raw: unknown,
+  injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  return applyOfflineCycleAction(context, raw, { repDb: deps.repDb, pilotDb: deps.pilotDb,
+    clock: { async read() { const reading = await deps.clock.read(); assertTrustedRepPClockReading(reading); return reading; } } });
 }

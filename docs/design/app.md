@@ -306,6 +306,7 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 
 - **`Field`:** campo com rótulo flutuante, raio de 12 dp, fundo `soft`. Teclado decimal quando o valor é número.
 - **`LabeledInput`:** rótulo em negrito acima do campo, uma linha; a borda pode assumir uma cor de alerta.
+- **`LabeledTimeInput`:** usado em todo campo de horário do app (inclusão e correção no ajuste de ponto; "Das"/"Até" da ausência por hora). Mesma aparência, com teclado numérico e separador automático de horas e minutos (`1350` → `13:50`). O separador é visual para permitir apagar e posicionar o cursor entre os dígitos; o formulário recebe `HH:mm`. Não corrige silenciosamente horários inválidos nem completa a hora com zero (decisão do programador, 27/10/2026): abaixo do campo fica o guia "Use 4 dígitos, com zero: 0840 = 08:40" (`TIME_INPUT_HINT`).
 - **`QuantityField`:** campo decimal entre os passos **−** e **+** de 48 dp, para uso com uma mão. O **−** desabilita em zero; zero pode aparecer como vazio.
 - **`DateField`:** abre o calendário do Material; mostra a data como dd/mm/aaaa e envia AAAA-MM-DD. Datas opcionais têm o botão "Sem data".
 - **Na entrada:** campos sobre o escuro, com borda e rótulo `pink` em foco e fundo `onDark` a 6%.
@@ -433,3 +434,7 @@ No Ponto sem internet, dados ainda não consultados aparecem como indisponíveis
 - Os trechos marcados "Como está hoje" não passaram por decisão de design. Se um deles for contestado, o código atual não serve de argumento.
 - O protótipo `Coala One App - Prototipo` não foi reaberto para este levantamento; diferenças entre ele e o app não estão listadas aqui.
 - Os pontos fora do padrão de [Cores](#cores) (hex solto) e de [Ícones de interface](#ícones-de-interface) (caracteres como ícone) seguem abertas.
+
+### Ciclo de contingência v2 na candidata local
+
+Preparo e renovação continuam automáticos e invisíveis como operação técnica:24horas para iniciar e24horas do primeiro registro. Encerrar ciclo só informa conclusão autoritativa depois da confirmação servidor e do envio de pendências; a visualização de cliente legado é identificada como local. O próximo preparo é tentado automaticamente, sem botão de autorização. Batida local confirmada no armazenamento reabre a visualização do novo ciclo, mantendo separadas confirmação local e confirmação fiscal. O [guia REP](../engineering/flows/dp-time-recording.md) descreve os limites e a recuperação; sem mudança de layout ou componentes visuais.

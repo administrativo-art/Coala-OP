@@ -50,7 +50,7 @@ test('separa decisão de aplicação e reconcilia preparação/ativação com de
   });
 
   await page.goto('/dashboard/dp/requests', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Ver pedidos da equipe' }).click();
+  await page.getByRole('radio', { name: 'Acompanhamento' }).click();
   await page.getByRole('button', { name: /Titular operacional E2E.*Ausência operacional E2E/ }).click();
   const panel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Ausência operacional E2E' }) });
   await expect(panel.getByText('Preparação em andamento')).toBeVisible();

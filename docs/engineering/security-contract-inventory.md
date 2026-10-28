@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **503**
-- Totalmente contratados: **158**
+- Arquivos de rota: **507**
+- Totalmente contratados: **162**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -83,6 +83,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/templates/[id]/text` | GET | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/[id]/text/route.ts) |
 | `/api/documents/templates/[id]/workflow` | PATCH | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/[id]/workflow/route.ts) |
 | `/api/dp/absence-availability/[requestId]/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts) |
+| `/api/dp/absence-coverage/[requestId]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-coverage/[requestId]/route.ts](../../src/app/api/dp/absence-coverage/[requestId]/route.ts) |
+| `/api/dp/absence-coverage/[requestId]/candidates` | GET ✓ | `CONTRACTED` | [src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts](../../src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts) |
 | `/api/dp/absence-operational/[requestId]/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts) |
 | `/api/dp/absence-retention` | GET ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/route.ts](../../src/app/api/dp/absence-retention/route.ts) |
 | `/api/dp/absence-retention/[caseId]/decision` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/[caseId]/decision/route.ts](../../src/app/api/dp/absence-retention/[caseId]/decision/route.ts) |
@@ -119,12 +121,14 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/employees/[employeeUid]` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/[employeeUid]/route.ts) |
 | `/api/dp/time-recording/fiscal-options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) |
 | `/api/dp/time-recording/journey-location` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) |
+| `/api/dp/time-recording/location-access` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-access/route.ts](../../src/app/api/dp/time-recording/location-access/route.ts) |
 | `/api/dp/time-recording/location-policies/[unitId]` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-policies/[unitId]/route.ts](../../src/app/api/dp/time-recording/location-policies/[unitId]/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
 | `/api/dp/time-recording/markings/[receiptId]/classification` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts](../../src/app/api/dp/time-recording/markings/[receiptId]/classification/route.ts) |
 | `/api/dp/time-recording/mirrors` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) |
 | `/api/dp/time-recording/mirrors/pdf` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) |
 | `/api/dp/time-recording/month` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) |
+| `/api/dp/time-recording/offline-cycles` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-cycles/route.ts](../../src/app/api/dp/time-recording/offline-cycles/route.ts) |
 | `/api/dp/time-recording/offline-permits` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-permits/route.ts](../../src/app/api/dp/time-recording/offline-permits/route.ts) |
 | `/api/dp/time-recording/options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) |
 | `/api/dp/time-recording/pending-receipts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) |
