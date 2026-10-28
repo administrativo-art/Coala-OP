@@ -188,7 +188,7 @@ O painel Localização aparece na visão pessoal e na visão administrativa some
 
 A [política interna](../../rep-p/privacidade/politica-interna-localizacao.md), a [comunicação para atuais colaboradores](../../rep-p/privacidade/comunicacao-colaboradores-atuais.md) e o [RIPD preparatório](../../rep-p/privacidade/ripd-localizacao.md) estão em minuta, com atendimento interno pelo RH. Não são aprovações jurídicas nem modelos publicados para assinatura. O termo v5 permanece inalterado.
 
-A [conferência da monitoração publicada](../../rep-p/homologacao/monitoracao-publicada.md) distingue a sonda200 dos recursos ainda ausentes e contém configuração proposta e roteiro de ensaio sem ativar coleta fiscal. A vinculação do segredo foi acrescentada ao YAML local; nenhuma implantação ocorreu nesta etapa.
+A [conferência da monitoração publicada](../../rep-p/homologacao/monitoracao-publicada.md) distingue a sonda200 dos recursos ainda ausentes e contém configuração proposta e roteiro de ensaio sem ativar coleta fiscal. O segredo de relay ainda não existe no projeto; a referência foi removida do YAML para manter a monitoração desligada até a criação e concessão oficiais. Nenhuma implantação do relay ocorreu nesta etapa.
 
 Preflight: até21leituras/página padrão (máximo51) e uma escrita de auditoria, sob demanda. Cenário de10consultas/h×5pessoas×8h×22dias:184.800leituras/mês e8.800escritas, além da autenticação. Sem alteração de polling/listeners. A infraestrutura de produção deve conferir IAM para o runtime escrever a auditoria sem ampliar acesso de clientes.
 
