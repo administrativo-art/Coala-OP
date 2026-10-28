@@ -20,6 +20,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useMonthlySchedule } from '@/hooks/use-monthly-schedule';
 import { useToast } from '@/hooks/use-toast';
+import { isWorkforceEmploymentRelationship } from '@/lib/hr/employment-relationship';
 
 interface BulkEditScheduleModalProps {
   open: boolean;
@@ -62,8 +63,8 @@ export function BulkEditScheduleModal({ open, onOpenChange, selectedKeys, onConf
   
   const { kioskEmployees, otherEmployees } = useMemo(() => {
     if (!users || !kioskId) return { kioskEmployees: [], otherEmployees: [] };
-    const kioskEmp = users.filter(u => u.operacional && u.assignedKioskIds.includes(kioskId!));
-    const otherEmp = users.filter(u => u.operacional && !u.assignedKioskIds.includes(kioskId!));
+    const kioskEmp = users.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType) && u.assignedKioskIds.includes(kioskId!));
+    const otherEmp = users.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType) && !u.assignedKioskIds.includes(kioskId!));
     return { kioskEmployees: kioskEmp, otherEmployees: otherEmp };
   }, [users, kioskId]);
 

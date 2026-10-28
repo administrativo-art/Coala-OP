@@ -43,12 +43,13 @@ test("a edição completa segue o padrão de drawer com abas e ajuda explicativa
   assert.match(source, /title="Cargo e função"/);
   assert.match(source, /title="Jornada e datas"/);
   assert.match(source, /title="Unidades"/);
-  assert.match(source, /title="Comportamento no sistema"/);
-  assert.match(source, /type CollaboratorEditTab = 'identity' \| 'journey' \| 'units' \| 'access'/);
+  assert.doesNotMatch(source, /title="Comportamento no sistema"/);
+  assert.match(source, /type CollaboratorEditTab = 'identity' \| 'journey' \| 'units';/);
   assert.doesNotMatch(source, /\{ id: 'system', label: 'Sistema' \}/);
   assert.match(source, /shiftDefinitionId: 'journey'/);
   assert.match(source, /assignedKioskIds: 'units'/);
-  assert.match(source, /operacional: 'access'/);
+  assert.match(source, /profileId: 'journey'/);
+  assert.doesNotMatch(source, /name="operacional"|name="participatesInGoals"/);
   assert.match(source, /isDrawer \? 'bottom-0 mt-auto' : 'bottom-4'/);
   assert.match(source, /<InfoPopover/);
 });

@@ -1287,10 +1287,6 @@ function EmployeeProfileFields({
   const [visibilityMessage, setVisibilityMessage] = useState<string | null>(null);
   const [systemActionSaving, setSystemActionSaving] = useState<string | null>(null);
   const [systemActionMessage, setSystemActionMessage] = useState<string | null>(null);
-  const [systemFlags, setSystemFlags] = useState({
-    operacional: user.operacional === true,
-    participatesInGoals: user.participatesInGoals === true,
-  });
   const [pdvAccessOverride, setPdvAccessOverride] = useState<UserPdvAccess[] | null>(null);
   const [pdvEditorAccessId, setPdvEditorAccessId] = useState<string | null>(null);
   const [pdvUnitId, setPdvUnitId] = useState("");
@@ -1403,31 +1399,6 @@ function EmployeeProfileFields({
   const pdvAccesses = (pdvAccessOverride ?? (user.pdvAccesses?.length ? user.pdvAccesses : legacyPdvAccess))
     .filter((access) => access.status === "active");
   const pdvUnits = units.filter((unit) => !unit.isArchived && Boolean(unit.pdvFilialId));
-
-  async function updateSystemFlag(field: "operacional" | "participatesInGoals", value: boolean) {
-    if (!canManageFieldVisibility || systemActionSaving) return;
-    setSystemActionSaving(field);
-    setSystemActionMessage(null);
-    try {
-      await onUpdateUser({ ...user, [field]: value });
-      setSystemFlags((current) => ({ ...current, [field]: value }));
-      if (firebaseUser) {
-        await createAuditLog(firebaseUser, {
-          module: "dp.collaborators",
-          action: field === "operacional" ? "operational_status_updated" : "goals_participation_updated",
-          targetType: "user",
-          targetId: user.id,
-          targetName: user.username,
-          metadata: { value },
-        }).catch(() => undefined);
-      }
-      setSystemActionMessage("Configuração do Coala One atualizada.");
-    } catch (error) {
-      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao atualizar a configuração.");
-    } finally {
-      setSystemActionSaving(null);
-    }
-  }
 
   async function openPdvEditor(access: UserPdvAccess) {
     if (!firebaseUser || !canManageFieldVisibility) return;
@@ -1621,8 +1592,6 @@ function EmployeeProfileFields({
       SYSTEM_FIELD_KEYS.loginPdv,
       SYSTEM_FIELD_KEYS.loginCoalaOne,
       SYSTEM_FIELD_KEYS.accessProfile,
-      SYSTEM_FIELD_KEYS.operational,
-      SYSTEM_FIELD_KEYS.goals,
       SYSTEM_FIELD_KEYS.functions,
     ]);
     return {
@@ -1667,16 +1636,6 @@ function EmployeeProfileFields({
       key: SYSTEM_FIELD_KEYS.loginCoalaOne,
       value: user.email || "-",
       hasValue: Boolean(user.email),
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.operational,
-      value: systemFlags.operacional ? "Sim" : "Não",
-      hasValue: true,
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.goals,
-      value: systemFlags.participatesInGoals ? "Participa" : "Não participa",
-      hasValue: true,
     },
     {
       key: SYSTEM_FIELD_KEYS.functions,
@@ -1769,11 +1728,9 @@ function EmployeeProfileFields({
     {
       id: "coala",
       title: "Coala One",
-      description: "Conta interna, permissões e participação operacional.",
+      description: "Conta interna e funções no sistema.",
       keys: [
         SYSTEM_FIELD_KEYS.loginCoalaOne,
-        SYSTEM_FIELD_KEYS.operational,
-        SYSTEM_FIELD_KEYS.goals,
         SYSTEM_FIELD_KEYS.functions,
       ],
     },
@@ -1848,11 +1805,6 @@ function EmployeeProfileFields({
   function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly, fixedVisibility }: EmployeeProfileFieldRow) {
     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
     const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
-    const managedFlag = key === SYSTEM_FIELD_KEYS.operational
-      ? { field: "operacional" as const, active: systemFlags.operacional }
-      : key === SYSTEM_FIELD_KEYS.goals
-        ? { field: "participatesInGoals" as const, active: systemFlags.participatesInGoals }
-        : null;
     return (
       <div key={key} className="rounded-xl border border-ds-divider bg-ds-input p-3">
         <div className="flex items-start justify-between gap-2">
@@ -1892,23 +1844,6 @@ function EmployeeProfileFields({
             ) : null}
           </div>
         </div>
-        {managedFlag && canManageFieldVisibility ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={managedFlag.active}
-            disabled={Boolean(systemActionSaving)}
-            onClick={() => void updateSystemFlag(managedFlag.field, !managedFlag.active)}
-            className="mt-3 flex w-full items-center justify-between gap-3 border-t border-ds-divider pt-3 text-left disabled:opacity-60"
-          >
-            <span className="text-[10px] font-black text-ds-ink-muted">
-              {managedFlag.active ? "Ativo" : "Inativo"}
-            </span>
-            <span className={`h-6 w-11 rounded-full p-1 transition ${managedFlag.active ? "bg-ds-accent" : "bg-ds-disabled"}`}>
-              <span className={`block h-4 w-4 rounded-full bg-white transition ${managedFlag.active ? "translate-x-5" : ""}`} />
-            </span>
-          </button>
-        ) : null}
       </div>
     );
   }

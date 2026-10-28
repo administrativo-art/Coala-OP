@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Separator } from './ui/separator';
+import { isWorkforceEmploymentRelationship } from '@/lib/hr/employment-relationship';
 
 
 interface ScheduleTableViewProps {
@@ -128,7 +129,7 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
                     const manualFolga = (lookupShift(daySchedule, kiosk, 'Folga') as string || '').split(' + ').filter(Boolean);
                     const todaysWorkers = todaysWorkersMap.get(dayISO) || new Set();
                     const autoFolgas = users
-                        .filter(u => u.operacional && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
+                        .filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType) && u.assignedKioskIds.includes(kiosk.id) && !todaysWorkers.has(u.username))
                         .map(u => u.username);
                     
                     const combinedFolgas = [...new Set([...manualFolga, ...autoFolgas])].join(' + ');
