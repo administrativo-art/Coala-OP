@@ -7,6 +7,7 @@ import { Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot } from 'fi
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import { usernameSearchVariants } from '@/lib/username-search';
@@ -17,7 +18,9 @@ import {
   type DPJourneyValidationShift,
   type DPJourneyValidationShiftDefinition,
 } from '@/features/dp/journey-validation/core';
+import { readPersonAgendaVersion } from '@/features/dp/shifts/agenda-clock.server';
 import { saveWorkShift } from '@/features/dp/shifts/service.server';
+import { CLOSURES, closureKey } from '@/features/dp/time-adjustments/service.server';
 
 import { operationalDayRefs, shiftOccupancySlices } from '../operational/occupancy-guard.server';
 import {
@@ -398,6 +401,17 @@ function coverageShiftId(displacedId: string) {
   return `absence-coverage-${displacedId.slice(0, 40)}`;
 }
 
+/**
+ * Mês fechado pelo DP não recebe turno de cobertura: mudaria a escala de um espelho já entregue.
+ * O fechamento fica no banco do RH, então a leitura é feita antes da gravação (mesmo padrão das ausências).
+ */
+export async function assertCoverageCompetenceOpen(workspaceId: string, date: string) {
+  const closure = await hrDbAdmin.collection(CLOSURES).doc(closureKey(workspaceId, date)).get();
+  if (closure.exists && closure.get('status') === 'closed') {
+    throw fail('PTRP_COMPETENCE_CLOSED', 'O mês deste turno já foi fechado pelo DP. Peça a reabertura para definir a cobertura.');
+  }
+}
+
 function operationHash(input: AbsenceCoverageDecisionInput) {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
 }
@@ -435,6 +449,9 @@ export async function decideAbsenceCoverage(actor: ServerUserContext, requestId:
       throw fail('DP_ABSENCE_COVERAGE_SHIFT_CONFLICT', 'Já existe outra cobertura gravada para este turno.');
     }
     if (!existing.exists) {
+      await assertCoverageCompetenceOpen(actor.workspace_id, target.date);
+      // Lida antes da conferência: se outra gravação mexer na agenda da pessoa até o turno ser gravado, a gravação recusa.
+      const agendaVersion = await readPersonAgendaVersion(actor.workspace_id, substitute.id);
       const eligibility = (await evaluateCandidates(actor.workspace_id, target, [substitute])).get(substitute.id)!;
       if (!eligibility.eligible) throw fail('DP_ABSENCE_COVERAGE_NOT_ELIGIBLE', eligibility.summary, 'EXPECTED_BUSINESS');
       await saveWorkShift({
@@ -443,6 +460,7 @@ export async function decideAbsenceCoverage(actor: ServerUserContext, requestId:
         shiftId,
         mode: 'create',
         requestId: input.operationId,
+        expectedAgendaVersion: agendaVersion,
         input: {
           userId: substitute.id,
           unitId: target.unitId,
