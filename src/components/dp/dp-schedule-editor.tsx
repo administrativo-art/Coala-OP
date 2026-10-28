@@ -104,6 +104,7 @@ import {
 import { DPBulkShiftEditPanel } from '@/components/dp/dp-bulk-shift-edit-dialog';
 import { DPBulkShiftCreatePanel } from '@/components/dp/dp-bulk-shift-create-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
+import { isWorkforceEmploymentRelationship } from '@/lib/hr/employment-relationship';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ function ShiftDialog({
 
   // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
   const operationalUsers = (() => {
-    const all = activeUsers.filter(u => u.operacional === true);
+    const all = activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType));
     if (!activeUnitIdForDefs) return all;
     return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
   })();
@@ -1715,7 +1716,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   }, [shiftDefinitions]);
 
   const operationalUsers = useMemo(() =>
-    activeUsers.filter(u => u.operacional === true),
+    activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType)),
     [activeUsers]
   );
   const usersOfUnit = useCallback((unitId: string | undefined) => {

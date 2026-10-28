@@ -933,7 +933,9 @@ export type User = {
   avatarUrl?: string;
   color?: string;              // hex color for avatar/schedule display
   // Operacional (PDV)
+  /** @deprecated Legado. Escala, ponto e férias usam o vínculo (`employmentRelationshipType`); não ler nem gravar. */
   operacional?: boolean;
+  /** @deprecated Legado. Metas valem para qualquer pessoa ativa; não ler nem gravar. */
   participatesInGoals?: boolean;
   pdvOperatorIds?: { [kioskId: string]: number };
   pdvAccessProfileId?: string;
@@ -1346,7 +1348,9 @@ export type OnboardingDocument = OnboardingDocumentTemplate & {
 };
 
 export type OnboardingFinalizationSettings = {
+  /** @deprecated Legado; a tela não envia mais. */
   operational?: boolean;
+  /** @deprecated Legado; a tela não envia mais. */
   participatesInGoals?: boolean;
   loginRestrictionEnabled?: boolean;
   needsTransportVoucher?: boolean;

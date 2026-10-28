@@ -202,6 +202,7 @@ export default async function seedE2E() {
     unitIds: [],
     isActive: true,
     operacional: true,
+    employmentRelationshipType: "clt",
     admissionDate: "2024-01-01",
     createdAt: now,
   });
