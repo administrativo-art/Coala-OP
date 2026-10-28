@@ -87,7 +87,7 @@ test('usa o selo da folga prevista como ação sem renderizar botão avulso', ()
 });
 
 test('mantém ausências de alocação e remoção de folga visíveis na própria célula', () => {
-  assert.match(scheduleEditorSource, /Sem unidade vinculada/);
+  assert.match(scheduleEditorSource, /Sem turno neste dia/);
   assert.match(scheduleEditorSource, /DSR em \$\{sourceUnitName\}/);
   assert.match(scheduleEditorSource, /aria-label=\{removalFailed \?/);
   assert.match(scheduleEditorSource, /method: 'DELETE'/);
