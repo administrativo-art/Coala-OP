@@ -13,6 +13,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney, DPShiftDefinition } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 
+import { assertPersonAgendaUnchanged, personAgendaClockRef, personAgendaVersion } from './agenda-clock.server';
 import type { SaveWorkShiftInput } from './schemas';
 
 const OCCUPANCY_QUERY_LIMIT = 21;
@@ -45,8 +46,10 @@ export async function saveWorkShift(params: {
   input: SaveWorkShiftInput;
   mode: 'create' | 'update';
   requestId: string;
+  /** Versão da agenda da pessoa lida antes de uma conferência feita fora desta transação (cobertura de turno). */
+  expectedAgendaVersion?: number;
 }) {
-  const { context, scheduleId, shiftId, input, mode, requestId } = params;
+  const { context, scheduleId, shiftId, input, mode, requestId, expectedAgendaVersion } = params;
   assertEditPermission(context);
 
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
@@ -60,6 +63,7 @@ export async function saveWorkShift(params: {
     .where('userId', '==', input.userId)
     .where('date', '==', input.date)
     .limit(OCCUPANCY_QUERY_LIMIT);
+  const agendaClockRef = personAgendaClockRef(context.workspace_id, input.userId);
 
   return dbAdmin.runTransaction(async (transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
@@ -68,6 +72,13 @@ export async function saveWorkShift(params: {
     const unitSnapshot = await transaction.get(unitRef);
     const shiftDefinitionSnapshot = shiftDefinitionRef ? await transaction.get(shiftDefinitionRef) : null;
     const occupancySnapshot = await transaction.get(occupancyQuery);
+    const agendaVersion = personAgendaVersion(await transaction.get(agendaClockRef));
+    assertPersonAgendaUnchanged(agendaVersion, expectedAgendaVersion);
+    // Turno que troca de pessoa também muda a agenda de quem saiu.
+    const previousUserId = shiftSnapshot.exists ? shiftSnapshot.get('userId') : undefined;
+    const previousAgendaClockRef = typeof previousUserId === 'string' && previousUserId && previousUserId !== input.userId
+      ? personAgendaClockRef(context.workspace_id, previousUserId) : null;
+    const previousAgendaVersion = previousAgendaClockRef ? personAgendaVersion(await transaction.get(previousAgendaClockRef)) : null;
 
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
@@ -307,6 +318,12 @@ export async function saveWorkShift(params: {
         goalEligibilityVersion: FieldValue.increment(1),
         journeyValidationVersion: FieldValue.increment(1),
       });
+    }
+    transaction.set(agendaClockRef, { workspaceId: context.workspace_id, userId: input.userId,
+      version: agendaVersion + 1, updatedAt: now });
+    if (previousAgendaClockRef && previousAgendaVersion !== null) {
+      transaction.set(previousAgendaClockRef, { workspaceId: context.workspace_id, userId: previousUserId,
+        version: previousAgendaVersion + 1, updatedAt: now });
     }
     transaction.create(referenceRef, {
       workspaceId: context.workspace_id,
