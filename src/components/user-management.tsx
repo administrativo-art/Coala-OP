@@ -1614,11 +1614,43 @@ export function UserManagement({
                 <div id="collaborator-edit-panel-units" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-units' : undefined}>
                 <UserFormSection
                   title="Unidades"
-                  description="Onde trabalha, referência financeira, onde é gestora e o que pode ver no sistema."
+                  description="Quatro escolhas diferentes: onde trabalha, qual unidade aparece no financeiro, onde responde e o que consegue consultar."
                   help="São quatro informações diferentes: unidades de escala (onde a pessoa trabalha), unidade principal (referência do financeiro), unidades sob responsabilidade (onde é gestora) e escopo (onde pode visualizar e operar no sistema)."
                   compact={createOnly}
                 >
                   <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
+                    <div className="rounded-ds-card border border-ds-info/25 bg-ds-info-bg/45 px-4 py-4">
+                      <div className="flex items-start gap-2.5">
+                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-sm font-extrabold text-ds-ink">Como ler esta tela</p>
+                          <p className="text-xs leading-5 text-ds-ink-2">
+                            A unidade financeira não define sozinha a escala nem o local da batida. A escala do dia e o vínculo operacional são conferidos separadamente.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2.5 md:grid-cols-2">
+                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
+                          <p className="text-xs font-extrabold text-ds-ink">1. Escala e operação</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades onde a pessoa pode ser escalada e trabalhar. Pode haver mais de uma.</p>
+                        </div>
+                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
+                          <p className="text-xs font-extrabold text-ds-ink">2. Principal financeira</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Referência de lotação, custos e relatórios financeiros. Não substitui a unidade do turno.</p>
+                        </div>
+                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
+                          <p className="text-xs font-extrabold text-ds-ink">3. Responsabilidade</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades em que a pessoa aparece como gestora no organograma, metas e documentos.</p>
+                        </div>
+                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
+                          <p className="text-xs font-extrabold text-ds-ink">4. Visualização por unidade</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Define onde a pessoa pode consultar e operar no sistema, conforme as permissões do perfil.</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 border-t border-ds-info/15 pt-3 text-xs font-semibold leading-5 text-ds-ink-2">
+                        Exemplo: alguém pode ter a unidade A como referência financeira, trabalhar também na unidade B e visualizar a unidade C sem que isso altere sua lotação ou sua escala.
+                      </p>
+                    </div>
                     <div>
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
@@ -1740,7 +1772,7 @@ export function UserManagement({
                             </SelectContent>
                           </Select>
                           <FormDescription className="text-xs">
-                            {UNIT_ACCESS_SCOPE_NOTES[normalizeUnitAccessScope(field.value)]} O perfil continua definindo o que ele pode fazer.
+                            {UNIT_ACCESS_SCOPE_NOTES[normalizeUnitAccessScope(field.value)]} Isso não altera a unidade financeira, não cria escala e não libera batida por si só; o perfil continua definindo o que ele pode fazer.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
