@@ -2,7 +2,7 @@
 
 **Produto:** Coala OP
 
-**Status:** em revisão; nada implementado. O guia de regras de estágio recebido em 28/10/2026 muda o cálculo (ciclos de 12 meses, saldo projetado até o fim do recesso, limite interno de 3 meses) e a trilha (aviso de recesso assinado). Este plano será atualizado depois das decisões P3–P6.
+**Status:** aprovado para implementação em 28/10/2026, já com o guia de regras de estágio recebido nesse dia (ciclos de 12 meses, saldo projetado, limite interno de 3 meses, aviso de recesso assinado); nada implementado
 
 **Última atualização:** 28/10/2026
 
@@ -59,26 +59,36 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 | D8 | O saldo não gozado no fim do estágio é tratado no plano geral de desligamento. | 28/10/2026 |
 | D9 | Estagiários poderão registrar ponto e entram no AFD e no AEJ. Sem mudança agora; a mudança futura exige revisão de Doc Brown. | 28/10/2026 |
 | D10 | O recesso usa as permissões de Férias; não há submódulo nem acesso próprio. O Panorama ganha o filtro "Estagiários". | 28/10/2026 |
+| D11 | Só meses completos contam (sem fração do mês incompleto). Decidido sobre a regra R02 do guia. | 28/10/2026 |
+| D12 | Cada parte tem um **aviso de recesso** gerado pelo sistema e assinado pelo estagiário na Autentique; o recesso só começa com o aviso assinado. | 28/10/2026 |
+| D13 | O cadastro do estagiário passa a ter "estágio remunerado: sim/não"; o aviso diz se a bolsa é mantida. | 28/10/2026 |
+| D14 | Ciclos de 12 meses separados desde o início do estágio, com o saldo mais antigo usado primeiro. Se o ciclo terminar com saldo, há um limite interno de 3 meses para regularizar, com alerta, e agendar fora do ciclo exige justificativa do RH. O limite nunca passa do fim do estágio e não é prazo legal. | 28/10/2026 |
+| D15 | Agendamento pode usar o saldo projetado até o último dia do recesso pedido (regra R04 do guia), desde que dentro da vigência. | 28/10/2026 |
+| D16 | Número máximo de partes e mínimo de dias por parte são configuráveis no DP; padrão sem limite (mantém D4). | 28/10/2026 |
 
 ## 5. Regras de negócio
 
 | # | Regra |
 | --- | --- |
 | RN1 | **Meses completos** numa data D = meses inteiros entre o início do período de estágio e D (15/07 → 15/10 = 3 meses). Dias soltos não contam. |
-| RN2 | **Acumulado em D** = arredondar para cima (meses completos × 2,5). Nunca passa do total da vigência. |
-| RN3 | **Saldo em D** = acumulado em D − dias de recesso aprovados ou pendentes com início até D. Recesso rejeitado ou cancelado não consome saldo. |
-| RN4 | **Agendar uma parte** exige: vínculo de estágio vigente na data de início; dias ≤ saldo na data de início (contando as outras partes); fim ≤ término do estágio, quando ele estiver cadastrado; sem sobreposição com outra parte ou ausência. |
+| RN2 | **Acumulado no ciclo em D** = arredondar para cima (meses completos do ciclo × 2,5), no máximo 30 por ciclo. Cada ciclo começa no aniversário do início do estágio. |
+| RN3 | **Saldo** = acumulado − dias gozados − dias reservados (aprovados ou pendentes), por ciclo, consumindo o ciclo mais antigo primeiro. Recesso rejeitado ou cancelado não consome saldo. |
+| RN4 | **Agendar uma parte** exige: vínculo de estágio vigente; dias ≤ saldo projetado até o último dia da parte (D15), contando as outras partes; fim ≤ término do estágio; sem sobreposição com outra parte ou ausência; respeitar os limites de partes (D16). Fora do ciclo (D14), a situação é "requer aprovação" e exige justificativa. |
 | RN5 | Sem término cadastrado no período de estágio, o agendamento é aceito com aviso "Cadastre o fim do estágio para controlar o prazo"; o alerta de fim de estágio fica desligado. |
 | RN6 | **Alerta de fim de estágio:** a partir de 60 dias antes do término, com saldo projetado no término > 0, a pessoa recebe prioridade "Agendar antes do fim". |
-| RN7 | **Trilha curta:** Agendar (registro criado) → Aprovar (status `APPROVED`) → Em gozo (hoje entre início e fim) → Concluído (fim passou). Rejeitar e cancelar exigem justificativa, como em férias. Em gozo e Concluído são derivados das datas, não gravados. |
+| RN7 | **Trilha:** Agendar → Aprovar → Aviso de recesso (gerar, conferir, enviar à Autentique, assinado) → Em gozo → Concluído. Sem recibo e sem pagamento. Em gozo e Concluído vêm das datas, e só depois do aviso assinado (D12). Rejeitar e cancelar exigem justificativa. |
 | RN8 | **Efetivação como CLT:** recesso com início antes da data do novo período fica no histórico do estágio. As férias da CLT contam a partir do início do período CLT, não da admissão como estagiário. O processo de conversão está no [plano de admissão](plano-admissao.md#22-efetivação-de-estagiário-como-clt-conversão-de-vínculo). |
 | RN9 | Registros `gozo` e `venda` são recusados para quem está em estágio na data, e `recesso` é recusado para quem não está. |
+| RN10 | **Situação de cada pedido:** permitido, requer aprovação (fora do ciclo ou acima do saldo projetado com exceção do RH) ou bloqueado (fora da vigência, sobreposição, sem estágio). Cada decisão grava data, responsável e a versão das regras usada. |
+| RN11 | **Alertas** no Panorama e nas notificações: 90, 60 e 30 dias antes do fim do ciclo com saldo; ciclo encerrado com saldo; perto e depois do limite interno; fim do estágio com saldo. |
 
 ## 6. Contrato de dados
 
 - **`dp_vacations`:** novo `recordType: 'recesso'`. Usa `userId`, `startDate`, `endDate`, `days`, `returnDate`, `status` e auditoria já existentes, mais `internshipPeriodStart` (o `validFrom` do período de estágio, que identifica o estágio a que a parte pertence). Não grava `cycleId` de CLT nem `workflow` de 6 etapas.
 - **Tipos e schema:** `DPVacationRecordType` passa a `'gozo' | 'venda' | 'recesso'`; o schema de criação vira união discriminada por `recordType`, para que `recesso` não exija `cycleId` nem campos de CLT (abono, 13º, concordância de fracionamento CLT).
-- **Função pura** em `src/lib/hr/internship-recess.ts`: `internshipRecessSummary({ periodStart, periodEnd, records, date })` → meses completos, acumulado, agendado, saldo, saldo projetado no término e texto da explicação do ícone. É a única fonte da conta: tela, servidor e o futuro desligamento a chamam.
+- **Função pura** em `src/lib/hr/internship-recess.ts` (rascunho preservado em `.ai-work-archive/development-technology/2026-10-28-recesso-estagio/`, a revisar para ciclos): ciclos, acumulado, gozado, reservado, saldo, saldo projetado, prazo interno, situação e texto do ícone. É a única fonte da conta: tela, servidor e o futuro desligamento a chamam.
+- **Aviso de recesso:** novo documento no catálogo oficial (`SYSTEM_DOCUMENT_TEMPLATES`), "Aviso de recesso — Estágio {período} — Parte {n}", reaproveitando a geração, a assinatura e a conferência da Autentique do aviso de férias; arquivado na pasta "Recesso".
+- **Cadastro:** campo "estágio remunerado" (D13) no perfil do estagiário.
 - **Vigência para o Panorama:** o carregamento de Férias passa a trazer, só para usuários com vínculo de estágio, `{ userId, periodStart, periodEnd }` resolvido pelo servidor. Sem consulta por pessoa no navegador.
 - **Auditoria:** reaproveita `dp_vacationEvents` com os tipos atuais de criação, aprovação, rejeição e cancelamento.
 
@@ -101,11 +111,7 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 | # | Pergunta | Com quem | Bloqueia |
 | --- | --- | --- | --- |
 | P1 | O saldo não gozado no fim do estágio é pago? Qual a base? | Contador | Só o plano de desligamento |
-| P2 | O saldo do primeiro ano continua valendo no segundo ano de estágio (sem vencimento dentro da vigência)? O plano assume que sim. | RH | RN3 antes da etapa 3 |
-| P3 | Fração do mês incompleto: só meses completos (recomendado), fração diária arredondada para cima, ou fração guardada com dias inteiros só a cada mês? | RH | Cálculo |
-| P4 | Aviso de recesso assinado pelo estagiário na Autentique; o recesso pode começar com o aviso pendente? | RH | Trilha |
-| P5 | Cadastro passa a exigir "estágio remunerado: sim/não" (aparece no aviso)? | RH | Aviso |
-| P6 | Limite interno de 3 meses após o ciclo para regularizar saldo, com alerta e justificativa do RH? | RH | Alertas |
+| P2 | Resolvida por D14: saldo pendente é mantido por ciclo e nunca some sozinho. | — | — |
 
 ## 10. Custo de leitura
 
@@ -116,7 +122,7 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 
 | Nível | O que prova |
 | --- | --- |
-| Unitário (`internship-recess`) | 0, 1, 3, 6, 12, 13 e 24 meses; arredondamento para cima; teto da vigência; partes rejeitadas não consomem; saldo projetado no término. |
+| Unitário (`internship-recess`) | Cenários A–E do guia: 3 meses = 8 dias; 6 meses com 8 usados = 7; ciclo completo com 15 usados = 15 pendentes e alerta; limite interno de 3 meses; contrato de 6 meses = 15. Mais: 1, 13 e 24 meses; ciclo mais antigo primeiro; saldo projetado até o fim da parte. |
 | Servidor | Recusa recesso sem estágio vigente, acima do saldo, depois do término ou sobreposto; recusa `gozo` para estagiário e `recesso` para CLT; ações da trilha CLT recusam recesso. |
 | Interface | Estrutura do Panorama (selo, filtro, alerta) e da página (ícone com a conta, "Agendar recesso", trilha curta). |
 | E2E (observação) | Emulador `demo-`: estagiária com 3 meses agenda 5 dias, RH aprova, a parte aparece como agendada e o saldo cai de 8 para 3. |
