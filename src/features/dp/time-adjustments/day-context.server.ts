@@ -12,17 +12,11 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { canAccessUnit } from '@/lib/unit-access';
 
 import type { AdjustmentDayContext, DayMarking, DayShift, DayTreatment } from './day-summary';
-import { ADJUSTMENTS, canReview, PILOT_ADJUSTMENTS, TREATMENTS } from './service.server';
+import { canReview, DAY_MARKINGS_LIMIT, readAdjustmentHistoryDocuments, readAdjustmentRequestForDay, readDayMarkingDocuments, readDayTreatmentDocuments } from './service.server';
 
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore };
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin };
 
-const OFFICIAL_MARKINGS = 'repP_receipts';
-const PILOT_MARKINGS = 'repP_pilotMarkings';
-// Um dia tem poucas batidas; o teto só protege contra dado corrompido.
-const MARKINGS_LIMIT = 40;
-const TREATMENTS_LIMIT = 40;
-const HISTORY_LIMIT = 60;
 const PURPOSES = new Set(['journey_start', 'break_start', 'break_end', 'journey_end']);
 
 function fail(code: string, safeMessage: string, kind: 'NOT_FOUND' | 'AUTHORIZATION' = 'NOT_FOUND') {
@@ -41,14 +35,13 @@ function daysBefore(date: string, days: number) {
  *
  * Custo por abertura do painel: 1 pedido + 1 consulta de batidas do dia + 1 de tratamentos + 1 usuário + a escala do
  * mês (escalas do mês, turnos da pessoa ≤62 e cadastros citados) + 2 consultas de histórico (≤60 cada). Sem polling.
+ * As leituras das coleções protegidas do ponto ficam em `service.server.ts`.
  */
 export async function readAdjustmentDayContext(context: ServerUserContext, adjustmentId: string, injected: Partial<Dependencies> = {}): Promise<AdjustmentDayContext> {
   if (!canReview(context)) throw fail('PTRP_ADJUSTMENT_REVIEW_FORBIDDEN', 'Sem permissão para analisar ajustes de ponto.', 'AUTHORIZATION');
   const deps = { ...defaults, ...injected };
-  const official = await deps.hrDb.collection(ADJUSTMENTS).doc(adjustmentId).get();
-  const request = official.exists ? official : await deps.hrDb.collection(PILOT_ADJUSTMENTS).doc(adjustmentId).get();
+  const { scope, snapshot: request } = await readAdjustmentRequestForDay(deps, adjustmentId);
   if (!request.exists || request.get('workspaceId') !== context.workspace_id) throw fail('PTRP_ADJUSTMENT_NOT_FOUND', 'Pedido não encontrado.');
-  const scope = official.exists ? 'official' : 'pilot';
   const employeeUid = String(request.get('employeeUid'));
   const workDate = String(request.get('workDate'));
   const unitIds = (request.get('unitIds') as string[] | undefined)?.length ? (request.get('unitIds') as string[]) : [String(request.get('unitId'))];
@@ -58,23 +51,16 @@ export async function readAdjustmentDayContext(context: ServerUserContext, adjus
   }
 
   const workspaceId = context.workspace_id;
-  const history = (collection: string) => deps.hrDb.collection(collection).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
-    .where('workDate', '>=', daysBefore(workDate, 30)).where('workDate', '<=', workDate).orderBy('workDate').limit(HISTORY_LIMIT).get();
-  const [markings, treatments, user, officialHistory, pilotHistory] = await Promise.all([
-    deps.repDb.collection(scope === 'pilot' ? PILOT_MARKINGS : OFFICIAL_MARKINGS).where('workspaceId', '==', workspaceId)
-      .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(MARKINGS_LIMIT + 1).get(),
+  const [markings, treatments, user, [officialHistory, pilotHistory]] = await Promise.all([
+    readDayMarkingDocuments(deps, scope, workspaceId, employeeUid, workDate),
     // O ensaio não cria tratamento (a decisão não altera o ponto), então só o pedido oficial tem o que ler aqui.
-    scope === 'official'
-      ? deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
-        .where('workDate', '==', workDate).limit(TREATMENTS_LIMIT).get()
-      : Promise.resolve(null),
+    scope === 'official' ? readDayTreatmentDocuments(deps, workspaceId, employeeUid, workDate) : Promise.resolve(null),
     deps.mainDb.collection('users').doc(employeeUid).get(),
-    history(ADJUSTMENTS),
-    history(PILOT_ADJUSTMENTS),
+    readAdjustmentHistoryDocuments(deps, workspaceId, employeeUid, daysBefore(workDate, 30), workDate),
   ]);
   const month = await readRepPMonthOfPerson([employeeUid, user.id, text(user.get('hrEmployeeId'))], workDate.slice(0, 7), { db: deps.mainDb });
 
-  const dayMarkings: DayMarking[] = markings.docs.slice(0, MARKINGS_LIMIT).flatMap((document) => {
+  const dayMarkings: DayMarking[] = markings.docs.slice(0, DAY_MARKINGS_LIMIT).flatMap((document) => {
     const markedAt = text(document.get('markedAt')) ?? text(document.get('snapshot.markedAt'));
     if (!markedAt) return [];
     const purpose = text(document.get('classification.purpose'));
@@ -109,6 +95,6 @@ export async function readAdjustmentDayContext(context: ServerUserContext, adjus
       otherRequestsSameDay: others.filter((document) => document.get('workDate') === workDate && document.get('status') !== 'cancelled').length,
       approvedInPrevious30Days: others.filter((document) => document.get('workDate') !== workDate && document.get('status') === 'approved').length,
     },
-    truncated: markings.size > MARKINGS_LIMIT || month.truncated,
+    truncated: markings.size > DAY_MARKINGS_LIMIT || month.truncated,
   };
 }
