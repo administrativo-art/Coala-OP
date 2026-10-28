@@ -81,6 +81,8 @@ interface Person {
   concessive?: VacationCycle;
   acquisitive?: VacationCycle;
   hasActiveTrail: boolean;
+  /** Último dia das férias em gozo hoje, quando houver. */
+  onVacationUntil?: Date;
   priority: { label: string; tone: VacationPillTone; rank: number; filter: PeopleFilter };
 }
 
@@ -140,6 +142,10 @@ export function DPFeriasManager() {
         const acquisitive = cycles.find(cycle => cycle.status === 'AQUISITIVO');
         const hasActiveTrail = userVacations.some(record => record.workflow?.status === 'active' && record.status !== 'REJECTED');
         const unitName = user.unitIds?.[0] ? units.find(unit => unit.id === user.unitIds![0])?.name ?? '' : '';
+        const enjoying = userVacations.find(record => (
+          record.recordType === 'gozo' && record.status !== 'REJECTED' && record.startDate && record.endDate
+          && parseISO(record.startDate) <= today && parseISO(record.endDate) >= today
+        ));
         return [{
           user,
           health,
@@ -148,6 +154,7 @@ export function DPFeriasManager() {
           concessive,
           acquisitive,
           hasActiveTrail,
+          onVacationUntil: enjoying?.endDate ? parseISO(enjoying.endDate) : undefined,
           priority: personPriority(concessive, acquisitive, hasActiveTrail, today),
         }];
       })
@@ -405,7 +412,12 @@ function PersonRow({ person, today, onOpen }: { person: Person; today: Date; onO
       <span className="flex min-w-0 items-center gap-3">
         <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ds-neutral-bg text-xs font-extrabold text-ds-ink-2">{initials(person.user.username)}</span>
         <span className="min-w-0">
-          <span className="block truncate text-[13.5px] font-extrabold text-ds-ink">{person.user.username}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[13.5px] font-extrabold text-ds-ink">{person.user.username}</span>
+            {person.onVacationUntil ? (
+              <VacationPill tone="info" className="h-[18px] px-[7px] text-[10.5px]">Em gozo até {format(person.onVacationUntil, 'dd/MM')}</VacationPill>
+            ) : null}
+          </span>
           <span className="block truncate text-[12px] text-ds-ink-muted">{meta || '—'}</span>
         </span>
       </span>
