@@ -128,7 +128,7 @@ async function assertNoPilotMarkingForDay(repDb: Firestore, workspaceId: string,
   }
 }
 
-function canReview(context: ServerUserContext) {
+export function canReview(context: ServerUserContext) {
   return context.isDefaultAdmin || context.permissions.dp?.requests?.review === true;
 }
 

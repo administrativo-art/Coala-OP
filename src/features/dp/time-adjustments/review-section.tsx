@@ -12,7 +12,14 @@ import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { purposeLabel } from "@/features/dp/rep-p/record-strip";
 
 import { AdjustmentReport } from "./adjustment-panel";
+import type { AdjustmentDayContext } from "./day-summary";
 import { ADJUSTMENT_KIND_LABELS, type AdjustmentView, type MarkingClassificationRequestView } from "./types";
+
+/** "Segunda, 26/10/2026": o dia da semana ajuda a conferir contra a escala. */
+function weekdayDate(workDate: string) {
+  const weekday = new Date(`${workDate}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" });
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${workDate.split("-").reverse().join("/")}`;
+}
 
 /** Fila de ajustes de ponto para quem analisa: aprovar ou recusar sempre com justificativa. */
 export function AdjustmentReviewSection({ firebaseUser, people, onCountChange }: {
@@ -28,6 +35,8 @@ export function AdjustmentReviewSection({ firebaseUser, people, onCountChange }:
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [day, setDay] = useState<AdjustmentDayContext | null>(null);
+  const [dayError, setDayError] = useState<string | null>(null);
   const names = new Map(people.map((person) => [person.id, person.username ?? "Responsável"]));
   const request = useCallback(<T,>(input: string, init: { method?: string; json?: unknown; fallbackError: string }) =>
     authenticatedApiRequest<T>(input, { ...init, getIdToken: () => firebaseUser?.getIdToken() ?? Promise.resolve(null) }), [firebaseUser]);
@@ -44,6 +53,18 @@ export function AdjustmentReviewSection({ firebaseUser, people, onCountChange }:
     }
   }, [request]);
   useEffect(() => { void load(); }, [load]);
+  const selectedId = selected?.id ?? null;
+  // O dia inteiro do pedido aberto: uma leitura por abertura, sem polling. Se falhar, o painel mostra só a batida do pedido.
+  useEffect(() => {
+    setDay(null);
+    setDayError(null);
+    if (!selectedId) return;
+    let cancelled = false;
+    request<{ day: AdjustmentDayContext }>(`/api/dp/time-recording/adjustments/${selectedId}/day`, { fallbackError: "Não foi possível carregar o dia inteiro." })
+      .then((payload) => { if (!cancelled) setDay(payload.day); })
+      .catch((cause) => { if (!cancelled) setDayError(errorMessageOf(cause, "Não foi possível carregar o dia inteiro.")); });
+    return () => { cancelled = true; };
+  }, [request, selectedId]);
   useEffect(() => { onCountChange?.(items ? items.length + classificationItems.length : null); }, [classificationItems.length, items, onCountChange]);
 
   async function decide(action: "approve" | "reject") {
@@ -90,8 +111,10 @@ export function AdjustmentReviewSection({ firebaseUser, people, onCountChange }:
       ))}
       {selected ? (
         <SidePanel open onOpenChange={(next) => { if (!next && !busy) setSelected(null); }} kicker={selected.scope === "pilot" ? "Simulação de ajuste" : "Ajuste de ponto"}
-          title={selected.employeeName ?? "Titular"} subtitle={`${ADJUSTMENT_KIND_LABELS[selected.kind].title} · ${selected.workDate.split("-").reverse().join("/")}`}>
-          <AdjustmentReport adjustment={selected} names={names}
+          title={selected.employeeName ?? "Titular"} subtitle={`${weekdayDate(selected.workDate)} · ${ADJUSTMENT_KIND_LABELS[selected.kind].title}`}
+          className="w-[min(680px,100vw)]">
+          {dayError ? <p role="status" className="text-xs font-semibold text-ds-warn">{dayError} Mostrando só a batida do pedido.</p> : null}
+          <AdjustmentReport adjustment={selected} names={names} day={day} dayLoading={!day && !dayError}
             originals={(selected.operations?.length ? selected.operations.map((operation) => operation.target).filter(Boolean) : selected.target ? [selected.target] : [])
               .map((target) => ({ receiptId: target!.receiptId, markedAt: target!.markedAt, nsr: target!.nsr ?? target!.pilotSequence ?? 0 }))} />
           <PanelSection title="Decisão" aside={selected.scope === "pilot" ? "sem efeito fiscal" : "justificativa obrigatória"}>

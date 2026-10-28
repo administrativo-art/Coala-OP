@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **507**
-- Totalmente contratados: **162**
+- Arquivos de rota: **508**
+- Totalmente contratados: **163**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -111,6 +111,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/[scheduleId]/vacations/route.ts) |
 | `/api/dp/time-recording/adjustments` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/route.ts](../../src/app/api/dp/time-recording/adjustments/route.ts) |
 | `/api/dp/time-recording/adjustments/[adjustmentId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts](../../src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts) |
+| `/api/dp/time-recording/adjustments/[adjustmentId]/day` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/day/route.ts](../../src/app/api/dp/time-recording/adjustments/[adjustmentId]/day/route.ts) |
 | `/api/dp/time-recording/adjustments/review` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/adjustments/review/route.ts](../../src/app/api/dp/time-recording/adjustments/review/route.ts) |
 | `/api/dp/time-recording/aej` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/aej/route.ts](../../src/app/api/dp/time-recording/aej/route.ts) |
 | `/api/dp/time-recording/afd` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) |

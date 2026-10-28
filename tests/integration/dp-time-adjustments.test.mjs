@@ -13,6 +13,7 @@ const { publishEmploymentReference } = await import('../../src/features/dp/emplo
 const { createOwnAdjustment, decideAdjustment, listAdjustmentsForReview, listOwnAdjustments, ADJUSTMENTS, TREATMENTS, CLOSURES, PILOT_ADJUSTMENTS }
   = await import('../../src/features/dp/time-adjustments/service.server.ts');
 const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
+const { readAdjustmentDayContext } = await import('../../src/features/dp/time-adjustments/day-context.server.ts');
 
 test('ajuste agrupado só aparece e só pode ser decidido por quem acessa todas as unidades', async () => {
   const prefix = `multiunit-${randomUUID().slice(0, 6)}`;
@@ -333,4 +334,68 @@ test('ajuste do ensaio percorre solicitação e decisão sem criar tratamento ou
   assert.equal((await hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2026-10`).get()).get('version'), 1);
   await assert.rejects(createOwnAdjustment(titular, { ...pilotPayload, newTime: '08:10' }, deps),
     { code: 'PTRP_ADJUSTMENT_ATTEMPT_CONFLICT' });
+});
+
+test('dia inteiro do pedido: batidas, tratamentos aprovados e histórico, só para quem analisa o pedido de outra pessoa', async () => {
+  const prefix = `day-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const employeeId = `${prefix}-employee`;
+  const reviewerId = `${prefix}-reviewer`;
+  const unitId = `${prefix}-unit`;
+  const workDate = '2026-08-12';
+  const permissions = structuredClone(defaultGuestPermissions); permissions.dp.requests.review = true;
+  const actor = (uid, units, workspace = workspaceId, granted = permissions) => ({ decoded: { uid }, userDoc: { id: uid, unitIds: units }, profileId: null,
+    permissions: granted, isDefaultAdmin: false, workspace_id: workspace });
+  const reviewer = actor(reviewerId, [unitId]);
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin };
+  const request = (id, status, date) => hrDbAdmin.collection(ADJUSTMENTS).doc(id).set({
+    id, workspaceId, employeeUid: employeeId, employeeName: 'Maria', workDate: date, kind: 'correct', status, version: 1,
+    establishmentId: `${prefix}-est`, unitId, target: null, inclusion: null, reason: 'Teste do dia inteiro.', aejReason: 'Teste do dia inteiro.',
+    acts: [], createdAt: '2026-08-13T12:00:00.000Z', updatedAt: '2026-08-13T12:00:00.000Z',
+  });
+  const receipt = (id, nsr, time, collectorId) => repPDbAdmin.collection('repP_receipts').doc(id).set({ workspaceId, employeeId, recordedDate: workDate, status: 'issued',
+    snapshot: { nsr, markedAt: `${workDate}T${time}:00-0300`, executionUnitId: unitId, collectorId } });
+  await Promise.all([
+    dbAdmin.collection('users').doc(employeeId).set({ username: 'Maria', employmentRelationshipType: 'internship' }),
+    request(`${prefix}-main`, 'in_review', workDate),
+    request(`${prefix}-same-day`, 'approved', workDate),
+    request(`${prefix}-earlier`, 'approved', '2026-08-05'),
+    receipt(`${prefix}-r2`, 5, '10:01', '02'),
+    receipt(`${prefix}-r1`, 4, '05:58', '01'),
+    hrDbAdmin.collection(TREATMENTS).doc(`${prefix}-treatment`).set({ workspaceId, employeeUid: employeeId, workDate, status: 'active',
+      adjustmentId: `${prefix}-same-day`, type: 'discard', originalReceiptId: `${prefix}-r2` }),
+    hrDbAdmin.collection(TREATMENTS).doc(`${prefix}-cancelled`).set({ workspaceId, employeeUid: employeeId, workDate, status: 'cancelled',
+      adjustmentId: 'x', type: 'discard', originalReceiptId: `${prefix}-r1` }),
+  ]);
+
+  const day = await readAdjustmentDayContext(reviewer, `${prefix}-main`, deps);
+  assert.equal(day.scope, 'official');
+  assert.equal(day.workDate, workDate);
+  assert.deepEqual(day.markings.map((item) => [item.nsr, item.channel]), [[4, 'app'], [5, 'web']]);
+  assert.deepEqual(day.treatments.map((item) => [item.type, item.originalReceiptId]), [['discard', `${prefix}-r2`]]);
+  assert.deepEqual(day.history, { otherRequestsSameDay: 1, approvedInPrevious30Days: 1 });
+  assert.deepEqual(day.shifts, []);
+  assert.equal(day.relationship, 'internship');
+
+  await assert.rejects(() => readAdjustmentDayContext(actor(reviewerId, [`${prefix}-other-unit`]), `${prefix}-main`, deps), { code: 'PTRP_ADJUSTMENT_REVIEW_FORBIDDEN' });
+  await assert.rejects(() => readAdjustmentDayContext(actor(`${prefix}-nobody`, [unitId], workspaceId, structuredClone(defaultGuestPermissions)), `${prefix}-main`, deps), { code: 'PTRP_ADJUSTMENT_REVIEW_FORBIDDEN' });
+  await assert.rejects(() => readAdjustmentDayContext(actor(employeeId, [unitId]), `${prefix}-main`, deps), { code: 'PTRP_ADJUSTMENT_SELF_DECISION' });
+  await assert.rejects(() => readAdjustmentDayContext(actor(reviewerId, [unitId], `${prefix}-other-ws`), `${prefix}-main`, deps), { code: 'PTRP_ADJUSTMENT_NOT_FOUND' });
+  await assert.rejects(() => readAdjustmentDayContext(reviewer, `${prefix}-missing`, deps), { code: 'PTRP_ADJUSTMENT_NOT_FOUND' });
+
+  // Simulação do ensaio: lê as batidas do ensaio, com a finalidade declarada, e não há tratamento.
+  await Promise.all([
+    hrDbAdmin.collection(PILOT_ADJUSTMENTS).doc(`${prefix}-pilot`).set({
+      id: `${prefix}-pilot`, workspaceId, employeeUid: employeeId, employeeName: 'Maria', workDate, scope: 'pilot', kind: 'discard', status: 'in_review', version: 1,
+      establishmentId: `${prefix}-est`, unitId, target: null, inclusion: null, reason: 'Simulação.', aejReason: 'Simulação.', acts: [],
+      createdAt: '2026-08-13T12:00:00.000Z', updatedAt: '2026-08-13T12:00:00.000Z' }),
+    repPDbAdmin.collection('repP_pilotMarkings').doc(`pilot_${prefix}`).set({ workspaceId, employeeId, recordedDate: workDate, markedAt: `${workDate}T17:59:00-0300`,
+      nsr: 7, sequence: 7, collectorId: '02', executionUnitId: unitId, classification: { purpose: 'journey_end' } }),
+  ]);
+  const pilot = await readAdjustmentDayContext(reviewer, `${prefix}-pilot`, deps);
+  assert.equal(pilot.scope, 'pilot');
+  assert.deepEqual(pilot.markings.map((item) => [item.nsr, item.purpose, item.channel]), [[7, 'journey_end', 'web']]);
+  assert.deepEqual(pilot.treatments, []);
+  // Sem mistura nos dois sentidos: com batida de ensaio no mesmo dia, o pedido oficial continua lendo só as oficiais.
+  assert.deepEqual((await readAdjustmentDayContext(reviewer, `${prefix}-main`, deps)).markings.map((item) => item.nsr), [4, 5]);
 });
