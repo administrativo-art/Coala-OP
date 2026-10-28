@@ -399,12 +399,18 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     return externalCoverageUserIds(dpShifts.filter((shift) => shift.date >= startKey && shift.date <= endKey));
   }, [activeDateRange, dpShifts]);
 
-  // Colaboradores do quiosque para fallback manual
+  // Quem é do quiosque entra no rateio quando a escala ainda não tem turnos.
   const kioskUsers = useMemo(
     () => scheduleEvidenceReady ? users.filter(u => kioskId
+      && u.isActive !== false
       && !externalCoverageUsers.has(u.id)
-      && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true)) : [],
+      && u.assignedKioskIds?.includes(kioskId)) : [],
     [externalCoverageUsers, users, kioskId, scheduleEvidenceReady]
+  );
+  // Metas valem para qualquer pessoa ativa, de qualquer vínculo; a inclusão manual aceita quem não é do quiosque.
+  const eligibleUsers = useMemo(
+    () => scheduleEvidenceReady ? users.filter(u => u.isActive !== false && !externalCoverageUsers.has(u.id)) : [],
+    [externalCoverageUsers, users, scheduleEvidenceReady]
   );
 
   const scheduledParticipants = useMemo<RevenueParticipant[]>(() => {
@@ -528,8 +534,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   );
 
   const participantOptions = useMemo(
-    () => kioskUsers.filter(user => !selectedParticipantIds.has(user.id) && !excludedParticipantIds.includes(user.id)),
-    [kioskUsers, selectedParticipantIds, excludedParticipantIds]
+    () => eligibleUsers.filter(user => !selectedParticipantIds.has(user.id) && !excludedParticipantIds.includes(user.id)),
+    [eligibleUsers, selectedParticipantIds, excludedParticipantIds]
   );
 
   const filteredParticipantOptions = useMemo(() => {

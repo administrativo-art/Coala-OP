@@ -29,7 +29,7 @@ test("cada escopo de visualização por unidade tem nota explicativa", () => {
 
 test("cada aba do drawer tem painel próprio e os campos de unidade têm nota", () => {
   const tabs = [...source.matchAll(/\{ id: '(\w+)', label: '[^']+' \}/g)].map((match) => match[1]);
-  assert.deepEqual(tabs, ["identity", "journey", "units", "access"]);
+  assert.deepEqual(tabs, ["identity", "journey", "units"]);
   for (const tab of tabs) {
     assert.match(source, new RegExp(`id="collaborator-edit-panel-${tab}"`));
   }

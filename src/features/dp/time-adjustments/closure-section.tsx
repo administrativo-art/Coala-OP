@@ -16,6 +16,7 @@ import type { ClosurePerson } from "./closure-core";
 import { ClosingPackageCard } from "./closing-package-card";
 import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
+import { belongsToTimeClosureRoster } from "@/lib/hr/employment-relationship";
 
 type ClosureView = {
   status: "open" | "closed"; version: number; closedAt: string | null; closedBy: string | null; manifestHash: string | null;
@@ -48,7 +49,7 @@ function previousCompetence() {
 // Último dia da competência (o banco do DP olha o ciclo que contém o fim do mês fechado).
 const lastDayOf = (competence: string) => new Date(Date.UTC(Number(competence.slice(0, 4)), Number(competence.slice(5, 7)), 0)).toISOString().slice(0, 10);
 
-export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; operacional?: boolean }> }) {
+export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; employmentRelationshipType?: string | null }> }) {
   const [competence, setCompetence] = useState(previousCompetence);
   const [data, setData] = useState<ClosurePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,9 +64,9 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [summary, setSummary] = useState<ClosingSummary | null>(null);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   // Aberto: prévia da equipe atual. Fechado: usa exatamente a equipe congelada naquela versão.
-  const activeTeam = people.filter((person) => person.operacional !== false).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
+  const activeTeam = people.filter((person) => belongsToTimeClosureRoster(person.employmentRelationshipType)).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
   const team = data?.closure?.status === "closed"
-    ? data.people.map((person) => ({ id: person.uid, username: person.name ?? undefined, operacional: true }))
+    ? data.people.map((person) => ({ id: person.uid, username: person.name ?? undefined }))
     : activeTeam;
   const names = new Map([...people.map((person) => [person.id, person.username ?? "Responsável"] as const),
     ...(data?.people ?? []).map((person) => [person.uid, person.name ?? "Responsável"] as const)]);

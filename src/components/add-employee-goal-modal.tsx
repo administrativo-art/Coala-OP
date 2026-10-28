@@ -63,10 +63,8 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
   const kioskUsers = useMemo(() =>
     scheduleEvidenceReady ? users.filter(u => {
       if (!period) return false;
-      // Show user if they participate in goals OR are assigned to this kiosk
-      const participates = u.participatesInGoals === true;
-      const assigned = u.assignedKioskIds?.includes(period.kioskId);
-      return !externalCoverageUsers.has(u.id) && (participates || assigned);
+      // Metas valem para qualquer pessoa ativa, de qualquer vínculo, inclusive de outro quiosque.
+      return u.isActive !== false && !externalCoverageUsers.has(u.id);
     }) : [],
     [externalCoverageUsers, users, period, scheduleEvidenceReady]
   );

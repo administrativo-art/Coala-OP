@@ -180,7 +180,7 @@ function UserFormSection({
   );
 }
 
-type CollaboratorEditTab = 'identity' | 'journey' | 'units' | 'access';
+type CollaboratorEditTab = 'identity' | 'journey' | 'units';
 
 const UNIT_ACCESS_SCOPE_NOTES: Record<UnitAccessScope, string> = {
   linked: 'Vê e opera só as unidades marcadas em "Unidades de escala e operação"; se a lotação mudar, o acesso muda junto.',
@@ -192,10 +192,9 @@ const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> 
   { id: 'identity', label: 'Identificação' },
   { id: 'journey', label: 'Cargo e jornada' },
   { id: 'units', label: 'Unidades' },
-  { id: 'access', label: 'Acesso e rotinas' },
 ];
 
-/** Abas que dependem do módulo DP; sem `dp.view` o drawer mostra só identificação e acesso. */
+/** Abas que dependem do módulo DP; sem `dp.view` o drawer mostra só a identificação. */
 const DP_ONLY_EDIT_TABS = new Set<CollaboratorEditTab>(['journey', 'units']);
 
 const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
@@ -213,13 +212,11 @@ const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, Collabor
   responsibleUnitIds: 'units',
   unitAccessScope: 'units',
   unitAccessUnitIds: 'units',
-  profileId: 'access',
-  registrationIdBizneo: 'access',
-  registrationIdPdv: 'access',
-  operacional: 'access',
-  participatesInGoals: 'access',
-  needsTransportVoucher: 'access',
-  transportVoucherValue: 'access',
+  profileId: 'journey',
+  registrationIdBizneo: 'identity',
+  registrationIdPdv: 'identity',
+  needsTransportVoucher: 'journey',
+  transportVoucherValue: 'journey',
 };
 
 type InactivationMode = 'temporary' | 'contract_termination';
@@ -315,8 +312,6 @@ const userSchema = z.object({
   unitId: z.string().optional(),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
-  operacional: z.boolean().optional(),
-  participatesInGoals: z.boolean().optional(),
   // Departamento Pessoal
   registrationIdBizneo: z.string().optional(),
   registrationIdPdv: z.string().optional(),
@@ -363,8 +358,6 @@ const USER_AUDIT_FIELDS = [
   'unitId',
   'unitIds',
   'assignedKioskIds',
-  'operacional',
-  'participatesInGoals',
   'registrationIdBizneo',
   'registrationIdPdv',
   'jobRoleId',
@@ -473,8 +466,6 @@ export function UserManagement({
         unitId: '',
         assignedKioskIds: [],
         avatarUrl: '',
-        operacional: false,
-        participatesInGoals: false,
         registrationIdBizneo: '',
         registrationIdPdv: '',
         jobRoleId: '',
@@ -754,8 +745,6 @@ export function UserManagement({
       unitId: '',
       assignedKioskIds: [],
       avatarUrl: '',
-      operacional: false,
-      participatesInGoals: false,
       registrationIdBizneo: '',
       registrationIdPdv: '',
       jobRoleId: '',
@@ -792,8 +781,6 @@ export function UserManagement({
           .map((kiosk) => kiosk.id),
       ])),
       avatarUrl: user.avatarUrl || '',
-      operacional: user.operacional || false,
-      participatesInGoals: user.participatesInGoals || false,
       registrationIdBizneo: user.registrationIdBizneo ?? '',
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
@@ -1059,8 +1046,6 @@ export function UserManagement({
           assignedKioskIds: values.assignedKioskIds,
           avatarUrl: avatarUrl,
           color: pickUserColor(users.map(u => u.color)),
-          operacional: values.operacional,
-          participatesInGoals: values.participatesInGoals,
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
           ),
@@ -1772,8 +1757,8 @@ export function UserManagement({
               </>
             ) : null}
 
-            {(!isDrawer || activeEditTab === 'access') ? (
-            <div id="collaborator-edit-panel-access" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-access' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+            {(!isDrawer || activeEditTab === 'journey') ? (
+            <div className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
             {permissions.dp?.view ? (
               <FormField control={form.control} name="profileId" render={() => (
                 <FormItem data-ui="profile-summary" className="rounded-ds-card border border-ds-border bg-ds-surface px-5 py-4 shadow-xs">
@@ -1791,63 +1776,13 @@ export function UserManagement({
                 </FormItem>
               )} />
             ) : null}
+            {showTransportVoucher ? (
             <UserFormSection
-              title="Comportamento no sistema"
-              description="Recursos operacionais habilitados para esta pessoa."
-              help="Estas opções habilitam a participação do cadastro em rotinas específicas. Elas não substituem cargo, função, vínculo, jornada nem perfil de permissão, e não geram efeitos financeiros por conta própria."
+              title="Vale-transporte"
+              description="Benefício de deslocamento desta pessoa."
               compact={createOnly}
             >
               <div className="grid gap-3 md:grid-cols-2">
-                <FormField control={form.control} name="operacional" render={({ field }) => (
-                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <FormLabel className="text-sm font-medium">Operacional</FormLabel>
-                        <FieldHelpTooltip
-                          title="Usuário operacional"
-                          description="Inclui o colaborador nas rotinas de operação, como escala de trabalho e relatórios operacionais. Não altera cargo, função ou perfil de permissão."
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                        {field.value ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
-                        />
-                      </FormControl>
-                    </div>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
-                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <FormLabel className="text-sm font-medium">Metas</FormLabel>
-                        <FieldHelpTooltip
-                          title="Participa de metas"
-                          description="Inclui o colaborador nos acompanhamentos e seleções do módulo de metas. Não cria meta sozinho e não muda remuneração sem as regras do módulo."
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                        {field.value ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
-                        />
-                      </FormControl>
-                    </div>
-                  </FormItem>
-                )} />
                 {showTransportVoucher ? (
                   <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
                   <FormItem className="rounded-ds-md border border-ds-border p-3 md:col-span-2">
@@ -1923,6 +1858,7 @@ export function UserManagement({
                 ) : null}
               </div>
             </UserFormSection>
+            ) : null}
             </div>
             ) : null}
 
@@ -2096,7 +2032,6 @@ export function UserManagement({
                               >
                                 {user.username}
                               </button>
-                              {user.operacional && <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700" variant="outline">Operacional</Badge>}
                               {user.isActive === false && <Badge className="border-slate-200 bg-slate-100 text-[10px] text-slate-500" variant="outline">Inativo</Badge>}
                             </div>
                             <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{user.jobRoleName ?? group.profileName} · {user.email}</p>

@@ -76,4 +76,4 @@ Limites por consulta: 5.000 fichas, 20.000 itens de composição e 10.000 insumo
 
 Testes: [cálculo/schema](../../../tests/unit/product-composition-cmv.test.ts), [integração](../../../tests/integration/dre-cmv-closure.test.mjs), [HTTP autenticado](../../../tests/e2e-api/financial-reconciliation.test.mts) e [isolamento por regras](../../../tests/security/firestore.rules.test.mjs). A implementação local não certifica dados reais nem homologação visual.
 
-O futuro fechamento financeiro mensal deve reutilizar este serviço e referenciar sua revisão, conforme [plano de fechamento, seção 7.5.1](../../plano-integracao-stone-conciliacao.md#751-cmv-no-fechamento-financeiro-mensal). Ainda não existe fechamento geral nem coordenação implantada entre seus estados e o CMV.
+O futuro fechamento financeiro mensal deve reutilizar este serviço e referenciar sua revisão, conforme [plano de fechamento, seção 7.5.1](../../planos/plano-integracao-stone-conciliacao.md#751-cmv-no-fechamento-financeiro-mensal). Ainda não existe fechamento geral nem coordenação implantada entre seus estados e o CMV.
