@@ -12,10 +12,11 @@ export function resolveDPShiftAssignment(params: {
   user: { unitId?: unknown; unitIds?: unknown; assignedKioskIds?: unknown };
 }): DPShiftAssignment {
   const { executionUnitId, executionUnitExternalId, user } = params;
-  const canonicalUnits = [...new Set([
-    typeof user.unitId === 'string' ? user.unitId : '',
-    ...strings(user.unitIds),
-  ].filter(Boolean))];
+  // unitId é a referência financeira; unitIds contém as unidades de escala e operação.
+  // Cadastros legados sem unitIds ainda usam unitId para não perder a origem.
+  const operationalUnits = strings(user.unitIds);
+  const canonicalUnits = [...new Set(operationalUnits.length
+    ? operationalUnits : [typeof user.unitId === 'string' ? user.unitId : ''].filter(Boolean))];
   const allAffiliations = new Set([...canonicalUnits, ...strings(user.assignedKioskIds)]);
   if (allAffiliations.has(executionUnitId) || (executionUnitExternalId && allAffiliations.has(executionUnitExternalId))) {
     return { assignmentKind: 'regular', countsTowardGoals: true };

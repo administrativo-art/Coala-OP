@@ -24,7 +24,7 @@ const { readRepPForAej, readRepPMarkingsForMirror } = await import('../../src/fe
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
-const { canonicalRepPOfflineEvent, hashRepPOfflineEvent, repPDeviceKeyId }
+const { canonicalRepPOfflineEvent, deriveRepPOfflineMarkedAt, hashRepPOfflineEvent, repPDeviceKeyId }
   = await import('../../src/features/dp/rep-p/offline.ts');
 
 function zipEntries(zip) {
@@ -59,7 +59,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
   const anotherUser = dbAdmin.collection('users').doc(`${prefix}-other-user`);
   const employee = hrDbAdmin.collection('employees').doc(`${prefix}-hr`);
   const cpfField = employee.collection('field_values').doc('employee.cpf');
-  const clock = { async read() { return { instant: new Date('2026-10-18T11:15:42.000Z'), source: 'synthetic-hlb-test',
+  let clockInstant = '2026-10-18T11:15:42.000Z';
+  const clock = { async read() { return { instant: new Date(clockInstant), source: 'synthetic-hlb-test',
     assurance: 'hlb_verified', observedOffsetMs: 12, verifiedAt: new Date(), attestationId: 'a'.repeat(64),
     attestationMode: 'fresh', quorum: 2, observations: [
       { server: '200.20.186.75', status: 'accepted', offsetMs: 10, roundTripMs: 20, stratum: 1 },
@@ -500,6 +501,94 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
         const incidents = await repPDbAdmin.collection('repP_availabilityIncidents').where('establishmentId', '==', establishmentId).get();
         for (const doc of incidents.docs) await doc.ref.delete();
         await repPDbAdmin.collection('repP_availabilityStates').doc(establishmentId).delete();
+      }
+    });
+    await t.test('cobertura externa aparece nas opções e registra na unidade escalada sem mudar o empregador', async () => {
+      const externalUnitId = `${prefix}-coverage-unit`;
+      const externalUnit = dbAdmin.collection('dp_units').doc(externalUnitId);
+      const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-coverage-schedule`);
+      const shift = schedule.collection('shifts').doc('coverage');
+      const incompleteUnit = dbAdmin.collection('dp_units').doc(`${prefix}-coverage-incomplete`);
+      const incompleteSchedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-coverage-incomplete-schedule`);
+      const incompleteShift = incompleteSchedule.collection('shifts').doc('coverage');
+      try {
+        await Promise.all([
+          externalUnit.set({ name: 'Cobertura externa', address: 'Rua da cobertura, 3', timeZone: 'America/Belem' }),
+          schedule.set({ year: 2026, month: 10, unitId: externalUnitId, locked: true, createdAt: Timestamp.now() }),
+          shift.set({ userId, unitId: externalUnitId, originUnitId: employerUnitId, date: '2026-10-18',
+            type: 'work', assignmentKind: 'external_coverage', exceptionReason: 'Cobertura autorizada pelo DP' }),
+          incompleteUnit.set({ name: 'Cobertura incompleta', address: '', timeZone: 'America/Belem' }),
+          incompleteSchedule.set({ year: 2026, month: 10, unitId: incompleteUnit.id, locked: true, createdAt: Timestamp.now() }),
+          incompleteShift.set({ userId, unitId: incompleteUnit.id, originUnitId: employerUnitId, date: '2026-10-18',
+            type: 'work', assignmentKind: 'external_coverage', exceptionReason: 'Cobertura sem endereço' }),
+        ]);
+        const coverageOptions = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
+        assert.equal(coverageOptions.executionUnits.find((unit) => unit.id === externalUnitId)?.name, 'Cobertura externa');
+        assert.equal(coverageOptions.executionUnits.some((unit) => unit.id === incompleteUnit.id), false);
+        assert.equal((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-19' }, dependencies))
+          .executionUnits.some((unit) => unit.id === externalUnitId), false);
+        const marked = await recordOwnRepPMarking(context, { attemptId: 'external-coverage-marking',
+          workDate: '2026-10-18', executionUnitId: externalUnitId, channel: 'mobile' }, dependencies);
+        assert.equal(marked.marking.executionUnitId, externalUnitId);
+        assert.equal(marked.marking.employerUnitId, employerUnitId);
+        const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+        const devicePublicKey = keys.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+        const deviceKeyId = repPDeviceKeyId(devicePublicKey);
+        const permit = await issueOwnRepPOfflinePermit(context, { permitRequestId: 'coverage-permit',
+          workDate: '2026-10-18', installationId: '11111111-1111-4111-8111-111111111111',
+          deviceKeyId, devicePublicKey, keySecurity: 'tee', bootCount: 7, anchorElapsedRealtimeMs: 1_000 }, dependencies);
+        const storedPermit = await repPDbAdmin.collection('repP_offlinePermits').doc(permit.permitId).get();
+        assert.equal(storedPermit.get('coverageGrants')[0].executionUnitId, externalUnitId);
+        assert.equal(storedPermit.get('units').some((unit) => unit.id === employerUnitId), true);
+        assert.equal(storedPermit.get('units').some((unit) => unit.id === incompleteUnit.id), false);
+        // A captura local ocorreu antes da edição da escala; o upload chegou depois.
+        const evidence = { permitId: permit.permitId, attemptId: 'coverage-offline',
+          executionUnitId: externalUnitId, deviceKeyId, elapsedRealtimeMs: 61_000, bootCount: 7,
+          sequence: 1, previousLocalHash: null,
+          markedAt: deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
+            anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: 61_000,
+            timeZone: 'America/Belem' }) };
+        const canonical = canonicalRepPOfflineEvent(evidence);
+        const offlineRequest = { attemptId: evidence.attemptId, workDate: '2026-10-18',
+          executionUnitId: externalUnitId, channel: 'mobile',
+          offline: { permitId: permit.permitId, deviceKeyId, elapsedRealtimeMs: evidence.elapsedRealtimeMs,
+            bootCount: 7, sequence: 1, previousLocalHash: null, markedAt: evidence.markedAt,
+            localHash: hashRepPOfflineEvent(canonical),
+            signature: sign('sha256', Buffer.from(canonical), keys.privateKey).toString('base64') } };
+        clockInstant = '2026-10-18T11:20:00.000Z';
+        await shift.delete();
+        await externalUnit.update({ address: '' });
+        assert.equal((await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies))
+          .executionUnits.some((unit) => unit.id === externalUnitId), false);
+        await assert.rejects(recordOwnRepPMarking(context, { attemptId: 'coverage-after-removal',
+          workDate: '2026-10-18', executionUnitId: externalUnitId, channel: 'mobile' }, dependencies),
+        { code: 'REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT' });
+        clockInstant = '2026-10-18T11:30:00.000Z';
+        const offlineMarked = await recordOwnRepPMarking(context, offlineRequest, dependencies);
+        assert.equal(offlineMarked.status, 'recorded');
+        assert.equal(offlineMarked.marking.employerUnitId, employerUnitId);
+        const receipt = await repPDbAdmin.collection('repP_receipts').doc(offlineMarked.receiptId).get();
+        assert.equal(receipt.get('snapshot.workLocation'), 'Rua da cobertura, 3');
+        assert.equal(receipt.get('snapshot.employerCnpj'), employerCnpj);
+        const afterRemoval = { ...evidence, attemptId: 'coverage-offline-after-removal',
+          elapsedRealtimeMs: 361_000, sequence: 2, previousLocalHash: hashRepPOfflineEvent(canonical),
+          markedAt: deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant,
+            anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs, elapsedRealtimeMs: 361_000,
+            timeZone: 'America/Belem' }) };
+        assert.ok(Date.parse(afterRemoval.markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'))
+          > Date.parse('2026-10-18T11:20:00.000Z'));
+        const afterCanonical = canonicalRepPOfflineEvent(afterRemoval);
+        const second = await recordOwnRepPMarking(context, { attemptId: afterRemoval.attemptId,
+          workDate: '2026-10-18', executionUnitId: externalUnitId, channel: 'mobile',
+          offline: { permitId: permit.permitId, deviceKeyId, elapsedRealtimeMs: afterRemoval.elapsedRealtimeMs,
+            bootCount: 7, sequence: 2, previousLocalHash: afterRemoval.previousLocalHash,
+            markedAt: afterRemoval.markedAt, localHash: hashRepPOfflineEvent(afterCanonical),
+            signature: sign('sha256', Buffer.from(afterCanonical), keys.privateKey).toString('base64') } }, dependencies);
+        assert.equal(second.status, 'recorded');
+        assert.equal((await recordOwnRepPMarking(context, offlineRequest, dependencies)).status, 'replayed');
+      } finally {
+        await Promise.all([shift, schedule, externalUnit, incompleteShift, incompleteSchedule, incompleteUnit]
+          .map((ref) => ref.delete().catch(() => undefined)));
       }
     });
     allRefs.push(...eventSnapshot.docs.map((doc) => doc.ref), ...attemptSnapshot.docs.map((doc) => doc.ref),
