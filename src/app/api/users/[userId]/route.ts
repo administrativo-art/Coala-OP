@@ -14,7 +14,7 @@ import { AppError } from "@/lib/observability";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
-import { canDelegateUnitAccess } from "@/lib/unit-access";
+import { canAccessUnit, canDelegateUnitAccess } from "@/lib/unit-access";
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 import {
   EMPLOYMENT_CYCLE_FIELDS,
@@ -312,6 +312,15 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
         code: "USER_UPDATE_UNIT_SCOPE_FORBIDDEN",
         kind: "AUTHORIZATION",
         safeMessage: "Você não pode atribuir unidades ou um escopo maior que o seu próprio.",
+      });
+    }
+    if (typeof payload.unitId === "string" && payload.unitId.trim()
+      && payload.unitId !== existingUser.unitId
+      && !canAccessUnit(actor.userDoc, payload.unitId.trim(), { isDefaultAdmin: actor.isDefaultAdmin })) {
+      throw new AppError({
+        code: "USER_UPDATE_FINANCIAL_UNIT_SCOPE_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "A referência financeira está fora do seu escopo de unidades.",
       });
     }
 

@@ -15,6 +15,7 @@ export type DayShift = {
   endTime: string | null;
   shiftName: string | null;
   unitName: string | null;
+  assignmentKind?: 'regular' | 'external_coverage';
   breakType: "none" | "fixed" | "flexible" | "staggered";
   breakStart: string | null;
   breakEnd: string | null;
