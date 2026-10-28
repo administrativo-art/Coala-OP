@@ -26,7 +26,6 @@ import {
   autentiqueSandboxEnabled,
   createAutentiqueDocument,
   getAutentiqueDocumentSignatures,
-  type AutentiqueCreatedDocument,
 } from '@/lib/autentique.server';
 import {
   analyzeVacationScheduling,
@@ -52,9 +51,10 @@ import type {
 import { vacationAccountantEmailContent } from './emails';
 import { downloadVacationAutentiqueSignedPdf } from './autentique-signed-pdf.server';
 import { saveImmutableVacationPdf } from './immutable-pdf.server';
+import { vacationParticipantsFromProvider, type VacationSigner } from './autentique-participants.server';
 import {
   retryVacationReceiptSignature,
-  syncVacationReceiptSignatureRequest,
+  refreshVacationReceiptSignatureFromProvider,
 } from './payment-completion.server';
 import { buildVacationNoticePdf } from './vacation-notice-pdf.server';
 
@@ -1040,64 +1040,6 @@ function workflowForStoredVacation(
     });
 }
 
-function participantStatus(
-  signature: AutentiqueCreatedDocument['signatures'][number],
-): DPVacationSignatureParticipant['status'] {
-  if (signature.signed?.created_at) return 'signed';
-  if (signature.rejected?.created_at) return 'rejected';
-  if (signature.viewed?.created_at) return 'viewed';
-  if (signature.email_events?.refused) return 'delivery_failed';
-  return 'sent';
-}
-
-function deliveryFailureReason(value: unknown) {
-  const reason = typeof value === 'string' ? value.trim() : '';
-  return reason
-    ? reason.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').slice(0, 300)
-    : null;
-}
-
-type VacationNoticeSigner = {
-  party: DPVacationSignatureParticipant['party'];
-  name: string;
-  email: string;
-  avatarUrl?: string | null;
-};
-
-function participantsFromProvider(input: {
-  signatures: AutentiqueCreatedDocument['signatures'];
-  signers: VacationNoticeSigner[];
-  invitedAt: string;
-}) {
-  return input.signatures.flatMap((signature): DPVacationSignatureParticipant[] => {
-    const providerSignatureId = String(signature.public_id ?? '').trim();
-    const email = String(signature.email ?? signature.user?.email ?? '').trim().toLowerCase();
-    const signer = input.signers.find((candidate) => candidate.email.toLowerCase() === email);
-    if (!providerSignatureId || !signer) return [];
-    const networkEvent = signature.signed ?? signature.rejected ?? signature.viewed;
-    return [{
-      party: signer.party,
-      providerSignatureId,
-      name: String(signature.name ?? signature.user?.name ?? signer.name).trim() || signer.name,
-      email: email || signer.email,
-      avatarUrl: signer.avatarUrl ?? null,
-      status: participantStatus(signature),
-      invitedAt: input.invitedAt,
-      emailSentAt: signature.email_events?.sent ?? null,
-      emailDeliveredAt: signature.email_events?.delivered ?? null,
-      deliveryFailureReason: signature.email_events?.refused
-        ? deliveryFailureReason(signature.email_events.reason)
-        : null,
-      emailOpenedAt: signature.email_events?.opened ?? null,
-      viewedAt: signature.viewed?.created_at ?? null,
-      signedAt: signature.signed?.created_at ?? null,
-      rejectedAt: signature.rejected?.created_at ?? null,
-      lastIp: networkEvent?.ip ?? null,
-      lastPort: networkEvent?.port ?? null,
-    }];
-  });
-}
-
 function participantMap(participants: DPVacationSignatureParticipant[]) {
   return Object.fromEntries(participants.map((participant) => [participant.providerSignatureId, participant]));
 }
@@ -1697,7 +1639,7 @@ export async function sendVacationNotice(
     });
   }
 
-  const signers: VacationNoticeSigner[] = [
+  const signers: VacationSigner[] = [
     {
       party: 'employee',
       name: employeeName,
@@ -1790,7 +1732,7 @@ export async function sendVacationNotice(
     });
     createdProviderDocumentId = created.document.id;
     const sentAt = new Date().toISOString();
-    const participants = participantsFromProvider({
+    const participants = vacationParticipantsFromProvider({
       signatures: created.document.signatures,
       signers,
       invitedAt: sentAt,
@@ -2072,7 +2014,7 @@ export async function syncVacationNotice(request: NextRequest, vacationId: strin
     };
   });
   const provider = await getAutentiqueDocumentSignatures(signature.providerDocumentId);
-  const participants = participantsFromProvider({
+  const participants = vacationParticipantsFromProvider({
     signatures: provider.signatures,
     signers: signature.signers,
     invitedAt: signature.invitedAt,
@@ -2687,16 +2629,8 @@ export async function retryVacationReceiptSignatureAction(request: NextRequest, 
 }
 
 export async function syncVacationReceiptSignatureAction(request: NextRequest, vacationId: string) {
-  const { vacationRef } = await requireVacationApprovalAccess(request, vacationId);
-  const snapshot = await vacationRef.get();
-  const workflow = snapshot.get('workflow') as DPVacationWorkflow | undefined;
-  if (!workflow?.receiptSignature.signatureRequestId) {
-    throw conflict('DP_VACATION_RECEIPT_SIGNATURE_NOT_SENT', 'O recibo ainda não foi enviado para assinatura.');
-  }
-  const result = await syncVacationReceiptSignatureRequest({
-    vacationId,
-    signatureRequestId: workflow.receiptSignature.signatureRequestId,
-  });
+  await requireVacationApprovalAccess(request, vacationId);
+  const result = await refreshVacationReceiptSignatureFromProvider(vacationId);
   return { id: vacationId, result };
 }
 
