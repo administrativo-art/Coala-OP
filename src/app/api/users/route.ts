@@ -127,15 +127,13 @@ export async function POST(request: NextRequest) {
     if (!isEmploymentRelationshipType(rawUserData.employmentRelationshipType)) {
       return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, Aprendiz, PJ, Estágio ou Societário." }, { status: 400 });
     }
-    if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })) {
+    const requestedFinancialUnitId = text(rawUserData.unitId);
+    if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })
+      || (requestedFinancialUnitId && !canAccessUnit(actor.userDoc, requestedFinancialUnitId, { isDefaultAdmin: actor.isDefaultAdmin }))) {
       return NextResponse.json(
-        { error: "O escopo do novo usuário não pode ultrapassar o seu próprio escopo de unidades." },
+        { error: "As unidades operacionais, a referência financeira e o escopo do novo usuário devem estar no seu próprio escopo de unidades." },
         { status: 403 },
       );
-    }
-    const requestedFinancialUnitId = text(rawUserData.unitId);
-    if (requestedFinancialUnitId && !canAccessUnit(actor.userDoc, requestedFinancialUnitId, { isDefaultAdmin: actor.isDefaultAdmin })) {
-      return NextResponse.json({ error: "A referência financeira está fora do seu escopo de unidades." }, { status: 403 });
     }
 
     const profileSnapshot = await dbAdmin.collection("profiles").doc(profileId).get();
