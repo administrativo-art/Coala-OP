@@ -49,11 +49,12 @@ import {
   vacationWorkflowDisplayStageId,
 } from '@/lib/dp-vacation-workflow';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PageHero } from '@/components/patterns/page-hero';
 import { HeroChip } from '@/components/patterns/hero-chip';
 import { SidePanel } from '@/components/patterns/side-panel';
 import { VacationPill, VacationStageDots, workflowOperationalSummary } from '@/components/dp/dp-ferias-shared';
-import { PersonBand, VacationRuleTimeline, type BandTone } from '@/components/dp/dp-ferias-person-parts';
+import { PersonStatusBar, VacationRuleTimeline, type BandTone } from '@/components/dp/dp-ferias-person-parts';
 
 import {
   calculateVacationHealth,
@@ -507,15 +508,19 @@ export function DPFeriasProfile({
           : (right.startDate ?? '').localeCompare(left.startDate ?? '');
       });
   }, [userVacations, workflowCycle]);
-  const selectedWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId)
-    ?? workflowVacations[0];
+  // O painel de etapas mostra só a parcela escolhida; ao concluir, a trilha sai da lista e o painel fecha em vez de
+  // abrir outro registro com as mesmas datas.
+  const drawerWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId);
+  const selectedWorkflowVacation = drawerWorkflowVacation ?? workflowVacations[0];
 
   React.useEffect(() => {
     if (!workflowVacations.length) {
+      setWorkflowDrawerOpen(false);
       setSelectedWorkflowVacationId(null);
       return;
     }
     if (!workflowVacations.some(vacation => vacation.id === selectedWorkflowVacationId)) {
+      if (selectedWorkflowVacationId) setWorkflowDrawerOpen(false);
       setSelectedWorkflowVacationId(workflowVacations[0].id);
     }
   }, [selectedWorkflowVacationId, workflowVacations]);
@@ -816,11 +821,8 @@ export function DPFeriasProfile({
   const nextVacation = enjoyments
     .filter(record => parseISO(record.startDate!) > today)
     .sort((left, right) => left.startDate!.localeCompare(right.startDate!))[0];
-  const situation = onVacation
-    ? `De férias até ${format(parseISO(onVacation.endDate!), 'dd/MM')}`
-    : nextVacation ? `Férias em ${format(parseISO(nextVacation.startDate!), 'dd/MM')}` : 'Trabalhando';
   const nowText = onVacation
-    ? `De férias de ${fmtDate(onVacation.startDate)} a ${fmtDate(onVacation.endDate)}. Retorna em ${fmtDate(onVacation.returnDate)}.`
+    ? `De férias de ${fmtDate(onVacation.startDate)} a ${fmtDate(onVacation.endDate)} · retorna em ${fmtDate(onVacation.returnDate)}.`
     : nextVacation
       ? `Trabalhando. Próximas férias a partir de ${fmtDate(nextVacation.startDate)}.`
       : 'Trabalhando. Nenhuma férias marcada.';
@@ -829,30 +831,23 @@ export function DPFeriasProfile({
     .map(record => ({ record, summary: workflowOperationalSummary(record.workflow!, user.username) }));
   const hrTrail = openTrails.find(trail => trail.summary.owner === 'RH');
   const externalTrail = openTrails.find(trail => !['RH', 'Sistema'].includes(trail.summary.owner));
-  let todoText = 'Nada a fazer: ainda no primeiro período aquisitivo.';
-  let todoTone: BandTone = 'neutral';
+  // Sem ação pendente a faixa mostra só "Hoje": saldo, prazo e próximo direito já estão nos chips do cabeçalho.
+  let todo: { text: string; tone: BandTone } | null = null;
   if (hrTrail) {
-    todoText = `${hrTrail.summary.action} · férias de ${fmtDate(hrTrail.record.startDate)}.`;
-    todoTone = 'info';
+    todo = { text: `${hrTrail.summary.action} · férias de ${fmtDate(hrTrail.record.startDate)}.`, tone: 'info' };
   } else if (externalTrail) {
-    todoText = `Aguardando ${externalTrail.summary.owner}: ${externalTrail.summary.action.toLowerCase()} · férias de ${fmtDate(externalTrail.record.startDate)}.`;
-    todoTone = 'warn';
+    todo = { text: `Aguardando ${externalTrail.summary.owner}: ${externalTrail.summary.action.toLowerCase()} · férias de ${fmtDate(externalTrail.record.startDate)}.`, tone: 'warn' };
   } else if (concessiveCycle && concessiveCycle.balance > 0 && concessiveNoticeLimit) {
-    todoText = `Agendar ${concessiveCycle.balance} dias até ${fmtDate(concessiveCycle.concessivePeriod.end)}. Para dar o aviso a tempo, marque até ${fmtDate(concessiveNoticeLimit.date)}.`;
-    todoTone = concessiveNoticeLimit.daysLeft <= 60 ? 'danger' : 'warn';
-  } else if (shownConcessive && shownConcessive.status === 'GOZADO') {
-    todoText = acquisitiveCycle
-      ? `Nada a fazer: o período está quitado. O próximo direito libera em ${fmtDate(addDays(acquisitiveCycle.acquisitivePeriod.end, 1))}.`
-      : 'Nada a fazer: o período está quitado.';
-  } else if (shownConcessive) {
-    todoText = `Nada a fazer: tudo agendado até ${fmtDate(shownConcessive.concessivePeriod.end)}.`;
+    todo = {
+      text: `Agendar ${concessiveCycle.balance} dias até ${fmtDate(concessiveCycle.concessivePeriod.end)}. Para dar o aviso a tempo, marque até ${fmtDate(concessiveNoticeLimit.date)}.`,
+      tone: concessiveNoticeLimit.daysLeft <= 60 ? 'danger' : 'warn',
+    };
   }
+  const nextEntitlement = acquisitiveCycle ? addDays(acquisitiveCycle.acquisitivePeriod.end, 1) : null;
   const canSchedule = canEdit && Boolean(defaultRegistrationCycle);
   const scheduleHint = defaultRegistrationCycle
-    ? `${defaultRegistrationCycle.balance} dias disponíveis · conceder até ${fmtDate(defaultRegistrationCycle.concessivePeriod.end)}`
-    : acquisitiveCycle
-      ? `Sem saldo agora · o próximo direito libera em ${fmtDate(addDays(acquisitiveCycle.acquisitivePeriod.end, 1))}`
-      : 'Sem saldo para agendar';
+    ? undefined
+    : nextEntitlement ? `Sem saldo agora · o próximo direito libera em ${fmtDate(nextEntitlement)}` : 'Sem saldo para agendar';
   const concessiveRecords = (shownConcessive?.records ?? [])
     .filter(record => record.status !== 'REJECTED')
     .sort((left, right) => (left.startDate ?? '').localeCompare(right.startDate ?? ''));
@@ -900,21 +895,28 @@ export function DPFeriasProfile({
       <PageHero
         kicker="Férias · Colaborador"
         title={user.username}
+        leading={(
+          <Avatar className="h-14 w-14 shrink-0 ring-2 ring-white/15">
+            <AvatarImage src={user.avatarUrl || undefined} alt={user.username} className="object-cover" />
+            <AvatarFallback className="bg-white/10 text-[16px] font-extrabold text-ds-on-dark">
+              {user.username.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')}
+            </AvatarFallback>
+          </Avatar>
+        )}
         subtitle={[user.jobRoleName, admDate ? `admissão em ${fmtDate(admDate)}` : null].filter(Boolean).join(' · ')}
         actions={canEdit ? (
-          <div className="flex flex-col items-end gap-1">
+          <span title={scheduleHint}>
             <Button type="button" variant="primary-page" size="md" disabled={!canSchedule} onClick={() => openVacationEditor()}>
               <Plus className="mr-2 h-4 w-4" />
               Agendar férias
             </Button>
-            <span className="max-w-[260px] text-right text-[11.5px] font-semibold text-ds-on-dark-sub">{scheduleHint}</span>
-          </div>
+          </span>
         ) : null}
         chips={(
           <>
-            <HeroChip value={situation} label="hoje" tone={onVacation ? 'info' : 'neutral'} />
             <HeroChip value={shownConcessive ? `${Math.max(0, shownConcessive.balance)}d` : '—'} label="saldo a agendar" />
             <HeroChip value={shownConcessive ? fmtDate(shownConcessive.concessivePeriod.end) : '—'} label="conceder até" tone={concessiveUrgent ? 'danger' : 'neutral'} />
+            {nextEntitlement ? <HeroChip value={fmtDate(nextEntitlement)} label="próximo direito" /> : null}
           </>
         )}
       />
@@ -924,10 +926,7 @@ export function DPFeriasProfile({
           Data de admissão não cadastrada. Configure o perfil do colaborador para calcular os períodos de férias.
         </p>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          <PersonBand label="Hoje" text={nowText} tone={onVacation ? 'info' : 'neutral'} />
-          <PersonBand label="O que fazer agora" text={todoText} tone={todoTone} />
-        </div>
+        <PersonStatusBar today={nowText} todayTone={onVacation ? 'info' : 'neutral'} action={todo} />
       )}
 
       {shownConcessive ? <VacationRuleTimeline cycle={shownConcessive} today={today} /> : null}
@@ -1101,11 +1100,11 @@ export function DPFeriasProfile({
       </div>
 
       <SidePanel
-        open={workflowDrawerOpen && Boolean(selectedWorkflowVacation)}
+        open={workflowDrawerOpen && Boolean(drawerWorkflowVacation)}
         onOpenChange={setWorkflowDrawerOpen}
-        kicker={selectedWorkflowVacation ? `Férias · ${parcelLabels.get(selectedWorkflowVacation.id) ?? 'Parcela'}` : 'Férias'}
+        kicker={drawerWorkflowVacation ? `Férias · ${parcelLabels.get(drawerWorkflowVacation.id) ?? 'Parcela'}` : 'Férias'}
         title={user.username}
-        subtitle={selectedWorkflowVacation ? `${fmtDate(selectedWorkflowVacation.startDate)} a ${fmtDate(selectedWorkflowVacation.endDate)} · ${selectedWorkflowVacation.days} dias` : undefined}
+        subtitle={drawerWorkflowVacation ? `${fmtDate(drawerWorkflowVacation.startDate)} a ${fmtDate(drawerWorkflowVacation.endDate)} · ${drawerWorkflowVacation.days} dias` : undefined}
         className="w-[860px]"
       >
         <DPVacationWorkflowPanel
