@@ -1364,7 +1364,7 @@ export function DPVacationWorkflowPanel({
             {selectedStage === 'payment' ? (
               <Substep done={paymentPaid} active={!paymentPaid && workflow.currentStage === 'payment'} label="Financeiro" detail={paymentPaid ? 'Pagamento confirmado' : 'Autorizar e acompanhar'} />
             ) : selectedStage === 'receipt_signature' ? (
-              <Substep done={receiptSigned} active={paymentPaid && !receiptSigned} label="Assinar recibo" detail={receiptSigned ? 'Assinatura concluída' : 'Bloqueado até o pagamento'} />
+              <Substep done={receiptSigned} active={paymentPaid && !receiptSigned} label="Assinar recibo" detail={receiptSigned ? 'Assinatura concluída' : paymentPaid ? 'Aguardando assinatura do colaborador' : 'Bloqueado até o pagamento'} />
             ) : (
               <Substep done={workflow.closure.status === 'completed'} active={workflow.closure.status === 'ready'} label="Finalizar no RH" detail={workflow.closure.status === 'completed' ? 'Trilha encerrada' : 'Após assinatura do recibo'} />
             )}

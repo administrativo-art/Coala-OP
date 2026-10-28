@@ -13,13 +13,11 @@ const vacationPage = readFileSync('src/app/dashboard/dp/ferias/page.tsx', 'utf8'
 const pageHeader = readFileSync('src/components/layout/page-header.tsx', 'utf8');
 const globalStyles = readFileSync('src/app/globals.css', 'utf8');
 
-test('fila de prioridade exclui ciclos agendados e pendentes apenas de aprovação', () => {
-  assert.match(manager, /e\.health\.cycleStatus !== 'AGENDADO'/);
-  assert.match(manager, /e\.health\.cycleStatus !== 'AGUARDANDO_APROVACAO'/);
-  assert.match(manager, /Férias agendadas/);
-  assert.match(manager, /Aguardando aprovação/);
-  assert.match(manager, /riskFilter === 'ALL' && awaitingApproval\.length > 0/);
-  assert.match(manager, /riskFilter === 'ALL' && scheduled\.length > 0/);
+test('panorama só pede agendamento para período concessivo com saldo aberto', () => {
+  assert.match(manager, /cycle\.status !== 'GOZADO' && cycle\.status !== 'AQUISITIVO'/);
+  assert.match(manager, /concessive\.status === 'PENDENTE' \|\| concessive\.status === 'PARCIAL'/);
+  assert.match(manager, /concessive\.status === 'AGUARDANDO_APROVACAO'\) return \{ label: 'Aguardando aprovação'/);
+  assert.match(manager, /concessive\.status === 'AGENDADO'/);
 });
 
 test('ciclo sem saldo não oferece novo lançamento no drawer ou no perfil', () => {
@@ -59,13 +57,11 @@ test('perfil não reabre trilha para um período legado que já terminou', () =>
 });
 
 test('painel encaminha as filas para a ficha individual e mantém a decisão individual', () => {
-  assert.match(manager, />\s*Abrir ficha\s*<ArrowUpRight/);
+  assert.match(manager, /const openPerson = \(userId: string\) => router\.push\(`\/dashboard\/dp\/ferias\/\$\{encodeURIComponent\(userId\)\}`\)/);
+  assert.match(manager, /<PersonRow[^>]*onOpen=\{\(\) => openPerson\(person\.user\.id\)\}/);
   assert.doesNotMatch(manager, /\?action=register/);
-  assert.match(manager, /kind="scheduling"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
-  assert.match(manager, /kind="approval"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
   assert.doesNotMatch(manager, /DPFeriasDrawer|setDrawerUserId/);
-  assert.match(manager, /<ConcessivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
-  assert.match(manager, /<AquisitivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
+  assert.doesNotMatch(manager, /Registrar férias/);
   assert.doesNotMatch(profilePage, /action === 'register'|initialRegistrationOpen/);
   assert.match(profile, /const \[scheduleOpen, setScheduleOpen\] = useState\(false\)/);
   assert.match(profile, /DPVacationDecisionPanel/);
@@ -75,44 +71,35 @@ test('painel encaminha as filas para a ficha individual e mantém a decisão ind
 });
 
 test('painel acompanha as trilhas ativas até a finalização e abre o período correto', () => {
-  assert.match(manager, /Trilhas em andamento/);
+  assert.match(manager, /label: 'Em andamento'/);
   assert.match(manager, /workflow\.status !== 'active'/);
-  assert.match(manager, /workflow\.currentStage === 'scheduling'/);
-  assert.match(manager, /Etapa \{stageIndex \+ 1\} de/);
-  assert.match(manager, /Responsável: \{summary\.owner\}/);
+  assert.match(manager, /Etapa \{stageIndex \+ 1\} de 6/);
+  assert.match(manager, /Responsável: \{trail\.owner\}/);
   assert.match(manager, /\?vacation=\$\{encodeURIComponent\(trail\.record\.id\)\}/);
   assert.match(profilePage, /initialWorkflowVacationId/);
   assert.match(profile, /initialWorkflowVacationId \?\? null/);
 });
 
-test('perfil agrupa concessivo, resumo, ciclos e auditoria no mesmo bloco histórico', () => {
-  assert.match(profile, /Ciclos e histórico/);
-  assert.match(profile, /Consulte o prazo concessivo, os saldos, os lançamentos e a auditoria em um único bloco/);
+test('página do colaborador separa período concessivo, aquisitivo, anteriores e auditoria', () => {
+  assert.match(profile, /Período concessivo · as férias que precisam ser concedidas/);
+  assert.match(profile, /Período aquisitivo · ganhando o próximo direito/);
+  assert.match(profile, /Períodos anteriores/);
   assert.match(profile, /DPVacationAuditTimeline/);
   assert.match(profile, /Histórico auditável/);
-  assert.match(profile, /Histórico de Ciclos/);
   assert.doesNotMatch(workflow, /<details className="group/);
 });
 
-test('resumo separa estados dos ciclos das métricas do ciclo concessivo', () => {
-  assert.match(profile, /Em aquisição/);
-  assert.match(profile, /Em período concessivo/);
-  assert.match(profile, /Encerrados/);
-  assert.match(profile, /Vencidos/);
-  assert.match(profile, /Férias do ciclo concessivo/);
-  assert.match(profile, /Períodos lançados/);
-  assert.match(profile, /Dias distribuídos/);
-  assert.match(profile, /Saldo a programar/);
-  assert.doesNotMatch(profile, /Total de registros/);
-  assert.doesNotMatch(profile, /Dias registrados/);
+test('página do colaborador diz a situação de hoje, o próximo passo e desenha a regra do prazo', () => {
+  assert.match(profile, /<PersonBand label="Hoje"/);
+  assert.match(profile, /<PersonBand label="O que fazer agora"/);
+  assert.match(profile, /<VacationRuleTimeline cycle=\{shownConcessive\}/);
+  assert.match(profile, /gozados · \{Math\.max\(0, shownConcessive\.takenDays - enjoyedDays\)\} agendados/);
 });
 
-test('ciclo concessivo alerta a data-limite estimada do aviso e explica o cálculo', () => {
+test('próximo passo usa a data-limite do aviso com 30 dias de antecedência', () => {
   assert.match(profile, /concessiveNoticeLimit/);
-  assert.match(profile, /Data-limite do aviso/);
-  assert.match(profile, /Entenda esta data/);
-  assert.match(profile, /com 30 dias de antecedência/);
   assert.match(profile, /remainingDays \+ 29/);
+  assert.match(profile, /Para dar o aviso a tempo, marque até/);
 });
 
 test('decisão no drawer mantém aprovação e rejeição protegidas por permissão e justificativa', () => {
@@ -126,15 +113,12 @@ test('decisão no drawer mantém aprovação e rejeição protegidas por permiss
   assert.match(decisionPanel, /Rejeitado por você/);
 });
 
-test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
-  assert.match(manager, /Pendente de agendamento/);
-  assert.match(manager, /\['PENDENTE', 'PARCIAL', 'VENCIDO'\]\.includes\(e\.health\.cycleStatus\)/);
-  assert.match(manager, /e\.balance > 0/);
-  assert.match(manager, /com saldo aberto/);
-  assert.match(manager, /Prazo de aviso em risco/);
-  assert.match(manager, /Em gozo neste mês/);
-  assert.match(manager, /QueueRow/);
-  assert.match(manager, /router\.push\(`\/dashboard\/dp\/ferias\/\$\{encodeURIComponent\(item\.user\.id\)\}`\)/);
+test('panorama traz indicadores, pendências do RH, filtro por unidade e calendário', () => {
+  assert.match(manager, /Precisa de você/);
+  assert.match(manager, /\['PENDENTE', 'PARCIAL', 'VENCIDO'\]\.includes\(cycle\.status\)/);
+  assert.match(manager, /label="prazos em risco"/);
+  assert.match(manager, /label="em gozo neste mês"/);
+  assert.match(manager, /unitFilter === '__all__' \|\| user\.unitIds\?\.includes\(unitFilter\)/);
   assert.match(manager, /DPVacationTimeline/);
   assert.match(timeline, /Aprovada/);
   assert.match(timeline, /Planejada/);
@@ -146,19 +130,14 @@ test('férias usa o cabeçalho e a escala tipográfica canônicos', () => {
   assert.match(pageHeader, /data-ui="page-title"/);
   assert.match(pageHeader, /text-2xl font-bold tracking-tight/);
   assert.match(vacationPage, /system-standard-page/);
-  assert.match(vacationPage, /<PageHeader/);
+  assert.match(manager, /<PageHero/);
   assert.match(globalStyles, /\.personal-section-density \.system-standard-page \[data-ui='page-title'\]/);
   assert.match(globalStyles, /font-size: 1\.5rem !important/);
 });
 
-test('timeline encerra o conteúdo operacional depois do período aquisitivo', () => {
-  const acquisitiveSection = manager.indexOf('{/* Período aquisitivo */}');
-  const timelineSection = manager.indexOf('<DPVacationTimeline', acquisitiveSection);
-  const monthModalSection = manager.indexOf('{/* Férias do mês modal */}', timelineSection);
-
-  assert.ok(acquisitiveSection >= 0);
-  assert.ok(timelineSection > acquisitiveSection);
-  assert.ok(monthModalSection > timelineSection);
+test('linha do tempo das férias fica na aba Calendário, separada do panorama', () => {
+  assert.match(manager, /view === 'calendar' \? \(\s*<DPVacationTimeline/);
+  assert.match(manager, /label: 'Calendário'/);
 });
 
 test('cadastro acontece na ficha individual e o drawer preserva edição e exclusão', () => {

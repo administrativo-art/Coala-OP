@@ -2,7 +2,6 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { DPFeriasManager } from '@/components/dp/dp-ferias-manager';
-import { PageHeader } from '@/components/layout/page-header';
 
 export default function DPFeriasPage() {
   const { permissions } = useAuth();
@@ -12,11 +11,7 @@ export default function DPFeriasPage() {
   }
 
   return (
-    <div className="system-standard-page space-y-6">
-      <PageHeader
-        title="Férias"
-        description="Do lançamento ao encerramento: acompanhe prazos, aprove períodos e siga a trilha documental de cada colaborador."
-      />
+    <div className="system-standard-page">
       <DPFeriasManager />
     </div>
   );
