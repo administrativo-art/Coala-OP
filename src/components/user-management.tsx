@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
+import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type UnitAccessScope, type User } from '@/types';
 import { normalizeUnitAccessScope } from '@/lib/unit-access';
