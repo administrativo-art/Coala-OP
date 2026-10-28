@@ -15,6 +15,12 @@
 - Ao criar/remover/mover API, página externa ou export de Cloud Functions, revise `docs/engineering/surface-flow-matrix.csv` antes de regenerar o inventário. Para jobs, gatilhos e webhooks, atualize `runtime-surfaces.md` e os consumidores afetados; para entradas compartilhadas, `access-and-privacy.md`. `generate-surface-inventory.py --check` também exige classificação dessas superfícies. Não marcar associação estrutural como autorização ou execução verificada.
 - Toda rota nova em `src/app/api/**/route.*` e todo arquivo de rota existente alterado devem exportar cada método HTTP diretamente por `secureRoute`, com contrato e enforcer compatíveis, ou registrar uma exceção temporária delimitada em `config/security-contract-exceptions.json`. O baseline legado é dívida congelada, não aprovação, e não deve ser regenerado para fazer uma mudança passar. Execute `npm run check:security-contracts` e siga `docs/engineering/security-contract.md`.
 
+## Planos
+
+- Todo plano de implementação, de produto ou de migração fica em `docs/planos/`, um arquivo por plano, com o nome `plano-<tema>.md`, e entra no índice `docs/planos/README.md`. Não crie planos na raiz de `docs/`, em outras pastas, em `.ai-work/`, no scratchpad ou fora do repositório.
+- O plano registra situação atual verificada, decisões com data, pendências a confirmar e ordem de execução. Documentos de apoio de um plano (homologação, referências, anexos) podem ficar em pastas temáticas, mas o plano em si continua em `docs/planos/` e aponta para eles.
+- Registros de chamado (`.ai-work/development-technology/<id>/`) e decisões de design (`docs/design/decisoes/`) não são planos e continuam nos seus lugares.
+
 ## Departamento de Desenvolvimento e Tecnologia
 
 - Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os oito especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown.
