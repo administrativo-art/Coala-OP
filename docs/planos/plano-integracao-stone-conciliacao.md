@@ -2,9 +2,9 @@
 
 **Status:** plano para implementação incremental
 
-**Decisão posterior (2026-09-26):** para o escopo Coala, sangrias são despesas classificadas obrigatoriamente na contagem; não transferências genéricas. Faltas/sobras físicas usam resultado calculado e justificativa livre, sem investigação obrigatória. Receita integral, taxas explícitas e competência gerencial seguem os contratos atualizados em [DRE](engineering/flows/dre.md), [fechamento diário](engineering/flows/cash-closures.md) e [taxas](engineering/flows/stone-sales-review.md). Propostas conflitantes abaixo são históricas; fechamento mensal/backfill real não estão autorizados nesta entrega local.
+**Decisão posterior (2026-09-26):** para o escopo Coala, sangrias são despesas classificadas obrigatoriamente na contagem; não transferências genéricas. Faltas/sobras físicas usam resultado calculado e justificativa livre, sem investigação obrigatória. Receita integral, taxas explícitas e competência gerencial seguem os contratos atualizados em [DRE](../engineering/flows/dre.md), [fechamento diário](../engineering/flows/cash-closures.md) e [taxas](../engineering/flows/stone-sales-review.md). Propostas conflitantes abaixo são históricas; fechamento mensal/backfill real não estão autorizados nesta entrega local.
 
-**Decisão posterior (2026-09-27) — CMV da DRE:** aprovada a atualização do CMV por composição enquanto aberto e seu congelamento **manual**, por unidade/competência, na confirmação do fechamento. Usa-se o custo vigente nessa confirmação, inclusive se feita no mês seguinte. A entrega atual acrescenta somente o fechamento do CMV na DRE; o fechamento financeiro geral permanece planejado. O contrato de integração está em [7.5.1](#751-cmv-no-fechamento-financeiro-mensal) e no [guia DRE](engineering/flows/dre.md#cmv-atual-e-fechamento-manual--2026-09-27). A ferramenta de simulação de preço não é a origem do problema e não é removida nesta correção.
+**Decisão posterior (2026-09-27) — CMV da DRE:** aprovada a atualização do CMV por composição enquanto aberto e seu congelamento **manual**, por unidade/competência, na confirmação do fechamento. Usa-se o custo vigente nessa confirmação, inclusive se feita no mês seguinte. A entrega atual acrescenta somente o fechamento do CMV na DRE; o fechamento financeiro geral permanece planejado. O contrato de integração está em [7.5.1](#751-cmv-no-fechamento-financeiro-mensal) e no [guia DRE](../engineering/flows/dre.md#cmv-atual-e-fechamento-manual--2026-09-27). A ferramenta de simulação de preço não é a origem do problema e não é removida nesta correção.
 
 **Competência inicial do backfill:** agosto de 2026
 
@@ -78,8 +78,8 @@ expectedTotalCents + finalizedDifferenceTotalCents
 
 Referências:
 
-- [`src/features/financial/pages/dre-page.tsx`](../src/features/financial/pages/dre-page.tsx)
-- [`src/features/financial/cash-closures/summary-counts.ts`](../src/features/financial/cash-closures/summary-counts.ts)
+- [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx)
+- [`src/features/financial/cash-closures/summary-counts.ts`](../../src/features/financial/cash-closures/summary-counts.ts)
 
 Esse contrato mistura receita com posição física do caixa. Deve ser corrigido antes de a Receita conciliada se tornar uma opção oficial.
 
@@ -89,8 +89,8 @@ Pix, débito e crédito são hoje marcados como conferidos automaticamente com o
 
 Referências:
 
-- [`src/features/financial/cash-closures/channel-normalization.ts`](../src/features/financial/cash-closures/channel-normalization.ts)
-- [`src/features/financial/cash-closures/build-cash-closure.ts`](../src/features/financial/cash-closures/build-cash-closure.ts)
+- [`src/features/financial/cash-closures/channel-normalization.ts`](../../src/features/financial/cash-closures/channel-normalization.ts)
+- [`src/features/financial/cash-closures/build-cash-closure.ts`](../../src/features/financial/cash-closures/build-cash-closure.ts)
 
 ### 4.3 Pagamentos do PDV
 
@@ -98,7 +98,7 @@ O parser atual preserva cupom, operador, horário, forma de pagamento e valor, m
 
 Referência:
 
-- [`src/features/financial/cash-closures/pdv-coupon-parser.ts`](../src/features/financial/cash-closures/pdv-coupon-parser.ts)
+- [`src/features/financial/cash-closures/pdv-coupon-parser.ts`](../../src/features/financial/cash-closures/pdv-coupon-parser.ts)
 
 ### 4.4 Caixa, sangrias e depósitos existentes
 
@@ -108,10 +108,10 @@ O problema remanescente para a DRE é mais restrito: o resumo atual incorpora a 
 
 Referências:
 
-- [`src/features/financial/cash-closures/pdv-cash-movements.ts`](../src/features/financial/cash-closures/pdv-cash-movements.ts)
-- [`src/features/financial/cash-closures/build-cash-closure.ts`](../src/features/financial/cash-closures/build-cash-closure.ts)
-- [`src/features/financial/cash-closures/repository.server.ts`](../src/features/financial/cash-closures/repository.server.ts)
-- [`src/features/financial/cash-deposits/reconciliation.ts`](../src/features/financial/cash-deposits/reconciliation.ts)
+- [`src/features/financial/cash-closures/pdv-cash-movements.ts`](../../src/features/financial/cash-closures/pdv-cash-movements.ts)
+- [`src/features/financial/cash-closures/build-cash-closure.ts`](../../src/features/financial/cash-closures/build-cash-closure.ts)
+- [`src/features/financial/cash-closures/repository.server.ts`](../../src/features/financial/cash-closures/repository.server.ts)
+- [`src/features/financial/cash-deposits/reconciliation.ts`](../../src/features/financial/cash-deposits/reconciliation.ts)
 
 ### 4.5 Conciliação bancária existente
 
@@ -121,8 +121,8 @@ Somente movimentos efetivos do extrato da conta Stone entram nessa conciliação
 
 Referência:
 
-- [`src/features/financial/inter-statement-sync.server.ts`](../src/features/financial/inter-statement-sync.server.ts)
-- [`src/features/financial/pages/import-page.tsx`](../src/features/financial/pages/import-page.tsx)
+- [`src/features/financial/inter-statement-sync.server.ts`](../../src/features/financial/inter-statement-sync.server.ts)
+- [`src/features/financial/pages/import-page.tsx`](../../src/features/financial/pages/import-page.tsx)
 
 ### 4.6 Fluxo de caixa existente
 
@@ -140,8 +140,8 @@ A implementação deve evoluir essa tela e suas permissões existentes, sem cria
 
 Referências:
 
-- [`src/features/financial/pages/cash-flow-page.tsx`](../src/features/financial/pages/cash-flow-page.tsx)
-- [`src/features/financial/lib/cash-flow-analysis.ts`](../src/features/financial/lib/cash-flow-analysis.ts)
+- [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
+- [`src/features/financial/lib/cash-flow-analysis.ts`](../../src/features/financial/lib/cash-flow-analysis.ts)
 
 ## 5. Arquitetura-alvo
 
@@ -446,7 +446,7 @@ Regra aprovada em 2026-09-27:
 
 **Integração obrigatória na implantação do fechamento geral:**
 
-1. Reutilizar `mutateCmvClosure` em [`cmv-closure.server.ts`](../src/features/financial/dre/cmv-closure.server.ts), seus schemas, autorização, revisão e conferência de fontes. Não criar outro cálculo, coleção de snapshots ou job de congelamento de CMV.
+1. Reutilizar `mutateCmvClosure` em [`cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts), seus schemas, autorização, revisão e conferência de fontes. Não criar outro cálculo, coleção de snapshots ou job de congelamento de CMV.
 2. O fechamento geral deve exigir CMV congelado e sem divergência nas unidades/competências abrangidas e registrar o identificador/revisão utilizado. Se já estiver fechado e íntegro, reutilizar a revisão, sem recalcular silenciosamente por causa da data do fechamento geral.
 3. Reabertura do CMV após fechamento geral deverá participar da reabertura auditada do período ou marcar o fechamento geral como pendente antes da correção. O fechamento geral não pode continuar válido referenciando revisão aberta, substituída ou fonte de vendas alterada. Revisão de receita/despesa que não altere a base de vendas do CMV não exige recalcular CMV automaticamente.
 4. As fontes e o snapshot do CMV ficam no banco operacional `coala`, com head, revisão e auditoria na mesma transação. O futuro fechamento financeiro usa outro banco: implementar intenção/estado de coordenação observável, idempotência e retomada, sem prometer transação atômica entre bancos. Só anunciar o fechamento geral concluído quando os pré-requisitos e a revisão referenciada estiverem confirmados.
