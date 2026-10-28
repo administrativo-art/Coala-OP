@@ -8,6 +8,38 @@ const { Timestamp } = await import('firebase-admin/firestore');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { readOwnRepPMonth, readRepPMonthOfPerson } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+const { externalCoverageUnits, allowedExecutionUnit } = await import('../../src/features/dp/rep-p/execution-units.server.ts');
+
+test('cobertura externa libera a unidade somente no dia e na escala vigente da própria pessoa', async () => {
+  const prefix = 'rep-p-external-coverage';
+  const date = '2027-05-12';
+  const uid = `${prefix}-employee`;
+  const origin = `${prefix}-origin`;
+  const destination = `${prefix}-destination`;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-official`);
+  const stale = dbAdmin.collection('dp_schedules').doc(`${prefix}-stale`);
+  const shift = schedule.collection('shifts').doc('coverage');
+  await Promise.all([
+    schedule.set({ year: 2027, month: 5, unitId: destination, locked: true, createdAt: Timestamp.fromMillis(2_000) }),
+    stale.set({ year: 2027, month: 5, unitId: destination, locked: false, createdAt: Timestamp.fromMillis(3_000) }),
+    shift.set({ userId: uid, unitId: destination, originUnitId: origin, date, type: 'work',
+      assignmentKind: 'external_coverage', exceptionReason: 'Cobertura autorizada pelo DP' }),
+    stale.collection('shifts').doc('stale').set({ userId: uid, unitId: destination, originUnitId: origin, date: '2027-05-13',
+      type: 'work', assignmentKind: 'external_coverage', exceptionReason: 'Escala substituída' }),
+  ]);
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, date, [origin]), [destination]);
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, date, ['unrelated-origin']), []);
+  assert.equal(await allowedExecutionUnit(dbAdmin, uid, date, [origin], destination), true);
+  assert.equal(await allowedExecutionUnit(dbAdmin, uid, date, [origin], origin), true);
+  assert.equal(await allowedExecutionUnit(dbAdmin, uid, '2027-05-13', [origin], destination), false);
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, `${prefix}-other`, date, [origin]), []);
+  await shift.update({ overnight: true });
+  assert.equal(await allowedExecutionUnit(dbAdmin, uid, '2027-05-13', [origin], destination), true);
+  await shift.update({ exceptionReason: '' });
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, date, [origin]), []);
+  await shift.update({ exceptionReason: 'Cobertura autorizada pelo DP', type: 'day_off' });
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, date, [origin]), []);
+});
 
 test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala oficial de cada unidade', async () => {
   const prefix = 'rep-p-month';

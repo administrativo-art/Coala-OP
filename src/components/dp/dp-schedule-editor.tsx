@@ -233,6 +233,7 @@ function ShiftDialog({
     username: string;
     originUnitId: string;
     originUnitName: string;
+    affiliatedUnitNames: string[];
     jobRoleName?: string;
     jobFunctionNames?: string[];
     shiftDefinitionId?: string;
@@ -291,6 +292,7 @@ function ShiftDialog({
         username: shift.userName ?? activeUsers.find((candidate) => candidate.id === shift.userId)?.username ?? 'Colaboradora externa',
         originUnitId: shift.originUnitId ?? '',
         originUnitName: units.find((unit) => unit.id === shift.originUnitId)?.name ?? shift.originUnitId ?? 'Unidade de origem',
+        affiliatedUnitNames: [],
       } : null);
     }
   }, [activeUsers, defaultDate, defaultUnitId, form, open, shift, units]);
@@ -464,7 +466,7 @@ function ShiftDialog({
                       <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Colaboradora externa</FormLabel>
                       <Select value={field.value} onValueChange={(value) => { field.onChange(value); setSelectedExternal(externalCandidates.find((candidate) => candidate.id === value) ?? null); }}>
                         <FormControl><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.originUnitName}</SelectItem>)}</SelectContent>
+                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.affiliatedUnitNames.join(' e ')}</SelectItem>)}</SelectContent>
                       </Select>
                       <FormMessage className="text-[11px]" />
                     </FormItem>
@@ -473,7 +475,9 @@ function ShiftDialog({
                 {selectedExternal ? (
                   <div className="rounded-lg border border-border bg-background px-3 py-2">
                     <p className="text-xs font-bold text-foreground">{selectedExternal.username}</p>
-                    <p className="text-[11px] text-muted-foreground">Unidade de origem: {selectedExternal.originUnitName}</p>
+                    <p className="text-[11px] text-muted-foreground">{selectedExternal.affiliatedUnitNames.length
+                      ? `${selectedExternal.affiliatedUnitNames.length === 1 ? 'Atrelado à unidade' : 'Atrelado às unidades'} ${selectedExternal.affiliatedUnitNames.join(' e ')}`
+                      : 'Confira as unidades de escala e operação no cadastro da pessoa.'}</p>
                   </div>
                 ) : null}
                 {candidateError ? <p role="alert" className="text-[11px] font-semibold text-destructive">{candidateError}</p> : null}
