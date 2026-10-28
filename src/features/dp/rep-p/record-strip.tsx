@@ -276,6 +276,9 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
             <MarkingSequence day={day} today={today} dark highlightNext />
           </button>
           <BreakNotice day={day} timeZone={unitClock?.available ? unitClock.timeZone : undefined} />
+          {work?.assignmentKind === 'external_coverage' && scheduledUnitId ? (
+            <p className="text-[11px] font-semibold text-ds-on-dark-2">Você foi escalado excepcionalmente para {work.unitName ?? unitName ?? 'esta unidade'} nesta data.</p>
+          ) : null}
           {otherUnit && unitId !== scheduledUnitId ? <p className="text-[11px] text-ds-on-dark-muted">A batida é registrada normalmente; o DP confere a troca de unidade.</p> : null}
           {optionsError ? <p role="alert" className="text-[12px] font-semibold text-ds-caution-tile">{optionsError}</p> : null}
         </div>

@@ -90,6 +90,13 @@ test('cadastro incompleto bloqueia publicação e não deriva empregador da lota
   assert.ok(seed.missingFields.includes('funções'));
 });
 
+test('publicação aceita referência financeira fora das unidades operacionais', () => {
+  const separate = { ...user, unitId: 'finance', unitIds: ['operation'] } as User;
+  const seeded = seedEmploymentPeriod(separate).draft;
+  const fields = incompleteDraftFields({ ...seeded, validFrom: '2026-11-01', sourceDocumentId: 'doc_1', sourceReason: 'Cadastro conferido pelo DP' }, separate);
+  assert.deepEqual(fields, []);
+});
+
 test('catálogo bloqueia empregador sem CNPJ válido ou endereço antes do PUT', () => {
   assert.deepEqual(employerCatalogIssues('employer', [{ id: 'employer', name: 'Unidade', cnpj: '123', address: '' } as never]), [
     'CNPJ válido da unidade empregadora', 'endereço da unidade empregadora',

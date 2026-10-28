@@ -51,7 +51,7 @@ function PeriodCard({ period, units, index }: { period: EmploymentPeriod; units:
       <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
         <div><dt className="font-extrabold text-ds-ink-faint">Relação</dt><dd className="mt-0.5 font-semibold text-ds-ink">{employmentRelationshipLabels[period.employmentRelationshipType]}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Empregador cadastrado</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.employer.unitName}<span className="block font-mono text-[11px] text-ds-ink-muted">{formatCnpj(period.employer.cnpj)}</span></dd></div>
-        <div><dt className="font-extrabold text-ds-ink-faint">Lotação principal</dt><dd className="mt-0.5 font-semibold text-ds-ink">{unitLabel(period.unitId, units)}</dd></div>
+        <div><dt className="font-extrabold text-ds-ink-faint">Referência financeira</dt><dd className="mt-0.5 font-semibold text-ds-ink">{unitLabel(period.unitId, units)}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Unidades operacionais</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.unitIds.map((id) => unitLabel(id, units)).join(', ')}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Cargo congelado</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.jobRoleName || 'Sem cargo registrado'}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Funções congeladas</dt><dd className="mt-0.5 font-semibold text-ds-ink">{displayNames(period.jobFunctionNames, 'Sem funções registradas')}</dd></div>
@@ -246,10 +246,11 @@ export function EmploymentReferenceCard({ user, units, firebaseUser, canPublish 
             {availableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${formatCnpj(unit.cnpj)}` : ''}</option>)}
           </SelectField>
           <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">O nome exibido é operacional. O servidor confere CNPJ e endereço; esta seleção não atesta razão social nem vínculo jurídico.</p>
-          <SelectField label="Lotação principal" value={draft.unitId} onChange={(unitId) => updateDraft({ unitId })} disabled={saving}>
+          <SelectField label="Referência financeira" value={draft.unitId} onChange={(unitId) => updateDraft({ unitId })} disabled={saving}>
             <option value="">Selecione a lotação</option>
             {availableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </SelectField>
+          <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">Lotação e custos. Pode ser diferente das unidades operacionais e não libera escala nem batida de ponto.</p>
           <fieldset>
             <legend className="text-xs font-bold text-ds-ink">Unidades operacionais</legend>
             <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-ds-btn border border-ds-border bg-ds-page p-3">

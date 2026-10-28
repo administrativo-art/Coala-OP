@@ -188,7 +188,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     CardBlock {
         Text(dayTitle(state.today), style = MaterialTheme.typography.titleMedium)
         Text(if (state.monthDataAvailable) TimeRules.shiftText(shift) ?: "Sem turno na escala de hoje"
-            else "Escala indisponível. Conecte para consultar.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            else "Escala ainda não consultada.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
         if (state.monthDataAvailable) TimeRules.breakText(shift)?.let {
             Text(it, color = Tokens.info, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
         }
@@ -223,7 +223,6 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark, style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
             val unitName = state.options?.executionUnits?.firstOrNull { it.id == state.unitId }?.name
             unitName?.let { Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall) }
-            if (local) Text("Seu ponto será salvo neste aparelho e enviado depois.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
         } else Text(if (state.options == null) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
     }
 }
@@ -441,7 +440,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     Page(screenTitle, feedback, leave, footer = footer, onRefresh = {
         when (section) { "today" -> vm.load(online); "records", "adjustments" -> vm.month(state.month); "bank" -> vm.loadBank();
             "day" -> detailDate?.let { if (detailSource == "home") vm.loadDay(it) else vm.loadBank(it) }; "mirror" -> vm.loadMirrorYear(state.month.year) }
-    }, header = {
+    }, showConnectivityNotice = false, header = {
         TopBar(screenTitle, busy = screenBusy, onBack = leave)
         // A escala escolhe a unidade automaticamente; só há escolha manual quando o dia não tem unidade escalada.
         if (section == "today" && (todayShift?.unitId == null || todayShift?.executionUnitPolicy == "free"
@@ -449,6 +448,10 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }) {
         if (section == "today") {
             OfficialClockCard(state, online)
+            if (todayShift?.assignmentKind == "external_coverage" && todayShift.unitId != null && units.any { it.id == todayShift.unitId }) CardBlock {
+                Text("Escala excepcional", style = MaterialTheme.typography.titleMedium)
+                Text("Você foi escalado excepcionalmente para ${todayShift.unitName ?: "esta unidade"} nesta data.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
             if (todayShift?.unitId != null && todayShift.unitId != state.unitId) CardBlock {
                 Text("Escala: ${todayShift.unitName ?: "unidade escalada"}", style = MaterialTheme.typography.titleMedium)
                 Text("Este ponto será registrado em $unitName.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -788,6 +791,10 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         Text(first.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
         NavSquare("›", "Próximo mês", !busy && state.month.isBefore(java.time.YearMonth.from(state.today))) { vm.month(state.month.plusMonths(1)) }
     }
+    if (!state.monthDataAvailable) {
+        EmptyState("Registros ainda não consultados", "Puxe para atualizar quando a consulta estiver disponível.")
+        return
+    }
     if (state.truncated) Text("O mês tem mais registros do que esta lista mostra; o espelho completo fica no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
     val last = if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()
     val days = generateSequence(last) { it.minusDays(1) }.takeWhile { !it.isBefore(first) }.toList()
@@ -861,6 +868,10 @@ private fun purposeColor(purpose: String?) = when (purpose) {
 
 @Composable private fun AdjustmentHistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onDay: (String) -> Unit) {
     AuxiliaryMonthPicker(state, busy, vm)
+    if (!state.monthDataAvailable) {
+        EmptyState("Ajustes ainda não consultados", "Puxe para atualizar quando a consulta estiver disponível.")
+        return
+    }
     var filter by rememberSaveable { mutableStateOf("all") }
     if (state.adjustments.isEmpty() && !busy) EmptyState("Nenhum ajuste neste mês", "Os pedidos enviados aparecem aqui com a decisão do gestor ou do DP.")
     if (state.adjustments.isNotEmpty()) {
@@ -931,6 +942,10 @@ private fun purposeColor(purpose: String?) = when (purpose) {
 @Composable private fun DayDetail(state: TimeState, workDate: String, busy: Boolean, onReceipt: (DayPunch) -> Unit,
     onAdjust: (String) -> Unit, focus: String) {
     val date = runCatching { LocalDate.parse(workDate) }.getOrNull() ?: return
+    if (!state.monthDataAvailable) {
+        EmptyState("Batidas ainda não consultadas", "Puxe para atualizar quando a consulta estiver disponível.")
+        return
+    }
     val shift = state.shifts.firstOrNull { it.date == workDate }
     val punches = TimeRules.journeyDay(workDate, shift, state.markings, state.treatments)
     val pilotDay = state.markings.any { it.workDate == workDate && it.pilot }

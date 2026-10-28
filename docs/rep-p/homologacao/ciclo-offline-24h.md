@@ -20,11 +20,11 @@ A evidência privada fica no registro de desenvolvimento `rep-p-availability-loc
 
 Resultado final local:109testes Android,24testes unitários TypeScript e25verificações de integração/API/regras passaram; checagem de tipos, lint, contratos e documentação passaram. Migração instrumentada:2testes passaram. A revisão final avalia somente a candidata local.
 
-O emulador não comprova TEE, GPS ou comportamento físico no Galaxy. O ensaio físico deve incluir perda e retorno da rede, expiração, reinício, retomada do app, encerramento, sincronização e recuperação de resposta perdida. A monitoração publicada precisa de ensaio separado.
+Em 28/10/2026, no Galaxy SM_S911B com o APK release assinado 0.3.30 e backend publicado, Wi-Fi e dados móveis foram desligados após o preparo online. A 3ª batida do piloto, “Volta do intervalo”, foi preservada no aparelho às 15h12; a tela mostrou uma marcação aguardando sincronização. Após restaurar as duas conexões e reenviar a mesma tentativa, o servidor retornou “Ensaio registrado”, 15h12 e sequência 15, com indicação de que ela já estava gravada. Não houve batida fiscal. Esse ensaio confirma captura local, retorno de rede e replay observado; não comprova sozinho expiração, reinício, troca de aparelho, encerramento, GPS ou acompanhamento contínuo. O APK release assinado 0.3.31/code36 foi instalado no mesmo Galaxy; sem rede, Home e Registro de ponto não mostraram os avisos passivos de conexão, e as consultas pendentes apareceram como “ainda não consultadas”. Não foi feita outra batida. Wi-Fi e dados móveis foram restaurados e confirmados ligados.
 
 ## Implantação e limites
 
-Candidata local, sem publicação nesta etapa. Implantar o backend compatível antes do APK; ativar v2 em novo ciclo limpo, após conferir as filas antigas. Não reconstruir retroativamente uma jornada legada aberta. As flags de coleta fiscal e acompanhamento não são ativadas por esta mudança.
+O backend compatível foi publicado em 28/10/2026 com o índice de escalas pronto. O APK 0.3.31 é candidato de distribuição; ativar v2 em novo ciclo limpo, após conferir as filas antigas. Não reconstruir retroativamente uma jornada legada aberta. As flags de coleta fiscal e acompanhamento permanecem desligadas.
 
 A projeção lê candidatos online por titular e ordem de commit do servidor, com cursor e limite de1por transação, no máximo128por chamada. Emissão e sincronização v2 conferem candidatos ainda pendentes na própria transação: estado auxiliar atrasado não autoriza uma nova janela. Se a ordem de commit divergir da HLB ou um candidato anterior ao encerramento chegar depois dele, ambos originais são preservados; apenas contingência é bloqueada para saneamento. Isso é um limite operacional conhecido, sem recuperação automática de ordem ambígua.
 

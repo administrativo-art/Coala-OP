@@ -42,7 +42,6 @@ export function validEmploymentHistory(history: EmploymentHistory): boolean {
       || typeof period.unitId !== 'string' || !period.unitId
       || !Array.isArray(period.unitIds) || period.unitIds.length < 1 || period.unitIds.length > 20
       || !period.unitIds.every((id) => typeof id === 'string' && Boolean(id))
-      || !period.unitIds.includes(period.unitId)
       || new Set(period.unitIds).size !== period.unitIds.length
       || period.jobRoleId !== undefined && (typeof period.jobRoleId !== 'string' || !period.jobRoleId)
       || !Array.isArray(period.jobFunctionIds) || period.jobFunctionIds.length > 20

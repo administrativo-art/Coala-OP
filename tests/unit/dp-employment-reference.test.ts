@@ -51,6 +51,20 @@ test('resolver não deriva empregador da unidade de cobertura nem preenche lacun
   assert.equal(resolveEmploymentReference(history, '2026-01-31').status, 'matched');
 });
 
+test('referência financeira pode ser diferente das unidades operacionais', () => {
+  const operationalPeriod = { ...period('2026-01-01'), unitId: 'finance', unitIds: ['operation'] };
+  assert.equal(publishEmploymentReferenceSchema.safeParse(input([operationalPeriod])).success, true);
+  const history = { workspaceId: 'w', userId: 'person', historyId: 'h', revision: 1,
+    periods: [{ ...operationalPeriod, employer: { unitId: 'employer', cnpj: '14276603000125', unitName: 'Empresa', address: 'Rua', identityStatus: 'catalog_identifiers_consistent_unverified' }, jobRoleName: null, jobFunctionNames: [] }],
+  } as EmploymentHistory;
+  const resolved = resolveEmploymentReference(history, '2026-10-28');
+  assert.equal(resolved.status, 'matched');
+  if (resolved.status === 'matched') {
+    assert.equal(resolved.period.unitId, 'finance');
+    assert.deepEqual(resolved.period.unitIds, ['operation']);
+  }
+});
+
 test('fronteira da API prende pessoa ao path, exige revisão/pedido e rejeita campo fiscal cliente', () => {
   const body = { requestId: 'req-1', expectedRevision: 0, periods: [period('2026-01-01')] };
   assert.equal(bindEmploymentReferencePublication('person', body)?.userId, 'person');
