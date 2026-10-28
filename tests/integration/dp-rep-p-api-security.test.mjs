@@ -319,6 +319,11 @@ test('APIs REP-P impedem exportação de terceiros, escalada de perfil e monitor
       const accepted = await send('synthetic-monitor-secret', body);
       assert.equal(accepted.status, 200);
       assert.equal((await accepted.json()).status, 'official-collection-disabled');
+      const cloudMonitoringOpen = await send('synthetic-monitor-secret', {
+        incident: { ...body.incident, incident_id: `${prefix}-cloud-monitoring-open`, ended_at: null },
+      });
+      assert.equal(cloudMonitoringOpen.status, 200, 'Cloud Monitoring usa ended_at=null enquanto o incidente está aberto');
+      assert.equal((await cloudMonitoringOpen.json()).status, 'official-collection-disabled');
       assert.equal((await repPDbAdmin.collection('repP_events').where('availabilityIncidentId', '==', body.incident.incident_id).get()).size, 0);
     });
   } finally {
