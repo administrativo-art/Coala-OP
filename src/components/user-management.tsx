@@ -1625,14 +1625,14 @@ export function UserManagement({
                         <div className="min-w-0 space-y-1">
                           <p className="text-sm font-extrabold text-ds-ink">Como ler esta tela</p>
                           <p className="text-xs leading-5 text-ds-ink-2">
-                            A unidade financeira não define sozinha a escala nem o local da batida. A escala do dia e o vínculo operacional são conferidos separadamente.
+                            A unidade financeira não define sozinha a escala nem o local da batida. Uma cobertura autorizada pode levar a pessoa a trabalhar temporariamente em outra unidade.
                           </p>
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2.5 md:grid-cols-2">
                         <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
                           <p className="text-xs font-extrabold text-ds-ink">1. Escala e operação</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades onde a pessoa pode ser escalada e trabalhar. Pode haver mais de uma.</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades habituais de trabalho. A cobertura em outra unidade é registrada no turno específico, com motivo.</p>
                         </div>
                         <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
                           <p className="text-xs font-extrabold text-ds-ink">2. Principal financeira</p>
@@ -1648,7 +1648,7 @@ export function UserManagement({
                         </div>
                       </div>
                       <p className="mt-3 border-t border-ds-info/15 pt-3 text-xs font-semibold leading-5 text-ds-ink-2">
-                        Exemplo: alguém pode ter a unidade A como referência financeira, trabalhar também na unidade B e visualizar a unidade C sem que isso altere sua lotação ou sua escala.
+                        Exemplo: alguém pode ter a unidade A como referência financeira e cobrir um turno na B. Visualizar a unidade C não cria um turno nem autoriza a batida lá.
                       </p>
                     </div>
                     <div>
