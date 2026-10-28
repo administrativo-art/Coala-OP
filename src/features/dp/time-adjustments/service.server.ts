@@ -128,7 +128,7 @@ async function assertNoPilotMarkingForDay(repDb: Firestore, workspaceId: string,
   }
 }
 
-function canReview(context: ServerUserContext) {
+export function canReview(context: ServerUserContext) {
   return context.isDefaultAdmin || context.permissions.dp?.requests?.review === true;
 }
 
@@ -455,6 +455,39 @@ export async function listAdjustmentsOfPerson(workspaceId: string, employeeUid: 
       markedAt: (doc.get('markedAt') as string | null) ?? null, executionUnitId: (doc.get('executionUnitId') as string | null) ?? null,
     })),
   };
+}
+
+// Leituras do dia de um pedido para a análise (só consulta). Ficam aqui porque tocam as coleções protegidas do ponto
+// (repP_ e ptrp_), que só os serviços delimitados podem citar (tests/unit/dp-rep-p-arp-deletion-guard.test.ts).
+export const DAY_MARKINGS_LIMIT = 40;
+const DAY_TREATMENTS_LIMIT = 40;
+const DAY_HISTORY_LIMIT = 60;
+type DayReadDeps = Pick<Dependencies, 'hrDb' | 'repDb'>;
+
+/** Pedido pelo id, oficial ou da simulação do ensaio. */
+export async function readAdjustmentRequestForDay(deps: DayReadDeps, adjustmentId: string) {
+  const official = await deps.hrDb.collection(ADJUSTMENTS).doc(adjustmentId).get();
+  if (official.exists) return { scope: 'official' as const, snapshot: official };
+  return { scope: 'pilot' as const, snapshot: await deps.hrDb.collection(PILOT_ADJUSTMENTS).doc(adjustmentId).get() };
+}
+
+/** Batidas do dia da pessoa: oficiais para o pedido oficial, do ensaio para a simulação (nunca as duas). */
+export function readDayMarkingDocuments(deps: DayReadDeps, scope: 'official' | 'pilot', workspaceId: string, employeeUid: string, workDate: string) {
+  return deps.repDb.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
+    .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(DAY_MARKINGS_LIMIT + 1).get();
+}
+
+/** Tratamentos do dia; só o pedido oficial cria tratamento. */
+export function readDayTreatmentDocuments(deps: DayReadDeps, workspaceId: string, employeeUid: string, workDate: string) {
+  return deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
+    .where('workDate', '==', workDate).limit(DAY_TREATMENTS_LIMIT).get();
+}
+
+/** Pedidos recentes da pessoa (oficiais e do ensaio) até o dia, pelo mesmo índice da lista mensal. */
+export function readAdjustmentHistoryDocuments(deps: DayReadDeps, workspaceId: string, employeeUid: string, fromDate: string, toDate: string) {
+  const query = (collection: string) => deps.hrDb.collection(collection).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
+    .where('workDate', '>=', fromDate).where('workDate', '<=', toDate).orderBy('workDate').limit(DAY_HISTORY_LIMIT).get();
+  return Promise.all([query(ADJUSTMENTS), query(PILOT_ADJUSTMENTS)]);
 }
 
 /** Fila de quem analisa: em análise, nas unidades acessíveis, sem os próprios pedidos. */
