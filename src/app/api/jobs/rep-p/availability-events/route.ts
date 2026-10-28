@@ -20,7 +20,9 @@ const notificationSchema = z.object({
     incident_id: z.string().min(1).max(256),
     state: z.enum(['open', 'closed']),
     started_at: z.number().int().positive(),
-    ended_at: z.number().int().positive().optional(),
+    // Cloud Monitoring sends `null` while an incident is open and a Unix
+    // timestamp only after it closes. Preserve both wire representations.
+    ended_at: z.number().int().positive().nullable().optional(),
     policy_name: z.string().min(1).max(512),
     condition_name: z.string().min(1).max(512),
   }),
