@@ -204,7 +204,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
             listOfNotNull(unitName, TimeRules.shiftText(today.timeShift)).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
             }
-            if (local) Text("Seu ponto será salvo neste aparelho e enviado depois.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
@@ -216,7 +215,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 Text("RESUMO DA JORNADA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                 val state = summary?.state
                 Text(when {
-                    punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas indisponíveis sem conexão"
+                    punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas ainda não consultadas"
                     punches.isEmpty() -> "Nenhuma batida hoje"
                     state == com.coalaone.go.domain.DaySummaryState.COMPLETE -> "Jornada encerrada às ${punches.last().time}"
                     state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS && punches.last().purpose == "break_start" -> "Em intervalo desde ${punches.last().time}"
@@ -314,7 +313,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         onDispose { lifecycle.removeObserver(observer) }
     }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
-    Page("Início", feedback, onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, header = {
+    Page("Início", feedback.copy(error = feedback.error?.takeUnless { it.startsWith("Sem conexão.") }), onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, showConnectivityNotice = false, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

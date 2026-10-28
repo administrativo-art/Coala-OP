@@ -849,8 +849,7 @@ class ViewModelsTest {
         // The permit anchor keeps the clock running, but under its own name.
         assertEquals(com.coalaone.go.domain.ClockSource.LOCAL_PERMIT, vm.state.value.clockSource)
         assertNotNull(vm.state.value.clockOffset)
-        assertEquals("Seu ensaio será salvo neste aparelho e enviado depois.",
-            TimeRules.blockedReason(vm.state.value.options, vm.state.value.offlineReady))
+        assertNull(TimeRules.blockedReason(vm.state.value.options, vm.state.value.offlineReady))
     }
     @Test fun changingUnitDoesNotDiscardOrMutateAPendingAttempt() = runTest {
         val options = TimeOptions(LocalDate.now().toString(), true, true,

@@ -25,9 +25,6 @@ export const periodInputSchema = z.object({
   if (period.validTo && period.validTo < period.validFrom) {
     context.addIssue({ code: 'custom', path: ['validTo'], message: 'Fim anterior ao início.' });
   }
-  if (!period.unitIds.includes(period.unitId)) {
-    context.addIssue({ code: 'custom', path: ['unitIds'], message: 'A lotação principal precisa estar nas unidades.' });
-  }
   if (new Set(period.unitIds).size !== period.unitIds.length || new Set(period.jobFunctionIds).size !== period.jobFunctionIds.length) {
     context.addIssue({ code: 'custom', message: 'Identificadores duplicados.' });
   }

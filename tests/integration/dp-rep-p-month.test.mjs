@@ -83,7 +83,7 @@ test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala 
   assert.equal(result.truncated, false);
   assert.deepEqual(result.shifts.map((item) => [item.date, item.type, item.startTime]), [['2027-03-02', 'work', '10:00'], ['2027-03-03', 'day_off', '00:00']]);
   assert.deepEqual(result.shifts[0], {
-    date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste', unitTimeZone: null,
+    date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste', assignmentKind: 'regular', unitTimeZone: null,
     shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
     breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4, executionUnitPolicy: 'scheduled', locationTrackingPolicy: 'punch_only',
     breakSegments: null, breakSplit: 'single', breakPauseCount: null,

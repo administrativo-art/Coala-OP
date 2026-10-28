@@ -23,6 +23,7 @@ import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Lo
 import { Badge } from '@/components/ui/badge';
 import { type UnitAccessScope, type User } from '@/types';
 import { normalizeUnitAccessScope } from '@/lib/unit-access';
+import { operationalSelectionForUser, operationalUnitsDiffer } from '@/lib/collaborator-operational-selection';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProfileManagementModal } from './profile-management-modal';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -454,6 +455,8 @@ export function UserManagement({
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
+  const [additionalOperationalUnitIds, setAdditionalOperationalUnitIds] = useState<string[]>([]);
+  const [additionalOperationalDirty, setAdditionalOperationalDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedEditUserIdRef = useRef<string | null>(null);
 
@@ -508,10 +511,6 @@ export function UserManagement({
     setActiveEditTab(nextTab.id);
     window.requestAnimationFrame(() => document.getElementById(`collaborator-edit-tab-${nextTab.id}`)?.focus());
   };
-
-  useEffect(() => {
-    onDirtyChange?.(form.formState.isDirty);
-  }, [form.formState.isDirty, onDirtyChange]);
 
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
@@ -591,14 +590,14 @@ export function UserManagement({
     () => selectedWorkUnits.map((unit) => unit.id),
     [selectedWorkUnits]
   );
+  const operationalUnitIds = useMemo(
+    () => [...new Set([...selectedWorkUnitIds, ...additionalOperationalUnitIds])],
+    [selectedWorkUnitIds, additionalOperationalUnitIds]
+  );
+  const operationalReconciliationPending = editingUser !== null && operationalUnitsDiffer(editingUser.unitIds, operationalUnitIds);
   useEffect(() => {
-    const currentPrimaryUnitId = form.getValues('unitId');
-    if (currentPrimaryUnitId && selectedWorkUnitIds.includes(currentPrimaryUnitId)) return;
-    form.setValue('unitId', selectedWorkUnitIds[0] ?? '', {
-      shouldDirty: Boolean(currentPrimaryUnitId),
-      shouldValidate: false,
-    });
-  }, [form, selectedWorkUnitIds]);
+    onDirtyChange?.(form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending);
+  }, [form.formState.isDirty, additionalOperationalDirty, operationalReconciliationPending, onDirtyChange]);
   const filteredShiftDefinitions = useMemo(() => {
     if (selectedKioskIds.length === 0) return shiftDefinitions;
     if (selectedWorkUnitIds.length === 0) return [];
@@ -760,26 +759,23 @@ export function UserManagement({
       transportVoucherValue: undefined,
     });
     setPdvOperatorIds({});
+    setAdditionalOperationalUnitIds([]);
+    setAdditionalOperationalDirty(false);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
   };
 
   const handleEdit = useCallback((user: User) => {
     setEditingUser(user);
+    const operationalSelection = operationalSelectionForUser(user, kiosks, units);
+    setAdditionalOperationalUnitIds(operationalSelection.additionalUnitIds);
+    setAdditionalOperationalDirty(false);
     form.reset({
       username: user.username,
       email: user.email,
       profileId: user.profileId,
       unitId: user.unitId ?? user.unitIds?.[0] ?? '',
-      assignedKioskIds: Array.from(new Set([
-        ...(user.assignedKioskIds ?? []).filter((id) => kiosks.some((kiosk) => kiosk.id === id)),
-        ...kiosks
-          .filter((kiosk) => {
-            const unit = matchDPUnitForKiosk(kiosk.name, units);
-            return unit ? (user.unitIds ?? []).includes(unit.id) : false;
-          })
-          .map((kiosk) => kiosk.id),
-      ])),
+      assignedKioskIds: operationalSelection.selectedKioskIds,
       avatarUrl: user.avatarUrl || '',
       registrationIdBizneo: user.registrationIdBizneo ?? '',
       registrationIdPdv: user.registrationIdPdv ?? '',
@@ -1021,9 +1017,7 @@ export function UserManagement({
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0
-            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
-            : undefined,
+          unitIds: operationalUnitIds,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -1064,9 +1058,7 @@ export function UserManagement({
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0
-            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
-            : undefined,
+          unitIds: operationalUnitIds,
           admissionDate,
           birthDate,
       }, values.email);
@@ -1680,6 +1672,25 @@ export function UserManagement({
                         </FormItem>
                       )} />
                     </div>
+                    <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
+                      <p className="font-bold text-ds-ink">Outras unidades operacionais</p>
+                      <p className="mt-1 text-ds-ink-muted">Vínculos de escala sem quiosque atribuído à pessoa. Permanecem no cadastro até serem removidos aqui. A referência financeira é independente.</p>
+                      {additionalOperationalUnitIds.filter((id) => !selectedWorkUnitIds.includes(id)).map((id) => (
+                        <div key={id} className="mt-2 flex items-center justify-between gap-3 rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
+                          <span>{units.find((unit) => unit.id === id)?.name ?? id}{editingUser?.unitId === id ? ' · também é a referência financeira' : ''}</span>
+                          <button type="button" className="font-bold text-ds-accent-ink underline" onClick={() => { setAdditionalOperationalUnitIds((current) => current.filter((item) => item !== id)); setAdditionalOperationalDirty(true); }}>Remover vínculo</button>
+                        </div>
+                      ))}
+                      <select aria-label="Adicionar unidade operacional sem quiosque atribuído" value="" className="mt-2 w-full rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2" onChange={(event) => { const id = event.target.value; if (id) { setAdditionalOperationalUnitIds((current) => [...new Set([...current, id])]); setAdditionalOperationalDirty(true); } }}>
+                        <option value="">Adicionar outra unidade operacional…</option>
+                        {units.filter((unit) => !operationalUnitIds.includes(unit.id)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                      </select>
+                    </div>
+                    {operationalReconciliationPending && (
+                      <p role="status" className="rounded-ds-md border border-ds-info/20 bg-ds-info-bg px-3 py-2 text-xs font-semibold text-ds-ink">
+                        Ao salvar, as unidades operacionais serão: {operationalUnitIds.map((id) => units.find((unit) => unit.id === id)?.name ?? id).join(', ') || 'nenhuma'}. A referência financeira permanece separada.
+                      </p>
+                    )}
                     {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
@@ -1703,20 +1714,20 @@ export function UserManagement({
                       <FormField control={form.control} name="unitId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Unidade principal (Financeiro)</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
+                                <SelectValue placeholder="Selecione a referência financeira" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {selectedWorkUnits.map((unit) => (
+                              {units.map((unit) => (
                                 <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                           <FormDescription className="text-xs">
-                            Referência do financeiro (lotação e custos), escolhida entre as unidades de escala. As demais não alteram essa referência.
+                            Referência do financeiro (lotação e custos), independente das unidades em que a pessoa trabalha. Não libera escala ou batida de ponto.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -1904,8 +1915,8 @@ export function UserManagement({
                   ),
             )}>
               {!createOnly ? (
-                <p className={cn('text-sm font-semibold', form.formState.isDirty ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                  {form.formState.isDirty ? 'Alterações pendentes' : 'Nenhuma alteração pendente'}
+                <p className={cn('text-sm font-semibold', form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
+                  {form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending ? 'Alterações pendentes' : 'Nenhuma alteração pendente'}
                 </p>
               ) : null}
               <div className="flex justify-end gap-2">
@@ -1924,7 +1935,7 @@ export function UserManagement({
                   size={createOnly ? 'default' : 'md'}
                   className={createOnly ? "h-7 px-3 text-[11px]" : undefined}
                   loading={form.formState.isSubmitting}
-                  disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}
+                  disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty && !additionalOperationalDirty && !operationalReconciliationPending)}
                 >
                   {editingUser ? 'Salvar alterações' : 'Criar usuário'}
                 </Button>
