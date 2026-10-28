@@ -7,7 +7,7 @@ Centralizar pedidos recorrentes do colaborador. O vale-transporte segue para an�
 ## Entradas
 
 - `src/app/dashboard/collaborator/requests/page.tsx`: central **Minhas solicitações**, histórico, andamento, termo e assinatura.
-- `src/app/dashboard/dp/requests/page.tsx`: fila de análise do Departamento Pessoal.
+- `src/app/dashboard/dp/requests/page.tsx`: página do Departamento Pessoal em três abas (27/10/2026): **Para analisar** reúne vale-transporte pendente, ausências atribuídas, ajustes de ponto e turnos sem cobertura, com chips que filtram por tipo; **Acompanhamento** mostra vale-transporte em qualquer situação e as ausências da equipe; **Pendências de documento** mostra termos com falha de geração e a retenção de comprovantes. Fechamento do ponto e exportação AFD/AEJ saíram desta página.
 - `src/app/api/collaborator/requests/route.ts`: lista pedidos próprios ou revisáveis e cria um pedido.
 - `src/app/api/collaborator/requests/[requestId]/route.ts`: cancela, aprova, rejeita ou refaz a geração do termo.
 - `src/app/api/collaborator/requests/[requestId]/document/route.ts`: entrega DOCX ou PDF somente ao titular ou ao RH autorizado.

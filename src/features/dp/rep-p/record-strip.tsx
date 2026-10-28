@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Coffee, FileText, Info, MapPin } from "lucide-react";
+import { CheckCircle2, Clock3, Coffee, FileText, Info, MapPin, RotateCw } from "lucide-react";
 
 import { ControlPanel } from "@/components/patterns/control-panel";
-import { errorMessageOf } from "@/components/patterns/panel-form";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { errorMessageOf, PanelSelectField } from "@/components/patterns/panel-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { breakStatus, journeyStartStatus, plannedPausesOf, type BreakLevel } from "./break-status";
 import { fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
+import { formatOfficialClock } from "./official-clock";
 import type { useRepPMarking } from "./use-rep-p-marking";
 
 type Marking = ReturnType<typeof useRepPMarking>;
@@ -73,28 +75,26 @@ function BreakNotice({ day, timeZone }: { day: DayView; timeZone?: string }) {
   if ((!status && !beforeJourney) || !day.shift) return null;
   if (beforeJourney) {
     return (
-      <div className={cn("rounded-ds-md border px-3 py-2", BREAK_TONE.neutral)} role="status">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span className="text-[13px] font-bold">{beforeJourney.headline}</span>
-        </div>
-        <p className="mt-0.5 text-[11px] opacity-80">{beforeJourney.detail}</p>
-      </div>
+      <p className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-ds-sm border px-2.5 py-1 text-[11.5px]", BREAK_TONE.neutral)} role="status">
+        <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <strong className="font-bold">{beforeJourney.headline}</strong>
+        {beforeJourney.detail ? <span className="opacity-80">· {beforeJourney.detail}</span> : null}
+      </p>
     );
   }
   if (!status) return null;
   const key = modalityKey(day.shift);
   return (
-    <div className={cn("rounded-ds-md border px-3 py-2", BREAK_TONE[status.level])} role="status">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className={cn("rounded-ds-sm border px-2.5 py-1 text-[11.5px]", BREAK_TONE[status.level])} role="status">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <Coffee className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="text-[13px] font-bold">{status.headline}</span>
+        <strong className="font-bold">{status.headline}</strong>
+        {status.detail ? <span className="opacity-80">· {status.detail}</span> : null}
         <button type="button" onClick={() => setShowNote((current) => !current)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold opacity-80 hover:opacity-100">
           <Info className="h-3 w-3" aria-hidden /> Como funciona
         </button>
-      </div>
-      {status.detail ? <p className="mt-0.5 text-[11px] opacity-80">{status.detail}</p> : null}
-      {showNote ? <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[11px] opacity-90">{BREAK_NOTES[key]} São avisos para ajudar; nada impede a batida.</p> : null}
+      </p>
+      {showNote ? <p className="mt-1 border-t border-white/10 pt-1 text-[11px] opacity-90">{BREAK_NOTES[key]} São avisos para ajudar; nada impede a batida.</p> : null}
     </div>
   );
 }
@@ -140,28 +140,62 @@ export function suggestedPurpose(markings: DayView["markings"], shift?: DayShift
   return "journey_start";
 }
 
-/** Sequência numerada das batidas do dia; a que falta num dia passado aparece em vermelho. */
-export function MarkingSequence({ day, today, dark }: { day: DayView; today: string; dark?: boolean }) {
+/** Cor da finalidade, igual à do Coala Go: início em verde, intervalo em azul, fim em grafite; sem classificação, tracejado. */
+export const PURPOSE_DOT: Record<MarkingPurpose, string> = {
+  journey_start: "bg-ds-ok", break_start: "bg-ds-info", break_end: "bg-ds-info", journey_end: "bg-ds-ink",
+};
+export function PurposeDot({ purpose, className }: { purpose: MarkingPurpose | null | undefined; className?: string }) {
+  return <span aria-hidden className={cn("inline-block h-2 w-2 shrink-0 rounded-full",
+    purpose ? PURPOSE_DOT[purpose] : "border border-dashed border-current opacity-60", className)} />;
+}
+
+/** Leitura da jornada de hoje pela última finalidade declarada; só visual, não muda a batida. */
+export function journeyState(day: DayView) {
+  const first = day.markings[0];
+  const last = day.markings.at(-1);
+  if (!first || !last) return "Jornada não iniciada";
+  const purpose = last.classification?.purpose;
+  if (purpose === "journey_end") return `Jornada encerrada às ${fiscalClock(last.markedAt)}`;
+  if (purpose === "break_start") return `Em intervalo desde ${fiscalClock(last.markedAt)}`;
+  return `Em jornada desde ${fiscalClock(first.markedAt)}`;
+}
+
+/** Próxima batida: posição na sequência do turno e a finalidade sugerida (organizacional; qualquer uma é aceita). */
+export function nextMarkingOf(day: DayView) {
+  const expected = expectedPunchesOf(day);
+  const index = day.markings.length;
+  const purpose = suggestedPurpose(day.markings, day.shift);
+  const reliable = day.markings.length === 0 || day.markings.every((marking) => marking.classification?.purpose);
+  const position = expected === null ? `${index + 1}ª batida` : index < expected ? `${index + 1}ª de ${expected}` : "batida extra";
+  return { expected, index, purpose, reliable, position, extra: expected !== null && index >= expected };
+}
+
+/** Sequência numerada das batidas do dia, com a finalidade de cada uma; a que falta num dia passado aparece em vermelho. */
+export function MarkingSequence({ day, today, dark, highlightNext = false }: { day: DayView; today: string; dark?: boolean; highlightNext?: boolean }) {
   const expected = expectedPunchesOf(day);
   const slots = Math.max(expected ?? day.markings.length + 1, day.markings.length);
   const past = day.date < today;
+  const next = nextMarkingOf(day);
   return (
-    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {Array.from({ length: slots }, (_, index) => {
         const marking = day.markings[index];
         const missing = !marking && past;
+        const isNext = highlightNext && !past && index === day.markings.length;
+        const purpose = marking?.classification?.purpose ?? null;
+        const label = marking ? (purpose ? purposeLabel(purpose) : suggestedLabel(index, expected))
+          : isNext && next.reliable ? purposeLabel(next.purpose) : null;
         return (
-          <span key={index} className="inline-flex items-center gap-1">
-            <span className={cn("inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-extrabold",
-              marking ? (dark ? "bg-white text-ds-ink" : "bg-ds-ink text-white")
-                : missing ? "bg-ds-danger-bg text-ds-danger"
-                  : dark ? "border border-dashed border-white/30 text-ds-on-dark-muted" : "border border-dashed border-ds-border text-ds-ink-faint")}>
-              {index + 1}
+          <span key={index} className={cn("inline-flex items-center gap-1.5",
+            isNext && "rounded-ds-sm border border-ds-accent-kicker/50 bg-ds-accent-kicker/10 px-1.5 py-0.5")}>
+            <span className={cn(marking ? (dark ? "text-white" : "text-ds-ink") : missing ? "text-ds-danger" : dark ? "text-ds-on-dark-muted" : "text-ds-ink-faint")}>
+              <PurposeDot purpose={marking ? purpose : null} className={marking && !purpose ? "border-solid bg-current" : undefined} />
             </span>
             <span className={cn("font-ds-mono text-[13px] font-bold tabular-nums",
               marking ? (dark ? "text-white" : "text-ds-ink") : missing ? "text-ds-danger" : dark ? "text-ds-on-dark-muted" : "text-ds-ink-faint")}>
               {marking ? fiscalClock(marking.markedAt) : "··:··"}
             </span>
+            {label && (dark || isNext) ? <span className={cn("text-[11px]", isNext ? (dark ? "text-white" : "text-ds-ink") : dark ? "text-ds-on-dark-muted" : "text-ds-ink-muted")}>{label}</span> : null}
           </span>
         );
       })}
@@ -169,16 +203,26 @@ export function MarkingSequence({ day, today, dark }: { day: DayView; today: str
   );
 }
 
-/** Faixa escura de registro: hora oficial, escala e unidade de hoje, sequência e a ação principal. */
-export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
+/** Botão principal da batida: reenviar, indisponível ou "Registrar Nª de N". Usado na faixa, no painel e na barra. */
+export function recordActionLabel(marking: Marking, day: DayView) {
+  if (marking.pendingAttempt) return "Reenviar a mesma batida";
+  if (marking.options && !marking.options.markingEnabled) return "Registro indisponível";
+  if (marking.options?.officialClock && !marking.options.officialClock.available) return "Hora Legal indisponível";
+  const next = nextMarkingOf(day);
+  return next.extra ? "Registrar batida extra" : next.expected === null ? `Registrar ${next.index + 1}ª batida` : `Registrar ${next.position}`;
+}
+
+/** Faixa escura de registro: hora oficial, estado da jornada, sequência com finalidade e a ação principal. */
+export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialogOpen: controlledOpen, onDialogOpenChange }: {
   marking: Marking; day: DayView; today: string; onOpenDay: () => void; onRecorded: () => void;
+  /** Controle opcional da janela, para o detalhe do dia abrir a mesma confirmação. */
+  dialogOpen?: boolean; onDialogOpenChange?: (open: boolean) => void;
 }) {
-  const { options, optionsError, unitId, setUnitId, canRecord, unitClock } = marking;
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const expected = expectedPunchesOf(day);
-  const nextIndex = day.markings.length;
-  const nextPurpose = suggestedPurpose(day.markings, day.shift);
-  const suggestionReliable = day.markings.length === 0 || day.markings.every((marking) => marking.classification?.purpose);
+  const { options, optionsError, unitId, setUnitId, canRecord, unitClock, pendingAttempt } = marking;
+  const [localOpen, setLocalOpen] = useState(false);
+  const dialogOpen = controlledOpen ?? localOpen;
+  const setDialogOpen = onDialogOpenChange ?? setLocalOpen;
+  const next = nextMarkingOf(day);
   const units = options?.executionUnits ?? [];
   const unitName = units.find((unit) => unit.id === unitId)?.name;
   // Turno com unidade fixa: a unidade da escala vem escolhida; trocar é possível e não bloqueia a batida.
@@ -187,24 +231,26 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
   const scheduledUnitId = work && !freeUnit && work.unitId && units.some((unit) => unit.id === work.unitId) ? work.unitId : null;
   const [otherUnit, setOtherUnit] = useState(false);
   useEffect(() => {
-    if (scheduledUnitId && !otherUnit && unitId !== scheduledUnitId) setUnitId(scheduledUnitId);
-  }, [scheduledUnitId, otherUnit, unitId, setUnitId]);
-  const showSelect = units.length > 1 && (!scheduledUnitId || otherUnit);
+    if (scheduledUnitId && !otherUnit && !pendingAttempt && unitId !== scheduledUnitId) setUnitId(scheduledUnitId);
+  }, [scheduledUnitId, otherUnit, pendingAttempt, unitId, setUnitId]);
+  const showSelect = !pendingAttempt && units.length > 1 && (!scheduledUnitId || otherUnit);
   const nowMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
   const blocked = options && !options.markingEnabled;
   const pilot = options?.mode === "pilot";
   const ineligible = options && options.markingEnabled && units.length === 0;
-  const action = expected === null ? `Registrar ${nextIndex + 1}ª batida` : nextIndex < expected ? `Registrar ${nextIndex + 1}ª de ${expected}` : "Registrar batida extra";
+  const pendingTime = pendingAttempt?.firstTriedAt && unitClock?.available ? formatOfficialClock(Date.parse(pendingAttempt.firstTriedAt), unitClock.timeZone).slice(0, 5) : null;
 
   return (
     <ControlPanel className="mx-auto w-full max-w-[1180px] p-0">
-      <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:gap-6">
+      <div className="flex flex-col gap-3 px-5 py-3 md:flex-row md:items-center md:gap-6">
         <div className="shrink-0">
           {options ? <OfficialClockDisplay clock={unitClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ds-on-dark-2">
-            <span className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-accent-kicker">Hoje</span>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ds-on-dark-2">
+            <strong className="text-[13px] text-white">{journeyState(day)}</strong>
+            {day.markings.length ? <span>{hm(workedMinutes(day.markings, nowMinutes))} até agora</span> : null}
+            <span className="text-ds-on-dark-muted" aria-hidden>·</span>
             {day.shift?.type === "work"
               ? <span>{day.shift.shiftName ?? "Turno"} {day.shift.startTime}–{day.shift.endTime}</span>
               : <span>{day.shift ? "Folga na escala" : "Sem escala publicada"}</span>}
@@ -214,65 +260,85 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded }: {
                 <MapPin className="h-3.5 w-3.5" aria-hidden />
                 {showSelect ? (
                   <select aria-label="Unidade onde você está trabalhando" value={unitId} onChange={(event) => setUnitId(event.target.value)}
-                    className="h-8 rounded-ds-sm border border-white/15 bg-white/[0.07] px-2 text-[13px] font-semibold text-white">
+                    className="h-7 rounded-ds-sm border border-white/15 bg-white/[0.07] px-2 text-[12.5px] font-semibold text-white">
                     {units.map((unit) => <option key={unit.id} value={unit.id} className="text-ds-ink">{unit.name}{unit.id === scheduledUnitId ? " (da escala)" : ""}</option>)}
                   </select>
                 ) : <strong className="text-white">{unitName ?? units[0].name}</strong>}
-                {freeUnit ? <span className="text-[11px] text-ds-on-dark-muted">turno volante</span>
+                {pendingAttempt ? null : freeUnit ? <span className="text-[11px] text-ds-on-dark-muted">turno volante</span>
                   : scheduledUnitId && units.length > 1 ? (otherUnit
                     ? <button type="button" className="text-[11px] font-bold underline" onClick={() => { setOtherUnit(false); setUnitId(scheduledUnitId); }}>usar a da escala</button>
-                    : <><span className="text-[11px] text-ds-on-dark-muted">da sua escala</span>
-                      <button type="button" className="text-[11px] font-bold text-ds-on-dark-muted underline hover:text-white" onClick={() => setOtherUnit(true)}>outra unidade?</button></>)
+                    : <button type="button" className="text-[11px] font-bold text-ds-on-dark-muted underline hover:text-white" onClick={() => setOtherUnit(true)}>outra unidade?</button>)
                     : null}
               </>
             ) : null}
           </p>
-          <button type="button" onClick={onOpenDay} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-left" aria-label="Ver as batidas de hoje">
-            <MarkingSequence day={day} today={today} dark />
-            <span className="text-[11px] text-ds-on-dark-muted">{hm(workedMinutes(day.markings, nowMinutes))} trabalhadas</span>
+          <button type="button" onClick={onOpenDay} className="block text-left" aria-label="Ver as batidas de hoje">
+            <MarkingSequence day={day} today={today} dark highlightNext />
           </button>
           <BreakNotice day={day} timeZone={unitClock?.available ? unitClock.timeZone : undefined} />
           {otherUnit && unitId !== scheduledUnitId ? <p className="text-[11px] text-ds-on-dark-muted">A batida é registrada normalmente; o DP confere a troca de unidade.</p> : null}
           {optionsError ? <p role="alert" className="text-[12px] font-semibold text-ds-caution-tile">{optionsError}</p> : null}
         </div>
-        <div className="shrink-0 md:text-right">
-          <Button type="button" variant="primary-page" className="w-full md:w-auto" disabled={!canRecord} onClick={() => setDialogOpen(true)}>
-            <Clock3 className="h-4 w-4" aria-hidden /> {action}
+        <div className="shrink-0 space-y-1 md:text-right">
+          {pendingAttempt ? (
+            <p className="max-w-[260px] text-[11.5px] text-ds-caution-tile md:ml-auto">
+              Tentativa{pendingTime ? ` feita por volta das ${pendingTime}` : ""} ficou sem resposta. Reenvie para confirmar sem duplicar.
+            </p>
+          ) : !blocked && !ineligible ? (
+            <p className="text-[11.5px] text-ds-on-dark-2">
+              Próxima: <strong className="text-white">{next.position}{next.reliable ? ` · ${purposeLabel(next.purpose).toLowerCase()}` : ""}</strong>
+            </p>
+          ) : null}
+          <Button type="button" variant={pendingAttempt ? "ds-secondary" : "primary-page"} className="w-full md:w-auto" disabled={!canRecord} onClick={() => setDialogOpen(true)}>
+            {pendingAttempt ? <RotateCw className="h-4 w-4" aria-hidden /> : <Clock3 className="h-4 w-4" aria-hidden />} {recordActionLabel(marking, day)}
           </Button>
-          <p className="mt-1 text-[11px] text-ds-on-dark-muted">
-            {blocked ? "Registro pelo sistema ainda não liberado" : ineligible ? "Vínculo de hoje sem registro de ponto"
-              : pilot
-                ? suggestionReliable ? `Ensaio controlado · sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Ensaio controlado · escolha a finalidade"
-                : suggestionReliable ? `Sugestão: ${purposeLabel(nextPurpose).toLowerCase()}` : "Escolha a finalidade; há batida anterior sem classificação"}
-          </p>
+          {!pendingAttempt && !blocked && !ineligible ? <p className="text-[10.5px] text-ds-on-dark-muted">A hora gravada é a do servidor ao confirmar.</p> : null}
+          {blocked || ineligible || pilot || !next.reliable ? (
+            <p className="text-[11px] text-ds-on-dark-muted">
+              {blocked ? "Registro pelo sistema ainda não liberado" : ineligible ? "Vínculo de hoje sem registro de ponto"
+                : pilot ? "Ensaio controlado: fora do fechamento oficial" : "Há batida anterior sem classificação: escolha a finalidade"}
+            </p>
+          ) : null}
         </div>
       </div>
-      <RecordDialog open={dialogOpen} onOpenChange={setDialogOpen} marking={marking} unitName={unitName ?? ""}
-        suggestedPurpose={nextPurpose} suggestionReliable={suggestionReliable} index={nextIndex} onRecorded={onRecorded} />
+      <RecordDialog open={dialogOpen} onOpenChange={setDialogOpen} marking={marking} day={day} onRecorded={onRecorded} />
     </ControlPanel>
   );
 }
 
-/** Confirmação antes de registrar e, depois, NSR e comprovante. Não fecha com a batida em andamento. */
-function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose, suggestionReliable, index, onRecorded }: {
-  open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; unitName: string; suggestedPurpose: MarkingPurpose; suggestionReliable: boolean; index: number; onRecorded: () => void;
+/**
+ * Confirmação antes de registrar e, depois, NSR e comprovante. Não fecha com a batida em andamento.
+ * Com tentativa sem resposta, vira "Reenviar a mesma batida": mostra a hora da primeira tentativa e trava a finalidade.
+ */
+export function RecordDialog({ open, onOpenChange, marking, day, onRecorded, chooseUnit = false }: {
+  open: boolean; onOpenChange: (open: boolean) => void; marking: Marking; day: DayView; onRecorded?: () => void;
+  /** Fora da faixa (painel e barra) a unidade é escolhida na própria janela. */
+  chooseUnit?: boolean;
 }) {
   const { recording, recordError, record, lastMarking, setLastMarking, canRecord, fetchReceiptFile, unitClock,
-    locationCaptureState, unitLocationPolicy } = marking;
+    locationCaptureState, unitLocationPolicy, pendingAttempt, options, unitId, setUnitId } = marking;
+  const units = options?.executionUnits ?? [];
+  const unitName = units.find((unit) => unit.id === unitId)?.name ?? "";
+  const next = nextMarkingOf(day);
   const [downloading, setDownloading] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
-  const [purpose, setPurpose] = useState<MarkingPurpose | null>(suggestionReliable ? suggestedPurpose : null);
-  useEffect(() => setPurpose(suggestionReliable ? suggestedPurpose : null), [suggestedPurpose, suggestionReliable, open]);
+  const [purpose, setPurpose] = useState<MarkingPurpose | null>(next.reliable ? next.purpose : null);
+  const [recordedIndex, setRecordedIndex] = useState(next.index);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  useEffect(() => setPurpose(next.reliable ? next.purpose : null), [next.purpose, next.reliable, open]);
+  const chosen = pendingAttempt?.purpose ?? purpose;
+  const pendingTime = pendingAttempt?.firstTriedAt && unitClock?.available ? formatOfficialClock(Date.parse(pendingAttempt.firstTriedAt), unitClock.timeZone) : null;
 
   function changeOpen(next: boolean) {
     if (!next && recording) return;
-    if (!next) { setLastMarking(null); setReceiptError(null); marking.discardPendingAttempt(); }
+    if (!next) { setLastMarking(null); setReceiptError(null); setConfirmingDiscard(false); marking.resetDialog(); }
     onOpenChange(next);
   }
   async function confirm() {
-    if (!purpose) return;
-    await record(purpose);
-    onRecorded();
+    if (!chosen) return;
+    setRecordedIndex(next.index);
+    await record(chosen);
+    onRecorded?.();
   }
   async function download() {
     if (!lastMarking) return;
@@ -295,7 +361,7 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
             <CheckCircle2 className="mx-auto h-12 w-12 text-ds-ok" aria-hidden />
             <DialogHeader className="items-center text-center sm:text-center">
               <DialogTitle>{lastMarking.pilot ? "Ensaio registrado" : "Ponto registrado"}</DialogTitle>
-              <DialogDescription>{index + 1}ª batida de hoje{lastMarking.status === "replayed" ? " (já estava gravada)" : ""}</DialogDescription>
+              <DialogDescription>{lastMarking.status === "replayed" ? "A batida já estava gravada; nada foi duplicado." : `${recordedIndex + 1}ª batida de hoje`}</DialogDescription>
             </DialogHeader>
             <p className="font-ds-mono text-[44px] font-extrabold leading-none text-ds-ink">{fiscalClock(lastMarking.marking.markedAt)}</p>
             <p className="text-sm text-ds-ink-muted">{brDate(lastMarking.marking.markedAt)} · {unitName} · {lastMarking.pilot ? "Sequência do ensaio" : "NSR"} {lastMarking.marking.nsr}</p>
@@ -312,10 +378,38 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
             </div>
             <Button type="button" variant="primary-modal" className="w-full" onClick={() => changeOpen(false)}>Fechar</Button>
           </div>
+        ) : pendingAttempt ? (
+          <div className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Reenviar a mesma batida</DialogTitle>
+              <DialogDescription>A primeira tentativa não teve resposta. O reenvio usa a mesma identificação: se ela já chegou, nada é duplicado e você recebe a batida gravada com o comprovante.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1 rounded-ds-md border border-ds-caution-border bg-ds-caution-bg px-3.5 py-3 text-xs text-ds-ink-2">
+              <p><strong className="text-ds-ink">Tentativa feita por volta das {pendingTime ? pendingTime.slice(0, 5) : "—"}</strong> (estimada pela tela, sem valor de registro).</p>
+              <p>Se a primeira tentativa não chegou, a batida será gravada na hora do reenvio, não nesta. A hora que vale é a do comprovante.</p>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <dt className="text-ds-ink-muted">Unidade</dt><dd className="font-bold text-ds-ink">{unitName}</dd>
+              <dt className="text-ds-ink-muted">Finalidade</dt>
+              <dd className="flex items-center gap-2 font-bold text-ds-ink"><PurposeDot purpose={pendingAttempt.purpose} />{purposeLabel(pendingAttempt.purpose)} <span className="text-xs font-semibold text-ds-ink-muted">(travada)</span></dd>
+            </dl>
+            {recordError ? <p role="alert" className="text-sm font-semibold text-ds-danger">{recordError}</p> : null}
+            {confirmingDiscard ? (
+              <InlineConfirm message="Descartar a tentativa? Se ela chegou ao servidor, a batida continua registrada: confira as batidas do dia antes de registrar de novo."
+                confirmLabel="Descartar tentativa" onConfirm={() => { marking.discardPendingAttempt(); setConfirmingDiscard(false); }} onCancel={() => setConfirmingDiscard(false)} />
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="ds-ghost" className="mr-auto" onClick={() => setConfirmingDiscard(true)} disabled={recording || confirmingDiscard}>Descartar tentativa</Button>
+              <Button type="button" variant="ds-ghost" onClick={() => changeOpen(false)} disabled={recording}>Agora não</Button>
+              <Button type="button" variant="primary-modal" loading={recording} loadingLabel="Reenviando…" disabled={!canRecord} onClick={() => void confirm()}>
+                <RotateCw className="h-4 w-4" aria-hidden /> Reenviar batida
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Registrar {index + 1}ª batida</DialogTitle>
+              <DialogTitle>Registrar {next.position}</DialogTitle>
               <DialogDescription>{marking.options?.mode === "pilot"
                 ? "Confira antes de registrar. Este ensaio fica separado do ponto oficial e não entra no fechamento."
                 : "Confira antes de registrar. A batida não pode ser apagada depois."}</DialogDescription>
@@ -324,14 +418,20 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
               <OfficialClockDisplay clock={unitClock} />
               <p className="mt-1 text-xs text-ds-ink-muted">A hora gravada é a do servidor, no momento da confirmação.</p>
             </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="text-ds-ink-muted">Unidade</dt><dd className="font-bold text-ds-ink">{unitName}</dd>
-            </dl>
+            {chooseUnit && units.length > 1 ? (
+              <PanelSelectField id="record-execution-unit" label="Unidade onde você está trabalhando" value={unitId}
+                onChange={setUnitId} options={units} />
+            ) : (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="text-ds-ink-muted">Unidade</dt><dd className="font-bold text-ds-ink">{unitName}</dd>
+              </dl>
+            )}
             <fieldset className="space-y-2">
               <legend className="mb-2 text-sm font-bold text-ds-ink">O que este registro representa?</legend>
-              {MARKING_PURPOSES.map(([id, label]) => <label key={id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-ds-sm border border-ds-border px-3 py-2 text-sm">
+              {MARKING_PURPOSES.map(([id, label]) => <label key={id} className="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-ds-sm border border-ds-border px-3 py-2 text-sm">
                 <input type="radio" name="marking-purpose" value={id} checked={purpose === id} onChange={() => setPurpose(id)} />
-                <span className="font-semibold">{label}</span>{suggestionReliable && id === suggestedPurpose ? <span className="ml-auto text-xs text-ds-accent">Sugerida</span> : null}
+                <PurposeDot purpose={id} />
+                <span className="font-semibold">{label}</span>{next.reliable && id === next.purpose ? <span className="ml-auto text-xs font-bold text-ds-accent-ink">Sugerida</span> : null}
               </label>)}
             </fieldset>
             <LocationCaptureNotice policy={unitLocationPolicy} state={locationCaptureState} />
@@ -339,7 +439,7 @@ function RecordDialog({ open, onOpenChange, marking, unitName, suggestedPurpose,
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ds-ghost" onClick={() => changeOpen(false)} disabled={recording}>Cancelar</Button>
               <Button type="button" variant="primary-modal" loading={recording} loadingLabel="Registrando…" disabled={!canRecord || !purpose} onClick={() => void confirm()}>
-                <Clock3 className="h-4 w-4" aria-hidden /> Confirmar registro
+                <Clock3 className="h-4 w-4" aria-hidden /> Confirmar ponto
               </Button>
             </div>
           </div>

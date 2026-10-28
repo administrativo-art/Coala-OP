@@ -15,7 +15,11 @@ import { AdjustmentReport } from "./adjustment-panel";
 import { ADJUSTMENT_KIND_LABELS, type AdjustmentView, type MarkingClassificationRequestView } from "./types";
 
 /** Fila de ajustes de ponto para quem analisa: aprovar ou recusar sempre com justificativa. */
-export function AdjustmentReviewSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string }> }) {
+export function AdjustmentReviewSection({ firebaseUser, people, onCountChange }: {
+  firebaseUser: FirebaseUser | null;
+  people: Array<{ id: string; username?: string }>;
+  onCountChange?: (count: number | null) => void;
+}) {
   const [items, setItems] = useState<AdjustmentView[] | null>(null);
   const [classificationItems, setClassificationItems] = useState<MarkingClassificationRequestView[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +44,7 @@ export function AdjustmentReviewSection({ firebaseUser, people }: { firebaseUser
     }
   }, [request]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { onCountChange?.(items ? items.length + classificationItems.length : null); }, [classificationItems.length, items, onCountChange]);
 
   async function decide(action: "approve" | "reject") {
     const current = selected ?? selectedClassification;

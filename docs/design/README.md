@@ -34,6 +34,10 @@ Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, c
 - [Estado atual × destino](estado-atual.md)
 - [Validação visual](validacao-visual.md)
 
+## Tema escuro
+
+Decidido (27/10/2026): o sistema web segue a regra do Coala Go — claro das 06h às 17h59 e escuro das 18h às 05h59 pela hora do aparelho, sem chave manual. A regra é só visual. A paleta escura redefine os tokens `--ds-*` (e os do shadcn usados em diálogos) em `:root[data-ds-theme="dark"]`, com os valores de `Theme.kt` do app. Ela vale apenas nas telas que montam `<ScheduledDarkTheme />` (`src/components/theme/scheduled-dark-theme.tsx`): hoje, Registro de ponto e Painel do colaborador. Antes de ligar em outra tela, remova as cores fixas claras (`bg-white`, `text-gray-*`, hex) dela e dos painéis e diálogos que ela abre; a tela volta ao claro ao ser fechada.
+
 ## Checklist de PR
 - [ ] Usei tokens e variantes existentes (sem hex solto no componente).
 - [ ] Uma ação principal por área; rótulos no formato verbo + objeto.

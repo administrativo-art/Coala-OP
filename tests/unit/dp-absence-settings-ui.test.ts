@@ -7,7 +7,8 @@ const component = fs.readFileSync('src/components/dp/dp-settings-absences.tsx', 
 const access = fs.readFileSync('src/features/dp/time-config/access.server.ts', 'utf8');
 
 test('ausências integra a navegação de Pessoal → Tempo entre turnos e hora extra', () => {
-  assert.match(settings, /pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars"\]\)/);
+  // Tempo termina na exportação fiscal (AFD e AEJ), que saiu do fechamento do ponto.
+  assert.match(settings, /pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars", "fiscal-exports"\]\)/);
   assert.match(settings, /label: "Ausências"/);
 });
 

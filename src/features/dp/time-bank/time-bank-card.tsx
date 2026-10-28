@@ -19,7 +19,7 @@ import { RESIDUAL_LABELS } from "./cycle";
 type StatementResponse = { policy: { name: string; enabled: boolean } | null; statement: BankStatement | null;
   closures: Record<string, number>; previewCompetences?: string[]; pilotPreview?: boolean };
 
-const REASON_LABELS: Record<BankLineReason, string> = {
+export const REASON_LABELS: Record<BankLineReason, string> = {
   worked_less: "Trabalhou menos que a jornada",
   worked_more: "Trabalhou mais que a jornada",
   missing_day: "Dia escalado sem batida (aguarda o DP lançar a ausência)",
