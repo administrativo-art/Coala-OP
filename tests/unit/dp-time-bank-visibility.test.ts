@@ -22,7 +22,9 @@ test('banco abre uma visão detalhada separada sem liberar batida pelo DP', () =
   assert.match(page, /Resumo e extrato detalhado/);
   assert.match(page, /<TimeBankCard[^>]*detailed/);
   assert.match(page, /O DP pode consultar e analisar o extrato, mas não registra batidas/);
-  assert.match(page, /detailHref=\{`\$\{baseHref\}\?view=time-bank`\}/);
+  // O cartão "Banco de horas" das consultas leva à visão detalhada.
+  assert.match(page, /view: "time-bank", title: "Banco de horas"/);
+  assert.match(page, /`\$\{baseHref\}\?view=\$\{view\}`/);
   assert.match(card, /Ver banco de horas detalhado/);
   assert.match(card, /detailed && lines\.length/);
 });

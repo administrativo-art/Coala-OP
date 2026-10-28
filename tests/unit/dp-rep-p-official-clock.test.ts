@@ -14,17 +14,20 @@ describe('Relógio do coletor REP-P', () => {
   it('is required on every collector screen and blocks the button without official time', async () => {
     const { readFileSync } = await import('node:fs');
     const hook = readFileSync('src/features/dp/rep-p/use-rep-p-marking.ts', 'utf8');
-    assert.match(hook, /canRecord: Boolean\(unitId\) && options\?\.markingEnabled === true && options\?\.officialClock\?\.available === true/);
-    // "Registro de ponto" e a janela "Bater ponto" da barra superior são coletores: relógio visível e botão preso a canRecord.
-    for (const file of ['record-strip.tsx', 'quick-marking-button.tsx']) {
-      const screen = readFileSync(`src/features/dp/rep-p/${file}`, 'utf8');
-      assert.match(screen, /<OfficialClockDisplay clock=\{unitClock\}/, file);
-      assert.match(screen, /disabled=\{!canRecord(?: \|\| !purpose)?\}/, file);
+    // Sem hora oficial nada é enviado, nem o reenvio de uma tentativa pendente.
+    assert.match(hook, /canRecord: Boolean\(effectiveUnitId\) && options\?\.markingEnabled === true && options\?\.officialClock\?\.available === true/);
+    // A faixa e a janela de confirmação compartilhada são o coletor: relógio visível e botões presos a canRecord.
+    const strip = readFileSync('src/features/dp/rep-p/record-strip.tsx', 'utf8');
+    assert.match(strip, /<OfficialClockDisplay clock=\{unitClock\}/);
+    assert.match(strip, /disabled=\{!canRecord\}/);
+    assert.match(strip, /disabled=\{!canRecord \|\| !purpose\}/);
+    // A janela não fecha com a batida em voo, senão a confirmação do servidor se perde e a pessoa bate de novo.
+    assert.match(strip, /if \(!next && recording\) return;/);
+    assert.match(strip, /Baixar comprovante/);
+    // A barra superior e o painel do colaborador usam a mesma confirmação, não uma cópia.
+    for (const file of ['src/features/dp/rep-p/quick-marking-button.tsx', 'src/components/collaborator-dashboard-panel.tsx']) {
+      assert.match(readFileSync(file, 'utf8'), /<RecordDialog /, file);
     }
-    // A janela rápida não fecha com a batida em voo, senão a confirmação do servidor se perde e a pessoa bate de novo.
-    const quick = readFileSync('src/features/dp/rep-p/quick-marking-button.tsx', 'utf8');
-    assert.match(quick, /if \(!next && recording\) return;/);
-    assert.match(quick, /Baixar comprovante/);
   });
 });
 

@@ -2,13 +2,14 @@ import 'server-only';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
+import { usernameSearchVariants } from '@/lib/username-search';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 
 const QUERY_MULTIPLIER = 3;
 export const EXTERNAL_CANDIDATE_MAX_RESULTS = 20;
-export const EXTERNAL_CANDIDATE_MAX_READS = EXTERNAL_CANDIDATE_MAX_RESULTS * QUERY_MULTIPLIER + 1;
+export const EXTERNAL_CANDIDATE_MAX_READS = (EXTERNAL_CANDIDATE_MAX_RESULTS * QUERY_MULTIPLIER + 1) * 5;
 
 export async function listExternalCoverageCandidates(params: {
   context: ServerUserContext;
@@ -40,15 +41,18 @@ export async function listExternalCoverageCandidates(params: {
   }
 
   const boundedLimit = Math.min(Math.max(limit, 1), EXTERNAL_CANDIDATE_MAX_RESULTS);
-  const snapshot = await dbAdmin.collection('users')
+  // O nome é gravado como digitado no cadastro; o Firestore só busca por prefixo exato, então tentamos as grafias comuns.
+  const snapshots = await Promise.all(usernameSearchVariants(search).map((variant) => dbAdmin.collection('users')
     .orderBy('username')
-    .startAt(search)
-    .endAt(`${search}\uf8ff`)
+    .startAt(variant)
+    .endAt(`${variant}\uf8ff`)
     .select('username', 'isActive', 'unitId', 'unitIds', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
     .limit(boundedLimit * QUERY_MULTIPLIER + 1)
-    .get();
+    .get()));
+  const documents = [...new Map(snapshots.flatMap((snapshot) => snapshot.docs).map((document) => [document.id, document])).values()]
+    .sort((left, right) => String(left.get('username') ?? '').localeCompare(String(right.get('username') ?? ''), 'pt-BR'));
 
-  const candidates = snapshot.docs.flatMap((document) => {
+  const candidates = documents.flatMap((document) => {
     if (document.get('isActive') === false) return [];
     try {
       const assignment = resolveDPShiftAssignment({
@@ -80,6 +84,6 @@ export async function listExternalCoverageCandidates(params: {
 
   return {
     candidates: candidates.map((candidate) => ({ ...candidate, originUnitName: originNameById.get(candidate.originUnitId) ?? candidate.originUnitId })),
-    truncated: snapshot.size > boundedLimit * QUERY_MULTIPLIER,
+    truncated: snapshots.some((snapshot) => snapshot.size > boundedLimit * QUERY_MULTIPLIER),
   };
 }

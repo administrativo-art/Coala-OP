@@ -43,3 +43,12 @@ test("a permissão ampla de DP continua liberando as rotas do módulo", () => {
   assert.equal(canAccessDpRoute(fullDpPermissions, "/dashboard/dp"), true);
   assert.equal(canAccessDpRoute(fullDpPermissions, "/dashboard/dp/schedules"), true);
 });
+
+test("fechamento do ponto abre só para quem fecha ou reabre a competência", () => {
+  const closer = permissions({ view: false, timeClosure: { close: true, reopen: false } } as PermissionSet["dp"]);
+  const reader = permissions({ view: false, requests: { view: true } } as PermissionSet["dp"]);
+
+  assert.equal(canAccessDpRoute(closer, "/dashboard/dp/fechamento"), true);
+  assert.equal(canAccessDpRoute(closer, "/dashboard/dp/schedules"), false);
+  assert.equal(canAccessDpRoute(reader, "/dashboard/dp/fechamento"), false);
+});

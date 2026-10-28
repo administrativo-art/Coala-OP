@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **503 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **505 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -106,6 +106,8 @@ Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/templates/[id]/text` | GET | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/%5Bid%5D/text/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/workflow` | PATCH | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/%5Bid%5D/workflow/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/dp/absence-availability/[requestId]/reconcile` | POST | [src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-availability/%5BrequestId%5D/reconcile/route.ts) | [dp-absences](flows/dp-absences.md) |
+| `/api/dp/absence-coverage/[requestId]` | GET, POST | [src/app/api/dp/absence-coverage/[requestId]/route.ts](../../src/app/api/dp/absence-coverage/%5BrequestId%5D/route.ts) | [dp-absences](flows/dp-absences.md) |
+| `/api/dp/absence-coverage/[requestId]/candidates` | GET | [src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts](../../src/app/api/dp/absence-coverage/%5BrequestId%5D/candidates/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-operational/[requestId]/reconcile` | POST | [src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-operational/%5BrequestId%5D/reconcile/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-retention` | GET | [src/app/api/dp/absence-retention/route.ts](../../src/app/api/dp/absence-retention/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-retention/[caseId]/decision` | POST | [src/app/api/dp/absence-retention/[caseId]/decision/route.ts](../../src/app/api/dp/absence-retention/%5BcaseId%5D/decision/route.ts) | [dp-absences](flows/dp-absences.md) |

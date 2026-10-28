@@ -40,6 +40,12 @@ import { ptBR } from "date-fns/locale";
 
 import { fetchMyFormExecutions } from "@/features/forms/lib/client";
 import { useAuth } from "@/hooks/use-auth";
+import { ScheduledDarkTheme } from "@/components/theme/scheduled-dark-theme";
+import { canOfferPunch, HeroPunchButton, HeroPunchRow } from "@/features/dp/rep-p/collaborator-punch";
+import { fiscalClock } from "@/features/dp/rep-p/day-model";
+import { nextMarkingOf, PURPOSE_DOT, purposeLabel, RecordDialog, recordActionLabel } from "@/features/dp/rep-p/record-strip";
+import { useRepPMarking } from "@/features/dp/rep-p/use-rep-p-marking";
+import { useTodayJourney } from "@/features/dp/rep-p/use-today-journey";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { useReposition } from "@/hooks/use-reposition";
 import { useToast } from "@/hooks/use-toast";
@@ -465,6 +471,7 @@ const TYPE_BADGE = {
   form: { label: "Formulário", icon: FileText, className: "bg-ds-accent-soft text-ds-accent-ink" },
   task: { label: "Tarefa", icon: CheckSquare, className: "bg-ds-info-bg text-ds-info" },
   count: { label: "Contagem", icon: ListOrdered, className: "bg-ds-info-bg text-ds-info" },
+  punch: { label: "Ponto", icon: Clock, className: "bg-ds-accent-soft text-ds-accent-ink" },
 } as const;
 
 function TimelineItem({
@@ -1597,6 +1604,11 @@ function CollaboratorDashboardPanelInner() {
   const { toast } = useToast();
   const { auditSessions } = useStockAudit();
   const [confirmingReceipt, setConfirmingReceipt] = useState<{ activityId: string; description: string } | null>(null);
+  // Batida pelo painel: a mesma coleta e confirmação do Registro de ponto. A jornada de hoje só é lida com a coleta liberada.
+  const punch = useRepPMarking();
+  const punchEnabled = canOfferPunch(punch);
+  const punchJourney = useTodayJourney(punch, punchEnabled);
+  const [punchOpen, setPunchOpen] = useState(false);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const [compactTimeline, setCompactTimeline] = useState(false);
   useEffect(() => {
@@ -1921,6 +1933,39 @@ function CollaboratorDashboardPanelInner() {
       });
     });
 
+    // Batidas de hoje e a próxima, entre as rotinas do dia.
+    if (punchEnabled) {
+      punchJourney.day.markings.forEach((marking, index) => {
+        const time = fiscalClock(marking.markedAt);
+        const purpose = marking.classification?.purpose ?? null;
+        items.push({
+          sortMin: hhmmToMinutes(time) ?? 0,
+          order: 1,
+          key: `punch-${marking.receiptId}`,
+          render: (isLast) => (
+            <TimelineItem type="punch" time={time} dot={purpose ? PURPOSE_DOT[purpose] : "bg-ds-ink-faint"} statusLabel="Registrada" statusClass="text-ds-ok"
+              compact={compactTimeline} title={`${purpose ? purposeLabel(purpose) : `${index + 1}ª batida`}`} meta={`${index + 1}ª batida · NSR ${marking.nsr}`}
+              completed={false} action={null} isLast={isLast} />
+          ),
+        });
+      });
+      const next = nextMarkingOf(punchJourney.day);
+      if (!next.extra) {
+        items.push({
+          sortMin: nowMinutes,
+          order: -1,
+          key: "punch-next",
+          render: (isLast) => (
+            <TimelineItem type="punch" time="··:··" dot="bg-ds-accent" statusLabel="Próxima" statusClass="text-ds-accent-ink" compact={compactTimeline}
+              title={`${next.position}${next.reliable ? ` · ${purposeLabel(next.purpose).toLowerCase()}` : ""}`}
+              meta="A hora gravada é a Hora Legal Brasileira no momento da confirmação."
+              action={<Button size="sm" variant="primary-page" disabled={!punch.canRecord} onClick={() => setPunchOpen(true)}>{recordActionLabel(punch, punchJourney.day)}</Button>}
+              isLast={isLast} />
+          ),
+        });
+      }
+    }
+
     // Shift markers
     if (todayShift) {
       const startMin = hhmmToMinutes(todayShift.startTime);
@@ -1953,7 +1998,8 @@ function CollaboratorDashboardPanelInner() {
 
     return items.sort((a, b) => a.sortMin - b.sortMin || a.order - b.order);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes, compactTimeline]);
+  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes, compactTimeline,
+    punchEnabled, punchJourney.day, punch]);
 
   const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
 
@@ -1969,6 +2015,7 @@ function CollaboratorDashboardPanelInner() {
   return (
     <>
     <section id="painel-colaborador" className="scroll-mt-6">
+      <ScheduledDarkTheme />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Left column */}
         <div className="space-y-6">
@@ -1978,7 +2025,10 @@ function CollaboratorDashboardPanelInner() {
               kicker={dateEyebrow}
               title={`${greetingFor(today)}, ${firstName}`}
               subtitle={todayShift ? `${todayShift.name} · ${todayShift.time}${todayShift.unit ? ` · ${todayShift.unit}` : ""}` : "Sem turno hoje"}
-              actions={<LiveClock onDark />}
+              actions={<>
+                {punchEnabled ? <HeroPunchButton marking={punch} day={punchJourney.day} onOpen={() => setPunchOpen(true)} /> : null}
+                <LiveClock onDark />
+              </>}
               chips={
                 loadingForms ? <HeroChip value="…" label="Carregando rotinas" /> : allDone ? (
                   <HeroChip value="✓" label="Rotina do dia concluída" />
@@ -1988,7 +2038,10 @@ function CollaboratorDashboardPanelInner() {
                   <HeroChip value={`${routinesDone}/${routinesTotal}`} label={`Rotinas do dia · ${pendingCount} pendente(s) até o fim do turno`} tone={pendingCount > 0 ? "warning" : "info"} />
                 )
               }
-            />
+            >
+              {punchEnabled ? <HeroPunchRow day={punchJourney.day} today={punch.today} /> : null}
+            </PageHero>
+            {punchEnabled ? <RecordDialog open={punchOpen} onOpenChange={setPunchOpen} marking={punch} day={punchJourney.day} chooseUnit onRecorded={punchJourney.reload} /> : null}
             {!loadingForms && !formsError && nextAction ? <NextActionCard execution={nextAction} /> : null}
           </div>
 

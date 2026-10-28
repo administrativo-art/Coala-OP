@@ -148,7 +148,6 @@ test('cria rascunho com comprovante, envia e analisa pedido atribuído', async (
   expect(submitted).toBe(1);
 
   await page.goto('/dashboard/dp/requests', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Ver fila de ausências' }).click();
   await page.getByRole('button', { name: /Ausência E2E.*10\/11\/2026/ }).click();
   const reviewPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Ausência E2E' }) });
   await expect(reviewPanel.getByText('Pessoa em análise E2E', { exact: true })).toBeVisible();
@@ -162,9 +161,10 @@ test('cria rascunho com comprovante, envia e analisa pedido atribuído', async (
   await page.getByRole('button', { name: 'Marcar como lido' }).click();
   await expect.poll(() => noticeMarked).toBe(true);
 
-  await page.getByRole('combobox', { name: 'Colaborador para novo pedido' }).click();
+  await page.getByRole('button', { name: 'Nova ausência' }).click();
+  await page.getByRole('combobox', { name: 'Colaborador' }).click();
   await page.getByRole('option', { name: E2E_ABSENCE_BENEFICIARY.name }).click();
-  await page.getByRole('button', { name: 'Preparar ausência para colaborador' }).click();
+  await page.getByRole('button', { name: 'Preencher ausência' }).click();
   const thirdPanel = page.locator('[data-ui="side-panel"]').filter({ has: page.getByRole('heading', { name: 'Solicitar ausência' }) });
   await expect(thirdPanel.getByText(`Solicitação para ${E2E_ABSENCE_BENEFICIARY.name}`)).toBeVisible();
   await thirdPanel.getByRole('combobox', { name: 'Tipo de ausência' }).click();

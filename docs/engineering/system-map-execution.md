@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-10-27: candidata local go-adjustment-time-input adiciona teclado numérico e separador automático nos horários de inclusão/correção do ajuste Android. Fontes: mapa curto → Registro REP-P → AdjustmentScreen, LabeledInput e TimeRules.adjustmentRequest. Sem mudança de API ou dados fiscais. Testes e limites no registro privado; telemetria atribuível indisponível.
+
 2026-10-27: retomada no Galaxy confirmou versão 0.3.28/code33, atestação HTTP 200 e autorização offline HTTP 201 às 21:11:27Z. A recusa do teste local anterior vinha de exportação sem provider; formato real passou. Candidata local adiciona TimeOfflinePreparation/worker automático, recuperação da fila e linguagem operacional simples; mudanças de vínculo não estão incluídas. Uso do mapa e resultados no registro privado attestation-galaxy. Telemetria atribuível indisponível.
 
 2026-10-27: diagnóstico de ponto offline 0.3.27 confirmou recusa 403 na autorização por atestação de aplicativo. Implementação do fluxo de hardware Android para APK direto e estados explícitos de dados/autorização indisponíveis; guia em `android-direct-apk-attestation.md`. Nenhum gate de conformidade é promovido por essa alteração.
