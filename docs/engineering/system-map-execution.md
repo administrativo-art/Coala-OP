@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-10-29: ajuste local dos documentos de férias: descarte motivado, preservação das decisões em correções/reenvios, histórico interno e consulta conjunta dos originais. Guia `flows/vacation-receipts.md`. Sem migração, banco real ou publicação; cobertura integrada do fluxo permanece pendente.
+
 2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
 
 2026-10-27: [LGPD v5 integrada](../rep-p/homologacao/lgpd-v5-validacao-integrada.md) passou com emuladores, conversor oficial e pacote de oito modelos/24 páginas. Golden dirigido atualizado; a consulta posterior não encontrou modelo LGPD armazenado nem override no destino (`coala`), dispensando migração. Sem publicação ou promoção do grupo inteiro a Verificado.

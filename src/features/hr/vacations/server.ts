@@ -9,7 +9,7 @@ import { createPaymentRequest, refreshPaymentRequest } from '@/features/financia
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
-import { vacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
+import { supersedeVacationReceiptDocuments, vacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
 import { guardOccupancyWrite, operationalGuardRequested, vacationOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
@@ -2447,7 +2447,9 @@ export async function discardVacationReceiptDocument(
   request: NextRequest,
   vacationId: string,
   documentId: string,
+  discardReason: string,
 ) {
+  const reason = requiredText(discardReason, 'DP_VACATION_RECEIPT_DISCARD_REASON', 'Informe o motivo do descarte.');
   const { context, vacationRef } = await requireVacationApprovalAccess(request, vacationId);
   const now = new Date().toISOString();
   await dbAdmin.runTransaction(async (transaction) => {
@@ -2468,7 +2470,7 @@ export async function discardVacationReceiptDocument(
       throw conflict('DP_VACATION_RECEIPT_DOCUMENT_ALREADY_SELECTED', 'Não é possível descartar o recibo já escolhido. Selecione outro arquivo antes.');
     }
     const nextDocuments: DPVacationReceiptDocument[] = documents.map((document) => (
-      document.id === target.id ? { ...document, status: 'discarded' as const } : document
+      document.id === target.id ? { ...document, status: 'discarded' as const, discardedAt: now, discardedBy: context.decoded.uid, discardReason: reason } : document
     ));
     const nextWorkflow: DPVacationWorkflow = {
       ...workflow,
@@ -2477,7 +2479,7 @@ export async function discardVacationReceiptDocument(
         documents: nextDocuments,
         suggestedDocumentId: workflow.receipt.suggestedDocumentId === target.id
           ? null
-          : workflow.receipt.suggestedDocumentId,
+          : workflow.receipt.suggestedDocumentId ?? null,
       },
       updatedAt: now,
     };
@@ -2486,6 +2488,7 @@ export async function discardVacationReceiptDocument(
       status: 'discarded',
       discardedAt: now,
       discardedBy: context.decoded.uid,
+      discardReason: reason,
     }, { merge: true });
     transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
       context,
@@ -2496,6 +2499,7 @@ export async function discardVacationReceiptDocument(
       {
         documentId: target.id,
         fileName: target.fileName,
+        reason,
         wasSuggestedByCopilot: workflow.receipt.suggestedDocumentId === target.id,
         documentTypeCode: target.analysis?.documentTypeCode ?? null,
       },
@@ -2527,9 +2531,7 @@ export async function reviewVacationReceipt(
     if (input.decision === 'correction_required') {
       const reason = requiredText(input.reason, 'DP_VACATION_RECEIPT_CORRECTION_REASON', 'Informe o que precisa ser corrigido.');
       const currentDocuments = vacationReceiptDocuments(workflow.receipt);
-      const documents = currentDocuments.map((document) => (
-        document.status === 'superseded' ? document : { ...document, status: 'superseded' as const }
-      ));
+      const documents = supersedeVacationReceiptDocuments(currentDocuments, { at: now, by: context.decoded.uid, reason });
       const nextWorkflow: DPVacationWorkflow = {
         ...workflow,
         currentStage: 'accountant',
@@ -2553,11 +2555,12 @@ export async function reviewVacationReceipt(
         updatedAt: now,
       };
       transaction.update(vacationRef, { workflow: nextWorkflow, updatedAt: new Date(now), updatedBy: context.decoded.uid });
-      currentDocuments.filter((document) => document.status !== 'superseded').forEach((document) => {
+      currentDocuments.filter((document) => document.status !== 'superseded' && document.status !== 'discarded').forEach((document) => {
         transaction.set(vacationRef.collection('receiptVersions').doc(document.id), {
           status: 'superseded',
           supersededAt: now,
           supersededBy: context.decoded.uid,
+          supersededReason: reason,
         }, { merge: true });
       });
       transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
@@ -2596,6 +2599,8 @@ export async function reviewVacationReceipt(
       receipt: {
         ...workflow.receipt,
         status: 'approved',
+        documents: vacationReceiptDocuments(workflow.receipt).map((document) => document.id === workflow.receipt.originalDocumentId
+          ? { ...document, approvedAt: now, approvedBy: context.decoded.uid } : document),
         reviewedValues: {
           grossAmount: Number(values.grossAmount.toFixed(2)),
           discountAmount: Number(values.discountAmount.toFixed(2)),
@@ -2613,6 +2618,11 @@ export async function reviewVacationReceipt(
       updatedAt: now,
     };
     transaction.update(vacationRef, { workflow: nextWorkflow, updatedAt: new Date(now), updatedBy: context.decoded.uid });
+    transaction.set(vacationRef.collection('receiptVersions').doc(workflow.receipt.originalDocumentId), {
+      approvedAt: now,
+      approvedBy: context.decoded.uid,
+      reviewNotes: input.notes ?? null,
+    }, { merge: true });
     transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
       context,
       vacationId,
@@ -3166,4 +3176,19 @@ export async function deleteVacation(request: NextRequest, vacationId: string) {
       { snapshot: serialize(current) as Record<string, unknown> },
     ));
   });
+}
+
+/** Read-only preflight for the API contract; mutation functions recheck within transactions. */
+export async function authorizeVacationMutation(request: NextRequest, vacationId: string, action: string) {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', httpStatus: 401, cause });
+  });
+  const permission = action === 'update_record' ? 'request' : 'approve';
+  if (!canManageVacation(context, permission)) throw forbidden();
+  await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(dbAdmin.collection('dp_vacations').doc(vacationId));
+    if (!snapshot.exists) throw notFound();
+    await assertTargetAccess(transaction, context, String(snapshot.get('userId') ?? ''));
+  });
+  return context;
 }

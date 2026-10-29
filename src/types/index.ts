@@ -4178,6 +4178,14 @@ export type DPVacationReceiptDocument = {
   status: 'processing' | 'review_pending' | 'analysis_failed' | 'selected' | 'superseded' | 'discarded';
   analysis?: DPVacationReceiptAnalysis | null;
   analyzedAt?: string | null;
+  discardedAt?: string | null;
+  discardedBy?: string | null;
+  discardReason?: string | null;
+  supersededAt?: string | null;
+  supersededBy?: string | null;
+  supersededReason?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
 };
 
 export type DPVacationWorkflow = {

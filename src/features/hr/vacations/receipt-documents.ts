@@ -99,3 +99,14 @@ export function suggestVacationReceiptDocument(
       return left.uploadedAt.localeCompare(right.uploadedAt) || left.id.localeCompare(right.id);
     })[0] ?? null;
 }
+
+/** Preserve previous decisions and original assets when a correction opens a new round. */
+export function supersedeVacationReceiptDocuments(
+  documents: DPVacationReceiptDocument[],
+  decision: { at: string; by: string; reason: string },
+): DPVacationReceiptDocument[] {
+  return documents.map((document) => document.status === 'superseded' || document.status === 'discarded'
+    ? document
+    : { ...document, status: 'superseded', supersededAt: decision.at,
+      supersededBy: decision.by, supersededReason: decision.reason });
+}

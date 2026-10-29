@@ -31,3 +31,6 @@ O [teste estrutural ponta a ponta](../../../tests/unit/dp-vacation-end-to-end-wo
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+
+O painel documental do ciclo/gozo permite abrir aviso e recibo assinados e comprovante separadamente. Rejeições e substituições permanecem no histórico interno de recebimento; não compõem a versão aceita. O arquivamento documental histórico não executa os comandos financeiros ou de assinatura descritos neste guia.
