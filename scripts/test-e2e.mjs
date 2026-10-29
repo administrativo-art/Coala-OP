@@ -81,7 +81,9 @@ const child = spawn(
     "firebase.e2e.json",
     "--only",
     "auth,firestore",
-    "npm run test:e2e:playwright",
+    process.argv.includes('--vacation-documents')
+      ? 'npm run test:e2e:playwright -- tests/e2e/hr/vacations.spec.ts --grep "descarte exige motivo"'
+      : "npm run test:e2e:playwright",
   ],
   { env, shell: process.platform === "win32", stdio: "inherit" },
 );
