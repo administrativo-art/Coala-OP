@@ -86,7 +86,8 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
   assert.match(timeViewModel, /offlineQueue\.beginOnline\(owner, onlineRequest[\s\S]*?api\.mark\(onlineRequest, owner\)/);
   assert.match(timeViewModel, /cause\.code\(\) == 409\) \{ clearAttempt\(\)/);
   assert.match(timeViewModel, /TimeRules\.workDate\(officialNow\(state\), zone\)/);
-  assert.match(time, /UnitPickerHeader\(units\.map \{ it\.id to it\.name \}, state\.unitId\.orEmpty\(\)/);
+  // A unidade da batida vem da escala do dia: o Ponto não tem seletor (decisão de 29/10/2026).
+  assert.doesNotMatch(time, /UnitPickerHeader/);
   assert.doesNotMatch(time, /Rules\.unitChoices/);
   assert.match(time, /capturePointLocation/);
   assert.match(time, /O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade/);

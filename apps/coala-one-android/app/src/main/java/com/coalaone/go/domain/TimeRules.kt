@@ -466,6 +466,12 @@ object TimeRules {
         shift.type == "day_off" -> "Folga"
         else -> listOfNotNull(shift.startTime?.let { start -> shift.endTime?.let { "$start–$it" } }, shift.shiftName).joinToString(" · ").ifBlank { null }
     }
+    /** Only the hours of the shift ("13:45–20:00"), without its name; "Folga" on a day off. */
+    fun shiftHours(shift: OwnShift?): String? = when {
+        shift == null -> null
+        shift.type == "day_off" -> "Folga"
+        else -> shift.startTime?.let { start -> shift.endTime?.let { "$start–$it" } }
+    }
     /** The break planned for the day, so the person sees it next to the punch button. */
     fun breakText(shift: OwnShift?): String? {
         if (shift == null || shift.type != "work") return null
