@@ -127,6 +127,13 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     fun fetch(then: (File) -> Unit) { val id = punch.receiptId ?: return; vm.receipt(id, markedAt, punch.nsr ?: 0, punch.pilot, context.cacheDir, then) }
     // The copy lives only while the sheet is open; sign-out also clears the folder.
     DisposableEffect(Unit) { onDispose { File(context.cacheDir, "receipts").deleteRecursively() } }
+    // One touch from the list reaches the receipt: the PDF opens as soon as the sheet does.
+    var autoOpened by rememberSaveable(punch.receiptId) { mutableStateOf(false) }
+    LaunchedEffect(punch.receiptId) {
+        if (autoOpened || punch.receiptStatus != "available") return@LaunchedEffect
+        autoOpened = true
+        fetch { file -> if (!openPdf(context, file)) problem = "Nenhum leitor de PDF neste aparelho. Use Compartilhar ou Salvar." }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Batida · ${punch.time}", style = MaterialTheme.typography.titleLarge)
@@ -227,14 +234,16 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
     }
 }
 
+private fun breakColors(level: BreakLevel) = when (level) {
+    BreakLevel.DANGER -> Tokens.danger to Tokens.dangerBg
+    BreakLevel.WARN -> Tokens.warning to Tokens.warningBg
+    BreakLevel.INFO -> Tokens.info to Tokens.infoBg
+    BreakLevel.OK -> Tokens.okInk to Tokens.okBg
+    BreakLevel.NEUTRAL -> Tokens.muted to Tokens.soft
+}
+
 @Composable private fun BreakNoticeCard(status: BreakStatus) {
-    val (ink, background) = when (status.level) {
-        BreakLevel.DANGER -> Tokens.danger to Tokens.dangerBg
-        BreakLevel.WARN -> Tokens.warning to Tokens.warningBg
-        BreakLevel.INFO -> Tokens.info to Tokens.infoBg
-        BreakLevel.OK -> Tokens.okInk to Tokens.okBg
-        BreakLevel.NEUTRAL -> Tokens.muted to Tokens.soft
-    }
+    val (ink, background) = breakColors(status.level)
     Column(Modifier.fillMaxWidth().background(background, RoundedCornerShape(14.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("INTERVALO", color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Bold))
@@ -247,16 +256,19 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 color = ink, style = MaterialTheme.typography.headlineSmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
         }
         status.detail?.let { Text(it, color = ink, style = MaterialTheme.typography.bodySmall) }
-        Text("Aviso de apoio; o registro de ponto continua disponível.", color = ink.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
     }
 }
 
-@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null) {
+@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null, onInformAbsence: (String) -> Unit = {}) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     val context = LocalContext.current
     val online = rememberOnline()
     DisposableEffect(Unit) {
-        onDispose { listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() } }
+        onDispose {
+            listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() }
+            // The confirmation cards have no button to dismiss them: they go away when the screen is left.
+            vm.dismissLast(); vm.dismissOffline()
+        }
     }
     LaunchedEffect(startDayDetail) { if (startDayDetail == null) vm.load(online) else vm.loadDay(startDayDetail) }
     LaunchedEffect(online) { if (online && startDayDetail == null) vm.load() else vm.refreshClock(online) }
@@ -307,6 +319,12 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
             officialNow = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)
             delay(1000 - officialNow % 1000)
         }
+    }
+    // The screen stays open across midnight: when the official day changes, the day, the shift and the unit are read again
+    // (otherwise yesterday's schedule and unit stay on screen).
+    val officialDay = TimeRules.workDate(officialNow, zone)
+    LaunchedEffect(officialDay) {
+        if (state.clockOffset != null && officialDay != state.today.toString() && !pendingAttempt) vm.load(online)
     }
     LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
         if (pendingDirectRecord && (if (online) pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve
@@ -435,16 +453,15 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
         }
     } }
     val screenTitle = when (section) { "records" -> "Registros"; "adjustments" -> "Histórico de ajustes"; "bank" -> "Banco de horas"; "mirror" -> "Espelhos mensais"; "day" -> "Detalhe do dia"; else -> "Registro de ponto" }
-    val leave: () -> Unit = { when (section) { "today" -> onBack(); "day" -> if (detailSource == "home") onBack() else section = detailSource; else -> section = "today" } }
+    val leave: () -> Unit = { when (section) { "today" -> onBack(); "day" -> if (detailSource == "home") onBack() else section = detailSource
+        else -> { section = "today"; java.time.YearMonth.from(state.today).let { if (state.month != it) vm.month(it) } } } }
     fun openDay(date: String, source: String) { detailDate = date; detailSource = source; section = "day"; confirming = false }
     Page(screenTitle, feedback, leave, footer = footer, onRefresh = {
         when (section) { "today" -> vm.load(online); "records", "adjustments" -> vm.month(state.month); "bank" -> vm.loadBank();
             "day" -> detailDate?.let { if (detailSource == "home") vm.loadDay(it) else vm.loadBank(it) }; "mirror" -> vm.loadMirrorYear(state.month.year) }
     }, showConnectivityNotice = false, header = {
         TopBar(screenTitle, busy = screenBusy, onBack = leave)
-        // A escala escolhe a unidade automaticamente; só há escolha manual quando o dia não tem unidade escalada.
-        if (section == "today" && (todayShift?.unitId == null || todayShift?.executionUnitPolicy == "free"
-                || units.none { it.id == todayShift.unitId }) && units.size > 1) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), screenBusy || confirming || pendingAttempt) { vm.unit(it) }
+        // No unit picker: the unit of the punch is the unit of the shift, and without a shift it is the person's own unit.
     }) {
         if (section == "today") {
             OfficialClockCard(state, online)
@@ -452,10 +469,9 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 Text("Escala excepcional", style = MaterialTheme.typography.titleMedium)
                 Text("Você foi escalado excepcionalmente para ${todayShift.unitName ?: "esta unidade"} nesta data.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
-            if (todayShift?.unitId != null && todayShift.unitId != state.unitId) CardBlock {
-                Text("Escala: ${todayShift.unitName ?: "unidade escalada"}", style = MaterialTheme.typography.titleMedium)
-                Text("Este ponto será registrado em $unitName.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                if (units.none { it.id == todayShift.unitId }) Text("A unidade da escala não está liberada para este dia. Peça ao DP para conferir o vínculo ou registrar a cobertura nesta escala.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            // The scheduled unit is not repeated here (the clock card already names the unit of the punch); only the blocker stays.
+            if (todayShift?.unitId != null && todayShift.unitId != state.unitId && units.none { it.id == todayShift.unitId }) CardBlock {
+                Text("A unidade da escala não está liberada para este dia. Peça ao DP para conferir o vínculo ou registrar a cobertura nesta escala.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             }
             if (todayShift?.executionUnitPolicy == "free" && todayShift.locationTrackingPolicy == "workday") {
                 CardBlock {
@@ -484,7 +500,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     Action("Encerrar acompanhamento", secondary = true) { vm.stopJourneyLocation() }
                 }
             }
-            breakStatus?.let { BreakNoticeCard(it) }
+            // The explanation of the interval lives in the day detail; here only its total as a chip.
+            breakStatus?.takeIf { it.usedMinutes > 0 || it.inPause }?.let { status ->
+                val (ink, background) = breakColors(status.level)
+                StatusChip("Intervalo · ${TimeRules.durationText(status.usedMinutes)}", ink, background)
+            }
             // One block for the reason and the contingency issue, instead of two stacked warnings.
             val blocked = if (!online && !state.offlineReady) "Conecte-se à internet para registrar o ponto."
                 else TimeRules.blockedReason(state.options, state.offlineReady)
@@ -501,16 +521,29 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                     color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
             }
+            // The decision comes first: the journey card is the highlight, the punch confirmation is one quiet line.
+            if (state.journeyClosurePromptDate == today) CardBlock(selected = true) {
+                Text("Jornada registrada", style = MaterialTheme.typography.titleMedium)
+                Text("Deseja encerrar o acompanhamento deste ciclo? Isso conclui apenas os avisos e o resumo; uma nova batida continua sempre disponível.",
+                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                FooterPair("Deixar em aberto", !feedback.busy, { vm.deferJourneyClosure() }, "Encerrar agora", !feedback.busy) { vm.closeJourneyCycle(today) }
+            } else if (declaredJourneyEnd && !cycleClosed) CardBlock(selected = true) {
+                Text("Fim da jornada registrado", style = MaterialTheme.typography.titleMedium)
+                Text("O ciclo continua aberto. Você pode encerrá-lo agora ou registrar outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                Action("Encerrar ciclo", secondary = true, enabled = !feedback.busy) { vm.closeJourneyCycle(today) }
+            } else if (cycleClosed) CardBlock(selected = true) {
+                Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
+                Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            }
             state.lastOffline?.let { local ->
-                CardBlock(selected = true) {
+                CardBlock {
                     Text("${if (pilotMode) "Ensaio" else "Ponto"} salvo no aparelho · ${TimeRules.secondsOf(local.markedAt)}", style = MaterialTheme.typography.titleMedium)
                     Text(if (pilotMode) "Aguardando sincronização do ensaio. Ainda não há sequência nem comprovante do ensaio; nada será enviado ao registro fiscal oficial."
                         else "Aguardando confirmação do servidor. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                    Action("Ok", secondary = true) { vm.dismissOffline() }
                 }
             }
             state.last?.let { last ->
-                CardBlock(selected = true) {
+                CardBlock {
                     Text("${if (last.pilot) "Ensaio registrado" else "Ponto registrado"} · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
                     Text("${if (last.pilot) "Sequência do ensaio" else "Registro oficial"} ${last.marking.nsr} · ${units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                     if (last.pilot) Text("Teste sem validade como REP-P e fora do fechamento oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
@@ -521,27 +554,10 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                         else -> "Localização não solicitada para esta unidade."
                     }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
                         style = MaterialTheme.typography.bodySmall) }
-                    if (last.receiptStatus == "available") Action("Abrir comprovante") { receipt = DayPunch(TimeRules.minuteOf(last.marking.markedAt), last.marking.nsr, last.receiptId, "available", pilot = last.pilot) to last.marking.markedAt }
-                    else Text("Comprovante em emissão. Puxe a tela para baixo para atualizar a lista.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                    Action("Ok", secondary = true) { vm.dismissLast() }
+                    if (last.receiptStatus != "available") Text("Comprovante em emissão. Ele aparece no detalhe do dia.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (state.journeyClosurePromptDate == today) CardBlock(selected = true) {
-                Text("Jornada registrada", style = MaterialTheme.typography.titleMedium)
-                Text("Deseja encerrar o acompanhamento deste ciclo? Isso conclui apenas os avisos e o resumo; uma nova batida continua sempre disponível.",
-                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                FooterPair("Deixar em aberto", !feedback.busy, { vm.deferJourneyClosure() }, "Encerrar agora", !feedback.busy) { vm.closeJourneyCycle(today) }
-            } else if (declaredJourneyEnd && !cycleClosed) CardBlock {
-                Text("Fim da jornada registrado", style = MaterialTheme.typography.titleMedium)
-                Text("O ciclo continua aberto. Você pode encerrá-lo agora ou registrar outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                Action("Encerrar ciclo", secondary = true, enabled = !feedback.busy) { vm.closeJourneyCycle(today) }
-            } else if (cycleClosed) CardBlock(selected = true) {
-                Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
-                Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            }
             TimeDayOverview(state, todayShift, todayPunches, !feedback.busy) { receipt = it to markedAtOf(it) }
-            if (todayMarkings.any { it.pilot }) Text("No ensaio, o pedido de ajuste é uma simulação: pode ser analisado pelo DP, mas não altera ponto, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            Action(if (todayMarkings.any { it.pilot }) "Simular pedido de ajuste" else "Pedir ajuste de ponto", secondary = true, enabled = online && !feedback.busy) { asking = today }
             Text("CONSULTAS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             listOf(
                 Triple("records", "Registros", "Batidas e detalhes de cada dia"),
@@ -554,11 +570,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 }
             }
         } else if (section == "records") RecordsTab(state, feedback.busy, vm,
-            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, onDay = { openDay(it, "records") }, onArchive = { selectedReceiptArchive = true })
+            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, onAbsence = onInformAbsence, onDay = { openDay(it, "records") }, onArchive = { selectedReceiptArchive = true })
         else if (section == "adjustments") AdjustmentHistoryTab(state, feedback.busy, vm) { openDay(it, "adjustments") }
         else if (section == "bank") BankTab(state, feedback.busy, vm) { openDay(it, "bank") }
         else if (section == "day" && detailDate != null) DayDetail(state, detailDate!!, feedback.busy,
-            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, focus = if (detailSource == "home") "records" else detailSource)
+            onReceipt = { receipt = it to markedAtOf(it) }, onAdjust = { asking = it }, onAbsence = onInformAbsence, focus = if (detailSource == "home") "records" else detailSource)
         else MirrorYearTab(state, feedback.busy, vm) { competence -> vm.openMirror(competence) { selectedMirror = true } }
     }
 }
@@ -780,8 +796,31 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
 }
 
+/** The shift of a day said once: the unit and the hours, each in a pill (the shift name stays in the schedule). */
+@Composable private fun ShiftPills(shift: OwnShift?) {
+    val unit = shift?.unitName?.takeIf { it.isNotBlank() }
+    val hours = TimeRules.shiftHours(shift)
+    if (unit == null && hours == null) return
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        unit?.let { StatusChip(it, Tokens.muted, Tokens.soft, Modifier.weight(1f, fill = false)) }
+        hours?.let { StatusChip(it, Tokens.muted, Tokens.soft) }
+    }
+}
+
+/** Day actions in a grid of two equal columns: same width and height, one line each. */
+@Composable private fun DayActions(actions: List<Pair<String, () -> Unit>>, enabled: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        actions.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { (label, onClick) -> Box(Modifier.weight(1f)) { Action(label, enabled = enabled, secondary = true, onClick = onClick) } }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
 @Composable private fun RecordsTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit,
-    onAdjust: (String) -> Unit, onDay: (String) -> Unit, onArchive: () -> Unit) {
+    onAdjust: (String) -> Unit, onAbsence: (String) -> Unit, onDay: (String) -> Unit, onArchive: () -> Unit) {
     val first = state.month.atDay(1)
     val officialMarkings = state.markings.filterNot { it.pilot }
     val hasPilotMarkings = state.markings.any { it.pilot }
@@ -820,7 +859,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = if (open) "Recolher dia" else "Abrir dia") { open = !open }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(dayTitle(date) + if (date == state.today) " · hoje" else "", style = MaterialTheme.typography.titleMedium)
-                    if (punches.isEmpty()) Text(TimeRules.shiftText(shift)?.let { "Escala $it · nenhuma batida" } ?: "Sem batidas", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    if (punches.isEmpty()) Text("Nenhuma batida", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                     else PunchTimes(punches)
                 }
                 when {
@@ -837,14 +876,15 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                 DropdownChevron(open, Tokens.muted)
             }
             if (open) {
-                TimeRules.shiftText(shift)?.let { Text("Escala: $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                ShiftPills(shift)
                 PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
                 val pilotDay = state.markings.any { it.workDate == key && it.pilot }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.weight(1f)) { Action("Detalhar dia", enabled = !busy) { onDay(key) } }
-                    Box(Modifier.weight(1f)) { Action(if (pilotDay) "Simular ajuste" else "Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(key) } }
-                }
-                if (pilotDay) Text("A simulação não produz tratamento nem efeito fiscal.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                DayActions(buildList {
+                    add("Detalhar dia" to { onDay(key) })
+                    add((if (pilotDay) "Simular ajuste" else "Pedir ajuste") to { onAdjust(key) })
+                    if (punches.isEmpty() && shift?.type == "work") add("Informar ausência" to { onAbsence(key) })
+                }, !busy)
+                if (pilotDay) Text("Simulação: se aprovada, muda só este dia de teste, sem efeito fiscal.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -940,7 +980,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
 }
 
 @Composable private fun DayDetail(state: TimeState, workDate: String, busy: Boolean, onReceipt: (DayPunch) -> Unit,
-    onAdjust: (String) -> Unit, focus: String) {
+    onAdjust: (String) -> Unit, onAbsence: (String) -> Unit, focus: String) {
     val date = runCatching { LocalDate.parse(workDate) }.getOrNull() ?: return
     if (!state.monthDataAvailable) {
         EmptyState("Batidas ainda não consultadas", "Puxe para atualizar quando a consulta estiver disponível.")
@@ -968,9 +1008,12 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
     CardBlock(selected = focus == "records") {
         Text("Jornada e batidas", style = MaterialTheme.typography.titleMedium)
-        SummaryLine("Escala", TimeRules.shiftText(shift) ?: "Sem turno informado")
-        SummaryLine("Local de trabalho", if (shift?.executionUnitPolicy == "free") "Entre unidades" else shift?.unitName ?: "Unidade não informada")
+        if (shift == null) SummaryLine("Escala", "Sem turno informado") else ShiftPills(shift)
+        if (shift?.executionUnitPolicy == "free") SummaryLine("Local de trabalho", "Entre unidades")
         SummaryLine("Intervalo", "${TimeRules.durationText(breakMinutes)} realizado" + (TimeRules.plannedBreakMinutes(shift).takeIf { it > 0 }?.let { " de ${TimeRules.durationText(it)} previsto" } ?: ""))
+        val detailNow = state.clockOffset?.let { android.os.SystemClock.elapsedRealtime() + it } ?: System.currentTimeMillis()
+        TimeRules.breakStatus(shift, state.markings.filter { it.workDate == workDate }, detailNow, TimeRules.unitZone(state.options, state.unitId))
+            ?.takeIf { it.level != BreakLevel.NEUTRAL }?.let { BreakNoticeCard(it) }
         HorizontalDivider(color = Tokens.border)
         if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
     }
@@ -997,14 +1040,17 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         adjustments.forEach { adjustment ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(TimeRules.ADJUSTMENT_KINDS.firstOrNull { it.first == adjustment.kind }?.second ?: adjustment.kind, modifier = Modifier.weight(1f))
-                StatusChip(if (adjustment.scope == "pilot" && adjustment.status == "approved") "Simulação aprovada · sem efeito" else TimeRules.ADJUSTMENT_STATUS[adjustment.status] ?: adjustment.status,
+                StatusChip(if (adjustment.scope == "pilot" && adjustment.status == "approved") "Simulação aprovada · só no ensaio" else TimeRules.ADJUSTMENT_STATUS[adjustment.status] ?: adjustment.status,
                     if (adjustment.status == "approved") Tokens.okInk else if (adjustment.status == "in_review") Tokens.warning else Tokens.muted,
                     if (adjustment.status == "approved") Tokens.okBg else if (adjustment.status == "in_review") Tokens.warningBg else Tokens.soft)
             }
         }
     }
-    if (pilotDay) Text("A simulação pode ser analisada pelo DP, mas não altera ponto, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-    Action(if (pilotDay) "Simular ajuste deste dia" else "Pedir ajuste deste dia", secondary = true, enabled = !busy) { onAdjust(workDate) }
+    if (pilotDay) Text("Simulação: se aprovada, muda só este dia de teste; não altera ponto oficial, banco, espelho ou folha.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    DayActions(buildList {
+        add((if (pilotDay) "Simular ajuste" else "Pedir ajuste") to { onAdjust(workDate) })
+        if (punches.isEmpty() && shift?.type == "work") add("Informar ausência" to { onAbsence(workDate) })
+    }, !busy)
 }
 
 @Composable private fun AdjustmentWeekPicker(value: String, today: LocalDate, enabled: Boolean, onChange: (String) -> Unit) {
