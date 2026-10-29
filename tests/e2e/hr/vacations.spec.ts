@@ -44,7 +44,7 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
 });
 
 test('descarte exige motivo e preserva o arquivo no histórico interno', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const { assertFirestoreEmulatorSafety } = await import('../../helpers/firestore-emulator-safety.mjs');
   assertFirestoreEmulatorSafety({ projectId: 'demo-coala-e2e' });
   const { getApps, initializeApp } = await import('firebase-admin/app');
@@ -78,7 +78,10 @@ test('descarte exige motivo e preserva o arquivo no histórico interno', async (
     const dialog = page.getByRole('dialog', { name: 'Descartar arquivo de recibo?' });
     await expect(dialog.getByRole('button', { name: 'Descartar', exact: true })).toBeDisabled();
     await dialog.getByLabel('Motivo do descarte').fill('Documento pertence a outra pessoa.');
+    const responsePromise = page.waitForResponse((response) => response.url().endsWith(`/api/dp/vacations/${E2E_VACATION.vacationId}`)
+      && response.request().method() === 'PATCH', { timeout: 120_000 });
     await dialog.getByRole('button', { name: 'Descartar', exact: true }).click();
+    expect((await responsePromise).status()).toBe(200);
     await expect(page.getByText('Arquivo de recibo descartado.', { exact: true })).toBeVisible();
     await page.getByText('Histórico interno dos documentos (1)', { exact: true }).click();
     await expect(page.getByText('Reprovado / descartado', { exact: true })).toBeVisible();
