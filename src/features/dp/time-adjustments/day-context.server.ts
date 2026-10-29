@@ -13,6 +13,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 
 import type { AdjustmentDayContext, DayMarking, DayShift, DayTreatment } from './day-summary';
 import { canReview, DAY_MARKINGS_LIMIT, readAdjustmentHistoryDocuments, readAdjustmentRequestForDay, readDayMarkingDocuments, readDayTreatmentDocuments } from './service.server';
+import { pilotTreatmentsOf, type PilotTreatmentSource } from './pilot-treatments';
 
 type Dependencies = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore };
 const defaults: Dependencies = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin };
@@ -53,7 +54,7 @@ export async function readAdjustmentDayContext(context: ServerUserContext, adjus
   const workspaceId = context.workspace_id;
   const [markings, treatments, user, [officialHistory, pilotHistory]] = await Promise.all([
     readDayMarkingDocuments(deps, scope, workspaceId, employeeUid, workDate),
-    // O ensaio não cria tratamento (a decisão não altera o ponto), então só o pedido oficial tem o que ler aqui.
+    // O ensaio não grava tratamento; o dele é derivado dos pedidos aprovados do dia (abaixo).
     scope === 'official' ? readDayTreatmentDocuments(deps, workspaceId, employeeUid, workDate) : Promise.resolve(null),
     deps.mainDb.collection('users').doc(employeeUid).get(),
     readAdjustmentHistoryDocuments(deps, workspaceId, employeeUid, daysBefore(workDate, 30), workDate),
@@ -74,12 +75,20 @@ export async function readAdjustmentDayContext(context: ServerUserContext, adjus
     }];
   }).sort((left, right) => left.markedAt.localeCompare(right.markedAt) || left.nsr - right.nsr);
 
-  const dayTreatments: DayTreatment[] = (treatments?.docs ?? []).filter((document) => document.get('status') === 'active').map((document) => ({
-    adjustmentId: String(document.get('adjustmentId')),
-    type: document.get('type') as 'discard' | 'inclusion',
-    originalReceiptId: text(document.get('originalReceiptId')),
-    markedAt: text(document.get('markedAt')),
-  }));
+  const pilotTreatments = scope === 'pilot'
+    ? pilotTreatmentsOf(pilotHistory.docs.filter((document) => document.get('workDate') === workDate)
+      .map((document) => document.data() as PilotTreatmentSource))
+    : [];
+  const dayTreatments: DayTreatment[] = [
+    ...(treatments?.docs ?? []).filter((document) => document.get('status') === 'active').map((document) => ({
+      adjustmentId: String(document.get('adjustmentId')),
+      type: document.get('type') as 'discard' | 'inclusion',
+      originalReceiptId: text(document.get('originalReceiptId')),
+      markedAt: text(document.get('markedAt')),
+    })),
+    ...pilotTreatments.map((treatment) => ({ adjustmentId: treatment.adjustmentId, type: treatment.type,
+      originalReceiptId: treatment.originalReceiptId, markedAt: treatment.markedAt })),
+  ];
 
   const shifts: DayShift[] = month.shifts.filter((shift) => shift.date === workDate && shift.type === 'work').map((shift) => ({
     startTime: shift.startTime, endTime: shift.endTime, overnight: shift.overnight, shiftName: shift.shiftName, unitName: shift.unitName,
