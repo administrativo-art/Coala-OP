@@ -14,8 +14,10 @@ export type ClosureAdjustment = {
 /** Sem motivo nem anexo: a declaração referencia o pedido sem reproduzir dado de saúde. */
 export type ClosureAbsence = {
   id: string; typeName: string; startDate: string; endDate: string; startTime: string | null; endTime: string | null;
-  quantity: number; unit: 'day' | 'hour'; status: string; approval: 'review' | 'tacit_timeout' | null; decidedBy: string | null;
+  quantity: number; unit: 'day' | 'hour'; status: string; approval: 'review' | 'tacit_timeout' | 'automatic_timeout' | null; decidedBy: string | null;
   decidedAt: string | null; attachmentCount: number;
+  effect?: 'excused_absence' | 'unexcused_absence' | 'worked_credit' | 'time_bank_debit' | 'manual_review';
+  automatic?: boolean;
 };
 export type ClosureShiftSwap = {
   id: string; status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'stale'; date: string;

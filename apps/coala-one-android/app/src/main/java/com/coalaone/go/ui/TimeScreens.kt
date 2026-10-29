@@ -169,7 +169,7 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 /** Numbered sequence of a day: the order suggests the kind; struck lines were discarded by the DP, tagged ones included. */
 @Composable private fun PunchList(punches: List<DayPunch>, enabled: Boolean, units: List<ExecutionUnit> = emptyList(), onReceipt: (DayPunch) -> Unit) {
     var position = 0
-    punches.forEach { punch ->
+    punches.forEachIndexed { punchIndex, punch ->
         val index = if (punch.discarded) null else position++
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).then(if (punch.receiptId != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClickLabel = "Ver comprovante") { onReceipt(punch) } else Modifier).padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -185,6 +185,12 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 punch.receiptId == null -> Unit
                 punch.receiptStatus == "available" -> StatusChip("Comprovante", Tokens.info, Tokens.infoBg)
                 else -> StatusChip("Pendente", Tokens.warning, Tokens.warningBg)
+            }
+        }
+        if (!punch.discarded && punch.purpose == "break_start") {
+            val end = punches.drop(punchIndex + 1).firstOrNull { !it.discarded }
+            if (end?.purpose == "break_end") TimeRules.intervalSeconds(punch, end)?.let { seconds ->
+                CompletedBreakPill(seconds, Modifier.padding(start = 46.dp, top = 2.dp, bottom = 2.dp))
             }
         }
     }
@@ -500,10 +506,11 @@ private fun breakColors(level: BreakLevel) = when (level) {
                     Action("Encerrar acompanhamento", secondary = true) { vm.stopJourneyLocation() }
                 }
             }
-            // The explanation of the interval lives in the day detail; here only its total as a chip.
-            breakStatus?.takeIf { it.usedMinutes > 0 || it.inPause }?.let { status ->
-                val (ink, background) = breakColors(status.level)
-                StatusChip("Intervalo · ${TimeRules.durationText(status.usedMinutes)}", ink, background)
+            breakStatus?.let { status ->
+                when {
+                    status.inPause -> BreakTimerPill(status)
+                    status.level != BreakLevel.OK -> BreakNoticeCard(status)
+                }
             }
             // One block for the reason and the contingency issue, instead of two stacked warnings.
             val blocked = if (!online && !state.offlineReady) "Conecte-se à internet para registrar o ponto."
@@ -840,7 +847,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         .filter { date -> state.markings.any { it.workDate == date.toString() } || state.shifts.any { it.date == date.toString() } || state.treatments.any { it.workDate == date.toString() } }
     val readings = days.associateWith { date -> TimeRules.recordDay(date.toString(), state.markings, state.shifts.firstOrNull { it.date == date.toString() }, state.treatments, state.today) }
     val withAdjustment = state.adjustments.filter { it.status == "in_review" }.map { it.workDate }.toSet()
-    val toReview = days.filter { readings[it]?.first in setOf(com.coalaone.go.domain.RecordDayState.MISSING, com.coalaone.go.domain.RecordDayState.REVIEW) }
+    val toReview = days.filter { it.toString() !in state.automaticAbsences
+        && readings[it]?.first in setOf(com.coalaone.go.domain.RecordDayState.MISSING, com.coalaone.go.domain.RecordDayState.REVIEW) }
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CountTile("${days.count { d -> state.markings.any { it.workDate == d.toString() } }}", "dias com batida", Tokens.ink, Tokens.surface, filter == "all", Modifier.weight(1f).fillMaxHeight()) { filter = "all" }
         CountTile("${toReview.size}", "a conferir", if (toReview.isEmpty()) Tokens.ink else Tokens.warning, if (toReview.isEmpty()) Tokens.surface else Tokens.warningBg, filter == "review", Modifier.weight(1f).fillMaxHeight()) { filter = "review" }
@@ -864,6 +872,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                 }
                 when {
                     key in withAdjustment -> StatusChip("Ajuste em análise", Tokens.amberInk, Tokens.amberBg)
+                    key in state.automaticAbsences -> StatusChip("Falta registrada", Tokens.danger, Tokens.dangerBg)
                     reading == com.coalaone.go.domain.RecordDayState.MISSING -> StatusChip("Sem batida", Tokens.warning, Tokens.warningBg)
                     reading == com.coalaone.go.domain.RecordDayState.REVIEW -> StatusChip("A conferir", Tokens.warning, Tokens.warningBg)
                     reading == com.coalaone.go.domain.RecordDayState.IN_PROGRESS -> StatusChip("Em andamento", Tokens.wine, Tokens.accentSoft)
@@ -877,6 +886,9 @@ private fun purposeColor(purpose: String?) = when (purpose) {
             }
             if (open) {
                 ShiftPills(shift)
+                if (key in state.automaticAbsences) Text("Falta registrada automaticamente após 24 horas sem batida, solicitação de ausência ou ajuste. Você ainda pode solicitar ausência ou pedir ajuste deste dia.",
+                    color = Tokens.danger, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().background(Tokens.dangerBg, RoundedCornerShape(12.dp)).padding(12.dp))
                 PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
                 val pilotDay = state.markings.any { it.workDate == key && it.pilot }
                 DayActions(buildList {
