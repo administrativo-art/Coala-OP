@@ -133,7 +133,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
                 unitId = state.unitId?.takeIf { id -> options.executionUnits.any { it.id == id } } ?: options.executionUnits.firstOrNull()?.id) }
             reconcileJourneyAvailability(options)
             refreshPermit(options, elapsed)
-            readMonth(mutable.value.month)
+            // The Ponto screen reads the current month: browsing Registros in another month must not take today's shift with it.
+            readMonth(YearMonth.from(today))
         } catch (cause: IOException) {
             mutable.update { it.copy(monthDataAvailable = false) }
             restoreLocalAuthorization(cause, elapsed)
@@ -215,7 +216,9 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments,
-                unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true } ?: current.unitId)
+                // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.
+                unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
+                    ?: current.options?.executionUnits?.firstOrNull()?.id ?: current.unitId)
         }
     }
     /** A pending attempt is immutable: its unit is changed only after a conclusive server answer. */
