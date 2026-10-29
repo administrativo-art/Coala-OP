@@ -33,6 +33,7 @@ export type DayShift = {
   breakDurationMinutes: number | null;
   toleranceMinutes: number | null;
   referenceMinutes: number | null;
+  expectedPunches: number | null;
 };
 
 export type AdjustmentDayContext = {
@@ -89,6 +90,10 @@ export type AdjustmentDaySummary = {
   scheduledMinutes: number | null;
   toleranceMinutes: number;
   hasShift: boolean;
+  /** Escala do dia e intervalo fixo previsto, em minutos desde 00:00 do dia do ponto, para desenhar no fundo da linha. */
+  scaleBand: { start: number; end: number; breakStart: number | null; breakEnd: number | null } | null;
+  /** Aviso quando o dia tem menos batidas que o esperado ou o pedido cita batida que a leitura do dia não trouxe. */
+  notice: string | null;
 };
 
 const SHORT_PURPOSE: Record<string, string> = { journey_start: 'Início', break_start: 'Intervalo', break_end: 'Volta', journey_end: 'Fim' };
@@ -165,6 +170,8 @@ function subtract(base: Array<[number, number]>, cut: Array<[number, number]>) {
 
 function labelFor(purpose: string | null, index: number, total: number) {
   if (purpose && SHORT_PURPOSE[purpose]) return SHORT_PURPOSE[purpose];
+  // Com uma batida só (ou nenhuma), a ordem não diz nada: mostra só o horário.
+  if (total < 2) return null;
   if (total === 4) return SHORT_PURPOSE[POSITIONAL[index]];
   return index % 2 === 0 ? 'Entrada' : 'Saída';
 }
@@ -356,6 +363,30 @@ export function summarizeAdjustmentDay(context: AdjustmentDayContext, operations
     const extra = context.shifts.length > 1 ? ` · há mais ${context.shifts.length - 1} ${context.shifts.length === 2 ? 'turno' : 'turnos'} no dia, sem somar` : '';
     shiftText = `escala ${shift.startTime}–${shift.endTime}${breakText}${extra}`;
   }
+  const clock = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  let scaleBand: AdjustmentDaySummary['scaleBand'] = null;
+  if (window) {
+    const fixed = shift?.breakType === 'fixed' && shift.breakStart && shift.breakEnd;
+    let breakStart = fixed ? clock(shift!.breakStart as string) : null;
+    let breakEnd = fixed ? clock(shift!.breakEnd as string) : null;
+    if (breakStart !== null && breakEnd !== null) {
+      if (breakStart < window.start) { breakStart += 1440; breakEnd += 1440; }
+      if (breakEnd <= breakStart) breakEnd += 1440;
+    }
+    scaleBand = { start: window.start, end: window.end, breakStart, breakEnd };
+  }
+  const expected = shift?.expectedPunches ?? null;
+  const notices: string[] = [];
+  const dayCount = context.markings.length;
+  if (dayCount < (expected ?? 2)) {
+    const found = dayCount === 0 ? 'Não há batida registrada neste dia' : dayCount === 1 ? 'Há 1 batida registrada neste dia' : `Há ${dayCount} batidas registradas neste dia`;
+    notices.push(`${found}${expected ? `; a escala cadastrada tem ${expected} marcações` : ''}. Confira o motivo informado no pedido.`);
+  }
+  const missing = operations.filter((operation) => operation.target && !context.markings.some((item) => item.receiptId === operation.target!.receiptId));
+  if (missing.length > 0) {
+    notices.push(`${missing.length === 1 ? 'A batida das' : 'As batidas das'} ${missing.map((operation) => operation.target!.markedAt.slice(11, 16)).join(', ')} citada${missing.length === 1 ? '' : 's'} no pedido não ${missing.length === 1 ? 'foi encontrada' : 'foram encontradas'} na leitura deste dia. Confira a data e a origem.`);
+  }
   return { before: { ...before, ghostSegments: [] }, after: { ...after, ghostSegments: ghost.map(([start, end]) => ({ start, end, outside: false })) },
-    rows, axis, shiftText, scheduledMinutes: scheduled, toleranceMinutes: tolerance, hasShift: window !== null };
+    rows, axis, shiftText, scheduledMinutes: scheduled, toleranceMinutes: tolerance, hasShift: window !== null, scaleBand,
+    notice: notices.length ? notices.join(' ') : null };
 }

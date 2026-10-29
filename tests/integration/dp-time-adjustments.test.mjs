@@ -383,13 +383,13 @@ test('dia inteiro do pedido: batidas, tratamentos aprovados e histórico, só pa
   await assert.rejects(() => readAdjustmentDayContext(actor(reviewerId, [unitId], `${prefix}-other-ws`), `${prefix}-main`, deps), { code: 'PTRP_ADJUSTMENT_NOT_FOUND' });
   await assert.rejects(() => readAdjustmentDayContext(reviewer, `${prefix}-missing`, deps), { code: 'PTRP_ADJUSTMENT_NOT_FOUND' });
 
-  // Simulação do ensaio: lê as batidas do ensaio, com a finalidade declarada, e não há tratamento.
+  // Simulação do ensaio: lê as batidas do ensaio (banco coala-rh), com a finalidade declarada, e não há tratamento.
   await Promise.all([
     hrDbAdmin.collection(PILOT_ADJUSTMENTS).doc(`${prefix}-pilot`).set({
       id: `${prefix}-pilot`, workspaceId, employeeUid: employeeId, employeeName: 'Maria', workDate, scope: 'pilot', kind: 'discard', status: 'in_review', version: 1,
       establishmentId: `${prefix}-est`, unitId, target: null, inclusion: null, reason: 'Simulação.', aejReason: 'Simulação.', acts: [],
       createdAt: '2026-08-13T12:00:00.000Z', updatedAt: '2026-08-13T12:00:00.000Z' }),
-    repPDbAdmin.collection('repP_pilotMarkings').doc(`pilot_${prefix}`).set({ workspaceId, employeeId, recordedDate: workDate, markedAt: `${workDate}T17:59:00-0300`,
+    hrDbAdmin.collection('repP_pilotMarkings').doc(`pilot_${prefix}`).set({ workspaceId, employeeId, recordedDate: workDate, markedAt: `${workDate}T17:59:00-0300`,
       nsr: 7, sequence: 7, collectorId: '02', executionUnitId: unitId, classification: { purpose: 'journey_end' } }),
   ]);
   const pilot = await readAdjustmentDayContext(reviewer, `${prefix}-pilot`, deps);
