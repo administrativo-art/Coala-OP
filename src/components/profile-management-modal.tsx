@@ -397,6 +397,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
   };
 
   const dashboardViewWatch = form.watch('permissions.dashboard.view' as any);
+  const dashboardCollaboratorWatch = form.watch('permissions.dashboard.collaborator' as any);
   const stockViewWatch = form.watch('permissions.stock.view' as any);
   const uniformsViewWatch = form.watch('permissions.stock.uniforms.view' as any);
   const stockCountViewWatch = form.watch('permissions.stock.stockCount.view' as any);
@@ -564,12 +565,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </AccordionContent>
                                 </AccordionItem>
 
-                                <AccordionItem value="app-time">
+                                <AccordionItem value="app-requests">
                                   <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
-                                    <div className="flex items-center"><Clock className="mr-2 h-5 w-5" /> Ponto e solicitações</div>
+                                    <div className="flex items-center"><Inbox className="mr-2 h-5 w-5" /> Solicitações</div>
                                   </AccordionTrigger>
                                   <AccordionContent className="space-y-2 p-1 pt-4">
-                                    {renderPermissionSwitch("permissions.app.timeRecording.mark" as any, "Ponto", "Mostra o Ponto no app: bater ponto com a hora oficial, ver e compartilhar comprovantes e pedir ajuste. Só bate ponto quem tem vínculo CLT ou de aprendiz no dia; também exige a permissão de colaborador do sistema.")}
                                     {renderPermissionSwitch("permissions.app.requests.create" as any, "Solicitações", "Mostra Solicitações no app: pedir ausência (com atestado) e vale-transporte. Também exige a permissão de colaborador do sistema.")}
                                   </AccordionContent>
                                 </AccordionItem>
@@ -600,7 +600,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                         <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel de Operações</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                         <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Indicadores de Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
-                                    {renderModuleToggle("permissions.dashboard.collaborator" as any, "Painel do Colaborador", "Permite acessar o Painel do Colaborador (rotinas do dia, formulários, contagem, escala e metas).")}
+                                    {renderModuleToggle("permissions.dashboard.collaborator" as any, "Painel do Colaborador", "Permite acessar o Painel do Colaborador e as rotinas pessoais liberadas para o perfil.")}
+                                    {renderPermissionSwitch(
+                                      "permissions.app.timeRecording.mark" as any,
+                                      "Registro de ponto",
+                                      "Exibe o Registro de ponto no Painel do Colaborador e permite bater ponto com a hora oficial, consultar e compartilhar comprovantes e pedir ajustes. A marcação só é liberada para vínculo CLT ou de aprendiz elegível no dia.",
+                                      !dashboardCollaboratorWatch,
+                                      true,
+                                    )}
                                 </AccordionContent>
                             </AccordionItem>
 

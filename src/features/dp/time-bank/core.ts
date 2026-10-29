@@ -6,8 +6,8 @@
  * Regras (decisão do programador, 19 e 20/10/2026):
  * - Referência do dia = carga da jornada naquele dia, não a duração do turno (7h20 de jornada com turno de 6h cumprido = −1h20).
  * - Falta de tempo vira débito no banco; tempo a mais segue a faixa de hora extra da política (banco com fator, folha ou revisão).
- * - Falta é ato do operador (20/10/2026): dia escalado sem batida e sem ausência fica "a tratar" (revisão), até o DP lançar
- *   a ausência. O tipo decide: justificada ou crédito abonam, injustificada desconta na folha, débito no banco vai ao banco.
+ * - Dia escalado sem batida, solicitação de ausência ou ajuste recebe falta injustificada automática 24 h após o fim
+ *   do turno. Ausência ou ajuste aprovados depois substituem seu efeito sem apagar o histórico automático.
  * - Trabalho em folga, domingo, feriado ou fora da escala segue a faixa correspondente da política (ex.: folha a 100%).
  * - Tolerância única da jornada: até 5 min na entrada e até 5 min na saída, somando no máximo a tolerância da jornada
  *   (art. 58 §1º; pendência (a) do Doc Brown). Dentro dela, entrada e saída contam como no horário; acima, conta tudo.

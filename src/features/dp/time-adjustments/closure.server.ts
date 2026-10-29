@@ -20,6 +20,8 @@ import {
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
 import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
+import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from './automatic-absence.server';
+import { automaticAbsenceSuperseded } from './automatic-absence-core';
 import { belongsToTimeClosureRoster } from '@/lib/hr/employment-relationship';
 
 const ABSENCES = 'dp_absenceRequests';
@@ -134,6 +136,12 @@ function absenceItem(record: AbsenceRequestRecord): ClosureAbsence & { beneficia
     decidedBy: decision?.actorUid ?? null, decidedAt: record.decidedAt ?? decision?.at ?? null, attachmentCount: record.attachments?.length ?? 0,
   };
 }
+function automaticAbsenceItem(record: AutomaticAbsenceRecord): ClosureAbsence & { beneficiaryUid: string; beneficiaryName: string | null } {
+  return { id: record.id, beneficiaryUid: record.employeeUid, beneficiaryName: record.employeeName, typeName: 'Falta injustificada automática',
+    startDate: record.workDate, endDate: record.workDate, startTime: null, endTime: null, quantity: 1, unit: 'day',
+    status: 'approved', approval: 'automatic_timeout', decidedBy: null, decidedAt: record.createdAt, attachmentCount: 0,
+    effect: 'unexcused_absence', automatic: true };
+}
 
 function shiftSwapItem(id: string, raw: DocumentData): ClosureShiftSwap {
   const request = serializeShiftSwap(id, raw as Record<string, unknown>);
@@ -158,15 +166,26 @@ function monthQueries(hrDb: Firestore, workspaceId: string, competence: string) 
     // Ausências que começam até 366 dias antes do mês; as que terminam antes dele são descartadas na memória.
     absences: hrDb.collection(ABSENCES).where('workspaceId', '==', workspaceId).where('startDate', '>=', absenceLookback(start)).where('startDate', '<=', end)
       .orderBy('startDate', 'desc').limit(ITEM_LIMIT + 1),
+    automaticAbsences: hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId)
+      .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(ITEM_LIMIT + 1),
   };
 }
 async function readDeclaration(get: (query: Query<DocumentData>) => Promise<{ docs: Array<{ data(): DocumentData }>; size: number }>, hrDb: Firestore, workspaceId: string, competence: string) {
   const queries = monthQueries(hrDb, workspaceId, competence);
-  const [adjustments, absences] = await Promise.all([get(queries.adjustments), get(queries.absences)]);
-  const truncated = adjustments.size > ITEM_LIMIT || absences.size > ITEM_LIMIT;
-  const people = buildDeclaration(adjustments.docs.slice(0, ITEM_LIMIT).map((doc) => adjustmentItem(doc.data() as AdjustmentRecord)),
-    absences.docs.slice(0, ITEM_LIMIT).map((doc) => doc.data() as AbsenceRequestRecord)
-      .filter((record) => record.status !== 'draft' && overlapsCompetence(record, competence)).map(absenceItem));
+  const [adjustments, absences, automaticAbsences] = await Promise.all([get(queries.adjustments), get(queries.absences), get(queries.automaticAbsences)]);
+  const truncated = adjustments.size > ITEM_LIMIT || absences.size > ITEM_LIMIT || automaticAbsences.size > ITEM_LIMIT;
+  const adjustmentItems = adjustments.docs.slice(0, ITEM_LIMIT).map((doc) => adjustmentItem(doc.data() as AdjustmentRecord));
+  const absenceItems = absences.docs.slice(0, ITEM_LIMIT).map((doc) => doc.data() as AbsenceRequestRecord)
+    .filter((record) => record.status !== 'draft' && overlapsCompetence(record, competence)).map(absenceItem);
+  const approvedAbsences = absenceItems.filter((item) => item.status === 'approved');
+  const approvedAdjustmentDays = new Set(adjustmentItems.filter((item) => item.status === 'approved').map((item) => `${item.employeeUid}|${item.workDate}`));
+  const automaticItems = automaticAbsences.docs.slice(0, ITEM_LIMIT).map((doc) => doc.data() as AutomaticAbsenceRecord)
+    .filter((record) => record.status === 'active')
+    .filter((record) => !automaticAbsenceSuperseded(record.workDate,
+      new Set([...approvedAdjustmentDays].filter((key) => key.startsWith(`${record.employeeUid}|`)).map((key) => key.slice(record.employeeUid.length + 1))),
+      approvedAbsences.filter((item) => item.beneficiaryUid === record.employeeUid)))
+    .map(automaticAbsenceItem);
+  const people = buildDeclaration(adjustmentItems, [...absenceItems, ...automaticItems]);
   return { people, truncated };
 }
 
