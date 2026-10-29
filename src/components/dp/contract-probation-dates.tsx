@@ -2,16 +2,24 @@ import type { ProbationProcessState } from '@/features/hr/integration/probation-
 import { addCalendarDays } from '@/features/hr/integration/probation';
 import { formatCivilDateBR } from '@/features/dp/employment-reference/presentation';
 
-export function contractProbationDates(probation: ProbationProcessState | null | undefined) {
+export function contractProbationDates(
+  probation: ProbationProcessState | null | undefined,
+  fallback: { firstEnd?: string | null; finalEnd?: string | null } = {},
+) {
   const schedule = probation?.schedule;
-  const automatic = probation?.config.effectivenessRule === 'automatic_at_end';
   const effective = probation?.status === 'effective';
-  const indefiniteStart = schedule && (automatic || effective) && probation?.status !== 'terminated'
-    ? addCalendarDays(schedule.finalEndDate, 1) : null;
+  const firstEnd = schedule?.firstPeriod.endDate ?? fallback.firstEnd ?? null;
+  const finalEnd = schedule?.secondPeriod?.endDate ?? fallback.finalEnd ?? null;
+  const lastEnd = schedule?.finalEndDate ?? finalEnd ?? firstEnd;
+  // A previsão não efetiva o vínculo: também existe quando a decisão é manual.
+  let indefiniteStart: string | null = null;
+  if (lastEnd && probation?.status !== 'terminated') {
+    try { indefiniteStart = addCalendarDays(lastEnd, 1); } catch { /* Data histórica inválida: não projetar. */ }
+  }
   return {
     start: schedule?.firstPeriod.startDate ?? null,
-    firstEnd: schedule?.firstPeriod.endDate ?? null,
-    finalEnd: schedule?.secondPeriod?.endDate ?? null,
+    firstEnd,
+    finalEnd,
     indefiniteStart,
     indefiniteLabel: effective ? 'Início do prazo indeterminado' : 'Início previsto do prazo indeterminado',
   };
