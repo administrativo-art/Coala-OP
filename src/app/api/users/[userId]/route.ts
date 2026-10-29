@@ -28,15 +28,14 @@ import {
 import {
   PdvOperationalUnitSyncError,
   PDV_SERVER_MANAGED_USER_FIELDS,
-  pdvOperationalUnitPatch,
+  operationalUnitIds,
+  pdvAccessEnabled,
+  planPdvAccessRevocation,
   planPdvOperationalUnitSyncs,
   sameOperationalUnits,
 } from "@/features/hr/lib/pdv-operational-unit-sync";
-import {
-  PdvApiError,
-  clonePdvLegalUserAccessToFilial,
-  movePdvLegalUserAccessToFilial,
-} from "@/lib/integrations/pdv-legal-admin";
+import { deriveAssignedKioskIds, executePdvSyncPlans, loadPdvUnitIds } from "@/features/hr/lib/pdv-unit-sync.server";
+import { PdvApiError } from "@/lib/integrations/pdv-legal-admin";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
   "profileId",
@@ -73,6 +72,10 @@ const SERVER_ONLY_FIELDS = new Set([
   "nextOperationalUnitChangeDate",
   "operationalProjectionSyncPending",
   "operationalUnitCutoverDate",
+  "operationalFollowUpPending",
+  "operationalFollowUpFromUnitIds",
+  "operationalFollowUpError",
+  "operationalFollowUpAttempts",
   "contractualDataPeriods",
   "contractualDataVersion",
   "scheduledContractChange",
@@ -318,6 +321,19 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     if (operationalPeriods !== undefined) {
       if (!validateOperationalPeriods(operationalPeriods)) throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_INVALID', kind: 'VALIDATION' });
       payload.unitIds = operationalUnitsOnDate({ operationalUnitPeriods: operationalPeriods });
+      // Com vigência, os quiosques atribuídos saem dela; o valor enviado pelo cliente é ignorado.
+      payload.assignedKioskIds = await deriveAssignedKioskIds(payload.unitIds as string[]);
+    }
+    if (hasOwn(payload, "pdvAccessEnabled")) {
+      if (typeof payload.pdvAccessEnabled !== "boolean") {
+        throw new AppError({ code: "USER_UPDATE_PDV_SWITCH_INVALID", kind: "VALIDATION", safeMessage: "Informe se a pessoa tem acesso ao PDV." });
+      }
+      if (payload.pdvAccessEnabled === pdvAccessEnabled(existingUser) && existingUser.pdvAccessEnabled === undefined) {
+        delete payload.pdvAccessEnabled;
+      } else if (payload.pdvAccessEnabled !== pdvAccessEnabled(existingUser)
+        && !canManageUsers && actor.permissions.dp.collaborators.edit !== true) {
+        throw new AppError({ code: "USER_UPDATE_PDV_SWITCH_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para alterar o acesso ao PDV." });
+      }
     }
     if (
       hasOwn(payload, "employmentRelationshipType") &&
@@ -455,8 +471,15 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     }
     if (contractChange && contractChange.effectiveDate === operationalCivilDate()) Object.assign(payload, contractChange.fields);
     const nextUser = { ...existingUser, ...payload };
-    const pdvSyncPlans = operationalPeriods !== undefined && !valuesDiffer(payload.assignedKioskIds ?? existingUser.assignedKioskIds, existingUser.assignedKioskIds)
-      ? [] : planPdvOperationalUnitSyncs(existingUser, nextUser);
+    const pdvWasEnabled = pdvAccessEnabled(existingUser);
+    const pdvEnabled = pdvAccessEnabled(nextUser);
+    const pdvSyncPlans = pdvWasEnabled && !pdvEnabled
+      ? planPdvAccessRevocation(existingUser)
+      : pdvEnabled && !sameOperationalUnits(existingUser, nextUser)
+        ? planPdvOperationalUnitSyncs(existingUser, nextUser, {
+            pdvUnitIds: await loadPdvUnitIds([...operationalUnitIds(existingUser), ...operationalUnitIds(nextUser)]),
+          })
+        : [];
     const employmentCycleChanged = Object.keys(payload).some((field) =>
       EMPLOYMENT_CYCLE_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
@@ -471,97 +494,21 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     }
     let pdvSyncAuditRef: FirebaseFirestore.DocumentReference | null = null;
     let pdvSyncCompletedAt: string | null = null;
-    const pdvSyncResults: Array<Record<string, unknown>> = [];
+    let pdvSyncResults: Array<Record<string, unknown>> = [];
 
     if (pdvSyncPlans.length > 0) {
-      const targetUnitSnapshots = await Promise.all(pdvSyncPlans.map((plan) =>
-        dbAdmin.collection("dp_units").doc(plan.targetUnitId).get()
-      ));
-      const targetUnits = new Map(pdvSyncPlans.map((plan, index) => {
-        const snapshot = targetUnitSnapshots[index];
-        const unit = snapshot.data() ?? {};
-        const name = typeof unit.name === "string" ? unit.name.trim() : "";
-        const filialId = typeof unit.pdvFilialId === "string" ? unit.pdvFilialId.trim() : "";
-        if (!snapshot.exists || unit.isArchived === true) {
-          throw new PdvOperationalUnitSyncError(`A unidade operacional ${plan.targetUnitId} não foi encontrada ou está arquivada.`);
-        }
-        if (!filialId) {
-          throw new PdvOperationalUnitSyncError(
-            `A unidade operacional ${name || plan.targetUnitId} ainda não está vinculada a uma filial do PDV Legal.`,
-          );
-        }
-        return [plan.targetUnitId, { name: name || plan.targetUnitId, filialId }] as const;
-      }));
-
-      pdvSyncAuditRef = userRef.collection("systemAccessAudit").doc();
-      const requestedAt = Timestamp.now();
-      await pdvSyncAuditRef.set({
-        action: "pdv_access_unit_sync",
-        status: "pending",
-        operations: pdvSyncPlans.map((plan) => ({
-          operation: plan.kind,
-          sourceExternalUserId: plan.sourceExternalUserId,
-          fromUnitId: plan.sourceUnitId,
-          toUnitId: plan.targetUnitId,
-          toFilialId: targetUnits.get(plan.targetUnitId)?.filialId ?? null,
-        })),
+      const execution = await executePdvSyncPlans({
+        userRef,
+        user: existingUser,
+        plans: pdvSyncPlans,
         actorId: actor.decoded.uid,
-        actorName: actor.userDoc.username ?? actor.userDoc.email ?? actor.decoded.uid,
-        requestedAt,
+        actorName: String(actor.userDoc.username ?? actor.userDoc.email ?? actor.decoded.uid),
+        action: pdvWasEnabled && !pdvEnabled ? "pdv_access_revoked" : "pdv_access_unit_sync",
       });
-
-      try {
-        let workingPdvUser = existingUser;
-        for (const plan of pdvSyncPlans) {
-          const targetUnit = targetUnits.get(plan.targetUnitId)!;
-          const updatedPdvUser = plan.kind === "move"
-            ? await movePdvLegalUserAccessToFilial({
-                userId: plan.sourceExternalUserId,
-                filialId: targetUnit.filialId,
-                profileId: plan.profileId,
-              })
-            : await clonePdvLegalUserAccessToFilial({
-                sourceUserId: plan.sourceExternalUserId,
-                filialId: targetUnit.filialId,
-                profileId: plan.profileId,
-              });
-          const confirmedProfileId = updatedPdvUser.profileId;
-          if (!confirmedProfileId) {
-            throw new PdvApiError(
-              "O PDV Legal não confirmou o perfil preservado após a sincronização de filial.",
-              "USER_PROFILE_NOT_CONFIRMED",
-            );
-          }
-          pdvSyncCompletedAt = new Date().toISOString();
-          const pdvPatch = pdvOperationalUnitPatch({
-            currentUser: workingPdvUser,
-            plan,
-            externalUserId: updatedPdvUser.id,
-            targetUnitName: targetUnit.name,
-            targetFilialId: targetUnit.filialId,
-            targetFilialName: targetUnit.name,
-            confirmedProfileId,
-            updatedAt: pdvSyncCompletedAt,
-          });
-          workingPdvUser = { ...workingPdvUser, ...pdvPatch };
-          Object.assign(payload, pdvPatch);
-          pdvSyncResults.push({
-            operation: plan.kind,
-            externalUserId: updatedPdvUser.id,
-            unitId: plan.targetUnitId,
-            filialId: targetUnit.filialId,
-            status: "completed",
-          });
-        }
-      } catch (error) {
-        await pdvSyncAuditRef.set({
-          status: "failed",
-          completedOperations: pdvSyncResults,
-          failureCode: error instanceof PdvApiError ? error.code : "UNEXPECTED_FAILURE",
-          failedAt: Timestamp.now(),
-        }, { merge: true }).catch(() => undefined);
-        throw error;
-      }
+      pdvSyncAuditRef = execution.auditRef;
+      pdvSyncCompletedAt = execution.completedAt;
+      pdvSyncResults = execution.results;
+      Object.assign(payload, execution.patch);
     }
 
     if (pdvSyncAuditRef && pdvSyncPlans.length > 0) {
