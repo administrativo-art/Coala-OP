@@ -11,4 +11,4 @@ Autorizado: implementação local em 29/10/2026. Commit e rollout autorizados pe
 
 Sem migração dos históricos antigos: motivos ausentes são apresentados como não registrados.
 
-Resultado local: implementação concluída; 81 testes dirigidos e 1 cenário integrado de API em Auth/Firestore emulados aprovados. Typecheck, lint sem erros e contratos aprovados. Teste em navegador e execução operacional financeira/assinatura não realizados. Entrega seguirá por PR para main e promoção específica para production; resultado do rollout no registro local da tarefa.
+Resultado local: implementação concluída; 81 testes dirigidos e 1 cenário integrado de API em Auth/Firestore emulados aprovados. Typecheck, lint sem erros e contratos aprovados. E2E de navegador incluído na conferência pré-publicação. Execução operacional financeira/assinatura real não realizada. Entrega seguirá por PR para main e promoção específica para production; resultado do rollout no registro local da tarefa.
