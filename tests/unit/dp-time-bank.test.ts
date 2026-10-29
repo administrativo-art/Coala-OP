@@ -44,7 +44,7 @@ describe('Banco de horas: apuração do dia', () => {
     assert.equal(shortBreak.deltaMinutes, 5);
   });
 
-  it('dia escalado sem batida fica a tratar pelo DP; o tipo da ausência lançada decide abono, desconto na folha ou débito no banco', () => {
+  it('antes da automação, dia sem batida fica a tratar; a ausência registrada decide abono, folha ou banco', () => {
     const missing = computeBankDay(day({}));
     assert.deepEqual([missing.lines, missing.issues, missing.unjustifiedAbsence], [[{ nature: 'review', minutes: 440, reason: 'missing_day' }], ['MISSING_DAY'], false]);
     // Sem batida e com 2h de ausência injustificada: as 2h vão à folha e o resto fica a tratar, sem débito no banco.
