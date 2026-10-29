@@ -24,6 +24,13 @@ test("o painel traz a linha do dia, o resultado antes e depois, as batidas e a t
   assert.match(view, /title="Batidas do dia" aside="a original sempre fica guardada"/);
   assert.match(panel, /Ver trilha e verificação/);
   assert.doesNotMatch(view, /#[0-9a-fA-F]{6}/);
+  assert.match(view, /summary\.notice \? <p role="status"/);
+  assert.match(view, /band=\{summary\.scaleBand\}/);
+});
+
+test("o seletor compartilhado corta o texto longo com reticências em vez de sair da caixa", () => {
+  const select = readFileSync("src/components/ui/select.tsx", "utf8");
+  assert.match(select, /\[&>span:first-child\]:line-clamp-1/);
 });
 
 test("a leitura do dia é só de consulta, exige quem analisa e nunca serve o próprio pedido", () => {
@@ -33,6 +40,8 @@ test("a leitura do dia é só de consulta, exige quem analisa e nunca serve o pr
   assert.match(route, /export const GET = secureRoute/);
   assert.doesNotMatch(route, /export const (POST|PATCH|PUT|DELETE)/);
   assert.match(server, /canReview\(context\)/);
+  const service = readFileSync("src/features/dp/time-adjustments/service.server.ts", "utf8");
+  assert.match(service, /const database = scope === 'pilot' \? deps\.hrDb : deps\.repDb;/);
   assert.match(server, /PTRP_ADJUSTMENT_SELF_DECISION/);
   assert.match(server, /canAccessUnit\(context\.userDoc, unitId/);
   assert.doesNotMatch(server, /\.(set|update|delete|create)\(/);

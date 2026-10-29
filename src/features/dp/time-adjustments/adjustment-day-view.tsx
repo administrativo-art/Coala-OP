@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 import {
   formatDuration, formatSignedDuration, pendingOperations, summarizeAdjustmentDay,
-  type AdjustmentDayContext, type DayMarker, type DayNote, type DayRowAction, type DayState,
+  type AdjustmentDayContext, type AdjustmentDaySummary, type DayMarker, type DayNote, type DayRowAction, type DayState,
 } from "./day-summary";
 import type { AdjustmentView } from "./types";
 
@@ -44,7 +44,7 @@ function MarkerLabel({ marker, axis }: { marker: DayMarker; axis: Axis }) {
 }
 
 /** Uma linha do dia: batidas como pontos, trechos trabalhados em azul e o que passa da escala em laranja. */
-function DayLine({ title, state, axis }: { title: string; state: DayState; axis: Axis }) {
+function DayLine({ title, state, axis, band }: { title: string; state: DayState; axis: Axis; band: AdjustmentDaySummary["scaleBand"] }) {
   const span = axis.end - axis.start;
   const at = (minute: number) => `${(((minute - axis.start) / span) * 100).toFixed(2)}%`;
   const width = (start: number, end: number) => `${(((end - start) / span) * 100).toFixed(2)}%`;
@@ -54,6 +54,14 @@ function DayLine({ title, state, axis }: { title: string; state: DayState; axis:
       <p className="text-[12px] font-extrabold text-ds-ink-2">{title}</p>
       <div role="img" aria-label={description} className="relative h-24">
         <span aria-hidden="true" className="absolute inset-x-0 top-12 h-0.5 bg-ds-divider" />
+        {band ? (
+          <span aria-hidden="true" style={{ left: at(Math.max(band.start, axis.start)), width: width(Math.max(band.start, axis.start), Math.min(band.end, axis.end)) }}
+            className="absolute top-[43px] h-3.5 rounded-[4px] bg-ds-info-bg" />
+        ) : null}
+        {band && band.breakStart !== null && band.breakEnd !== null ? (
+          <span aria-hidden="true" title="Intervalo previsto" style={{ left: at(band.breakStart), width: width(band.breakStart, band.breakEnd) }}
+            className="absolute top-[43px] h-3.5 bg-ds-neutral-bg [background-image:repeating-linear-gradient(45deg,transparent_0_3px,rgb(0_0_0/0.08)_3px_6px)]" />
+        ) : null}
         {state.ghostSegments.map((segment) => (
           <span key={`g${segment.start}`} aria-hidden="true" style={{ left: at(segment.start), width: width(segment.start, segment.end) }}
             className="absolute top-[49px] h-0 border-t-2 border-dashed border-ds-danger/40" />
@@ -98,9 +106,11 @@ export function AdjustmentDayOverview({ adjustment, day }: { adjustment: Adjustm
     <>
       <PanelSection title="O dia em uma linha" aside={summary.shiftText ?? "sem escala neste dia"}>
         <div className="space-y-1">
-          <DayLine title="Como está" state={before} axis={summary.axis} />
-          <DayLine title="Se aprovar" state={after} axis={summary.axis} />
+          {summary.notice ? <p role="status" className="rounded-ds-btn bg-ds-warn-bg px-3 py-2 text-[12.5px] font-semibold text-ds-warn">{summary.notice}</p> : null}
+          <DayLine title="Como está" state={before} axis={summary.axis} band={summary.scaleBand} />
+          <DayLine title="Se aprovar" state={after} axis={summary.axis} band={summary.scaleBand} />
           <div className="flex flex-wrap gap-x-3.5 gap-y-1 pt-1">
+            {summary.scaleBand ? <LegendItem swatch={<span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ds-info-bg" />}>Escala</LegendItem> : null}
             <LegendItem swatch={<span aria-hidden="true" className="h-1.5 w-3.5 rounded-[3px] bg-ds-info" />}>Trabalhado</LegendItem>
             <LegendItem swatch={<span aria-hidden="true" className="h-1.5 w-3.5 rounded-[3px] bg-ds-warn" />}>Fora da escala</LegendItem>
             <LegendItem swatch={<span aria-hidden="true" className="size-2.5 rounded-full border-2 border-ds-info bg-ds-surface" />}>Batida</LegendItem>
