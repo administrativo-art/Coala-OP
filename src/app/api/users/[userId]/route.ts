@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { serializedTimestampParts } from "@/lib/firestore-serialized-timestamp";
+import { appendOperationalPeriod, sameOperationalPeriods, operationalCivilDate, operationalUnitsOnDate, validateOperationalPeriods } from '@/lib/operational-unit-periods';
+import { currentOperationalPatch } from '@/lib/operational-unit-periods.server';
+import { prepareContractChange, applyContractChange, cancelContractChange } from '@/lib/contractual-data.server';
+import { contractualDiff } from '@/lib/contractual-data';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
@@ -64,6 +69,20 @@ const SERVER_ONLY_FIELDS = new Set([
   "passwordChangedAt",
   "createdAt",
   "updatedAt",
+  "operationalProjectionDate",
+  "nextOperationalUnitChangeDate",
+  "operationalProjectionSyncPending",
+  "operationalUnitCutoverDate",
+  "contractualDataPeriods",
+  "contractualDataVersion",
+  "scheduledContractChange",
+  "nextContractChangeDate",
+  "contractProjectionSyncPending",
+  "contractualFieldOverrides",
+  "probationEffectiveMarker",
+  "probationProjectionPending",
+  "employerCnpj",
+  "employerUnitName",
   "hrEmployeeId",
   "personRecordType",
   "profileCompliance",
@@ -249,8 +268,56 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     const { userId, existingUser } = resource;
     const canManageUsers = actor.isDefaultAdmin || actor.permissions.settings.manageUsers;
     const payload = cleanPayload(rawPayload) as Record<string, unknown>;
+    const contractReason = payload.contractChangeReason;
+    const contractEffectiveDate = payload.contractEffectiveDate;
+    const cancelContractId = typeof payload.cancelContractChangeId === 'string' ? payload.cancelContractChangeId : null;
+    delete payload.cancelContractChangeId;
+    if (cancelContractId && !canManageUsers && actor.permissions.dp.collaborators.edit !== true) {
+      throw new AppError({ code: 'CONTRACT_CANCEL_FORBIDDEN', kind: 'AUTHORIZATION' });
+    }
+    delete payload.contractChangeReason;
+    delete payload.contractEffectiveDate;
     for (const field of SERVER_ONLY_FIELDS) {
       delete payload[field];
+    }
+    const operationalHistoryChanged = hasOwn(payload, 'operationalUnitPeriods')
+      && valuesDiffer(payload.operationalUnitPeriods, existingUser.operationalUnitPeriods);
+    if (!operationalHistoryChanged) delete payload.operationalUnitPeriods;
+    if (operationalHistoryChanged) {
+      if (!canManageUsers && actor.permissions.dp.collaborators.edit !== true) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para alterar as unidades operacionais.' });
+      }
+      if (!validateOperationalPeriods(payload.operationalUnitPeriods)) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_INVALID', kind: 'VALIDATION', safeMessage: 'Confira as datas e unidades das vigências operacionais.' });
+      }
+      const before = existingUser.operationalUnitPeriods;
+      if (before !== undefined && !validateOperationalPeriods(before)) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_INCONSISTENT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico operacional precisa ser conferido antes da alteração.' });
+      }
+      const previous = before ?? [];
+      const last = payload.operationalUnitPeriods.at(-1);
+      if (last && previous.at(-1) && (last.validFrom <= previous.at(-1)!.validFrom
+        || previous.at(-1)!.validTo && last.validFrom <= previous.at(-1)!.validTo!)) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_START', kind: 'VALIDATION', safeMessage: 'A nova vigência precisa começar depois da anterior.' });
+      }
+      if (!last || previous.length && last.validFrom < operationalCivilDate()
+        || last.validTo !== undefined
+        || !sameOperationalPeriods(appendOperationalPeriod(previous, last.validFrom, last.unitIds), payload.operationalUnitPeriods)) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_APPEND_ONLY', kind: 'VALIDATION', safeMessage: 'Acrescente uma nova vigência sem modificar os períodos anteriores.' });
+      }
+      if (payload.operationalUnitPeriods.some((period) => period.unitIds.some((id) => !canAccessUnit(actor.userDoc, id, { isDefaultAdmin: actor.isDefaultAdmin })))) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_SCOPE', kind: 'AUTHORIZATION', safeMessage: 'Uma das unidades da vigência está fora do seu escopo.' });
+      }
+      const selectedUnitIds = [...new Set(last.unitIds)];
+      const selectedUnits = await dbAdmin.getAll(...selectedUnitIds.map((id) => dbAdmin.collection('dp_units').doc(id)));
+      if (selectedUnits.some((unit) => !unit.exists || unit.get('isArchived') === true)) {
+        throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_UNIT', kind: 'VALIDATION', safeMessage: 'Selecione unidades existentes e ativas para a nova vigência.' });
+      }
+    }
+    const operationalPeriods = payload.operationalUnitPeriods ?? existingUser.operationalUnitPeriods;
+    if (operationalPeriods !== undefined) {
+      if (!validateOperationalPeriods(operationalPeriods)) throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_INVALID', kind: 'VALIDATION' });
+      payload.unitIds = operationalUnitsOnDate({ operationalUnitPeriods: operationalPeriods });
     }
     if (
       hasOwn(payload, "employmentRelationshipType") &&
@@ -296,6 +363,7 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
         currentUser: existingUser,
         protectedUser: isProtectedUser(existingUser),
         syncProfile: true,
+        inferFinancialUnit: false,
       });
       Object.assign(payload, collaboratorCore.userPatch);
     }
@@ -357,8 +425,38 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
       }
     }
 
+    const contractChanged = Object.keys(contractualDiff(existingUser, payload)).length > 0;
+    if (cancelContractId && contractChanged) throw new AppError({ code: 'CONTRACT_CANCEL_SEPARATE_ACTION', kind: 'VALIDATION', safeMessage: 'Cancele o agendamento antes de alterar os dados contratuais.' });
+    if (contractChanged && !canManageUsers && actor.permissions.dp.collaborators.edit !== true) {
+      throw new AppError({ code: 'CONTRACT_CHANGE_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para alterar dados contratuais.' });
+    }
+    const employerId = typeof payload.employerUnitId === 'string' ? payload.employerUnitId : existingUser.employerUnitId;
+    let employerSnapshot: import('@/lib/contractual-data.server').ContractualPeriod['employer'];
+    if (contractChanged && typeof employerId === 'string' && employerId) {
+      if (!canAccessUnit(actor.userDoc, employerId, { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: 'CONTRACT_EMPLOYER_SCOPE', kind: 'AUTHORIZATION', safeMessage: 'Empregador fora do seu escopo.' });
+      const employer = await dbAdmin.collection('dp_units').doc(employerId).get();
+      const cnpj = CnpjValidator.validate(String(employer.get('cnpj') ?? ''));
+      if (employer.exists && cnpj.valid && employer.get('name') && employer.get('address')) {
+        employerSnapshot = { unitId: employerId, unitName: String(employer.get('name')), address: String(employer.get('address')), cnpj: cnpj.clean, identityStatus: 'catalog_identifiers_consistent_unverified' };
+        if (payload.employerUnitId !== undefined && payload.employerUnitId !== existingUser.employerUnitId) {
+          payload.employerCnpj = cnpj.clean;
+          payload.employerUnitName = String(employer.get('name'));
+        }
+      } else if (payload.employerUnitId !== undefined && payload.employerUnitId !== existingUser.employerUnitId) {
+        throw new AppError({ code: 'CONTRACT_EMPLOYER_INCOMPLETE', kind: 'VALIDATION', safeMessage: 'Confira CNPJ, nome e endereço do empregador antes de salvar.' });
+      }
+    }
+    const contractChange = prepareContractChange(existingUser, payload, { reason: contractReason, effectiveDate: contractEffectiveDate,
+      id: userRef.collection('contractualChanges').doc().id, actorId: actor.decoded.uid,
+      actorName: String(actor.userDoc.username ?? actor.decoded.uid), employer: employerSnapshot });
+    if (!contractChange && payload.profileId === existingUser.profileId) delete payload.profileId;
+    if (typeof contractChange?.fields.profileId === 'string') {
+      contractChange.profileWasDefaultAdmin = (await dbAdmin.collection('profiles').doc(contractChange.fields.profileId).get()).get('isDefaultAdmin') === true;
+    }
+    if (contractChange && contractChange.effectiveDate === operationalCivilDate()) Object.assign(payload, contractChange.fields);
     const nextUser = { ...existingUser, ...payload };
-    const pdvSyncPlans = planPdvOperationalUnitSyncs(existingUser, nextUser);
+    const pdvSyncPlans = operationalPeriods !== undefined && !valuesDiffer(payload.assignedKioskIds ?? existingUser.assignedKioskIds, existingUser.assignedKioskIds)
+      ? [] : planPdvOperationalUnitSyncs(existingUser, nextUser);
     const employmentCycleChanged = Object.keys(payload).some((field) =>
       EMPLOYMENT_CYCLE_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
@@ -471,13 +569,23 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
         await dbAdmin.runTransaction(async (transaction) => {
           const latestUserSnap = await transaction.get(userRef);
           const latestUser = latestUserSnap.data() ?? {};
+          if (operationalHistoryChanged && valuesDiffer(latestUser.operationalUnitPeriods, existingUser.operationalUnitPeriods)) {
+            throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_CONFLICT', kind: 'CONFLICT', safeMessage: 'As vigências mudaram. Atualize o cadastro antes de salvar.' });
+          }
           if (!sameOperationalUnits(existingUser, latestUser)) {
             throw new PdvOperationalUnitSyncError(
               "As unidades da colaboradora foram alteradas durante a sincronização. Tente novamente.",
             );
           }
-          setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+          const contractPatch = cancelContractId
+            ? cancelContractChange(transaction, userRef, latestUserSnap, existingUser, { id: cancelContractId, reason: contractReason, actorId: actor.decoded.uid, actorName: String(actor.userDoc.username ?? actor.decoded.uid) })
+            : applyContractChange(transaction, userRef, latestUserSnap, existingUser, contractChange);
+          setEmploymentCyclePatch(transaction, userRef, latestUserSnap, currentOperationalPatch(latestUser, { ...payload, ...contractPatch }),
             { cycleMutation: employmentCycleChanged });
+          if (operationalHistoryChanged) transaction.create(userRef.collection('operationalUnitAudit').doc(), {
+            actorId: actor.decoded.uid, before: existingUser.operationalUnitPeriods ?? [],
+            after: payload.operationalUnitPeriods, createdAt: Timestamp.now(),
+          });
           transaction.set(pdvSyncAuditRef!, {
             status: "completed",
             completedOperations: pdvSyncResults,
@@ -497,13 +605,23 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
       await dbAdmin.runTransaction(async (transaction) => {
         const latestUserSnap = await transaction.get(userRef);
         if (!latestUserSnap.exists) throw new AppError({ code: "USER_UPDATE_TARGET_NOT_FOUND", kind: "NOT_FOUND" });
-        setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+        if (operationalHistoryChanged && valuesDiffer(latestUserSnap.get('operationalUnitPeriods'), existingUser.operationalUnitPeriods)) {
+          throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_CONFLICT', kind: 'CONFLICT', safeMessage: 'As vigências mudaram. Atualize o cadastro antes de salvar.' });
+        }
+        const contractPatch = cancelContractId
+          ? cancelContractChange(transaction, userRef, latestUserSnap, existingUser, { id: cancelContractId, reason: contractReason, actorId: actor.decoded.uid, actorName: String(actor.userDoc.username ?? actor.decoded.uid) })
+          : applyContractChange(transaction, userRef, latestUserSnap, existingUser, contractChange);
+        setEmploymentCyclePatch(transaction, userRef, latestUserSnap, currentOperationalPatch(latestUserSnap.data() ?? {}, { ...payload, ...contractPatch }),
           { cycleMutation: employmentCycleChanged });
+        if (operationalHistoryChanged) transaction.create(userRef.collection('operationalUnitAudit').doc(), {
+          actorId: actor.decoded.uid, before: existingUser.operationalUnitPeriods ?? [],
+          after: payload.operationalUnitPeriods, createdAt: Timestamp.now(),
+        });
       });
     }
 
     if (unitAssignmentChanged) {
-      const nextUser = { ...existingUser, ...payload };
+      const nextUser = (await userRef.get()).data() ?? { ...existingUser, ...payload };
       const employeeId = typeof nextUser.hrEmployeeId === "string" && nextUser.hrEmployeeId.trim()
         ? nextUser.hrEmployeeId.trim()
         : typeof nextUser.registrationIdBizneo === "string" && nextUser.registrationIdBizneo.trim()

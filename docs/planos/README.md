@@ -6,6 +6,7 @@
 | --- | --- |
 | [Plano — Ponto, Jornada e Fechamento da Competência](plano-jornada-fechamento-rh.md) | Ponto e DP |
 | [Plano — REP-P, Documentos e Conformidade](plano-rep-p-controle-de-ponto.md) | Ponto e DP |
+| [Plano — Fonte única das unidades operacionais](plano-fonte-unica-unidades-operacionais.md) | Pessoas, escala e ponto |
 | [Plano — Recesso do estagiário](plano-recesso-estagio.md) | Pessoas e DP |
 | [Plano — Trilha de admissão](plano-admissao.md) | Pessoas e RH |
 | [Plano — Onboarding, integração, documentos e assinatura](plano-onboarding-integracao-documentos-assinatura.md) | Pessoas e RH |

@@ -122,7 +122,9 @@ import {
 } from "@/lib/hr/employment-relationship";
 import { createManagedTerminationProcess } from "@/features/hr/termination/client";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
-import { EmploymentReferenceCard } from "@/features/dp/employment-reference/employment-reference-card";
+import { Button } from "@/components/ui/button";
+import { ContractChanges } from "@/components/dp/contract-changes";
+import { contractProbationDates } from "@/components/dp/contract-probation-dates";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -1269,6 +1271,7 @@ function EmployeeProfileFields({
   profileState,
   onProfileChanged,
   onFieldMapChanged,
+  onEditContract,
   children,
 }: {
   user: User;
@@ -1277,6 +1280,7 @@ function EmployeeProfileFields({
   profileState: EmployeeProfileState;
   onProfileChanged: () => void;
   onFieldMapChanged: () => void;
+  onEditContract?: () => void;
   children?: React.ReactNode;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
@@ -1662,20 +1666,32 @@ function EmployeeProfileFields({
     });
   });
 
-  const relationshipEntry = systemField("Tipo de vínculo", "Dados contratuais", 5, "restricted_partial");
-  if (canManageFieldVisibility || canViewField(relationshipEntry.visibility, role, visibilityContext, relationshipEntry.access, fieldMap.access_matrix)) {
-    const relationshipType = resolveEmploymentRelationshipType(user.employmentRelationshipType, user.personRecordType);
-    const contractSection = profileDisplaySection("Dados contratuais");
-    if (!sections[contractSection]) sections[contractSection] = [];
-    sections[contractSection].push({
-      key: EMPLOYMENT_RELATIONSHIP_FIELD_KEY,
-      entry: relationshipEntry,
-      staticValue: employmentRelationshipLabel(relationshipType),
-      staticHasValue: Boolean(relationshipType),
-      readOnly: true,
-      fixedVisibility: true,
-    });
-  }
+  const contractSection = profileDisplaySection("Dados contratuais");
+  sections[contractSection] = (sections[contractSection] ?? []).map((row) => ({ ...row, readOnly: true }));
+  const addContractRow = (key: string, label: string, order: number, value: React.ReactNode, hasValue: boolean, inheritKey?: string) => {
+    const fallback = fieldMap.fields[inheritKey ?? key] ?? systemField(label, contractSection, order, "restricted_partial");
+    const entry = { ...fallback, label, section: contractSection, order };
+    if (!canManageFieldVisibility && !canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix)) return;
+    sections[contractSection] = (sections[contractSection] ?? []).filter((row) => row.key !== key);
+    sections[contractSection].push({ key, entry, staticValue: hasValue ? value : "Não informado", staticHasValue: hasValue, readOnly: true });
+  };
+  const relationshipType = resolveEmploymentRelationshipType(user.employmentRelationshipType, user.personRecordType);
+  addContractRow(EMPLOYMENT_RELATIONSHIP_FIELD_KEY, "Tipo de vínculo", 5, employmentRelationshipLabel(relationshipType), Boolean(relationshipType));
+  const employer = units.find((unit) => unit.id === user.employerUnitId);
+  addContractRow("employee.employer_cnpj", "CNPJ do empregador", 10, user.employerCnpj || employer?.cnpj || "", Boolean(user.employerCnpj || employer?.cnpj));
+  addContractRow("system.contract.employer_unit", "Unidade empregadora", 15, user.employerUnitName || employer?.name || "", Boolean(user.employerUnitId));
+  addContractRow("system.contract.admission", "Data de admissão", 25, fmtDate(user.admissionDate), Boolean(user.admissionDate));
+  addContractRow("employee.job_role_id", "Cargo", 30, user.jobRoleName || user.jobRoleId || "", Boolean(user.jobRoleId));
+  addContractRow("system.contract.functions", "Função", 35, user.jobFunctionNames?.join(", ") || user.jobFunctionIds?.join(", ") || "", Boolean(user.jobFunctionIds?.length), SYSTEM_FIELD_KEYS.functions);
+  const probationDates = contractProbationDates(profileState.data.periodo_experiencia);
+  addContractRow("system.contract.probation_start", "Início da experiência", 38, formatIsoDate(probationDates.start), Boolean(probationDates.start), "employee.probation_eval_1");
+  const firstExperienceEnd = probationDates.firstEnd ?? fieldDateIso(fieldValues["employee.probation_eval_1"]);
+  const secondExperienceEnd = probationDates.finalEnd ?? fieldDateIso(fieldValues["employee.probation_eval_2"]);
+  addContractRow("employee.probation_eval_1", "Fim do 1º período de experiência", 40, formatIsoDate(firstExperienceEnd), Boolean(firstExperienceEnd));
+  addContractRow("employee.probation_eval_2", "Fim do 2º período de experiência", 50, formatIsoDate(secondExperienceEnd), Boolean(secondExperienceEnd));
+  addContractRow("system.contract.indefinite_start", probationDates.indefiniteLabel, 55, formatIsoDate(probationDates.indefiniteStart), Boolean(probationDates.indefiniteStart), "employee.probation_eval_2");
+  const financial = units.find((unit) => unit.id === user.unitId);
+  addContractRow("system.contract.financial_unit", "Unidade financeira", 60, financial?.name || user.unitId || "", Boolean(user.unitId));
 
   Object.values(sections).forEach((items) => {
     items.sort((left, right) => (left.entry.order ?? 0) - (right.entry.order ?? 0));
@@ -1815,7 +1831,7 @@ function EmployeeProfileFields({
                 staticValue
               ) : hasValue ? (
                 <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
-              ) : role !== "employee" ? (
+              ) : role !== "employee" && !readOnlyFromOrgChart ? (
                 <button type="button" onClick={() => setEditKey(key)} className="text-ds-accent-ink">
                   + Adicionar
                 </button>
@@ -1856,7 +1872,7 @@ function EmployeeProfileFields({
       const text = formatFieldValue(row.fv, row.entry.type, role, fieldKey);
       return text === "—" ? null : text;
     });
-    const editable = role !== "employee" && def.editKeys.some((fieldKey) => rowsByKey.has(fieldKey));
+    const editable = role !== "employee" && rows.some((row) => !row.readOnly) && def.editKeys.some((fieldKey) => rowsByKey.has(fieldKey));
     const visibilityKey = `section:${def.label}`;
     return (
       <div key={def.id} className="rounded-xl border border-ds-divider bg-ds-input p-3">
@@ -2081,6 +2097,7 @@ function EmployeeProfileFields({
                 ) : (
                   renderSectionBody(section, sectionFields)
                 )}
+                {section === contractSection ? <><div className="px-3 pb-2">{canManageFieldVisibility && onEditContract ? <Button type="button" variant="ds-secondary" size="sm" onClick={onEditContract}>Editar dados contratuais</Button> : null}</div><ContractChanges userId={user.id} units={units} /></> : null}
               </section>
             );
           })}
@@ -2594,6 +2611,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     }
     setDiscardEditOpen(false);
     setEditDrawerDirty(false);
+    if (reason === 'saved') setEmployeeProfileReloadKey((value) => value + 1);
     setEditDrawerInUrl(false);
   }, [editDrawerDirty, setEditDrawerInUrl]);
 
@@ -2665,10 +2683,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const blockOrder = (id: keyof typeof DEFAULT_PROFILE_BLOCKS) => profileBlocks[id]?.order ?? DEFAULT_PROFILE_BLOCKS[id].order;
   const canManageSystemFieldVisibility = Boolean(
     permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true
-  );
-  const canPublishEmploymentReference = Boolean(
-    !ownProfileOnly
-    && (isDefaultAdmin || permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true)
   );
   const viewingOwnProfile = firebaseUser?.uid === collaborator.id || currentUser?.id === collaborator.id;
   const canReadTimeRecording = Boolean(
@@ -3407,6 +3421,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           profileState={employeeProfileState}
           onProfileChanged={reloadEmployeeProfile}
           onFieldMapChanged={reloadEmployeeFieldMap}
+          onEditContract={() => setEditDrawerInUrl(true)}
         >
           <div className="space-y-2.5">
             {systemVisibilityMessage ? (
@@ -3421,12 +3436,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
               <div className="space-y-2.5">
                 {renderSystemBlock("system.schedule_units")}
-                <EmploymentReferenceCard
-                  user={collaborator}
-                  units={units}
-                  firebaseUser={firebaseUser}
-                  canPublish={canPublishEmploymentReference}
-                />
+
               </div>
               {renderSystemBlock("system.vacations")}
             </div>

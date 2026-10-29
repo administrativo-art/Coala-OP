@@ -51,7 +51,8 @@ test('Coala Go preserva offline, servidor valida a corrente e só então atribui
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       execution.set({ name: 'Execução', address: 'Rua operacional, 2', timeZone: 'America/Manaus' }),
-      user.set({ isActive: true, unitId: employerUnitId, unitIds: [employerUnitId, executionUnitId] }),
+      user.set({ isActive: true, unitId: employerUnitId, unitIds: [employerUnitId, executionUnitId],
+        operationalUnitPeriods: [{ validFrom: '2026-01-01', unitIds: [employerUnitId, executionUnitId] }] }),
       employee.set({ auth_uid: userId, name: 'Maria Offline' }), cpfField.set({ value_text: cpf }),
     ]);
     await publishEmploymentReference(context, { userId, expectedRevision: 0, requestId: 'offline-employment', periods: [{
@@ -65,6 +66,12 @@ test('Coala Go preserva offline, servidor valida a corrente e só então atribui
       installationId: '11111111-1111-4111-8111-111111111111', deviceKeyId, devicePublicKey,
       keySecurity: 'tee', bootCount: 7, anchorElapsedRealtimeMs: 1_000 }, dependencies);
     permitId = permit.permitId;
+    const frozenOperationalReference = (await repPDbAdmin.collection('repP_offlinePermits').doc(permitId).get()).get('operationalUnitReference');
+    assert.match(frozenOperationalReference.hash, /^[a-f0-9]{64}$/);
+    await user.update({ operationalUnitPeriods: [
+      { validFrom: '2026-01-01', validTo: '2026-10-17', unitIds: [employerUnitId, executionUnitId] },
+      { validFrom: '2026-10-18', unitIds: [employerUnitId] },
+    ] });
     const event = { permitId, attemptId: 'offline-attempt-1', executionUnitId, deviceKeyId,
       elapsedRealtimeMs: 1_801_000, bootCount: 7, sequence: 1, previousLocalHash: null,
       markedAt: deriveRepPOfflineMarkedAt({ anchorInstant: permit.anchorInstant, anchorElapsedRealtimeMs: permit.anchorElapsedRealtimeMs,
@@ -79,7 +86,33 @@ test('Coala Go preserva offline, servidor valida a corrente e só então atribui
     assert.equal(recorded.status, 'recorded'); assert.equal(recorded.marking.mode, '1');
     assert.equal(recorded.marking.markedAt, '2026-10-18T07:30:00-0400');
     assert.equal(recorded.marking.recordedAt, '2026-10-18T08:00:00-0400');
+    const firstEvent = await repPDbAdmin.collection('repP_events').doc(`${establishmentId}_${String(recorded.marking.nsr).padStart(9, '0')}`).get();
+    assert.deepEqual(firstEvent.get('operationalUnitReference'), frozenOperationalReference);
+    await user.update({ operationalUnitPeriods: [{ validFrom: '2026-01-01', unitIds: [employerUnitId, executionUnitId] }] });
     assert.equal((await recordOwnRepPMarking(context, request, dependencies)).status, 'replayed');
+    await t.test('permit legado sem metadado preserva unidade congelada após mudança operacional', async () => {
+      const legacy = await issueOwnRepPOfflinePermit(context, { permitRequestId: 'legacy-permit-regression', workDate: '2026-10-18',
+        installationId: '22222222-2222-4222-8222-222222222222', deviceKeyId, devicePublicKey,
+        keySecurity: 'tee', bootCount: 7, anchorElapsedRealtimeMs: 1_000 }, dependencies);
+      const { FieldValue } = await import('firebase-admin/firestore');
+      await repPDbAdmin.collection('repP_offlinePermits').doc(legacy.permitId).update({ operationalUnitReference: FieldValue.delete() });
+      await user.update({ operationalUnitPeriods: [
+        { validFrom: '2026-01-01', validTo: '2026-10-17', unitIds: [employerUnitId, executionUnitId] },
+        { validFrom: '2026-10-18', unitIds: [employerUnitId] },
+      ] });
+      const core = { ...event, permitId: legacy.permitId, attemptId: 'legacy-permit-attempt', elapsedRealtimeMs: 61_000,
+        markedAt: deriveRepPOfflineMarkedAt({ anchorInstant: legacy.anchorInstant, anchorElapsedRealtimeMs: legacy.anchorElapsedRealtimeMs,
+          elapsedRealtimeMs: 61_000, timeZone: 'America/Manaus' }) };
+      const serialized = canonicalRepPOfflineEvent(core);
+      clockInstant = '2026-10-18T12:02:00.000Z';
+      const result = await recordOwnRepPMarking(context, { ...request, attemptId: core.attemptId, offline: {
+        ...request.offline, permitId: legacy.permitId, elapsedRealtimeMs: core.elapsedRealtimeMs, markedAt: core.markedAt,
+        localHash: hashRepPOfflineEvent(serialized), signature: sign('sha256', Buffer.from(serialized), privateKey).toString('base64'),
+      } }, dependencies);
+      assert.equal(result.status, 'recorded');
+      assert.equal(result.marking.executionUnitId, executionUnitId);
+      await user.update({ operationalUnitPeriods: [{ validFrom: '2026-01-01', unitIds: [employerUnitId, executionUnitId] }] });
+    });
     const nsrAfterFirst = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
     await t.test('autorização de outra pessoa ou chave não registra nem avança a fila', async () => {
       const before = (await repPDbAdmin.collection('repP_offlinePermits').doc(permitId).get()).data();
