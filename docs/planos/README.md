@@ -22,3 +22,4 @@
 | [Plano de provisões financeiras - rascunho para validação](plano-provisoes-financeiras-draft.md) | Financeiro |
 | [Retomada — conciliação e Coala Financeiro](plano-retomada-financeiro-2026-09-22.md) | Financeiro |
 | [Plano de Implementação: Analytics Operacional em Formulários](plano-implementacao-analytics-formularios.md) | Formulários |
+| [Documentos e histórico de férias](plano-ferias-documentos.md) | Pessoas e DP |
