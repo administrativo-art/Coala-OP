@@ -528,12 +528,13 @@ export async function createCorrectedInboxBarcodePaymentRequest(id: string, acto
   });
 }
 
-function cancelledInterBarcodeStatus(status: unknown) {
-  return String(status ?? "")
+function inactiveInterBarcodeStatus(status: unknown) {
+  const normalized = String(status ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Z0-9]/gi, "")
-    .toUpperCase() === "CANCELADO";
+    .toUpperCase();
+  return ["CANCELADO", "REJEITADO", "RECUSADO"].includes(normalized);
 }
 
 function assertExpenseBoletoCancellationTarget(request: BankPaymentRequest, replacementScheduledFor: string) {
@@ -541,7 +542,7 @@ function assertExpenseBoletoCancellationTarget(request: BankPaymentRequest, repl
     throw new PaymentRequestCancellationError("Somente boleto anexado à despesa aceita esta correção de data.");
   }
   if (!["awaiting_bank_approval", "scheduled"].includes(request.status)
-    && !(request.bankCancellation?.status === "pending" && cancelledInterBarcodeStatus(request.bankStatus))) {
+    && !(request.bankCancellation?.status === "pending" && inactiveInterBarcodeStatus(request.bankStatus))) {
     throw new PaymentRequestCancellationError("A solicitação não está pendente de aprovação nem agendada no banco.");
   }
   if (!request.interRequestId) {
@@ -672,14 +673,14 @@ export async function cancelAndReplaceExpenseBoletoPaymentRequest(
       cancellationConfirmed = true;
     } catch {
       const observed = await getInterBarcodePayment(bankTransactionCode).catch(() => null);
-      cancellationConfirmed = cancelledInterBarcodeStatus(observed?.statusPagamento);
+      cancellationConfirmed = inactiveInterBarcodeStatus(observed?.statusPagamento);
       if (!cancellationConfirmed) {
         throw new PaymentRequestCancellationError("O cancelamento bancário ainda não foi confirmado. Consulte o Inter antes de retomar.");
       }
     }
   } else {
     const observed = await getInterBarcodePayment(bankTransactionCode).catch(() => null);
-    cancellationConfirmed = cancelledInterBarcodeStatus(observed?.statusPagamento);
+    cancellationConfirmed = inactiveInterBarcodeStatus(observed?.statusPagamento);
     if (!cancellationConfirmed) {
       throw new PaymentRequestCancellationError("Já existe um cancelamento em conferência. Aguarde a confirmação do Inter.");
     }
@@ -724,7 +725,7 @@ export async function cancelAndReplaceExpenseBoletoPaymentRequest(
       || current.bankCancellation.bankTransactionCode !== bankTransactionCode
       || current.bankCancellation.replacementScheduledFor !== replacementScheduledFor
       || (!["awaiting_bank_approval", "scheduled"].includes(current.status)
-        && !(current.status === "rejected" && cancelledInterBarcodeStatus(current.bankStatus)))
+        && !(current.status === "rejected" && inactiveInterBarcodeStatus(current.bankStatus)))
       || current.statementReconciliationStatus === "matched" || current.statementTransactionId) {
       throw new PaymentRequestCancellationError("O cancelamento foi confirmado, mas a solicitação mudou e exige reconciliação.");
     }
@@ -1773,7 +1774,7 @@ async function persistBarcodeBankObservation(params: {
       current.paymentRail !== "barcode"
       || !["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement", "failed"].includes(current.status)
     ) return current;
-    if (current.bankCancellation?.status === "pending" && cancelledInterBarcodeStatus(params.rawBankStatus)) return current;
+    if (current.bankCancellation?.status === "pending" && inactiveInterBarcodeStatus(params.rawBankStatus)) return current;
     const messageRef = current.sourceType === "financial_inbox"
       ? financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId)
       : null;
@@ -2136,7 +2137,7 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     if (!current.interRequestId || !current.barcodeSnapshot) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
     const bank = await getInterBarcodePayment(current.interRequestId);
     if (!bank) throw new Error("O Banco Inter ainda não retornou este pagamento.");
-    if (current.bankCancellation?.status === "pending" && cancelledInterBarcodeStatus(bank.statusPagamento)) return current;
+    if (current.bankCancellation?.status === "pending" && inactiveInterBarcodeStatus(bank.statusPagamento)) return current;
     const approvalRequired = Number(bank.aprovacoesRealizadas || 0) < Number(bank.aprovacoesNecessarias || 0);
     const nextBank = approvalRequired
       ? "awaiting_bank_approval" as const

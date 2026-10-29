@@ -120,6 +120,31 @@ test("DELETE aceito com persistência interrompida retoma via GET CANCELADO sem 
   });
 });
 
+test("aprovação recusada no Inter retoma a substituição sem repetir DELETE", async () => {
+  const target = await fixture("rejected-approval", {
+    status: "awaiting_bank_approval",
+    bankStatus: "AGUARDANDO_APROVACAO",
+    bankCancellation: {
+      status: "pending",
+      requestedAt: new Date().toISOString(),
+      requestedBy: actor.uid,
+      requestedByEmail: actor.email,
+      bankTransactionCode: "inter-rejected-approval",
+      replacementScheduledFor: scheduledFor,
+    },
+  });
+  let deletes = 0;
+  await withBank(async (config) => {
+    if (config.method === "delete") deletes++;
+    return ok(config, [{ statusPagamento: "REJEITADO", valorNominal: 100 }]);
+  }, async () => {
+    await refreshPaymentRequest(target.id, actor);
+    const replacement = await cancelAndReplaceExpenseBoletoPaymentRequest(target.id, scheduledFor, actor);
+    assert.equal(replacement.supersedesPaymentRequestId, target.id);
+    assert.equal(deletes, 0);
+  });
+});
+
 test("liquidação concorrente após DELETE impede substituição", async () => {
   const target = await fixture("paid");
   await withBank(async (config) => {
