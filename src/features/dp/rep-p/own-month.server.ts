@@ -20,6 +20,7 @@ export type RepPOwnScheduledShift = {
   overnight: boolean;
   unitId: string | null;
   unitName: string | null;
+  assignmentKind?: 'regular' | 'external_coverage';
   unitTimeZone: string | null;
   shiftName: string | null;
   breakType: 'none' | 'fixed' | 'flexible' | 'staggered';
@@ -146,6 +147,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       overnight: doc.get('overnight') === true,
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
+      assignmentKind: doc.get('assignmentKind') === 'external_coverage' ? 'external_coverage' : 'regular',
       unitTimeZone: unitId ? unitTimeZoneById.get(unitId) ?? null : null,
       shiftName: text(definition?.get('name')),
       breakType,

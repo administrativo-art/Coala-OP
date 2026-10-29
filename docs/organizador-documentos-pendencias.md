@@ -2,7 +2,7 @@
 
 > Documento de handoff. Diz **exatamente o que falta** para o módulo ir a produção,
 > com passos, arquivos, critério de aceite, esforço e risco. Complementa
-> `docs/plano-correcao-organizador-documentos.md` (histórico do que foi feito).
+> `docs/planos/plano-correcao-organizador-documentos.md` (histórico do que foi feito).
 
 ## Estado atual (verificado)
 

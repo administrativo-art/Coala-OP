@@ -6,6 +6,9 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { reconcileOperationalUnitPeriods } from './operational-unit-periods.js';
+import { activateContractualChanges } from './contractual-data.js';
+import { advanceAutomaticProbation } from './probation-transition.js';
 import { getAccessToken, loadPdvSyncCatalog, syncDayAdmin } from './pdv-sync.js';
 import { reconciliationDates } from './pdv-reconciliation-policy.js';
 import { PDVLEGAL_SECRET_NAMES } from './pdv-secret-contract.js';
@@ -38,7 +41,7 @@ export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-jo
 export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
-export { absenceTacitApprovalJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
+export { absenceTacitApprovalJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
 export {
@@ -290,12 +293,16 @@ async function syncBizneoUsersIntoCoala(source: string) {
     await db.runTransaction(async (transaction) => {
       const current = await transaction.get(userDoc.ref);
       if (!current.exists) return;
+      const effectivePatch = { ...patch };
+      const admissionLocallyManaged = Array.isArray(current.get('contractualFieldOverrides'))
+        && current.get('contractualFieldOverrides').includes('admissionDate');
+      if (admissionLocallyManaged) delete effectivePatch.admissionDate;
       const storedAdmission = current.get('admissionDate');
-      const admissionMillis = admissionDate?.toMillis();
+      const admissionMillis = admissionLocallyManaged ? undefined : admissionDate?.toMillis();
       const admissionChanged = admissionMillis !== undefined
         && (typeof storedAdmission?.toMillis !== 'function'
           || storedAdmission.toMillis() !== admissionMillis);
-      setEmploymentCyclePatch(transaction, userDoc.ref, current, patch, admissionChanged);
+      setEmploymentCyclePatch(transaction, userDoc.ref, current, effectivePatch, admissionChanged);
     });
     matched += 1;
   }
@@ -639,6 +646,13 @@ export const cleanupExpiredActionLogs = onSchedule({
 export const absenceRetentionDailyReview = onSchedule({ schedule: '0 9 * * *',
   timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
   await detectDueAbsenceRetention(db, hrDb);
+});
+export const activateCollaboratorPeriods = onSchedule({ schedule: 'every 5 minutes',
+  timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
+  const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Belem' }).format(new Date());
+  await activateContractualChanges(db, hrDb, date);
+  await reconcileOperationalUnitPeriods(db, hrDb, date);
+  await advanceAutomaticProbation(db, hrDb, date);
 });
 export const absenceRetentionReconciliation = onSchedule({ schedule: '15 4 * * *',
   timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {

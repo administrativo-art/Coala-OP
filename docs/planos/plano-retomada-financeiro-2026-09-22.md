@@ -99,7 +99,7 @@ ser marcada como agenda completa ou saldo disponível.
 
 Validação executada: 1.333 testes unitários, quatro testes de API em emuladores e
 `verify` com build aprovados; foi necessário `NODE_OPTIONS=--max-old-space-size=4096`.
-Detalhes em [stone-receivable-period.md](engineering/stone-receivable-period.md).
+Detalhes em [stone-receivable-period.md](../engineering/stone-receivable-period.md).
 
 ## Próxima execução — desdobramento técnico da sequência combinada
 
@@ -130,7 +130,7 @@ decimais e não escreve. A integração direta não satisfaz o contrato desta co
 Implementados acesso a Recebíveis em Fluxo de caixa, seleção de análises no Coala
 Financeiro e quatro perguntas com evidências sobre a mesma consulta. A cobertura
 integral da carteira permanece pendente e não foi marcada como entregue.
-Detalhes e validação em [receivables-agent-integration.md](engineering/receivables-agent-integration.md).
+Detalhes e validação em [receivables-agent-integration.md](../engineering/receivables-agent-integration.md).
 Verificação concluída: 1.345 testes unitários, quatro testes de API em emuladores e
 build aprovados. Acesso administrativo mantido, sem novas permissões ou migrações.
 
@@ -157,7 +157,7 @@ API administrativa, apresentação das evidências e E2E em emuladores. Não hab
 lançamento ou fechamento automático. Nenhuma alteração de produção ou publicação.
 
 Detalhes, limites e resultados dos testes em
-[pdv-stone-daily-review.md](engineering/pdv-stone-daily-review.md).
+[pdv-stone-daily-review.md](../engineering/pdv-stone-daily-review.md).
 Validação: 1.366 testes aprovados (21 novos), check aprovado e build com 171 páginas
 aprovado sem cache persistente. A tentativa inicial de build falhou por disco cheio;
 a configuração temporária usada na repetição não integra a entrega.
@@ -174,7 +174,7 @@ StoneCode não equivale à cobertura completa da unidade. Integração validada 
 fontes HTTP sintéticas e E2E de autorização em emuladores, não com produção.
 Validação concluída: `verify` aprovado, 1.378 testes unitários, build com 172 páginas
 e E2E da API aprovado em duas execuções. Detalhes em
-[pdv-stone-flow.md](engineering/pdv-stone-flow.md).
+[pdv-stone-flow.md](../engineering/pdv-stone-flow.md).
 Nenhuma publicação realizada.
 
 Próxima frente: completar fonte Pix e sua atribuição inequívoca à unidade, validar
@@ -192,7 +192,7 @@ O exemplo oficial contém StoneCode e terminal no campo adicional de algumas lin
 O parser agora preserva essa evidência com validação estrita, sem inferir identidade
 para linhas sem o campo ou com conflito. Isso permite preparar o futuro vínculo pelo
 StoneCode já cadastrado, sem exigir sempre uma associação separada de serial.
-Detalhes e fontes em [stone-pix-identity.md](engineering/stone-pix-identity.md).
+Detalhes e fontes em [stone-pix-identity.md](../engineering/stone-pix-identity.md).
 
 Pix continua não comparado na tela. Próximo incremento: validar valores/eventos Pix
 estritamente, ler um arquivo consistente com limite e resolver o vínculo oficial
@@ -209,7 +209,7 @@ Branch `feat/stone-pix-events`, base `5e198f71`. O parser passa a conservar evid
 versionada de centavos exatos, evento, E2E, refund e datas UTC com microssegundos.
 Cancelamentos, valores inválidos, identidades ausentes e eventos relacionados ou
 duplicados ficam fora dos candidatos. Os campos/resumo legados não são usados como
-prova de venda única. Detalhes em [stone-pix-events.md](engineering/stone-pix-events.md).
+prova de venda única. Detalhes em [stone-pix-events.md](../engineering/stone-pix-events.md).
 
 Ainda não conclui a etapa 2: Pix não foi conectado à tela, nenhuma conta real foi
 consultada e não houve publicação. Próximo passo: leitura limitada/consistente,
@@ -233,7 +233,7 @@ histórico, fonte bancária e dados reais permanecem explícitas, não marcadas 
 resolvidas por uma nova tela. Scheduler implementado, desativado por padrão.
 
 Detalhes, permissões, preflight de custos, índices, testes e critérios de publicação
-em [financial-plan-completion.md](engineering/financial-plan-completion.md).
+em [financial-plan-completion.md](../engineering/financial-plan-completion.md).
 
 ### Retomada após desligamento — 23/09/2026
 
@@ -280,7 +280,7 @@ oficial validado; consulta real do Tirirical depende de publicar a nova rota com
 o segredo já mantido no servidor. WalletPosition não foi tratado como carteira
 integral por vencimento nem saldo bancário. Sem backfill, deploy ou lançamentos.
 Contrato, custo e critérios de cobertura em
-[stone-wallet-position.md](engineering/stone-wallet-position.md).
+[stone-wallet-position.md](../engineering/stone-wallet-position.md).
 
 Validação local concluída: `npm run verify` aprovado com 1.416 testes unitários e
 build; cinco testes de autorização/entrada da API aprovados em emuladores demo.

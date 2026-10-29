@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 
+import { AdjustmentDayOverview } from "./adjustment-day-view";
+import { operationsHeadline, pendingOperations, type AdjustmentDayContext } from "./day-summary";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "./types";
 
 type Kind = AdjustmentView["kind"];
@@ -48,7 +50,7 @@ export function AdjustmentComparison({ originals, kind, targetReceiptId, newMark
         ...(discarded ? [chip(clock(discarded.markedAt), "discarded", "d")] : []),
         ...(newMarkedAt && kind !== "discard" ? [chip(clock(newMarkedAt), "included", "i")] : []),
       ])}
-      {row(scope === "pilot" ? "Resultado da simulação (sem efeito no ponto)" : "Depois, se aprovado (o que vale no fechamento)",
+      {row(scope === "pilot" ? "Resultado da simulação (vale só no ensaio)" : "Depois, se aprovado (o que vale no fechamento)",
         after.map((item, index) => chip(item.time, item.state, `a${index}`)))}
     </div>
   );
@@ -67,25 +69,67 @@ function AdjustmentOperationsComparison({ originals, adjustment }: { originals: 
   return <div className="space-y-3">
     <Field label="Antes">{chips(before.map((item) => ({ time: clock(item.markedAt) })))}</Field>
     <Field label="Pedido">{chips(operations.flatMap((item) => [...(item.target ? [{ time: clock(item.target.markedAt), state: "discarded" as const }] : []), ...(item.inclusion ? [{ time: clock(item.inclusion.markedAt), state: "included" as const }] : [])]))}</Field>
-    <Field label={adjustment.scope === "pilot" ? "Resultado simulado (sem efeito)" : "Depois, se aprovado"}>{chips(after.map((time) => ({ time })))}</Field>
+    <Field label={adjustment.scope === "pilot" ? "Resultado simulado (vale só no ensaio)" : "Depois, se aprovado"}>{chips(after.map((time) => ({ time })))}</Field>
   </div>;
 }
 
-/** Relatório do pedido: antigo × novo, justificativa e trilha de autoria com códigos encadeados. */
-export function AdjustmentReport({ adjustment, originals, names }: { adjustment: AdjustmentView; originals: Marking[]; names?: Map<string, string> }) {
+/** Contexto do pedido para quem analisa: quanto tempo depois do dia foi feito e o histórico recente da pessoa. */
+export function requestContextText(adjustment: AdjustmentView, day: AdjustmentDayContext) {
+  const requestedAt = adjustment.acts[0]?.at;
+  const parts: string[] = [];
+  if (requestedAt) {
+    const utc = (value: string) => Date.UTC(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, Number(value.slice(8, 10)));
+    const late = Math.round((utc(new Date(requestedAt).toLocaleDateString("en-CA")) - utc(adjustment.workDate)) / 86_400_000);
+    parts.push(late <= 0 ? "Pedido feito no mesmo dia." : `Pedido feito ${late === 1 ? "1 dia" : `${late} dias`} depois.`);
+  }
+  const others = day.history.otherRequestsSameDay;
+  parts.push(others === 0 ? `Nenhum outro pedido para ${adjustment.workDate.split("-").reverse().slice(0, 2).join("/")}.` : `${others} ${others === 1 ? "outro pedido" : "outros pedidos"} para este dia.`);
+  const approved = day.history.approvedInPrevious30Days;
+  parts.push(`Nos 30 dias anteriores: ${approved === 0 ? "nenhum ajuste aprovado" : `${approved} ${approved === 1 ? "ajuste aprovado" : "ajustes aprovados"}`}.`);
+  return parts.join(" ");
+}
+
+/**
+ * Relatório do pedido: com o dia carregado, mostra o dia inteiro (linha do dia, resultado, batidas); sem ele, o
+ * antigo × novo só da batida do pedido. Depois vêm a justificativa e a trilha de autoria com códigos encadeados.
+ */
+export function AdjustmentReport({ adjustment, originals, names, day, dayLoading = false }: {
+  adjustment: AdjustmentView; originals: Marking[]; names?: Map<string, string>; day?: AdjustmentDayContext | null; dayLoading?: boolean;
+}) {
   const who = (uid: string, role: string) => role === "titular" ? `${adjustment.employeeName ?? "Titular"} (titular)` : `${names?.get(uid) ?? "Responsável"} (análise)`;
   const operations = adjustment.operations?.length ? adjustment.operations : [{ kind: adjustment.kind, target: adjustment.target, inclusion: adjustment.inclusion }];
+  const trail = (
+    <ol className="space-y-3 text-sm">
+      {adjustment.acts.map((act) => (
+        <li key={act.hash} className="flex gap-2.5">
+          <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", act.action === "approved" ? "bg-ds-ok" : act.action === "rejected" ? "bg-ds-danger" : "bg-ds-ink")} aria-hidden />
+          <div>
+            <p className="font-bold text-ds-ink">{act.action === "requested" ? "Solicitado" : act.action === "approved" ? "Aprovado" : act.action === "rejected" ? "Recusado" : "Cancelado"} por {who(act.actorUid, act.role)}</p>
+            <p className="text-xs text-ds-ink-muted">{brDateTime(act.at)} · {act.clockSource === "hora_legal" ? "hora oficial" : "relógio do servidor"} · login autenticado</p>
+            {act.reason && act.action !== "requested" ? <p className="text-xs text-ds-ink-2">Justificativa: {act.reason}</p> : null}
+            <p className="font-ds-mono text-[11px] text-ds-ink-faint">verificação {act.hash.slice(0, 4)}…{act.hash.slice(-4)}{act.previousHash ? " · encadeada à anterior" : ""}</p>
+          </div>
+        </li>
+      ))}
+      {adjustment.status === "in_review" ? <li className="text-xs text-ds-ink-muted">Aguardando decisão do gestor ou do DP.</li> : null}
+          </ol>
+  );
   return (
     <>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2"><StatusPill variant={adjustment.status === "approved" ? "ok" : adjustment.status === "in_review" ? "info" : "neutral"}>
-          {adjustment.scope === "pilot" && adjustment.status === "approved" ? "Simulação aprovada · sem efeito no ponto" : ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
-          {adjustment.scope === "pilot" ? <StatusPill variant="warn">Simulação do ensaio</StatusPill> : null}</div>
+          {adjustment.scope === "pilot" && adjustment.status === "approved" ? "Simulação aprovada · vale só no ensaio" : ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>
+          {adjustment.scope === "pilot" ? <StatusPill variant="warn">Simulação do ensaio</StatusPill> : null}
+          {day ? <StatusPill variant="neutral">{operationsHeadline(pendingOperations(adjustment))}</StatusPill> : null}</div>
         <span className="font-ds-mono text-[11px] text-ds-ink-faint">{adjustment.id.slice(0, 10)}</span>
       </div>
-      <PanelSection title="Antigo × novo">
-        <AdjustmentOperationsComparison originals={originals} adjustment={adjustment} />
-      </PanelSection>
+      {day ? <AdjustmentDayOverview adjustment={adjustment} day={day} /> : dayLoading ? (
+        <PanelSection title="O dia em uma linha"><p className="text-sm text-ds-ink-muted">Carregando o dia inteiro…</p></PanelSection>
+      ) : (
+        <PanelSection title="Antigo × novo">
+          <AdjustmentOperationsComparison originals={originals} adjustment={adjustment} />
+        </PanelSection>
+      )}
       <PanelSection title="Dados do pedido">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Batidas originais">{operations.flatMap((item) => item.target ? [`${clock(item.target.markedAt)} · ${adjustment.scope === "pilot" ? "sequência" : "NSR"} ${adjustment.scope === "pilot" ? item.target.pilotSequence : item.target.nsr}`] : []).join("; ") || "— (inclusão)"}</Field>
@@ -93,26 +137,19 @@ export function AdjustmentReport({ adjustment, originals, names }: { adjustment:
           <Field label="Tratamento">{adjustment.kind === "include" ? "Inclusão" : adjustment.kind === "discard" ? "Desconsideração" : "Desconsideração + inclusão"}</Field>
           <Field label="Dia">{adjustment.workDate.split("-").reverse().join("/")}</Field>
           <div className="col-span-2"><Field label="Justificativa"><span className="whitespace-pre-wrap font-normal">{adjustment.reason}</span></Field></div>
+          {day ? <p className="col-span-2 text-xs text-ds-ink-muted">{requestContextText(adjustment, day)}</p> : null}
         </div>
       </PanelSection>
       <PanelSection title="Trilha de autoria">
-        <ol className="space-y-3 text-sm">
-          {adjustment.acts.map((act) => (
-            <li key={act.hash} className="flex gap-2.5">
-              <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", act.action === "approved" ? "bg-ds-ok" : act.action === "rejected" ? "bg-ds-danger" : "bg-ds-ink")} aria-hidden />
-              <div>
-                <p className="font-bold text-ds-ink">{act.action === "requested" ? "Solicitado" : act.action === "approved" ? "Aprovado" : act.action === "rejected" ? "Recusado" : "Cancelado"} por {who(act.actorUid, act.role)}</p>
-                <p className="text-xs text-ds-ink-muted">{brDateTime(act.at)} · {act.clockSource === "hora_legal" ? "hora oficial" : "relógio do servidor"} · login autenticado</p>
-                {act.reason && act.action !== "requested" ? <p className="text-xs text-ds-ink-2">Justificativa: {act.reason}</p> : null}
-                <p className="font-ds-mono text-[11px] text-ds-ink-faint">verificação {act.hash.slice(0, 4)}…{act.hash.slice(-4)}{act.previousHash ? " · encadeada à anterior" : ""}</p>
-              </div>
-            </li>
-          ))}
-          {adjustment.status === "in_review" ? <li className="text-xs text-ds-ink-muted">Aguardando decisão do gestor ou do DP.</li> : null}
-        </ol>
+        {day ? (
+          <details>
+            <summary className="cursor-pointer text-sm font-bold text-ds-ink">Ver trilha e verificação</summary>
+            <div className="mt-3">{trail}</div>
+          </details>
+        ) : trail}
       </PanelSection>
       <p className={cn("text-xs", adjustment.scope === "pilot" ? "font-semibold text-ds-warn" : "text-ds-ink-muted")}>
-        {adjustment.scope === "pilot" ? "Simulação segregada: a decisão não cria tratamento e não altera ponto, banco, espelho, folha, AFD ou AEJ."
+        {adjustment.scope === "pilot" ? "Simulação segregada: aprovar muda só o dia do ensaio (original riscada e novo horário), sem alterar ponto oficial, banco, espelho, folha, AFD ou AEJ."
           : "A batida original continua guardada no registro oficial; o ajuste aparece no espelho e no documento de fechamento do mês."}
       </p>
     </>
@@ -158,7 +195,7 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, sco
   return (
     <SidePanel open={open} onOpenChange={(next) => { if (!next && !sending) onClose(); }} kicker={workDate.split("-").reverse().join("/")}
       title={step === "done" ? (scope === "pilot" ? "Simulação enviada" : "Pedido de ajuste enviado") : (scope === "pilot" ? "Simular ajuste" : "Pedir ajuste de ponto")}
-      subtitle={scope === "pilot" ? "O DP testa a análise; nenhuma decisão altera o ponto oficial." : "Quem decide é o seu gestor ou o DP. A batida original nunca é apagada."}>
+      subtitle={scope === "pilot" ? "O DP testa a análise; a decisão altera só o dia do ensaio, nunca o ponto oficial." : "Quem decide é o seu gestor ou o DP. A batida original nunca é apagada."}>
       {step === "done" && saved ? <AdjustmentReport adjustment={saved} originals={originals} /> : (
         <>
           <ol className="flex items-center gap-2 text-xs font-bold" aria-label="Etapas do pedido">
@@ -224,7 +261,7 @@ export function AdjustmentRequestPanel({ open, workDate, originals, request, sco
                   <div className="col-span-2"><Field label="Justificativa"><span className="whitespace-pre-wrap font-normal">{reason.trim()}</span></Field></div>
                 </div>
                 <p className={cn("rounded-ds-md px-3 py-2 text-xs", scope === "pilot" ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-info-bg text-ds-info")}>
-                  {scope === "pilot" ? "SIMULAÇÃO: o pedido e a decisão ficam separados do PTRP e não produzem tratamento, banco, espelho, folha, AFD ou AEJ."
+                  {scope === "pilot" ? "SIMULAÇÃO: vale só no ensaio. O pedido e a decisão ficam separados do PTRP e não geram AFD, AEJ, espelho, banco nem folha; aprovar muda só o dia do ensaio."
                     : "O pedido fica registrado em seu nome, com data e hora oficiais. A batida original não é apagada: se aprovado, ela fica marcada como desconsiderada e o horário novo entra como incluído, com a sua justificativa."}
                 </p>
               </PanelSection>

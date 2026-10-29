@@ -16,6 +16,12 @@
 - Ações em massa: barra fixa no rodapé da tela com contagem e ações; nunca no fim da lista.
 - Catálogos históricos que permitem arquivamento abrem em **Ativos** e separam **Arquivados** por chips mutuamente exclusivos dentro do `ControlPanel`. Não misturar os dois estados na mesma lista nem adicionar uma terceira opção “Todos” quando a finalidade for operacional.
 
+## Tabela ordenável (`SortHeader`)
+- Título de coluna que ordena ao clique: primeira vez ordena (texto de A a Z, data do mais recente para o mais antigo), cliques seguintes alternam crescente e decrescente. A coluna ativa fica em `--ds-accent-ink` com seta; `aria-sort` anuncia a ordem.
+- A coluna que muda o estado (Situação) não ordena. No celular, os títulos viram uma fileira de botões acima das linhas.
+- Filtros ficam acima da tabela: busca por texto, `Segmented` de tipo e a contagem ("N de M pedidos"). Sem resultado: texto em caixa tracejada.
+- Pessoa na linha: `PersonAvatar` (36px, redondo, foto do cadastro e iniciais de reserva na cor da escala). Exemplo vivo: fila de ajustes de ponto em Solicitações.
+
 ## Lote (Controle de Estoque)
 Uma linha: [lote em mono 12.5/700 + StatusPill] · [quiosque 13/600 / local 12 #6e737a] · [VALIDADE kicker + data em mono] · [quantidades 19/800 + unidade 12 #5f646c] · "›".
 Reserva: abaixo, separada por borda tracejada, com "Reserva ativa · N" (12/800 #1d4ed8) e pills de destino ("Em processamento" quando ainda não há destino).

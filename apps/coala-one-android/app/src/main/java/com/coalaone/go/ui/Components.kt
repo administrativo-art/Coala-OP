@@ -99,7 +99,7 @@ fun shortDate(value: String?): String? {
         action?.let { (label, run) -> Box(Modifier.heightIn(min = 34.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(10.dp)).clickable(enabled = !busy, role = Role.Button, onClick = run).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) { Text(label, color = Tokens.onDark, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp)) } }
     }
 }
-@Composable fun Page(title: String, feedback: Feedback = Feedback(), onBack: (() -> Unit)? = null, footer: (@Composable ColumnScope.() -> Unit)? = null, header: (@Composable ColumnScope.() -> Unit)? = null, onRefresh: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+@Composable fun Page(title: String, feedback: Feedback = Feedback(), onBack: (() -> Unit)? = null, footer: (@Composable ColumnScope.() -> Unit)? = null, header: (@Composable ColumnScope.() -> Unit)? = null, onRefresh: (() -> Unit)? = null, showConnectivityNotice: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val online = rememberOnline()
     CompositionLocalProvider(LocalContentColor provides Tokens.ink) {
     Box(Modifier.fillMaxSize().background(Tokens.page).imePadding()) {
@@ -112,8 +112,8 @@ fun shortDate(value: String?): String? {
                 Text("Visualizando como $targetName · somente leitura", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                     modifier = Modifier.fillMaxWidth().background(Tokens.warningBg).padding(horizontal = 20.dp, vertical = 10.dp))
             }
-            // What survives without a connection is said in words, not left for the person to guess.
-            if (!online) Text("Sem conexão. Os registros salvos neste aparelho serão enviados quando a conexão voltar. Algumas consultas precisam de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            // Screens with their own saved/pending state can omit this generic notice.
+            if (showConnectivityNotice && !online) Text("Sem conexão. Os registros salvos neste aparelho serão enviados quando a conexão voltar. Algumas consultas precisam de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp).background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             val body: @Composable () -> Unit = {
                 // Cada rota começa no topo. Sem a chave, o mesmo slot do Compose herdava a
@@ -180,7 +180,7 @@ fun shortDate(value: String?): String? {
         Box(Modifier.weight(1f)) { Action(next, enabled = nextEnabled, onClick = onNext) }
     }
 }
-@Composable fun StatusChip(text: String, ink: Color, background: Color) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
+@Composable fun StatusChip(text: String, ink: Color, background: Color, modifier: Modifier = Modifier) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
 /** Pill filter from the prototype: dark when selected, outlined otherwise. */
 @Composable fun PillChoice(label: String, selected: Boolean, enabled: Boolean = true, accent: Boolean = false, onClick: () -> Unit) {
     val ink = when { selected && accent -> Tokens.wine; selected -> Tokens.pillInk; else -> Tokens.muted }

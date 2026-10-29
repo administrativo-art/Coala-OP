@@ -52,10 +52,28 @@ export function employmentRelationshipLabel(value: unknown) {
   return EMPLOYMENT_RELATIONSHIP_TYPES.find((item) => item.value === value)?.label ?? "Vínculo não definido";
 }
 
-export function isEmploymentRelationshipEligibleForAbsence(
+/**
+ * Vínculos com jornada: aparecem na escala da unidade, registram ponto e entram no fechamento. Substitui o antigo
+ * interruptor "Operacional"; estar na escala não obriga a receber turno.
+ */
+export function isWorkforceEmploymentRelationship(
   value: unknown,
 ): value is Exclude<EmploymentRelationshipType, "pj" | "partner"> {
   return value === "clt" || value === "apprenticeship" || value === "internship";
+}
+
+/**
+ * Fechamento de ponto: na dúvida, inclui. Cadastro sem vínculo entra (como entrava com o antigo "Operacional"),
+ * para ninguém sair do controle de jornada em silêncio; só PJ e societário ficam fora.
+ */
+export function belongsToTimeClosureRoster(value: unknown) {
+  return value === undefined || value === null || value === "" || isWorkforceEmploymentRelationship(value);
+}
+
+export function isEmploymentRelationshipEligibleForAbsence(
+  value: unknown,
+): value is Exclude<EmploymentRelationshipType, "pj" | "partner"> {
+  return isWorkforceEmploymentRelationship(value);
 }
 
 export function terminationReasonsForRelationship(value: unknown): readonly EmploymentTerminationReason[] {

@@ -23,7 +23,8 @@
 
 - Formulários extensos que partem de uma página de detalhe, como **Editar dados do colaborador**, podem usar até 920px e ocupam 100% da largura no mobile. A ampliação é horizontal apenas quando o formulário realmente exigir espaço; ela nunca substitui o alinhamento vertical obrigatório de topo a base.
 - O conteúdo é dividido por assunto em abas; não apresentar todos os blocos numa única rolagem longa.
-- Assuntos curtos e diretamente dependentes podem compartilhar uma etapa, mantendo cartões internos separados e suas ajudas contextuais. Na edição do colaborador, as abas são **Identificação** (nome, e-mail, vínculo, foto), **Cargo e jornada** (cargo, função, turno e datas), **Unidades** (escala e operação → unidade principal → responsabilidade → escopo, nessa ordem, porque o escopo "vinculadas" depende das unidades de escala) e **Acesso e rotinas** (resumo do perfil efetivo, usuário operacional, metas e vale-transporte). As abas que dependem do DP somem para quem não tem `dp.view`.
+- As abas do drawer largo ficam no pé do topo escuro, em formato de pasta: a ativa tem o fundo do corpo (`bg-ds-warm`) e texto escuro, as inativas ficam em texto atenuado sobre o escuro. O `SidePanel` reserva o espaço com `headerTabs` e o conteúdo desenha as abas ali por portal (`SidePanelHeaderTabsContext`), mantendo o estado no formulário. Fora do painel, o trilho cinza continua como alternativa.
+- Na edição de colaborador, Identificação agrupa dados pessoais e Dados contratuais (vínculo, admissão, cargo/função, datas calculadas da experiência e motivo/data efetiva). Jornada mantém turno e datas operacionais. Unidades mantém, nesta ordem, empregadora, vigências de operação/escala (com os quiosques atribuídos calculados e o switch Acesso ao PDV), financeira, responsabilidade e acesso no sistema (`Segmented` Onde trabalha · Escolhidas · Todas); a edição e o histórico das vigências expandem inline no mesmo painel. Quiosques atribuídos não têm seletor na edição: saem da vigência. Dados contratuais no perfil é somente informativo e oferece consulta à trilha. Jornada exige `dp.view`; Unidades também fica disponível para quem gerencia usuários.
 - Campos que se confundem entre si recebem nota curta sob o campo dizendo o efeito de cada um; num seletor de modos, a nota muda conforme a opção escolhida.
 - Cada aba mostra um ponto quando contém campo alterado (cor de destaque) ou com erro (cor de perigo), para que ninguém salve sem ver o que mudou em outra aba.
 - Cada assunto mantém título, descrição curta e `InfoPopover` clicável com alcance e efeitos dos campos. Ajuda essencial não depende de *hover*.
@@ -47,3 +48,11 @@ Blocos configuráveis dentro dessas abas recebem um ícone de informação quand
 
 ## Baixa inline (Controle de Estoque)
 Tipo em Segmented: Consumo/Venda · Descarte/Perda · Outros. Quantidade em embalagens, com "disponível" (quantidade − reserva) no rótulo. Validações: quantidade > 0; ≤ disponível; "Outros" exige observação. Confirmar chama `consumeFromLot`.
+
+Ajuste de interface em 28/10/2026: todos os seletores de unidade ficam exclusivamente na aba Unidades. O quadro Como ler esta tela foi removido; cada tipo tem ícone InfoPopover com ajuda por clique/toque. Financeira e empregadora continuam sendo dados contratuais auditados; a justificativa fica disponível também na aba Unidades, sem mudar fontes ou regras. Gestores de usuários preservam acesso à aba mesmo sem visualização DP.
+
+### Linhas numeradas (edição do colaborador, 29/10/2026)
+
+- Cada aba do drawer é um cartão (`EditSection`) com título, descrição e `InfoPopover`; dentro, cada pergunta é uma linha (`EditRow` ou `EditFormRow` em `src/components/collaborator-edit-rows.tsx`): número em círculo escuro, nome 13/800 e efeito em 12px à esquerda (200px), campo à direita; divisores entre linhas. No celular a linha empilha.
+- `EditFormRow` mantém o `FormItem`, então o rótulo continua associado ao campo e o erro aparece junto dele. O cadastro rápido (`createOnly`) usa as mesmas peças em modo compacto, sem numeração.
+- Uma linha por decisão: não agrupar dois campos que respondem perguntas diferentes na mesma linha.

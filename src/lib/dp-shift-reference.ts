@@ -1,3 +1,4 @@
+import { operationalUnitsOnDate, validateOperationalPeriods } from '@/lib/operational-unit-periods';
 import type { DPJourney, DPShiftDefinition } from '@/types';
 import type { DPJourneyResolvedBy } from './dp-journey-resolution';
 
@@ -63,7 +64,7 @@ export function buildDPShiftReference(params: {
     plannedEndTime: params.endTime,
     collaborator: {
       unitId: stringOrNull(user.unitId),
-      unitIds: stringArray(user.unitIds),
+      unitIds: operationalUnitsOnDate({ unitIds: stringArray(user.unitIds), ...(validateOperationalPeriods(user.operationalUnitPeriods) ? { operationalUnitPeriods: user.operationalUnitPeriods } : {}) }, params.date),
       jobRoleId: stringOrNull(user.jobRoleId),
       jobRoleName: stringOrNull(user.jobRoleName),
       jobFunctionIds: stringArray(user.jobFunctionIds),

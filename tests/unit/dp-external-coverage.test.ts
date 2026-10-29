@@ -22,6 +22,19 @@ test('deriva cobertura externa, origem e exclusão de metas sem alterar o víncu
   assert.equal(countsDPShiftTowardGoals({}), true);
 });
 
+test('usa unidades de escala e operação antes da referência financeira', () => {
+  const user = { unitId: 'financeira', unitIds: ['operacional-a', 'operacional-b'] };
+  assert.deepEqual(resolveDPShiftAssignment({ executionUnitId: 'destino', user }), {
+    assignmentKind: 'external_coverage', originUnitId: 'operacional-a', countsTowardGoals: false,
+  });
+  assert.deepEqual(resolveDPShiftAssignment({ executionUnitId: 'financeira', user }), {
+    assignmentKind: 'external_coverage', originUnitId: 'operacional-a', countsTowardGoals: false,
+  });
+  assert.deepEqual(resolveDPShiftAssignment({ executionUnitId: 'operacional-b', user }), {
+    assignmentKind: 'regular', countsTowardGoals: true,
+  });
+});
+
 test('recusa cobertura sem unidade de origem canônica', () => {
   assert.throws(
     () => resolveDPShiftAssignment({ executionUnitId: 'destino', user: { assignedKioskIds: ['legado'] } }),

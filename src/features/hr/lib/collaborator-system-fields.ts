@@ -9,7 +9,9 @@ export const SYSTEM_FIELD_KEYS = {
   loginCoalaOne: "system.access.login_coala_one",
   accessProfile: "system.documents.access_profile",
   jobRole: "system.role.job_role",
+  /** Legado: sem tela desde 10/2026; mantido porque o contrato de variáveis `coala-documents-v2` ainda o lista. */
   operational: "system.role.operational",
+  /** Legado: idem; metas valem para qualquer pessoa ativa. */
   goals: "system.role.goals",
   functions: "system.role.functions",
   shift: "system.schedule.shift",

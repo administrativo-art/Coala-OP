@@ -24,7 +24,7 @@ class ApiContractTest {
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"versionCode":0,"versionName":"Não publicado","minVersionCode":0,"packagePath":null}"""))
             assertNull(api.release().packagePath)
             assertEquals("/api/app/version?packageName=coalaone.go", server.takeRequest().path)
-            assertEquals("coalaone.go.debug", BuildConfig.APPLICATION_ID)
+            assertEquals(if (BuildConfig.DEBUG) "coalaone.go.debug" else "coalaone.go", BuildConfig.APPLICATION_ID)
             assertTrue(json.encodeToString(AttestationRequest("t".repeat(200), "d033b3e8-dbc4-4c34-8cb7-0cdb5f61293e")).contains("\"packageName\":\"coalaone.go\""))
         }
     }

@@ -68,6 +68,7 @@ export type CollaboratorCoreOptions = {
   currentUser?: AnyRecord;
   protectedUser?: boolean;
   syncProfile?: boolean;
+  inferFinancialUnit?: boolean;
 };
 
 export type CollaboratorCoreResult = {
@@ -92,22 +93,22 @@ export async function resolveCollaboratorCore(
       ? asStringArray(data.functionId)
       : asStringArray(currentUser.jobFunctionIds);
 
-  const resolvedUnitIds = asStringArray(data.unitIds).length > 0
+  const resolvedUnitIds = hasOwn(data, 'unitIds')
     ? asStringArray(data.unitIds)
     : asStringArray(data.assignedKioskIds).length > 0
       ? asStringArray(data.assignedKioskIds)
-      : asStringArray(data.unitId).length > 0
-        ? asStringArray(data.unitId)
-        : asStringArray(currentUser.unitIds).length > 0
-          ? asStringArray(currentUser.unitIds)
-          : asStringArray(currentUser.assignedKioskIds);
-  const primaryUnitId = asString(data.unitId)
-    ?? asString(currentUser.unitId)
-    ?? resolvedUnitIds[0]
-    ?? null;
-  const unitIds = primaryUnitId
-    ? [primaryUnitId, ...resolvedUnitIds.filter((unitId) => unitId !== primaryUnitId)]
-    : resolvedUnitIds;
+      : asStringArray(currentUser.unitIds).length > 0
+        ? asStringArray(currentUser.unitIds)
+        : asStringArray(currentUser.assignedKioskIds).length > 0
+          ? asStringArray(currentUser.assignedKioskIds)
+          // Onboarding legado informa apenas unitId; o cadastro com unitIds explícito nunca usa este fallback.
+          : asStringArray(data.unitId).length > 0
+            ? asStringArray(data.unitId)
+            : asStringArray(currentUser.unitId);
+  const primaryUnitId = options.inferFinancialUnit === false
+    ? hasOwn(data, 'unitId') ? asString(data.unitId) : asString(currentUser.unitId)
+    : asString(data.unitId) ?? asString(currentUser.unitId) ?? resolvedUnitIds[0] ?? null;
+  const unitIds = [...new Set(resolvedUnitIds)];
   const assignedKioskIds = hasOwn(data, "assignedKioskIds")
     ? asStringArray(data.assignedKioskIds)
     : asStringArray(currentUser.assignedKioskIds);
@@ -201,7 +202,8 @@ export async function resolveCollaboratorCore(
       unitAccessScope,
       unitAccessUnitIds: unitAccessScope === "selected" ? unitAccessUnitIds : [],
     } : {}),
-    ...(unitIds.length > 0 ? { unitId: primaryUnitId ?? unitIds[0], unitIds } : {}),
+    ...(primaryUnitId ? { unitId: primaryUnitId } : {}),
+    ...(unitIds.length > 0 || hasOwn(data, "unitIds") ? { unitIds } : {}),
     ...(hasOwn(data, "assignedKioskIds") ? { assignedKioskIds } : {}),
     ...(hasOwn(data, "shiftDefinitionId") ? { shiftDefinitionId: shiftDefinitionId ?? null } : {}),
     ...(operationalValue !== null ? { operacional: operationalValue } : {}),

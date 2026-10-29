@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { differenceInCalendarDays, format, parseISO, startOfDay, subDays } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO, startOfDay, subDays } from 'date-fns';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPVacationRecord } from '@/types';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,22 +43,28 @@ import {
 } from '@/components/dp/dp-vacation-workflow';
 import { DPVacationEditorPanel } from '@/components/dp/dp-vacation-editor-panel';
 import { DPVacationDecisionPanel } from '@/components/dp/dp-vacation-decision-panel';
-import { shouldDisplayVacationWorkflow } from '@/lib/dp-vacation-workflow';
+import {
+  shouldDisplayVacationWorkflow,
+  VACATION_WORKFLOW_DISPLAY_STAGE_META,
+  vacationWorkflowDisplayStageId,
+} from '@/lib/dp-vacation-workflow';
+import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { PageHero } from '@/components/patterns/page-hero';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { SidePanel } from '@/components/patterns/side-panel';
+import { VacationPill, VacationStageDots, workflowOperationalSummary } from '@/components/dp/dp-ferias-shared';
+import { PersonStatusBar, VacationRuleTimeline, type BandTone } from '@/components/dp/dp-ferias-person-parts';
 
 import {
   calculateVacationHealth,
   getVacationCycleHistory,
-  RISK_PROGRESS_CLASS,
   CYCLE_STATUS_CONFIG,
   type VacationCycle,
-  type VacationRisk,
 } from '@/lib/utils/vacation-logic';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function initials(name: string) {
-  return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
-}
 
 function toDate(ts: unknown): Date | undefined {
   if (!ts) return undefined;
@@ -77,15 +81,6 @@ function fmtDate(d?: string | Date) {
     return format(dt, 'dd/MM/yyyy');
   } catch { return String(d); }
 }
-
-// ─── Risk config ──────────────────────────────────────────────────────────────
-
-const RISK_CONFIG: Record<VacationRisk, { label: string; text: string; bg: string }> = {
-  VENCIDA:  { label: 'Vencida',   text: 'text-ds-danger dark:text-ds-danger',      bg: 'bg-ds-danger-bg dark:bg-ds-danger'      },
-  CRITICA:  { label: 'Crítica',   text: 'text-ds-warn dark:text-ds-warn', bg: 'bg-ds-warn-bg dark:bg-ds-warn' },
-  ATENCAO:  { label: 'Atenção',   text: 'text-ds-warn dark:text-ds-warn', bg: 'bg-ds-warn-bg dark:bg-ds-warn' },
-  EM_DIA:   { label: 'Em dia',    text: 'text-ds-ok dark:text-ds-ok',   bg: 'bg-ds-ok-bg dark:bg-ds-ok'   },
-};
 
 // ─── Vacation record status config ────────────────────────────────────────────
 
@@ -251,6 +246,98 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onRevi
   );
 }
 
+// ─── Parcela do período concessivo ────────────────────────────────────────────
+
+interface ParcelRowProps {
+  record: DPVacationRecord;
+  label: string;
+  employeeName: string;
+  today: Date;
+  canEdit: boolean;
+  canApprove: boolean;
+  hasWorkflow: boolean;
+  onOpenWorkflow: () => void;
+  onEdit: (r: DPVacationRecord) => void;
+  onDelete: (r: DPVacationRecord) => void;
+  onReview: (r: DPVacationRecord) => void;
+}
+
+function ParcelRow({ record, label, employeeName, today, canEdit, canApprove, hasWorkflow, onOpenWorkflow, onEdit, onDelete, onReview }: ParcelRowProps) {
+  const start = record.startDate ? parseISO(record.startDate) : null;
+  const end = record.endDate ? parseISO(record.endDate) : null;
+  const pending = record.status === 'PENDING' || record.status === 'PLANNED';
+  const status = pending
+    ? { label: 'Aguardando aprovação', tone: 'warn' as const }
+    : start && end && start <= today && end >= today
+      ? { label: 'Em gozo agora', tone: 'info' as const }
+      : end && end < today
+        ? { label: 'Gozada', tone: 'ok' as const }
+        : { label: 'Agendada', tone: 'info' as const };
+  const workflow = record.workflow;
+  const active = workflow?.status === 'active';
+  const summary = active && workflow ? workflowOperationalSummary(workflow, employeeName) : null;
+  const stageIndex = active && workflow
+    ? Math.max(0, VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === vacationWorkflowDisplayStageId(workflow.currentStage)))
+    : -1;
+  const waitingExternal = Boolean(summary && !['RH', 'Sistema'].includes(summary.owner));
+
+  return (
+    <div className="grid grid-cols-[110px_minmax(150px,1fr)_minmax(220px,1.7fr)_auto] items-center gap-3.5 border-t border-ds-divider px-[18px] py-3">
+      <span>
+        <span className="block text-[13px] font-extrabold text-ds-ink">{label}</span>
+        <span className="block text-[11.5px] text-ds-ink-muted">{record.days} dias</span>
+      </span>
+      <span>
+        <span className="block font-ds-mono text-[12.5px] font-bold text-ds-ink">
+          {record.recordType === 'gozo' ? `${fmtDate(record.startDate)} a ${fmtDate(record.endDate)}` : 'Venda de 1/3'}
+        </span>
+        <VacationPill tone={status.tone} className="mt-1">{status.label}</VacationPill>
+      </span>
+      <span className="min-w-0">
+        {summary ? (
+          <>
+            <VacationStageDots current={stageIndex + 1} waitingExternal={waitingExternal} />
+            <span className="mt-1 block text-[12.5px] font-extrabold text-ds-ink">
+              Etapa {stageIndex + 1} de 6 · {VACATION_WORKFLOW_DISPLAY_STAGE_META[stageIndex].short}
+            </span>
+            <span className="block text-[11.5px] text-ds-ink-muted">{summary.action} · com {summary.owner}</span>
+          </>
+        ) : workflow?.status === 'completed' ? (
+          <span className="text-[12px] font-semibold text-ds-ink-muted">Etapas concluídas</span>
+        ) : (
+          <span className="text-[12px] font-semibold text-ds-ink-muted">—</span>
+        )}
+      </span>
+      <span className="flex items-center justify-end gap-1.5">
+        {canApprove && pending ? (
+          <Button type="button" variant="primary-modal" size="xs" onClick={() => onReview(record)}>Revisar e decidir</Button>
+        ) : null}
+        {hasWorkflow ? (
+          <Button type="button" variant="ds-secondary" size="xs" onClick={onOpenWorkflow}>Ver etapas</Button>
+        ) : null}
+        {canEdit ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ds-ghost" size="xs" aria-label={`Mais ações da ${label}`}>
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(record)}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />Editar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDelete(record)} className="text-destructive focus:text-destructive">
+                <Trash2 className="mr-2 h-3.5 w-3.5" />Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 // ─── Main Profile Component ───────────────────────────────────────────────────
 
 interface DPFeriasProfileProps {
@@ -281,6 +368,7 @@ export function DPFeriasProfile({
   const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(
     initialWorkflowVacationId ?? null,
   );
+  const [workflowDrawerOpen, setWorkflowDrawerOpen] = useState(Boolean(initialWorkflowVacationId));
   const [noticeBusy, setNoticeBusy] = useState<'generate' | 'validate' | 'open' | 'send' | 'sync' | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -360,12 +448,6 @@ export function DPFeriasProfile({
     () => concessiveCycle ?? cycles.find(cycle => cycle.records.length > 0),
     [concessiveCycle, cycles],
   );
-  const cycleCounts = useMemo(() => ({
-    acquisition: cycles.filter(cycle => cycle.status === 'AQUISITIVO').length,
-    concessive: cycles.filter(cycle => !['AQUISITIVO', 'GOZADO', 'VENCIDO'].includes(cycle.status)).length,
-    closed: cycles.filter(cycle => cycle.status === 'GOZADO').length,
-    overdue: cycles.filter(cycle => cycle.status === 'VENCIDO').length,
-  }), [cycles]);
   const defaultRegistrationCycle = useMemo(
     () => cycles.find(cycle => cycle.status !== 'AQUISITIVO' && cycle.balance > 0),
     [cycles],
@@ -426,15 +508,19 @@ export function DPFeriasProfile({
           : (right.startDate ?? '').localeCompare(left.startDate ?? '');
       });
   }, [userVacations, workflowCycle]);
-  const selectedWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId)
-    ?? workflowVacations[0];
+  // O painel de etapas mostra só a parcela escolhida; ao concluir, a trilha sai da lista e o painel fecha em vez de
+  // abrir outro registro com as mesmas datas.
+  const drawerWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId);
+  const selectedWorkflowVacation = drawerWorkflowVacation ?? workflowVacations[0];
 
   React.useEffect(() => {
     if (!workflowVacations.length) {
+      setWorkflowDrawerOpen(false);
       setSelectedWorkflowVacationId(null);
       return;
     }
     if (!workflowVacations.some(vacation => vacation.id === selectedWorkflowVacationId)) {
+      if (selectedWorkflowVacationId) setWorkflowDrawerOpen(false);
       setSelectedWorkflowVacationId(workflowVacations[0].id);
     }
   }, [selectedWorkflowVacationId, workflowVacations]);
@@ -723,304 +809,350 @@ export function DPFeriasProfile({
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <BackButton fallbackHref="/dashboard/dp/ferias" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarImage src={user.avatarUrl} />
-            <AvatarFallback>{initials(user.username)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold truncate">{user.username}</h1>
-            {admDate && (
-              <p className="text-sm text-muted-foreground">
-                Admissão: {fmtDate(admDate)}
-              </p>
-            )}
-          </div>
-        </div>
-        {canEdit && defaultRegistrationCycle && workflowVacations.length > 0 && (
-          <Button size="sm" onClick={() => openVacationEditor()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Registrar férias
-          </Button>
-        )}
-      </div>
+  const today = startOfDay(new Date());
+  const shownConcessive = concessiveCycle
+    ?? cycles.find(cycle => cycle.status === 'GOZADO' && cycle.concessivePeriod.end >= today);
+  const acquisitiveCycle = cycles.find(cycle => cycle.status === 'AQUISITIVO');
+  const pastCycles = cycles.filter(cycle => cycle !== shownConcessive && cycle.status !== 'AQUISITIVO');
+  const enjoyments = userVacations.filter(record => (
+    record.recordType === 'gozo' && record.status !== 'REJECTED' && record.startDate && record.endDate
+  ));
+  const onVacation = enjoyments.find(record => parseISO(record.startDate!) <= today && parseISO(record.endDate!) >= today);
+  const nextVacation = enjoyments
+    .filter(record => parseISO(record.startDate!) > today)
+    .sort((left, right) => left.startDate!.localeCompare(right.startDate!))[0];
+  const nowText = onVacation
+    ? `De férias de ${fmtDate(onVacation.startDate)} a ${fmtDate(onVacation.endDate)} · retorna em ${fmtDate(onVacation.returnDate)}.`
+    : nextVacation
+      ? `Trabalhando. Próximas férias a partir de ${fmtDate(nextVacation.startDate)}.`
+      : 'Trabalhando. Nenhuma férias marcada.';
+  const openTrails = userVacations
+    .filter(record => record.workflow?.status === 'active' && record.status !== 'REJECTED')
+    .map(record => ({ record, summary: workflowOperationalSummary(record.workflow!, user.username) }));
+  const hrTrail = openTrails.find(trail => trail.summary.owner === 'RH');
+  const externalTrail = openTrails.find(trail => !['RH', 'Sistema'].includes(trail.summary.owner));
+  // Sem ação pendente a faixa mostra só "Hoje": saldo, prazo e próximo direito já estão nos chips do cabeçalho.
+  let todo: { text: string; tone: BandTone } | null = null;
+  if (hrTrail) {
+    todo = { text: `${hrTrail.summary.action} · férias de ${fmtDate(hrTrail.record.startDate)}.`, tone: 'info' };
+  } else if (externalTrail) {
+    todo = { text: `Aguardando ${externalTrail.summary.owner}: ${externalTrail.summary.action.toLowerCase()} · férias de ${fmtDate(externalTrail.record.startDate)}.`, tone: 'warn' };
+  } else if (concessiveCycle && concessiveCycle.balance > 0 && concessiveNoticeLimit) {
+    todo = {
+      text: `Agendar ${concessiveCycle.balance} dias até ${fmtDate(concessiveCycle.concessivePeriod.end)}. Para dar o aviso a tempo, marque até ${fmtDate(concessiveNoticeLimit.date)}.`,
+      tone: concessiveNoticeLimit.daysLeft <= 60 ? 'danger' : 'warn',
+    };
+  }
+  const nextEntitlement = acquisitiveCycle ? addDays(acquisitiveCycle.acquisitivePeriod.end, 1) : null;
+  const canSchedule = canEdit && Boolean(defaultRegistrationCycle);
+  const scheduleHint = defaultRegistrationCycle
+    ? undefined
+    : nextEntitlement ? `Sem saldo agora · o próximo direito libera em ${fmtDate(nextEntitlement)}` : 'Sem saldo para agendar';
+  const concessiveRecords = (shownConcessive?.records ?? [])
+    .filter(record => record.status !== 'REJECTED')
+    .sort((left, right) => (left.startDate ?? '').localeCompare(right.startDate ?? ''));
+  const concessiveDaysLeft = shownConcessive ? differenceInCalendarDays(shownConcessive.concessivePeriod.end, today) : 0;
+  const concessiveUrgent = Boolean(shownConcessive && shownConcessive.balance > 0 && concessiveDaysLeft <= 120);
+  const enjoyedDays = concessiveRecords
+    .filter(record => record.recordType === 'gozo' && record.endDate && parseISO(record.endDate) < today)
+    .reduce((total, record) => total + record.days, 0);
+  const acquisitiveProgress = acquisitiveCycle
+    ? Math.max(0, Math.min(100, Math.round(
+        differenceInCalendarDays(today, acquisitiveCycle.acquisitivePeriod.start)
+        / Math.max(1, differenceInCalendarDays(acquisitiveCycle.acquisitivePeriod.end, acquisitiveCycle.acquisitivePeriod.start)) * 100,
+      )))
+    : 0;
+  const workflowIds = new Set(workflowVacations.map(vacation => vacation.id));
+  const openWorkflow = (vacationId: string) => {
+    setSelectedWorkflowVacationId(vacationId);
+    setWorkflowDrawerOpen(true);
+  };
+  let parcelNumber = 0;
+  const parcelLabels = new Map(concessiveRecords.map(record => [
+    record.id,
+    record.recordType === 'gozo' ? `Parcela ${++parcelNumber}` : 'Abono pecuniário',
+  ]));
+  const documentGroups = concessiveRecords
+    .filter(record => record.recordType === 'gozo' && record.workflow)
+    .slice()
+    .reverse()
+    .map(record => {
+      const workflow = record.workflow!;
+      const notice = workflow.notice.status === 'signed'
+        ? { detail: 'Assinado', tone: 'ok' as const }
+        : workflow.notice.status === 'sent' ? { detail: 'Aguardando assinatura', tone: 'warn' as const } : { detail: 'Ainda não assinado', tone: 'neutral' as const };
+      const receipt = workflow.receiptSignature.status === 'signed'
+        ? { detail: 'Assinado', tone: 'ok' as const }
+        : workflow.receiptSignature.status === 'sent' ? { detail: 'Aguardando assinatura', tone: 'warn' as const } : { detail: 'Assina depois do pagamento', tone: 'neutral' as const };
+      return { record, notice, receipt };
+    });
 
-      <DPVacationWorkflowPanel
-        records={workflowVacations}
-        registrationCycle={defaultRegistrationCycle}
-        selectedId={selectedWorkflowVacationId}
-        canEdit={canEdit}
-        canApprove={canApprove}
-        onRegister={() => openVacationEditor()}
-        onSelect={setSelectedWorkflowVacationId}
-        onEdit={openVacationEdit}
-        onApprove={setDecisionVacation}
-        onGenerateNotice={handleGenerateNotice}
-        onValidateNotice={handleValidateNotice}
-        onOpenNotice={handleOpenNotice}
-        onSendNotice={handleSendNotice}
-        onSyncNotice={handleSyncNotice}
-        noticeBusy={noticeBusy}
-        workflowBusy={workflowBusy}
-        onSendAccountant={(vacation) => handleWorkflowAction(vacation, 'accountant', { action: 'send_accountant' }, 'Solicitação enviada à contabilidade.')}
-        onSelectReceiptDocument={(vacation, documentId) => handleWorkflowAction(
-          vacation,
-          `select-receipt-${documentId}`,
-          { action: 'select_receipt_document', documentId },
-          'Recibo principal confirmado pelo RH.',
+  return (
+    <div className="space-y-4">
+      <div>
+        <BackButton fallbackHref="/dashboard/dp/ferias" label="Férias" variant="outline" size="sm" />
+      </div>
+      <PageHero
+        kicker="Férias · Colaborador"
+        title={user.username}
+        leading={(
+          <Avatar className="h-14 w-14 shrink-0 ring-2 ring-white/15">
+            <AvatarImage src={user.avatarUrl || undefined} alt={user.username} className="object-cover" />
+            <AvatarFallback className="bg-white/10 text-[16px] font-extrabold text-ds-on-dark">
+              {user.username.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')}
+            </AvatarFallback>
+          </Avatar>
         )}
-        onDiscardReceiptDocument={(vacation, documentId, reason) => handleWorkflowAction(
-          vacation,
-          `discard-receipt-${documentId}`,
-          { action: 'discard_receipt_document', documentId, reason },
-          'Arquivo de recibo descartado.',
+        subtitle={[user.jobRoleName, admDate ? `admissão em ${fmtDate(admDate)}` : null].filter(Boolean).join(' · ')}
+        actions={canEdit ? (
+          <span title={scheduleHint}>
+            <Button type="button" variant="primary-page" size="md" disabled={!canSchedule} onClick={() => openVacationEditor()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Agendar férias
+            </Button>
+          </span>
+        ) : null}
+        chips={(
+          <>
+            <HeroChip value={shownConcessive ? `${Math.max(0, shownConcessive.balance)}d` : '—'} label="saldo a agendar" />
+            <HeroChip value={shownConcessive ? fmtDate(shownConcessive.concessivePeriod.end) : '—'} label="conceder até" tone={concessiveUrgent ? 'danger' : 'neutral'} />
+            {nextEntitlement ? <HeroChip value={fmtDate(nextEntitlement)} label="próximo direito" /> : null}
+          </>
         )}
-        onReviewReceipt={(vacation, review) => handleWorkflowAction(
-          vacation,
-          review.decision === 'approved' ? 'approve-receipt' : 'correct-receipt',
-          { action: 'review_receipt', ...review },
-          review.decision === 'approved' ? 'Recibo aprovado.' : 'Correção solicitada à contabilidade.',
-        )}
-        onPreparePayment={(vacation) => handleWorkflowAction(vacation, 'prepare-payment', { action: 'prepare_payment' }, 'Pagamento preparado para o Financeiro.')}
-        onSyncPayment={(vacation) => handleWorkflowAction(vacation, 'sync-payment', { action: 'sync_payment' }, 'Situação do pagamento atualizada.')}
-        onRetryReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'retry-receipt-signature', { action: 'retry_receipt_signature' }, 'Recibo enviado para assinatura.')}
-        onSyncReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'sync-receipt-signature', { action: 'sync_receipt_signature' }, 'Assinatura do recibo atualizada.')}
-        onFinalizeWorkflow={(vacation) => handleWorkflowAction(vacation, 'finalize', { action: 'finalize_workflow' }, 'Trilha de férias finalizada.')}
-        onOpenWorkflowAsset={handleOpenWorkflowAsset}
-        onOpenReceiptDocument={handleOpenReceiptDocument}
-        onCancel={handleCancel}
       />
 
-      <section className="overflow-hidden rounded-[18px] border bg-card shadow-xs">
-        <div className="border-b px-4 py-3.5">
-          <p className="text-sm font-black">Ciclos e histórico</p>
-          <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
-            Consulte o prazo concessivo, os saldos, os lançamentos e a auditoria em um único bloco.
-          </p>
-        </div>
+      {health.status === 'INVALIDO' ? (
+        <p className="rounded-ds-card border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-[13px] font-semibold text-ds-alert-ink">
+          Data de admissão não cadastrada. Configure o perfil do colaborador para calcular os períodos de férias.
+        </p>
+      ) : (
+        <PersonStatusBar today={nowText} todayTone={onVacation ? 'info' : 'neutral'} action={todo} />
+      )}
 
-        {selectedWorkflowVacation ? (
-          <details className="group border-b bg-background">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[12px] font-black text-ds-ink-2 marker:content-none">
-              <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Histórico auditável</span>
-              <span className="text-[10px] font-semibold text-ds-ink-muted group-open:hidden">Mostrar</span>
-              <span className="hidden text-[10px] font-semibold text-ds-ink-muted group-open:inline">Ocultar</span>
-            </summary>
-            <div className="border-t border-ds-divider">
-              <DPVacationAuditTimeline
-                vacationId={selectedWorkflowVacation.id}
-                version={selectedWorkflowVacation.workflow?.updatedAt ?? String(selectedWorkflowVacation.updatedAt ?? '')}
-                embedded
-              />
-            </div>
-          </details>
-        ) : null}
+      {shownConcessive ? <VacationRuleTimeline cycle={shownConcessive} today={today} /> : null}
 
-        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
-
-        {/* Left: Health Summary */}
-        <div className="lg:col-span-1 space-y-4">
-          <Card className="border-0 bg-muted/25 shadow-none">
-            <CardContent className="space-y-2.5 p-3">
-              {health.status === 'INVALIDO' && (
-                <p className="text-sm text-muted-foreground">
-                  Data de admissão não cadastrada. Configure o perfil do colaborador.
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-4">
+          <section aria-label="Período concessivo" className="rounded-ds-card-lg border border-ds-border bg-ds-surface">
+            <div className="flex flex-wrap items-start gap-3 px-[18px] pb-3 pt-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Período concessivo · as férias que precisam ser concedidas</p>
+                <p className="mt-1 font-ds-mono text-[15px] font-bold text-ds-ink">
+                  {shownConcessive ? `${fmtDate(shownConcessive.acquisitivePeriod.start)} – ${fmtDate(shownConcessive.acquisitivePeriod.end)}` : '—'}
                 </p>
-              )}
-
-              {health.status === 'CONCESSIVO' && (() => {
-                const risk = health.details.risk;
-                const rcfg = RISK_CONFIG[risk];
-                return (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-muted-foreground">Período Concessivo</p>
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${rcfg.bg} ${rcfg.text}`}>
-                        {rcfg.label}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Prazo</span>
-                        <span className="font-medium">{fmtDate(health.details.deadline)}</span>
-                      </div>
-                      <Progress
-                        value={health.details.progress}
-                        className={`h-2 ${RISK_PROGRESS_CLASS[risk]}`}
-                      />
-                    </div>
-
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>Aquisitivo: {fmtDate(health.details.acquisitivePeriod.start)} → {fmtDate(health.details.acquisitivePeriod.end)}</p>
-                    </div>
-
-                    <Badge variant="secondary" className="text-xs">
-                      {CYCLE_STATUS_CONFIG[health.cycleStatus]?.label ?? health.cycleStatus}
-                    </Badge>
-                  </>
-                );
-              })()}
-
-              {health.status === 'AQUISITIVO' && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-muted-foreground">Período Aquisitivo</p>
-                    <Badge variant="secondary" className="text-xs">Em Aquisição</Badge>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progresso</span>
-                      <span>{Math.round(health.details.progress)}%</span>
-                    </div>
-                    <Progress value={health.details.progress} className="h-2" />
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    {fmtDate(health.details.start)} → {fmtDate(health.details.end)}
+              </div>
+              {shownConcessive ? (
+                <div className="text-right">
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Conceder até</p>
+                  <p className={cn('mt-1 font-ds-mono text-[13px] font-bold', concessiveUrgent ? 'text-ds-danger' : 'text-ds-ink')}>
+                    {fmtDate(shownConcessive.concessivePeriod.end)} · {concessiveDaysLeft < 0 ? 'vencido' : `em ${concessiveDaysLeft} dias`}
                   </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Summary stats */}
-          <Card className="border-0 bg-muted/25 shadow-none">
-            <CardContent className="p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ciclos</p>
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-info" />Em aquisição</span>
-                  <span className="font-semibold tabular-nums">{cycleCounts.acquisition}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-warn" />Em período concessivo</span>
-                  <span className="font-semibold tabular-nums">{cycleCounts.concessive}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-ok" />Encerrados</span>
-                  <span className="font-semibold tabular-nums">{cycleCounts.closed}</span>
-                </div>
-                {cycleCounts.overdue > 0 ? (
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2 text-ds-danger"><span className="h-2 w-2 rounded-full bg-ds-danger" />Vencidos</span>
-                    <span className="font-semibold tabular-nums text-ds-danger">{cycleCounts.overdue}</span>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="my-3 border-t" />
-
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Férias do ciclo concessivo</p>
-                {concessiveCycle ? <span className="text-[10px] font-bold text-muted-foreground">{concessiveCycle.id}</span> : null}
-              </div>
-              {concessiveCycle ? (
-                <div className="mt-3 space-y-2">
-                  <div className="flex justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Períodos lançados</span>
-                    <span className="font-semibold tabular-nums">{concessiveCycle.records.length}</span>
-                  </div>
-                  <div className="flex justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Dias distribuídos</span>
-                    <span className="font-semibold tabular-nums">{concessiveCycle.takenDays}d</span>
-                  </div>
-                  <div className="flex justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Saldo a programar</span>
-                    <span className="font-semibold tabular-nums">{Math.max(0, concessiveCycle.balance)}d</span>
-                  </div>
-                  {concessiveNoticeLimit ? (
-                    <div className={`mt-3 rounded-xl border px-3 py-2.5 ${
-                      concessiveNoticeLimit.daysLeft < 0
-                        ? 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger'
-                        : concessiveNoticeLimit.daysLeft <= 60
-                          ? 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn'
-                          : 'border-ds-info-bg bg-ds-info-bg text-ds-info dark:border-ds-info-bg dark:bg-ds-info dark:text-ds-info'
-                    }`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <span>
-                          <span className="block text-[10px] font-black uppercase tracking-[0.08em]">Data-limite do aviso</span>
-                          <span className="mt-0.5 block text-sm font-black tabular-nums">{fmtDate(concessiveNoticeLimit.date)}</span>
+              ) : null}
+            </div>
+            {shownConcessive ? (
+              <>
+                <div className="px-[18px] pb-3">
+                  <div className="flex h-[26px] gap-[3px]">
+                    {concessiveRecords.map(record => {
+                      const enjoyed = Boolean(record.endDate && parseISO(record.endDate) < today);
+                      return (
+                        <span
+                          key={record.id}
+                          className={cn('grid place-items-center overflow-hidden whitespace-nowrap rounded-[7px] text-[11px] font-extrabold text-white', enjoyed ? 'bg-ds-ok' : 'bg-ds-info')}
+                          style={{ flex: `${record.days} 1 0` }}
+                        >
+                          {(parcelLabels.get(record.id) ?? '').replace('Parcela ', 'P')} · {record.days}d
                         </span>
-                        <span className="rounded-full bg-ds-surface px-2 py-1 text-[10px] font-black dark:bg-black/15">
-                          {concessiveNoticeLimit.daysLeft < 0
-                            ? `${Math.abs(concessiveNoticeLimit.daysLeft)}d em atraso`
-                            : concessiveNoticeLimit.daysLeft === 0
-                              ? 'Vence hoje'
-                              : `${concessiveNoticeLimit.daysLeft} dias`}
-                        </span>
-                      </div>
-                      <details className="group mt-2">
-                        <summary className="cursor-pointer list-none text-[10.5px] font-bold underline underline-offset-2 marker:content-none">
-                          Entenda esta data
-                        </summary>
-                        <p className="mt-2 text-[10.5px] font-medium leading-relaxed opacity-80">
-                          É a última data estimada para comunicar as férias com 30 dias de antecedência. O cálculo reserva os {concessiveNoticeLimit.remainingDays} dias ainda não distribuídos antes de {fmtDate(concessiveCycle.concessivePeriod.end)}, fim do período concessivo.
-                        </p>
-                      </details>
-                    </div>
-                  ) : null}
+                      );
+                    })}
+                    {shownConcessive.balance > 0 || concessiveRecords.length === 0 ? (
+                      <span className="grid place-items-center overflow-hidden whitespace-nowrap rounded-[7px] bg-ds-neutral-bg text-[11px] font-extrabold text-ds-ink-2" style={{ flex: `${Math.max(1, shownConcessive.balance)} 1 0` }}>
+                        Saldo · {Math.max(0, shownConcessive.balance)}d
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 text-[12px] font-semibold text-ds-ink-muted">
+                    30 dias de direito · {enjoyedDays} gozados · {Math.max(0, shownConcessive.takenDays - enjoyedDays)} agendados · {Math.max(0, shownConcessive.balance)} de saldo
+                  </p>
                 </div>
-              ) : (
-                <p className="mt-3 text-xs font-medium text-muted-foreground">Nenhum ciclo em período concessivo.</p>
-              )}
-            </CardContent>
-          </Card>
+                {concessiveRecords.length === 0 ? (
+                  <p className="border-t border-ds-divider px-[18px] py-3 text-[13px] text-ds-ink-muted">Nenhuma parcela agendada. Use Agendar férias no topo.</p>
+                ) : concessiveRecords.map(record => (
+                  <ParcelRow
+                    key={record.id}
+                    record={record}
+                    label={parcelLabels.get(record.id) ?? 'Parcela'}
+                    employeeName={user.username}
+                    today={today}
+                    canEdit={canEdit}
+                    canApprove={canApprove}
+                    hasWorkflow={workflowIds.has(record.id)}
+                    onOpenWorkflow={() => openWorkflow(record.id)}
+                    onEdit={openVacationEdit}
+                    onDelete={setDeleteTarget}
+                    onReview={setDecisionVacation}
+                  />
+                ))}
+              </>
+            ) : (
+              <p className="px-[18px] pb-4 text-[13px] text-ds-ink-muted">Ainda não há período concessivo: o primeiro período aquisitivo não completou.</p>
+            )}
+          </section>
+
+          <section aria-label="Período aquisitivo" className="flex flex-wrap items-center gap-4 rounded-ds-card-lg border border-ds-border bg-ds-surface px-[18px] py-4">
+            <div className="min-w-0 flex-[1_1_260px]">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Período aquisitivo · ganhando o próximo direito</p>
+              <p className="mt-1 font-ds-mono text-[15px] font-bold text-ds-ink">
+                {acquisitiveCycle ? `${fmtDate(acquisitiveCycle.acquisitivePeriod.start)} – ${fmtDate(acquisitiveCycle.acquisitivePeriod.end)}` : '—'}
+              </p>
+            </div>
+            <div className="min-w-0 flex-[1_1_260px]">
+              <span className="block h-2 overflow-hidden rounded-full bg-ds-neutral-bg">
+                <span className="block h-full rounded-full bg-ds-info" style={{ width: `${acquisitiveProgress}%` }} />
+              </span>
+              <p className="mt-1.5 text-[12px] font-semibold text-ds-ink-muted">
+                {acquisitiveCycle
+                  ? `${acquisitiveProgress}% do período · completa em ${fmtDate(acquisitiveCycle.acquisitivePeriod.end)} · 30 dias previstos, agendáveis depois disso`
+                  : 'Sem período em aquisição'}
+              </p>
+            </div>
+          </section>
+
+          <section aria-label="Períodos anteriores" className="rounded-ds-card-lg border border-ds-border bg-ds-surface">
+            <div className="flex flex-wrap items-center gap-2 px-[18px] pb-2 pt-3.5">
+              <h2 className="text-[14px] font-extrabold text-ds-ink">Períodos anteriores</h2>
+              <span className="text-[12px] text-ds-ink-muted">
+                {pastCycles.length ? `${pastCycles.length} desde ${admDate ? fmtDate(admDate) : 'a admissão'}` : 'Nenhum período anterior'}
+              </span>
+              {vacationHistoryCursor ? (
+                <Button type="button" variant="ds-secondary" size="xs" className="ml-auto" disabled={vacationHistoryLoading} onClick={() => void loadVacationHistory(vacationHistoryCursor)}>
+                  {vacationHistoryLoading ? 'Carregando…' : 'Carregar períodos mais antigos'}
+                </Button>
+              ) : null}
+            </div>
+            {vacationsLoading ? (
+              <p className="px-[18px] pb-4 text-[13px] text-ds-ink-muted">Carregando períodos…</p>
+            ) : pastCycles.map(cycle => (
+              <details key={cycle.id} className="group border-t border-ds-divider">
+                <summary className="grid cursor-pointer list-none grid-cols-[minmax(200px,1fr)_100px_150px_minmax(150px,auto)_16px] items-center gap-3 px-[18px] py-3 marker:content-none hover:bg-ds-muted">
+                  <span className="font-ds-mono text-[12.5px] font-bold text-ds-ink">{fmtDate(cycle.acquisitivePeriod.start)} – {fmtDate(cycle.acquisitivePeriod.end)}</span>
+                  <span className="text-[13px] font-bold text-ds-ink-2">{cycle.takenDays} dias</span>
+                  <span className="font-ds-mono text-[12.5px] font-bold text-ds-ink-2">até {fmtDate(cycle.concessivePeriod.end)}</span>
+                  <VacationPill tone={cycle.status === 'GOZADO' ? 'ok' : cycle.status === 'VENCIDO' ? 'danger' : 'warn'}>
+                    {CYCLE_STATUS_CONFIG[cycle.status].label}
+                  </VacationPill>
+                  <span aria-hidden="true" className="text-ds-ink-faint transition-transform group-open:rotate-90">›</span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <CycleCard
+                    cycle={cycle}
+                    canEdit={canEdit}
+                    canApprove={canApprove}
+                    onAdd={openVacationEditor}
+                    onEdit={openVacationEdit}
+                    onDelete={setDeleteTarget}
+                    onReview={setDecisionVacation}
+                  />
+                </div>
+              </details>
+            ))}
+          </section>
         </div>
 
-        {/* Right: Cycle History */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Histórico de Ciclos
-            </p>
-            {vacationHistoryCursor ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={vacationHistoryLoading}
-                onClick={() => void loadVacationHistory(vacationHistoryCursor)}
-              >
-                {vacationHistoryLoading ? 'Carregando...' : 'Carregar períodos anteriores'}
-              </Button>
-            ) : null}
-          </div>
+        <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
+          <section aria-label="Documentos de férias" className="rounded-ds-card-lg border border-ds-border bg-ds-surface">
+            <div className="px-4 pb-2 pt-3.5">
+              <h2 className="text-[14px] font-extrabold text-ds-ink">Documentos de férias</h2>
+              <p className="mt-0.5 text-[12px] text-ds-ink-muted">Por parcela do período concessivo, mais recente primeiro</p>
+            </div>
+            {documentGroups.length === 0 ? (
+              <p className="border-t border-ds-divider px-4 py-3 text-[12.5px] text-ds-ink-muted">Nenhum documento ainda.</p>
+            ) : documentGroups.map(({ record, notice, receipt }) => (
+              <div key={record.id} className="border-t border-ds-divider px-4 py-2.5">
+                <p className="text-[12.5px] font-extrabold text-ds-ink">{parcelLabels.get(record.id)} · {fmtDate(record.startDate)} a {fmtDate(record.endDate)}</p>
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-[12.5px] font-bold text-ds-ink-2">Aviso de férias</span>
+                    <VacationPill tone={notice.tone}>{notice.detail}</VacationPill>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-[12.5px] font-bold text-ds-ink-2">Recibo de férias</span>
+                    <VacationPill tone={receipt.tone}>{receipt.detail}</VacationPill>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
+          {selectedWorkflowVacation ? (
+            <details className="rounded-ds-card-lg border border-ds-border bg-ds-surface">
+              <summary className="cursor-pointer list-none px-4 py-3.5 text-[14px] font-extrabold text-ds-ink marker:content-none">Histórico auditável</summary>
+              <div className="border-t border-ds-divider">
+                <DPVacationAuditTimeline
+                  vacationId={selectedWorkflowVacation.id}
+                  version={selectedWorkflowVacation.workflow?.updatedAt ?? String(selectedWorkflowVacation.updatedAt ?? '')}
+                  embedded
+                />
+              </div>
+            </details>
+          ) : null}
+        </aside>
+      </div>
 
-          {vacationsLoading ? (
-            <div className="space-y-3">
-              {[...Array(2)].map((_, i) => (
-                <div key={i} className="h-32 rounded-xl border bg-muted/20 animate-pulse" />
-              ))}
-            </div>
-          ) : cycles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2 rounded-xl border border-dashed">
-              <CalendarDays className="h-8 w-8 opacity-30" />
-              <p className="text-sm">Data de admissão necessária para calcular ciclos.</p>
-            </div>
-          ) : (
-            cycles.map(cycle => (
-              <CycleCard
-                key={cycle.id}
-                cycle={cycle}
-                canEdit={canEdit}
-                canApprove={canApprove}
-                onAdd={openVacationEditor}
-                onEdit={openVacationEdit}
-                onDelete={setDeleteTarget}
-                onReview={setDecisionVacation}
-              />
-            ))
+      <SidePanel
+        open={workflowDrawerOpen && Boolean(drawerWorkflowVacation)}
+        onOpenChange={setWorkflowDrawerOpen}
+        kicker={drawerWorkflowVacation ? `Férias · ${parcelLabels.get(drawerWorkflowVacation.id) ?? 'Parcela'}` : 'Férias'}
+        title={user.username}
+        subtitle={drawerWorkflowVacation ? `${fmtDate(drawerWorkflowVacation.startDate)} a ${fmtDate(drawerWorkflowVacation.endDate)} · ${drawerWorkflowVacation.days} dias` : undefined}
+        className="w-[860px]"
+      >
+        <DPVacationWorkflowPanel
+          records={workflowVacations}
+          registrationCycle={defaultRegistrationCycle}
+          selectedId={selectedWorkflowVacationId}
+          canEdit={canEdit}
+          canApprove={canApprove}
+          onRegister={() => openVacationEditor()}
+          onSelect={setSelectedWorkflowVacationId}
+          onEdit={openVacationEdit}
+          onApprove={setDecisionVacation}
+          onGenerateNotice={handleGenerateNotice}
+          onValidateNotice={handleValidateNotice}
+          onOpenNotice={handleOpenNotice}
+          onSendNotice={handleSendNotice}
+          onSyncNotice={handleSyncNotice}
+          noticeBusy={noticeBusy}
+          workflowBusy={workflowBusy}
+          onSendAccountant={(vacation) => handleWorkflowAction(vacation, 'accountant', { action: 'send_accountant' }, 'Solicitação enviada à contabilidade.')}
+          onSelectReceiptDocument={(vacation, documentId) => handleWorkflowAction(
+            vacation,
+            `select-receipt-${documentId}`,
+            { action: 'select_receipt_document', documentId },
+            'Recibo principal confirmado pelo RH.',
           )}
-        </div>
-        </div>
-      </section>
+          onDiscardReceiptDocument={(vacation, documentId, reason) => handleWorkflowAction(
+            vacation,
+            `discard-receipt-${documentId}`,
+            { action: 'discard_receipt_document', documentId, reason },
+            'Arquivo de recibo descartado.',
+          )}
+          onReviewReceipt={(vacation, review) => handleWorkflowAction(
+            vacation,
+            review.decision === 'approved' ? 'approve-receipt' : 'correct-receipt',
+            { action: 'review_receipt', ...review },
+            review.decision === 'approved' ? 'Recibo aprovado.' : 'Correção solicitada à contabilidade.',
+          )}
+          onPreparePayment={(vacation) => handleWorkflowAction(vacation, 'prepare-payment', { action: 'prepare_payment' }, 'Pagamento preparado para o Financeiro.')}
+          onSyncPayment={(vacation) => handleWorkflowAction(vacation, 'sync-payment', { action: 'sync_payment' }, 'Situação do pagamento atualizada.')}
+          onRetryReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'retry-receipt-signature', { action: 'retry_receipt_signature' }, 'Recibo enviado para assinatura.')}
+          onSyncReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'sync-receipt-signature', { action: 'sync_receipt_signature' }, 'Assinatura do recibo atualizada.')}
+          onFinalizeWorkflow={(vacation) => handleWorkflowAction(vacation, 'finalize', { action: 'finalize_workflow' }, 'Trilha de férias finalizada.')}
+          onOpenWorkflowAsset={handleOpenWorkflowAsset}
+          onOpenReceiptDocument={handleOpenReceiptDocument}
+          onCancel={handleCancel}
+        />
+      </SidePanel>
 
       <Sheet
         open={Boolean(decisionVacation && decisionCycle)}

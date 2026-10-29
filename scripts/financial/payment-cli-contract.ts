@@ -105,6 +105,40 @@ export function validatePaymentCliAction(input: {
   }
 }
 
+export function validatePaymentCliCancellation(input: {
+  request: Record<string, unknown>;
+  amountCents: number;
+  currentScheduledFor: string;
+  replacementScheduledFor: string;
+  beneficiaryDocument: string;
+  expenseId: string;
+  barcode: string;
+  today?: string;
+}) {
+  const requestBarcode = record(input.request.barcodeSnapshot);
+  const today = input.today ?? new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  if (input.request.sourceType !== "expense_boleto"
+    || input.request.paymentRail !== "barcode"
+    || !["awaiting_bank_approval", "scheduled"].includes(String(input.request.status))
+    || typeof input.request.interRequestId !== "string" || !input.request.interRequestId
+    || input.request.supersededByPaymentRequestId
+    || !Number.isSafeInteger(input.amountCents) || input.amountCents <= 0
+    || Math.round(Number(input.request.amount) * 100) !== input.amountCents
+    || input.request.sourceId !== input.expenseId
+    || input.request.expenseId !== input.expenseId || !input.expenseId
+    || requestBarcode?.code !== input.barcode
+    || requestBarcode?.beneficiaryDocument !== input.beneficiaryDocument
+    || requestBarcode?.scheduledFor !== input.currentScheduledFor
+    || !validIsoDate(input.currentScheduledFor)
+    || !validIsoDate(input.replacementScheduledFor)
+    || input.replacementScheduledFor < today
+    || input.replacementScheduledFor > String(requestBarcode?.dueDate ?? "")) {
+    throw new PaymentCliError("A solicitação diverge do cancelamento e reenvio confirmados. Nenhuma ação foi feita.");
+  }
+}
+
 export function validateOverdueSettlementCliRevision(input: {
   request: Record<string, unknown>;
   principalAmountCents: number;

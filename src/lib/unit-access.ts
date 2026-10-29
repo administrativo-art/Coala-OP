@@ -1,8 +1,10 @@
 import type { UnitAccessScope, User } from '@/types';
+import { operationalUnitsOnDate } from '@/lib/operational-unit-periods';
 
 export type UnitAccessUser = Partial<Pick<
   User,
   | 'unitIds'
+  | 'operationalUnitPeriods'
   | 'assignedKioskIds'
   | 'unitAccessScope'
   | 'unitAccessUnitIds'
@@ -36,7 +38,7 @@ export function isUnitAccessScope(value: unknown): value is UnitAccessScope {
 
 export function getLinkedUnitIds(user: UnitAccessUser): string[] {
   return unique([
-    ...stringArray(user.unitIds),
+    ...operationalUnitsOnDate(user),
     ...stringArray(user.assignedKioskIds),
   ]);
 }

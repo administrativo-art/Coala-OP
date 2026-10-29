@@ -1,7 +1,15 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useContext, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { SidePanelHeaderTabsContext } from '@/components/patterns/side-panel';
 import Link from 'next/link';
+import { ContractChangeForm, contractFormChanged } from '@/components/dp/contract-change-form';
+import { ContractProbationDates } from '@/components/dp/contract-probation-dates';
+import { useEmployeeProfile } from '@/features/rh/hooks/useEmployeeProfile';
+import { getHrEmployeeId } from '@/lib/hr/person-link';
+import { OperationalUnitPeriodsField } from '@/components/dp/operational-unit-periods-field';
+import { operationalUnitsOnDate, operationalCivilDate, type OperationalUnitPeriod } from '@/lib/operational-unit-periods';
 import { useForm, Controller, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
@@ -15,20 +23,19 @@ import { useDP } from '@/components/dp-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
+import { Edit, Shield, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type UnitAccessScope, type User } from '@/types';
 import { normalizeUnitAccessScope } from '@/lib/unit-access';
+import { operationalSelectionForUser } from '@/lib/collaborator-operational-selection';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProfileManagementModal } from './profile-management-modal';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from './ui/scroll-area';
 import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from '@/lib/hr/termination-options';
 import {
   EMPLOYMENT_RELATIONSHIP_TYPES,
@@ -60,6 +67,11 @@ import {
 } from '@/lib/utils/vacation-logic';
 import { PageHeader } from '@/components/layout/page-header';
 import { InfoPopover } from '@/components/ui/info-popover';
+import { EditFormRow, EditRow, EditRowsGroup, EditSection } from '@/components/collaborator-edit-rows';
+import { OperationalKioskSummary, PdvAccessControl } from '@/components/dp/operational-pdv-summary';
+import { Segmented } from '@/components/patterns/segmented';
+import { StatusPill } from '@/components/ui/status-pill';
+import { hasActivePdvAccess } from '@/features/hr/lib/pdv-operational-unit-sync';
 
 function getAvatarUploadErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
@@ -147,40 +159,7 @@ function FieldHelpTooltip({ title, description }: { title: string; description: 
   );
 }
 
-function UserFormSection({
-  title,
-  description,
-  help,
-  compact,
-  children,
-}: {
-  title: string;
-  description?: string;
-  help?: string;
-  compact?: boolean;
-  children: ReactNode;
-}) {
-  if (compact) return <div className="space-y-2">{children}</div>;
-
-  return (
-    <section data-ui="form-section" className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface shadow-xs">
-      <header className="flex items-start justify-between gap-3 border-b border-ds-divider px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="text-lg font-extrabold tracking-tight text-ds-ink">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-ds-ink-muted">{description}</p> : null}
-        </div>
-        {help ? (
-          <InfoPopover title={title} contentClassName="w-[360px]">
-            <p>{help}</p>
-          </InfoPopover>
-        ) : null}
-      </header>
-      <div className="space-y-4 px-5 py-5">{children}</div>
-    </section>
-  );
-}
-
-type CollaboratorEditTab = 'identity' | 'journey' | 'units' | 'access';
+type CollaboratorEditTab = 'identity' | 'journey' | 'units';
 
 const UNIT_ACCESS_SCOPE_NOTES: Record<UnitAccessScope, string> = {
   linked: 'Vê e opera só as unidades marcadas em "Unidades de escala e operação"; se a lotação mudar, o acesso muda junto.',
@@ -190,36 +169,31 @@ const UNIT_ACCESS_SCOPE_NOTES: Record<UnitAccessScope, string> = {
 
 const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> = [
   { id: 'identity', label: 'Identificação' },
-  { id: 'journey', label: 'Cargo e jornada' },
+  { id: 'journey', label: 'Jornada' },
   { id: 'units', label: 'Unidades' },
-  { id: 'access', label: 'Acesso e rotinas' },
 ];
-
-/** Abas que dependem do módulo DP; sem `dp.view` o drawer mostra só identificação e acesso. */
-const DP_ONLY_EDIT_TABS = new Set<CollaboratorEditTab>(['journey', 'units']);
 
 const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
   username: 'identity',
   email: 'identity',
   avatarUrl: 'identity',
   employmentRelationshipType: 'identity',
-  jobRoleId: 'journey',
-  jobFunctionIds: 'journey',
+  employerUnitId: 'units',
+  jobRoleId: 'identity',
+  jobFunctionIds: 'identity',
   shiftDefinitionId: 'journey',
-  admissionDate: 'journey',
+  admissionDate: 'identity',
   birthDate: 'journey',
   assignedKioskIds: 'units',
   unitId: 'units',
   responsibleUnitIds: 'units',
   unitAccessScope: 'units',
   unitAccessUnitIds: 'units',
-  profileId: 'access',
-  registrationIdBizneo: 'access',
-  registrationIdPdv: 'access',
-  operacional: 'access',
-  participatesInGoals: 'access',
-  needsTransportVoucher: 'access',
-  transportVoucherValue: 'access',
+  profileId: 'journey',
+  registrationIdBizneo: 'identity',
+  registrationIdPdv: 'identity',
+  needsTransportVoucher: 'journey',
+  transportVoucherValue: 'journey',
 };
 
 type InactivationMode = 'temporary' | 'contract_termination';
@@ -313,10 +287,9 @@ const userSchema = z.object({
   email: z.string().email("O e-mail é inválido."),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   unitId: z.string().optional(),
+  employerUnitId: z.string().optional(),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
-  operacional: z.boolean().optional(),
-  participatesInGoals: z.boolean().optional(),
   // Departamento Pessoal
   registrationIdBizneo: z.string().optional(),
   registrationIdPdv: z.string().optional(),
@@ -333,13 +306,7 @@ const userSchema = z.object({
   shiftDefinitionId: z.string().optional(),
   needsTransportVoucher: z.boolean().optional(),
   transportVoucherValue: z.coerce.number().nonnegative().optional(),
-}).refine(data => {
-    // Quiosque obrigatório apenas para não-admins
-    if (data.profileId === 'admin') return true;
-    return data.assignedKioskIds.length > 0;
-}, {
-    message: 'Selecione pelo menos um quiosque.',
-    path: ['assignedKioskIds'],
+  pdvAccessEnabled: z.boolean().optional(),
 }).refine(data => data.profileId === 'admin' || Boolean(data.unitId), {
     message: 'Selecione a unidade principal do financeiro.',
     path: ['unitId'],
@@ -363,8 +330,6 @@ const USER_AUDIT_FIELDS = [
   'unitId',
   'unitIds',
   'assignedKioskIds',
-  'operacional',
-  'participatesInGoals',
   'registrationIdBizneo',
   'registrationIdPdv',
   'jobRoleId',
@@ -423,16 +388,19 @@ export function UserManagement({
   contextLabel = 'Gestão do colaborador',
   showTransportVoucher = false,
 }: UserManagementProps = {}) {
-  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
+  const { isDefaultAdmin, permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
   const { shiftDefinitions, shiftDefsLoading, vacations } = useDP();
   const { toast } = useToast();
-  
+
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
   const [activeEditTab, setActiveEditTab] = useState<CollaboratorEditTab>('identity');
+  const headerTabsSlot = useContext(SidePanelHeaderTabsContext);
+  const [contractChangeReason, setContractChangeReason] = useState('');
+  const [contractEffectiveDate, setContractEffectiveDate] = useState(operationalCivilDate);
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
@@ -461,6 +429,10 @@ export function UserManagement({
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
+  const [additionalOperationalUnitIds, setAdditionalOperationalUnitIds] = useState<string[]>([]);
+  const [additionalOperationalDirty, setAdditionalOperationalDirty] = useState(false);
+  const [pendingOperationalPeriods, setPendingOperationalPeriods] = useState<OperationalUnitPeriod[] | undefined>();
+  const [operationalPeriodsValid, setOperationalPeriodsValid] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedEditUserIdRef = useRef<string | null>(null);
 
@@ -471,10 +443,9 @@ export function UserManagement({
         email: '',
         profileId: '',
         unitId: '',
+        employerUnitId: '',
         assignedKioskIds: [],
         avatarUrl: '',
-        operacional: false,
-        participatesInGoals: false,
         registrationIdBizneo: '',
         registrationIdPdv: '',
         jobRoleId: '',
@@ -491,11 +462,13 @@ export function UserManagement({
     }
   });
 
+  const contractProfileState = useEmployeeProfile(editingUser ? getHrEmployeeId(editingUser) ?? editingUser.id : '');
+  const contractChanged = contractFormChanged(editingUser, form.watch(), timestampToDateInput(editingUser?.admissionDate));
   const isDrawer = presentation === 'drawer' && !createOnly;
 
-  const visibleEditTabs = permissions.dp?.view
-    ? COLLABORATOR_EDIT_TABS
-    : COLLABORATOR_EDIT_TABS.filter((tab) => !DP_ONLY_EDIT_TABS.has(tab.id));
+  const canEditUnits = Boolean(permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin);
+  const visibleEditTabs = COLLABORATOR_EDIT_TABS.filter((tab) =>
+    tab.id === 'identity' || (tab.id === 'units' ? canEditUnits : permissions.dp?.view));
   // Ler errors/dirtyFields aqui inscreve o render nas mudanças; o ponto na aba evita salvar sem ver o que mudou em outra aba.
   const editTabStatus = (tab: CollaboratorEditTab): 'error' | 'changed' | null => {
     const inTab = (field: string) => COLLABORATOR_EDIT_FIELD_TAB[field as keyof UserFormValues] === tab;
@@ -517,10 +490,6 @@ export function UserManagement({
     setActiveEditTab(nextTab.id);
     window.requestAnimationFrame(() => document.getElementById(`collaborator-edit-tab-${nextTab.id}`)?.focus());
   };
-
-  useEffect(() => {
-    onDirtyChange?.(form.formState.isDirty);
-  }, [form.formState.isDirty, onDirtyChange]);
 
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
@@ -600,14 +569,21 @@ export function UserManagement({
     () => selectedWorkUnits.map((unit) => unit.id),
     [selectedWorkUnits]
   );
+  const operationalUnitIds = useMemo(
+    () => [...new Set([...selectedWorkUnitIds, ...additionalOperationalUnitIds])],
+    [selectedWorkUnitIds, additionalOperationalUnitIds]
+  );
+  const operationalReconciliationPending = pendingOperationalPeriods !== undefined;
+  // Unidades que valem hoje, já com a nova vigência em edição: base dos quiosques e do PDV exibidos.
+  const currentOperationalUnitIds = useMemo(
+    () => editingUser
+      ? operationalUnitsOnDate({ ...editingUser, ...(pendingOperationalPeriods ? { operationalUnitPeriods: pendingOperationalPeriods } : {}) })
+      : operationalUnitIds,
+    [editingUser, pendingOperationalPeriods, operationalUnitIds]
+  );
   useEffect(() => {
-    const currentPrimaryUnitId = form.getValues('unitId');
-    if (currentPrimaryUnitId && selectedWorkUnitIds.includes(currentPrimaryUnitId)) return;
-    form.setValue('unitId', selectedWorkUnitIds[0] ?? '', {
-      shouldDirty: Boolean(currentPrimaryUnitId),
-      shouldValidate: false,
-    });
-  }, [form, selectedWorkUnitIds]);
+    onDirtyChange?.(form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending || !operationalPeriodsValid);
+  }, [form.formState.isDirty, additionalOperationalDirty, operationalReconciliationPending, operationalPeriodsValid, onDirtyChange]);
   const filteredShiftDefinitions = useMemo(() => {
     if (selectedKioskIds.length === 0) return shiftDefinitions;
     if (selectedWorkUnitIds.length === 0) return [];
@@ -752,10 +728,9 @@ export function UserManagement({
       email: '',
       profileId: '',
       unitId: '',
+      employerUnitId: '',
       assignedKioskIds: [],
       avatarUrl: '',
-      operacional: false,
-      participatesInGoals: false,
       registrationIdBizneo: '',
       registrationIdPdv: '',
       jobRoleId: '',
@@ -771,29 +746,29 @@ export function UserManagement({
       transportVoucherValue: undefined,
     });
     setPdvOperatorIds({});
+    setAdditionalOperationalUnitIds([]);
+    setAdditionalOperationalDirty(false);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
   };
 
   const handleEdit = useCallback((user: User) => {
     setEditingUser(user);
+    setContractChangeReason('');
+    setContractEffectiveDate(operationalCivilDate());
+    setPendingOperationalPeriods(undefined);
+    setOperationalPeriodsValid(true);
+    const operationalSelection = operationalSelectionForUser(user, kiosks, units);
+    setAdditionalOperationalUnitIds(operationalSelection.additionalUnitIds);
+    setAdditionalOperationalDirty(false);
     form.reset({
       username: user.username,
       email: user.email,
       profileId: user.profileId,
-      unitId: user.unitId ?? user.unitIds?.[0] ?? '',
-      assignedKioskIds: Array.from(new Set([
-        ...(user.assignedKioskIds ?? []).filter((id) => kiosks.some((kiosk) => kiosk.id === id)),
-        ...kiosks
-          .filter((kiosk) => {
-            const unit = matchDPUnitForKiosk(kiosk.name, units);
-            return unit ? (user.unitIds ?? []).includes(unit.id) : false;
-          })
-          .map((kiosk) => kiosk.id),
-      ])),
+      unitId: user.unitId ?? '',
+      employerUnitId: user.employerUnitId ?? '',
+      assignedKioskIds: operationalSelection.selectedKioskIds,
       avatarUrl: user.avatarUrl || '',
-      operacional: user.operacional || false,
-      participatesInGoals: user.participatesInGoals || false,
       registrationIdBizneo: user.registrationIdBizneo ?? '',
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
@@ -810,6 +785,7 @@ export function UserManagement({
       shiftDefinitionId: user.shiftDefinitionId ?? '',
       needsTransportVoucher: user.needsTransportVoucher ?? false,
       transportVoucherValue: user.transportVoucherValue,
+      pdvAccessEnabled: user.pdvAccessEnabled ?? hasActivePdvAccess(user as unknown as Record<string, unknown>),
     });
     const existing: Record<string, string> = {};
     Object.entries(user.pdvOperatorIds ?? {}).forEach(([k, v]) => { existing[k] = String(v); });
@@ -889,7 +865,7 @@ export function UserManagement({
       console.warn('[UserManagement] Falha ao registrar auditoria.', error);
     }
   };
-  
+
   const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
   const handleInactivateClick = (user: User) => {
     if (user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false) return;
@@ -973,7 +949,7 @@ export function UserManagement({
       });
     }
   };
-  
+
   const handleResetPasswordConfirm = async () => {
     if (userToResetPassword) {
       const success = await resetPassword(userToResetPassword.email);
@@ -998,6 +974,11 @@ export function UserManagement({
   };
 
   const saveUser = async (values: UserFormValues) => {
+    if (!operationalPeriodsValid) return;
+    if (contractChanged && (contractChangeReason.trim().length < 5 || contractEffectiveDate < operationalCivilDate())) {
+      setActiveEditTab(form.getValues('unitId') !== (editingUser?.unitId ?? '') || form.getValues('employerUnitId') !== (editingUser?.employerUnitId ?? '') ? 'units' : 'identity');
+      throw new Error('Informe a data efetiva e uma justificativa de pelo menos cinco caracteres para a alteração contratual.');
+    }
     values = { ...values, username: formatPersonName(values.username) };
     const avatarUrl = values.avatarUrl || '';
     const admissionDate = values.admissionDate
@@ -1030,13 +1011,13 @@ export function UserManagement({
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
-          unitId: values.unitId || selectedWorkUnitIds[0],
+          employerUnitId: values.employerUnitId || null,
+          unitId: values.unitId || undefined,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0
-            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
-            : undefined,
+          unitIds: editingUser ? operationalUnitsOnDate({ ...editingUser, ...(pendingOperationalPeriods ? { operationalUnitPeriods: pendingOperationalPeriods } : {}) }) : operationalUnitIds,
+          ...(pendingOperationalPeriods ? { operationalUnitPeriods: pendingOperationalPeriods } : {}),
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -1044,23 +1025,29 @@ export function UserManagement({
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
           transportVoucherHistory,
       };
-      const mergedUser = { ...editingUser, ...updatedData };
+      const mergedUser: User & { contractChangeReason?: string; contractEffectiveDate?: string } = { ...editingUser, ...updatedData,
+        ...(contractChanged ? { contractChangeReason: contractChangeReason.trim(), contractEffectiveDate } : {}),
+      };
       const changes = userAuditDiff(editingUser, mergedUser);
       await updateUser(mergedUser);
       await logUserAudit('user_updated', editingUser, {
         email: editingUser.email,
         changed_fields: Object.keys(changes),
+        contract_audit_recorded: contractChanged,
         changes,
       });
     } else {
+      // No cadastro novo ainda não há vigência: o quiosque de trabalho continua obrigatório para quem não é admin.
+      if (values.profileId !== 'admin' && values.assignedKioskIds.length === 0) {
+        form.setError('assignedKioskIds', { type: 'manual', message: 'Selecione pelo menos um quiosque.' });
+        return;
+      }
       const createResult = await addUser({
           username: values.username,
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
           avatarUrl: avatarUrl,
           color: pickUserColor(users.map(u => u.color)),
-          operacional: values.operacional,
-          participatesInGoals: values.participatesInGoals,
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
           ),
@@ -1079,9 +1066,7 @@ export function UserManagement({
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0
-            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
-            : undefined,
+          unitIds: operationalUnitIds,
           admissionDate,
           birthDate,
       }, values.email);
@@ -1104,7 +1089,7 @@ export function UserManagement({
       });
       return;
     }
-    toast({ title: 'Alterações salvas.' });
+    toast({ title: contractChanged && contractEffectiveDate > operationalCivilDate() ? 'Alteração contratual agendada.' : 'Alterações salvas.' });
     closeForm('saved');
   };
 
@@ -1135,7 +1120,7 @@ export function UserManagement({
     });
     if (!isDrawer) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  
+
   const handlePhotoUpdate = async (dataUrl: string) => {
     setIsUploadingPhoto(true);
     const targetUserId = editingUser?.id || `new-user-${Date.now()}`;
@@ -1161,7 +1146,7 @@ export function UserManagement({
       setIsUploadingPhoto(false);
     }
   };
-  
+
   const handlePhotoCaptured = async (dataUrl: string) => {
       await handlePhotoUpdate(dataUrl);
       setIsPhotoModalOpen(false);
@@ -1231,7 +1216,7 @@ export function UserManagement({
       </Card>
     );
   }
-  
+
   const activeCount = users.filter((user) => user.isActive !== false).length;
   const inactiveCount = users.length - activeCount;
   const pendingInvites = users.filter((user) => user.isActive !== false && !(user as any).lastLoginAt).length;
@@ -1308,36 +1293,45 @@ export function UserManagement({
               </div>
             ) : null}
 
-            {isDrawer ? (
+            {isDrawer ? (() => {
+              // No painel lateral as abas ficam no pé do topo escuro (pasta): a ativa tem a cor do corpo.
+              const inHeader = Boolean(headerTabsSlot);
+              const nav = (
               <nav
                 aria-label="Seções da edição do colaborador"
-                className="sticky top-0 z-20 -mx-1 shrink-0 overflow-x-auto rounded-ds-md bg-ds-seg p-[3px] shadow-xs"
+                className={cn(
+                  'shrink-0 overflow-x-auto',
+                  inHeader ? '-mx-1' : 'sticky top-0 z-20 -mx-1 rounded-ds-md bg-ds-seg p-[3px] shadow-xs',
+                )}
               >
-                <div role="tablist" aria-label="Dados do colaborador" className="flex min-w-max gap-1">
+                <div role="tablist" aria-label="Dados do colaborador" className={cn('flex min-w-max', inHeader ? 'gap-0.5' : 'gap-1')}>
                   {visibleEditTabs.map((tab, index) => {
                     const status = editTabStatus(tab.id);
+                    const active = activeEditTab === tab.id;
                     return (
                     <button
                       key={tab.id}
                       id={`collaborator-edit-tab-${tab.id}`}
                       type="button"
                       role="tab"
-                      tabIndex={activeEditTab === tab.id ? 0 : -1}
-                      aria-selected={activeEditTab === tab.id}
+                      tabIndex={active ? 0 : -1}
+                      aria-selected={active}
                       aria-controls={`collaborator-edit-panel-${tab.id}`}
                       onClick={() => setActiveEditTab(tab.id)}
                       onKeyDown={(event) => handleEditTabKeyDown(event, index)}
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
-                        activeEditTab === tab.id
-                          ? 'bg-ds-surface text-ds-ink shadow-xs'
-                          : 'text-ds-ink-muted hover:text-ds-ink',
+                        'inline-flex items-center gap-1.5 font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2',
+                        inHeader
+                          ? cn('h-[42px] rounded-t-[10px] px-4 text-[13px] focus-visible:ring-white/40',
+                              active ? 'bg-ds-warm text-ds-ink' : 'text-ds-on-dark-muted hover:text-ds-on-dark')
+                          : cn('rounded-ds-sm px-3 py-2 text-xs focus-visible:ring-ds-accent-ink',
+                              active ? 'bg-ds-surface text-ds-ink shadow-xs' : 'text-ds-ink-muted hover:text-ds-ink'),
                       )}
                     >
                       {tab.label}
                       {status ? (
                         <>
-                          <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', status === 'error' ? 'bg-ds-danger' : 'bg-ds-accent')} />
+                          <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', status === 'error' ? 'bg-ds-danger' : inHeader && !active ? 'bg-ds-accent-kicker' : 'bg-ds-accent')} />
                           <span className="sr-only">{status === 'error' ? '(com erro)' : '(alterada)'}</span>
                         </>
                       ) : null}
@@ -1346,583 +1340,485 @@ export function UserManagement({
                   })}
                 </div>
               </nav>
-            ) : null}
+              );
+              return headerTabsSlot ? createPortal(nav, headerTabsSlot) : nav;
+            })() : null}
 
             {(!isDrawer || activeEditTab === 'identity') ? (
-            <div id="collaborator-edit-panel-identity" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-identity' : undefined}>
-            <UserFormSection
+            <div id="collaborator-edit-panel-identity" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-identity' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+            <EditSection
               title="Identificação"
-              description="Dados básicos e natureza do vínculo da pessoa."
-              help="Reúne a identificação principal do cadastro. O tipo de vínculo define quais fluxos trabalhistas ou societários podem ser aplicados, sem alterar sozinho cargo, função ou permissões."
+              description="Quem é a pessoa no sistema."
+              help="Reúne a identificação principal do cadastro: foto, nome e e-mail de acesso."
               compact={createOnly}
             >
-              <div className={createOnly ? "grid gap-2" : "flex flex-col gap-5 sm:flex-row sm:items-start"}>
-                {/* Avatar + botões */}
-                {!createOnly ? (
-                <div className="flex flex-col items-center gap-2 shrink-0">
-                  <Avatar className="h-20 w-20">
-                    {isUploadingPhoto ? (
-                      <AvatarFallback><Loader2 className="h-5 w-5 animate-spin" /></AvatarFallback>
-                    ) : (
-                      <>
-                        <AvatarImage src={form.watch('avatarUrl') || undefined} />
-                        <AvatarFallback
-                          className="text-2xl font-bold text-white"
-                          style={{
-                            backgroundColor: editingUser
-                              ? getUserColor(editingUser.id, editingUser.color)
-                              : pickUserColor(users.map(u => u.color)),
-                          }}
-                        >
-                          {form.watch('username')?.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?'}
-                        </AvatarFallback>
-                      </>
-                    )}
-                  </Avatar>
-                  <div className="flex gap-1.5">
-                    <Button type="button" size="sm" variant="ds-secondary" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}>
-                      <Camera className="h-3 w-3 mr-1" /> Tirar foto
-                    </Button>
-                    <Button type="button" size="sm" variant="ds-secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}>
-                      <Upload className="h-3 w-3 mr-1" /> Carregar
-                    </Button>
-                  </div>
-                  <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                </div>
-                ) : null}
-
-                {/* Nome, e-mail, badges */}
-                <div className="flex-1 space-y-3 min-w-0">
-                  {!createOnly ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="h-3 w-3 rounded-full ring-1 ring-border shrink-0"
-                        style={{
-                          backgroundColor: editingUser
-                            ? getUserColor(editingUser.id, editingUser.color)
-                            : pickUserColor(users.map(u => u.color)),
-                        }}
-                      />
-                      <span className="text-[11px] text-muted-foreground">Cor na escala</span>
-                    </div>
-                    {editingUser && (
-                      <Badge variant={editingUser.isActive !== false ? 'default' : 'secondary'} className="text-[10px]">
-                        {editingUser.isActive !== false ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    )}
-                  </div>
-                  ) : null}
-                  <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-3 gap-3"}>
-                    <FormField control={form.control} name="username" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nome</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="ex: Maria Silva"
-                            {...field}
-                            autoComplete={createOnly ? 'off' : 'name'}
-                            onBlur={(event) => {
-                              field.onBlur();
-                              const formatted = formatPersonName(event.target.value);
-                              if (formatted) {
-                                form.setValue('username', formatted, { shouldDirty: true, shouldValidate: true });
-                              }
+              {!createOnly ? (
+                <EditRow number={1} label="Foto" labelId="collaborator-edit-photo" description="Aparece na escala, no ponto e no organograma.">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <Avatar className="h-16 w-16">
+                      {isUploadingPhoto ? (
+                        <AvatarFallback><Loader2 className="h-5 w-5 animate-spin" /></AvatarFallback>
+                      ) : (
+                        <>
+                          <AvatarImage src={form.watch('avatarUrl') || undefined} />
+                          <AvatarFallback
+                            className="text-xl font-bold text-white"
+                            style={{
+                              backgroundColor: editingUser
+                                ? getUserColor(editingUser.id, editingUser.color)
+                                : pickUserColor(users.map(u => u.color)),
+                            }}
+                          >
+                            {form.watch('username')?.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?'}
+                          </AvatarFallback>
+                        </>
+                      )}
+                    </Avatar>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-1.5">
+                        <Button type="button" size="sm" variant="ds-secondary" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}>
+                          <Camera className="mr-1 h-3 w-3" /> Tirar foto
+                        </Button>
+                        <Button type="button" size="sm" variant="ds-secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}>
+                          <Upload className="mr-1 h-3 w-3" /> Carregar
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-ds-ink-muted">
+                          <span
+                            aria-hidden="true"
+                            className="h-3 w-3 shrink-0 rounded-full ring-1 ring-ds-border"
+                            style={{
+                              backgroundColor: editingUser
+                                ? getUserColor(editingUser.id, editingUser.color)
+                                : pickUserColor(users.map(u => u.color)),
                             }}
                           />
-                        </FormControl>
-                        <FormDescription>Use nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="email" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>E-mail</FormLabel>
-                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} autoComplete={createOnly ? 'off' : 'email'} disabled={!!editingUser} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de vínculo</FormLabel>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {EMPLOYMENT_RELATIONSHIP_TYPES.map((item) => (
-                              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription className="text-xs">
-                          Classifica a natureza do vínculo e habilita somente os fluxos compatíveis.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                          Cor na escala
+                        </span>
+                        {editingUser && (
+                          <Badge variant={editingUser.isActive !== false ? 'default' : 'secondary'} className="text-[10px]">
+                            {editingUser.isActive !== false ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                   </div>
-                </div>
-              </div>
-            </UserFormSection>
+                </EditRow>
+              ) : null}
+              <EditRowsGroup compact={createOnly} className='grid grid-cols-1 gap-2 lg:grid-cols-3'>
+                <FormField control={form.control} name="username" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 2} label="Nome" compact={createOnly} description="Nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.">
+                    <FormControl>
+                      <Input
+                        placeholder="ex: Maria Silva"
+                        {...field}
+                        autoComplete={createOnly ? 'off' : 'name'}
+                        onBlur={(event) => {
+                          field.onBlur();
+                          const formatted = formatPersonName(event.target.value);
+                          if (formatted) {
+                            form.setValue('username', formatted, { shouldDirty: true, shouldValidate: true });
+                          }
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+                <FormField control={form.control} name="email" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 3} label="E-mail" compact={createOnly} description={editingUser ? 'Login e recibos assinados. Não muda depois do cadastro.' : undefined}>
+                    <FormControl><Input type="email" placeholder="email@dominio.com" {...field} autoComplete={createOnly ? 'off' : 'email'} disabled={!!editingUser} /></FormControl>
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+              </EditRowsGroup>
+            </EditSection>
+
+            {permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin ? (
+            <EditSection
+              title="Dados contratuais"
+              description="Vínculo, admissão e o que a pessoa faz na empresa."
+              help="O tipo de vínculo define quais fluxos trabalhistas ou societários se aplicam. Cargo e função definem o perfil de permissão. Mudanças contratuais pedem data efetiva e justificativa."
+              compact={createOnly}
+            >
+              <EditRowsGroup compact={createOnly} className='grid gap-2 md:grid-cols-2'>
+                <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 1} label="Tipo de vínculo" compact={createOnly} description="Habilita só os fluxos compatíveis (CLT, estágio, PJ…).">
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {EMPLOYMENT_RELATIONSHIP_TYPES.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+                <FormField control={form.control} name="admissionDate" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 2} label="Data de admissão" compact={createOnly} description={hasBizneoLink ? 'Mantida pela integração com o Bizneo.' : 'Base do tempo de empresa, da experiência e das férias.'}>
+                    <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+                <FormField control={form.control} name="jobRoleId" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 3} label="Cargo" compact={createOnly} description="Junto com a função, aplica o perfil de permissão.">
+                    <Select
+                      value={field.value || '__none__'}
+                      onValueChange={(value) => {
+                        field.onChange(value === '__none__' ? '' : value);
+                      }}
+                      disabled={hrLoading}
+                    >
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cargo" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem cargo</SelectItem>
+                        {roleOptions.map((role) => (
+                          <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {effectiveDefaultProfileName && (
+                      <p className="text-xs text-ds-ink-muted">Perfil aplicado automaticamente: {effectiveDefaultProfileName}.</p>
+                    )}
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+                <FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
+                  <EditFormRow number={createOnly ? undefined : 4} label="Função" compact={createOnly} description="Só aparecem as funções compatíveis com o cargo.">
+                    <Select
+                      value={(field.value ?? [])[0] ?? '__none__'}
+                      onValueChange={(value) => {
+                        field.onChange(value === '__none__' ? [] : [value]);
+                      }}
+                      disabled={hrLoading || !selectedRoleId}
+                    >
+                      <FormControl>
+                        <SelectTrigger className={selectedRoleId ? '' : 'opacity-70'}>
+                          <SelectValue placeholder={selectedRoleId ? 'Selecione a função' : 'Selecione primeiro um cargo'} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">
+                          {selectedRoleId ? 'Sem função' : 'Selecione primeiro um cargo'}
+                        </SelectItem>
+                        {compatibleFunctionOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                        {selectedRoleId && compatibleFunctionOptions.length === 0 && (
+                          <SelectItem value="__no_function_options__" disabled>
+                            Nenhuma função para este cargo
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </EditFormRow>
+                )} />
+              </EditRowsGroup>
+              {editingUser ? (
+                <EditRow number={5} label="Experiência" labelId="collaborator-edit-probation" description="Calculada pela admissão e pelo contrato.">
+                  <ContractProbationDates probation={contractProfileState.status === 'ok' ? contractProfileState.data.periodo_experiencia : null} loading={contractProfileState.status === 'loading' || contractProfileState.status === 'idle'} error={contractProfileState.status === 'error' ? contractProfileState.message : undefined} />
+                </EditRow>
+              ) : null}
+              {contractChanged ? (
+                <EditRow label="Data efetiva e justificativa" labelId="collaborator-edit-contract-change" compact={createOnly} description="Obrigatórias para registrar a mudança contratual.">
+                  <ContractChangeForm reason={contractChangeReason} effectiveDate={contractEffectiveDate} onReasonChange={setContractChangeReason} onEffectiveDateChange={setContractEffectiveDate} />
+                </EditRow>
+              ) : null}
+            </EditSection>
+            ) : null}
             </div>
             ) : null}
 
-            {permissions.dp?.view ? (
+            {canEditUnits ? (
               <>
-                {(!isDrawer || activeEditTab === 'journey') ? (
+                {permissions.dp?.view && (!isDrawer || activeEditTab === 'journey') ? (
                 <div id="collaborator-edit-panel-journey" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-journey' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
-                <UserFormSection
-                  title="Cargo e função"
-                  description="O que a pessoa faz na empresa e qual perfil de permissão isso aplica."
-                  help="Cargo e função determinam o perfil de permissão aplicado automaticamente. A lista de funções respeita a compatibilidade com o cargo escolhido."
+                <EditSection
+                  title="Jornada"
+                  description="Turno de referência, datas pessoais e o que se calcula a partir delas."
+                  help="O turno padrão orienta a montagem da escala dentro da jornada aplicável. As datas alimentam tempo de empresa, idade, aniversários e ciclos de férias; integrações podem bloquear campos mantidos pelo sistema de origem."
                   compact={createOnly}
                 >
-                  <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
-                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
-                      <FormField control={form.control} name="jobRoleId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Cargo</FormLabel>
-                          <Select
-                            value={field.value || '__none__'}
-                            onValueChange={(value) => {
-                              field.onChange(value === '__none__' ? '' : value);
-                            }}
-                            disabled={hrLoading}
-                          >
-                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cargo" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="__none__">Sem cargo</SelectItem>
-                              {roleOptions.map((role) => (
-                                <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {effectiveDefaultProfileName && (
-                            <FormDescription className="text-xs">
-                              Perfil aplicado automaticamente: {effectiveDefaultProfileName}.
-                            </FormDescription>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Função</FormLabel>
-                          <Select
-                            value={(field.value ?? [])[0] ?? '__none__'}
-                            onValueChange={(value) => {
-                              field.onChange(value === '__none__' ? [] : [value]);
-                            }}
-                            disabled={hrLoading || !selectedRoleId}
-                          >
-                            <FormControl>
-                              <SelectTrigger className={selectedRoleId ? '' : 'opacity-70'}>
-                                <SelectValue placeholder={selectedRoleId ? 'Selecione a função' : 'Selecione primeiro um cargo'} />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="__none__">
-                                {selectedRoleId ? 'Sem função' : 'Selecione primeiro um cargo'}
+                  <EditRowsGroup compact={createOnly} className='grid grid-cols-1 gap-2 lg:grid-cols-3'>
+                    <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
+                      <EditFormRow number={createOnly ? undefined : 1} label="Turno padrão" compact={createOnly} description={shiftDefinitionHint}>
+                        <Select
+                          value={field.value || '__none__'}
+                          onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
+                          disabled={shiftDefsLoading}
+                        >
+                          <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Nenhum —</SelectItem>
+                            {filteredShiftDefinitions.map(def => (
+                              <SelectItem key={def.id} value={def.id}>{def.name} ({def.startTime}–{def.endTime})</SelectItem>
+                            ))}
+                            {filteredShiftDefinitions.length === 0 && (
+                              <SelectItem value="__no_shift_options__" disabled>
+                                Nenhum turno para esta unidade
                               </SelectItem>
-                              {compatibleFunctionOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                              {selectedRoleId && compatibleFunctionOptions.length === 0 && (
-                                <SelectItem value="__no_function_options__" disabled>
-                                  Nenhuma função para este cargo
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            A função listada respeita a compatibilidade do cargo.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                  </div>
-                </UserFormSection>
-                <UserFormSection
-                  title="Jornada e datas"
-                  description="Turno de referência, datas contratuais e informações calculadas."
-                  help="O turno padrão orienta a montagem da escala dentro da jornada aplicável. As datas alimentam cálculos de tempo de empresa, idade, aniversários e ciclos de férias; integrações podem bloquear campos que são mantidos pelo sistema de origem."
-                  compact={createOnly}
-                >
-                  <div className={createOnly ? "space-y-2" : "space-y-4"}>
-                    <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 gap-4 lg:grid-cols-3"}>
-                      <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Turno padrão</FormLabel>
-                          <Select
-                            value={field.value || '__none__'}
-                            onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
-                            disabled={shiftDefsLoading}
-                          >
-                            <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="__none__">— Nenhum —</SelectItem>
-                              {filteredShiftDefinitions.map(def => (
-                                <SelectItem key={def.id} value={def.id}>{def.name} ({def.startTime}–{def.endTime})</SelectItem>
-                              ))}
-                              {filteredShiftDefinitions.length === 0 && (
-                                <SelectItem value="__no_shift_options__" disabled>
-                                  Nenhum turno para esta unidade
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">{shiftDefinitionHint}</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="admissionDate" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Data de admissão</FormLabel>
-                          <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="birthDate" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Data de nascimento</FormLabel>
-                          <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                    {!createOnly ? (
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                      <DerivedInfoCard label="Tempo de empresa" value={dpDateSummary.tenure} />
-                      <DerivedInfoCard label="Idade" value={dpDateSummary.age} />
-                      <DerivedInfoCard label="Aniversário de empresa" value={dpDateSummary.companyAnniversary} />
-                      <DerivedInfoCard label="Aniversário de idade" value={dpDateSummary.birthday} />
-                      <VacationSummaryCard
-                        user={editingUser}
-                        admissionDate={parseDateInput(admissionDateValue)}
-                        vacations={vacations}
-                      />
-                    </div>
-                    ) : null}
-                  </div>
-                </UserFormSection>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </EditFormRow>
+                    )} />
+                    <FormField control={form.control} name="birthDate" render={({ field }) => (
+                      <EditFormRow number={createOnly ? undefined : 2} label="Data de nascimento" compact={createOnly} description={hasBizneoLink ? 'Mantida pela integração com o Bizneo.' : 'Base da idade e do aniversário.'}>
+                        <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
+                        <FormMessage />
+                      </EditFormRow>
+                    )} />
+                  </EditRowsGroup>
+                  {!createOnly ? (
+                    <EditRow number={3} label="Calculado" labelId="collaborator-edit-derived" description="Atualiza conforme as datas acima.">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <DerivedInfoCard label="Tempo de empresa" value={dpDateSummary.tenure} />
+                        <DerivedInfoCard label="Idade" value={dpDateSummary.age} />
+                        <DerivedInfoCard label="Aniversário de empresa" value={dpDateSummary.companyAnniversary} />
+                        <DerivedInfoCard label="Aniversário de idade" value={dpDateSummary.birthday} />
+                        <VacationSummaryCard
+                          user={editingUser}
+                          admissionDate={parseDateInput(admissionDateValue)}
+                          vacations={vacations}
+                        />
+                      </div>
+                    </EditRow>
+                  ) : null}
+                </EditSection>
                 </div>
                 ) : null}
 
                 {(!isDrawer || activeEditTab === 'units') ? (
                 <div id="collaborator-edit-panel-units" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-units' : undefined}>
-                <UserFormSection
+                <EditSection
                   title="Unidades"
-                  description="Onde trabalha, referência financeira, onde é gestora e o que pode ver no sistema."
-                  help="São quatro informações diferentes: unidades de escala (onde a pessoa trabalha), unidade principal (referência do financeiro), unidades sob responsabilidade (onde é gestora) e escopo (onde pode visualizar e operar no sistema)."
+                  description="Quem contrata, onde trabalha, para onde vai o custo, onde é gestor e o que enxerga."
+                  help="A vigência de escala e operação é a fonte de onde a pessoa trabalha: escala, ponto, quiosques atribuídos, acesso ao PDV e o acesso “Onde trabalha” seguem dela. Empregadora e financeira são dados contratuais auditados."
                   compact={createOnly}
                 >
-                  <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
-                    <div>
+                  {editingUser ? (
+                    <FormField control={form.control} name="employerUnitId" render={({ field }) => (
+                      <EditFormRow number={1} label="Unidade empregadora" description="CNPJ que assina a carteira." help="Unidade de cadastro do empregador e de seu CNPJ no contrato. Não muda ao alterar unidades operacionais ou cobrir um turno.">
+                        <Select value={field.value || '__none__'} onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Não informada</SelectItem>
+                            {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${unit.cnpj}` : ''}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </EditFormRow>
+                    )} />
+                  ) : null}
+
+                  {editingUser ? (
+                    <EditRow
+                      number={2}
+                      label="Escala e operação"
+                      labelId="collaborator-edit-operational"
+                      description="Onde trabalha no dia a dia. Cobertura eventual vai no próprio turno."
+                      help="Unidades habituais de trabalho por período. Uma nova vigência fecha a anterior na véspera, mantendo o histórico. Os quiosques atribuídos e os acessos ao PDV saem destas unidades automaticamente; vigências futuras entram em vigor na data."
+                    >
+                      <OperationalUnitPeriodsField key={editingUser.id} periods={editingUser.operationalUnitPeriods ?? []} units={units} initialUnitIds={operationalUnitIds} onChange={setPendingOperationalPeriods} onValidityChange={setOperationalPeriodsValid} />
+                      <OperationalKioskSummary
+                        hasPeriods={editingUser.operationalUnitPeriods !== undefined}
+                        unitIds={currentOperationalUnitIds}
+                        legacyKioskIds={editingUser.assignedKioskIds ?? []}
+                        kiosks={kiosks}
+                        units={units}
+                      />
+                      <FormField control={form.control} name="pdvAccessEnabled" render={({ field }) => (
+                        <PdvAccessControl
+                          enabled={field.value ?? false}
+                          onChange={field.onChange}
+                          user={editingUser}
+                          unitIds={currentOperationalUnitIds}
+                          units={units}
+                        />
+                      )} />
+                    </EditRow>
+                  ) : (
+                    <EditRow label="Escala e operação" compact={createOnly} labelId="collaborator-create-operational">
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unidades de escala e operação</FormLabel>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <FormControl>
-                                <Button variant="ds-secondary" className="relative h-10 w-full justify-start rounded-ds-md bg-ds-input pr-12 text-[13px] font-normal">
-                                  {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
-                                  <span className="pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
-                                    <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
-                                  </span>
-                                </Button>
-                              </FormControl>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
-                              <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <ScrollArea className="h-48">
-                                {kiosks.map(kiosk => (
-                                  <DropdownMenuCheckboxItem
-                                    key={kiosk.id}
-                                    checked={field.value?.includes(kiosk.id)}
-                                    onCheckedChange={checked => {
-                                      const selected = field.value || [];
-                                      field.onChange(checked
-                                        ? Array.from(new Set([...selected, kiosk.id]))
-                                        : selected.filter(id => id !== kiosk.id));
-                                    }}
-                                    onSelect={e => e.preventDefault()}
-                                  >
-                                    {kiosk.name}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
-                              </ScrollArea>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <FormDescription className="text-xs">
-                            Onde a pessoa trabalha: entra na escala e opera nessas unidades (aceita várias). É a base do escopo &quot;Somente unidades vinculadas&quot;.
-                          </FormDescription>
+                          <div className="flex items-center gap-2"><FormLabel>Quiosques de trabalho</FormLabel><FieldHelpTooltip title="Quiosques de trabalho" description="Quiosques onde a pessoa vai trabalhar. Depois do cadastro, as mudanças são registradas por vigência na aba Unidades." /></div>
+                          <MultiSelect
+                            options={kiosks.map((kiosk) => ({ value: kiosk.id, label: kiosk.name }))}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Selecione os quiosques"
+                          />
                           <FormMessage />
                         </FormItem>
                       )} />
-                    </div>
-                    {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {form.watch('assignedKioskIds').map(kioskId => {
-                            const id = pdvOperatorIds[kioskId];
-                            if (!id) return null;
-                            const name = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
-                            return (
-                              <span key={kioskId} className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground rounded-md px-2 py-1">
-                                <span className="font-medium">{name}</span>
-                                <span className="text-muted-foreground/60">·</span>
-                                {id}
-                              </span>
-                            );
-                          })}
-                        </div>
+                      <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
+                        <div className="flex items-center gap-2"><p className="font-bold text-ds-ink">Outras unidades operacionais</p><FieldHelpTooltip title="Unidades operacionais na criação" description="Unidades habituais de trabalho sem quiosque, como o CD. A unidade financeira permanece independente. Depois do cadastro, as mudanças operacionais são registradas por vigência nesta aba." /></div>
+                        {additionalOperationalUnitIds.filter((id) => !selectedWorkUnitIds.includes(id)).map((id) => (
+                          <div key={id} className="mt-2 flex items-center justify-between gap-3 rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
+                            <span>{units.find((unit) => unit.id === id)?.name ?? id}{form.watch('unitId') === id ? ' · também é a referência financeira' : ''}</span>
+                            <button type="button" className="font-bold text-ds-accent-ink underline" onClick={() => { setAdditionalOperationalUnitIds((current) => current.filter((item) => item !== id)); setAdditionalOperationalDirty(true); }}>Remover vínculo</button>
+                          </div>
+                        ))}
+                        <select aria-label="Adicionar unidade operacional sem quiosque" value="" className="mt-2 w-full rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2" onChange={(event) => { const id = event.target.value; if (id) { setAdditionalOperationalUnitIds((current) => [...new Set([...current, id])]); setAdditionalOperationalDirty(true); } }}>
+                          <option value="">Adicionar outra unidade operacional…</option>
+                          {units.filter((unit) => !operationalUnitIds.includes(unit.id)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                        </select>
                       </div>
-                    )}
-                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
-                      <FormField control={form.control} name="unitId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {selectedWorkUnits.map((unit) => (
-                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Referência do financeiro (lotação e custos), escolhida entre as unidades de escala. As demais não alteram essa referência.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidades sob responsabilidade</FormLabel>
-                          <FormControl>
-                            <MultiSelect
-                              options={responsibleUnitOptions}
-                              selected={field.value ?? []}
-                              onChange={field.onChange}
-                              placeholder="Selecione as unidades"
-                              className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
-                            />
-                          </FormControl>
-                          <FormDescription className="text-xs">
-                            Onde a pessoa é gestora: aparece como responsável no organograma, nas metas e nos documentos. Não libera acesso; isso é o escopo abaixo.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                    <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
-                      <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Escopo de visualização por unidade</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="linked">Somente unidades vinculadas</SelectItem>
-                              <SelectItem value="selected">Unidades específicas</SelectItem>
-                              <SelectItem value="all">Todas as unidades</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            {UNIT_ACCESS_SCOPE_NOTES[normalizeUnitAccessScope(field.value)]} O perfil continua definindo o que ele pode fazer.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      {selectedUnitAccessScope === 'selected' ? (
-                        <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Unidades liberadas no escopo</FormLabel>
-                            <FormControl>
-                              <MultiSelect
-                                options={responsibleUnitOptions}
-                                selected={field.value ?? []}
-                                onChange={field.onChange}
-                                placeholder="Selecione as unidades"
-                              />
-                            </FormControl>
-                            <FormDescription className="text-xs">
-                              Não altera a lotação nem as unidades sob responsabilidade.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      ) : null}
-                    </div>
-                  </div>
-                </UserFormSection>
+                    </EditRow>
+                  )}
+
+                  <FormField control={form.control} name="unitId" render={({ field }) => (
+                    <EditFormRow number={createOnly ? undefined : 3} label="Principal financeira" compact={createOnly} description="Lotação, custos e relatórios. Não muda a unidade do turno." help="Referência do financeiro: lotação e custos do colaborador. É independente das unidades em que ele trabalha e não muda ao escalar um turno em outro local. Não libera escala nem batida de ponto.">
+                      <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a referência financeira" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {units.map((unit) => (
+                            <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </EditFormRow>
+                  )} />
+
+                  {isDrawer && contractChanged ? (
+                    <EditRow label="Data efetiva e justificativa" labelId="collaborator-edit-unit-contract-change" description="Empregadora e financeira são dados contratuais: informe quando valem e por quê.">
+                      <ContractChangeForm reason={contractChangeReason} effectiveDate={contractEffectiveDate} onReasonChange={setContractChangeReason} onEffectiveDateChange={setContractEffectiveDate} />
+                    </EditRow>
+                  ) : null}
+
+                  <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
+                    <EditFormRow number={createOnly ? undefined : 4} label="Responsabilidade" compact={createOnly} description="Onde aparece como gestor no organograma, nas metas e nos documentos." help="Não libera acesso; isso é definido em Acesso no sistema.">
+                      <FormControl>
+                        <MultiSelect
+                          options={responsibleUnitOptions}
+                          selected={field.value ?? []}
+                          onChange={field.onChange}
+                          placeholder="Nenhuma unidade"
+                          className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </EditFormRow>
+                  )} />
+
+                  <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
+                    <EditFormRow number={createOnly ? undefined : 5} label="Acesso no sistema" compact={createOnly} description="Onde pode consultar e operar, conforme o perfil." help="Onde trabalha: segue a vigência de escala e operação. Escolhidas: as unidades marcadas abaixo, mesmo onde não trabalha (ex.: supervisão). Todas: escopo global, para gestão. Não muda financeira, empregador, escala nem batida de ponto.">
+                      <FormControl>
+                        <Segmented
+                          aria-label="Acesso no sistema"
+                          value={normalizeUnitAccessScope(field.value)}
+                          onChange={field.onChange}
+                          options={[
+                            { value: 'linked', label: 'Onde trabalha' },
+                            { value: 'selected', label: 'Escolhidas' },
+                            { value: 'all', label: 'Todas' },
+                          ]}
+                        />
+                      </FormControl>
+                      <p className="text-xs leading-5 text-ds-ink-muted">{UNIT_ACCESS_SCOPE_NOTES[normalizeUnitAccessScope(field.value)]}</p>
+                      <FormMessage />
+                    </EditFormRow>
+                  )} />
+                  {selectedUnitAccessScope === 'selected' ? (
+                    <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
+                      <EditFormRow label="Unidades liberadas" compact={createOnly} description="Pode ver e operar estas unidades mesmo onde não trabalha.">
+                        <FormControl>
+                          <MultiSelect
+                            options={responsibleUnitOptions}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Selecione as unidades"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </EditFormRow>
+                    )} />
+                  ) : null}
+                </EditSection>
                 </div>
                 ) : null}
               </>
             ) : null}
 
-            {(!isDrawer || activeEditTab === 'access') ? (
-            <div id="collaborator-edit-panel-access" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-access' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+            {(!isDrawer || activeEditTab === 'journey') ? (
+            <div className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+            {permissions.dp?.view || showTransportVoucher ? (
+            <EditSection title="Permissão e benefícios" description="O que o cadastro libera para a pessoa." compact={createOnly}>
             {permissions.dp?.view ? (
               <FormField control={form.control} name="profileId" render={() => (
-                <FormItem data-ui="profile-summary" className="rounded-ds-card border border-ds-border bg-ds-surface px-5 py-4 shadow-xs">
-                  <FormLabel className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">Perfil de permissão</FormLabel>
-                  <p className="text-base font-extrabold text-ds-ink">
+                <EditFormRow number={createOnly ? undefined : 1} label="Perfil de permissão" compact={createOnly} description="Define o que a pessoa pode fazer; as unidades definem onde.">
+                  <p data-ui="profile-summary" className="text-base font-extrabold text-ds-ink">
                     {profilesLoading ? 'Carregando perfil...' : selectedProfileName ?? 'Sem perfil definido'}
                   </p>
-                  <FormDescription className="text-xs">
-                    {effectiveDefaultProfileId && effectiveDefaultProfileId === selectedProfileId
-                      ? 'Aplicado pelo cargo e função (aba Cargo e jornada). '
-                      : ''}
-                    O perfil define o que a pessoa pode fazer; as unidades definem onde.
-                  </FormDescription>
+                  {effectiveDefaultProfileId && effectiveDefaultProfileId === selectedProfileId ? (
+                    <p className="text-xs text-ds-ink-muted">Aplicado pelo cargo e pela função (aba Identificação).</p>
+                  ) : null}
                   <FormMessage />
-                </FormItem>
+                </EditFormRow>
               )} />
             ) : null}
-            <UserFormSection
-              title="Comportamento no sistema"
-              description="Recursos operacionais habilitados para esta pessoa."
-              help="Estas opções habilitam a participação do cadastro em rotinas específicas. Elas não substituem cargo, função, vínculo, jornada nem perfil de permissão, e não geram efeitos financeiros por conta própria."
-              compact={createOnly}
-            >
-              <div className="grid gap-3 md:grid-cols-2">
-                <FormField control={form.control} name="operacional" render={({ field }) => (
-                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <FormLabel className="text-sm font-medium">Operacional</FormLabel>
-                        <FieldHelpTooltip
-                          title="Usuário operacional"
-                          description="Inclui o colaborador nas rotinas de operação, como escala de trabalho e relatórios operacionais. Não altera cargo, função ou perfil de permissão."
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                        {field.value ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
-                        />
-                      </FormControl>
-                    </div>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
-                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <FormLabel className="text-sm font-medium">Metas</FormLabel>
-                        <FieldHelpTooltip
-                          title="Participa de metas"
-                          description="Inclui o colaborador nos acompanhamentos e seleções do módulo de metas. Não cria meta sozinho e não muda remuneração sem as regras do módulo."
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                        {field.value ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
-                        />
-                      </FormControl>
-                    </div>
-                  </FormItem>
-                )} />
-                {showTransportVoucher ? (
-                  <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
-                  <FormItem className="rounded-ds-md border border-ds-border p-3 md:col-span-2">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-[220px] space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <FormLabel className="text-sm font-medium">Vale-transporte</FormLabel>
-                          <span className={cn(
-                            'rounded-full px-2 py-0.5 text-[11px] font-bold',
-                            currentTransportVoucherStatus === 'active' && 'bg-emerald-50 text-emerald-700',
-                            currentTransportVoucherStatus === 'suspended' && 'bg-amber-50 text-amber-700',
-                            currentTransportVoucherStatus === 'none' && 'bg-slate-100 text-slate-500'
-                          )}>
-                            {transportVoucherStatusLabel(currentTransportVoucherStatus)}
-                          </span>
-                        </div>
-                        <FormDescription className="text-xs">
-                          Próximo ato: {nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} benefício.
-                        </FormDescription>
-                      </div>
-
-                      <div className="flex flex-1 flex-col gap-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <FormControl><Switch checked={!!field.value} onCheckedChange={openTransportVoucherChangeDialog} /></FormControl>
-                          <span className="text-xs font-semibold text-slate-500">
-                            {nextTransportVoucherActionLabel(currentTransportVoucherStatus)}
-                          </span>
-                          {field.value && (
-                            <FormField control={form.control} name="transportVoucherValue" render={({ field: valueField }) => (
-                              <div className="min-w-[180px]">
-                                <FormControl>
-                                  <Input type="number" step="0.01" min="0" placeholder="R$ 0,00" {...valueField} value={valueField.value ?? ''} className="h-9" />
-                                </FormControl>
-                                <FormMessage />
-                              </div>
-                            )} />
-                          )}
-                        </div>
-
-                        <div className="rounded-lg border bg-slate-50/70 p-3">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-bold uppercase text-slate-400">Histórico de atos</p>
-                            <p className="text-[11px] font-semibold text-slate-400">Solicitar · Suspender · Reativar</p>
+            {showTransportVoucher ? (
+              <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
+                <EditFormRow number={createOnly ? undefined : 2} label="Vale-transporte" compact={createOnly} description={`Próximo ato: ${nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} benefício.`}>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={openTransportVoucherChangeDialog} /></FormControl>
+                      <StatusPill variant={currentTransportVoucherStatus === 'active' ? 'ok' : currentTransportVoucherStatus === 'suspended' ? 'warn' : 'neutral'}>
+                        {transportVoucherStatusLabel(currentTransportVoucherStatus)}
+                      </StatusPill>
+                      {field.value && (
+                        <FormField control={form.control} name="transportVoucherValue" render={({ field: valueField }) => (
+                          <div className="min-w-[180px]">
+                            <FormControl>
+                              <Input type="number" step="0.01" min="0" placeholder="R$ 0,00" aria-label="Valor diário do vale-transporte" {...valueField} value={valueField.value ?? ''} className="h-9" />
+                            </FormControl>
+                            <FormMessage />
                           </div>
-                          {transportVoucherHistory.length > 0 ? (
-                            <div className="grid gap-2 md:grid-cols-3">
-                              {transportVoucherHistory.slice(-6).reverse().map((entry) => (
-                                <div key={entry.id} className="rounded-lg border bg-white p-3 text-xs">
-                                  <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold', transportVoucherActionClass(entry))}>
-                                    {formatTransportVoucherAction(entry)}
-                                  </span>
-                                  <p className="mt-2 font-semibold text-slate-800">
-                                    {format(parseDateInput(entry.effectiveDate) ?? new Date(entry.effectiveDate), 'dd/MM/yyyy')}
-                                  </p>
-                                  <p className="mt-1 line-clamp-2 text-slate-500">{entry.reason}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="grid gap-2 md:grid-cols-3">
-                              {['Solicitar', 'Suspender', 'Reativar'].map((label) => (
-                                <div key={label} className="rounded-lg border border-dashed bg-white px-3 py-2 text-xs font-semibold text-slate-400">
-                                  {label}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                        )} />
+                      )}
                     </div>
-                  </FormItem>
-                  )} />
-                ) : null}
-              </div>
-            </UserFormSection>
+
+                    <div className="rounded-ds-md border border-ds-border bg-ds-muted p-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">Histórico de atos</p>
+                        <p className="text-[11px] font-semibold text-ds-ink-faint">Solicitar · Suspender · Reativar</p>
+                      </div>
+                      {transportVoucherHistory.length > 0 ? (
+                        <div className="grid gap-2 md:grid-cols-3">
+                          {transportVoucherHistory.slice(-6).reverse().map((entry) => (
+                            <div key={entry.id} className="rounded-ds-sm border border-ds-border bg-ds-surface p-3 text-xs">
+                              <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold', transportVoucherActionClass(entry))}>
+                                {formatTransportVoucherAction(entry)}
+                              </span>
+                              <p className="mt-2 font-semibold text-ds-ink">
+                                {format(parseDateInput(entry.effectiveDate) ?? new Date(entry.effectiveDate), 'dd/MM/yyyy')}
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-ds-ink-muted">{entry.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-ds-ink-muted">Nenhum ato registrado.</p>
+                      )}
+                    </div>
+                  </div>
+                </EditFormRow>
+              )} />
+            ) : null}
+            </EditSection>
+            ) : null}
             </div>
             ) : null}
 
@@ -1936,8 +1832,8 @@ export function UserManagement({
                   ),
             )}>
               {!createOnly ? (
-                <p className={cn('text-sm font-semibold', form.formState.isDirty ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
-                  {form.formState.isDirty ? 'Alterações pendentes' : 'Nenhuma alteração pendente'}
+                <p className={cn('text-sm font-semibold', form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
+                  {form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending ? 'Alterações pendentes' : 'Nenhuma alteração pendente'}
                 </p>
               ) : null}
               <div className="flex justify-end gap-2">
@@ -1956,7 +1852,7 @@ export function UserManagement({
                   size={createOnly ? 'default' : 'md'}
                   className={createOnly ? "h-7 px-3 text-[11px]" : undefined}
                   loading={form.formState.isSubmitting}
-                  disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}
+                  disabled={!operationalPeriodsValid || isUploadingPhoto || (!!editingUser && !form.formState.isDirty && !additionalOperationalDirty && !operationalReconciliationPending)}
                 >
                   {editingUser ? 'Salvar alterações' : 'Criar usuário'}
                 </Button>
@@ -2096,7 +1992,6 @@ export function UserManagement({
                               >
                                 {user.username}
                               </button>
-                              {user.operacional && <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700" variant="outline">Operacional</Badge>}
                               {user.isActive === false && <Badge className="border-slate-200 bg-slate-100 text-[10px] text-slate-500" variant="outline">Inativo</Badge>}
                             </div>
                             <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{user.jobRoleName ?? group.profileName} · {user.email}</p>
@@ -2161,14 +2056,14 @@ export function UserManagement({
           )}
         </div>
       )}
-      
-      <ProfileManagementModal 
+
+      <ProfileManagementModal
         open={isProfilesModalOpen}
         onOpenChange={setIsProfilesModalOpen}
         canEdit={!!permissions.settings.manageProfiles}
       />
 
-      <PhotoCaptureModal 
+      <PhotoCaptureModal
         open={isPhotoModalOpen}
         onOpenChange={setIsPhotoModalOpen}
         onPhotoCaptured={handlePhotoCaptured}
@@ -2372,7 +2267,7 @@ export function UserManagement({
           </DialogContent>
         </Dialog>
       )}
-      
+
       {userToResetPassword && (
          <DeleteConfirmationDialog
             open={!!userToResetPassword}
