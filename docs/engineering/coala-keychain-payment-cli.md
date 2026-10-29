@@ -16,6 +16,7 @@ node --import tsx scripts/financial/coala-authenticated-payment.mts lookup --ema
 node --import tsx scripts/financial/coala-authenticated-payment.mts main-lookup --email EMAIL --kind entity-document --value CNPJ
 node --import tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
 node --import tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+node --import tsx scripts/financial/coala-authenticated-payment.mts cancel-replace --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --current-scheduled-for AAAA-MM-DD --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --confirm-financial-actions
 ```
 
 Acrescente `--memory-session NOME` a cada comando executado enquanto o processo
@@ -50,6 +51,15 @@ data programada, CPF/CNPJ do beneficiário, ID da despesa e código completo
 `awaiting_financial_authorization`; `send`, apenas `ready_to_submit`. Uma tentativa
 anterior de envio, ou um ID do Inter já gravado, bloqueia ambos. A CLI não reenvia
 automaticamente ordens com resultado incerto.
+
+`cancel-replace` corrige a data de um boleto anexado diretamente à despesa que já
+foi aceito pelo Inter e ainda aguarda aprovação ou execução. A confirmação explícita
+cobre o cancelamento bancário e a criação da versão substituta, mas não autoriza um
+segundo envio silencioso: a nova solicitação volta a
+`awaiting_financial_authorization`. O backend só cria essa versão depois de o Inter
+confirmar `CANCELADO`; falha ou incerteza exige consulta de estado antes de repetir.
+Depois, use `authorize` e `send` com o novo ID e a nova data. A aprovação final segue
+separada no aplicativo do Inter.
 
 A consulta atual do Coala devolve até 100 solicitações recentes. Se a ordem não
 aparecer, isso não prova inexistência: consulte-a no produto. A validação da CLI

@@ -6,7 +6,7 @@ import { createBeneficiarySnapshot, resolvePaymentBeneficiary } from "../benefic
 import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/proof.server";
 import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
-import { findInterBarcodePaymentsByCode, getInterBarcodePayment, mapInterBarcodeStatus, submitInterBarcodePayment } from "@/lib/integrations/inter/barcode-payments.server";
+import { cancelInterBarcodePayment, findInterBarcodePaymentsByCode, getInterBarcodePayment, mapInterBarcodeStatus, submitInterBarcodePayment } from "@/lib/integrations/inter/barcode-payments.server";
 import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/integrations/inter/pix-payments.server";
 import { listInterStatementEntries } from "@/lib/integrations/inter/statements.server";
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
@@ -50,6 +50,7 @@ import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 
 export class FinancialServiceApprovalIneligibleError extends Error {}
 export class PaymentRequestRecoveryError extends Error {}
+export class PaymentRequestCancellationError extends Error {}
 
 const financialServiceApprover: PaymentActor = {
   uid: FINANCIAL_SERVICE_APPROVER_ID,
@@ -522,6 +523,266 @@ export async function createCorrectedInboxBarcodePaymentRequest(id: string, acto
       type: "BANK_PAYMENT_REQUEST_RECREATED", at: now, actorId: actor.uid,
       actorEmail: actor.email ?? null, paymentRequestId: replacement.id,
       supersedesPaymentRequestId: initial.id,
+    });
+    return replacement;
+  });
+}
+
+function cancelledInterBarcodeStatus(status: unknown) {
+  return String(status ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase() === "CANCELADO";
+}
+
+function assertExpenseBoletoCancellationTarget(request: BankPaymentRequest, replacementScheduledFor: string) {
+  if (request.sourceType !== "expense_boleto" || request.paymentRail !== "barcode") {
+    throw new PaymentRequestCancellationError("Somente boleto anexado à despesa aceita esta correção de data.");
+  }
+  if (!["awaiting_bank_approval", "scheduled"].includes(request.status)) {
+    throw new PaymentRequestCancellationError("A solicitação não está pendente de aprovação nem agendada no banco.");
+  }
+  if (!request.interRequestId) {
+    throw new PaymentRequestCancellationError("A solicitação não possui código bancário para cancelamento.");
+  }
+  const today = todayInBelem();
+  if (!isValidIsoDate(replacementScheduledFor)
+    || replacementScheduledFor < today
+    || replacementScheduledFor > request.barcodeSnapshot.dueDate) {
+    throw new PaymentRequestCancellationError("A nova data deve estar entre hoje e o vencimento do boleto.");
+  }
+  if (request.supersededByPaymentRequestId) {
+    throw new PaymentRequestCancellationError("A solicitação já foi substituída por outra versão.");
+  }
+}
+
+export async function cancelAndReplaceExpenseBoletoPaymentRequest(
+  id: string,
+  replacementScheduledFor: string,
+  actor: PaymentActor,
+) {
+  const initial = await getPaymentRequest(id);
+  if (!initial.workspaceId) throw new PaymentRequestCancellationError("A solicitação não possui ambiente financeiro confirmado.");
+  if (initial.status === "cancelled" && initial.supersededByPaymentRequestId) {
+    if (initial.bankCancellation?.status !== "confirmed"
+      || initial.bankCancellation.replacementScheduledFor !== replacementScheduledFor) {
+      throw new PaymentRequestCancellationError("A solicitação já foi cancelada com outra substituição.");
+    }
+    const existing = await getPaymentRequest(initial.supersededByPaymentRequestId).catch(() => null);
+    if (!existing || existing.supersedesPaymentRequestId !== initial.id) {
+      throw new PaymentRequestCancellationError("A versão substituta não corresponde à solicitação cancelada.");
+    }
+    return existing;
+  }
+  assertExpenseBoletoCancellationTarget(initial, replacementScheduledFor);
+
+  const requestRef = paymentRequestRef(initial.id);
+  const expenseRef = financialDbAdmin.collection("expenses").doc(initial.sourceId);
+  const expectedDebitRef = financialDbAdmin.collection("expectedBankDebits").doc(`request_${initial.id}`);
+  const startedAt = new Date().toISOString();
+  const cancellationEventId = randomUUID();
+  const bankTransactionCode = initial.interRequestId!;
+
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const [snapshot, expense] = await Promise.all([
+      transaction.get(requestRef),
+      transaction.get(expenseRef),
+    ]);
+    if (!snapshot.exists || !expense.exists) {
+      throw new PaymentRequestCancellationError("A solicitação ou a despesa vinculada não foi encontrada.");
+    }
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    assertExpenseBoletoCancellationTarget(current, replacementScheduledFor);
+    if (current.workspaceId !== initial.workspaceId || expense.get("workspaceId") !== initial.workspaceId) {
+      throw new PaymentRequestCancellationError("A solicitação e a despesa não pertencem ao mesmo ambiente financeiro.");
+    }
+    if (current.interRequestId !== bankTransactionCode) {
+      throw new PaymentRequestCancellationError("O código bancário mudou durante a conferência.");
+    }
+    const installments = expense.get("installments");
+    const targetInstallment = Array.isArray(installments) && installments.length > 1
+      ? installments.find((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === current.installmentNumber)
+      : null;
+    if ((targetInstallment ? targetInstallment.paymentRequestId : expense.get("paymentRequestId")) !== current.id) {
+      throw new PaymentRequestCancellationError("O vínculo entre despesa e solicitação mudou durante a conferência.");
+    }
+    const currentCancellation = current.bankCancellation;
+    if (currentCancellation?.status === "pending"
+      && (currentCancellation.replacementScheduledFor !== replacementScheduledFor
+        || currentCancellation.bankTransactionCode !== bankTransactionCode)) {
+      throw new PaymentRequestCancellationError("Já existe outro cancelamento em conferência para esta solicitação.");
+    }
+    transaction.set(requestRef, {
+      bankCancellation: {
+        status: "pending",
+        requestedAt: currentCancellation?.requestedAt ?? startedAt,
+        requestedBy: currentCancellation?.requestedBy ?? actor.uid,
+        requestedByEmail: currentCancellation?.requestedByEmail ?? actor.email ?? null,
+        bankTransactionCode,
+        replacementScheduledFor,
+      },
+      updatedAt: startedAt,
+    }, { merge: true });
+    if (!currentCancellation) transaction.create(requestRef.collection("events").doc(cancellationEventId), {
+      type: "INTER_BARCODE_CANCELLATION_STARTED",
+      at: startedAt,
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      interRequestId: bankTransactionCode,
+      replacementScheduledFor,
+    });
+  });
+
+  let cancellationConfirmed = false;
+  try {
+    await cancelInterBarcodePayment(bankTransactionCode);
+    cancellationConfirmed = true;
+  } catch (cause) {
+    const observed = await getInterBarcodePayment(bankTransactionCode).catch(() => null);
+    cancellationConfirmed = cancelledInterBarcodeStatus(observed?.statusPagamento);
+    if (!cancellationConfirmed) {
+      const failedAt = new Date().toISOString();
+      await requestRef.set({
+        bankCancellation: {
+          status: "failed",
+          requestedAt: initial.bankCancellation?.requestedAt ?? startedAt,
+          requestedBy: initial.bankCancellation?.requestedBy ?? actor.uid,
+          requestedByEmail: initial.bankCancellation?.requestedByEmail ?? actor.email ?? null,
+          bankTransactionCode,
+          replacementScheduledFor,
+          failedAt,
+        },
+        updatedAt: failedAt,
+      }, { merge: true }).catch(() => undefined);
+      await addPaymentEvent(initial.id, "INTER_BARCODE_CANCELLATION_FAILED", actor, {
+        interRequestId: bankTransactionCode,
+        replacementScheduledFor,
+      }).catch(() => undefined);
+      throw cause;
+    }
+  }
+
+  if (!cancellationConfirmed) {
+    throw new PaymentRequestCancellationError("O Banco Inter não confirmou o cancelamento.");
+  }
+
+  const confirmedAt = new Date().toISOString();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const [snapshot, expense, expectedDebit] = await Promise.all([
+      transaction.get(requestRef),
+      transaction.get(expenseRef),
+      transaction.get(expectedDebitRef),
+    ]);
+    if (!snapshot.exists || !expense.exists) {
+      throw new PaymentRequestCancellationError("O cancelamento foi confirmado pelo banco, mas a solicitação local exige reconciliação.");
+    }
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.supersededByPaymentRequestId) {
+      const existingReplacement = await transaction.get(paymentRequestRef(current.supersededByPaymentRequestId));
+      if (existingReplacement.exists) {
+        return { id: existingReplacement.id, ...existingReplacement.data() } as BankPaymentRequest;
+      }
+      throw new PaymentRequestCancellationError("O cancelamento foi confirmado, mas a versão substituta não foi encontrada.");
+    }
+    if (current.interRequestId !== bankTransactionCode || current.paymentRail !== "barcode" || current.sourceType !== "expense_boleto") {
+      throw new PaymentRequestCancellationError("O cancelamento foi confirmado, mas a solicitação mudou e exige reconciliação.");
+    }
+    const installments = expense.get("installments");
+    const targetInstallment = Array.isArray(installments) && installments.length > 1
+      ? installments.find((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === current.installmentNumber)
+      : null;
+    if ((targetInstallment ? targetInstallment.paymentRequestId : expense.get("paymentRequestId")) !== current.id) {
+      throw new PaymentRequestCancellationError("O cancelamento foi confirmado, mas o vínculo da despesa mudou e exige reconciliação.");
+    }
+
+    const replacementRef = paymentRequestRef(`${current.id}_v${paymentSubmissionAttemptCount(current) + 1}`);
+    const existingReplacement = await transaction.get(replacementRef);
+    if (existingReplacement.exists) {
+      return { id: existingReplacement.id, ...existingReplacement.data() } as BankPaymentRequest;
+    }
+    const replacement: BankPaymentRequest = {
+      id: replacementRef.id,
+      workspaceId: current.workspaceId,
+      sourceType: "expense_boleto",
+      sourceId: current.sourceId,
+      expenseId: current.expenseId,
+      installmentNumber: current.installmentNumber ?? null,
+      paymentRail: "barcode",
+      barcodeSnapshot: { ...current.barcodeSnapshot, scheduledFor: replacementScheduledFor },
+      amount: current.amount,
+      description: current.description,
+      status: "awaiting_financial_authorization",
+      idempotencyKey: randomUUID(),
+      submissionAttemptCount: 0,
+      lastError: null,
+      statementReconciliationStatus: "not_expected",
+      supersedesPaymentRequestId: current.id,
+      supersededByPaymentRequestId: null,
+      createdAt: confirmedAt,
+      createdBy: actor.uid,
+      updatedAt: confirmedAt,
+    };
+
+    transaction.create(replacementRef, Object.fromEntries(Object.entries(replacement).filter(([key, value]) => key !== "id" && value !== undefined)));
+    transaction.set(requestRef, {
+      status: "cancelled",
+      bankStatus: "CANCELADO",
+      bankCancellation: {
+        ...current.bankCancellation,
+        status: "confirmed",
+        confirmedAt,
+        bankTransactionCode,
+        replacementScheduledFor,
+      },
+      cancelledAt: confirmedAt,
+      cancelledBy: actor.uid,
+      statementReconciliationStatus: "not_expected",
+      nextBankStatusCheckAt: null,
+      supersededByPaymentRequestId: replacement.id,
+      lastError: null,
+      updatedAt: confirmedAt,
+    }, { merge: true });
+    if (expectedDebit.exists) transaction.set(expectedDebitRef, {
+        status: "cancelled",
+        bankStatus: "CANCELADO",
+        updatedAt: confirmedAt,
+      }, { merge: true });
+    if (targetInstallment) {
+      transaction.set(expenseRef, {
+        installments: installments.map((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === current.installmentNumber
+          ? { ...item, paymentRequestId: replacement.id }
+          : item),
+        updatedAt: confirmedAt,
+        updatedBy: actor.uid,
+      }, { merge: true });
+    } else {
+      transaction.set(expenseRef, { paymentRequestId: replacement.id, updatedAt: confirmedAt, updatedBy: actor.uid }, { merge: true });
+    }
+    transaction.create(requestRef.collection("events").doc(), {
+      type: "INTER_BARCODE_PAYMENT_CANCELLED_AND_REPLACED",
+      at: confirmedAt,
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      interRequestId: bankTransactionCode,
+      replacementPaymentRequestId: replacement.id,
+      replacementScheduledFor,
+    });
+    transaction.create(replacementRef.collection("events").doc(), {
+      type: "PAYMENT_REQUEST_RECREATED_AFTER_BANK_CANCELLATION",
+      at: confirmedAt,
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      supersedesPaymentRequestId: current.id,
+      scheduledFor: replacementScheduledFor,
+    });
+    transaction.create(expenseRef.collection("events").doc(), {
+      type: "EXPENSE_BOLETO_PAYMENT_RESCHEDULED",
+      at: confirmedAt,
+      actorId: actor.uid,
+      previousPaymentRequestId: current.id,
+      paymentRequestId: replacement.id,
+      scheduledFor: replacementScheduledFor,
     });
     return replacement;
   });

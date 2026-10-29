@@ -217,6 +217,7 @@ api,src/app/api/financial/inbox/route.ts,,docs/engineering/flows/financial-inbox
 api,src/app/api/financial/inbox/settings/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/management-analysis/route.ts,,docs/engineering/flows/financial-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/authorize/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/payment-requests/[id]/cancel-and-replace/route.ts,,docs/engineering/flows/payment-requests.md,Cancela no Inter um boleto direto ainda pendente e cria nova versao para a data confirmada; exige permissao de envio e auditoria.
 api,src/app/api/financial/payment-requests/[id]/proof/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/recover/route.ts,,docs/engineering/flows/payment-requests.md,Recuperacao versionada apos duas recusas; preserva a tentativa anterior e nao envia automaticamente.
 api,src/app/api/financial/payment-requests/[id]/refresh/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
