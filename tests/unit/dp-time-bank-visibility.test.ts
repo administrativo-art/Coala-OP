@@ -11,8 +11,8 @@ test('barra do perfil expõe registro e banco somente a titulares ou leitores au
   assert.match(profile, /permissions\.dp\?\.timeRecording\?\.view/);
   assert.match(profile, /permissions\.dp\?\.timeClosure\?\.close/);
   assert.match(profile, /permissions\.dp\?\.timeClosure\?\.reopen/);
-  assert.match(profile, />\s*Registro de ponto\s*</);
-  assert.match(profile, />\s*Banco de horas\s*</);
+  assert.match(profile, /<HeaderIconLink[^>]*label="Registro de ponto"/);
+  assert.match(profile, /<HeaderIconLink[^>]*label="Banco de horas"/);
   assert.match(profile, /\?view=time-bank/);
   assert.match(profile, /bg-ds-ink\/95/);
 });
