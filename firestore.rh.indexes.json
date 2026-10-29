@@ -1,5 +1,7 @@
 {
   "indexes": [
+    {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
+    {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeUid", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
     { "collectionGroup": "onboardingProcesses", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "probationV2.config.effectivenessRule", "order": "ASCENDING" },
       { "fieldPath": "probationV2.status", "order": "ASCENDING" },

@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
@@ -190,6 +191,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val planned = TimeRules.plannedPunchTimes(today.timeShift)
     val classified = today.timePunches.all { it.classification?.purpose != null }
     val nextPurpose = if (classified) TimeRules.suggestedPurpose(today.timePunches.sortedBy { it.markedAt }, today.timeShift) else null
+    val breakStatus = if (showTime) TimeRules.breakStatus(today.timeShift, today.timePunches, official, zone) else null
+    var summaryExpanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -211,11 +214,20 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
         }
+        breakStatus?.takeIf { it.inPause }?.let { BreakTimerPill(it, dark = true, modifier = Modifier.padding(top = 5.dp)) }
         HorizontalDivider(color = Tokens.onDark4.copy(alpha = .45f), modifier = Modifier.padding(vertical = 7.dp))
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button,
+                onClickLabel = if (summaryExpanded) "Recolher resumo da jornada" else "Expandir resumo da jornada") { summaryExpanded = !summaryExpanded },
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("RESUMO DA JORNADA", color = Tokens.onDark4,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            DropdownChevron(summaryExpanded, Tokens.onDark3)
+        }
+        if (summaryExpanded) {
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Ver o dia") { onDetails(workDate) },
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("RESUMO DA JORNADA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                 val state = summary?.state
                 Text(when {
                     punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas ainda não consultadas"
@@ -249,6 +261,18 @@ private fun installUpdate(context: android.content.Context, file: File) {
                     Text(if (next) "Próxima" else label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
                 }
             }
+        }
+        summary?.takeIf { it.state == com.coalaone.go.domain.DaySummaryState.COMPLETE }?.let { day ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HomeTimeMetric("Trabalhado", TimeRules.durationText(day.workedMinutes ?: 0), Modifier.weight(1f))
+                HomeTimeMetric("Intervalo", TimeRules.durationText(day.breakMinutes ?: 0), Modifier.weight(1f))
+                HomeTimeMetric("Dif. da escala", day.shiftDifferenceMinutes?.let { TimeRules.durationText(it, true) } ?: "—", Modifier.weight(1f))
+            }
+            day.plannedBreakMinutes?.takeIf { it > 0 }?.let {
+                Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+            }
+            Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+        }
         }
         Spacer(Modifier.height(5.dp))
         if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
