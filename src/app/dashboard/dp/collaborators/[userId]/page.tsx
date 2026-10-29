@@ -3153,7 +3153,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             }}
             kicker="Editar colaborador"
             title={displayName(collaborator.username)}
-            subtitle="Identificação, atuação, jornada e comportamento no sistema."
+            subtitle="Identificação, jornada, unidades e acesso no sistema."
+            headerTabs
             className="w-[min(920px,100vw)]"
           >
             <UserManagement
