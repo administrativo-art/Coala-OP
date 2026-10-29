@@ -1,15 +1,18 @@
 import type { DPUnit, Kiosk, User } from '@/types';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { operationalUnitsOnDate, operationalCivilDate } from '@/lib/operational-unit-periods';
 
-type OperationalUser = Pick<User, 'id' | 'unitIds' | 'assignedKioskIds'>;
+type OperationalUser = Pick<User, 'id' | 'unitIds' | 'assignedKioskIds' | 'operationalUnitPeriods'>;
 
 export function userMatchesDPUnit(
-  user: Pick<OperationalUser, 'unitIds' | 'assignedKioskIds'>,
+  user: Pick<OperationalUser, 'unitIds' | 'assignedKioskIds' | 'operationalUnitPeriods'>,
   unitId: string | undefined,
   units: DPUnit[],
   kiosks: Kiosk[],
+  date = operationalCivilDate(),
 ) {
   if (!unitId) return true;
+  if (user.operationalUnitPeriods !== undefined) return operationalUnitsOnDate(user, date).includes(unitId);
   if (user.unitIds?.includes(unitId)) return true;
 
   const assignedKioskIds = user.assignedKioskIds ?? [];

@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **508 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **509 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -538,6 +538,7 @@ Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/user-notifications` | GET, PATCH | [src/app/api/user-notifications/route.ts](../../src/app/api/user-notifications/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/users` | POST | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) | [people-access](flows/people-access.md) |
 | `/api/users/[userId]` | PATCH | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/%5BuserId%5D/route.ts) | [people-access](flows/people-access.md) |
+| `/api/users/[userId]/contract-changes` | GET | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/%5BuserId%5D/contract-changes/route.ts) | [people-access](flows/people-access.md) |
 | `/api/webhooks/autentique` | POST | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/banking` | POST | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/cobranca` | POST | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -553,6 +554,7 @@ Inclui **58 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `absenceRetentionReconciliation` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTacitApprovalJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTerminationEffectsResume` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
+| `activateCollaboratorPeriods` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [people-access](flows/people-access.md) |
 | `cashClosureDailySync` | `onSchedule` | [functions/src/cash-closure-jobs.ts](../../functions/src/cash-closure-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `cashClosureSummaryReinforcement` | `onSchedule` | [functions/src/cash-closure-summaries.ts](../../functions/src/cash-closure-summaries.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `cashClosureSummaryWritten` | `onDocumentWritten` | [functions/src/cash-closure-summaries.ts](../../functions/src/cash-closure-summaries.ts) | [runtime-surfaces](runtime-surfaces.md) |

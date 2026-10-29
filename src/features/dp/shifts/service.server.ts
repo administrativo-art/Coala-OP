@@ -217,6 +217,7 @@ export async function saveWorkShift(params: {
     try {
       assignment = resolveDPShiftAssignment({
         executionUnitId: input.unitId,
+        date: input.date,
         executionUnitExternalId: typeof unitSnapshot.get('externalId') === 'string' ? unitSnapshot.get('externalId') : undefined,
         user: userSnapshot.data() ?? {},
       });

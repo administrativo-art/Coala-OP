@@ -587,3 +587,5 @@ function,functions/src/system-notice-jobs.ts,systemNoticesDailyMonitor,docs/engi
 function,functions/src/rep-p-availability.ts,repPAvailabilityAlertRelay,docs/engineering/flows/dp-time-recording.md,Relay PubSub sem acesso a ARP; encaminha notificacoes do Cloud Monitoring ao unico escritor App Hosting e repete em falha.
 api,src/app/api/dp/absence-coverage/[requestId]/route.ts,,docs/engineering/flows/dp-absences.md,Le e grava a cobertura de cada turno retirado pela ausencia (coberto/fechado/desfalque) com auditoria e aviso ao substituto.
 api,src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts,,docs/engineering/flows/dp-absences.md,Lista pessoas da unidade e de outras unidades com elegibilidade pela jornada e pela agenda.
+api,src/app/api/users/[userId]/contract-changes/route.ts,,docs/engineering/flows/people-access.md,Trilha contratual por pessoa com gestao de usuarios e escopo; consultas limitadas sem polling.
+function,functions/src/index.ts,activateCollaboratorPeriods,docs/engineering/flows/people-access.md,Ativacao contratual e projecoes operacionais por data; experiencia automatica vinculada ao ciclo atual; lotes limitados.

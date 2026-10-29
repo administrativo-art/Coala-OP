@@ -33,7 +33,8 @@ test("cada aba do drawer tem painel próprio e os campos de unidade têm nota", 
   for (const tab of tabs) {
     assert.match(source, new RegExp(`id="collaborator-edit-panel-${tab}"`));
   }
-  assert.match(source, /Onde a pessoa trabalha: entra na escala/);
+  assert.match(source, /As unidades habituais de escala e ponto são definidas nas vigências de operação abaixo/);
+  assert.match(source, /<OperationalUnitPeriodsField/);
   assert.match(source, /Referência do financeiro/);
   assert.match(source, /Onde a pessoa é gestora/);
 });

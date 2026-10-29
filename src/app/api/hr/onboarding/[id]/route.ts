@@ -1226,6 +1226,8 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
       actorEmail: access.decoded.email ?? null,
       baseUrl: appBaseUrl(request),
     });
+    const employmentCycleSnapshot = await dbAdmin.collection('users').doc(created.userId).get();
+    if (process.probationV2) update.probationV2 = { ...asRecord(process.probationV2), employmentCycleVersion: Number(employmentCycleSnapshot.get('employmentCycleVersion') ?? 0) };
     update.collaboratorUserId = created.userId;
     update.employeeId = created.employeeId;
     update.documents = created.promotedDocuments.documents;

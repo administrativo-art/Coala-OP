@@ -40,13 +40,16 @@ test("a edição completa segue o padrão de drawer com abas e ajuda explicativa
   assert.match(profilePageSource, /Descartar alterações\?/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /title="Identificação"/);
-  assert.match(source, /title="Cargo e função"/);
-  assert.match(source, /title="Jornada e datas"/);
+  assert.match(source, /title="Dados contratuais"/);
+  assert.match(source, /title="Jornada"/);
   assert.match(source, /title="Unidades"/);
   assert.doesNotMatch(source, /title="Comportamento no sistema"/);
   assert.match(source, /type CollaboratorEditTab = 'identity' \| 'journey' \| 'units';/);
   assert.doesNotMatch(source, /\{ id: 'system', label: 'Sistema' \}/);
   assert.match(source, /shiftDefinitionId: 'journey'/);
+  assert.match(source, /jobRoleId: 'identity'/);
+  assert.match(source, /jobFunctionIds: 'identity'/);
+  assert.match(source, /unitId: 'identity'/);
   assert.match(source, /assignedKioskIds: 'units'/);
   assert.match(source, /profileId: 'journey'/);
   assert.doesNotMatch(source, /name="operacional"|name="participatesInGoals"/);

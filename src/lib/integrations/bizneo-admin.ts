@@ -154,12 +154,15 @@ export async function syncBizneoUserIds(): Promise<SyncUsersResult> {
       await dbAdmin.runTransaction(async (transaction) => {
         const current = await transaction.get(doc.ref);
         if (!current.exists) return;
+        const effectivePatch = { ...patch };
+        const manualContractFields = current.get('contractualFieldOverrides');
+        if (Array.isArray(manualContractFields) && manualContractFields.includes('admissionDate')) delete effectivePatch.admissionDate;
         const storedAdmission = current.get('admissionDate');
         const admissionMillis = admissionDate?.toMillis();
-        const admissionChanged = admissionMillis !== undefined
+        const admissionChanged = effectivePatch.admissionDate !== undefined && admissionMillis !== undefined
           && (typeof storedAdmission?.toMillis !== 'function'
             || storedAdmission.toMillis() !== admissionMillis);
-        setEmploymentCyclePatch(transaction, doc.ref, current, patch, { cycleMutation: admissionChanged });
+        setEmploymentCyclePatch(transaction, doc.ref, current, effectivePatch, { cycleMutation: admissionChanged });
       });
       matched++;
       matchedEmails.add(email);
