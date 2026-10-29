@@ -25,7 +25,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck, Info } from 'lucide-react';
+import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type UnitAccessScope, type User } from '@/types';
 import { normalizeUnitAccessScope } from '@/lib/unit-access';
@@ -201,22 +201,19 @@ const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> 
   { id: 'units', label: 'Unidades' },
 ];
 
-/** Abas que dependem do módulo DP; sem `dp.view` o drawer mostra só a identificação. */
-const DP_ONLY_EDIT_TABS = new Set<CollaboratorEditTab>(['journey', 'units']);
-
 const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
   username: 'identity',
   email: 'identity',
   avatarUrl: 'identity',
   employmentRelationshipType: 'identity',
-  employerUnitId: 'identity',
+  employerUnitId: 'units',
   jobRoleId: 'identity',
   jobFunctionIds: 'identity',
   shiftDefinitionId: 'journey',
   admissionDate: 'identity',
   birthDate: 'journey',
   assignedKioskIds: 'units',
-  unitId: 'identity',
+  unitId: 'units',
   responsibleUnitIds: 'units',
   unitAccessScope: 'units',
   unitAccessUnitIds: 'units',
@@ -502,9 +499,9 @@ export function UserManagement({
   const contractChanged = contractFormChanged(editingUser, form.watch(), timestampToDateInput(editingUser?.admissionDate));
   const isDrawer = presentation === 'drawer' && !createOnly;
 
-  const visibleEditTabs = permissions.dp?.view
-    ? COLLABORATOR_EDIT_TABS
-    : COLLABORATOR_EDIT_TABS.filter((tab) => !DP_ONLY_EDIT_TABS.has(tab.id));
+  const canEditUnits = Boolean(permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin);
+  const visibleEditTabs = COLLABORATOR_EDIT_TABS.filter((tab) =>
+    tab.id === 'identity' || (tab.id === 'units' ? canEditUnits : permissions.dp?.view));
   // Ler errors/dirtyFields aqui inscreve o render nas mudanças; o ponto na aba evita salvar sem ver o que mudou em outra aba.
   const editTabStatus = (tab: CollaboratorEditTab): 'error' | 'changed' | null => {
     const inTab = (field: string) => COLLABORATOR_EDIT_FIELD_TAB[field as keyof UserFormValues] === tab;
@@ -1004,7 +1001,7 @@ export function UserManagement({
   const saveUser = async (values: UserFormValues) => {
     if (!operationalPeriodsValid) return;
     if (contractChanged && (contractChangeReason.trim().length < 5 || contractEffectiveDate < operationalCivilDate())) {
-      setActiveEditTab('identity');
+      setActiveEditTab(form.getValues('unitId') !== (editingUser?.unitId ?? '') || form.getValues('employerUnitId') !== (editingUser?.employerUnitId ?? '') ? 'units' : 'identity');
       throw new Error('Informe a data efetiva e uma justificativa de pelo menos cinco caracteres para a alteração contratual.');
     }
     values = { ...values, username: formatPersonName(values.username) };
@@ -1456,7 +1453,7 @@ export function UserManagement({
               </div>
             </UserFormSection>
 
-            {permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin ? <UserFormSection title="Dados contratuais" description="Vínculo, admissão, empregador, referência financeira e atuação contratada." compact={createOnly}>
+            {permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin ? <UserFormSection title="Dados contratuais" description="Vínculo, admissão, experiência e atuação contratada." compact={createOnly}>
               <div className="grid gap-4 md:grid-cols-2"><FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de vínculo</FormLabel>
@@ -1477,26 +1474,6 @@ export function UserManagement({
                         <FormItem>
                           <FormLabel>Data de admissão</FormLabel>
                           <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />{editingUser && <FormField control={form.control} name="employerUnitId" render={({ field }) => (<FormItem><FormLabel>Unidade empregadora</FormLabel><Select value={field.value || '__none__'} onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl><SelectContent><SelectItem value="__none__">Não informada</SelectItem>{units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${unit.cnpj}` : ''}</SelectItem>)}</SelectContent></Select><FormDescription>Unidade de cadastro do empregador. A referência financeira é definida separadamente.</FormDescription><FormMessage /></FormItem>)} />}<FormField control={form.control} name="unitId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione a referência financeira" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {units.map((unit) => (
-                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Referência do financeiro (lotação e custos), independente das unidades em que a pessoa trabalha. Não libera escala ou batida de ponto.
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} /><FormField control={form.control} name="jobRoleId" render={({ field }) => (
@@ -1568,9 +1545,9 @@ export function UserManagement({
             </div>
             ) : null}
 
-            {permissions.dp?.view ? (
+            {canEditUnits ? (
               <>
-                {(!isDrawer || activeEditTab === 'journey') ? (
+                {permissions.dp?.view && (!isDrawer || activeEditTab === 'journey') ? (
                 <div id="collaborator-edit-panel-journey" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-journey' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
 
                 <UserFormSection
@@ -1637,47 +1614,48 @@ export function UserManagement({
                 <div id="collaborator-edit-panel-units" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-units' : undefined}>
                 <UserFormSection
                   title="Unidades"
-                  description="Unidades habituais de trabalho, quiosques atribuídos, responsabilidade e acesso."
-                  help="São quatro informações diferentes: unidades de escala (onde a pessoa trabalha), unidade principal (referência do financeiro), unidades sob responsabilidade (onde é gestora) e escopo (onde pode visualizar e operar no sistema)."
+                  description="Operação e escala, financeiro, empregador, responsabilidade e acesso."
                   compact={createOnly}
                 >
                   <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
-                    <div className="rounded-ds-card border border-ds-info/25 bg-ds-info-bg/45 px-4 py-4">
-                      <div className="flex items-start gap-2.5">
-                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
-                        <div className="min-w-0 space-y-1">
-                          <p className="text-sm font-extrabold text-ds-ink">Como ler esta tela</p>
-                          <p className="text-xs leading-5 text-ds-ink-2">
-                            A unidade financeira não define sozinha a escala nem o local da batida. Uma cobertura autorizada pode levar a pessoa a trabalhar temporariamente em outra unidade.
-                          </p>
+                    {editingUser && <OperationalUnitPeriodsField key={editingUser.id} periods={editingUser.operationalUnitPeriods ?? []} units={units} initialUnitIds={operationalUnitIds} onChange={setPendingOperationalPeriods} onValidityChange={setOperationalPeriodsValid} />}
+                    {!editingUser && <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
+                      <div className="flex items-center gap-2"><p className="font-bold text-ds-ink">Outras unidades operacionais</p><FieldHelpTooltip title="Unidades operacionais na criação" description="Unidades habituais de trabalho sem um quiosque atribuído. A unidade financeira permanece independente. Depois do cadastro, as mudanças operacionais são registradas por vigência nesta aba." /></div>
+                      <p className="mt-1 text-ds-ink-muted">Vínculos de escala sem quiosque atribuído à pessoa. Permanecem no cadastro até serem removidos aqui. A referência financeira é independente.</p>
+                      {additionalOperationalUnitIds.filter((id) => !selectedWorkUnitIds.includes(id)).map((id) => (
+                        <div key={id} className="mt-2 flex items-center justify-between gap-3 rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
+                          <span>{units.find((unit) => unit.id === id)?.name ?? id}{form.watch('unitId') === id ? ' · também é a referência financeira' : ''}</span>
+                          <button type="button" className="font-bold text-ds-accent-ink underline" onClick={() => { setAdditionalOperationalUnitIds((current) => current.filter((item) => item !== id)); setAdditionalOperationalDirty(true); }}>Remover vínculo</button>
                         </div>
-                      </div>
-                      <div className="mt-3 grid gap-2.5 md:grid-cols-2">
-                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
-                          <p className="text-xs font-extrabold text-ds-ink">1. Escala e operação</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades habituais de trabalho. A cobertura em outra unidade é registrada no turno específico, com motivo.</p>
-                        </div>
-                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
-                          <p className="text-xs font-extrabold text-ds-ink">2. Principal financeira</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Referência de lotação e custos, editada em Identificação → Dados contratuais.</p>
-                        </div>
-                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
-                          <p className="text-xs font-extrabold text-ds-ink">3. Responsabilidade</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Unidades em que a pessoa aparece como gestora no organograma, metas e documentos.</p>
-                        </div>
-                        <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
-                          <p className="text-xs font-extrabold text-ds-ink">4. Visualização por unidade</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Define onde a pessoa pode consultar e operar no sistema, conforme as permissões do perfil.</p>
-                        </div>
-                      </div>
-                      <p className="mt-3 border-t border-ds-info/15 pt-3 text-xs font-semibold leading-5 text-ds-ink-2">
-                        Exemplo: alguém pode ter a unidade A como referência financeira e cobrir um turno na B. Visualizar a unidade C não cria um turno nem autoriza a batida lá.
-                      </p>
-                    </div>
+                      ))}
+                      <select aria-label="Adicionar unidade operacional sem quiosque atribuído" value="" className="mt-2 w-full rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2" onChange={(event) => { const id = event.target.value; if (id) { setAdditionalOperationalUnitIds((current) => [...new Set([...current, id])]); setAdditionalOperationalDirty(true); } }}>
+                        <option value="">Adicionar outra unidade operacional…</option>
+                        {units.filter((unit) => !operationalUnitIds.includes(unit.id)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                      </select>
+                    </div>}
+                    <div className="grid gap-4 md:grid-cols-2">{editingUser && <FormField control={form.control} name="employerUnitId" render={({ field }) => (<FormItem><div className="flex items-center gap-2"><FormLabel>Unidade empregadora</FormLabel><FieldHelpTooltip title="Unidade empregadora" description="Unidade de cadastro do empregador e de seu CNPJ no contrato. Não é alterada ao mudar unidades operacionais ou cobrir um turno." /></div><Select value={field.value || '__none__'} onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl><SelectContent><SelectItem value="__none__">Não informada</SelectItem>{units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${unit.cnpj}` : ''}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />}<FormField control={form.control} name="unitId" render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center gap-2"><FormLabel>Unidade principal (Financeiro)</FormLabel><FieldHelpTooltip title="Unidade financeira" description="Referência do financeiro: lotação e custos do colaborador. É independente das unidades em que ele trabalha e não muda ao escalar um turno em outro local. Não libera escala ou batida de ponto." /></div>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione a referência financeira" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {units.map((unit) => (
+                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} /></div>
+                    {isDrawer && contractChanged ? <ContractChangeForm reason={contractChangeReason} effectiveDate={contractEffectiveDate} onReasonChange={setContractChangeReason} onEffectiveDateChange={setContractEffectiveDate} /> : null}
                     <div>
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Quiosques atribuídos</FormLabel>
+                          <div className="flex items-center gap-2"><FormLabel>Quiosques atribuídos</FormLabel><FieldHelpTooltip title="Quiosques atribuídos" description="Quiosques atribuídos para atuação e acesso ao PDV. As unidades habituais de escala e ponto são definidas no histórico de vigências desta aba." /></div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <FormControl>
@@ -1711,28 +1689,10 @@ export function UserManagement({
                               </ScrollArea>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          <FormDescription className="text-xs">
-                            Quiosques atribuídos para atuação e acesso. As unidades habituais de escala e ponto são definidas nas vigências de operação abaixo.
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
                     </div>
-                    {editingUser && <OperationalUnitPeriodsField key={editingUser.id} periods={editingUser.operationalUnitPeriods ?? []} units={units} initialUnitIds={operationalUnitIds} onChange={setPendingOperationalPeriods} onValidityChange={setOperationalPeriodsValid} />}
-                    {!editingUser && <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
-                      <p className="font-bold text-ds-ink">Outras unidades operacionais</p>
-                      <p className="mt-1 text-ds-ink-muted">Vínculos de escala sem quiosque atribuído à pessoa. Permanecem no cadastro até serem removidos aqui. A referência financeira é independente.</p>
-                      {additionalOperationalUnitIds.filter((id) => !selectedWorkUnitIds.includes(id)).map((id) => (
-                        <div key={id} className="mt-2 flex items-center justify-between gap-3 rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
-                          <span>{units.find((unit) => unit.id === id)?.name ?? id}{form.watch('unitId') === id ? ' · também é a referência financeira' : ''}</span>
-                          <button type="button" className="font-bold text-ds-accent-ink underline" onClick={() => { setAdditionalOperationalUnitIds((current) => current.filter((item) => item !== id)); setAdditionalOperationalDirty(true); }}>Remover vínculo</button>
-                        </div>
-                      ))}
-                      <select aria-label="Adicionar unidade operacional sem quiosque atribuído" value="" className="mt-2 w-full rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2" onChange={(event) => { const id = event.target.value; if (id) { setAdditionalOperationalUnitIds((current) => [...new Set([...current, id])]); setAdditionalOperationalDirty(true); } }}>
-                        <option value="">Adicionar outra unidade operacional…</option>
-                        {units.filter((unit) => !operationalUnitIds.includes(unit.id)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-                      </select>
-                    </div>}
                     {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
@@ -1756,7 +1716,7 @@ export function UserManagement({
 
                       <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unidades sob responsabilidade</FormLabel>
+                          <div className="flex items-center gap-2"><FormLabel>Unidades sob responsabilidade</FormLabel><FieldHelpTooltip title="Unidades sob responsabilidade" description="Onde a pessoa é gestora: aparece como responsável no organograma, nas metas e nos documentos. Não libera acesso; isso é definido no escopo de visualização." /></div>
                           <FormControl>
                             <MultiSelect
                               options={responsibleUnitOptions}
@@ -1766,9 +1726,6 @@ export function UserManagement({
                               className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
                             />
                           </FormControl>
-                          <FormDescription className="text-xs">
-                            Onde a pessoa é gestora: aparece como responsável no organograma, nas metas e nos documentos. Não libera acesso; isso é o escopo abaixo.
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
@@ -1776,7 +1733,7 @@ export function UserManagement({
                     <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
                       <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Escopo de visualização por unidade</FormLabel>
+                          <div className="flex items-center gap-2"><FormLabel>Escopo de visualização por unidade</FormLabel><FieldHelpTooltip title="Escopo de visualização por unidade" description="Define onde a pessoa pode consultar e operar no sistema, dentro das permissões do perfil. Unidades vinculadas acompanham o cadastro; específicas usam a seleção abaixo; todas permite o escopo global. Não muda financeira, empregador, escala ou autorização de ponto." /></div>
                           <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
@@ -1798,7 +1755,7 @@ export function UserManagement({
                       {selectedUnitAccessScope === 'selected' ? (
                         <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Unidades liberadas no escopo</FormLabel>
+                            <div className="flex items-center gap-2"><FormLabel>Unidades liberadas no escopo</FormLabel><FieldHelpTooltip title="Unidades liberadas no escopo" description="Selecione as unidades que a pessoa poderá visualizar, mesmo quando não trabalha nelas. Não altera a lotação, o empregador ou as unidades sob responsabilidade." /></div>
                             <FormControl>
                               <MultiSelect
                                 options={responsibleUnitOptions}
