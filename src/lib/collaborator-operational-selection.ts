@@ -27,3 +27,22 @@ export function operationalUnitsDiffer(saved: string[] | undefined, selected: st
   const next = new Set(selected);
   return previous.size !== next.size || [...previous].some((id) => !next.has(id));
 }
+
+/**
+ * Quiosques atribuídos derivados das unidades da vigência: cada unidade que
+ * corresponde a um quiosque (mesma filial do PDV ou, sem filial, mesmo nome)
+ * entra; unidades sem quiosque, como o CD, não geram atribuição.
+ */
+export function kioskIdsForOperationalUnits(
+  unitIds: readonly string[],
+  kiosks: { id: string; name: string; pdvFilialId?: string | null }[],
+  units: (Pick<DPUnit, 'id' | 'name'> & { pdvFilialId?: string | null })[],
+) {
+  const selected = new Set(unitIds);
+  const filialToUnit = new Map(units.flatMap((unit) => unit.pdvFilialId?.trim() ? [[unit.pdvFilialId.trim(), unit.id] as const] : []));
+  return kiosks.flatMap((kiosk) => {
+    const filial = kiosk.pdvFilialId?.trim();
+    const unitId = (filial ? filialToUnit.get(filial) : undefined) ?? matchDPUnitForKiosk(kiosk.name, units as DPUnit[])?.id;
+    return unitId && selected.has(unitId) ? [kiosk.id] : [];
+  });
+}

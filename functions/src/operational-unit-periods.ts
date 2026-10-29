@@ -18,12 +18,20 @@ export async function reconcileOperationalUnitPeriods(db: Firestore, hrDb: Fires
       const period = periods.find((item) => item.validFrom <= date && (!item.validTo || item.validTo >= date));
       const unitIds = period?.unitIds ?? [];
       const next = periods.find((item) => item.validFrom > date)?.validFrom;
-      if (JSON.stringify(current.get('unitIds') ?? []) !== JSON.stringify(unitIds)) {
+      const unitsChanged = JSON.stringify(current.get('unitIds') ?? []) !== JSON.stringify(unitIds);
+      if (unitsChanged) {
         transaction.create(ref.collection('operationalUnitAudit').doc(), { actorId: 'system', action: 'scheduled_period_activated',
           before: current.get('unitIds') ?? [], after: unitIds, effectiveDate: date, createdAt: Timestamp.now() });
       }
+      // Quiosques atribuídos e acessos ao PDV seguem a vigência; a rota do job conclui o acompanhamento.
+      // Se já havia pendência, mantém as unidades de origem dela para o PDV comparar com o estado anterior real.
+      const followUp = unitsChanged ? {
+        operationalFollowUpPending: true,
+        operationalFollowUpAttempts: 0,
+        ...(current.get('operationalFollowUpPending') === true ? {} : { operationalFollowUpFromUnitIds: current.get('unitIds') ?? [] }),
+      } : {};
       transaction.update(ref, { unitIds, operationalProjectionDate: date, operationalProjectionSyncPending: true,
-        nextOperationalUnitChangeDate: next ?? FieldValue.delete() });
+        nextOperationalUnitChangeDate: next ?? FieldValue.delete(), ...followUp });
       return { unitIds, fingerprint: JSON.stringify(periods), financial: current.get('unitId') ?? null,
         employeeId: current.get('hrEmployeeId') || current.get('registrationIdBizneo') || current.id };
     });

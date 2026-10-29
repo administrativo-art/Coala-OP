@@ -127,20 +127,47 @@ export type PdvOperationalUnitSyncPlan =
       sourceUnitId: null;
       targetUnitId: string;
       profileId: string | null;
+    }
+  | {
+      kind: "remove";
+      sourceExternalUserId: string;
+      sourceUnitId: string | null;
+      targetUnitId: null;
+      profileId: null;
     };
 
+export type PdvOperationalUnitSyncOptions = {
+  /** Unidades vinculadas a uma filial do PDV; as demais (ex.: CD) não têm acesso a sincronizar. */
+  pdvUnitIds?: ReadonlySet<string>;
+};
+
+/** Acesso ao PDV ligado no cadastro; sem decisão gravada, vale "Sim" para quem já tem acesso ativo. */
+export function pdvAccessEnabled(user: RecordLike) {
+  if (typeof user.pdvAccessEnabled === "boolean") return user.pdvAccessEnabled;
+  return hasActivePdvAccess(user);
+}
+
+export function hasActivePdvAccess(user: RecordLike) {
+  return storedPdvAccesses(user).some((access) => access.status === "active")
+    || Boolean(normalizeExternalUserId(user.registrationIdPdv));
+}
+
 /**
- * A conta do PDV aceita uma filial por usuário. A movimentação automática só é
- * segura quando a alteração representa uma troca inequívoca de uma unidade por
- * outra. Inclusões adicionais não movem a conta existente; remoções e mudanças
- * múltiplas que afetem um acesso ativo exigem tratamento explícito.
+ * A conta do PDV aceita uma filial por usuário. Cada unidade da vigência com
+ * filial recebe um acesso: a troca de uma unidade por outra move o acesso, uma
+ * inclusão clona o acesso existente (preservando o perfil) e uma saída remove o
+ * acesso daquela unidade. Só as unidades alteradas são tocadas; acessos que já
+ * divergiam da vigência ficam para conferência humana. Quando não dá para
+ * identificar qual acesso pertence à unidade removida, a alteração é bloqueada.
  */
 export function planPdvOperationalUnitSyncs(
   currentUser: RecordLike,
   nextUser: RecordLike,
+  options: PdvOperationalUnitSyncOptions = {},
 ): PdvOperationalUnitSyncPlan[] {
-  const currentUnits = operationalUnitIds(currentUser);
-  const nextUnits = operationalUnitIds(nextUser);
+  const inScope = (unitId: string) => !options.pdvUnitIds || options.pdvUnitIds.has(unitId);
+  const currentUnits = operationalUnitIds(currentUser).filter(inScope);
+  const nextUnits = operationalUnitIds(nextUser).filter(inScope);
   const removed = currentUnits.filter((unitId) => !nextUnits.includes(unitId));
   const added = nextUnits.filter((unitId) => !currentUnits.includes(unitId));
   if (removed.length === 0 && added.length === 0) return [];
@@ -149,6 +176,10 @@ export function planPdvOperationalUnitSyncs(
   const legacyExternalUserId = normalizeExternalUserId(currentUser.registrationIdPdv);
   const hasPdvAccess = accesses.length > 0 || Boolean(legacyExternalUserId);
   if (!hasPdvAccess) return [];
+
+  if (removed.length !== 1 || added.length !== 1) {
+    if (removed.length > 0) return planMultipleUnitChanges(currentUser, accesses, legacyExternalUserId, removed, added);
+  }
 
   if (removed.length === 0 && added.length > 0) {
     const selected = legacyExternalUserId
@@ -167,16 +198,6 @@ export function planPdvOperationalUnitSyncs(
       targetUnitId,
       profileId: cleanText(selected?.profileId) ?? cleanText(currentUser.pdvAccessProfileId),
     }));
-  }
-
-  if (removed.length !== 1 || added.length !== 1) {
-    const removedAccess = accesses.some((access) => access.unitId && removed.includes(access.unitId));
-    if (removedAccess || (legacyExternalUserId && currentUnits.length === 1 && removed.length === 1)) {
-      throw new PdvOperationalUnitSyncError(
-        "A alteração afeta um acesso ativo do PDV Legal, mas não é uma troca direta entre duas unidades. Ajuste os acessos do PDV individualmente.",
-      );
-    }
-    return [];
   }
 
   const [sourceUnitId] = removed;
@@ -204,6 +225,106 @@ export function planPdvOperationalUnitSyncs(
   }];
 }
 
+function planMultipleUnitChanges(
+  currentUser: RecordLike,
+  accesses: UserPdvAccess[],
+  legacyExternalUserId: string | null,
+  removed: string[],
+  added: string[],
+): PdvOperationalUnitSyncPlan[] {
+  const removedSources = removed.flatMap((unitId) => {
+    const atUnit = accesses.filter((access) => access.unitId === unitId);
+    if (atUnit.length > 1) {
+      throw new PdvOperationalUnitSyncError(
+        "Há mais de um acesso do PDV Legal relacionado à mesma unidade. Ajuste os acessos individualmente.",
+      );
+    }
+    return atUnit.length ? [{ unitId, access: atUnit[0] }] : [];
+  });
+  const unidentified = accesses.some((access) => !access.unitId)
+    || Boolean(legacyExternalUserId && !accesses.some((access) => access.externalUserId === legacyExternalUserId));
+  if (removedSources.length < removed.length && unidentified) {
+    throw new PdvOperationalUnitSyncError(
+      "Não foi possível identificar qual acesso do PDV Legal pertence à unidade removida. Ajuste os acessos individualmente.",
+    );
+  }
+
+  const plans: PdvOperationalUnitSyncPlan[] = [];
+  const pairs = Math.min(removedSources.length, added.length);
+  for (let index = 0; index < pairs; index++) {
+    const { unitId, access } = removedSources[index];
+    plans.push({
+      kind: "move",
+      sourceExternalUserId: access.externalUserId,
+      sourceUnitId: unitId,
+      targetUnitId: added[index],
+      profileId: cleanText(access.profileId) ?? cleanText(currentUser.pdvAccessProfileId),
+    });
+  }
+  const leaving = new Set(removedSources.slice(pairs).map(({ access }) => access.externalUserId));
+  const source = accesses.find((access) => access.externalUserId === legacyExternalUserId && !leaving.has(access.externalUserId))
+    ?? accesses.find((access) => !leaving.has(access.externalUserId))
+    ?? null;
+  for (const targetUnitId of added.slice(pairs)) {
+    const sourceExternalUserId = source?.externalUserId ?? legacyExternalUserId;
+    if (!sourceExternalUserId) {
+      throw new PdvOperationalUnitSyncError(
+        "Não foi possível identificar o acesso principal do PDV Legal para criar o acesso da nova unidade.",
+      );
+    }
+    plans.push({
+      kind: "add",
+      sourceExternalUserId,
+      sourceUnitId: null,
+      targetUnitId,
+      profileId: cleanText(source?.profileId) ?? cleanText(currentUser.pdvAccessProfileId),
+    });
+  }
+  // Remoções por último: as inclusões ainda podem clonar o perfil de um acesso que vai sair.
+  for (const { unitId, access } of removedSources.slice(pairs)) {
+    plans.push({ kind: "remove", sourceExternalUserId: access.externalUserId, sourceUnitId: unitId, targetUnitId: null, profileId: null });
+  }
+  return plans;
+}
+
+/** Desligar o acesso ao PDV remove todos os acessos ativos da pessoa, inclusive o registro legado. */
+export function planPdvAccessRevocation(currentUser: RecordLike): PdvOperationalUnitSyncPlan[] {
+  const ids = new Map<string, string | null>();
+  for (const access of storedPdvAccesses(currentUser)) {
+    if (access.status === "active") ids.set(access.externalUserId, access.unitId ?? null);
+  }
+  const legacyExternalUserId = normalizeExternalUserId(currentUser.registrationIdPdv);
+  if (legacyExternalUserId && !ids.has(legacyExternalUserId)) ids.set(legacyExternalUserId, null);
+  return [...ids].map(([sourceExternalUserId, sourceUnitId]) => ({
+    kind: "remove",
+    sourceExternalUserId,
+    sourceUnitId,
+    targetUnitId: null,
+    profileId: null,
+  }));
+}
+
+/** Marca o acesso removido como inativo (o ID fica no histórico) e reaponta o acesso principal. */
+export function pdvRemovalPatch(params: { currentUser: RecordLike; externalUserId: string; updatedAt: string }) {
+  const currentAccesses = storedPdvAccesses(params.currentUser);
+  const pdvAccesses = currentAccesses.some((access) => access.externalUserId === params.externalUserId)
+    ? currentAccesses.map((access) => access.externalUserId === params.externalUserId
+      ? { ...access, status: "inactive" as const, updatedAt: params.updatedAt }
+      : access)
+    : currentAccesses;
+  const legacyId = normalizeExternalUserId(params.currentUser.registrationIdPdv);
+  if (legacyId !== params.externalUserId) return { pdvAccesses };
+  const next = pdvAccesses.find((access) => access.status === "active") ?? null;
+  return {
+    pdvAccesses,
+    registrationIdPdv: next?.externalUserId ?? null,
+    pdvAccessFilialId: next?.filialId || null,
+    pdvAccessFilialName: next?.filialName ?? null,
+    pdvAccessProfileId: next?.profileId || null,
+    pdvAccessProfileName: next?.profileName ?? null,
+  };
+}
+
 export function pdvOperationalUnitPatch(params: {
   currentUser: RecordLike;
   plan: PdvOperationalUnitSyncPlan;
@@ -214,15 +335,18 @@ export function pdvOperationalUnitPatch(params: {
   confirmedProfileId: string;
   updatedAt: string;
 }) {
+  const plan = params.plan;
+  if (plan.kind === "remove") throw new PdvOperationalUnitSyncError("A remoção de acesso usa pdvRemovalPatch.");
+
   const currentAccesses = storedPdvAccesses(params.currentUser);
-  const previous = params.plan.kind === "move"
-    ? currentAccesses.find((access) => access.externalUserId === params.plan.sourceExternalUserId)
+  const previous = plan.kind === "move"
+    ? currentAccesses.find((access) => access.externalUserId === plan.sourceExternalUserId)
     : currentAccesses.find((access) =>
-        access.unitId === params.plan.targetUnitId || access.externalUserId === params.externalUserId
+        access.unitId === plan.targetUnitId || access.externalUserId === params.externalUserId
       ) ?? null;
   const updatedAccess: UserPdvAccess = {
     externalUserId: params.externalUserId,
-    unitId: params.plan.targetUnitId,
+    unitId: plan.targetUnitId,
     unitName: params.targetUnitName,
     filialId: params.targetFilialId,
     filialName: params.targetFilialName,
@@ -237,16 +361,16 @@ export function pdvOperationalUnitPatch(params: {
     : [...currentAccesses, updatedAccess];
   const legacyId = normalizeExternalUserId(params.currentUser.registrationIdPdv);
   const establishesPrimaryAccess = !legacyId
-    && params.plan.kind === "add"
+    && plan.kind === "add"
     && currentAccesses.length === 1
-    && currentAccesses[0]?.externalUserId === params.plan.sourceExternalUserId;
-  const updatesPrimaryAccess = params.plan.kind === "move" && (
-    !legacyId || legacyId === params.plan.sourceExternalUserId || pdvAccesses.length === 1
+    && currentAccesses[0]?.externalUserId === plan.sourceExternalUserId;
+  const updatesPrimaryAccess = plan.kind === "move" && (
+    !legacyId || legacyId === plan.sourceExternalUserId || pdvAccesses.length === 1
   );
 
   return {
     pdvAccesses,
-    ...(establishesPrimaryAccess ? { registrationIdPdv: params.plan.sourceExternalUserId } : {}),
+    ...(establishesPrimaryAccess ? { registrationIdPdv: plan.sourceExternalUserId } : {}),
     ...(updatesPrimaryAccess ? {
       registrationIdPdv: params.externalUserId,
       pdvAccessFilialId: params.targetFilialId,
@@ -256,3 +380,6 @@ export function pdvOperationalUnitPatch(params: {
     } : {}),
   };
 }
+
+/** Acessos do PDV do cadastro (inclui os legados por quiosque), para exibição. */
+export { storedPdvAccesses as listPdvAccesses };
