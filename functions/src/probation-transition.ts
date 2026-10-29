@@ -13,7 +13,9 @@ export async function advanceAutomaticProbation(db: Firestore, hrDb: Firestore, 
     processes.where('probationV2.config.effectivenessRule', '==', 'automatic_at_end')
       .where('probationV2.status', 'in', ['active', 'decision_pending'])
       .where('probationV2.schedule.finalEndDate', '<', date)
-      .where('probationV2.employmentCycleVersion', '>=', 0).limit(100).get(),
+      .where('probationV2.employmentCycleVersion', '>=', 0)
+      .orderBy('probationV2.schedule.finalEndDate')
+      .orderBy('probationV2.employmentCycleVersion').limit(100).get(),
     db.collection('users').where('probationProjectionPending', '==', true).limit(100).get(),
   ]);
   const refs = new Map(due.docs.map((row) => [row.id, row.ref]));
