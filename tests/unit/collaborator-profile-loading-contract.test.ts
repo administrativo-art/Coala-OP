@@ -55,7 +55,8 @@ test('revisitas preservam o último perfil autorizado durante a revalidação', 
 
 test('ações frequentes ficam visíveis e ações sensíveis permanecem no menu', () => {
   assert.match(profilePageSource, />\s*Editar dados\s*<\/button>/u);
-  assert.match(profilePageSource, />\s*Documentos\s*<\/Link>/u);
+  assert.match(profilePageSource, /<HeaderIconLink[^>]*label="Documentos"/u);
+  assert.doesNotMatch(profilePageSource, /Perfil completo|EmployeeProfileHeaderSummary/u);
   assert.match(profilePageSource, /Consentimento de imagem e voz/u);
   assert.match(profilePageSource, /terminationCopyForRelationship/u);
 });
