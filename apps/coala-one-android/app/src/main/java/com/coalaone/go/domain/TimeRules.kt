@@ -17,7 +17,7 @@ data class DayPunch(val time: String, val nsr: Long?, val receiptId: String?, va
 enum class BreakLevel { NEUTRAL, INFO, WARN, DANGER, OK }
 data class BreakStatus(val level: BreakLevel, val headline: String, val detail: String?, val usedMinutes: Int,
     val totalMinutes: Int, val pausesDone: Int, val plannedPauses: Int?, val inPause: Boolean,
-    val countdownSeconds: Long? = null, val countdownLabel: String? = null)
+    val countdownSeconds: Long? = null, val countdownLabel: String? = null, val usedSeconds: Long = usedMinutes * 60L)
 enum class DaySummaryState { IN_PROGRESS, COMPLETE, PENDING }
 data class DaySummary(val state: DaySummaryState, val workedMinutes: Int? = null, val breakMinutes: Int? = null,
     val plannedBreakMinutes: Int? = null, val shiftDifferenceMinutes: Int? = null, val message: String? = null)
@@ -183,8 +183,8 @@ object TimeRules {
         if (total <= 0) return null
         val planned = plannedPauses(shift)
         fun result(level: BreakLevel, headline: String, detail: String?, used: Int = 0, pauses: Int = 0,
-            inPause: Boolean = false, countdown: Long? = null, countdownLabel: String? = null) =
-            BreakStatus(level, headline, detail, used, total, pauses, planned, inPause, countdown, countdownLabel)
+            inPause: Boolean = false, countdown: Long? = null, countdownLabel: String? = null, usedExact: Long = used * 60L) =
+            BreakStatus(level, headline, detail, used, total, pauses, planned, inPause, countdown, countdownLabel, usedExact)
         if (markings.any { it.classification?.purpose == null }) return result(BreakLevel.NEUTRAL,
             "Classifique as batidas para acompanhar o intervalo",
             "A classificação organiza os avisos e pode ser alterada sem modificar o horário registrado.")
@@ -207,7 +207,8 @@ object TimeRules {
         val currentSeconds = pauseStart?.let { java.time.Duration.between(it, now).seconds.coerceAtLeast(0) } ?: 0L
         val usedSeconds = closedSeconds + currentSeconds
         val used = (usedSeconds / 60).toInt()
-        val remainingSeconds = (total * 60L - usedSeconds).coerceAtLeast(0)
+        val countdownSeconds = total * 60L - usedSeconds
+        val remainingSeconds = countdownSeconds.coerceAtLeast(0)
         val remaining = ((remainingSeconds + 59) / 60).toInt()
         val inPause = pauseStart != null
         val progress = if (planned == 1) null else "Usados $used de $total min · ${closed.size}" +
@@ -217,7 +218,8 @@ object TimeRules {
         if (journeyEnded && used < total) return result(BreakLevel.DANGER, "Jornada finalizada sem o intervalo completo",
             "Foram classificados $used de $total min de intervalo. A batida continua válida e o dia segue para conferência.", used, closed.size)
         if (usedSeconds > (total + tolerance) * 60L) return result(BreakLevel.DANGER, "Intervalo passou de $total min ($used min)",
-            if (tolerance > 0) "Tolerância de $tolerance min da jornada excedida." else "A jornada não tem tolerância.", used, closed.size, inPause)
+            if (tolerance > 0) "Tolerância de $tolerance min da jornada excedida." else "A jornada não tem tolerância.",
+            used, closed.size, inPause, if (inPause) countdownSeconds else null, "Intervalo", usedSeconds)
 
         val nowZoned = now.atZone(zone)
         val startMinute = shift.startTime?.let(::clockMinutes) ?: 0
@@ -251,7 +253,7 @@ object TimeRules {
                 val passed = Math.ceil(kotlin.math.abs(secondsToEnd) / 60.0).toInt()
                 return result(if (secondsToEnd < -tolerance * 60L) BreakLevel.DANGER else if (secondsToEnd <= 120) BreakLevel.WARN else BreakLevel.INFO,
                     if (secondsToEnd < 0) "Passou do fim do intervalo há $passed min" else "Em intervalo · volte às ${segment.end} (${left(back.coerceAtLeast(0))})",
-                    progress, used, closed.size, true, secondsToEnd, "Fim do intervalo")
+                    progress, used, closed.size, true, countdownSeconds, "Intervalo", usedSeconds)
             }
             if (nowMinute > end) return result(BreakLevel.DANGER, "$label${segment.start}–${segment.end} não foi feita",
                 "Registre a saída para o intervalo assim que puder.", used, closed.size)
@@ -276,12 +278,10 @@ object TimeRules {
         val where = if (windowEnd != null) "dentro da janela" else "antes do fim do turno"
         if (inPause) {
             val currentPauseSeconds = currentSeconds
-            val countdown = if (planned == 1) remainingSeconds else shift.breakMinPauseMinutes?.let { (it * 60L - currentPauseSeconds).coerceAtLeast(0) }
-            val countdownLabel = if (planned == 1) "Fim do intervalo" else countdown?.let { "Mínimo desta pausa" }
             return result(if (remainingSeconds <= 120) BreakLevel.WARN else BreakLevel.INFO,
                 if (planned == 1) "Em intervalo · volte às ${hhmm(nowMinute + remaining)} (${left(remaining)})"
                 else "Em pausa há ${(currentPauseSeconds / 60)} min · restam $remaining min de intervalo",
-                progress, used, closed.size, true, countdown, countdownLabel)
+                progress, used, closed.size, true, countdownSeconds, "Intervalo", usedSeconds)
         }
         if (windowStart != null && nowMinute < windowStart) {
             val ahead = windowStart - nowMinute
@@ -312,6 +312,14 @@ object TimeRules {
         val first = instantOf(start); val last = instantOf(end)
         return if (first != null && last != null) java.time.Duration.between(first, last).toMinutes().coerceAtLeast(0).toInt()
         else clockSpan(start.time, end.time)
+    }
+    /** Exact elapsed time for the visual marker placed between the two interval punches. */
+    fun intervalSeconds(start: DayPunch, end: DayPunch): Long? {
+        val first = instantOf(start)
+        val last = instantOf(end)
+        if (first != null && last != null) return java.time.Duration.between(first, last).seconds.coerceAtLeast(0)
+        if (!timePattern.matches(start.time) || !timePattern.matches(end.time)) return null
+        return clockSpan(start.time, end.time) * 60L
     }
     fun workedMinutes(punches: List<DayPunch>): Int? {
         val active = orderedPunches(punches)

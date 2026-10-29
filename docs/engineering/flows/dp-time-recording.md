@@ -196,6 +196,8 @@ Preflight: até21leituras/página padrão (máximo51) e uma escrita de auditoria
 
 ## Contingência por ciclo de 24 horas — candidata local
 
+**Falta automática (29/10/2026):** a rotina horária registra falta injustificada 24 horas após o fim civil do turno quando o dia escalado continua sem batida, solicitação de ausência ou ajuste de ponto. O registro é idempotente e auditável. Ele não reserva nem fecha o dia: ausência ou ajuste aprovados posteriormente substituem o efeito no banco, folha, espelho e AEJ, sem apagar a ocorrência automática; pedidos recusados ou cancelados preservam a falta.
+
 Regra aprovada pelo usuário: preparo válido por 24 horas para iniciar; a primeira batida abre uma janela própria de 24 horas, independente da data civil e da duração prevista do turno. Reconexão e renovação não reiniciam esse prazo. Encerramento confirmado pelo servidor finaliza a autorização e permite preparar o próximo ciclo. Não é prazo legal atribuído à Portaria; é controle operacional do produto.
 
 A negociação é explícita por `protocolVersion:2` na emissão existente. O servidor conserva a âncora da Hora Legal, aparelho/chave/boot e unidades, devolvendo `preparationExpiresAt` e envelope máximo de48horas; o limite efetivo depois do início é o deadline imutável do ciclo. V1 conserva12horas, canônico e filas já seladas. Depois da inscrição emv2, novas emissõesv1 são recusadas; capturasv1 anteriores à inscrição ainda sincronizam e replays aceitos continuam idempotentes. Captura posterior que tenta usarv1 é preservada no aparelho para conferência, sem NSR novo.

@@ -1,6 +1,7 @@
 package com.coalaone.go
 
 import com.coalaone.go.data.*
+import com.coalaone.go.domain.DayPunch
 import com.coalaone.go.domain.TimeRules
 import org.junit.Assert.*
 import org.junit.Test
@@ -182,7 +183,13 @@ class TimeRulesTest {
         val inPause = TimeRules.breakStatus(flexible, listOf(marking("r1", "09:57", "journey_start"),
             marking("r2", "13:00", "break_start")), now("13:10"), zone)!!
         assertEquals(300L, inPause.countdownSeconds)
+        assertEquals(600L, inPause.usedSeconds)
         assertTrue(inPause.headline.contains("volte às 13:15"))
+        val exceeded = TimeRules.breakStatus(flexible, listOf(marking("r1", "09:57", "journey_start"),
+            marking("r2", "13:00", "break_start")), now("13:16"), zone)!!
+        assertEquals(-60L, exceeded.countdownSeconds)
+        assertEquals(960L, exceeded.usedSeconds)
+        assertTrue(exceeded.inPause)
 
         val multiple = flexible.copy(breakSplit = "multiple", breakMinPauseMinutes = 5)
         val short = TimeRules.breakStatus(multiple, listOf(marking("r1", "09:57", "journey_start"),
@@ -196,6 +203,11 @@ class TimeRulesTest {
         val status = TimeRules.breakStatus(shift, listOf(unclassified), Instant.parse("2026-10-19T13:00:00Z").toEpochMilli(), ZoneId.of("UTC"))
         assertTrue(status!!.headline.contains("Classifique"))
         assertTrue(TimeRules.canRecord(options, "slz"))
+    }
+    @Test fun completedIntervalKeepsItsExactDurationBetweenPunches() {
+        val start = DayPunch("14:53", 2, "r2", "available", purpose = "break_start", markedAt = "2026-10-29T14:53:00-03:00")
+        val end = DayPunch("16:50", 3, "r3", "available", purpose = "break_end", markedAt = "2026-10-29T16:50:12-03:00")
+        assertEquals(7_032L, TimeRules.intervalSeconds(start, end))
     }
     @Test fun treatedDayKeepsTheOriginalPunchStruckAndShowsTheInclusion() {
         val markings = listOf(OwnMarking("r1", "2026-10-18", 1, "2026-10-18T08:00:00-03:00", "slz", "01", "available"), OwnMarking("r2", "2026-10-18", 2, "2026-10-18T08:01:00-03:00", "slz", "01", "available"))

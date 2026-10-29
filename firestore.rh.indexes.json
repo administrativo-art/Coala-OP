@@ -1,5 +1,7 @@
 {
   "indexes": [
+    {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
+    {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeUid", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
     {"collectionGroup": "dp_journeyLocationEvents", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "executionUnitId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
     {"collectionGroup": "repP_pilotMarkings", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "cycleCandidate.committedAt", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
 

@@ -23,6 +23,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.font.FontWeight
 import com.coalaone.go.domain.Rules
+import com.coalaone.go.domain.BreakStatus
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.animateContentSize
@@ -181,6 +182,51 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun StatusChip(text: String, ink: Color, background: Color) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
+
+/** Compact live interval indicator shared by Ponto and Home. It only exists while a pause is open. */
+@Composable fun BreakTimerPill(status: BreakStatus, dark: Boolean = false, modifier: Modifier = Modifier) {
+    if (!status.inPause || status.countdownSeconds == null) return
+    val exceeded = status.countdownSeconds < 0
+    val absolute = kotlin.math.abs(status.countdownSeconds)
+    fun clock(seconds: Long, includeHours: Boolean = false): String {
+        val hours = seconds / 3600
+        val minutes = seconds % 3600 / 60
+        val remainder = seconds % 60
+        return if (includeHours || hours > 0) String.format(Locale.ROOT, "%02d:%02d:%02d", hours, minutes, remainder)
+        else String.format(Locale.ROOT, "%02d:%02d", minutes, remainder)
+    }
+    val ink = when {
+        exceeded -> if (dark) Tokens.accentSoft else Tokens.danger
+        status.countdownSeconds <= 120 -> Tokens.warning
+        dark -> Tokens.accentSoft
+        else -> Tokens.wine
+    }
+    val background = when {
+        dark -> Tokens.onDark.copy(alpha = .09f)
+        exceeded -> Tokens.dangerBg
+        status.countdownSeconds <= 120 -> Tokens.warningBg
+        else -> Tokens.accentSoft
+    }
+    val text = if (exceeded) "Intervalo excedido · +${clock(absolute)} · total ${clock(status.usedSeconds, true)}"
+        else "Intervalo · faltam ${clock(absolute)} · total ${clock(status.usedSeconds, true)}"
+    Text(text, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.sp),
+        modifier = modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 5.dp))
+}
+
+@Composable fun CompletedBreakPill(seconds: Long, modifier: Modifier = Modifier) {
+    val hours = seconds / 3600
+    val minutes = seconds % 3600 / 60
+    val remainder = seconds % 60
+    val duration = when {
+        hours > 0 -> String.format(Locale.ROOT, "%dh%02d", hours, minutes)
+        remainder > 0 -> String.format(Locale.ROOT, "%dmin %02ds", minutes, remainder)
+        else -> "${minutes}min"
+    }
+    Text("Intervalo · $duration", color = Tokens.wine,
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.sp),
+        modifier = modifier.background(Tokens.accentSoft, RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 5.dp))
+}
 /** Pill filter from the prototype: dark when selected, outlined otherwise. */
 @Composable fun PillChoice(label: String, selected: Boolean, enabled: Boolean = true, accent: Boolean = false, onClick: () -> Unit) {
     val ink = when { selected && accent -> Tokens.wine; selected -> Tokens.pillInk; else -> Tokens.muted }

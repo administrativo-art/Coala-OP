@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **507**
-- Totalmente contratados: **162**
+- Arquivos de rota: **508**
+- Totalmente contratados: **163**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -402,6 +402,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/jobs/documents/retention-reconcile` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/documents/retention-reconcile/route.ts](../../src/app/api/jobs/documents/retention-reconcile/route.ts) |
 | `/api/jobs/dp/absences/tacit-approval` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/absences/tacit-approval/route.ts](../../src/app/api/jobs/dp/absences/tacit-approval/route.ts) |
 | `/api/jobs/dp/time-closing/overdue` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/time-closing/overdue/route.ts](../../src/app/api/jobs/dp/time-closing/overdue/route.ts) |
+| `/api/jobs/dp/time-recording/automatic-absences` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/time-recording/automatic-absences/route.ts](../../src/app/api/jobs/dp/time-recording/automatic-absences/route.ts) |
 | `/api/jobs/financial-budgets/generate` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) |
 | `/api/jobs/financial-inbox/maintenance` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) |
 | `/api/jobs/inter/cobrancas/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) |

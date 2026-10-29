@@ -40,6 +40,20 @@ test('Barra do início não tem resumo deslizante: só os dados da própria barr
   assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
 });
 
+test('Resumo do ponto na Home é expansível e o cronômetro só aparece durante o intervalo', () => {
+  assert.match(activity, /var summaryExpanded by rememberSaveable/);
+  assert.match(activity, /onClickLabel = if \(summaryExpanded\) "Recolher resumo da jornada" else "Expandir resumo da jornada"/);
+  assert.match(activity, /if \(summaryExpanded\) \{/);
+  assert.match(activity, /breakStatus\?\.takeIf \{ it\.inPause \}\?\.let \{ BreakTimerPill/);
+  assert.match(components, /fun BreakTimerPill\(status: BreakStatus/);
+  assert.match(components, /Intervalo · faltam/);
+  assert.match(components, /Intervalo excedido · \+/);
+  assert.match(time, /punch\.purpose == "break_start"/);
+  assert.match(time, /end\?\.purpose == "break_end"/);
+  assert.match(time, /CompletedBreakPill/);
+  assert.match(time, /status\.level != BreakLevel\.OK -> BreakNoticeCard/);
+});
+
 test('Início relê relógio e turno por pessoa, e o tema visual segue a hora do dia', () => {
   assert.match(home, /val dataOwner = developerViewAs\.targetUserId \?: owner/);
   assert.match(home, /val state = profileState\.visibleFor\(dataOwner\)/);
