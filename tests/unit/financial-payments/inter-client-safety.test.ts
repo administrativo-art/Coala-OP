@@ -14,6 +14,7 @@ import {
   createInterClient,
   inspectInterCertificateHealth,
 } from "../../../src/lib/integrations/inter/client.server";
+import { cancelInterBarcodePayment } from "../../../src/lib/integrations/inter/barcode-payments.server";
 import { InterApiError } from "../../../src/lib/integrations/inter/error";
 
 const ENVIRONMENT_KEYS = [
@@ -184,6 +185,25 @@ test("repete somente leitura e nunca repete inclusão de pagamento", async () =>
       },
     );
     assert.equal(paymentCalls, 1);
+  });
+});
+
+test("cancelamento de boleto usa DELETE único com código codificado", async () => {
+  let cancellations = 0;
+  const adapter: AxiosAdapter = async (config) => {
+    if (config.url?.endsWith("/oauth/v2/token")) {
+      assert.match(String(config.data), /pagamento-boleto.write/);
+      return success(config, { access_token: "fixture-token", expires_in: 3600 });
+    }
+    assert.equal(config.method?.toUpperCase(), "DELETE");
+    assert.equal(config.url, "/banking/v2/pagamento/transacao%2Fcom%20espaco");
+    cancellations += 1;
+    return success(config, undefined);
+  };
+
+  await withInterFixture(adapter, async () => {
+    await cancelInterBarcodePayment("transacao/com espaco");
+    assert.equal(cancellations, 1);
   });
 });
 

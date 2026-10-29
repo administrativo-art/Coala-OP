@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **510**
-- Totalmente contratados: **165**
+- Arquivos de rota: **511**
+- Totalmente contratados: **166**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -243,6 +243,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/management-analysis` | POST | `LEGACY_BASELINE` | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) |
 | `/api/financial/payment-requests` | GET, POST | `EXCEPTION` | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) |
 | `/api/financial/payment-requests/[id]/authorize` | POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/authorize/route.ts](../../src/app/api/financial/payment-requests/[id]/authorize/route.ts) |
+| `/api/financial/payment-requests/[id]/cancel-and-replace` | POST ✓ | `CONTRACTED` | [src/app/api/financial/payment-requests/[id]/cancel-and-replace/route.ts](../../src/app/api/financial/payment-requests/[id]/cancel-and-replace/route.ts) |
 | `/api/financial/payment-requests/[id]/proof` | GET | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/proof/route.ts](../../src/app/api/financial/payment-requests/[id]/proof/route.ts) |
 | `/api/financial/payment-requests/[id]/recover` | POST ✓ | `CONTRACTED` | [src/app/api/financial/payment-requests/[id]/recover/route.ts](../../src/app/api/financial/payment-requests/[id]/recover/route.ts) |
 | `/api/financial/payment-requests/[id]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/financial/payment-requests/[id]/refresh/route.ts](../../src/app/api/financial/payment-requests/[id]/refresh/route.ts) |

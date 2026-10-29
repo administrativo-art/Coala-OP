@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
 
 const order = {
   sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_1", expenseId: "expense_1",
@@ -21,6 +21,34 @@ test("boleto direto exige origem na própria despesa e preserva todas as confirm
   const direct = { ...order, sourceType: "expense_boleto", sourceId: "expense_1" };
   assert.doesNotThrow(() => validatePaymentCliAction({ request: direct, action: "authorize", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...direct, sourceId: "other" }, action: "authorize", ...expected }));
+});
+
+test("cancela e substitui somente boleto direto pendente com data bancária confirmada", () => {
+  const direct = {
+    ...order,
+    sourceType: "expense_boleto",
+    sourceId: "expense_1",
+    status: "awaiting_bank_approval",
+    interRequestId: "bank_1",
+    barcodeSnapshot: { ...order.barcodeSnapshot, scheduledFor: "2026-11-07", dueDate: "2026-11-07" },
+  };
+  const cancellation = {
+    request: direct,
+    amountCents: expected.amountCents,
+    currentScheduledFor: "2026-11-07",
+    replacementScheduledFor: "2026-10-29",
+    beneficiaryDocument: expected.beneficiaryDocument,
+    expenseId: expected.expenseId,
+    barcode: expected.barcode,
+    today: "2026-10-29",
+  };
+  assert.doesNotThrow(() => validatePaymentCliCancellation(cancellation));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, currentScheduledFor: "2026-11-06" }));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, replacementScheduledFor: "2026-11-08" }));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, replacementScheduledFor: "2026-10-28" }));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, request: { ...direct, sourceType: "financial_inbox" } }));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, request: { ...direct, status: "paid" } }));
+  assert.throws(() => validatePaymentCliCancellation({ ...cancellation, request: { ...direct, interRequestId: null } }));
 });
 
 test("impede divergência e repetição de ordem bancária", () => {
