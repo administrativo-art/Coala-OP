@@ -33,7 +33,11 @@ test('Dados contratuais informa e o drawer concentra edição com justificativa 
   await expect(page.getByRole('heading', { name: 'Vigências do vínculo', exact: true })).toHaveCount(0);
   await section.getByRole('button', { name: 'Ver alterações', exact: true }).click();
   await expect(section.getByText('Nenhuma alteração contratual registrada.')).toBeVisible();
-  await section.getByRole('button', { name: 'Editar dados contratuais', exact: true }).click();
+  await expect(section.getByRole('button', { name: 'Editar dados contratuais', exact: true })).toHaveCount(0);
+  await expect(section.getByText('Razão social', { exact: true })).toHaveCount(0);
+  await expect(section.getByText('Unidade empregadora', { exact: true })).toHaveCount(0);
+  await expect(section.getByText('Unidade financeira', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Editar dados', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Identificação', exact: true })).toHaveAttribute('aria-selected', 'true', { timeout: 90_000 });
   await expect(page.getByLabel('Principal financeira', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Unidade empregadora', { exact: true })).toHaveCount(0);
