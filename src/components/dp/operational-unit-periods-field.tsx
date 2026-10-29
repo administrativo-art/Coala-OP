@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { InfoPopover } from '@/components/ui/info-popover';
 import type { DPUnit } from '@/types';
 import { appendOperationalPeriod, operationalCivilDate, type OperationalUnitPeriod } from '@/lib/operational-unit-periods';
 import { formatCivilDateBR } from '@/features/dp/employment-reference/presentation';
@@ -36,7 +37,7 @@ export function OperationalUnitPeriodsField({ periods, units, initialUnitIds = [
     setEditing(false); setError(''); onChange(undefined); onValidityChange(true);
   }
   return <div className="space-y-3 rounded-ds-md border border-ds-border p-3">
-    <p className="text-sm font-bold">Unidades de operação e escala</p>
+    <div className="flex items-center gap-2"><p className="text-sm font-bold">Unidades de operação e escala</p><InfoPopover title="Unidades de operação e escala"><p>Unidades habituais de trabalho por período. Uma nova vigência fecha a anterior na véspera, mantendo o histórico. Cobertura em outra unidade é registrada no turno específico, com motivo, sem alterar financeira ou empregador.</p></InfoPopover></div>
     {current ? <div className="text-sm"><p className="font-semibold">Vigência {periods.indexOf(current) + 1} · {formatCivilDateBR(current.validFrom)} até {current.validTo ? formatCivilDateBR(current.validTo) : 'indeterminado'}</p><p>{names(current.unitIds)}</p></div>
       : <p className="text-sm text-ds-ink-muted">{!periods.length && initialUnitIds.length ? `Unidades do cadastro atual: ${names(initialUnitIds)}. Confira a data inicial para registrar a primeira vigência.` : 'Sem vigência definida para hoje. Colaboradores sem atuação em escala ou ponto podem permanecer assim.'}</p>}
     {periods.filter((period) => period.validFrom > today).map((period) => <p key={period.validFrom} className="text-sm">Agendada · {formatCivilDateBR(period.validFrom)} · {names(period.unitIds)}</p>)}

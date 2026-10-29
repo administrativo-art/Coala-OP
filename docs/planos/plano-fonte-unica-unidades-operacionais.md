@@ -55,3 +55,7 @@ Nenhuma migração automática. Antes da primeira vigência, conferir pessoa, un
 ## Implantação
 
 Integrar por PR/main, índices novos nos bancos principal/RH e Function `activateCollaboratorPeriods`, depois promoção validada a production e conferência do SHA/rollout/HTTP. A Feature não altera sozinha o cadastro de Luís; a data da primeira vigência permanece pendente de confirmação.
+
+## Correção de organização da interface — 28/10/2026
+
+Decisão posterior do usuário: concentrar todos os seletores de unidade na aba Unidades, incluindo financeira e empregadora. Retirar o quadro explicativo e oferecer ícone de ajuda em cada tipo. A localização dos campos muda; auditoria contratual, datas e fonte operacional permanecem. A justificativa das mudanças contratuais também deve estar acessível na própria aba Unidades.
