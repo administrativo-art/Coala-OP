@@ -107,6 +107,18 @@ type BankPaymentRequestBase = {
     outcome: "clear" | "existing_recovered";
     bankTransactionCode?: string | null;
   };
+  bankCancellation?: {
+    status: "pending" | "failed" | "confirmed";
+    requestedAt: string;
+    requestedBy: string;
+    requestedByEmail?: string | null;
+    bankTransactionCode: string;
+    replacementScheduledFor: string;
+    failedAt?: string;
+    confirmedAt?: string;
+  };
+  cancelledAt?: string;
+  cancelledBy?: string;
 };
 
 export type PixBankPaymentRequest = BankPaymentRequestBase & {

@@ -80,6 +80,13 @@ export async function getInterBarcodePayment(transactionCode: string) {
   return (values[0] ?? null) as InterBarcodePayment | null;
 }
 
+export async function cancelInterBarcodePayment(transactionCode: string) {
+  const code = transactionCode.trim();
+  if (!code || code.length > 200) throw new Error("Código da transação bancária inválido.");
+  const client = await createInterClient("pagamento-boleto.write");
+  await client.delete(`/banking/v2/pagamento/${encodeURIComponent(code)}`);
+}
+
 export async function findInterBarcodePaymentsByCode(code: string) {
   const client = await createInterClient("pagamento-boleto.read");
   const response = await client.get("/banking/v2/pagamento", {
