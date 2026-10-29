@@ -9,6 +9,9 @@
 | [Plano — Fonte única das unidades operacionais](plano-fonte-unica-unidades-operacionais.md) | Pessoas, escala e ponto |
 | [Plano — Recesso do estagiário](plano-recesso-estagio.md) | Pessoas e DP |
 | [Plano — Trilha de admissão](plano-admissao.md) | Pessoas e RH |
+| [Plano — Desligamento de todos os vínculos](plano-desligamento.md) | Pessoas e RH |
+| [Plano — Auditoria do módulo de Férias](plano-auditoria-ferias.md) | Pessoas e DP |
+| [Plano — Falta automática e declarada](plano-falta-automatica.md) | Ponto e DP |
 | [Plano — Onboarding, integração, documentos e assinatura](plano-onboarding-integracao-documentos-assinatura.md) | Pessoas e RH |
 | [Plano de correção — Organizador Inteligente de Documentos de RH](plano-correcao-organizador-documentos.md) | Pessoas e RH |
 | [Plano — Implantação da API do Banco Inter para pagamentos](plano-integracao-api-banco-inter-pagamentos.md) | Financeiro |
