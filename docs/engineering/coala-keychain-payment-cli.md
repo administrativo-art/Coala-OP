@@ -56,8 +56,10 @@ automaticamente ordens com resultado incerto.
 foi aceito pelo Inter e ainda aguarda aprovação ou execução. A confirmação explícita
 cobre o cancelamento bancário e a criação da versão substituta, mas não autoriza um
 segundo envio silencioso: a nova solicitação volta a
-`awaiting_financial_authorization`. O backend só cria essa versão depois de o Inter
-confirmar `CANCELADO`; falha ou incerteza exige consulta de estado antes de repetir.
+`awaiting_financial_authorization`. O backend exige permissões de criar e enviar solicitações
+e só cria essa versão após o DELETE aceito pelo Inter ou uma consulta posterior com
+`CANCELADO`. Falha ou incerteza exige consulta de estado antes de repetir; a
+repetição não emite outro DELETE.
 Depois, use `authorize` e `send` com o novo ID e a nova data. A aprovação final segue
 separada no aplicativo do Inter.
 

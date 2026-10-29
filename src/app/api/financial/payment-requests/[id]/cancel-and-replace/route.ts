@@ -72,6 +72,7 @@ const enforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unkno
     if (!actor.isDefaultAdmin && (
       !actor.permissions.financial?.view
       || !actor.permissions.financial?.paymentRequests?.view
+      || !actor.permissions.financial?.paymentRequests?.create
       || !actor.permissions.financial?.paymentRequests?.submit
     )) {
       throw new AppError({
