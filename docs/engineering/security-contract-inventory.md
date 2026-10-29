@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **509**
-- Totalmente contratados: **164**
+- Arquivos de rota: **510**
+- Totalmente contratados: **165**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -413,6 +413,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/jobs/stone-pix/request` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) |
 | `/api/jobs/system-notices/daily` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) |
+| `/api/jobs/users/operational-follow-up` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/users/operational-follow-up/route.ts](../../src/app/api/jobs/users/operational-follow-up/route.ts) |
 | `/api/mercadorias` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) |
 | `/api/mercadorias/export` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) |
 | `/api/mobile/app-attestation` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) |

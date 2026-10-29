@@ -943,6 +943,11 @@ export type User = {
   pdvAccessFilialId?: string;
   pdvAccessFilialName?: string;
   pdvAccesses?: UserPdvAccess[];
+  /** Acesso ao PDV ligado: as unidades da vigência com filial recebem acesso. Ausente = "Sim" para quem já tem acesso ativo. */
+  pdvAccessEnabled?: boolean;
+  /** Pendência do job após uma vigência agendada entrar em vigor: quiosques atribuídos e PDV. */
+  operationalFollowUpPending?: boolean;
+  operationalFollowUpError?: string | null;
   // Departamento Pessoal (RH)
   /** ID canônico do cadastro em coala-rh/employees. */
   hrEmployeeId?: string;
