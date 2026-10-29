@@ -23,7 +23,7 @@
 
 - Formulários extensos que partem de uma página de detalhe, como **Editar dados do colaborador**, podem usar até 920px e ocupam 100% da largura no mobile. A ampliação é horizontal apenas quando o formulário realmente exigir espaço; ela nunca substitui o alinhamento vertical obrigatório de topo a base.
 - O conteúdo é dividido por assunto em abas; não apresentar todos os blocos numa única rolagem longa.
-- Na edição de colaborador, Identificação agrupa dados pessoais e Dados contratuais (vínculo, admissão, empregadora, financeira, cargo/função, datas calculadas da experiência e motivo/data efetiva). Jornada mantém turno e datas operacionais. Unidades mantém vigências de operação/escala, quiosques atribuídos, responsabilidade e escopo; sua edição e histórico expandem inline no mesmo painel. Dados contratuais no perfil é somente informativo e oferece consulta à trilha. As abas que dependem do DP somem para quem não tem `dp.view`.
+- Na edição de colaborador, Identificação agrupa dados pessoais e Dados contratuais (vínculo, admissão, cargo/função, datas calculadas da experiência e motivo/data efetiva). Jornada mantém turno e datas operacionais. Unidades mantém vigências de operação/escala, financeira, empregadora, quiosques atribuídos, responsabilidade e escopo; sua edição e histórico expandem inline no mesmo painel. Dados contratuais no perfil é somente informativo e oferece consulta à trilha. Jornada exige `dp.view`; Unidades também fica disponível para quem gerencia usuários.
 - Campos que se confundem entre si recebem nota curta sob o campo dizendo o efeito de cada um; num seletor de modos, a nota muda conforme a opção escolhida.
 - Cada aba mostra um ponto quando contém campo alterado (cor de destaque) ou com erro (cor de perigo), para que ninguém salve sem ver o que mudou em outra aba.
 - Cada assunto mantém título, descrição curta e `InfoPopover` clicável com alcance e efeitos dos campos. Ajuda essencial não depende de *hover*.
@@ -47,3 +47,5 @@ Blocos configuráveis dentro dessas abas recebem um ícone de informação quand
 
 ## Baixa inline (Controle de Estoque)
 Tipo em Segmented: Consumo/Venda · Descarte/Perda · Outros. Quantidade em embalagens, com "disponível" (quantidade − reserva) no rótulo. Validações: quantidade > 0; ≤ disponível; "Outros" exige observação. Confirmar chama `consumeFromLot`.
+
+Ajuste de interface em 28/10/2026: todos os seletores de unidade ficam exclusivamente na aba Unidades. O quadro Como ler esta tela foi removido; cada tipo tem ícone InfoPopover com ajuda por clique/toque. Financeira e empregadora continuam sendo dados contratuais auditados; a justificativa fica disponível também na aba Unidades, sem mudar fontes ou regras. Gestores de usuários preservam acesso à aba mesmo sem visualização DP.
