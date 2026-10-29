@@ -4,7 +4,7 @@
 
 **Status:** aprovado para implementação em 28/10/2026, já com o guia de regras de estágio recebido nesse dia (ciclos de 12 meses, saldo projetado, limite interno de 3 meses, aviso de recesso assinado); nada implementado
 
-**Última atualização:** 28/10/2026
+**Última atualização:** 29/10/2026
 
 **Responsável funcional:** RH / DP
 
@@ -65,6 +65,7 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 | D14 | Ciclos de 12 meses separados desde o início do estágio, com o saldo mais antigo usado primeiro. Se o ciclo terminar com saldo, há um limite interno de 3 meses para regularizar, com alerta, e agendar fora do ciclo exige justificativa do RH. O limite nunca passa do fim do estágio e não é prazo legal. | 28/10/2026 |
 | D15 | Agendamento pode usar o saldo projetado até o último dia do recesso pedido (regra R04 do guia), desde que dentro da vigência. | 28/10/2026 |
 | D16 | Número máximo de partes e mínimo de dias por parte são configuráveis no DP; padrão sem limite (mantém D4). | 28/10/2026 |
+| D17 | O recesso pertence ao módulo de Férias, não ao de Ausências, e tem **tipos**. O primeiro é **"Recesso estagiário"**; outros tipos de recesso podem entrar depois sem mudar o modelo. Cada tipo define quem é elegível (pelo vínculo na data), a regra de cálculo, o documento e o texto na tela. | 29/10/2026 |
 
 ## 5. Regras de negócio
 
@@ -78,16 +79,16 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 | RN6 | **Alerta de fim de estágio:** a partir de 60 dias antes do término, com saldo projetado no término > 0, a pessoa recebe prioridade "Agendar antes do fim". |
 | RN7 | **Trilha:** Agendar → Aprovar → Aviso de recesso (gerar, conferir, enviar à Autentique, assinado) → Em gozo → Concluído. Sem recibo e sem pagamento. Em gozo e Concluído vêm das datas, e só depois do aviso assinado (D12). Rejeitar e cancelar exigem justificativa. |
 | RN8 | **Efetivação como CLT:** recesso com início antes da data do novo período fica no histórico do estágio. As férias da CLT contam a partir do início do período CLT, não da admissão como estagiário. O processo de conversão está no [plano de admissão](plano-admissao.md#22-efetivação-de-estagiário-como-clt-conversão-de-vínculo). |
-| RN9 | Registros `gozo` e `venda` são recusados para quem está em estágio na data, e `recesso` é recusado para quem não está. |
+| RN9 | Registros `gozo` e `venda` são recusados para quem está em estágio na data, e `recesso` é recusado para quem não tem o vínculo que o tipo exige (`internship`: estágio vigente na data). `recesso` sem `recessKind` válido é recusado. |
 | RN10 | **Situação de cada pedido:** permitido, requer aprovação (fora do ciclo ou acima do saldo projetado com exceção do RH) ou bloqueado (fora da vigência, sobreposição, sem estágio). Cada decisão grava data, responsável e a versão das regras usada. |
 | RN11 | **Alertas** no Panorama e nas notificações: 90, 60 e 30 dias antes do fim do ciclo com saldo; ciclo encerrado com saldo; perto e depois do limite interno; fim do estágio com saldo. |
 
 ## 6. Contrato de dados
 
-- **`dp_vacations`:** novo `recordType: 'recesso'`. Usa `userId`, `startDate`, `endDate`, `days`, `returnDate`, `status` e auditoria já existentes, mais `internshipPeriodStart` (o `validFrom` do período de estágio, que identifica o estágio a que a parte pertence). Não grava `cycleId` de CLT nem `workflow` de 6 etapas.
+- **`dp_vacations`:** novo `recordType: 'recesso'` com `recessKind` (D17), cujo único valor por ora é `'internship'`, exibido como "Recesso estagiário". Um catálogo de tipos de recesso no código (rótulo, vínculo elegível, regra, modelo de aviso) é a fonte da lista; novo tipo é nova entrada no catálogo. Usa `userId`, `startDate`, `endDate`, `days`, `returnDate`, `status` e auditoria já existentes, mais `internshipPeriodStart` (o `validFrom` do período de estágio, que identifica o estágio a que a parte pertence). Não grava `cycleId` de CLT nem `workflow` de 6 etapas.
 - **Tipos e schema:** `DPVacationRecordType` passa a `'gozo' | 'venda' | 'recesso'`; o schema de criação vira união discriminada por `recordType`, para que `recesso` não exija `cycleId` nem campos de CLT (abono, 13º, concordância de fracionamento CLT).
 - **Função pura** em `src/lib/hr/internship-recess.ts` (rascunho preservado em `.ai-work-archive/development-technology/2026-10-28-recesso-estagio/`, a revisar para ciclos): ciclos, acumulado, gozado, reservado, saldo, saldo projetado, prazo interno, situação e texto do ícone. É a única fonte da conta: tela, servidor e o futuro desligamento a chamam.
-- **Aviso de recesso:** novo documento no catálogo oficial (`SYSTEM_DOCUMENT_TEMPLATES`), "Aviso de recesso — Estágio {período} — Parte {n}", reaproveitando a geração, a assinatura e a conferência da Autentique do aviso de férias; arquivado na pasta "Recesso".
+- **Aviso de recesso:** novo documento no catálogo oficial (`SYSTEM_DOCUMENT_TEMPLATES`), "Aviso de recesso estagiário — Estágio {período} — Parte {n}", reaproveitando a geração, a assinatura e a conferência da Autentique do aviso de férias; arquivado na pasta "Recesso".
 - **Cadastro:** campo "estágio remunerado" (D13) no perfil do estagiário.
 - **Vigência para o Panorama:** o carregamento de Férias passa a trazer, só para usuários com vínculo de estágio, `{ userId, periodStart, periodEnd }` resolvido pelo servidor. Sem consulta por pessoa no navegador.
 - **Auditoria:** reaproveita `dp_vacationEvents` com os tipos atuais de criação, aprovação, rejeição e cancelamento.
@@ -101,7 +102,7 @@ Controlar no módulo de Férias o recesso remunerado do estagiário (Lei 11.788/
 
 ## 8. Interface
 
-- **Panorama:** estagiários na mesma tabela com o selo roxo "Recesso". Colunas: vigência e saldo (acumulados · agendados) no lugar do concessivo; acúmulo "X de 30 dias até o fim do estágio" no lugar do aquisitivo. Prioridades: "Recesso" (em dia) e "Agendar antes do fim" (RN6). Novo chip de filtro "Estagiários".
+- **Panorama:** estagiários na mesma tabela com o selo roxo "Recesso estagiário" (o nome do tipo, D17). Colunas: vigência e saldo (acumulados · agendados) no lugar do concessivo; acúmulo "X de 30 dias até o fim do estágio" no lugar do aquisitivo. Prioridades: "Recesso" (em dia) e "Agendar antes do fim" (RN6). Novo chip de filtro "Estagiários".
 - **Página individual:** chips de saldo (com ícone explicativo, D5), fim do estágio e próximo acúmulo; botão "Agendar recesso"; linha do tempo da vigência com marcos de 7,5, 15, 22,5 e 30 dias; lista das partes com a trilha curta; lembrete do acordo de fracionamento na pasta "Recesso" quando houver mais de uma parte (D4).
 - **Agendar recesso:** início e fim, dias corridos, acumulado na data de início, saldo depois do agendamento, sugestão de férias escolares (D6). Erros de RN4 aparecem junto do campo.
 - Padrões de `docs/design/` (PageHero, LiftRow, SidePanel, StatusPill, tokens `ds-*`).
