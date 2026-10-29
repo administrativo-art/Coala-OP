@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   VACATION_WORKFLOW_DISPLAY_STAGE_META,
   type DPVacationWorkflowDisplayStageId,
@@ -67,7 +67,7 @@ type Props = {
   workflowBusy: string | null;
   onSendAccountant: (record: DPVacationRecord) => void;
   onSelectReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
-  onDiscardReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
+  onDiscardReceiptDocument: (record: DPVacationRecord, documentId: string, reason: string) => void;
   onReviewReceipt: (record: DPVacationRecord, review: {
     decision: 'approved' | 'correction_required';
     values?: { grossAmount: number; discountAmount: number; netAmount: number; paymentDate?: string | null };
@@ -735,6 +735,7 @@ export function DPVacationWorkflowPanel({
     recordId: string;
     stage: DPVacationWorkflowDisplayStageId;
   } | null>(null);
+  const [discardReason, setDiscardReason] = useState('');
   const [discardTarget, setDiscardTarget] = useState<{ documentId: string; fileName: string } | null>(null);
 
   useEffect(() => {
@@ -1553,22 +1554,53 @@ export function DPVacationWorkflowPanel({
         ) : null}
       </div>
 
-      <DeleteConfirmationDialog
-        open={discardTarget !== null}
-        onOpenChange={(open) => { if (!open) setDiscardTarget(null); }}
-        onConfirm={() => {
-          if (!discardTarget) return;
-          onDiscardReceiptDocument(record, discardTarget.documentId);
-        }}
-        title="Descartar arquivo de recibo?"
-        description={discardTarget
-          ? `O arquivo "${discardTarget.fileName}" deixará de aparecer para seleção do RH. Ele continua registrado para auditoria e não pode ser restaurado por aqui; será necessário um novo envio do contador.`
-          : undefined}
-        confirmButtonText="Descartar"
-        cancelButtonText="Cancelar"
-        confirmButtonVariant="destructive"
-        isDeleting={discardTarget !== null && workflowBusy === `discard-receipt-${discardTarget.documentId}`}
-      />
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-sm font-semibold">Documentos do período aquisitivo {record.cycleId}</p>
+        <p className="mt-1 text-xs text-slate-500">Gozo: {formatDate(record.startDate)} a {formatDate(record.endDate)}. Cada documento mantém seu arquivo original completo.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" disabled={!noticeSigned || noticeBusy !== null} onClick={() => onOpenNotice(record)}>Aviso assinado</Button>
+          <Button variant="outline" size="sm" disabled={!receiptSigned || workflowBusy !== null} onClick={() => onOpenWorkflowAsset(record, 'receipt-signed')}>Recibo assinado</Button>
+          <Button variant="outline" size="sm" disabled={!workflow.payment.proofStoragePath || workflowBusy !== null} onClick={() => onOpenWorkflowAsset(record, 'payment-proof')}>Comprovante de pagamento</Button>
+        </div>
+      </div>
+
+      {receiptDocumentsRaw.length ? (
+        <details className="border-t border-emerald-100 p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Histórico interno dos documentos ({receiptDocumentsRaw.length})</summary>
+          <div className="mt-3 space-y-3">
+            {receiptDocumentsRaw.map((document) => (
+              <div key={document.id} className="rounded-lg border bg-white p-3 text-xs">
+                <Button variant="link" className="h-auto p-0 text-xs" onClick={() => onOpenReceiptDocument(record, document.id)}>{document.fileName}</Button>
+                <p className="mt-1 font-semibold">{document.status === 'discarded' ? 'Reprovado / descartado' : document.status === 'superseded' ? 'Substituído — correção solicitada' : document.approvedAt || (workflow.receipt.status === 'approved' && workflow.receipt.originalDocumentId === document.id) ? 'Recibo aceito' : document.status === 'selected' ? 'Selecionado para revisão' : 'Recebido para análise'}</p>
+                <p>Enviado em {document.uploadedAt || 'data não registrada'} · Rodada {document.correctionRound + 1}</p>
+                {document.status === 'discarded' || document.status === 'superseded' ? <>
+                  <p>Motivo: {document.discardReason || document.supersededReason || 'Não registrado.'}</p>
+                  <p>Decisão: {document.discardedAt || document.supersededAt || 'data não registrada'} · Responsável: {document.discardedBy || document.supersededBy || 'não registrado'}</p>
+                </> : document.approvedAt ? <p>Aprovado em {document.approvedAt} · Responsável: {document.approvedBy || 'não registrado'}</p> : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      <Dialog open={discardTarget !== null} onOpenChange={(open) => { if (!open) { setDiscardTarget(null); setDiscardReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Descartar arquivo de recibo?</DialogTitle>
+            <DialogDescription>O arquivo {discardTarget?.fileName} permanece no histórico interno com o motivo da decisão e seu original preservado.</DialogDescription>
+          </DialogHeader>
+          <label htmlFor="vacation-discard-reason" className="text-sm font-semibold">Motivo do descarte</label>
+          <Textarea id="vacation-discard-reason" value={discardReason} onChange={(event) => setDiscardReason(event.target.value)} maxLength={2000} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDiscardTarget(null); setDiscardReason(''); }}>Cancelar</Button>
+            <Button variant="destructive" disabled={!discardReason.trim() || workflowBusy !== null} onClick={() => {
+              if (!discardTarget || !discardReason.trim()) return;
+              onDiscardReceiptDocument(record, discardTarget.documentId, discardReason.trim());
+              setDiscardTarget(null); setDiscardReason('');
+            }}>Descartar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

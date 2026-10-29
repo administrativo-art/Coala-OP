@@ -73,11 +73,14 @@ export function resolveDocumentProcess(processCategory: ProcessCategory, fields:
       const acquisitionPeriod = startYear && endYear ? `${startYear}-${endYear}` : startYear;
       const installment = numLike(fields, "installmentNumber") ?? 1;
       const installmentLabel = pad2(installment);
+      const gozoStart = formatBR(str(fields, "vacationStartDate"));
+      const gozoEnd = formatBR(str(fields, "vacationEndDate"));
+      const gozoLabel = gozoStart && gozoEnd ? `Gozo ${gozoStart} a ${gozoEnd}` : null;
       return {
         processCategory,
         caseId: `vacation-period-${acquisitionPeriod}`,
         subcaseId: `installment-${installmentLabel}`,
-        pathSegments: [`Período aquisitivo ${acquisitionPeriod}`, `Parcela ${installmentLabel}`],
+        pathSegments: [`Período aquisitivo ${acquisitionPeriod}`, `Parcela ${installmentLabel}${gozoLabel ? ` · ${gozoLabel}` : ""}`],
         tokens: { acquisitionPeriod, installmentNumber: installmentLabel, issueDate: str(fields, "issueDate") ?? "" },
         referenceLabel: `PA ${acquisitionPeriod} · Parcela ${installmentLabel}`,
       };

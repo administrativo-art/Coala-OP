@@ -22,6 +22,18 @@ describe("resolveDocumentProcess", () => {
     assert.deepEqual(p.pathSegments, ["Período aquisitivo 2025-2026", "Parcela 01"]);
   });
 
+  test("férias: documentos independentes compartilham período, parcela e gozo sem efeitos operacionais", () => {
+    const fields = { acquisitionPeriodStart: "2025-08-01", acquisitionPeriodEnd: "2026-07-31",
+      installmentNumber: 2, vacationStartDate: "2026-10-01", vacationEndDate: "2026-10-15" };
+    const results = ["VACATION_NOTICE", "VACATION_RECEIPT", "VACATION_PAYMENT"].map((code) =>
+      resolveDocumentDestination({ config: getDocumentTypeConfig(code)!, employeeCode: "001", fields, version: 1 }));
+    assert.equal(new Set(results.map((result) => result.caseId)).size, 1);
+    assert.equal(new Set(results.map((result) => result.subcaseId)).size, 1);
+    assert.equal(new Set(results.map((result) => result.pathSegments.slice(0, -1).join("/"))).size, 1);
+    assert.equal(new Set(results.map((result) => result.downloadName)).size, 3);
+    assert.match(results[0].pathSegments[2], /Parcela 02 · Gozo 01\/10\/2026 a 15\/10\/2026/);
+  });
+
   test("remuneração: ano/mês por competência", () => {
     const p = resolveDocumentProcess("MONTHLY_REFERENCE", { referenceMonth: "2026-07" });
     assert.deepEqual(p.pathSegments, ["2026", "Julho"]);

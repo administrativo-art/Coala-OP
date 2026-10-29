@@ -129,3 +129,5 @@ Consulta de coordenadas traçada em `location-access.server.ts` e `POST /api/dp/
 2026-10-28: centralização local de unidades de operação/escala por data e editor contratual único, com auditoria atômica e ativação limitada. Integrações demo de concorrência, revisão original, experiência/desligamento e offline passaram; E2E de interface passou em Chromium demo com duas unidades e contrato no mesmo salvamento; publicação ainda pendente. Não promove o grupo inteiro a Verificado; ver [pessoas](flows/people-access.md).
 
 2026-10-28: ajuste de organização do editor concentra todos os seletores de unidade na aba Unidades, substitui o quadro de ajuda por ícones e preserva motivo/data na aba. Unitários e E2E demo do editor passaram; sem mudança nas fontes ou regras do ponto. Aguardar publicação desta correção.
+
+Ajuste documental de férias (29/10/2026): histórico interno com decisões preservadas, descarte motivado e consulta conjunta dos originais; verificação local em `vacation-receipts.md`, execução integrada completa do fluxo permanece pendente.
