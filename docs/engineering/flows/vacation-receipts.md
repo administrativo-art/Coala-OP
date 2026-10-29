@@ -62,3 +62,5 @@ Verificação local: transições de correção, preservação de descartes e or
 
 
 Teste integrado isolado: `node scripts/test-integration.mjs --vacation-documents`, com [cenário sintético de API](../../../tests/integration/dp-vacation-documents.test.mjs). Confere PATCH/DELETE legítimos e bloqueios de autenticação, permissão e unidade; valida motivo obrigatório, autor não forjável, original preservado, evento/versão persistidos e repetição sem duplicação. Execução aprovada nos emuladores locais; não valida navegador, financeiro ou Autentique reais.
+
+E2E do formulário e histórico: `node scripts/test-e2e.mjs --vacation-documents` usa navegador local e projeto demo; cenário em `tests/e2e/hr/vacations.spec.ts`.
