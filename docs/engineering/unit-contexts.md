@@ -34,3 +34,5 @@ Quando a pessoa trabalha excepcionalmente fora das unidades operacionais, o turn
 **Verificação local:** testes de integração em emulador cobrem vigência por data, revisão explícita e replay offline após mudança. Isso não confirma datas reais nem substitui homologação fiscal/jurídica.
 
 Na edição, financeira vazia não é preenchida pela primeira unidade operacional. A inicialização legada da admissão mantém sua compatibilidade explícita. Se um período contratual aplicado remove financeira ou empregadora, a resolução fiscal fica inconsistente e exige conferência; não reutiliza silenciosamente o dado histórico anterior.
+
+Ajuste de interface em 28/10/2026: todos os seletores de unidade ficam exclusivamente na aba Unidades. O quadro Como ler esta tela foi removido; cada tipo tem ícone InfoPopover com ajuda por clique/toque. Financeira e empregadora continuam sendo dados contratuais auditados; a justificativa fica disponível também na aba Unidades, sem mudar fontes ou regras. Gestores de usuários preservam acesso à aba mesmo sem visualização DP.

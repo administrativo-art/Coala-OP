@@ -49,7 +49,9 @@ test("a edição completa segue o padrão de drawer com abas e ajuda explicativa
   assert.match(source, /shiftDefinitionId: 'journey'/);
   assert.match(source, /jobRoleId: 'identity'/);
   assert.match(source, /jobFunctionIds: 'identity'/);
-  assert.match(source, /unitId: 'identity'/);
+  assert.match(source, /unitId: 'units'/);
+  assert.match(source, /employerUnitId: 'units'/);
+  assert.doesNotMatch(source, /Como ler esta tela/);
   assert.match(source, /assignedKioskIds: 'units'/);
   assert.match(source, /profileId: 'journey'/);
   assert.doesNotMatch(source, /name="operacional"|name="participatesInGoals"/);
