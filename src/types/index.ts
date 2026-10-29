@@ -988,6 +988,8 @@ export type User = {
   /** Unidades em que a pessoa pode ser escalada e atuar. */
   unitIds?: string[];
   admissionDate?: Timestamp;
+  /** Fonte datada das unidades habituais de operação e escala. Ausente em cadastros legados. */
+  operationalUnitPeriods?: import('@/lib/operational-unit-periods').OperationalUnitPeriod[];
   birthDate?: Timestamp;
   shiftDefinitionId?: string;
   overnight?: boolean;

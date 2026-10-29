@@ -60,3 +60,7 @@ Testes de parsers/segredos e E2Es de API são referências nos guias. A etapa 8 
 ## Geração de orçamentos adicionada na main
 
 `financialBudgetGeneration` em [financial-budget-jobs.ts](../../functions/src/financial-budget-jobs.ts) chama a rota de geração às 03h30 de Belém. Contrato, dados e limites em [orçamentos](flows/financial-budgets.md). Configuração/execução remota não verificadas nesta entrega.
+
+## Centralização por vigências — 28/10/2026
+
+`activateCollaboratorPeriods` roda a cada 5 minutos em America/Belem: ativa até 100 contratos vencidos, reconcilia até 100 projeções contratuais, até 100 unidades vencidas + 100 projeções pendentes, e até 100 experiências automáticas vencidas com ciclo vinculado + 100 projeções pendentes. Todas as consultas têm filtro/limite; concluídos saem da seleção. Falhas RH mantêm marcador para retry. Novos índices principal/RH e deploy de `activateCollaboratorPeriods`, `onFieldUpdate`, `reviewFieldChangeRequest` e `syncBizneoUsersMonthly` são pré-requisitos. Limite conservador: 600 candidatos/execução × 12/h × 24h = 172.800 candidatos/dia em saturação, mais leituras pontuais/transações/retries; sem candidatos são cerca de 6 leituras mínimas × 8.640 execuções/mês = 51.840 leituras/mês. Não há varredura integral nem polling de UI. Volume real depende de pendências; monitorar fila e erros, especialmente RH. Experiências sem ciclo não entram na automação.

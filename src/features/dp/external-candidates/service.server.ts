@@ -18,6 +18,7 @@ export async function listExternalCoverageCandidates(params: {
   scheduleId: string;
   search: string;
   limit: number;
+  date?: string;
 }) {
   const { context, scheduleId, search, limit } = params;
   if (!context.isDefaultAdmin && (
@@ -48,7 +49,7 @@ export async function listExternalCoverageCandidates(params: {
     .orderBy('username')
     .startAt(variant)
     .endAt(`${variant}\uf8ff`)
-    .select('username', 'isActive', 'unitId', 'unitIds', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
+    .select('username', 'isActive', 'unitId', 'unitIds', 'operationalUnitPeriods', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
     .limit(boundedLimit * QUERY_MULTIPLIER + 1)
     .get()));
   const documents = [...new Map(snapshots.flatMap((snapshot) => snapshot.docs).map((document) => [document.id, document])).values()]
@@ -59,6 +60,7 @@ export async function listExternalCoverageCandidates(params: {
     try {
       const assignment = resolveDPShiftAssignment({
         executionUnitId,
+        date: params.date,
         executionUnitExternalId: typeof unit.get('externalId') === 'string' ? unit.get('externalId') : undefined,
         user: document.data(),
       });

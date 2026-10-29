@@ -335,10 +335,10 @@ async function externalUsers(search: string) {
   return [...new Map(snapshots.flatMap((snapshot) => snapshot.docs).map((doc) => [doc.id, doc])).values()];
 }
 
-function assignmentFor(user: DocumentSnapshot, unit: DocumentSnapshot) {
+function assignmentFor(user: DocumentSnapshot, unit: DocumentSnapshot, date: string) {
   try {
     return resolveDPShiftAssignment({ executionUnitId: unit.id, executionUnitExternalId: text(unit.get('externalId')),
-      user: user.data() ?? {} });
+      user: user.data() ?? {}, date });
   } catch {
     return null;
   }
@@ -369,7 +369,7 @@ export async function listAbsenceCoverageCandidates(actor: ServerUserContext, re
   const people = [...new Map(pool.map((user) => [user.id, user])).values()].flatMap((user) => {
     if (user.id === target.beneficiaryUid || user.get('isActive') === false) return [];
     if (term && !String(user.get('username') ?? '').toLocaleLowerCase('pt-BR').includes(term)) return [];
-    const assignment = assignmentFor(user, unit);
+    const assignment = assignmentFor(user, unit, target.date);
     if (!assignment || assignment.assignmentKind === 'external_coverage' && !external) return [];
     return [{ user, assignment }];
   }).slice(0, CANDIDATE_LIMIT);
@@ -437,7 +437,7 @@ export async function decideAbsenceCoverage(actor: ServerUserContext, requestId:
     if (!substitute.exists || substitute.get('isActive') === false || substitute.id === target.beneficiaryUid) {
       throw fail('DP_ABSENCE_COVERAGE_SUBSTITUTE_INVALID', 'Escolha outra pessoa para cobrir o turno.', 'VALIDATION');
     }
-    const assignment = assignmentFor(substitute, unit);
+    const assignment = assignmentFor(substitute, unit, target.date);
     if (!assignment) throw fail('DP_ABSENCE_COVERAGE_ORIGIN_REQUIRED', 'A unidade de origem da pessoa precisa estar definida.', 'DATA_INTEGRITY');
     assignmentKind = assignment.assignmentKind;
     if (assignmentKind === 'external_coverage') {

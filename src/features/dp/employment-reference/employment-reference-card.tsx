@@ -31,6 +31,7 @@ type LoadState =
 
 type SummaryProps = {
   result: EmploymentHistoryResult;
+  operationalTimeline?: boolean;
   units: DPUnit[];
 };
 
@@ -38,11 +39,11 @@ function displayNames(names: string[], fallback: string) {
   return names.filter(Boolean).join(', ') || fallback;
 }
 
-function PeriodCard({ period, units, index }: { period: EmploymentPeriod; units: DPUnit[]; index: number }) {
+function PeriodCard({ period, units, index, operationalTimeline }: { period: EmploymentPeriod; units: DPUnit[]; index: number; operationalTimeline?: boolean }) {
   return (
     <article className="rounded-ds-btn-lg border border-ds-border bg-ds-page px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-extrabold text-ds-ink">Vigência {index + 1}</p>
+        <p className="text-sm font-extrabold text-ds-ink">Período contratual {index + 1}</p>
         <StatusPill variant={period.validTo ? 'neutral' : 'ok'}>{period.validTo ? 'Encerrada' : 'Atual'}</StatusPill>
       </div>
       <p className="mt-1 text-xs font-semibold text-ds-ink-muted">
@@ -52,7 +53,7 @@ function PeriodCard({ period, units, index }: { period: EmploymentPeriod; units:
         <div><dt className="font-extrabold text-ds-ink-faint">Relação</dt><dd className="mt-0.5 font-semibold text-ds-ink">{employmentRelationshipLabels[period.employmentRelationshipType]}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Empregador cadastrado</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.employer.unitName}<span className="block font-mono text-[11px] text-ds-ink-muted">{formatCnpj(period.employer.cnpj)}</span></dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Referência financeira</dt><dd className="mt-0.5 font-semibold text-ds-ink">{unitLabel(period.unitId, units)}</dd></div>
-        <div><dt className="font-extrabold text-ds-ink-faint">Unidades operacionais</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.unitIds.map((id) => unitLabel(id, units)).join(', ')}</dd></div>
+        {!operationalTimeline && <div><dt className="font-extrabold text-ds-ink-faint">Unidades operacionais</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.unitIds.map((id) => unitLabel(id, units)).join(', ')}</dd></div>}
         <div><dt className="font-extrabold text-ds-ink-faint">Cargo congelado</dt><dd className="mt-0.5 font-semibold text-ds-ink">{period.jobRoleName || 'Sem cargo registrado'}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Funções congeladas</dt><dd className="mt-0.5 font-semibold text-ds-ink">{displayNames(period.jobFunctionNames, 'Sem funções registradas')}</dd></div>
         <div><dt className="font-extrabold text-ds-ink-faint">Referência do documento-base</dt><dd className="mt-0.5 break-all font-mono font-semibold text-ds-ink">{period.sourceDocumentId}</dd></div>
@@ -65,7 +66,7 @@ function PeriodCard({ period, units, index }: { period: EmploymentPeriod; units:
   );
 }
 
-export function EmploymentReferenceSummary({ result, units }: SummaryProps) {
+export function EmploymentReferenceSummary({ result, units, operationalTimeline }: SummaryProps) {
   if (result.status === 'missing') {
     return (
       <div className="rounded-ds-btn-lg border border-dashed border-ds-border-input bg-ds-page p-4">
@@ -89,7 +90,7 @@ export function EmploymentReferenceSummary({ result, units }: SummaryProps) {
         <span className="text-xs font-semibold text-ds-ink-faint">{result.periods.length} período(s)</span>
       </div>
       {[...result.periods].reverse().map((period, reverseIndex) => (
-        <PeriodCard key={`${period.validFrom}-${period.sourceDocumentId}`} period={period} units={units} index={result.periods.length - reverseIndex - 1} />
+        <PeriodCard operationalTimeline={operationalTimeline} key={`${period.validFrom}-${period.sourceDocumentId}`} period={period} units={units} index={result.periods.length - reverseIndex - 1} />
       ))}
     </div>
   );
@@ -195,10 +196,10 @@ export function EmploymentReferenceCard({ user, units, firebaseUser, canPublish 
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ds-accent-soft text-ds-accent-ink"><BriefcaseBusiness className="h-4 w-4" /></span>
-            <div><h2 className="text-sm font-extrabold text-ds-ink">Vigências do vínculo</h2><p className="text-[11px] font-semibold text-ds-ink-faint">Histórico privado por período</p></div>
+            <div><h2 className="text-sm font-extrabold text-ds-ink">Histórico contratual</h2><p className="text-[11px] font-semibold text-ds-ink-faint">Referências contratuais por período</p></div>
           </div>
           {canPublish && state.kind === 'ready' && state.result.status !== 'inconsistent' ? (
-            <Button variant="primary-page" size="xs" onClick={openPublication}>{state.result.status === 'missing' ? 'Criar vigência' : 'Adicionar vigência'}</Button>
+            <Button variant="primary-page" size="xs" onClick={openPublication}>{state.result.status === 'missing' ? 'Definir período contratual' : 'Adicionar período contratual'}</Button>
           ) : null}
         </header>
         <div className="p-3">
@@ -206,11 +207,11 @@ export function EmploymentReferenceCard({ user, units, firebaseUser, canPublish 
             <div role="status" className="flex items-center gap-2 rounded-ds-btn-lg bg-ds-page p-4 text-sm font-semibold text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin" />Carregando vigências…</div>
           ) : state.kind === 'error' ? (
             <div role="alert" className="space-y-3 rounded-ds-btn-lg border border-ds-danger/20 bg-ds-danger-bg p-4 text-sm text-ds-danger"><p className="font-semibold">{state.message}</p><Button variant="ds-secondary" size="xs" onClick={() => void refresh()}>Tentar novamente</Button></div>
-          ) : <EmploymentReferenceSummary result={state.result} units={units} />}
+          ) : <EmploymentReferenceSummary result={state.result} units={units} operationalTimeline={user.operationalUnitPeriods !== undefined} />}
         </div>
       </section>
 
-      <SidePanel open={panelOpen} onOpenChange={(open) => { if (!open && saving) return; setPanelOpen(open); }} kicker="Vínculo" title="Adicionar vigência" subtitle={user.username}>
+      <SidePanel open={panelOpen} onOpenChange={(open) => { if (!open && saving) return; setPanelOpen(open); }} kicker="Vínculo" title="Adicionar período contratual" subtitle={user.username}>
         <PanelSection title="Período e referência">
           <label className="grid gap-1.5 text-xs font-bold text-ds-ink">Início da nova vigência
             <input type="date" value={draft.validFrom} onChange={(event) => updateDraft({ validFrom: event.target.value })} disabled={saving} className={inputClassName} />
@@ -251,15 +252,15 @@ export function EmploymentReferenceCard({ user, units, firebaseUser, canPublish 
             {availableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </SelectField>
           <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">Lotação e custos. Pode ser diferente das unidades operacionais e não libera escala nem batida de ponto.</p>
-          <fieldset>
-            <legend className="text-xs font-bold text-ds-ink">Unidades operacionais</legend>
+          {user.operationalUnitPeriods === undefined ? <fieldset>
+            <legend className="text-xs font-bold text-ds-ink">Unidades operacionais legadas</legend>
             <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-ds-btn border border-ds-border bg-ds-page p-3">
               {availableUnits.map((unit) => {
                 const checked = draft.unitIds.includes(unit.id);
                 return <label key={unit.id} className="flex items-center gap-2 text-xs font-semibold text-ds-ink"><input type="checkbox" checked={checked} disabled={saving} onChange={() => updateDraft({ unitIds: checked ? draft.unitIds.filter((id) => id !== unit.id) : [...draft.unitIds, unit.id] })} className="h-4 w-4 accent-(--ds-modal) disabled:cursor-not-allowed disabled:opacity-60" />{unit.name}</label>;
               })}
             </div>
-          </fieldset>
+          </fieldset> : <p className="text-sm text-ds-ink-muted">As unidades de trabalho são definidas em Unidades → Vigências de operação e escala no cadastro. O ponto consulta esse histórico pela data do registro.</p>}
         </PanelSection>
 
         {missing.length ? (

@@ -2,6 +2,12 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
+import { ContractChangeForm, contractFormChanged } from '@/components/dp/contract-change-form';
+import { ContractProbationDates } from '@/components/dp/contract-probation-dates';
+import { useEmployeeProfile } from '@/features/rh/hooks/useEmployeeProfile';
+import { getHrEmployeeId } from '@/lib/hr/person-link';
+import { OperationalUnitPeriodsField } from '@/components/dp/operational-unit-periods-field';
+import { operationalUnitsOnDate, operationalCivilDate, type OperationalUnitPeriod } from '@/lib/operational-unit-periods';
 import { useForm, Controller, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@/lib/zod-resolver';
 import * as z from 'zod';
@@ -23,7 +29,7 @@ import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Lo
 import { Badge } from '@/components/ui/badge';
 import { type UnitAccessScope, type User } from '@/types';
 import { normalizeUnitAccessScope } from '@/lib/unit-access';
-import { operationalSelectionForUser, operationalUnitsDiffer } from '@/lib/collaborator-operational-selection';
+import { operationalSelectionForUser } from '@/lib/collaborator-operational-selection';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProfileManagementModal } from './profile-management-modal';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -191,7 +197,7 @@ const UNIT_ACCESS_SCOPE_NOTES: Record<UnitAccessScope, string> = {
 
 const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> = [
   { id: 'identity', label: 'Identificação' },
-  { id: 'journey', label: 'Cargo e jornada' },
+  { id: 'journey', label: 'Jornada' },
   { id: 'units', label: 'Unidades' },
 ];
 
@@ -203,13 +209,14 @@ const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, Collabor
   email: 'identity',
   avatarUrl: 'identity',
   employmentRelationshipType: 'identity',
-  jobRoleId: 'journey',
-  jobFunctionIds: 'journey',
+  employerUnitId: 'identity',
+  jobRoleId: 'identity',
+  jobFunctionIds: 'identity',
   shiftDefinitionId: 'journey',
-  admissionDate: 'journey',
+  admissionDate: 'identity',
   birthDate: 'journey',
   assignedKioskIds: 'units',
-  unitId: 'units',
+  unitId: 'identity',
   responsibleUnitIds: 'units',
   unitAccessScope: 'units',
   unitAccessUnitIds: 'units',
@@ -311,6 +318,7 @@ const userSchema = z.object({
   email: z.string().email("O e-mail é inválido."),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   unitId: z.string().optional(),
+  employerUnitId: z.string().optional(),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
   // Departamento Pessoal
@@ -417,16 +425,18 @@ export function UserManagement({
   contextLabel = 'Gestão do colaborador',
   showTransportVoucher = false,
 }: UserManagementProps = {}) {
-  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
+  const { isDefaultAdmin, permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
   const { shiftDefinitions, shiftDefsLoading, vacations } = useDP();
   const { toast } = useToast();
-  
+
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
   const [activeEditTab, setActiveEditTab] = useState<CollaboratorEditTab>('identity');
+  const [contractChangeReason, setContractChangeReason] = useState('');
+  const [contractEffectiveDate, setContractEffectiveDate] = useState(operationalCivilDate);
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
@@ -457,6 +467,8 @@ export function UserManagement({
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
   const [additionalOperationalUnitIds, setAdditionalOperationalUnitIds] = useState<string[]>([]);
   const [additionalOperationalDirty, setAdditionalOperationalDirty] = useState(false);
+  const [pendingOperationalPeriods, setPendingOperationalPeriods] = useState<OperationalUnitPeriod[] | undefined>();
+  const [operationalPeriodsValid, setOperationalPeriodsValid] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedEditUserIdRef = useRef<string | null>(null);
 
@@ -467,6 +479,7 @@ export function UserManagement({
         email: '',
         profileId: '',
         unitId: '',
+        employerUnitId: '',
         assignedKioskIds: [],
         avatarUrl: '',
         registrationIdBizneo: '',
@@ -485,6 +498,8 @@ export function UserManagement({
     }
   });
 
+  const contractProfileState = useEmployeeProfile(editingUser ? getHrEmployeeId(editingUser) ?? editingUser.id : '');
+  const contractChanged = contractFormChanged(editingUser, form.watch(), timestampToDateInput(editingUser?.admissionDate));
   const isDrawer = presentation === 'drawer' && !createOnly;
 
   const visibleEditTabs = permissions.dp?.view
@@ -594,10 +609,10 @@ export function UserManagement({
     () => [...new Set([...selectedWorkUnitIds, ...additionalOperationalUnitIds])],
     [selectedWorkUnitIds, additionalOperationalUnitIds]
   );
-  const operationalReconciliationPending = editingUser !== null && operationalUnitsDiffer(editingUser.unitIds, operationalUnitIds);
+  const operationalReconciliationPending = pendingOperationalPeriods !== undefined;
   useEffect(() => {
-    onDirtyChange?.(form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending);
-  }, [form.formState.isDirty, additionalOperationalDirty, operationalReconciliationPending, onDirtyChange]);
+    onDirtyChange?.(form.formState.isDirty || additionalOperationalDirty || operationalReconciliationPending || !operationalPeriodsValid);
+  }, [form.formState.isDirty, additionalOperationalDirty, operationalReconciliationPending, operationalPeriodsValid, onDirtyChange]);
   const filteredShiftDefinitions = useMemo(() => {
     if (selectedKioskIds.length === 0) return shiftDefinitions;
     if (selectedWorkUnitIds.length === 0) return [];
@@ -742,6 +757,7 @@ export function UserManagement({
       email: '',
       profileId: '',
       unitId: '',
+      employerUnitId: '',
       assignedKioskIds: [],
       avatarUrl: '',
       registrationIdBizneo: '',
@@ -767,6 +783,10 @@ export function UserManagement({
 
   const handleEdit = useCallback((user: User) => {
     setEditingUser(user);
+    setContractChangeReason('');
+    setContractEffectiveDate(operationalCivilDate());
+    setPendingOperationalPeriods(undefined);
+    setOperationalPeriodsValid(true);
     const operationalSelection = operationalSelectionForUser(user, kiosks, units);
     setAdditionalOperationalUnitIds(operationalSelection.additionalUnitIds);
     setAdditionalOperationalDirty(false);
@@ -774,7 +794,8 @@ export function UserManagement({
       username: user.username,
       email: user.email,
       profileId: user.profileId,
-      unitId: user.unitId ?? user.unitIds?.[0] ?? '',
+      unitId: user.unitId ?? '',
+      employerUnitId: user.employerUnitId ?? '',
       assignedKioskIds: operationalSelection.selectedKioskIds,
       avatarUrl: user.avatarUrl || '',
       registrationIdBizneo: user.registrationIdBizneo ?? '',
@@ -872,7 +893,7 @@ export function UserManagement({
       console.warn('[UserManagement] Falha ao registrar auditoria.', error);
     }
   };
-  
+
   const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
   const handleInactivateClick = (user: User) => {
     if (user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false) return;
@@ -956,7 +977,7 @@ export function UserManagement({
       });
     }
   };
-  
+
   const handleResetPasswordConfirm = async () => {
     if (userToResetPassword) {
       const success = await resetPassword(userToResetPassword.email);
@@ -981,6 +1002,11 @@ export function UserManagement({
   };
 
   const saveUser = async (values: UserFormValues) => {
+    if (!operationalPeriodsValid) return;
+    if (contractChanged && (contractChangeReason.trim().length < 5 || contractEffectiveDate < operationalCivilDate())) {
+      setActiveEditTab('identity');
+      throw new Error('Informe a data efetiva e uma justificativa de pelo menos cinco caracteres para a alteração contratual.');
+    }
     values = { ...values, username: formatPersonName(values.username) };
     const avatarUrl = values.avatarUrl || '';
     const admissionDate = values.admissionDate
@@ -1013,11 +1039,13 @@ export function UserManagement({
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
-          unitId: values.unitId || selectedWorkUnitIds[0],
+          employerUnitId: values.employerUnitId || null,
+          unitId: values.unitId || undefined,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: operationalUnitIds,
+          unitIds: editingUser ? operationalUnitsOnDate({ ...editingUser, ...(pendingOperationalPeriods ? { operationalUnitPeriods: pendingOperationalPeriods } : {}) }) : operationalUnitIds,
+          ...(pendingOperationalPeriods ? { operationalUnitPeriods: pendingOperationalPeriods } : {}),
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -1025,12 +1053,15 @@ export function UserManagement({
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
           transportVoucherHistory,
       };
-      const mergedUser = { ...editingUser, ...updatedData };
+      const mergedUser: User & { contractChangeReason?: string; contractEffectiveDate?: string } = { ...editingUser, ...updatedData,
+        ...(contractChanged ? { contractChangeReason: contractChangeReason.trim(), contractEffectiveDate } : {}),
+      };
       const changes = userAuditDiff(editingUser, mergedUser);
       await updateUser(mergedUser);
       await logUserAudit('user_updated', editingUser, {
         email: editingUser.email,
         changed_fields: Object.keys(changes),
+        contract_audit_recorded: contractChanged,
         changes,
       });
     } else {
@@ -1081,7 +1112,7 @@ export function UserManagement({
       });
       return;
     }
-    toast({ title: 'Alterações salvas.' });
+    toast({ title: contractChanged && contractEffectiveDate > operationalCivilDate() ? 'Alteração contratual agendada.' : 'Alterações salvas.' });
     closeForm('saved');
   };
 
@@ -1112,7 +1143,7 @@ export function UserManagement({
     });
     if (!isDrawer) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  
+
   const handlePhotoUpdate = async (dataUrl: string) => {
     setIsUploadingPhoto(true);
     const targetUserId = editingUser?.id || `new-user-${Date.now()}`;
@@ -1138,7 +1169,7 @@ export function UserManagement({
       setIsUploadingPhoto(false);
     }
   };
-  
+
   const handlePhotoCaptured = async (dataUrl: string) => {
       await handlePhotoUpdate(dataUrl);
       setIsPhotoModalOpen(false);
@@ -1208,7 +1239,7 @@ export function UserManagement({
       </Card>
     );
   }
-  
+
   const activeCount = users.filter((user) => user.isActive !== false).length;
   const inactiveCount = users.length - activeCount;
   const pendingInvites = users.filter((user) => user.isActive !== false && !(user as any).lastLoginAt).length;
@@ -1419,7 +1450,14 @@ export function UserManagement({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
+
+                  </div>
+                </div>
+              </div>
+            </UserFormSection>
+
+            {permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin ? <UserFormSection title="Dados contratuais" description="Vínculo, admissão, empregador, referência financeira e atuação contratada." compact={createOnly}>
+              <div className="grid gap-4 md:grid-cols-2"><FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de vínculo</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
@@ -1435,27 +1473,33 @@ export function UserManagement({
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
-                    )} />
-                  </div>
-                </div>
-              </div>
-            </UserFormSection>
-            </div>
-            ) : null}
-
-            {permissions.dp?.view ? (
-              <>
-                {(!isDrawer || activeEditTab === 'journey') ? (
-                <div id="collaborator-edit-panel-journey" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-journey' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
-                <UserFormSection
-                  title="Cargo e função"
-                  description="O que a pessoa faz na empresa e qual perfil de permissão isso aplica."
-                  help="Cargo e função determinam o perfil de permissão aplicado automaticamente. A lista de funções respeita a compatibilidade com o cargo escolhido."
-                  compact={createOnly}
-                >
-                  <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
-                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
-                      <FormField control={form.control} name="jobRoleId" render={({ field }) => (
+                    )} /><FormField control={form.control} name="admissionDate" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data de admissão</FormLabel>
+                          <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />{editingUser && <FormField control={form.control} name="employerUnitId" render={({ field }) => (<FormItem><FormLabel>Unidade empregadora</FormLabel><Select value={field.value || '__none__'} onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl><SelectContent><SelectItem value="__none__">Não informada</SelectItem>{units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${unit.cnpj}` : ''}</SelectItem>)}</SelectContent></Select><FormDescription>Unidade de cadastro do empregador. A referência financeira é definida separadamente.</FormDescription><FormMessage /></FormItem>)} />}<FormField control={form.control} name="unitId" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione a referência financeira" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {units.map((unit) => (
+                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Referência do financeiro (lotação e custos), independente das unidades em que a pessoa trabalha. Não libera escala ou batida de ponto.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} /><FormField control={form.control} name="jobRoleId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Cargo</FormLabel>
                           <Select
@@ -1480,8 +1524,7 @@ export function UserManagement({
                           )}
                           <FormMessage />
                         </FormItem>
-                      )} />
-                      <FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
+                      )} /><FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Função</FormLabel>
                           <Select
@@ -1517,13 +1560,22 @@ export function UserManagement({
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
-                      )} />
-                    </div>
-                  </div>
-                </UserFormSection>
+                      )} /></div>
+              {hasBizneoLink ? <p className="mt-3 text-xs text-ds-ink-muted">A data de admissão é mantida pela integração com o Bizneo.</p> : null}
+              {editingUser ? <div className="mt-4"><ContractProbationDates probation={contractProfileState.status === 'ok' ? contractProfileState.data.periodo_experiencia : null} loading={contractProfileState.status === 'loading' || contractProfileState.status === 'idle'} error={contractProfileState.status === 'error' ? contractProfileState.message : undefined} /></div> : null}
+              {contractChanged ? <div className="mt-4"><ContractChangeForm reason={contractChangeReason} effectiveDate={contractEffectiveDate} onReasonChange={setContractChangeReason} onEffectiveDateChange={setContractEffectiveDate} /></div> : null}
+            </UserFormSection> : null}
+            </div>
+            ) : null}
+
+            {permissions.dp?.view ? (
+              <>
+                {(!isDrawer || activeEditTab === 'journey') ? (
+                <div id="collaborator-edit-panel-journey" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-journey' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
+
                 <UserFormSection
-                  title="Jornada e datas"
-                  description="Turno de referência, datas contratuais e informações calculadas."
+                  title="Jornada"
+                  description="Turno de referência e informações calculadas."
                   help="O turno padrão orienta a montagem da escala dentro da jornada aplicável. As datas alimentam cálculos de tempo de empresa, idade, aniversários e ciclos de férias; integrações podem bloquear campos que são mantidos pelo sistema de origem."
                   compact={createOnly}
                 >
@@ -1554,13 +1606,7 @@ export function UserManagement({
                           <FormMessage />
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="admissionDate" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Data de admissão</FormLabel>
-                          <FormControl><Input type="date" {...field} disabled={hasBizneoLink} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+
                       <FormField control={form.control} name="birthDate" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Data de nascimento</FormLabel>
@@ -1591,7 +1637,7 @@ export function UserManagement({
                 <div id="collaborator-edit-panel-units" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-units' : undefined}>
                 <UserFormSection
                   title="Unidades"
-                  description="Quatro escolhas diferentes: onde trabalha, qual unidade aparece no financeiro, onde responde e o que consegue consultar."
+                  description="Unidades habituais de trabalho, quiosques atribuídos, responsabilidade e acesso."
                   help="São quatro informações diferentes: unidades de escala (onde a pessoa trabalha), unidade principal (referência do financeiro), unidades sob responsabilidade (onde é gestora) e escopo (onde pode visualizar e operar no sistema)."
                   compact={createOnly}
                 >
@@ -1613,7 +1659,7 @@ export function UserManagement({
                         </div>
                         <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
                           <p className="text-xs font-extrabold text-ds-ink">2. Principal financeira</p>
-                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Referência de lotação, custos e relatórios financeiros. Não substitui a unidade do turno.</p>
+                          <p className="mt-1 text-xs leading-5 text-ds-ink-muted">Referência de lotação e custos, editada em Identificação → Dados contratuais.</p>
                         </div>
                         <div className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2.5">
                           <p className="text-xs font-extrabold text-ds-ink">3. Responsabilidade</p>
@@ -1631,7 +1677,7 @@ export function UserManagement({
                     <div>
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unidades de escala e operação</FormLabel>
+                          <FormLabel>Quiosques atribuídos</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <FormControl>
@@ -1666,18 +1712,19 @@ export function UserManagement({
                             </DropdownMenuContent>
                           </DropdownMenu>
                           <FormDescription className="text-xs">
-                            Onde a pessoa trabalha: entra na escala e opera nessas unidades (aceita várias). É a base do escopo &quot;Somente unidades vinculadas&quot;.
+                            Quiosques atribuídos para atuação e acesso. As unidades habituais de escala e ponto são definidas nas vigências de operação abaixo.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
                     </div>
-                    <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
+                    {editingUser && <OperationalUnitPeriodsField key={editingUser.id} periods={editingUser.operationalUnitPeriods ?? []} units={units} initialUnitIds={operationalUnitIds} onChange={setPendingOperationalPeriods} onValidityChange={setOperationalPeriodsValid} />}
+                    {!editingUser && <div className="rounded-ds-md border border-ds-border bg-ds-page px-3 py-3 text-xs">
                       <p className="font-bold text-ds-ink">Outras unidades operacionais</p>
                       <p className="mt-1 text-ds-ink-muted">Vínculos de escala sem quiosque atribuído à pessoa. Permanecem no cadastro até serem removidos aqui. A referência financeira é independente.</p>
                       {additionalOperationalUnitIds.filter((id) => !selectedWorkUnitIds.includes(id)).map((id) => (
                         <div key={id} className="mt-2 flex items-center justify-between gap-3 rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
-                          <span>{units.find((unit) => unit.id === id)?.name ?? id}{editingUser?.unitId === id ? ' · também é a referência financeira' : ''}</span>
+                          <span>{units.find((unit) => unit.id === id)?.name ?? id}{form.watch('unitId') === id ? ' · também é a referência financeira' : ''}</span>
                           <button type="button" className="font-bold text-ds-accent-ink underline" onClick={() => { setAdditionalOperationalUnitIds((current) => current.filter((item) => item !== id)); setAdditionalOperationalDirty(true); }}>Remover vínculo</button>
                         </div>
                       ))}
@@ -1685,12 +1732,7 @@ export function UserManagement({
                         <option value="">Adicionar outra unidade operacional…</option>
                         {units.filter((unit) => !operationalUnitIds.includes(unit.id)).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                       </select>
-                    </div>
-                    {operationalReconciliationPending && (
-                      <p role="status" className="rounded-ds-md border border-ds-info/20 bg-ds-info-bg px-3 py-2 text-xs font-semibold text-ds-ink">
-                        Ao salvar, as unidades operacionais serão: {operationalUnitIds.map((id) => units.find((unit) => unit.id === id)?.name ?? id).join(', ') || 'nenhuma'}. A referência financeira permanece separada.
-                      </p>
-                    )}
+                    </div>}
                     {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
@@ -1711,27 +1753,7 @@ export function UserManagement({
                       </div>
                     )}
                     <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
-                      <FormField control={form.control} name="unitId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione a referência financeira" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {units.map((unit) => (
-                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Referência do financeiro (lotação e custos), independente das unidades em que a pessoa trabalha. Não libera escala ou batida de ponto.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+
                       <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Unidades sob responsabilidade</FormLabel>
@@ -1811,7 +1833,7 @@ export function UserManagement({
                   </p>
                   <FormDescription className="text-xs">
                     {effectiveDefaultProfileId && effectiveDefaultProfileId === selectedProfileId
-                      ? 'Aplicado pelo cargo e função (aba Cargo e jornada). '
+                      ? 'Aplicado pelo cargo e função (aba Identificação). '
                       : ''}
                     O perfil define o que a pessoa pode fazer; as unidades definem onde.
                   </FormDescription>
@@ -1935,7 +1957,7 @@ export function UserManagement({
                   size={createOnly ? 'default' : 'md'}
                   className={createOnly ? "h-7 px-3 text-[11px]" : undefined}
                   loading={form.formState.isSubmitting}
-                  disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty && !additionalOperationalDirty && !operationalReconciliationPending)}
+                  disabled={!operationalPeriodsValid || isUploadingPhoto || (!!editingUser && !form.formState.isDirty && !additionalOperationalDirty && !operationalReconciliationPending)}
                 >
                   {editingUser ? 'Salvar alterações' : 'Criar usuário'}
                 </Button>
@@ -2139,14 +2161,14 @@ export function UserManagement({
           )}
         </div>
       )}
-      
-      <ProfileManagementModal 
+
+      <ProfileManagementModal
         open={isProfilesModalOpen}
         onOpenChange={setIsProfilesModalOpen}
         canEdit={!!permissions.settings.manageProfiles}
       />
 
-      <PhotoCaptureModal 
+      <PhotoCaptureModal
         open={isPhotoModalOpen}
         onOpenChange={setIsPhotoModalOpen}
         onPhotoCaptured={handlePhotoCaptured}
@@ -2350,7 +2372,7 @@ export function UserManagement({
           </DialogContent>
         </Dialog>
       )}
-      
+
       {userToResetPassword && (
          <DeleteConfirmationDialog
             open={!!userToResetPassword}

@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **508**
-- Totalmente contratados: **163**
+- Arquivos de rota: **509**
+- Totalmente contratados: **164**
 - Legados congelados: **337**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -515,6 +515,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/user-notifications` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/user-notifications/route.ts](../../src/app/api/user-notifications/route.ts) |
 | `/api/users` | POST | `EXCEPTION` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
 | `/api/users/[userId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
+| `/api/users/[userId]/contract-changes` | GET ✓ | `CONTRACTED` | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/[userId]/contract-changes/route.ts) |
 | `/api/webhooks/autentique` | POST | `LEGACY_BASELINE` | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) |
 | `/api/webhooks/inter/banking` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) |
 | `/api/webhooks/inter/cobranca` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) |

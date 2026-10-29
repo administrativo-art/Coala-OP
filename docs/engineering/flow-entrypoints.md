@@ -975,13 +975,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 87.
+Arquivos locais percorridos: 89.
 
 Chamadas candidatas encontradas:
 
 - `/api/audit/log` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/log/route.ts`](../../src/app/api/audit/log/route.ts)
 - `/api/audit/logs` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/logs/route.ts`](../../src/app/api/audit/logs/route.ts)
-- `/api/dp/collaborators/` — interface [`src/features/dp/employment-reference/client.ts`](../../src/features/dp/employment-reference/client.ts)
 - `/api/hr/bootstrap` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/bootstrap/route.ts`](../../src/app/api/hr/bootstrap/route.ts)
 - `/api/hr/collaborators/` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `/api/hr/departments` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/route.ts`](../../src/app/api/hr/departments/route.ts)
@@ -1013,6 +1012,7 @@ Chamadas candidatas encontradas:
 - `/api/uniforms/exchange` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/exchange/route.ts`](../../src/app/api/uniforms/exchange/route.ts)
 - `/api/uniforms/return` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/return/route.ts`](../../src/app/api/uniforms/return/route.ts)
 - `/api/uniforms/terms/` — interface [`src/components/collaborator-uniforms.tsx`](../../src/components/collaborator-uniforms.tsx); rota candidata [`src/app/api/uniforms/terms/[id]/route.ts`](../../src/app/api/uniforms/terms/%5Bid%5D/route.ts)
+- `/api/users/` — interface [`src/components/dp/contract-changes.tsx`](../../src/components/dp/contract-changes.tsx); rota candidata [`src/app/api/users/[userId]/route.ts`](../../src/app/api/users/%5BuserId%5D/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
