@@ -41,6 +41,7 @@ import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
 import type { EmployeeFieldValue, FieldMapEntry, FieldVisibility, NormalizedFieldVisibility, RhRole } from "@/types/rh";
 import { canViewField, normalizeFieldVisibility } from "@/types/rh";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CYCLE_STATUS_CONFIG, getVacationCycleHistory, type VacationCycle } from "@/lib/utils/vacation-logic";
 import { FieldValue } from "@/features/rh/components/FieldValue";
 import { formatFieldValue } from "@/features/rh/lib/field-format";
@@ -2208,83 +2209,24 @@ function EmployeeProfileFields({
   );
 }
 
-function EmployeeProfileHeaderSummary({
-  userId,
-  profileState,
-}: {
-  userId: string;
-  profileState: EmployeeProfileState;
-}) {
-  const { firebaseUser, permissions, user: currentUser } = useAuth();
-
-  if (profileState.status === "idle" || profileState.status === "loading") {
-    return (
-      <div className="min-w-[280px] rounded-2xl border border-ds-divider bg-ds-input px-4 py-3">
-        <div className="h-4 w-32 animate-pulse rounded bg-ds-divider" />
-        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-ds-neutral-bg" />
-      </div>
-    );
-  }
-
-  if (profileState.status === "error") {
-    return (
-      <div className="min-w-[280px] rounded-2xl border border-ds-warn-bg bg-ds-warn-bg px-4 py-3">
-        <p className="text-xs font-black text-ds-warn">Cadastro local indisponível</p>
-        <p className="mt-1 text-[11px] font-bold text-ds-warn">
-          Os campos complementares ainda não foram preparados para este colaborador.
-        </p>
-      </div>
-    );
-  }
-
-  const { employee, fieldValues, fieldMap, cache } = profileState.data;
-  const role = cache.rh_role as RhRole;
-  const visibilityContext = {
-    isOwner: firebaseUser?.uid === userId || employee.auth_uid === firebaseUser?.uid || currentUser?.id === userId,
-    canViewConfidential: permissions.settings?.manageUsers === true,
-    userId: currentUser?.id ?? firebaseUser?.uid ?? null,
-    roleIds: currentUser?.jobRoleId ? [currentUser.jobRoleId] : [],
-    functionIds: (currentUser?.jobFunctionIds ?? []).filter(Boolean),
-  };
-  const visibleFields = Object.entries(fieldMap.fields)
-    .filter(([key, entry]) => {
-      if (isSystemStaticField(key) || isSystemPanelProfileField(key) || isLegacyUniformField(key, entry)) return false;
-      return canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix) && conditionalMatches(entry, fieldValues);
-    });
-  const filledFields = visibleFields.filter(([key]) => fieldHasValue(fieldValues[key])).length;
-  const totalFields = visibleFields.length;
-  const completionPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : employee.profile_completion;
-
+/** Atalho só com ícone na barra do perfil: o nome aparece ao passar o mouse ou focar, e leitores de tela leem o rótulo. */
+function HeaderIconLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   return (
-    <div className="min-w-[320px] rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3">
-      <div className="flex items-center gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full"
-            style={{ background: `conic-gradient(#df2f78 ${completionPct * 3.6}deg, #ececf0 0deg)` }}
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href={href}
+            aria-label={label}
+            className="grid h-9 w-9 place-items-center rounded-ds-btn border border-white/15 bg-white/[0.07] text-ds-accent shadow-xs hover:border-ds-accent hover:bg-white/[0.12] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
           >
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-ds-ink text-xs font-black text-white">
-              {completionPct}%
-            </div>
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-white">Perfil completo</p>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${completionPct >= 80 ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger"}`}>
-                {completionPct >= 80 ? "Completo" : "Incompleto"}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
-              {filledFields}/{totalFields} campos preenchidos
-            </p>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
-              Cadastro local do Coala
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+            {icon}
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 function TerminationDialog({
@@ -3322,31 +3264,25 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               </div>
             </div>
           </div>
-          <div className="min-w-0 md:w-[320px]">
-            <EmployeeProfileHeaderSummary
-              userId={user.id}
-              profileState={employeeProfileState}
-            />
-          </div>
-          <div className="grid shrink-0 gap-2 xl:justify-items-end">
+          <div className="shrink-0">
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               {canManageSystemFieldVisibility ? (
                 <button
                   type="button"
                   onClick={() => setEditDrawerInUrl(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-accent bg-ds-accent px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent-hover hover:bg-ds-accent-hover"
                 >
-                  <Pencil className="h-4 w-4 text-ds-accent" />
+                  <Pencil className="h-4 w-4" />
                   Editar dados
                 </button>
               ) : null}
-              <Link
-                href={`/dashboard/dp/collaborators/${user.id}/documents`}
-                className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-              >
-                <FileText className="h-4 w-4 text-ds-accent" />
-                Documentos
-              </Link>
+              <HeaderIconLink href={`/dashboard/dp/collaborators/${user.id}/documents`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
+              {canReadTimeRecording ? (
+                <>
+                  <HeaderIconLink href={timeRecordingHref} label="Registro de ponto" icon={<Clock className="h-[18px] w-[18px]" />} />
+                  <HeaderIconLink href={`${timeRecordingHref}?view=time-bank`} label="Banco de horas" icon={<TimerReset className="h-[18px] w-[18px]" />} />
+                </>
+              ) : null}
               <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
                 <PopoverTrigger asChild>
                   <button
@@ -3392,24 +3328,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </PopoverContent>
               </Popover>
             </div>
-            {canReadTimeRecording ? (
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                <Link
-                  href={timeRecordingHref}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-                >
-                  <Clock className="h-4 w-4 text-ds-accent" />
-                  Registro de ponto
-                </Link>
-                <Link
-                  href={`${timeRecordingHref}?view=time-bank`}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-                >
-                  <TimerReset className="h-4 w-4 text-ds-accent" />
-                  Banco de horas
-                </Link>
-              </div>
-            ) : null}
           </div>
         </div>
       </section>
