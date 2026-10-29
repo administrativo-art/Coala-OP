@@ -94,14 +94,20 @@ export const PROFILE_COMPOSITE_FIELDS: readonly CompositeFieldDef[] = [
  * Campos que não aparecem na ficha. `employee.address` era uma linha livre que repetia o
  * endereço; os documentos agora montam essa linha a partir dos campos do endereço.
  */
-export const HIDDEN_PROFILE_FIELD_KEYS: ReadonlySet<string> = new Set(["employee.address"]);
+export const HIDDEN_PROFILE_FIELD_KEYS: ReadonlySet<string> = new Set([
+  "employee.address",
+  "employee.mother_name",
+  "employee.father_name",
+  "employee.vt_notes",
+  "employee.employer_name",
+]);
 
 export const PROFILE_SUBGROUPS: Readonly<Record<string, readonly ProfileSubgroupDef[]>> = {
   "Dados pessoais": [
     {
       id: "identity",
       title: "Identificação",
-      description: "Quem é a pessoa: nome, nascimento e filiação.",
+      description: "Quem é a pessoa: nome e nascimento.",
       keys: [
         "employee.name",
         "employee.birth_date",

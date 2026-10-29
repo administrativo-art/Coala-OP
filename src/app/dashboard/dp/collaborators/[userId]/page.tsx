@@ -126,6 +126,7 @@ import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { Button } from "@/components/ui/button";
 import { ContractChanges } from "@/components/dp/contract-changes";
 import { contractProbationDates } from "@/components/dp/contract-probation-dates";
+import { pdvAccessUnitLabel } from "@/features/hr/lib/pdv-access-presentation";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -1272,7 +1273,6 @@ function EmployeeProfileFields({
   profileState,
   onProfileChanged,
   onFieldMapChanged,
-  onEditContract,
   children,
 }: {
   user: User;
@@ -1281,7 +1281,6 @@ function EmployeeProfileFields({
   profileState: EmployeeProfileState;
   onProfileChanged: () => void;
   onFieldMapChanged: () => void;
-  onEditContract?: () => void;
   children?: React.ReactNode;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
@@ -1638,20 +1637,6 @@ function EmployeeProfileFields({
       hasValue: pdvAccesses.length > 0 || pdvRegistrationLabel(user) !== "-",
     },
     {
-      key: SYSTEM_FIELD_KEYS.loginCoalaOne,
-      value: user.email || "-",
-      hasValue: Boolean(user.email),
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.functions,
-      value: user.jobFunctionNames && user.jobFunctionNames.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {user.jobFunctionNames.map((name) => <Chip key={name} tone="good">{name}</Chip>)}
-        </div>
-      ) : "Nenhuma função vinculada.",
-      hasValue: Boolean(user.jobFunctionNames?.length),
-    },
-    {
       key: SYSTEM_FIELD_KEYS.accessProfile,
       value: Array.from(new Set(pdvAccesses.map((access) => access.profileName).filter(Boolean))).join(", ") || user.pdvAccessProfileName || "-",
       hasValue: pdvAccesses.some((access) => Boolean(access.profileName)) || Boolean(user.pdvAccessProfileName),
@@ -1680,19 +1665,19 @@ function EmployeeProfileFields({
   addContractRow(EMPLOYMENT_RELATIONSHIP_FIELD_KEY, "Tipo de vínculo", 5, employmentRelationshipLabel(relationshipType), Boolean(relationshipType));
   const employer = units.find((unit) => unit.id === user.employerUnitId);
   addContractRow("employee.employer_cnpj", "CNPJ do empregador", 10, user.employerCnpj || employer?.cnpj || "", Boolean(user.employerCnpj || employer?.cnpj));
-  addContractRow("system.contract.employer_unit", "Unidade empregadora", 15, user.employerUnitName || employer?.name || "", Boolean(user.employerUnitId));
   addContractRow("system.contract.admission", "Data de admissão", 25, fmtDate(user.admissionDate), Boolean(user.admissionDate));
   addContractRow("employee.job_role_id", "Cargo", 30, user.jobRoleName || user.jobRoleId || "", Boolean(user.jobRoleId));
   addContractRow("system.contract.functions", "Função", 35, user.jobFunctionNames?.join(", ") || user.jobFunctionIds?.join(", ") || "", Boolean(user.jobFunctionIds?.length), SYSTEM_FIELD_KEYS.functions);
-  const probationDates = contractProbationDates(profileState.data.periodo_experiencia);
+  const probationDates = contractProbationDates(profileState.data.periodo_experiencia, {
+    firstEnd: fieldDateIso(fieldValues["employee.probation_eval_1"]),
+    finalEnd: fieldDateIso(fieldValues["employee.probation_eval_2"]),
+  });
   addContractRow("system.contract.probation_start", "Início da experiência", 38, formatIsoDate(probationDates.start), Boolean(probationDates.start), "employee.probation_eval_1");
   const firstExperienceEnd = probationDates.firstEnd ?? fieldDateIso(fieldValues["employee.probation_eval_1"]);
   const secondExperienceEnd = probationDates.finalEnd ?? fieldDateIso(fieldValues["employee.probation_eval_2"]);
   addContractRow("employee.probation_eval_1", "Fim do 1º período de experiência", 40, formatIsoDate(firstExperienceEnd), Boolean(firstExperienceEnd));
   addContractRow("employee.probation_eval_2", "Fim do 2º período de experiência", 50, formatIsoDate(secondExperienceEnd), Boolean(secondExperienceEnd));
   addContractRow("system.contract.indefinite_start", probationDates.indefiniteLabel, 55, formatIsoDate(probationDates.indefiniteStart), Boolean(probationDates.indefiniteStart), "employee.probation_eval_2");
-  const financial = units.find((unit) => unit.id === user.unitId);
-  addContractRow("system.contract.financial_unit", "Unidade financeira", 60, financial?.name || user.unitId || "", Boolean(user.unitId));
 
   Object.values(sections).forEach((items) => {
     items.sort((left, right) => (left.entry.order ?? 0) - (right.entry.order ?? 0));
@@ -1740,15 +1725,6 @@ function EmployeeProfileFields({
         SYSTEM_FIELD_KEYS.loginPdv,
         SYSTEM_FIELD_KEYS.registrationPdv,
         SYSTEM_FIELD_KEYS.accessProfile,
-      ],
-    },
-    {
-      id: "coala",
-      title: "Coala One",
-      description: "Conta interna e funções no sistema.",
-      keys: [
-        SYSTEM_FIELD_KEYS.loginCoalaOne,
-        SYSTEM_FIELD_KEYS.functions,
       ],
     },
   ];
@@ -2059,7 +2035,7 @@ function EmployeeProfileFields({
                                 <div key={access.externalUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ds-input p-3 ring-1 ring-ds-border">
                                   <div className="min-w-0">
                                     <p className="text-xs font-black text-ds-ink">
-                                      {access.unitName ?? access.filialName ?? `Filial ${access.filialId || "não identificada"}`}
+                                      {pdvAccessUnitLabel(access, units)}
                                     </p>
                                     <p className="mt-1 text-[10px] font-bold text-ds-ink-muted">
                                       Usuário {access.externalUserId} · {access.profileName ?? "Perfil do PDV ainda não sincronizado"}
@@ -2098,7 +2074,7 @@ function EmployeeProfileFields({
                 ) : (
                   renderSectionBody(section, sectionFields)
                 )}
-                {section === contractSection ? <><div className="px-3 pb-2">{canManageFieldVisibility && onEditContract ? <Button type="button" variant="ds-secondary" size="sm" onClick={onEditContract}>Editar dados contratuais</Button> : null}</div><ContractChanges userId={user.id} units={units} /></> : null}
+                {section === contractSection ? <ContractChanges userId={user.id} units={units} /> : null}
               </section>
             );
           })}
@@ -3340,7 +3316,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           profileState={employeeProfileState}
           onProfileChanged={reloadEmployeeProfile}
           onFieldMapChanged={reloadEmployeeFieldMap}
-          onEditContract={() => setEditDrawerInUrl(true)}
         >
           <div className="space-y-2.5">
             {systemVisibilityMessage ? (
