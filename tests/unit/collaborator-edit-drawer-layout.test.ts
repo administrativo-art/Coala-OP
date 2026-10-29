@@ -27,14 +27,18 @@ test("cada escopo de visualização por unidade tem nota explicativa", () => {
   }
 });
 
-test("cada aba do drawer tem painel próprio e os campos de unidade têm nota", () => {
+test("cada aba do drawer tem painel próprio e as linhas de unidade explicam o efeito", () => {
   const tabs = [...source.matchAll(/\{ id: '(\w+)', label: '[^']+' \}/g)].map((match) => match[1]);
   assert.deepEqual(tabs, ["identity", "journey", "units"]);
   for (const tab of tabs) {
     assert.match(source, new RegExp(`id="collaborator-edit-panel-${tab}"`));
   }
-  assert.match(source, /As unidades habituais de escala e ponto são definidas no histórico de vigências desta aba/);
+  // Quiosques atribuídos e acesso ao PDV saem da vigência; não existe mais seletor manual de quiosque na edição.
+  assert.match(source, /Os quiosques atribuídos e os acessos ao PDV saem destas unidades automaticamente/);
+  assert.match(source, /<OperationalKioskSummary/);
+  assert.match(source, /<PdvAccessControl/);
+  assert.doesNotMatch(source, /<FormLabel>Quiosques atribuídos<\/FormLabel>/);
   assert.match(source, /<OperationalUnitPeriodsField/);
   assert.match(source, /Referência do financeiro/);
-  assert.match(source, /Onde a pessoa é gestora/);
+  assert.match(source, /Onde aparece como gestor no organograma/);
 });
