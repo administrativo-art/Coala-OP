@@ -14,7 +14,7 @@ const luis: AdjustmentDayContext = {
   markings: [marking("r1", "05:58", 4), marking("r2", "10:01", 5), marking("r3", "11:00", 6), marking("r4", "17:59", 7, "web")],
   treatments: [],
   shifts: [{ startTime: "06:00", endTime: "14:00", overnight: false, shiftName: "Manhã", unitName: "Tirirical", breakType: "fixed",
-    breakStart: "10:00", breakEnd: "11:00", breakDurationMinutes: 60, toleranceMinutes: 10, referenceMinutes: null }],
+    breakStart: "10:00", breakEnd: "11:00", breakDurationMinutes: 60, toleranceMinutes: 10, referenceMinutes: null, expectedPunches: 4 }],
   history: { otherRequestsSameDay: 0, approvedInPrevious30Days: 1 }, relationship: "clt",
 };
 const swap: DayOperation[] = [{ kind: "correct", target: { receiptId: "r4", markedAt: at("17:59"), nsr: 7 }, inclusion: { markedAt: at("13:50") } }];
@@ -95,10 +95,26 @@ test("sem escala no dia, mostra as batidas e não compara", () => {
   assert.equal(summary.shiftText, null);
 });
 
-test("a batida do pedido que não veio na leitura do dia ainda conta como desconsiderada", () => {
+test("a batida do pedido que não veio na leitura do dia ainda conta como desconsiderada, e o painel avisa", () => {
   const summary = summarizeAdjustmentDay({ ...luis, markings: luis.markings.slice(0, 3) }, swap);
   assert.equal(summary.before.workedMinutes, 662);
   assert.equal(summary.after.workedMinutes, 413);
+  assert.match(summary.notice ?? "", /A batida das 17:59 citada no pedido não foi encontrada na leitura deste dia\. Confira a data e a origem\./);
+});
+
+test("dia com menos batidas que o esperado avisa, e uma batida só aparece sem rótulo de entrada", () => {
+  const only = { ...luis, markings: [luis.markings[3]] };
+  const summary = summarizeAdjustmentDay(only, swap);
+  assert.match(summary.notice ?? "", /^Há 1 batida registrada neste dia; a escala cadastrada tem 4 marcações\. Confira o motivo informado no pedido\./);
+  assert.deepEqual(summary.before.markers.map((marker) => marker.label), [null]);
+  assert.equal(summarizeAdjustmentDay(luis, swap).notice, null);
+  assert.match(summarizeAdjustmentDay({ ...luis, markings: [] }, []).notice ?? "", /^Não há batida registrada neste dia; a escala cadastrada tem 4 marcações\./);
+});
+
+test("a escala e o intervalo fixo viram o fundo da linha, em minutos do dia", () => {
+  const band = summarizeAdjustmentDay(luis, swap).scaleBand;
+  assert.deepEqual(band, { start: 360, end: 840, breakStart: 600, breakEnd: 660 });
+  assert.equal(summarizeAdjustmentDay({ ...luis, shifts: [] }, swap).scaleBand, null);
 });
 
 test("inclusão simples e desconsideração simples", () => {
@@ -115,7 +131,7 @@ test("inclusão simples e desconsideração simples", () => {
 test("turno que passa da meia-noite usa o dia seguinte como fim da escala", () => {
   const night: AdjustmentDayContext = { ...luis, markings: [
     { ...marking("n1", "22:00", 1) }, { ...marking("n2", "06:00", 2), markedAt: at("06:00", "2026-10-27") }],
-    shifts: [{ ...luis.shifts[0], startTime: "22:00", endTime: "06:00", overnight: true, breakType: "none", breakStart: null, breakEnd: null, breakDurationMinutes: null, referenceMinutes: null }] };
+    shifts: [{ ...luis.shifts[0], startTime: "22:00", endTime: "06:00", overnight: true, breakType: "none", breakStart: null, breakEnd: null, breakDurationMinutes: null, referenceMinutes: null, expectedPunches: 2 }] };
   const summary = summarizeAdjustmentDay(night, []);
   assert.equal(minutesFromWorkDate("2026-10-26", at("06:00", "2026-10-27")), 30 * 60);
   assert.equal(summary.before.workedMinutes, 480);

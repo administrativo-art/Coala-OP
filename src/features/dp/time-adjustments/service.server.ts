@@ -471,9 +471,13 @@ export async function readAdjustmentRequestForDay(deps: DayReadDeps, adjustmentI
   return { scope: 'pilot' as const, snapshot: await deps.hrDb.collection(PILOT_ADJUSTMENTS).doc(adjustmentId).get() };
 }
 
-/** Batidas do dia da pessoa: oficiais para o pedido oficial, do ensaio para a simulação (nunca as duas). */
+/**
+ * Batidas do dia da pessoa: oficiais (banco do REP-P) para o pedido oficial, do ensaio (banco coala-rh, como em
+ * `readOwnPilotMarkingForAdjustment`) para a simulação, nunca as duas.
+ */
 export function readDayMarkingDocuments(deps: DayReadDeps, scope: 'official' | 'pilot', workspaceId: string, employeeUid: string, workDate: string) {
-  return deps.repDb.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
+  const database = scope === 'pilot' ? deps.hrDb : deps.repDb;
+  return database.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
     .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(DAY_MARKINGS_LIMIT + 1).get();
 }
 

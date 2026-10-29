@@ -84,7 +84,7 @@ export async function readAdjustmentDayContext(context: ServerUserContext, adjus
   const shifts: DayShift[] = month.shifts.filter((shift) => shift.date === workDate && shift.type === 'work').map((shift) => ({
     startTime: shift.startTime, endTime: shift.endTime, overnight: shift.overnight, shiftName: shift.shiftName, unitName: shift.unitName,
     breakType: shift.breakType, breakStart: shift.breakStart, breakEnd: shift.breakEnd, breakDurationMinutes: shift.breakDurationMinutes,
-    toleranceMinutes: shift.toleranceMinutes, referenceMinutes: shift.referenceMinutes,
+    toleranceMinutes: shift.toleranceMinutes, referenceMinutes: shift.referenceMinutes, expectedPunches: shift.expectedPunches,
   }));
 
   const others = [...officialHistory.docs, ...pilotHistory.docs].filter((document) => document.id !== adjustmentId);
