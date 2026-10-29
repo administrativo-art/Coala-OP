@@ -12,7 +12,17 @@ test("form do drawer do colaborador não encolhe dentro do SidePanel", () => {
 });
 
 test("barra de abas do drawer do colaborador não encolhe", () => {
-  assert.match(source, /aria-label="Seções da edição do colaborador"\s+className="[^"]*\bshrink-0\b[^"]*overflow-x-auto/);
+  assert.match(source, /aria-label="Seções da edição do colaborador"\s+className=\{cn\(\s+'shrink-0 overflow-x-auto'/);
+});
+
+test("no painel lateral as abas ficam no topo escuro, em formato de pasta", () => {
+  const panel = readFileSync(path.join(process.cwd(), "src/components/patterns/side-panel.tsx"), "utf8");
+  const page = readFileSync(path.join(process.cwd(), "src/app/dashboard/dp/collaborators/[userId]/page.tsx"), "utf8");
+  assert.match(panel, /headerTabs \? <div ref=\{setTabsSlot\} data-ui="side-panel-header-tabs"/);
+  assert.match(page, /kicker="Editar colaborador"[^]*?headerTabs\n/);
+  assert.match(source, /createPortal\(nav, headerTabsSlot\)/);
+  // A aba ativa usa a cor do corpo do painel para "abrir" sobre ele.
+  assert.match(source, /active \? 'bg-ds-warm text-ds-ink' : 'text-ds-on-dark-muted hover:text-ds-on-dark'/);
 });
 
 test("edição do colaborador só inicializa e poda funções com os catálogos carregados", () => {

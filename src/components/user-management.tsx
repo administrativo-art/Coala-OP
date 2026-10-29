@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useContext, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { SidePanelHeaderTabsContext } from '@/components/patterns/side-panel';
 import Link from 'next/link';
 import { ContractChangeForm, contractFormChanged } from '@/components/dp/contract-change-form';
 import { ContractProbationDates } from '@/components/dp/contract-probation-dates';
@@ -396,6 +398,7 @@ export function UserManagement({
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
   const [activeEditTab, setActiveEditTab] = useState<CollaboratorEditTab>('identity');
+  const headerTabsSlot = useContext(SidePanelHeaderTabsContext);
   const [contractChangeReason, setContractChangeReason] = useState('');
   const [contractEffectiveDate, setContractEffectiveDate] = useState(operationalCivilDate);
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
@@ -1290,36 +1293,45 @@ export function UserManagement({
               </div>
             ) : null}
 
-            {isDrawer ? (
+            {isDrawer ? (() => {
+              // No painel lateral as abas ficam no pé do topo escuro (pasta): a ativa tem a cor do corpo.
+              const inHeader = Boolean(headerTabsSlot);
+              const nav = (
               <nav
                 aria-label="Seções da edição do colaborador"
-                className="sticky top-0 z-20 -mx-1 shrink-0 overflow-x-auto rounded-ds-md bg-ds-seg p-[3px] shadow-xs"
+                className={cn(
+                  'shrink-0 overflow-x-auto',
+                  inHeader ? '-mx-1' : 'sticky top-0 z-20 -mx-1 rounded-ds-md bg-ds-seg p-[3px] shadow-xs',
+                )}
               >
-                <div role="tablist" aria-label="Dados do colaborador" className="flex min-w-max gap-1">
+                <div role="tablist" aria-label="Dados do colaborador" className={cn('flex min-w-max', inHeader ? 'gap-0.5' : 'gap-1')}>
                   {visibleEditTabs.map((tab, index) => {
                     const status = editTabStatus(tab.id);
+                    const active = activeEditTab === tab.id;
                     return (
                     <button
                       key={tab.id}
                       id={`collaborator-edit-tab-${tab.id}`}
                       type="button"
                       role="tab"
-                      tabIndex={activeEditTab === tab.id ? 0 : -1}
-                      aria-selected={activeEditTab === tab.id}
+                      tabIndex={active ? 0 : -1}
+                      aria-selected={active}
                       aria-controls={`collaborator-edit-panel-${tab.id}`}
                       onClick={() => setActiveEditTab(tab.id)}
                       onKeyDown={(event) => handleEditTabKeyDown(event, index)}
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
-                        activeEditTab === tab.id
-                          ? 'bg-ds-surface text-ds-ink shadow-xs'
-                          : 'text-ds-ink-muted hover:text-ds-ink',
+                        'inline-flex items-center gap-1.5 font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2',
+                        inHeader
+                          ? cn('h-[42px] rounded-t-[10px] px-4 text-[13px] focus-visible:ring-white/40',
+                              active ? 'bg-ds-warm text-ds-ink' : 'text-ds-on-dark-muted hover:text-ds-on-dark')
+                          : cn('rounded-ds-sm px-3 py-2 text-xs focus-visible:ring-ds-accent-ink',
+                              active ? 'bg-ds-surface text-ds-ink shadow-xs' : 'text-ds-ink-muted hover:text-ds-ink'),
                       )}
                     >
                       {tab.label}
                       {status ? (
                         <>
-                          <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', status === 'error' ? 'bg-ds-danger' : 'bg-ds-accent')} />
+                          <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', status === 'error' ? 'bg-ds-danger' : inHeader && !active ? 'bg-ds-accent-kicker' : 'bg-ds-accent')} />
                           <span className="sr-only">{status === 'error' ? '(com erro)' : '(alterada)'}</span>
                         </>
                       ) : null}
@@ -1328,7 +1340,9 @@ export function UserManagement({
                   })}
                 </div>
               </nav>
-            ) : null}
+              );
+              return headerTabsSlot ? createPortal(nav, headerTabsSlot) : nav;
+            })() : null}
 
             {(!isDrawer || activeEditTab === 'identity') ? (
             <div id="collaborator-edit-panel-identity" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-identity' : undefined} className={isDrawer ? 'flex flex-col gap-4' : createOnly ? 'space-y-2' : 'space-y-5'}>
