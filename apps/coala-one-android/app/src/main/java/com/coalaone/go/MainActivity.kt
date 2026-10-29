@@ -152,10 +152,10 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
-        composable("time") { TimeScreen(hiltViewModel(), back) }
-        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true) }
+        composable("time") { TimeScreen(hiltViewModel(), back, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
         composable("time/day/{date}", arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
-            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"))
+            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"), onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
         }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
@@ -201,8 +201,11 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
                 style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
             val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
-            listOfNotNull(unitName, TimeRules.shiftText(today.timeShift)).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
-                Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+            // Only the unit and the hours, each in its own pill; the shift name stays in the schedule.
+            val hours = TimeRules.shiftHours(today.timeShift)
+            if (!unitName.isNullOrBlank() || hours != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                unitName?.takeIf { it.isNotBlank() }?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f), Modifier.weight(1f, fill = false)) }
+                hours?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f)) }
             }
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
@@ -247,29 +250,12 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 }
             }
         }
-        summary?.takeIf { it.state == com.coalaone.go.domain.DaySummaryState.COMPLETE }?.let { day ->
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HomeTimeMetric("Trabalhado", TimeRules.durationText(day.workedMinutes ?: 0), Modifier.weight(1f))
-                HomeTimeMetric("Intervalo", TimeRules.durationText(day.breakMinutes ?: 0), Modifier.weight(1f))
-                HomeTimeMetric("Dif. da escala", day.shiftDifferenceMinutes?.let { TimeRules.durationText(it, true) } ?: "—", Modifier.weight(1f))
-            }
-            day.plannedBreakMinutes?.takeIf { it > 0 }?.let {
-                Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
-            }
-            Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
-        }
         Spacer(Modifier.height(5.dp))
         if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
             Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
                 style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
         Action("Registrar ponto", dark = true, onClick = onRecord)
-    }
-}
-@Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(value, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
-        Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {

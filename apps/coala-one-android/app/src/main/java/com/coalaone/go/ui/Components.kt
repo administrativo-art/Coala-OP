@@ -180,7 +180,7 @@ fun shortDate(value: String?): String? {
         Box(Modifier.weight(1f)) { Action(next, enabled = nextEnabled, onClick = onNext) }
     }
 }
-@Composable fun StatusChip(text: String, ink: Color, background: Color) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
+@Composable fun StatusChip(text: String, ink: Color, background: Color, modifier: Modifier = Modifier) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
 /** Pill filter from the prototype: dark when selected, outlined otherwise. */
 @Composable fun PillChoice(label: String, selected: Boolean, enabled: Boolean = true, accent: Boolean = false, onClick: () -> Unit) {
     val ink = when { selected && accent -> Tokens.wine; selected -> Tokens.pillInk; else -> Tokens.muted }

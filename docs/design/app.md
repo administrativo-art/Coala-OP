@@ -275,6 +275,10 @@ Enquanto a tela está ocupada, os botões da barra ficam desabilitados e a 40% d
 - Desabilitado enquanto a tela carrega.
 - As opções vêm de `Rules.unitChoices`: com mais de uma unidade, a primeira é **"Todas as unidades"**.
 
+### Ponto: sem seletor de unidade e comprovante em um toque
+
+**Decidido (29/10/2026).** A tela de Ponto não usa `UnitPickerHeader`: a unidade vem da escala do dia (ou da primeira unidade liberada à pessoa) e aparece como pílula ao lado do horário do turno. A tela principal mostra só relógio, turno do dia e botão de bater; trabalhado, intervalo e diferença ficam no Detalhe do dia. O cartão de confirmação da batida não traz "Abrir comprovante" nem "Ok": tocar na batida da lista abre o PDF direto (a folha com classificação, compartilhar e salvar aparece junto). "Pedir ajuste" e "Informar ausência" ficam em Registros e no Detalhe do dia, em grade de duas colunas.
+
 ### Filtro da lista de sangrias (Compra local)
 
 **Decidido (2026-10-20, 0.3.14).** A Compra local abre por etapas.
