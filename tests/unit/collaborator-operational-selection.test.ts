@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { operationalSelectionForUser, operationalUnitsDiffer } from '../../src/lib/collaborator-operational-selection';
+import { kioskIdsForOperationalUnits, operationalSelectionForUser, operationalUnitsDiffer } from '../../src/lib/collaborator-operational-selection';
 import type { DPUnit } from '../../src/types';
 
 const kiosks = [{ id: 'kiosk-a', name: 'Quiosque A' }];
@@ -20,4 +20,15 @@ test('preserva Tirirical como operacional adicional mesmo sendo também financei
   assert.deepEqual(selection.additionalUnitIds, ['unit-finance']);
   assert.equal(operationalUnitsDiffer(['unit-finance'], ['unit-a', ...selection.additionalUnitIds]), true);
   assert.equal(operationalUnitsDiffer(['unit-finance', 'unit-a'], ['unit-a', ...selection.additionalUnitIds]), false);
+});
+
+test('deriva os quiosques atribuídos das unidades da vigência, ignorando unidades sem quiosque', () => {
+  const allKiosks = [
+    { id: 'kiosk-a', name: 'Quiosque A' },
+    { id: 'kiosk-t', name: 'Tirirical', pdvFilialId: '10' },
+  ];
+  const allUnits = [...units, { id: 'unit-t', name: 'Unidade com outro nome', pdvFilialId: '10' }];
+  assert.deepEqual(kioskIdsForOperationalUnits(['unit-cd', 'unit-t'], allKiosks, allUnits), ['kiosk-t']);
+  assert.deepEqual(kioskIdsForOperationalUnits(['unit-a'], allKiosks, allUnits), ['kiosk-a']);
+  assert.deepEqual(kioskIdsForOperationalUnits(['unit-cd'], allKiosks, allUnits), []);
 });
