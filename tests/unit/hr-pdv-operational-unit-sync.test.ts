@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   PdvOperationalUnitSyncError,
   PDV_SERVER_MANAGED_USER_FIELDS,
+  pdvAccessEnabled,
   pdvOperationalUnitPatch,
+  pdvRemovalPatch,
+  planPdvAccessRevocation,
   planPdvOperationalUnitSyncs,
 } from "../../src/features/hr/lib/pdv-operational-unit-sync";
 
@@ -142,7 +145,7 @@ test("bloqueia uma troca ambígua quando existem vários acessos sem vínculo co
   );
 });
 
-test("bloqueia a remoção isolada de uma unidade que possui acesso ativo", () => {
+test("remove o acesso quando a unidade sai da vigência sem outra entrar", () => {
   const current = {
     unitIds: ["tirirical", "calhau"],
     registrationIdPdv: "436145",
@@ -155,10 +158,85 @@ test("bloqueia a remoção isolada de uma unidade que possui acesso ativo", () =
     }],
   };
 
+  assert.deepEqual(planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["calhau"] }), [{
+    kind: "remove",
+    sourceExternalUserId: "436145",
+    sourceUnitId: "tirirical",
+    targetUnitId: null,
+    profileId: null,
+  }]);
+});
+
+test("ignora unidades sem filial do PDV ao planejar", () => {
+  const current = {
+    unitIds: ["tirirical"],
+    registrationIdPdv: "436145",
+    pdvAccesses: [{ externalUserId: "436145", unitId: "tirirical", filialId: "10", profileId: "12", status: "active" }],
+  };
+  const pdvUnitIds = new Set(["tirirical", "joao-paulo"]);
+  assert.deepEqual(planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["tirirical", "cd"] }, { pdvUnitIds }), []);
+  assert.deepEqual(planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["cd", "joao-paulo"] }, { pdvUnitIds }), [{
+    kind: "move",
+    sourceExternalUserId: "436145",
+    sourceUnitId: "tirirical",
+    targetUnitId: "joao-paulo",
+    profileId: "12",
+  }]);
+});
+
+test("combina troca, inclusão e remoção em uma alteração múltipla, removendo por último", () => {
+  const current = {
+    unitIds: ["a", "b"],
+    registrationIdPdv: "1",
+    pdvAccesses: [
+      { externalUserId: "1", unitId: "a", filialId: "10", profileId: "12", status: "active" },
+      { externalUserId: "2", unitId: "b", filialId: "20", profileId: "12", status: "active" },
+    ],
+  };
+  const plans = planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["c"] });
+  assert.deepEqual(plans.map((plan) => [plan.kind, plan.sourceExternalUserId, plan.targetUnitId]), [
+    ["move", "1", "c"],
+    ["remove", "2", null],
+  ]);
+});
+
+test("bloqueia a remoção quando o acesso não identifica a unidade", () => {
+  const current = {
+    unitIds: ["a", "b"],
+    pdvAccesses: [{ externalUserId: "9", unitId: null, filialId: "10", profileId: "12", status: "active" }],
+  };
   assert.throws(
-    () => planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["calhau"] }),
+    () => planPdvOperationalUnitSyncs(current, { ...current, unitIds: ["b", "c", "d"] }),
     PdvOperationalUnitSyncError,
   );
+});
+
+test("desligar o acesso planeja a remoção de todos os acessos ativos e do registro legado", () => {
+  const current = {
+    registrationIdPdv: "9",
+    pdvAccesses: [
+      { externalUserId: "1", unitId: "a", filialId: "10", profileId: "12", status: "active" },
+      { externalUserId: "2", unitId: "b", filialId: "20", profileId: "12", status: "inactive" },
+    ],
+  };
+  assert.deepEqual(planPdvAccessRevocation(current).map((plan) => plan.sourceExternalUserId), ["1", "9"]);
+  assert.equal(pdvAccessEnabled(current), true);
+  assert.equal(pdvAccessEnabled({ ...current, pdvAccessEnabled: false }), false);
+  assert.equal(pdvAccessEnabled({}), false);
+});
+
+test("a remoção inativa o acesso, mantém o ID no histórico e reaponta o principal", () => {
+  const current = {
+    registrationIdPdv: "1",
+    pdvAccesses: [
+      { externalUserId: "1", unitId: "a", filialId: "10", filialName: "A", profileId: "12", status: "active" },
+      { externalUserId: "2", unitId: "b", filialId: "20", filialName: "B", profileId: "13", status: "active" },
+    ],
+  };
+  const patch = pdvRemovalPatch({ currentUser: current, externalUserId: "1", updatedAt: "2026-10-29T12:00:00.000Z" });
+  assert.deepEqual(patch.pdvAccesses.map((access) => [access.externalUserId, access.status]), [["1", "inactive"], ["2", "active"]]);
+  assert.equal(patch.registrationIdPdv, "2");
+  assert.equal(patch.pdvAccessFilialId, "20");
 });
 
 test("a confirmação de uma transferência atualiza o vínculo sem duplicar o acesso", () => {

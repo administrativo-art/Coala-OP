@@ -368,6 +368,8 @@ type PersistablePdvSnapshot = {
   metrics: PdvSnapshotMetrics;
   dailyRevenue: number;
   revenueByOperator: Record<string, number>;
+  /** Filial do PDV do quiosque; identifica os acessos criados pela integração (pdvAccesses). */
+  pdvFilialId?: string;
 };
 
 type EmployeeGoalEntry = {
@@ -473,6 +475,13 @@ async function persistPdvSnapshot(
     }
     const operatorIdToUserId: Record<string, string> = {};
     for (const userDoc of usersSnap?.docs ?? []) {
+      // Acessos criados pela integração na filial deste quiosque, inclusive os já removidos (as vendas antigas continuam da pessoa).
+      for (const access of Array.isArray(userDoc.data().pdvAccesses) ? userDoc.data().pdvAccesses : []) {
+        const externalUserId = access && typeof access === 'object' ? String(access.externalUserId ?? '').trim() : '';
+        if (snapshot.pdvFilialId && externalUserId && String(access.filialId ?? '').trim() === snapshot.pdvFilialId) {
+          operatorIdToUserId[externalUserId] ??= userDoc.id;
+        }
+      }
       const operatorId = userDoc.data().pdvOperatorIds?.[kioskId];
       if (operatorId != null) operatorIdToUserId[String(operatorId)] = userDoc.id;
     }
@@ -983,6 +992,7 @@ export async function syncDayAdmin(
     },
     dailyRevenue,
     revenueByOperator,
+    pdvFilialId,
   };
   const persistence = options.dryRun ? 'preview' as const : await persistPdvSnapshot(dateStr, kioskId, snapshot, db, options);
 
