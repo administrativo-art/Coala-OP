@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { isCivilDate } from '@/features/dp/employment-reference/resolve';
 
 import { EXTERNAL_CANDIDATE_MAX_RESULTS, listExternalCoverageCandidates } from '@/features/dp/external-candidates/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
@@ -14,10 +15,11 @@ import { canAccessUnit } from '@/lib/unit-access';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ scheduleId: string }> };
-type Input = { search: string; limit: number };
+type Input = { search: string; limit: number; date?: string };
 type Resource = { unitId: string; scheduleId: string };
 const routeSchema = z.object({ scheduleId: z.string().trim().min(1).max(180) }).strict();
-const querySchema = z.object({ search: z.string().trim().min(2).max(80), limit: z.coerce.number().int().min(1).max(EXTERNAL_CANDIDATE_MAX_RESULTS).default(15) }).strict();
+const querySchema = z.object({ search: z.string().trim().min(2).max(80), limit: z.coerce.number().int().min(1).max(EXTERNAL_CANDIDATE_MAX_RESULTS).default(15),
+  date: z.preprocess((value) => value === '' ? undefined : value, z.string().refine(isCivilDate).optional()) }).strict();
 const searchLimiter = createInMemoryRateLimiter({ limit: 30, windowMs: 60_000, maxKeys: 5_000 });
 const contract = defineSecurityContract({ schemaVersion: 1, id: 'dp.schedules.external-candidates.list', version: 1, surface: { method: 'GET', path: '/api/dp/schedules/[scheduleId]/external-candidates' }, exposure: 'authenticated', identity: { kind: 'active-user' }, authorization: { kind: 'permission', action: 'dp.schedules.assign-external' }, resourceScope: { kind: 'unit' }, input: { kind: 'schema', schema: 'dp.schedules.external-candidates.query', unknownFields: 'reject' }, effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized' });
 const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, Input, Resource>({
@@ -46,5 +48,5 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
       safeMessage: 'Muitas buscas foram feitas. Aguarde um instante e tente novamente.',
     });
   }
-  return NextResponse.json(await listExternalCoverageCandidates({ context: security.actor, scheduleId: security.resource.scheduleId, search: security.input.search, limit: security.input.limit }), { headers: { 'Cache-Control': 'private, no-store' } });
+  return NextResponse.json(await listExternalCoverageCandidates({ context: security.actor, scheduleId: security.resource.scheduleId, search: security.input.search, limit: security.input.limit, date: security.input.date }), { headers: { 'Cache-Control': 'private, no-store' } });
 });

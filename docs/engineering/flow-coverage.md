@@ -125,3 +125,5 @@ Consulta de coordenadas traçada em `location-access.server.ts` e `POST /api/dp/
 
 
 2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.
+
+2026-10-28: centralização local de unidades de operação/escala por data e editor contratual único, com auditoria atômica e ativação limitada. Integrações demo de concorrência, revisão original, experiência/desligamento e offline passaram; E2E de interface passou em Chromium demo com duas unidades e contrato no mesmo salvamento; publicação ainda pendente. Não promove o grupo inteiro a Verificado; ver [pessoas](flows/people-access.md).

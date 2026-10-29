@@ -77,7 +77,7 @@ import {
   getPrimaryShiftDefinitionUnitId,
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
-import { buildDPHabitualRoster, userMatchesDPUnit } from '@/lib/dp-schedule-roster';
+import { userMatchesDPUnit } from '@/lib/dp-schedule-roster';
 import {
   buildCrossUnitConflictShiftIds,
   buildShiftStreakState,
@@ -238,13 +238,6 @@ function ShiftDialog({
   // Active unit for filtering (defaultUnitId when locked, or single unit in per-unit mode)
   const activeUnitIdForDefs = defaultUnitId ?? (units.length === 1 ? units[0].id : undefined);
 
-  // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
-  const operationalUsers = (() => {
-    const all = activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType));
-    if (!activeUnitIdForDefs) return all;
-    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
-  })();
-
   const form = useForm<ShiftFormValues>({
     resolver: zodResolver(shiftSchema),
     defaultValues: {
@@ -286,6 +279,14 @@ function ShiftDialog({
 
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
+  // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
+  const operationalUsers = (() => {
+    const all = activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType));
+    if (!activeUnitIdForDefs) return all;
+    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks, form.watch('date') || undefined));
+  })();
+
+
   const selectedUnitId = form.watch('unitId');
   const selectedShiftDefinitionId = form.watch('shiftDefinitionId');
   const hasSelectedShiftDefinition = Boolean(selectedShiftDefinitionId);
@@ -324,7 +325,7 @@ function ShiftDialog({
     setCandidateError(null);
     try {
       const result = await api<{ candidates: ExternalCandidate[]; truncated: boolean }>(
-        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15`,
+        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15&date=${encodeURIComponent(form.getValues('date') || '')}`,
         { fallbackError: 'Falha ao buscar colaboradoras de outras unidades.' },
       );
       setExternalCandidates(result.candidates);
@@ -1711,9 +1712,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType)),
     [activeUsers]
   );
-  const usersOfUnit = useCallback((unitId: string | undefined) => {
+  const usersOfUnit = useCallback((unitId: string | undefined, date?: string) => {
     if (!unitId) return operationalUsers;
-    const linked = operationalUsers.filter((candidate) => userMatchesDPUnit(candidate, unitId, units, kiosks));
+    const linked = operationalUsers.filter((candidate) => userMatchesDPUnit(candidate, unitId, units, kiosks, date));
     return linked.length > 0 ? linked : operationalUsers;
   }, [kiosks, operationalUsers, units]);
   const manualDayOffUsers = useMemo(() => usersOfUnit(manualDayOffDialog?.unitId), [manualDayOffDialog?.unitId, usersOfUnit]);
@@ -1748,10 +1749,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const bulkPeople = useMemo(() => {
     if (!schedule.unitId) return operationalUsers;
     const linked = operationalUsers.filter((candidate) => (
-      userMatchesDPUnit(candidate, schedule.unitId, units, kiosks)
+      days.some((day) => userMatchesDPUnit(candidate, schedule.unitId, units, kiosks, day.date))
     ));
     return linked.length > 0 ? linked : operationalUsers;
-  }, [kiosks, operationalUsers, schedule.unitId, units]);
+  }, [days, kiosks, operationalUsers, schedule.unitId, units]);
 
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
@@ -1896,12 +1897,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const ghostIndex = useMemo(() => {
     if (!isPerUnit || !schedule.unitId) return {} as Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>>;
     // Users who are officially linked to this unit (multi-unit workers)
-    const linkedUserIds = new Set(operationalUsers
-      .filter(u => userMatchesDPUnit(u, schedule.unitId, units, kiosks))
-      .map(u => u.id));
     const idx: Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>> = {};
     for (const s of siblingWorkShifts) {
-      if (!linkedUserIds.has(s.userId)) continue;
+      const person = operationalUsers.find((user) => user.id === s.userId);
+      if (!person || !userMatchesDPUnit(person, schedule.unitId, units, kiosks, s.date)) continue;
       const unitName = units.find(u => u.id === s.unitId)?.name ?? s.unitId;
       const consecutiveDayCount = consecutiveCountMap.get(s.id) ?? 1;
       if (!idx[s.date]) idx[s.date] = {};
@@ -2015,7 +2014,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       if (isPerUnit && schedule.unitId) {
         const linkedToCurrentUser = operationalUsers.find((user) => user.id === shift.userId);
         const linkedToCurrent = linkedToCurrentUser
-          ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
+          ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks, shift.date)
           : false;
         if (linkedToCurrent || shift.unitId === schedule.unitId) displayUnitId = schedule.unitId;
         else return;
@@ -2036,7 +2035,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         if (isPerUnit && schedule.unitId) {
           const linkedToCurrentUser = operationalUsers.find((user) => user.id === userId);
           const linkedToCurrent = linkedToCurrentUser
-            ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
+            ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks, item.date)
             : false;
           if (linkedToCurrent || item.sourceUnitId === schedule.unitId) displayUnitId = schedule.unitId;
           else return;
@@ -2079,11 +2078,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     units,
     userFilter,
   ]);
-
-  const rosterUserIdsByUnit = useMemo(
-    () => buildDPHabitualRoster(activeUnits, operationalUsers, units, kiosks),
-    [activeUnits, kiosks, operationalUsers, units],
-  );
 
   const occupiedUserDateKeys = useMemo(
     () => new Set(
@@ -2887,7 +2881,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         ? Object.values(ghostIndex[date] ?? {}).flat()
                         : [];
                       const visibleDayOffUserIds = new Set(dayOffEntries.map((entry) => entry.userId));
-                      const unassignedUsers = (rosterUserIdsByUnit.get(unit.id) ?? [])
+                      const unassignedUsers = operationalUsers.filter((person) => userMatchesDPUnit(person, unit.id, units, kiosks, date)).map((person) => person.id)
                         .filter((userId) => (
                           (userFilter === '__all__' || userFilter === userId)
                           && !occupiedUserDateKeys.has(`${date}::${userId}`)

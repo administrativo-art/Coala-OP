@@ -118,3 +118,9 @@ O [serviço](../../src/features/dp/rep-p/location-access.server.ts) filtra por p
 
 
 2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.
+
+## Centralização por vigências — 28/10/2026
+
+A nova trilha contratual por alvo exige admin/`settings.manageUsers` e escopo no servidor, além do controle de visibilidade no cliente. PATCH reutiliza gestão de usuários/edição DP e valida escopo. Sem nova permissão ou migração de perfis. Campos RH contratuais não têm segunda edição manual. O job não altera grants por unidades operacionais; perfil derivado de cargo/função é aplicado somente na data, com revalidação do catálogo.
+
+Motivo, ator e antes/depois ficam em `users/{id}/contractualChanges`, subcoleção sem leitura cliente; o estado agendado no diretório guarda somente campos de aplicação, ID, data e guardas do ciclo/perfil. A API dedicada autoriza a consulta da trilha.

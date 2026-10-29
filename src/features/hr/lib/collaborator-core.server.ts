@@ -68,6 +68,7 @@ export type CollaboratorCoreOptions = {
   currentUser?: AnyRecord;
   protectedUser?: boolean;
   syncProfile?: boolean;
+  inferFinancialUnit?: boolean;
 };
 
 export type CollaboratorCoreResult = {
@@ -104,10 +105,9 @@ export async function resolveCollaboratorCore(
           : asStringArray(data.unitId).length > 0
             ? asStringArray(data.unitId)
             : asStringArray(currentUser.unitId);
-  const primaryUnitId = asString(data.unitId)
-    ?? asString(currentUser.unitId)
-    ?? resolvedUnitIds[0]
-    ?? null;
+  const primaryUnitId = options.inferFinancialUnit === false
+    ? hasOwn(data, 'unitId') ? asString(data.unitId) : asString(currentUser.unitId)
+    : asString(data.unitId) ?? asString(currentUser.unitId) ?? resolvedUnitIds[0] ?? null;
   const unitIds = [...new Set(resolvedUnitIds)];
   const assignedKioskIds = hasOwn(data, "assignedKioskIds")
     ? asStringArray(data.assignedKioskIds)

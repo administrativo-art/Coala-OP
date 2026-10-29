@@ -244,7 +244,7 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
     ...DEFAULT_PROBATION_CONFIG,
     alertsBeforeDays: [10, 5, 1], extensionTermRequired: false,
     evaluator: { strategy: "direct_manager" as const, fallback: "hr_pool" as const },
-    effectivenessRule: "manual" as const,
+    effectivenessRule: "automatic_at_end" as const,
   };
 
   function patchDraft(patch: Partial<IntegrationTemplateVersion>) {

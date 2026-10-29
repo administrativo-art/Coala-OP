@@ -129,7 +129,19 @@ type EstablishmentDocument = {
   profile: RepPAfdProfile; lastNsr: number; lastType7Hash: string | null; lastType7Nsr: number | null;
 };
 
+type OperationalUnitReference = NonNullable<Extract<import('@/features/dp/employment-reference/resolve').EmploymentResolution, { status: 'matched' }>['operationalUnitReference']>;
+type ContractualDataReference = NonNullable<Extract<import('@/features/dp/employment-reference/resolve').EmploymentResolution, { status: 'matched' }>['contractualDataReference']>;
+
+function operationalEvidence(reference: { operationalUnitReference?: OperationalUnitReference; contractualDataReference?: ContractualDataReference },
+  permit?: { operationalUnitReference?: OperationalUnitReference; contractualDataReference?: ContractualDataReference }) {
+  const source = permit ?? reference;
+  return { ...(source.operationalUnitReference ? { operationalUnitReference: source.operationalUnitReference } : {}),
+    ...(source.contractualDataReference ? { contractualDataReference: source.contractualDataReference } : {}) };
+}
+
 type OfflinePermitDocument = {
+  operationalUnitReference?: OperationalUnitReference;
+  contractualDataReference?: ContractualDataReference;
   schemaVersion: 1; scope?: 'official' | 'pilot'; workspaceId: string; employeeId: string; requestDigest: string;
   permitId: string; installationId: string; deviceKeyId: string; devicePublicKey: string;
   keySecurity: 'tee' | 'strongbox'; bootCount: number; anchorElapsedRealtimeMs: number;
@@ -434,6 +446,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
   }
   const issuedAt = reading.instant.toISOString();
   const permit: OfflinePermitDocument = {
+    ...operationalEvidence(reference),
     schemaVersion: 1, scope: 'pilot', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
@@ -527,6 +540,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   }
   const issuedAt = reading.instant.toISOString();
   const permit: OfflinePermitDocument = {
+    ...operationalEvidence(reference),
     schemaVersion: 1, scope: 'official', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
@@ -668,7 +682,8 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   if (input.offline?.cycle) await reconcileOnlineCycles(deps.pilotDb, context, 'pilot');
   const offline = input.offline ? await preparePilotOfflineMarking(context, input, deps) : null;
   const coverageGrant = offline && offlineCoverageGrant(offline.permit, input.workDate, input.executionUnitId);
-  if (!coverageGrant && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
+  if (!coverageGrant && !offline?.permit.units.some((unit) => unit.id === input.executionUnitId)
+    && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
     throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
   const [identity, executionUnit] = await Promise.all([
@@ -764,7 +779,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       executionUnitId: input.executionUnitId, establishmentId, collectorId, hash, employeeName, unitName,
       workLocation, status: 'pending', snapshot, locationSummary: null, ...organizationalClassification };
     const cycleInfo = cycle?.commit(receiptId);
-    transaction.create(markingRef, { ...marking, ...(offline ? {} : { cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId } }), attemptId: input.attemptId, employmentHistoryId: reference.historyId,
+    transaction.create(markingRef, { ...marking, ...operationalEvidence(reference, offline?.permit), ...(offline ? {} : { cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId } }), attemptId: input.attemptId, employmentHistoryId: reference.historyId,
       employmentRevision: reference.revision, trustedClock: { source: reading.source, assurance: reading.assurance,
         observedOffsetMs: reading.observedOffsetMs, verifiedAt: reading.verifiedAt.toISOString(),
         serverInstant: reading.instant.toISOString(), attestationId: reading.attestationId,
@@ -948,7 +963,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     const location = prepareLocationEvidence({ policy: locationPolicy, attempt: input.locationAttempt,
       markedAt: reading.instant, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
-    transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
+    transaction.create(eventRef, { ...prepared.marking, ...operationalEvidence(reference), arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
         verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
@@ -1051,7 +1066,8 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
   const coverageGrant = offlineCoverageGrant(permit, input.workDate, input.executionUnitId);
-  if (!coverageGrant && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
+  if (!coverageGrant && !permit.units.some((unit) => unit.id === input.executionUnitId)
+    && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
     throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
@@ -1136,7 +1152,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
     cycle?.commit(eventRef.id);
-    transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
+    transaction.create(eventRef, { ...prepared.marking, ...operationalEvidence(reference, permit), arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       offlineEvidence: { permitId: permit.permitId, installationId: permit.installationId,
         deviceKeyId: evidence.deviceKeyId, keySecurity: permit.keySecurity, bootCount: evidence.bootCount,
         sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, localHash: evidence.localHash,

@@ -398,6 +398,9 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
     // 1. Buscar cache de permissões
     const currentAccess = await resolveCurrentRhAccess(uid, request.auth.token);
     if (!currentAccess?.cache.rh_role) throw new HttpsError('permission-denied', 'Sem acesso ao módulo RH.');
+    if (['employee.employer_cnpj', 'employee.employer_name', 'employee.job_role_id', 'employee.probation_eval_1', 'employee.probation_eval_2'].includes(field_key)) {
+      throw new HttpsError('failed-precondition', 'Altere os dados contratuais em Editar colaborador. As datas de experiência vêm do processo de admissão.');
+    }
     const cache = currentAccess.cache;
     const isOwner = cache.bizneo_employee_id === employee_id;
     if (!currentAccess.canEditOtherProfiles && !isOwner) {
@@ -544,6 +547,9 @@ export const reviewFieldChangeRequest = onCall<ReviewFieldChangeRequest>(
 
     const employeeId = String(change.employeeId ?? '').trim();
     const fieldKey = String(change.fieldKey ?? '').trim();
+    if (decision === 'approved' && ['employee.employer_cnpj', 'employee.employer_name', 'employee.job_role_id', 'employee.probation_eval_1', 'employee.probation_eval_2'].includes(fieldKey)) {
+      throw new HttpsError('failed-precondition', 'Faça a alteração contratual em Editar colaborador, com data e justificativa.');
+    }
     const employeeRef = hrDb.collection('employees').doc(employeeId);
     const [employeeSnap, fieldMap] = await Promise.all([employeeRef.get(), getFieldMap()]);
     if (!employeeSnap.exists) throw new HttpsError('not-found', 'Colaborador não encontrado.');

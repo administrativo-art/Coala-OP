@@ -18,7 +18,9 @@ export type EmploymentResolution =
   | { status: 'missing' }
   | { status: 'gap'; historyId: string; revision: number; date: string }
   | { status: 'inconsistent'; historyId?: string; revision?: number }
-  | { status: 'matched'; historyId: string; revision: number; date: string; period: EmploymentPeriod };
+  | { status: 'matched'; historyId: string; revision: number; date: string; period: EmploymentPeriod;
+      contractualDataReference?: { changeId: string; validFrom: string; validTo: string | null };
+      operationalUnitReference?: { hash: string; validFrom: string; validTo: string | null; unitIds: string[] } };
 
 export function isCivilDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
