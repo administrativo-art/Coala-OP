@@ -186,6 +186,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     };
   });
   const automaticDates = new Set(automaticAbsences?.docs.filter((doc) => doc.get('status') === 'active').map((doc) => String(doc.get('workDate'))) ?? []);
+  let effectiveAutomaticDates = [...automaticDates];
   if (options.automaticAbsence && automaticDates.size) {
     const [approvedAbsences, approvedAdjustments] = await Promise.all([
       hrDb.collection('dp_absenceRequests').where('workspaceId', '==', options.automaticAbsence.workspaceId)
@@ -196,9 +197,9 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     const periods = approvedAbsences.docs.filter((doc) => doc.get('status') === 'approved')
       .map((doc) => ({ startDate: String(doc.get('startDate')), endDate: String(doc.get('endDate')) }));
     const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => doc.get('status') === 'approved').map((doc) => String(doc.get('workDate'))));
-    for (const date of [...automaticDates]) if (automaticAbsenceSuperseded(date, adjustmentDates, periods)) automaticDates.delete(date);
+    effectiveAutomaticDates = effectiveAutomaticDates.filter((date) => !automaticAbsenceSuperseded(date, adjustmentDates, periods));
   }
   return { month: competence, shifts: result, holidays,
-    automaticAbsences: [...automaticDates].sort(),
+    automaticAbsences: effectiveAutomaticDates.sort(),
     truncated: shifts.size >= MAX_OWN_SHIFTS };
 }
