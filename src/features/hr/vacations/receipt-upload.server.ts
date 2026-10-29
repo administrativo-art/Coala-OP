@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { getStorage } from 'firebase-admin/storage';
 
 import {
+  supersedeVacationReceiptDocuments,
   suggestVacationReceiptDocument,
   vacationReceiptDocuments,
 } from '@/features/hr/vacations/receipt-documents';
@@ -280,7 +281,7 @@ export async function uploadVacationReceipt(params: {
       }
       const correctionRound = workflow!.accountant.correctionRound ?? 0;
       const previousDocuments = workflow!.receipt.status === 'correction_requested'
-        ? existingDocuments.map((document) => document.status === 'superseded' ? document : { ...document, status: 'superseded' as const })
+        ? supersedeVacationReceiptDocuments(existingDocuments, { at: now, by: 'external:accountant', reason: workflow!.receipt.correctionReason ?? 'Novo envio após solicitação de correção.' })
         : existingDocuments;
       const uploadedDocuments: DPVacationReceiptDocument[] = prepared.map((item) => ({
         id: item.id,

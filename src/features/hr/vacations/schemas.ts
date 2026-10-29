@@ -116,6 +116,7 @@ export const updateVacationSchema = z.union([
   }),
   z.object({
     action: z.literal('discard_receipt_document'),
+    reason: z.string().trim().min(1, 'Informe o motivo do descarte.').max(2000),
     documentId: z.string().regex(/^receipt_[a-f0-9]{32}$/, 'Documento inválido.'),
   }),
   reviewReceiptSchema,
