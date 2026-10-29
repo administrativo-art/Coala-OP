@@ -25,7 +25,7 @@ export type PilotTreatment = {
 };
 
 /**
- * O pedido aprovado da simulação vira tratamento **derivado**, calculado na leitura: não grava em `ptrp_treatments`, não
+ * O pedido aprovado da simulação vira tratamento **derivado**, calculado na leitura: não grava na coleção de tratamentos oficiais, não
  * entra no AEJ, no espelho, no banco nem na folha. A batida original do ensaio nunca é apagada nem alterada. Mesma forma
  * do tratamento oficial para que as telas apliquem o "antes × depois" sem um caminho paralelo.
  */
