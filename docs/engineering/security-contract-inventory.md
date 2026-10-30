@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **529**
-- Totalmente contratados: **190**
+- Arquivos de rota: **533**
+- Totalmente contratados: **194**
 - Legados congelados: **331**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -137,6 +137,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/employees/[employeeUid]` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/[employeeUid]/route.ts) |
 | `/api/dp/time-recording/fiscal-options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) |
 | `/api/dp/time-recording/journey-location` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) |
+| `/api/dp/time-recording/journey-location/lease` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/lease/route.ts](../../src/app/api/dp/time-recording/journey-location/lease/route.ts) |
 | `/api/dp/time-recording/location-access` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-access/route.ts](../../src/app/api/dp/time-recording/location-access/route.ts) |
 | `/api/dp/time-recording/location-policies/[unitId]` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/location-policies/[unitId]/route.ts](../../src/app/api/dp/time-recording/location-policies/[unitId]/route.ts) |
 | `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
@@ -435,6 +436,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/mercadorias` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) |
 | `/api/mercadorias/export` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) |
 | `/api/mobile/app-attestation` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) |
+| `/api/mobile/auth/google-migration` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/mobile/auth/google-migration/route.ts](../../src/app/api/mobile/auth/google-migration/route.ts) |
+| `/api/mobile/corporate-device` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/mobile/corporate-device/route.ts](../../src/app/api/mobile/corporate-device/route.ts) |
 | `/api/mobile/profile` | GET ✓ | `CONTRACTED` | [src/app/api/mobile/profile/route.ts](../../src/app/api/mobile/profile/route.ts) |
 | `/api/mobile/profile/photo` | POST ✓ | `CONTRACTED` | [src/app/api/mobile/profile/photo/route.ts](../../src/app/api/mobile/profile/photo/route.ts) |
 | `/api/mobile/push/devices` | DELETE ✓, POST ✓ | `CONTRACTED` | [src/app/api/mobile/push/devices/route.ts](../../src/app/api/mobile/push/devices/route.ts) |
@@ -536,6 +539,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/users/[userId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
 | `/api/users/[userId]/assets` | GET ✓ | `CONTRACTED` | [src/app/api/users/[userId]/assets/route.ts](../../src/app/api/users/[userId]/assets/route.ts) |
 | `/api/users/[userId]/contract-changes` | GET ✓ | `CONTRACTED` | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/[userId]/contract-changes/route.ts) |
+| `/api/users/[userId]/corporate-devices` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/users/[userId]/corporate-devices/route.ts](../../src/app/api/users/[userId]/corporate-devices/route.ts) |
 | `/api/webhooks/autentique` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) |
 | `/api/webhooks/inter/banking` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) |
 | `/api/webhooks/inter/cobranca` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) |

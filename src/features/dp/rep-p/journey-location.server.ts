@@ -11,6 +11,7 @@ import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import { nextJourneyLocationState, type JourneyLocationState } from './journey-location-core';
+import { revokeOwnJourneyLocationLease, validateOwnJourneyLocationLease } from './journey-location-lease.server';
 import { REP_P_LOCATION_RETENTION_DAYS } from './location';
 import { loadRepPLocationPolicies } from './location-policy.server';
 import { readOwnRepPMonth, type RepPOwnScheduledShift } from './own-month.server';
@@ -25,6 +26,8 @@ type Dependencies = {
   enabled: boolean;
   readMonth: typeof readOwnRepPMonth;
   loadPolicies: typeof loadRepPLocationPolicies;
+  validateLease: typeof validateOwnJourneyLocationLease;
+  revokeLease: typeof revokeOwnJourneyLocationLease;
 };
 const defaults: Dependencies = {
   repDb: hrDbAdmin,
@@ -34,6 +37,8 @@ const defaults: Dependencies = {
   enabled: process.env.DP_JOURNEY_LOCATION_ENABLED === 'true',
   readMonth: readOwnRepPMonth,
   loadPolicies: loadRepPLocationPolicies,
+  validateLease: validateOwnJourneyLocationLease,
+  revokeLease: revokeOwnJourneyLocationLease,
 };
 
 function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'AUTHORIZATION' | 'DATA_INTEGRITY' = 'VALIDATION') {
@@ -90,8 +95,14 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
   // é desligado. Nenhuma leitura nem escrita de localização acontece neste caminho.
   if (!deps.enabled) return { acceptedEventIds: parsed.data.events.map((event) => event.eventId), stopRequested: true };
   const first = parsed.data.events[0];
+  if (parsed.data.events.some((event) => event.executionUnitId !== first.executionUnitId)) {
+    throw fail('DP_JOURNEY_LOCATION_UNIT_MISMATCH', 'O lote de localização não corresponde à unidade autorizada.');
+  }
   const unitIds = [...new Set(parsed.data.events.map((event) => event.executionUnitId))];
   const now = deps.now();
+  await deps.validateLease(context, { sessionId: first.sessionId, workDate: first.workDate,
+    executionUnitId: first.executionUnitId, leaseToken: parsed.data.leaseToken },
+    { hrDb: deps.repDb, now: deps.now });
   if (parsed.data.events.some((event) => Date.parse(event.capturedAt) > now.getTime() + 5 * 60_000)) {
     throw fail('DP_JOURNEY_LOCATION_TIME_INVALID', 'O horário de uma amostra não corresponde à jornada.');
   }
@@ -142,12 +153,13 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
         state: 'stopped', stoppedReason: 'policy_revoked', stoppedAt: Timestamp.fromDate(now), updatedAt: Timestamp.fromDate(now),
       });
     });
+    await deps.revokeLease(context, first.sessionId, { hrDb: deps.repDb, now: deps.now });
     return { acceptedEventIds: parsed.data.events.map((event) => event.eventId), stopRequested: true };
   }
 
   const refs = parsed.data.events.map((event) => deps.repDb.collection(JOURNEY_LOCATION_EVENTS)
     .doc(eventKey(context.workspace_id, context.decoded.uid, event.eventId)));
-  return deps.repDb.runTransaction(async (transaction) => {
+  const outcome = await deps.repDb.runTransaction(async (transaction) => {
     const current = await transaction.get(sessionRef);
     const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
     const session = current.exists ? current.data() : initial;
@@ -159,6 +171,9 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
     let state = (session!.state ?? null) as JourneyLocationState | null;
     let lastCapturedAt = millis(session!.lastCapturedAt);
     if (!Number.isFinite(lastCapturedAt)) lastCapturedAt = Number.NEGATIVE_INFINITY;
+    let lastPositionCapturedAt = millis(session!.lastPositionCapturedAt);
+    if (!Number.isFinite(lastPositionCapturedAt)) lastPositionCapturedAt = Number.NEGATIVE_INFINITY;
+    let eventCount = Number(session!.eventCount ?? 0);
     const unitSet = new Set<string>((session!.unitIds as unknown[]).filter((value): value is string => typeof value === 'string'));
     const policies = { ...(session!.policies as Record<string, unknown>) };
 
@@ -179,6 +194,16 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
       try { state = nextJourneyLocationState(state, event.eventType); }
       catch { throw fail('DP_JOURNEY_LOCATION_SEQUENCE_INVALID', 'A sequência do acompanhamento não corresponde ao ciclo da jornada.'); }
       lastCapturedAt = capturedAt;
+      if (event.latitude !== undefined && event.latitude !== null) {
+        if (capturedAt - lastPositionCapturedAt < 30_000) {
+          // A restart can produce an eager first fix. Acknowledge and ignore only that redundant
+          // sample instead of terminating the whole authorized journey.
+          return;
+        }
+        lastPositionCapturedAt = capturedAt;
+      }
+      eventCount += 1;
+      if (eventCount > 500) throw fail('DP_JOURNEY_LOCATION_SESSION_LIMIT', 'A sessão atingiu o limite de amostras autorizado.');
       unitSet.add(event.executionUnitId);
       const policy = livePolicies.get(event.executionUnitId)!;
       policies[event.executionUnitId] = { revision: policy.revision, legalBasisReference: policy.legalBasisReference };
@@ -196,11 +221,18 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
       });
     });
     const update = {
-      state, unitIds: [...unitSet], policies, lastCapturedAt: Timestamp.fromMillis(lastCapturedAt), updatedAt: Timestamp.fromDate(now),
+      state, unitIds: [...unitSet], policies, eventCount,
+      lastCapturedAt: Timestamp.fromMillis(lastCapturedAt),
+      ...(Number.isFinite(lastPositionCapturedAt) ? { lastPositionCapturedAt: Timestamp.fromMillis(lastPositionCapturedAt) } : {}),
+      updatedAt: Timestamp.fromDate(now),
       ...(state === 'stopped' ? { stoppedAt: Timestamp.fromMillis(lastCapturedAt), stoppedReason: 'client_stop' } : {}),
     };
     if (current.exists) transaction.update(sessionRef, update);
     else transaction.create(sessionRef, { ...session, ...update });
     return { acceptedEventIds: parsed.data.events.map((event) => event.eventId), stopRequested: false };
   });
+  if (parsed.data.events.some((event) => event.eventType === 'stop')) {
+    await deps.revokeLease(context, first.sessionId, { hrDb: deps.repDb, now: deps.now });
+  }
+  return outcome;
 }

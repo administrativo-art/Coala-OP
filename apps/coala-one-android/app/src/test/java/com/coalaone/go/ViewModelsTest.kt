@@ -127,6 +127,37 @@ class ViewModelsTest {
         runCurrent(); vm.reset(" nobody@example.invalid "); advanceUntilIdle()
         assertEquals("nobody@example.invalid", requested); assertTrue(vm.state.value.resetSent)
     }
+    @Test fun googleMigrationPreservesUidAndUsesOnlyAuthorizedCorporateEmail() = runTest {
+        var requestToken = ""
+        val api = object : ApiService by DemoApi() {
+            override suspend fun googleMigrationStatus() = GoogleMigrationStatus(
+                available = true,
+                currentEmail = "heucillennysantos@gmail.com",
+                targetEmail = "heucilene@coalashakes.com",
+            )
+            override suspend fun migrateGoogle(request: GoogleMigrationRequest): GoogleMigrationResult {
+                requestToken = request.googleIdToken
+                return GoogleMigrationResult(true, "test-owner", "heucilene@coalashakes.com", "google.com")
+            }
+        }
+        val biometric = object : BiometricPreferences {
+            override fun enabled(uid: String) = false; override fun ready(uid: String) = false
+            override fun record(uid: String, enabled: Boolean) {}; override fun clear() {}
+        }
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, api,
+            object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push)
+        runCurrent(); vm.loadGoogleMigration(); advanceUntilIdle()
+        assertTrue(vm.googleMigration.value.available)
+        vm.migrateGoogle("google-token", "outra@coalashakes.com"); advanceUntilIdle()
+        assertEquals("", requestToken)
+        assertNotNull(vm.googleMigration.value.error)
+        auth.googleEmail = "heucilene@coalashakes.com"
+        vm.migrateGoogle("google-token", "heucilene@coalashakes.com"); advanceUntilIdle()
+        assertEquals("google-token", requestToken)
+        assertEquals("test-owner", auth.googleExpectedUid)
+        assertEquals("test-owner", vm.state.value.identity?.uid)
+        assertTrue(vm.googleMigration.value.completed)
+    }
     @Test fun persistedDeveloperViewAsIsRestoredBeforeHomeAndReconciledAtStartup() = runTest {
         val developerAuth = TestAuth().also { it.mutable.value = Identity("developer", DEVELOPER_VIEW_AS_EMAIL) }
         val storedSelection = InMemoryDeveloperViewAsStore().also { it.select("view-as-user") }

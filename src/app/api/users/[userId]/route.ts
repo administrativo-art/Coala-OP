@@ -47,6 +47,7 @@ const MANAGE_USERS_ONLY_FIELDS = new Set([
   "terminationDate",
   "unitAccessScope",
   "unitAccessUnitIds",
+  "corporateGoogleEmail",
 ]);
 
 const UNIT_ASSIGNMENT_FIELDS = new Set([
@@ -374,6 +375,32 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
       });
     }
 
+    if (hasOwn(payload, "corporateGoogleEmail")) {
+      if (existingUser.googleWorkspaceMigrationStatus === "pending_auth") {
+        throw new AppError({ code: "USER_UPDATE_GOOGLE_MIGRATION_IN_PROGRESS", kind: "CONFLICT",
+          safeMessage: "A migração Google deste cadastro está em andamento. Aguarde a conclusão antes de trocar a conta autorizada." });
+      }
+      if (payload.corporateGoogleEmail === null || payload.corporateGoogleEmail === "") {
+        payload.corporateGoogleEmail = null;
+      } else if (typeof payload.corporateGoogleEmail === "string") {
+        const corporateGoogleEmail = payload.corporateGoogleEmail.trim().toLowerCase();
+        if (!/^[^\s@]+@coalashakes\.com$/.test(corporateGoogleEmail)) {
+          throw new AppError({
+            code: "USER_UPDATE_CORPORATE_GOOGLE_EMAIL_INVALID",
+            kind: "VALIDATION",
+            safeMessage: "Informe uma conta Google empresarial de coalashakes.com.",
+          });
+        }
+        payload.corporateGoogleEmail = corporateGoogleEmail;
+      } else {
+        throw new AppError({
+          code: "USER_UPDATE_CORPORATE_GOOGLE_EMAIL_INVALID",
+          kind: "VALIDATION",
+          safeMessage: "Conta Google empresarial inválida.",
+        });
+      }
+    }
+
     if (hasCollaboratorCoreFields(payload)) {
       const collaboratorCore = await resolveCollaboratorCore(payload, {
         currentUser: existingUser,
@@ -471,6 +498,17 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     }
     if (contractChange && contractChange.effectiveDate === operationalCivilDate()) Object.assign(payload, contractChange.fields);
     const nextUser = { ...existingUser, ...payload };
+    const corporateGoogleEmailForUniqueness = hasOwn(payload, "corporateGoogleEmail")
+      && typeof payload.corporateGoogleEmail === "string" ? payload.corporateGoogleEmail : null;
+    const assertCorporateGoogleEmailUnique = async (transaction: FirebaseFirestore.Transaction) => {
+      if (!corporateGoogleEmailForUniqueness) return;
+      const duplicate = await transaction.get(dbAdmin.collection("users")
+        .where("corporateGoogleEmail", "==", corporateGoogleEmailForUniqueness).limit(2));
+      if (duplicate.docs.some((document) => document.id !== userId)) {
+        throw new AppError({ code: "USER_UPDATE_CORPORATE_GOOGLE_EMAIL_IN_USE", kind: "CONFLICT",
+          safeMessage: "Esta conta Google empresarial já está autorizada para outro cadastro." });
+      }
+    };
     const pdvWasEnabled = pdvAccessEnabled(existingUser);
     const pdvEnabled = pdvAccessEnabled(nextUser);
     const pdvSyncPlans = pdvWasEnabled && !pdvEnabled
@@ -515,6 +553,11 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
       try {
         await dbAdmin.runTransaction(async (transaction) => {
           const latestUserSnap = await transaction.get(userRef);
+          if (corporateGoogleEmailForUniqueness && latestUserSnap.get('googleWorkspaceMigrationStatus') === 'pending_auth') {
+            throw new AppError({ code: "USER_UPDATE_GOOGLE_MIGRATION_IN_PROGRESS", kind: "CONFLICT",
+              safeMessage: "A migração Google deste cadastro está em andamento. Aguarde a conclusão antes de trocar a conta autorizada." });
+          }
+          await assertCorporateGoogleEmailUnique(transaction);
           const latestUser = latestUserSnap.data() ?? {};
           if (operationalHistoryChanged && valuesDiffer(latestUser.operationalUnitPeriods, existingUser.operationalUnitPeriods)) {
             throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_CONFLICT', kind: 'CONFLICT', safeMessage: 'As vigências mudaram. Atualize o cadastro antes de salvar.' });
@@ -551,6 +594,11 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
     } else {
       await dbAdmin.runTransaction(async (transaction) => {
         const latestUserSnap = await transaction.get(userRef);
+        if (corporateGoogleEmailForUniqueness && latestUserSnap.get('googleWorkspaceMigrationStatus') === 'pending_auth') {
+          throw new AppError({ code: "USER_UPDATE_GOOGLE_MIGRATION_IN_PROGRESS", kind: "CONFLICT",
+            safeMessage: "A migração Google deste cadastro está em andamento. Aguarde a conclusão antes de trocar a conta autorizada." });
+        }
+        await assertCorporateGoogleEmailUnique(transaction);
         if (!latestUserSnap.exists) throw new AppError({ code: "USER_UPDATE_TARGET_NOT_FOUND", kind: "NOT_FOUND" });
         if (operationalHistoryChanged && valuesDiffer(latestUserSnap.get('operationalUnitPeriods'), existingUser.operationalUnitPeriods)) {
           throw new AppError({ code: 'USER_OPERATIONAL_PERIOD_CONFLICT', kind: 'CONFLICT', safeMessage: 'As vigências mudaram. Atualize o cadastro antes de salvar.' });

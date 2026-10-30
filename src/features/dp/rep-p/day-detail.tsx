@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, FileText, Info, MapPin, Moon, RefreshCw, Share2 } from "lucide-react";
 
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
@@ -12,6 +12,7 @@ import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView }
 import type { BankIssue, BankStatementLine } from "@/features/dp/time-bank/core";
 import { REASON_LABELS } from "@/features/dp/time-bank/time-bank-card";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 import { absenceStatus, adjustmentStateOf, balanceOf, durationLabel, incidentFact, INCIDENTS, MarkingClassificationEditor,
   type ClassificationActions, type ReceiptActions } from "./day-list";
@@ -115,6 +116,40 @@ function MarkingLocation({ location }: { location: NonNullable<DayMarking["locat
   );
 }
 
+type JourneyLocationEntry = { id: string; capturedAt: string | null; status: string; formattedAddress: string | null;
+  position: { accuracyMeters: number } | null };
+function JourneyLocationDetails({ day, employeeUid }: { day: DayView; employeeUid: string }) {
+  const { firebaseUser } = useAuth();
+  const [entries, setEntries] = useState<JourneyLocationEntry[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unitId = day.markings[0]?.executionUnitId || day.shift?.unitId || null;
+  if (day.shift?.locationTrackingPolicy !== "workday" || !unitId) return null;
+  async function load() {
+    if (!firebaseUser) return;
+    setLoading(true); setError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch("/api/dp/time-recording/location-access", { method: "POST", cache: "no-store",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeUid, unitId, workDate: day.date, source: "journey",
+          reason: firebaseUser.uid === employeeUid ? "own_data" : "operational_review", limit: 50 }) });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error?.message || "Não foi possível abrir o trajeto.");
+      setEntries((await response.json() as { entries: JourneyLocationEntry[] }).entries);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível abrir o trajeto."); }
+    finally { setLoading(false); }
+  }
+  return <PanelSection title="Localização durante a jornada">
+    {entries === null ? <Button type="button" variant="ds-secondary" size="sm" loading={loading} onClick={() => void load()}>
+      <MapPin className="h-4 w-4" aria-hidden /> Ver registros do dia
+    </Button> : entries.length ? <div className="space-y-2">{entries.map((entry) => <div key={entry.id} className="rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
+      <p className="text-sm font-semibold text-ds-ink">{entry.formattedAddress || (entry.status === "sample" ? "Posição registrada" : ({ start: "Acompanhamento iniciado", pause: "Pausado no intervalo", resume: "Retomado após intervalo", stop: "Acompanhamento encerrado" } as Record<string,string>)[entry.status] || entry.status)}</p>
+      <p className="text-xs text-ds-ink-muted">{entry.capturedAt ? new Date(entry.capturedAt).toLocaleString("pt-BR") : "Horário indisponível"}{entry.position ? ` · precisão aproximada ${Math.round(entry.position.accuracyMeters)} m` : ""}</p>
+    </div>)}</div> : <p className="text-sm text-ds-ink-muted">Nenhum registro de acompanhamento foi guardado para este dia.</p>}
+    {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}
+  </PanelSection>;
+}
+
 function TimelineMarking({ marking, index, expected, unitNames, receipts, classifications }: {
   marking: DayMarking; index: number; expected: number | null; unitNames: Map<string, string>;
   receipts: ReceiptActions | null; classifications: ClassificationActions | null;
@@ -194,12 +229,12 @@ function TimelineGap({ kind, minutes, open }: { kind: "work" | "break"; minutes:
  * passam pelo pedido ao DP e a classificação muda só a leitura da jornada.
  */
 export function DayDetailPanel({ day, days, today, unitNames, receipts, classifications, onClose, onNavigate, onRequestAbsence, adjustments,
-  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord }: {
+  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord, employeeUid }: {
   day: DayView | null; days: DayView[]; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null;
   classifications: ClassificationActions | null; onClose: () => void; onNavigate: (date: string) => void;
   onRequestAbsence: (date: string) => void; adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void;
   onOpenAdjustment: (id: string) => void; readOnly?: boolean; markingMode?: "official" | "pilot" | "disabled" | null;
-  bank: DayBank | "unavailable" | null; onRecord?: () => void;
+  bank: DayBank | "unavailable" | null; onRecord?: () => void; employeeUid: string;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -362,6 +397,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> A classificação organiza a jornada e os avisos. Alterá-la não muda o horário nem o registro fiscal da batida.
         </p>
       </PanelSection>
+
+      <JourneyLocationDetails day={day} employeeUid={employeeUid} />
 
       {work || effective.length ? <PolicySection day={day} today={today} bank={bank} difference={difference} toleranceApplied={toleranceApplied} /> : null}
 

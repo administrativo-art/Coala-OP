@@ -11,7 +11,16 @@ class TestAuth : AuthGateway {
     override val identities = mutable
     override val current get() = mutable.value
     var rejectPassword = false
+    var googleExpectedUid: String? = null
+    var googleToken: String? = null
+    var googleEmail = "google@example.invalid"
     override suspend fun login(email: String, password: String) = Identity("test-owner", email).also { mutable.value = it }
+    override suspend fun loginWithGoogle(idToken: String, expectedUid: String?) =
+        Identity(expectedUid ?: "test-owner", googleEmail).also {
+            googleToken = idToken
+            googleExpectedUid = expectedUid
+            mutable.value = it
+        }
     override suspend fun reauthenticate(password: String) { if (rejectPassword) error("Bad password") }
     override suspend fun token(forceRefresh: Boolean) = "test-token"
     override fun signOut() { mutable.value = null }
