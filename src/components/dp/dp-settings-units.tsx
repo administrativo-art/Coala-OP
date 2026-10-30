@@ -680,6 +680,11 @@ export function DPSettingsUnits() {
         busy={saving === "unit" || saving === "delete"}
         onClose={() => setSelectedUnitKey(null)}
         onEdit={(unit) => { setSelectedUnitKey(null); setUnitDialog({ mode: "edit", unit }); }}
+        onAddressSave={async (unit, address) => {
+          setSaving("unit");
+          try { await updateUnit({ ...unit, address }); }
+          finally { setSaving(null); }
+        }}
         onRegister={(kioskId) => { setSelectedUnitKey(null); setUnitDialog({ mode: "sync", kioskId }); }}
         onDetachFromGroup={(unit) => void detachUnitFromGroup(unit)}
         onDelete={(unit) => removeWith(() => deleteUnit(unit.id), () => setSelectedUnitKey(null))}

@@ -175,7 +175,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakWindowEnd: breakType === 'staggered' ? text(definition?.get('breakWindowEnd')) : null,
       expectedPunches: minutes(definition?.get('expectedPunches')),
       executionUnitPolicy: definition?.get('executionUnitPolicy') === 'free' ? 'free' : 'scheduled',
-      locationTrackingPolicy: (['disabled', 'punch_only', 'workday'] as const).find((value) => value === definition?.get('locationTrackingPolicy')) ?? 'punch_only',
+      locationTrackingPolicy: (['disabled', 'punch_only', 'workday'] as const).find((value) => value === definition?.get('locationTrackingPolicy')) ?? 'disabled',
       breakSegments: segments?.length ? segments : null,
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),

@@ -6,6 +6,7 @@
 | --- | --- |
 | [Plano — Ponto, Jornada e Fechamento da Competência](plano-jornada-fechamento-rh.md) | Ponto e DP |
 | [Plano — REP-P, Documentos e Conformidade](plano-rep-p-controle-de-ponto.md) | Ponto e DP |
+| [Plano arquivado — Localização contínua e registro presencial em dispositivo dedicado](plano-monitoramento-continuo-celular-empresarial.md) | Ponto, mobilidade e privacidade |
 | [Plano — Fonte única das unidades operacionais](plano-fonte-unica-unidades-operacionais.md) | Pessoas, escala e ponto |
 | [Plano — Vigência como fonte de quiosques e acesso ao PDV](plano-vigencia-quiosques-pdv.md) | Pessoas, escala e PDV |
 | [Plano — Recesso do estagiário](plano-recesso-estagio.md) | Pessoas e DP |
