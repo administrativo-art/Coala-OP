@@ -7,12 +7,12 @@ import {
   renderHtml,
   renderSubject,
   renderText,
+  reportWindow,
   weekCoverage,
   type GoalMonth,
   type ReportInput,
   type SalesDay,
 } from '../../functions/src/weekly-revenue-goals-report';
-import { reportWindow } from '../../functions/src/weekly-revenue-goals-email';
 
 const units = [{ id: 'a', name: 'Unidade A' }, { id: 'b', name: 'Unidade B' }];
 

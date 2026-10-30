@@ -4,8 +4,9 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 
 import {
-  addDays,
   buildReport,
+  localDate,
+  reportWindow,
   dateRange,
   renderHtml,
   renderSubject,
@@ -32,20 +33,9 @@ const minWeekCoverage = defineString("REVENUE_GOALS_MIN_WEEK_COVERAGE", { defaul
 const onTrackPercent = defineString("REVENUE_GOALS_ON_TRACK_PERCENT", { default: "100" });
 const attentionPercent = defineString("REVENUE_GOALS_ATTENTION_PERCENT", { default: "95" });
 
-function localDate(now: Date) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-}
-
 function localDateOf(value: unknown) {
   const date = value instanceof Timestamp ? value.toDate() : value instanceof Date ? value : null;
   return date ? localDate(date) : null;
-}
-
-/** Semana anterior completa (segunda a domingo) e mês do primeiro dia até ontem. */
-export function reportWindow(now: Date) {
-  const yesterday = addDays(localDate(now), -1);
-  const weekEnd = addDays(yesterday, -((new Date(`${yesterday}T12:00:00Z`).getUTCDay() + 7) % 7));
-  return { weekStart: addDays(weekEnd, -6), weekEnd, monthStart: `${yesterday.slice(0, 8)}01`, monthEnd: yesterday };
 }
 
 function monthsBack(month: string, count: number) {

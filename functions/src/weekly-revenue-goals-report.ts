@@ -67,6 +67,17 @@ export function addDays(date: string, amount: number) {
   return value.toISOString().slice(0, 10);
 }
 
+export function localDate(now: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+/** Semana anterior completa (segunda a domingo) e mês do primeiro dia até ontem. */
+export function reportWindow(now: Date) {
+  const yesterday = addDays(localDate(now), -1);
+  const weekEnd = addDays(yesterday, -((new Date(`${yesterday}T12:00:00Z`).getUTCDay() + 7) % 7));
+  return { weekStart: addDays(weekEnd, -6), weekEnd, monthStart: `${yesterday.slice(0, 8)}01`, monthEnd: yesterday };
+}
+
 export function dateRange(start: string, end: string) {
   const out: string[] = [];
   for (let date = start; date <= end; date = addDays(date, 1)) out.push(date);
