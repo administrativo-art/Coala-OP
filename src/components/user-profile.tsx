@@ -9,10 +9,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
+  DropdownMenuPortal,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -32,6 +35,10 @@ const LOCAL_VIEW_AS_PREVIEW: DeveloperViewAsUser[] = [
   { id: 'preview-edwilson', username: 'Edwilson Lobato', email: 'edwilson@coalashakes.com', jobRoleName: 'Líder', profileId: 'profile-leader' },
   { id: 'preview-samila', username: 'Samila Santos', email: 'samila@coalashakes.com', jobRoleName: 'Atendente', profileId: 'profile-attendant' },
 ];
+
+function getInitials(name?: string) {
+  return (name ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("") || "?";
+}
 
 function getAvatarUploadErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
@@ -70,8 +77,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
 
   const kioskNames = (user.assignedKioskIds ?? [])
     .map(id => kiosks.find(k => k.id === id)?.name)
-    .filter(Boolean)
-    .join(', ');
+    .filter((name): name is string => Boolean(name));
 
   const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
   const profileName = profile ? profile.name : 'Perfil não encontrado';
@@ -187,7 +193,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
                   <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />
                 ) : (
                   <AvatarFallback className="bg-ds-accent text-[13px] font-extrabold text-ds-dark">
-                    {(user.username ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("")}
+                    {getInitials(user.username)}
                   </AvatarFallback>
                 )}
               </Avatar>
@@ -220,25 +226,67 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align={variant === "card" ? "start" : "end"} side={variant === "card" ? "right" : "bottom"} className="w-64">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">{user.username}</p>
-              <p className="text-xs leading-none text-muted-foreground">{profileName}</p>
-              {displayedViewAs && (
-                <p className="text-xs font-semibold text-ds-accent-ink">
-                  Visualizando como {displayedViewAs.username} · somente leitura
+          <div className="flex items-center gap-3 px-2 py-2.5">
+            {displayedViewAs ? (
+              <Avatar className="h-11 w-11 shrink-0">
+                {displayedViewAs.avatarUrl ? <AvatarImage src={displayedViewAs.avatarUrl} alt={displayedViewAs.username} className="object-cover" /> : null}
+                <AvatarFallback className="bg-ds-accent-soft text-[13px] font-extrabold text-ds-accent-ink">
+                  {getInitials(displayedViewAs.username)}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <DropdownMenuSub>
+                <DropdownMenuPrimitive.SubTrigger
+                  aria-label="Alterar foto de perfil"
+                  disabled={isUploadingPhoto}
+                  className="group/photo relative shrink-0 cursor-pointer rounded-full outline-hidden data-highlighted:ring-2 data-highlighted:ring-ds-accent-ink data-[state=open]:ring-2 data-[state=open]:ring-ds-accent-ink"
+                >
+                  <Avatar className="h-11 w-11">
+                    {isUploadingPhoto ? (
+                      <AvatarFallback><Loader2 className="h-4 w-4 animate-spin" /></AvatarFallback>
+                    ) : user.avatarUrl ? (
+                      <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />
+                    ) : (
+                      <AvatarFallback className="bg-ds-accent text-[13px] font-extrabold text-ds-dark">
+                        {getInitials(user.username)}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border bg-popover text-muted-foreground group-hover/photo:text-foreground">
+                    <Camera className="h-3 w-3" />
+                  </span>
+                </DropdownMenuPrimitive.SubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent className="w-44">
+                    <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>
+                      <Camera className="mr-2 h-4 w-4" />
+                      <span>Tirar foto</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      <span>Carregar foto</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            )}
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="truncate text-sm font-medium leading-tight">{displayedViewAs?.username ?? user.username}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {displayedViewAs ? `${displayedViewAs.jobRoleName || displayedViewAs.email} · somente leitura` : profileName}
+              </p>
+              {!displayedViewAs && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground" title={kioskNames.join(', ') || undefined}>
+                  <Warehouse className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{kioskNames[0] ?? 'Sem quiosque'}</span>
+                  {kioskNames.length > 1 && <span className="shrink-0">· +{kioskNames.length - 1}</span>}
                 </p>
               )}
             </div>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-default focus:bg-transparent">
-            <Warehouse className="mr-2 h-4 w-4" />
-            <span>Quiosque(s): {kioskNames || 'N/A'}</span>
-          </DropdownMenuItem>
+          </div>
           <DropdownMenuSeparator />
           {canViewAs && (displayedViewAs ? (
-            <DropdownMenuItem disabled={viewAsBusy} onSelect={handleStopViewAs}>
+            <DropdownMenuItem disabled={viewAsBusy} onSelect={handleStopViewAs} className="font-medium">
               <RotateCcw className="mr-2 h-4 w-4" />
               <span>Voltar ao meu perfil</span>
             </DropdownMenuItem>
@@ -249,20 +297,10 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
             </DropdownMenuItem>
           ))}
           {!displayedViewAs && (
-            <>
-              <DropdownMenuItem onSelect={() => setIsPhotoModalOpen(true)}>
-                <Camera className="mr-2 h-4 w-4" />
-                <span>Tirar foto</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
-                <Upload className="mr-2 h-4 w-4" />
-                <span>Carregar foto</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
-                <KeyRound className="mr-2 h-4 w-4" />
-                <span>Alterar senha</span>
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
+              <KeyRound className="mr-2 h-4 w-4" />
+              <span>Alterar senha</span>
+            </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout}>
