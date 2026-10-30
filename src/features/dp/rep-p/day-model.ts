@@ -26,6 +26,8 @@ export type DayShift = {
   overnight?: boolean;
   unitId?: string | null;
   executionUnitPolicy?: "scheduled" | "free";
+  /** O detalhe só apresenta o resultado geográfico quando o turno daquele dia pediu coleta. */
+  locationTrackingPolicy?: "disabled" | "punch_only" | "workday";
   breakSegments?: { start: string; end: string }[] | null;
   breakSplit?: "single" | "multiple";
   breakPauseCount?: number | null;
@@ -39,7 +41,10 @@ export type DayMarking = { receiptId: string; markedAt: string; nsr: number; exe
   /** Ensaio pré-homologação: visível na conferência e prévia, mas fora do fechamento oficial. */
   pilot?: boolean;
   /** Tratamento aprovado (PTRP): original, desconsiderada (continua listada) ou incluída por ajuste. */
-  treatment?: "original" | "discarded" | "included"; adjustmentId?: string };
+  treatment?: "original" | "discarded" | "included"; adjustmentId?: string;
+  /** Resultado da localização na batida (sem coordenadas); vem só para quem pode ver e quando o turno coletou. */
+  location?: { evaluation: "inside" | "outside" | "indeterminate"; distanceMeters: number | null;
+    physicalUnitId?: string | null; physicalUnitName?: string | null } | null };
 
 export type DayTreatment = { type: "discard" | "inclusion"; workDate: string; adjustmentId: string;
   originalReceiptId: string | null; markedAt: string | null; executionUnitId: string | null };
@@ -202,7 +207,10 @@ export function buildMonthView(input: { month: string; today: string; shifts: (D
     const shifts = input.shifts.filter((shift) => shift.date === date);
     // Com duas linhas no dia (troca ou cobertura), vale o turno de trabalho.
     const shift = shifts.find((item) => item.type === "work") ?? shifts[0] ?? null;
-    return buildDayView({ date, today: input.today, shift, markings: input.markings.filter((marking) => marking.workDate === date), absences: input.absences,
+    // A existência da evidência congela a decisão vigente na batida. Não releia a definição mutável do turno
+    // para esconder ou revelar retroativamente um resultado histórico.
+    const markings = input.markings.filter((marking) => marking.workDate === date);
+    return buildDayView({ date, today: input.today, shift, markings, absences: input.absences,
       treatments: input.treatments });
   });
 }
