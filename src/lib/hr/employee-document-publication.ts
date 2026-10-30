@@ -66,6 +66,7 @@ export const DEFAULT_DOCUMENT_PUBLICATION_POLICY: Record<string, DocumentPublica
   UNIFORM_DELIVERY: automaticOnSign,
   UNIFORM_EXCHANGE: automaticOnSign,
   UNIFORM_RETURN: automaticOnSign,
+  ASSET_CUSTODY_TERM: automaticOnSign,
   // Saúde: os ASOs fora da admissão; atestado restrito.
   ASO_ADMISSION: never,
   ASO_PERIODIC: automaticOnValidate,

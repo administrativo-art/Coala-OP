@@ -14,7 +14,7 @@ test("catálogo de configurações lista todo modelo gerável e exclui somente r
 });
 
 test("Configurações Pessoal reúne geração, publicação e modelos sem duplicar a implementação", async () => {
-  const [settingsSource, catalogSource, templatesSource, templateDetailSource, settingsDetailRoute, sidebarSource, instructions] = await Promise.all([
+  const [settingsSource, catalogSource, templatesSource, templateDetailSource, settingsDetailRoute, sidebarSource, instructions, registryGuide, harness] = await Promise.all([
     readFile(path.join(process.cwd(), "src/app/dashboard/settings/page.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "src/components/settings/generated-documents-settings.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "src/app/dashboard/documents/templates/page.tsx"), "utf8"),
@@ -22,6 +22,8 @@ test("Configurações Pessoal reúne geração, publicação e modelos sem dupli
     readFile(path.join(process.cwd(), "src/app/dashboard/settings/documents/templates/[id]/page.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "src/components/sidebar.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "AGENTS.md"), "utf8"),
+    readFile(path.join(process.cwd(), "docs/engineering/generated-documents-registry.md"), "utf8"),
+    readFile(path.join(process.cwd(), "docs/engineering/generated-documents-harness.md"), "utf8"),
   ]);
   assert.match(settingsSource, /value: "generated-documents"/);
   assert.match(settingsSource, /value: "documents"/);
@@ -43,4 +45,9 @@ test("Configurações Pessoal reúne geração, publicação e modelos sem dupli
   assert.doesNotMatch(sidebarSource, /href: "\/dashboard\/documents\/templates"/);
   assert.match(instructions, /SYSTEM_DOCUMENT_TEMPLATES/);
   assert.match(instructions, /Configurações → Pessoal → Documentos/);
+  assert.match(instructions, /Gerador persistente sem catálogo bloqueia commit e rollout/);
+  assert.match(registryGuide, /harness de documentos gerados/);
+  assert.match(registryGuide, /ordem, relatório, espelho, comprovante, pacote/);
+  assert.match(harness, /Documento persistente gerado sem catálogo/);
+  assert.match(harness, /generationMode: "reference"/);
 });

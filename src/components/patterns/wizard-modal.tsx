@@ -152,7 +152,7 @@ export function WizardModal({
     const blocked = !readOnly && mode === "new" && index > highestStep
 
     return (
-      <li key={step.id} className={cn(placement === "top" && "min-w-0 flex-1")}>
+      <li key={step.id} className={cn(placement === "top" && "min-w-[148px] flex-1 md:min-w-0")}>
         <button
           type="button"
           disabled={blocked}
@@ -223,19 +223,28 @@ export function WizardModal({
 
           <div className="flex min-h-0 flex-col">
             {stepper === "top" && !readOnly ? (
-              <header className="flex items-start gap-4 border-b border-ds-border-footer px-7 pb-[18px] pt-6">
-                <nav aria-label="Etapas do cadastro" className="min-w-0 flex-1">
-                  <ol className="flex gap-2">{visibleSteps.map((candidate, index) => renderStepButton(candidate, index, "top"))}</ol>
+              <header className="shrink-0 border-b border-ds-border-footer bg-ds-input">
+                <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-7 sm:pt-[22px]">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-[21px] font-extrabold tracking-[-0.02em] text-ds-ink">{title}</h3>
+                    {description && <p className="mt-0.5 truncate text-[13px] text-ds-ink-muted">{description}</p>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                    {headerActions}
+                    <button
+                      ref={closeButtonRef}
+                      type="button"
+                      aria-label="Fechar"
+                      onClick={requestClose}
+                      className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+                    >
+                      <X aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <nav aria-label="Etapas do cadastro" className="overflow-x-auto px-5 pb-[18px] sm:px-7">
+                  <ol className="flex min-w-max gap-2 md:min-w-0">{visibleSteps.map((candidate, index) => renderStepButton(candidate, index, "top"))}</ol>
                 </nav>
-                <button
-                  ref={closeButtonRef}
-                  type="button"
-                  aria-label="Fechar"
-                  onClick={requestClose}
-                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
-                >
-                  <X aria-hidden="true" className="h-4 w-4" />
-                </button>
               </header>
             ) : (
               <header className="border-b border-ds-border-footer px-7 pb-[18px] pt-[22px]">

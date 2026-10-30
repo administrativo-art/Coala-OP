@@ -20,6 +20,7 @@ import {
   MapPin,
   Menu,
   Pencil,
+  PackageCheck,
   Shirt,
   TimerReset,
   Umbrella,
@@ -33,6 +34,7 @@ import { createAuditLog } from "@/features/audit/client";
 import type { DPUnit, DPVacationRecord, User, UserPdvAccess } from "@/types";
 import { getHrEmployeeId } from "@/lib/hr/person-link";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
+import { CollaboratorAssets } from "@/components/collaborator-assets";
 import {
   useEmployeeProfile,
   type EmployeeProfileState,
@@ -3342,6 +3344,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               {renderSystemBlock("system.uniforms")}
               {renderSystemBlock("system.transport_voucher")}
             </div>
+            <Panel title="Equipamentos sob responsabilidade" icon={PackageCheck}>
+              <CollaboratorAssets userId={user.id} />
+            </Panel>
           </div>
         </EmployeeProfileFields>
         {transportVoucherEditorOpen ? (

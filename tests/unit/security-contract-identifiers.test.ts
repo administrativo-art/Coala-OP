@@ -22,7 +22,7 @@ test("contratos de segurança: ação e estratégia em minúsculas, no formato a
   for (const file of await routeFiles("src/app/api")) {
     const source = await readFile(file, "utf8");
     if (!source.includes("defineSecurityContract(")) continue;
-    for (const match of source.matchAll(/kind: ["'](?:permission|custom)["'], (?:action|strategy): ["']([^"']+)["']/g)) {
+    for (const match of source.matchAll(/kind\s*:\s*["'](?:permission|custom)["']\s*,\s*(?:action|strategy)\s*:\s*["']([^"']+)["']/g)) {
       if (!IDENTIFIER.test(match[1]!)) invalid.push(`${file}: ${match[1]}`);
     }
   }

@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 
 import { archiveAutentiqueSignedDocument } from "@/features/hr/documents/signature-workflow.server";
 import {
@@ -13,6 +13,11 @@ import { markTerminationDocumentSigned, markTerminationIdentitySigned } from "@/
 import { syncVacationNoticeSignatureRequest } from "@/features/hr/vacations/server";
 import { syncVacationReceiptSignatureRequest } from "@/features/hr/vacations/payment-completion.server";
 import { reportSystemError } from "@/lib/observability";
+import { archiveAndProjectAssetCustodyTerm, projectAssetCustodyTermSignature } from "@/features/assets/custody-term.server";
+import { AppError } from "@/lib/observability/app-error";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 export const runtime = "nodejs";
 
@@ -22,7 +27,7 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const secret = process.env.AUTENTIQUE_WEBHOOK_SECRET?.trim();
   if (!secret) {
     console.error("[autentique-webhook] AUTENTIQUE_WEBHOOK_SECRET não configurado.");
@@ -185,6 +190,8 @@ export async function POST(request: Request) {
               await syncVacationNoticeSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
             } else if (typeof vacationId === "string" && purpose === "vacation_receipt") {
               await syncVacationReceiptSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
+            } else if (purpose === "asset_custody_term") {
+              await archiveAndProjectAssetCustodyTerm({ signatureRequestId: requestDoc.id, signedUrl: files.signed as string, signedAt: event.createdAt, eventId: event.id });
             } else {
               await archiveAutentiqueSignedDocument({
                 signatureRequestId: requestDoc.id,
@@ -207,8 +214,11 @@ export async function POST(request: Request) {
               archiveEventId: reference.eventId,
               updatedAt: new Date().toISOString(),
             }, { merge: true });
+            if (purpose === "asset_custody_term") await projectAssetCustodyTermSignature(requestDoc.id).catch(() => undefined);
           }
         });
+      } else if (purpose === "asset_custody_term") {
+        after(async () => { await projectAssetCustodyTermSignature(requestDoc.id).catch(() => undefined); });
       } else if (typeof vacationId === "string" && (purpose === "vacation_notice" || purpose === "vacation_receipt")) {
         after(async () => {
           try {
@@ -249,3 +259,22 @@ export async function POST(request: Request) {
   });
   return NextResponse.json({ received: true });
 }
+
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+const contract = defineSecurityContract({ schemaVersion: 1, id: "webhooks.autentique.receive", version: 1, surface: { method: "POST", path: "/api/webhooks/autentique" }, exposure: "internal-service", identity: { kind: "signed-webhook", provider: "autentique" }, authorization: { kind: "none" }, resourceScope: { kind: "none" }, input: { kind: "schema", schema: "autentique.webhook", unknownFields: "strip" }, effects: { mode: "external", audit: "server-authoritative" }, errorExposure: "sanitized" });
+const enforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, true, Record<string, unknown>, undefined>(contract, {
+  async authenticate({ request }) {
+    const secret = process.env.AUTENTIQUE_WEBHOOK_SECRET?.trim();
+    if (!secret) throw new AppError({ code: "AUTENTIQUE_WEBHOOK_UNAVAILABLE", kind: "TRANSIENT_EXTERNAL", httpStatus: 503, safeMessage: "Webhook indisponível." });
+    const rawBody = await request.clone().text();
+    if (!verifyAutentiqueWebhookSignature({ rawBody, signature: request.headers.get("x-autentique-signature"), secret })) throw new AppError({ code: "AUTENTIQUE_WEBHOOK_SIGNATURE_INVALID", kind: "AUTHENTICATION", safeMessage: "Assinatura inválida." });
+    return true as const;
+  },
+  async parseInput({ request }) {
+    const value = await request.clone().json().catch(() => null);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new AppError({ code: "AUTENTIQUE_WEBHOOK_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Evento inválido." });
+    return value as Record<string, unknown>;
+  },
+});
+
+export const POST = secureRoute({ contract, enforcer }, ({ request }) => handlePost(request));

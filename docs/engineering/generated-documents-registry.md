@@ -23,6 +23,16 @@ Ao criar um fluxo que gere PDF, DOCX, termo, recibo, declaração, relatório ar
 5. atualizar os testes do catálogo e o guia do fluxo gerador;
 6. não concluir a implementação enquanto o modelo não estiver visível no catálogo ou enquanto a exclusão tiver sido explicitamente justificada como `reference`.
 
+Essa regra abrange todos os módulos e todos os nomes usados pela interface: documento, termo, recibo, declaração, aviso, ordem, relatório, espelho, comprovante, pacote e equivalentes. O fato de o arquivo nascer dentro de Patrimônio, Financeiro, DP, Estoque, Tarefas ou de um job não altera a obrigação. O critério é o resultado persistido e oficial, não o nome da função que o produziu.
+
+Use o [harness de documentos gerados](generated-documents-harness.md) para classificar a saída, conferir o catálogo, assinatura, publicação, retenção e evidências antes do commit. A ausência de um gerador em uma busca textual não comprova cobertura; o responsável pelo fluxo deve declarar cada saída persistida no registro do chamado.
+
 Arquivos enviados apenas como instâncias não entram nesse catálogo: pertencem ao fluxo de documentos do colaborador ou da empresa. Um arquivo enviado como **modelo reutilizável** continua sendo cadastrado no módulo Documentos e precisa entrar na fonte oficial efetiva antes de receber automação ou política de publicação. Exportações transitórias que não são preservadas também precisam de decisão explícita no guia do fluxo antes de serem tratadas como modelo catalogado.
 
 AFD e AEJ são exceções `reference` deliberadas: não são modelos editáveis nem documentos gerais da pasta do colaborador, mas exportações fiscais de leiautes oficiais, geradas por estabelecimento/período e preservadas junto da assinatura e da auditoria. Permanecem fora da lista **Geração e publicação**; o fluxo e a retenção estão documentados em [Registro de ponto REP-P](flows/dp-time-recording.md). O comprovante individual e o espelho, por serem documentos pessoais apresentados ao colaborador, continuam registrados no catálogo.
+
+## Patrimônio
+
+`system-asset-custody-term` é o termo contextual de entrega e responsabilidade criado ao transferir a posse de um patrimônio para colaborador. Usa `coala-letterhead-v2`, protocolo patrimonial `PAT`, assinatura independente do colaborador e do signatário institucional, retenção `employment_plus_5y` e publicação automática somente depois da assinatura. A origem preserva `sourceAssetId` e `sourceCustodyTransferId`; o arquivo assinado segue para **Documentos do colaborador → Uniformes e EPIs → Entregas**. Veja o [fluxo patrimonial](flows/assets.md).
+
+`system-asset-maintenance-order` é a ordem contextual das manutenções preventivas, corretivas e manuais. Usa o timbre `coala-letterhead-v2`, protocolo `MNT`, retenção `asset_lifecycle_plus_5y` e não passa pelo Autentique (`signatureScope: none`). O registro preserva `sourceAssetId` e `sourceMaintenanceOccurrenceId`; o PDF contém componentes enviados e linhas para complemento manual, sem IMEI, telefone ou segredo.
