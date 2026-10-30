@@ -41,11 +41,14 @@ import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
 import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.data.Modules
+import com.coalaone.go.auth.GoogleCredentialResult
+import com.coalaone.go.auth.requestGoogleWorkspaceCredential
 import com.coalaone.go.ui.*
 import android.Manifest
 import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
@@ -100,10 +103,17 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             val release by update.release.collectAsStateWithLifecycle()
             val feedback by update.feedback.collectAsStateWithLifecycle()
             val progress by update.progress.collectAsStateWithLifecycle()
+            val googleMigration by session.googleMigration.collectAsStateWithLifecycle()
+            var migrationPoint by rememberSaveable { mutableStateOf(false) }
             CompositionLocalProvider(LocalImages provides images, LocalOwner provides (identity.identity?.uid ?: "anonymous")) {
                 when {
                     Rules.updateRequired(release, BuildConfig.VERSION_CODE) -> Page("Atualização necessária", feedback, footer = { Action("Baixar atualização", feedback.busy) { update.download(::install) } }) { Text("Atualize o Coala Go para continuar."); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) }
                     identity.loading || identity.identity == null || identity.locked -> AuthScreen(session, ::biometric)
+                    !session.mode.simulation && !googleMigration.checked -> GoogleMigrationRequiredScreen(session, googleMigration, checking = true)
+                    migrationPoint -> TimeScreen(hiltViewModel(), { migrationPoint = false }, startConfirming = true,
+                        onInformAbsence = { migrationPoint = false })
+                    !session.mode.simulation && googleMigration.required && !googleMigration.completed ->
+                        GoogleMigrationRequiredScreen(session, googleMigration, checking = false) { migrationPoint = true }
                     else -> AppNavigation(session, update) { biometric(enroll = true) }
                 }
             }
@@ -132,6 +142,40 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         }
     }
 }
+
+@Composable private fun GoogleMigrationRequiredScreen(session: SessionViewModel, state: GoogleMigrationState, checking: Boolean,
+    onRecordPoint: (() -> Unit)? = null) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    Page("Atualização do acesso", Feedback(busy = state.loading || state.busy, error = state.error), showConnectivityNotice = false) {
+        CardBlock(selected = true) {
+            Text(if (checking) "Preparando seu acesso" else "Vincule sua conta empresarial", style = MaterialTheme.typography.titleLarge)
+            Text(when {
+                checking -> "Estamos conferindo seu cadastro. Isso costuma levar poucos segundos."
+                state.busy -> state.step ?: "Concluindo a vinculação…"
+                else -> "Seu cadastro e todo o histórico serão mantidos. Toque em prosseguir e escolha ${state.targetEmail ?: "sua conta Google"}."
+            }, color = Tokens.muted)
+            if (checking || state.busy) {
+                LinearProgressIndicator(progress = { state.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
+                Text("Etapa ${when { state.progress < .3f -> "1 de 3"; state.progress < .7f -> "2 de 3"; else -> "3 de 3" }}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("1. Toque em Prosseguir.\n2. Escolha a conta indicada.\n3. Aguarde a confirmação na tela.", color = Tokens.muted, style = MaterialTheme.typography.bodyMedium)
+                Action("Prosseguir", false, enabled = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                                is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
+                                GoogleCredentialResult.Cancelled -> Unit
+                            }
+                        } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                    }
+                }
+                onRecordPoint?.let { Action("Registrar ponto agora", false, secondary = true, onClick = it) }
+            }
+            state.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit) {
     val nav = rememberNavController()
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
@@ -146,7 +190,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         val homeEntry: (androidx.navigation.NavBackStackEntry) -> androidx.navigation.NavBackStackEntry = { nav.getBackStackEntry("home") }
         composable("home") { entry -> HomeScreen(hiltViewModel(), hiltViewModel(entry), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
-        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back, onPrepareBiometric) }
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, hiltViewModel(), back, onPrepareBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -400,7 +444,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
-@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
+@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, corporateDevice: CorporateDeviceViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
@@ -408,6 +452,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val push by session.push.state.collectAsStateWithLifecycle()
     val sessionState by session.state.collectAsStateWithLifecycle()
+    val googleMigration by session.googleMigration.collectAsStateWithLifecycle()
+    val corporateDeviceState by corporateDevice.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
     LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
@@ -415,6 +462,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val dataOwner = developerViewAs.targetUserId ?: owner
     val state = profileState.visibleFor(dataOwner)
     LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
+    LaunchedEffect(dataOwner, developerViewAs.targetUserId) { if (developerViewAs.targetUserId == null) session.loadGoogleMigration() }
+    LaunchedEffect(dataOwner, developerViewAs.targetUserId) { if (developerViewAs.targetUserId == null) corporateDevice.load() }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)
         else session.push.reflect(owner)
@@ -456,6 +505,49 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 else "O app oferece a biometria após o login para liberar o acesso sem conexão. Se você pulou essa etapa, pode ativá-la aqui.",
                 color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             if (!sessionState.localUnlockEnabled) Action("Ativar biometria", sessionState.busy, enabled = !sessionState.busy, onClick = onPrepareBiometric)
+        }
+        if (developerViewAs.targetUserId == null && (googleMigration.available || googleMigration.completed)) CardBlock(selected = googleMigration.completed) {
+            Text("Acesso pelo Google", style = MaterialTheme.typography.titleMedium)
+            if (googleMigration.completed) {
+                Text("Acesso Google vinculado a ${googleMigration.targetEmail}.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(if (googleMigration.targetEmail != null) "Vincule ${googleMigration.targetEmail} sem perder seu histórico."
+                    else "Vincule sua conta Google ao cadastro atual sem perder seu histórico.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                if (googleMigration.busy) {
+                    LinearProgressIndicator(progress = { googleMigration.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
+                    Text(googleMigration.step ?: "Concluindo…", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Action("Vincular minha conta Google", googleMigration.busy || googleMigration.loading, enabled = !googleMigration.busy && !googleMigration.loading) {
+                    scope.launch {
+                        try {
+                            when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                                is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
+                                GoogleCredentialResult.Cancelled -> Unit
+                            }
+                        } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                    }
+                }
+            }
+            googleMigration.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+        if (developerViewAs.targetUserId == null) CardBlock(selected = corporateDeviceState.status == "active") {
+            Text("Aparelho empresarial", style = MaterialTheme.typography.titleMedium)
+            when (corporateDeviceState.status) {
+                "active" -> Text("Este aparelho está identificado como equipamento da empresa. O rastreio continua dependendo da pessoa autenticada e da política do turno.", color = Tokens.ok, style = MaterialTheme.typography.bodySmall)
+                "pending" -> Text("Solicitação enviada. Aguarde a aprovação no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                "suspended" -> Text("Este aparelho está suspenso. Procure a administração.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                "rejected", "revoked", "replaced" -> {
+                    Text("Este vínculo não está ativo. Envie uma nova solicitação se a administração orientar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    Action("Solicitar novo vínculo", corporateDeviceState.busy, enabled = !corporateDeviceState.busy, onClick = corporateDevice::request)
+                }
+                else -> {
+                    Text("Vincule este celular somente se ele pertence à empresa e foi entregue para seu uso.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    Action("Vincular este aparelho empresarial", corporateDeviceState.busy || corporateDeviceState.loading,
+                        enabled = !corporateDeviceState.busy && !corporateDeviceState.loading, onClick = corporateDevice::request)
+                }
+            }
+            corporateDeviceState.model?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+            corporateDeviceState.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
         if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)

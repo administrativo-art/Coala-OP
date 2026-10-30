@@ -1023,6 +1023,8 @@ service cloud.firestore {
     // Tokens e instalações push são acessados somente pelo Admin SDK.
     match /mobilePushTokens/{id} { allow read, write: if false; }
     match /mobilePushInstallations/{id} { allow read, write: if false; }
+    match /mobileCorporateDevices/{id} { allow read, write: if false; }
+    match /authIdentityMigrations/{id} { allow read, write: if false; }
     match /userNotifications/{id} { allow read, write: if false; }
     match /systemNotices/{id} { allow read, write: if false; }
     match /dp_absenceOperationalReadiness/{id} { allow read, write: if false; }

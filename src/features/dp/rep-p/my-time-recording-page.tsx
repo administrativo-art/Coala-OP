@@ -493,6 +493,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
       )}
 
       <DayDetailPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
+        employeeUid={employeeUid ?? firebaseUser?.uid ?? ""}
         days={days} today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications}
         onClose={() => setOpenDate(null)} onNavigate={setOpenDate}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}

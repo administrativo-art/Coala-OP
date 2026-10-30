@@ -81,6 +81,52 @@ function getAvatarUploadErrorMessage(error: unknown) {
   return 'Tente novamente.';
 }
 
+type CorporateDeviceRow = { id: string; status: string; model: string; androidVersion: string; appVersion: string; keySecurity: string; requestedAt: string | null; updatedAt: string | null };
+
+function CorporateDevicesPanel({ userId, firebaseUser }: { userId: string; firebaseUser: { getIdToken(forceRefresh?: boolean): Promise<string> } | null }) {
+  const { toast } = useToast();
+  const [devices, setDevices] = useState<CorporateDeviceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    if (!firebaseUser) return;
+    setLoading(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/corporate-devices`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error?.message || 'Não foi possível consultar os aparelhos.');
+      setDevices((await response.json() as { devices: CorporateDeviceRow[] }).devices);
+    } catch (error) { toast({ title: 'Não foi possível carregar os aparelhos.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' }); }
+    finally { setLoading(false); }
+  }, [firebaseUser, toast, userId]);
+  useEffect(() => { void load(); }, [load]);
+  async function decide(deviceId: string, decision: 'approve' | 'reject') {
+    if (!firebaseUser) return;
+    setBusyId(deviceId);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/corporate-devices`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, decision }),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error?.message || 'Não foi possível registrar a decisão.');
+      toast({ title: decision === 'approve' ? 'Aparelho empresarial aprovado.' : 'Solicitação rejeitada.' });
+      await load();
+    } catch (error) { toast({ title: 'Não foi possível registrar a decisão.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' }); }
+    finally { setBusyId(null); }
+  }
+  if (loading) return <div className="flex items-center gap-2 text-sm text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin" /> Consultando aparelhos…</div>;
+  if (!devices.length) return <p className="text-sm text-ds-ink-muted">Nenhum aparelho solicitou vínculo para esta pessoa.</p>;
+  return <div className="space-y-2">{devices.map((device) => <div key={device.id} className="rounded-xl border border-ds-border bg-ds-surface p-3">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div><p className="font-semibold text-ds-ink">{device.model || 'Aparelho Android'}</p><p className="text-xs text-ds-ink-muted">Android {device.androidVersion} · Coala Go {device.appVersion} · chave {device.keySecurity.toUpperCase()}</p></div>
+      <StatusPill variant={device.status === 'active' ? 'ok' : device.status === 'pending' ? 'warn' : 'neutral'}>{({ active: 'Ativo', pending: 'Aguardando aprovação', suspended: 'Suspenso', rejected: 'Rejeitado', revoked: 'Revogado', replaced: 'Substituído' } as Record<string, string>)[device.status] ?? device.status}</StatusPill>
+    </div>
+    {device.requestedAt ? <p className="mt-2 text-xs text-ds-ink-muted">Solicitado em {new Date(device.requestedAt).toLocaleString('pt-BR')}</p> : null}
+    {device.status === 'pending' ? <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" loading={busyId === device.id} onClick={() => void decide(device.id, 'approve')}><CheckCircle2 className="mr-1 h-4 w-4" /> Aprovar aparelho</Button><Button type="button" size="sm" variant="ds-secondary" disabled={busyId === device.id} onClick={() => void decide(device.id, 'reject')}>Rejeitar</Button></div> : null}
+  </div>)}</div>;
+}
+
 function timestampToDateInput(ts: Timestamp | undefined): string {
   if (!ts) return '';
   try { return format(ts.toDate(), 'yyyy-MM-dd'); } catch { return ''; }
@@ -176,6 +222,7 @@ const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> 
 const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
   username: 'identity',
   email: 'identity',
+  corporateGoogleEmail: 'identity',
   avatarUrl: 'identity',
   employmentRelationshipType: 'identity',
   employerUnitId: 'units',
@@ -285,6 +332,7 @@ function newLocalId(prefix: string) {
 const userSchema = z.object({
   username: z.string().trim().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   email: z.string().email("O e-mail é inválido."),
+  corporateGoogleEmail: z.union([z.string().trim().email("O e-mail Google empresarial é inválido."), z.literal('')]).optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   unitId: z.string().optional(),
   employerUnitId: z.string().optional(),
@@ -326,6 +374,7 @@ function firstUserFormError(errors: FieldErrors<UserFormValues>) {
 
 const USER_AUDIT_FIELDS = [
   'username',
+  'corporateGoogleEmail',
   'profileId',
   'unitId',
   'unitIds',
@@ -441,6 +490,7 @@ export function UserManagement({
     defaultValues: {
         username: '',
         email: '',
+        corporateGoogleEmail: '',
         profileId: '',
         unitId: '',
         employerUnitId: '',
@@ -726,6 +776,7 @@ export function UserManagement({
     form.reset({
       username: '',
       email: '',
+      corporateGoogleEmail: '',
       profileId: '',
       unitId: '',
       employerUnitId: '',
@@ -764,6 +815,7 @@ export function UserManagement({
     form.reset({
       username: user.username,
       email: user.email,
+      corporateGoogleEmail: user.corporateGoogleEmail ?? '',
       profileId: user.profileId,
       unitId: user.unitId ?? '',
       employerUnitId: user.employerUnitId ?? '',
@@ -1000,6 +1052,7 @@ export function UserManagement({
     if (editingUser) {
       const updatedData: Partial<User> = {
           ...values,
+          corporateGoogleEmail: values.corporateGoogleEmail?.trim().toLowerCase() || null,
           avatarUrl,
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
@@ -1433,8 +1486,20 @@ export function UserManagement({
                     <FormMessage />
                   </EditFormRow>
                 )} />
+                {editingUser ? <FormField control={form.control} name="corporateGoogleEmail" render={({ field }) => (
+                  <EditFormRow number={4} label="Google empresarial" compact={createOnly} description="Conta do Google Workspace autorizada para substituir o login atual sem criar outro usuário.">
+                    <FormControl><Input type="email" placeholder="nome@coalashakes.com" {...field} autoComplete="off" /></FormControl>
+                    <FormMessage />
+                  </EditFormRow>
+                )} /> : null}
               </EditRowsGroup>
             </EditSection>
+
+            {editingUser && (permissions.settings.manageUsers || isDefaultAdmin) ? (
+              <EditSection title="Aparelhos empresariais" description="Solicitações do Coala Go vinculadas a esta pessoa." help="A aprovação autoriza esta instalação como aparelho empresarial. Ela não inicia rastreio fora de um turno configurado.">
+                <CorporateDevicesPanel userId={editingUser.id} firebaseUser={firebaseUser} />
+              </EditSection>
+            ) : null}
 
             {permissions.dp?.view || permissions.settings.manageUsers || isDefaultAdmin ? (
             <EditSection

@@ -113,7 +113,7 @@ export type RepPOwnMonthRequest = z.infer<typeof repPOwnMonthSchema>;
 const journeyLocationEventSchema = z.object({
   eventId: z.string().uuid(),
   sessionId: z.string().uuid(),
-  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  workDate: z.string().refine(isCivilDate, 'Data civil inválida.'),
   executionUnitId: z.string().trim().min(1).max(180),
   eventType: z.enum(['start', 'sample', 'pause', 'resume', 'stop']),
   capturedAt: z.string().datetime({ offset: true }),
@@ -129,7 +129,10 @@ const journeyLocationEventSchema = z.object({
     context.addIssue({ code: 'custom', path: ['latitude'], message: 'A posição deve ser enviada por inteiro.' });
   }
 });
-export const journeyLocationBatchSchema = z.object({ events: z.array(journeyLocationEventSchema).min(1).max(50) }).strict()
+export const journeyLocationBatchSchema = z.object({
+  leaseToken: z.string().min(40).max(256).regex(/^[A-Za-z0-9_-]+$/),
+  events: z.array(journeyLocationEventSchema).min(1).max(50),
+}).strict()
   .superRefine((value, context) => {
     const first = value.events[0];
     if (value.events.some((event) => event.sessionId !== first.sessionId || event.workDate !== first.workDate)) {
@@ -144,3 +147,10 @@ export const journeyLocationBatchSchema = z.object({ events: z.array(journeyLoca
     }
   });
 export type JourneyLocationBatchInput = z.infer<typeof journeyLocationBatchSchema>;
+
+export const journeyLocationLeaseSchema = z.object({
+  sessionId: z.string().uuid(),
+  workDate: z.string().refine(isCivilDate, 'Data civil inválida.'),
+  executionUnitId: id,
+}).strict();
+export type JourneyLocationLeaseInput = z.infer<typeof journeyLocationLeaseSchema>;

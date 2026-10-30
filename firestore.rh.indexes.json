@@ -388,6 +388,7 @@
   "fieldOverrides": [
     { "collectionGroup": "dp_journeyLocationEvents", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_journeyLocationSessions", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "dp_journeyLocationLeases", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_timeRecordingAccessAudit", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "packages", "fieldPath": "status", "indexes": [
       { "order": "ASCENDING", "queryScope": "COLLECTION" },

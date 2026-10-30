@@ -203,16 +203,18 @@ test('Detalhe do dia é único e o acompanhamento entre unidades respeita iníci
   assert.match(time, /Text\("Memória de cálculo"/);
   assert.match(time, /Text\("Ajustes e ocorrências"/);
   assert.match(time, /Permitir localização/);
-  assert.match(journeyLocationService, /300_000L, 100f/);
+  assert.match(journeyLocationService, /movingMinSeconds = 120L/);
+  assert.match(journeyLocationService, /stationaryMaxSeconds = 900L/);
+  assert.match(journeyLocationService, /requestLocationUpdates\(it, 60_000L, 25f/);
   assert.match(journeyLocationService, /ACTION_PAUSE/);
   assert.match(journeyLocationService, /ACTION_STOP/);
   assert.match(journeyLocationService, /ACTION_ABORT/);
   assert.match(journeyLocationService, /abortTracking\(\)/);
   assert.match(journeyLocationQueue, /vault\.seal/);
   assert.match(journeyLocationQueue, /response\.stopRequested/);
-  assert.match(journeyLocationQueue, /controller\.stopFromServer\(\)/);
+  assert.match(journeyLocationQueue, /controller\.stopFromServer\(first\.sessionId\)/);
   assert.match(journeyLocationQueue, /NetworkType\.CONNECTED/);
-  assert.match(journeyLocationQueue, /setInitialDelay\(15, TimeUnit\.MINUTES\)/);
+  assert.match(journeyLocationQueue, /setInitialDelay\(if \(event\.eventType == "stop"\) 0 else 15, TimeUnit\.MINUTES\)/);
   assert.doesNotMatch(time, /POST_NOTIFICATIONS/);
 });
 
