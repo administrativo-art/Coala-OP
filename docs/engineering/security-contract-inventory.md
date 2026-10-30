@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **527**
-- Totalmente contratados: **188**
+- Arquivos de rota: **529**
+- Totalmente contratados: **190**
 - Legados congelados: **331**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -24,6 +24,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/assets/[assetId]/audits/upload` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/audits/upload/route.ts](../../src/app/api/assets/[assetId]/audits/upload/route.ts) |
 | `/api/assets/[assetId]/custody-transfers` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/route.ts) |
 | `/api/assets/[assetId]/custody-transfers/[transferId]/term` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts) |
+| `/api/assets/[assetId]/custody-transfers/[transferId]/term/file` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts) |
+| `/api/assets/[assetId]/custody-transfers/list` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/list/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/list/route.ts) |
 | `/api/assets/[assetId]/history` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/history/route.ts](../../src/app/api/assets/[assetId]/history/route.ts) |
 | `/api/assets/[assetId]/maintenance-occurrences` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/maintenance-occurrences/route.ts](../../src/app/api/assets/[assetId]/maintenance-occurrences/route.ts) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts](../../src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts) |

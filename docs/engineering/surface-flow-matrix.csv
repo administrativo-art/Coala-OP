@@ -28,6 +28,8 @@ api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Desti
 api,src/app/api/assets/[assetId]/movements/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/[assetId]/custody-transfers/route.ts,,docs/engineering/flows/assets.md,Transferencia transacional de posse com versao esperada e processo documental separado.
 api,src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts,,docs/engineering/flows/assets.md,Gera envia ou reconcilia termo patrimonial idempotente sob permissao assets.transfer.
+api,src/app/api/assets/[assetId]/custody-transfers/list/route.ts,,docs/engineering/flows/assets.md,Trilha paginada de transferencias e estados do termo com allowlist e permissao de historico.
+api,src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts,,docs/engineering/flows/assets.md,Download privado do PDF do termo validando transferencia documento patrimonio workspace e permissao.
 api,src/app/api/assets/[assetId]/audits/route.ts,,docs/engineering/flows/assets.md,Fecha auditoria com fotos e pode abrir manutencao corretiva.
 api,src/app/api/assets/[assetId]/audits/upload/route.ts,,docs/engineering/flows/assets.md,Recebe evidencia fotografica em prefixo isolado e registra hash e metadados para verificacao no fechamento.
 api,src/app/api/assets/[assetId]/maintenance-plans/route.ts,,docs/engineering/flows/assets.md,Cadastra plano preventivo explicito com cadencia e snapshots.
