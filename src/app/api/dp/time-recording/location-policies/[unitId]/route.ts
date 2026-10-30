@@ -63,9 +63,12 @@ const putEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, S
   },
 });
 
-export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) =>
-  NextResponse.json(await readRepPLocationPolicy(security.actor, security.resource.unitId),
-    { headers: { 'Cache-Control': 'private, no-store' } }));
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
+  const result = await readRepPLocationPolicy(security.actor, security.resource.unitId);
+  // Chave de navegador: chega somente à tela autorizada e continua protegida pelas restrições de site e API no Google Cloud.
+  const mapsBrowserApiKey = process.env.GOOGLE_MAPS_BROWSER_API_KEY?.trim() || null;
+  return NextResponse.json({ ...result, mapsBrowserApiKey }, { headers: { 'Cache-Control': 'private, no-store' } });
+});
 
 export const PUT = secureRoute({ contract: putContract, enforcer: putEnforcer }, async ({ security }) =>
   NextResponse.json(await saveRepPLocationPolicy(security.actor, security.resource.unitId, security.input),

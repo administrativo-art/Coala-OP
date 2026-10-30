@@ -46,12 +46,14 @@ import kotlinx.serialization.Serializable
 @Serializable data class LocationAttempt(val captureId: String, val status: String, val elapsedMs: Long,
     val capturedAt: String? = null, val latitude: Double? = null, val longitude: Double? = null, val accuracyMeters: Double? = null)
 @Serializable data class LocationSummary(val captureStatus: String, val evaluation: String)
+@Serializable data class MarkingLocation(val evaluation: String, val distanceMeters: Double? = null,
+    val physicalUnitId: String? = null, val physicalUnitName: String? = null)
 @Serializable data class RecordedMarking(val nsr: Long, val markedAt: String, val executionUnitId: String)
 @Serializable data class MarkingResponse(val status: String, val receiptId: String, val receiptStatus: String, val receiptIssue: String? = null,
     val marking: RecordedMarking, val location: LocationSummary? = null, val pilot: Boolean = false, val offlineCycle: OfflineCycle? = null)
 @Serializable data class MarkingClassification(val purpose: String, val source: String = "declared", val status: String = "confirmed")
 @Serializable data class OwnMarking(val receiptId: String, val workDate: String, val nsr: Long, val markedAt: String, val executionUnitId: String, val collectorId: String, val receiptStatus: String, val receiptIssue: String? = null,
-    val classification: MarkingClassification? = null, val pilot: Boolean = false)
+    val classification: MarkingClassification? = null, val pilot: Boolean = false, val location: MarkingLocation? = null)
 @Serializable data class ClassificationUpdate(val purpose: String)
 @Serializable data class ClassificationResult(val classification: MarkingClassification, val changeStatus: String = "applied")
 @Serializable data class OwnMarkings(val startDate: String, val endDate: String, val markings: List<OwnMarking>, val truncated: Boolean = false)
@@ -61,7 +63,7 @@ import kotlinx.serialization.Serializable
     val breakType: String? = null, val breakStart: String? = null, val breakEnd: String? = null, val breakDurationMinutes: Int? = null, val breakWindowStart: String? = null, val breakWindowEnd: String? = null,
     val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val breakMinPauseMinutes: Int? = null,
     val toleranceMinutes: Int? = null, val expectedPunches: Int? = null,
-    val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "punch_only", val unitTimeZone: String? = null)
+    val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "disabled", val unitTimeZone: String? = null)
 @Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val automaticAbsences: List<String> = emptyList(), val truncated: Boolean = false)
 
 /** Privacy-separated journey trail. It never changes a punch, NSR, receipt, AFD or payroll result. */

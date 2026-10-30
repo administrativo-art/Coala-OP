@@ -27,7 +27,6 @@ import { saveFile } from "./marking-ui";
 import { hm, PURPOSE_DOT, RecordStrip, type MarkingPurpose } from "./record-strip";
 import { AdjustmentsHistory, MirrorsGrid } from "./time-recording-views";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
-import { LocationAccessPanel } from "./location-access-panel";
 
 type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
 type HistoryPayload = { markings: HistoryItem[]; truncated: boolean };
@@ -336,10 +335,6 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
         <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded}
           dialogOpen={recordOpen} onDialogOpenChange={setRecordOpen} />
       </>}
-
-      {!readOnly || permissions.dp?.timeRecording?.readLocation === true ? (
-        <LocationAccessPanel key={employeeUid ?? firebaseUser?.uid} firebaseUser={firebaseUser} employeeUid={employeeUid} units={unitNames} today={today} />
-      ) : null}
 
       {/* Consultas por cartões, como no Coala Go; cada uma tem endereço próprio (?view=). */}
       <nav aria-label="Consultas do ponto" className="grid grid-cols-2 gap-3 lg:grid-cols-4">

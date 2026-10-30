@@ -186,7 +186,7 @@ function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
     overnight: def?.overnight ?? false,
     expectedPunches: def?.expectedPunches == null ? '' : String(def.expectedPunches),
     executionUnitPolicy: def?.executionUnitPolicy ?? 'scheduled',
-    locationTrackingPolicy: def?.locationTrackingPolicy ?? 'punch_only',
+    locationTrackingPolicy: def?.locationTrackingPolicy ?? 'disabled',
   };
 }
 

@@ -45,7 +45,7 @@ export const repPLocationPolicyInputSchema = repPLocationPolicyFieldsSchema.exte
   }
   if (value.mode === 'disabled') return;
   for (const field of ['center', 'radiusMeters', 'maxAccuracyMeters', 'maxAgeSeconds', 'captureTimeoutMs',
-    'privacyNoticeUrl', 'legalBasisReference', 'retentionDays'] as const) {
+    'legalBasisReference', 'retentionDays'] as const) {
     if (value[field] === null) context.addIssue({ code: 'custom', path: [field], message: 'Campo obrigatório para ativar a coleta.' });
   }
   if (!value.participantUserIds.length) context.addIssue({ code: 'custom', path: ['participantUserIds'],

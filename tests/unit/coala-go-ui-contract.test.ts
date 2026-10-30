@@ -51,7 +51,8 @@ test('Resumo do ponto na Home é expansível e o cronômetro só aparece durante
   assert.match(time, /punch\.purpose == "break_start"/);
   assert.match(time, /end\?\.purpose == "break_end"/);
   assert.match(time, /CompletedBreakPill/);
-  assert.match(time, /status\.level != BreakLevel\.OK -> BreakNoticeCard/);
+  assert.doesNotMatch(time, /status\.level != BreakLevel\.OK -> BreakNoticeCard/);
+  assert.match(time, /takeIf \{ it\.level != BreakLevel\.NEUTRAL \}\?\.let \{ BreakNoticeCard/);
 });
 
 test('Início relê relógio e turno por pessoa, e o tema visual segue a hora do dia', () => {
@@ -104,7 +105,7 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
   assert.doesNotMatch(time, /UnitPickerHeader/);
   assert.doesNotMatch(time, /Rules\.unitChoices/);
   assert.match(time, /capturePointLocation/);
-  assert.match(time, /O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade/);
+  assert.doesNotMatch(time, /leitura pontual de localização|Aviso de privacidade|O ponto será registrado mesmo se a posição/);
   assert.doesNotMatch(time, /ACCESS_BACKGROUND_LOCATION/);
   // A finalidade é declarada na batida, a sugestão continua editável e também pode ser corrigida no detalhe.
   assert.match(timeModels, /val declaredPurpose: String\? = null/);
@@ -203,6 +204,15 @@ test('Detalhe do dia é único e o acompanhamento entre unidades respeita iníci
   assert.match(journeyLocationQueue, /NetworkType\.CONNECTED/);
   assert.match(journeyLocationQueue, /setInitialDelay\(15, TimeUnit\.MINUTES\)/);
   assert.doesNotMatch(time, /POST_NOTIFICATIONS/);
+});
+
+test('permissão pontual é preparada uma vez, mas turno sem configuração permanece sem coleta', () => {
+  assert.match(timeModels, /locationTrackingPolicy: String = "disabled"/);
+  assert.match(time, /getSharedPreferences\("point-location-permission"/);
+  assert.match(time, /putBoolean\("requested", true\)/);
+  assert.match(time, /section == "today" && !locationPermissionPrepared/);
+  assert.match(time, /locationPolicy\.mode == "disabled"[\s\S]*?vm\.record/);
+  assert.doesNotMatch(time, /ACCESS_BACKGROUND_LOCATION/);
 });
 
 test('Troca de turno permanece em Solicitações e consome o contrato central', () => {
