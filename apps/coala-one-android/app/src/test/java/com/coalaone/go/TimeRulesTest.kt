@@ -91,6 +91,27 @@ class TimeRulesTest {
         assertEquals("1ª batida · Início da jornada", TimeRules.nextPunchText(0, null, "journey_start"))
         assertTrue(TimeRules.plannedPunchTimes(null).isEmpty())
     }
+    @Test fun punchUnitNeverFallsSilentlyOutsideTheScheduledUnit() {
+        val shift = OwnShift("2026-10-19", "work", "08:00", "17:00", unitId = "mao")
+        assertEquals("mao", TimeRules.punchUnitId(options, shift))
+        assertEquals("slz", TimeRules.punchUnitId(options, shift, chosen = "slz"))
+        assertFalse(TimeRules.scheduledUnitOutside(options, shift))
+        val outside = shift.copy(unitId = "cd")
+        assertTrue(TimeRules.scheduledUnitOutside(options, outside))
+        assertEquals("slz", TimeRules.punchUnitId(options, outside))
+        assertFalse(TimeRules.scheduledUnitOutside(options, outside.copy(type = "off")))
+        assertFalse(TimeRules.unitPickable(options, shift))
+        assertTrue(TimeRules.unitPickable(options, outside))
+        assertTrue(TimeRules.unitPickable(options, null))
+    }
+    @Test fun slotsAreNamedByPurposeAndNumberedWithSeveralPauses() {
+        assertEquals(listOf("Início", "Pausa", "Volta", "Fim"), (0 until 4).map { TimeRules.slotLabel(it, 4, true, null) })
+        assertEquals(listOf("Início", "P1", "V1", "P2", "V2", "Fim"), (0 until 6).map { TimeRules.slotLabel(it, 6, true, null) })
+        assertEquals(listOf("Início", "Fim"), (0 until 2).map { TimeRules.slotLabel(it, 2, true, null) })
+        // Without a planned count the done punch keeps its own purpose; nothing is guessed as the end.
+        assertEquals("Fim", TimeRules.slotLabel(3, 4, false, "journey_end"))
+        assertEquals("Pausa", TimeRules.slotLabel(3, 4, false, null))
+    }
     @Test fun workedSoFarCountsTheOpenSegmentAndStopsDuringTheBreak() {
         fun punch(time: String, purpose: String) = com.coalaone.go.domain.DayPunch(time, 1, "r$time", "available", purpose = purpose, markedAt = "2026-10-19T$time:00-0300")
         val now = Instant.parse("2026-10-19T14:47:00Z").toEpochMilli() // 11:47 em São Luís
@@ -196,6 +217,15 @@ class TimeRulesTest {
             marking("r2", "12:00", "break_start"), marking("r3", "12:03", "break_end")), now("13:00"), zone)!!
         assertEquals(com.coalaone.go.domain.BreakLevel.WARN, short.level)
         assertTrue(short.headline.contains("mínimo de 5 min"))
+    }
+    @Test fun openBreakWithoutShiftCountsElapsedTimeWithoutAPlan() {
+        val marking = OwnMarking("r1", "2026-10-19", 1, "2026-10-19T13:00:00-03:00", "slz", "01", "available",
+            classification = MarkingClassification("break_start"))
+        val now = java.time.OffsetDateTime.parse("2026-10-19T13:12:30-03:00").toInstant().toEpochMilli()
+        val status = TimeRules.breakStatus(null, listOf(marking), now, ZoneId.of("America/Fortaleza"))!!
+        assertTrue(status.inPause)
+        assertNull(status.countdownSeconds)
+        assertEquals(750L, status.usedSeconds)
     }
     @Test fun liveBreakStatusRequiresClassificationsAndNeverBlocksThePunch() {
         val shift = OwnShift("2026-10-19", "work", "08:00", "16:00", breakType = "flexible", breakDurationMinutes = 60)

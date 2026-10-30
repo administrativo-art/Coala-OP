@@ -757,6 +757,45 @@ class ViewModelsTest {
         assertEquals(sent[0].attemptId, sent[1].attemptId); assertEquals(location, sent[1].locationAttempt)
         assertFalse(revived.hasPendingLocationAttempt()); assertNull(saved.get<String>("attemptLocation"))
     }
+    @Test fun todayIsReadBeforeAPunchIsSuggestedAndAPastMonthDoesNotCount() = runTest {
+        val releaseMonth = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val api = object : ApiService by DemoApi() { override suspend fun markings(startDate: String, endDate: String): OwnMarkings {
+            releaseMonth.await(); return DemoApi().markings(startDate, endDate)
+        } }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.load(); advanceUntilIdle()
+        // Options arrived, today's punches did not: the day is still unread.
+        assertNotNull(vm.state.value.options); assertEquals(DayLoad.PENDING, vm.state.value.dayLoad)
+        releaseMonth.complete(Unit); advanceUntilIdle()
+        assertEquals(DayLoad.READ, vm.state.value.dayLoad)
+        vm.month(java.time.YearMonth.now().minusMonths(1)); advanceUntilIdle()
+        assertEquals(DayLoad.PENDING, vm.state.value.dayLoad)
+        vm.load(); advanceUntilIdle()
+        assertEquals(DayLoad.READ, vm.state.value.dayLoad); assertEquals(java.time.YearMonth.now(), vm.state.value.month)
+    }
+    @Test fun pendingAttemptSurvivesReloadingTheDaySoTheHomeSheetResendsTheSamePunch() = runTest {
+        val sent = mutableListOf<MarkingRequest>(); var lose = true
+        val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {
+            sent += request; if (lose) { lose = false; throw java.io.IOException("lost") }; return DemoApi().mark(request)
+        } }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.load(); advanceUntilIdle()
+        vm.record(declaredPurpose = "break_start"); advanceUntilIdle()
+        assertTrue(vm.hasPendingAttempt())
+        // Opening the home sheet reloads the day; the attempt and its purpose stay.
+        vm.load(); advanceUntilIdle()
+        assertEquals("break_start", vm.pendingAttempt()?.purpose)
+        vm.record(declaredPurpose = "journey_end"); advanceUntilIdle()
+        assertEquals(2, sent.size); assertEquals(sent[0].attemptId, sent[1].attemptId)
+        assertEquals("break_start", sent[1].declaredPurpose); assertFalse(vm.hasPendingAttempt())
+    }
+    @Test fun aFailedOptionsReadSettlesTheDayAsUnread() = runTest {
+        val api = object : ApiService by DemoApi() { override suspend fun timeOptions(workDate: String): TimeOptions =
+            throw retrofit2.HttpException(retrofit2.Response.error<Any>(500, "{}".toResponseBody())) }
+        val vm = timeViewModel(auth, repository(auth, api), androidx.lifecycle.SavedStateHandle())
+        vm.load(); advanceUntilIdle()
+        assertEquals(DayLoad.UNREAD, vm.state.value.dayLoad)
+    }
     @Test fun offlinePunchStaysLocalWithoutPretendingItHasAnNsr() = runTest {
         var sends = 0
         val api = object : ApiService by DemoApi() { override suspend fun mark(request: MarkingRequest, expectedOwner: String?): MarkingResponse {

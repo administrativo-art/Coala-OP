@@ -142,7 +142,9 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
         popExitTransition = { fadeOut(tween(if (motion) 160 else 0)) + slideOutVertically(tween(if (motion) 160 else 0)) { if (motion) 6 else 0 } }) {
-        composable("home") { HomeScreen(hiltViewModel(), session, update) { nav.navigate(it) } }
+        // Ponto's view model lives with the home entry: the home sheet and the Ponto screen share one pending attempt.
+        val homeEntry: (androidx.navigation.NavBackStackEntry) -> androidx.navigation.NavBackStackEntry = { nav.getBackStackEntry("home") }
+        composable("home") { entry -> HomeScreen(hiltViewModel(), hiltViewModel(entry), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
         composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back, onPrepareBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
@@ -153,10 +155,13 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
-        composable("time") { TimeScreen(hiltViewModel(), back, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
-        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time") { entry -> TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back,
+            onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time/register") { entry -> TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back, startConfirming = true,
+            onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
         composable("time/day/{date}", arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
-            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"), onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
+            TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back, startDayDetail = entry.arguments?.getString("date"),
+                onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
         }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
@@ -171,7 +176,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
 }
 @Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit, onDetails: (String) -> Unit) {
     val options = today.timeOptions
-    val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
+    val unitId = TimeRules.punchUnitId(options, today.timeShift) ?: today.timeShift?.unitId
     val zone = TimeRules.unitZone(options, unitId)
     var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)) }
     LaunchedEffect(today.timeClockOffset) {
@@ -203,13 +208,17 @@ private fun installUpdate(context: android.content.Context, file: File) {
         if (showTime) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
                 style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-            val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
-            // Only the unit and the hours, each in its own pill; the shift name stays in the schedule.
+            val unitName = (options?.executionUnits?.firstOrNull { it.id == unitId }?.name ?: today.shiftUnit)
+                ?.let { if (TimeRules.unitPickable(options, today.timeShift)) "Unidade prevista: $it" else it }
             val hours = TimeRules.shiftHours(today.timeShift)
             if (!unitName.isNullOrBlank() || hours != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 unitName?.takeIf { it.isNotBlank() }?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f), Modifier.weight(1f, fill = false)) }
                 hours?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f)) }
             }
+            if (TimeRules.scheduledUnitOutside(options, today.timeShift)) Text("Escala em ${today.timeShift?.unitName ?: "outra unidade"}, fora das unidades do seu vínculo. Confira a unidade ao bater.",
+                color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
+            if (local) Text(if (options?.officialClock?.available == false) "Hora Legal indisponível. Sua batida será preservada neste aparelho."
+                else "Sem internet. Sua batida será preservada neste aparelho.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
@@ -253,12 +262,12 @@ private fun installUpdate(context: android.content.Context, file: File) {
             (0 until slots).forEach { index ->
                 val done = punches.getOrNull(index)
                 val next = done == null && index == punches.size
-                val label = when { index == 0 -> "Início"; index == slots - 1 && planned.isNotEmpty() -> "Fim"; index % 2 == 1 -> "Intervalo"; else -> "Volta" }
+                val label = TimeRules.slotLabel(index, slots, planned.isNotEmpty(), done?.purpose ?: nextPurpose.takeIf { next && planned.isEmpty() })
                 Column(Modifier.weight(1f).background(if (next) Tokens.pink.copy(alpha = .12f) else Tokens.onDark.copy(alpha = .06f), RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(done?.time ?: planned.getOrNull(index) ?: "—", color = when { done != null -> Tokens.onDark; next -> Tokens.pink; else -> Tokens.onDark4 },
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-                    Text(if (next) "Próxima" else label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
+                    Text(label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
                 }
             }
         }
@@ -275,9 +284,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
         }
         }
         Spacer(Modifier.height(5.dp))
-        if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
-            Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
-                style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
         Action("Registrar ponto", dark = true, onClick = onRecord)
     }
@@ -288,7 +294,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
-@Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
+@Composable private fun HomeScreen(vm: HomeViewModel, timeVm: TimeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle(); val release by update.release.collectAsStateWithLifecycle()
     val updateFeedback by update.feedback.collectAsStateWithLifecycle()
@@ -328,6 +334,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
+    var punching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
     Page("Início", feedback.copy(error = feedback.error?.takeUnless { it.startsWith("Sem conexão.") }), onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, showConnectivityNotice = false, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
@@ -347,13 +354,21 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Action("Baixar atualização", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
-        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate)
+        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate) {
+            if (developerViewAs.targetUserId == null) punching = true else navigate("time/register")
+        }
+        state?.modules?.let { modules ->
+            if (punching) PunchSheet(timeVm, onOpenTime = { navigate("time") }) {
+                punching = false
+                vm.loadToday(modules, goalUnit, dataOwner, force = true)
+            }
+        }
     }
 }
 @Composable internal fun HomeModuleContent(modules: Modules?, visibleToday: HomeToday, visiblePendingCount: Int,
-    navigate: (String) -> Unit) {
+    navigate: (String) -> Unit, onRecord: () -> Unit = { navigate("time/register") }) {
     modules ?: return
-    if (modules.timeRecording) HomeTimeSummary(visibleToday, { navigate("time/register") }) { date -> navigate("time/day/$date") }
+    if (modules.timeRecording) HomeTimeSummary(visibleToday, onRecord) { date -> navigate("time/day/$date") }
     val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
     if (journey.isNotEmpty()) {
         Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
