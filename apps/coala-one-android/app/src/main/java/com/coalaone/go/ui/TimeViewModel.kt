@@ -30,6 +30,7 @@ import javax.inject.Inject
 
 data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = null, val clockSource: ClockSource = ClockSource.NONE, val unitId: String? = null,
     val today: LocalDate = LocalDate.now(), val month: YearMonth = YearMonth.now(), val markings: List<OwnMarking> = emptyList(), val shifts: List<OwnShift> = emptyList(),
+    val automaticAbsences: Set<String> = emptySet(),
     val adjustments: List<Adjustment> = emptyList(), val treatments: List<Treatment> = emptyList(), val truncated: Boolean = false, val last: MarkingResponse? = null, val sentAdjustment: Adjustment? = null,
     val bank: TimeBankResponse? = null, val bankDate: String? = null, val mirror: MirrorStatus? = null, val mirrorCompetence: String? = null,
     val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
@@ -183,6 +184,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         mutable.update { current -> current.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset),
             today = LocalDate.now(), month = YearMonth.from(date), monthDataAvailable = true, markings = markings.markings,
             truncated = markings.truncated || monthReads.any { it.truncated }, shifts = monthReads.flatMap { it.shifts },
+            automaticAbsences = monthReads.flatMap { it.automaticAbsences }.toSet(),
             adjustments = adjustmentReads.flatMap { it.adjustments }, treatments = adjustmentReads.flatMap { it.treatments },
             bank = null, bankDate = null) }
         // Punches and treatments are useful by themselves; a bank outage must not blank the direct detail.
@@ -215,6 +217,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         mutable.update { current ->
             val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
+                automaticAbsences = shifts.automaticAbsences.toSet(),
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments,
                 // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.
                 unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
