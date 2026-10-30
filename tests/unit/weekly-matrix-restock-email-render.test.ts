@@ -36,7 +36,7 @@ test('compra mostra estoque, mínimo, falta e pedido agrupados por fornecedor', 
   const html = renderEmail(rows, now, url);
   assert.match(html, /Distribuidora Norte <span[^>]*>· 1 item<\/span>/);
   assert.match(html, /Leite integral[\s\S]*?Marca A · 1 l[\s\S]*?12 \/ 60 l[\s\S]*?48 l[\s\S]*?4 cx c\/ 12/);
-  assert.match(html, new RegExp(`href="${url}"`));
+  assert.ok(html.includes(`href="${url}"`));
 });
 
 test('compra a caminho mostra fornecedor, previsão, atraso e cobertura', () => {
@@ -61,5 +61,5 @@ test('versão em texto puro repete as mesmas informações', () => {
   assert.match(text, /Segunda-feira, 2 de novembro, calculado às 08:00/);
   assert.match(text, /- Leite integral \(Marca A · 1 l\): tem 12 \/ mín\. 60 l · comprar 48 l · pedir 4 cx c\/ 12/);
   assert.match(text, /- Canudo: Embalagens Pará · 1 caixa · previsão 28\/10 \(atrasada\) · cobre a falta/);
-  assert.match(text, new RegExp(`Abrir no Coala One: ${url}`));
+  assert.ok(text.includes(`Abrir no Coala One: ${url}`));
 });
