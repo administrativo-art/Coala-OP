@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **527 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **529 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -47,6 +47,8 @@ Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/assets/[assetId]/audits/upload` | POST | [src/app/api/assets/[assetId]/audits/upload/route.ts](../../src/app/api/assets/%5BassetId%5D/audits/upload/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/custody-transfers` | POST | [src/app/api/assets/[assetId]/custody-transfers/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/custody-transfers/[transferId]/term` | POST | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/%5BtransferId%5D/term/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/custody-transfers/[transferId]/term/file` | GET | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/%5BtransferId%5D/term/file/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/custody-transfers/list` | GET | [src/app/api/assets/[assetId]/custody-transfers/list/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/list/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/history` | GET | [src/app/api/assets/[assetId]/history/route.ts](../../src/app/api/assets/%5BassetId%5D/history/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/maintenance-occurrences` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/%5BoccurrenceId%5D/route.ts) | [assets](flows/assets.md) |
