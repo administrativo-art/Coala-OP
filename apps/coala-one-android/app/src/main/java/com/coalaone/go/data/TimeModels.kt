@@ -62,7 +62,7 @@ import kotlinx.serialization.Serializable
     val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val breakMinPauseMinutes: Int? = null,
     val toleranceMinutes: Int? = null, val expectedPunches: Int? = null,
     val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "punch_only", val unitTimeZone: String? = null)
-@Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val truncated: Boolean = false)
+@Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val automaticAbsences: List<String> = emptyList(), val truncated: Boolean = false)
 
 /** Privacy-separated journey trail. It never changes a punch, NSR, receipt, AFD or payroll result. */
 @Serializable data class JourneyLocationEvent(val eventId: String, val sessionId: String, val workDate: String,

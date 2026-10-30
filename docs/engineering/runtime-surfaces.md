@@ -48,6 +48,8 @@ As URLs desses disparadores são configuração: a correspondência indicada dev
 
 [Acompanhamento das vigências](flows/people-access.md): a função agendada `operationalFollowUpJob` (a cada 15 minutos, America/Belem) chama [`POST /api/jobs/users/operational-follow-up`](../../src/app/api/jobs/users/operational-follow-up/route.ts) com `SYSTEM_NOTICES_JOB_SECRET`. A rota consulta só `users` com `operationalFollowUpPending == true` (até 20), marcados por `activateCollaboratorPeriods` quando uma vigência agendada muda `unitIds`; recalcula `assignedKioskIds` e, com acesso ao PDV ligado, move/clona/remove acessos no PDV Legal das unidades alteradas. Cinco falhas seguidas param a pendência com `operationalFollowUpError`.
 
+`automaticAbsenceJob` roda de hora em hora, no minuto 35, e chama `POST /api/jobs/dp/time-recording/automatic-absences` com o mesmo segredo interno. A rota registra de forma idempotente a falta injustificada vencida 24 horas após o fim do turno e conserva o registro quando uma solicitação posterior substitui seu efeito.
+
 ## Webhooks e consumidores
 
 | Entrada | Autenticação observada | Dados e consumidores / limite |
