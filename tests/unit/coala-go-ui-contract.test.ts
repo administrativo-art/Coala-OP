@@ -212,9 +212,9 @@ test('Detalhe do dia é único e o acompanhamento entre unidades respeita iníci
   assert.match(journeyLocationService, /abortTracking\(\)/);
   assert.match(journeyLocationQueue, /vault\.seal/);
   assert.match(journeyLocationQueue, /response\.stopRequested/);
-  assert.match(journeyLocationQueue, /controller\.stopFromServer\(\)/);
+  assert.match(journeyLocationQueue, /controller\.stopFromServer\(first\.sessionId\)/);
   assert.match(journeyLocationQueue, /NetworkType\.CONNECTED/);
-  assert.match(journeyLocationQueue, /setInitialDelay\(15, TimeUnit\.MINUTES\)/);
+  assert.match(journeyLocationQueue, /setInitialDelay\(if \(event\.eventType == "stop"\) 0 else 15, TimeUnit\.MINUTES\)/);
   assert.doesNotMatch(time, /POST_NOTIFICATIONS/);
 });
 
