@@ -33,7 +33,7 @@ const postContract = defineSecurityContract({ schemaVersion: 1, id: 'mobile.corp
   effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized', additionalGuarantees: ['control:mobile-app-attested'] });
 
 const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { installationId: string }, Resource>({
-  id: 'mobile-corporate-device-read-own-v1', guarantees: ['authenticated-user', 'active-user', 'owner-checked', 'input-validated', 'control:mobile-app-attested'],
+  id: 'mobile-corporate-device-read-own-v1', guarantees: ['authenticated-user', 'active-user', 'owner-checked', 'input-validated', 'fields-allowlisted', 'control:mobile-app-attested'],
   async enforce({ request }) { const current = await actor(request); const raw = Object.fromEntries(request.nextUrl.searchParams.entries());
     const parsed = querySchema.safeParse(raw); if (!parsed.success) throw new AppError({ code: 'CORPORATE_DEVICE_QUERY_INVALID', kind: 'VALIDATION' });
     return { actor: current, input: parsed.data, resource: { ownerId: current.decoded.uid } }; },
