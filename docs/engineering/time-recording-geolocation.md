@@ -18,15 +18,21 @@
 
 A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no banco dedicado `coala-rep-p`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
 
-## Complemento Entre unidades — implementado e não ativado
+## Complemento Entre unidades — implementado, desativado e arquivado
 
-A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. O backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão é falso, além da política nominal da unidade. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`.
+A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. Em 30/10 o recurso contínuo foi retirado da implantação atual e [arquivado para exploração futura](../planos/plano-monitoramento-continuo-celular-empresarial.md). O backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão deve permanecer falso, além da política nominal da unidade. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`.
 
-Quando e somente quando todos os gates forem aprovados, o Android poderá manter um serviço em primeiro plano durante a jornada, com amostras periódicas no intervalo operacional definido. A pessoa recebe a explicação antes da permissão contextual; o aplicativo não pede localização ao abrir. O ciclo começa após a finalidade declarada `Início da jornada`, pausa em `Início do intervalo`, retoma em `Volta do intervalo` e encerra em `Fim da jornada`, por ação manual sempre disponível, por revogação da política ou por limite de segurança. Alterar uma classificação reconcilia o ciclo; uma sequência ambígua encerra a coleta. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
+Quando e somente quando todos os gates forem aprovados, o Android poderá manter um serviço em primeiro plano durante a jornada, com amostras periódicas no intervalo operacional definido. A instalação existente pede uma única vez a permissão foreground ao abrir Ponto; concedê-la não inicia coleta. O ciclo contínuo arquivado só poderia começar após a finalidade declarada `Início da jornada`, pausar no intervalo e encerrar no fim, sempre sujeito a nova decisão de produto e jurídica. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
 
 O servidor é a autoridade da sessão: exige fuso brasileiro explícito na unidade, congela fuso, início e fim escalados, aceita chegada antecipada somente dentro da janela limitada de quatro horas, encerra a tolerância duas horas após o turno, rejeita amostras fora da janela, ordenação invertida, amostra sem início ou durante pausa e qualquer evento depois do encerramento. Cada lote revalida a política. Revogação ou kill switch devolvem instrução terminal: o Android interrompe sensores e indicador sem enfileirar outro evento e elimina os eventos posteriores daquela sessão. Sessões e eventos ficam separados em `dp_journeyLocationSessions` e `dp_journeyLocationEvents`, fora da ARP/PTRP, e só podem apoiar revisão humana.
 
 Antes de mudar o gate para verdadeiro, concluir e publicar: cláusula LGPD e aditivo dos atuais; finalidade específica e base legal já decididas; frequência efetiva; retenção de cinco anos; aviso e transparência; acesso pelo titular; perfis de consulta e auditoria; eliminação e `legalHold`; canal de contestação; RIPD; configuração dos turnos reais; e ensaio em aparelho físico. Até isso ocorrer, telas e contratos podem demonstrar a opção, mas nenhuma coleta periódica real deve iniciar.
+
+## Área da unidade separada da coleta (29/10/2026)
+
+Decisão do programador: toda unidade cadastrada deve ter a sua área, independentemente de a coleta estar ligada. Em **Unidades › unidade › Localização da unidade** o modal tem duas partes: **Onde fica a unidade** (latitude, longitude e raio; aceita colar o endereço completo de um lugar do Google Maps ou as coordenadas, usando o pino do lugar e não o centro da tela; o link curto precisa ser aberto antes) e **Coleta no registro de ponto** (modo, precisão, aviso, base jurídica, participantes e confirmação). Com a coleta **Desligada**, a área é salva sozinha, sem campos de privacidade, e nenhuma posição é pedida. O armazenamento continua em `repP_locationPolicies` no banco do REP-P (a política é lida na mesma transação da marcação); `dp_units` segue sem coordenadas.
+
+Depois de a batida ser aceita, a classificação nominal compara a leitura com as áreas do workspace em páginas de 50 políticas e grava o nome da área que contém a posição. Essa derivação é best effort: falha ou 500 áreas ou mais preserva a evidência original sem nome e nunca afeta a batida. Para `U` áreas e `P` batidas capturadas, o custo adicional máximo normal é aproximadamente `U × P` leituras de política, mais uma leitura da unidade quando houver correspondência. Antes de ampliar muito o número de unidades, substituir a varredura por um diretório espacial versionado.
 
 ## Objetivo e decisão principal
 
@@ -62,7 +68,7 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 - geocodificação reversa de cada batida;
 - inclusão de coordenadas no AFD, AEJ, comprovante, e-mail, push ou aviso do sistema;
 - promessa de prevenção de fraude: a posição informada pelo cliente pode ser simulada;
-- coordenada no modo off-line: a fila atual assina a batida, não a posição; ao sincronizar, a evidência registra `unavailable` sem aceitar coordenada não vinculada à assinatura do aparelho.
+- coordenada no modo off-line: a fila atual assina a batida, não a posição; ao sincronizar, não cria evidência geográfica.
 
 ## Regras de produto
 
@@ -77,6 +83,8 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 9. Coordenadas exatas não aparecem em listas, logs, métricas ou mensagens. Elas são carregadas somente no detalhe autorizado.
 10. A ativação em pessoas reais depende do aviso/cláusula, lista nominal do piloto, parâmetros da unidade e gates jurídicos documentados.
 11. Uma política ausente ou corrompida desliga apenas a coleta; nunca derruba a batida.
+12. O resultado aparece somente no detalhe do dia e apenas quando a própria evidência registra que o gate do turno estava em `punch_only|workday` no instante da batida. Evidência legada sem essa prova permanece oculta; editar hoje a definição do turno não muda dias passados.
+13. Turnos atuais e legados sem valor explícito resolvem `locationTrackingPolicy=disabled`. A política da unidade não é suficiente para iniciar coleta; o servidor exige também `punch_only` no turno da data. A permissão Android pode permanecer concedida ao Coala Go sem que isso autorize uma leitura fora dessas condições.
 
 ## Arquitetura implementada localmente
 
@@ -112,7 +120,7 @@ As políticas e as evidências ficam no `coala-rep-p`, que recebe a transação 
 
 ## Modelo de política
 
-O desenho inicial abaixo é histórico. A implementação consolidou cabeçalho e estado atual em `repP_locationPolicies/{hash(workspaceId, unitId)}` e grava cada versão nas subcoleções `revisions` e `audit`. O contrato executável está em `location-policy.server.ts`: uma área circular, modos `disabled|observe`, lista nominal de até 20 participantes, aviso HTTPS, referência jurídica e retenção fixa de 1.825 dias.
+O desenho inicial abaixo é histórico. A implementação consolidou cabeçalho e estado atual em `repP_locationPolicies/{hash(workspaceId, unitId)}` e grava cada versão nas subcoleções `revisions` e `audit`. O contrato executável está em `location-policy.server.ts`: uma área circular, modos `disabled|observe`, lista nominal de até 20 participantes, referência jurídica e retenção fixa de 1.825 dias. O campo legado `privacyNoticeUrl` continua aceito como nulo por compatibilidade, mas não é exibido nem exigido: a seção 3-A do termo LGPD v5 é a fonte documental única.
 
 ### Cabeçalho ativo — proposta histórica substituída
 
@@ -222,7 +230,7 @@ Validação mínima do servidor:
 - `elapsedMs` entre zero e 60 segundos;
 - marcação offline não aceita `locationAttempt`, pois a assinatura local ainda não cobre a coordenada.
 
-O status de falha é uma declaração do cliente e deve ser armazenado como tal. O servidor não consegue provar que o usuário negou a permissão nem que o sensor estava indisponível.
+O status de falha recebido numa marcação on-line é uma declaração do cliente e deve ser armazenado como tal. O servidor não consegue provar que o usuário negou a permissão nem que o sensor estava indisponível. Na sincronização offline atual não nasce evidência `unavailable`: o permit não assina localização, portanto a batida é preservada sem tentativa geográfica.
 
 ### Resposta da marcação
 
@@ -401,7 +409,7 @@ O primeiro incremento pode aceitar latitude e longitude e oferecer `Usar minha l
 
 O aplicativo Android usa o mesmo contrato e o canal `mobile`. A implementação local:
 
-- solicitar permissão somente quando a pessoa abrir a confirmação;
+- solicitar a permissão foreground uma única vez na primeira abertura de Ponto após a atualização; concedê-la não inicia coleta, e a leitura continua condicionada ao turno e à unidade;
 - tratar permissão precisa, aproximada, negada temporariamente e negada permanentemente;
 - preservar o payload da tentativa em armazenamento local até a resposta;
 - preserva a atestação já disponível do aplicativo como contexto separado;
@@ -478,7 +486,7 @@ Falha ao interpretar uma captura válida ou política inconsistente não deve se
 - política: leitura por ID determinístico, sem consulta composta;
 - evidência: ID determinístico igual ao evento e TTL em `expiresAt`; consulta da candidata por pessoa/workspace/unidade/dia, com limite e cursor de ID.
 
-No volume de referência de 50 pessoas, quatro batidas por dia e 26 dias, são cerca de 5.200 batidas mensais. Para participantes de unidade ativa, a solução acrescenta uma leitura de política e uma escrita de evidência por batida. Com evidências entre 0,8 e 1,5 KiB, o crescimento esperado é de aproximadamente 4 a 8 MiB por mês, antes de índices, backups e PITR.
+No volume de referência de 50 pessoas, quatro batidas por dia e 26 dias, são cerca de 5.200 batidas mensais. Para participantes de unidade ativa, a solução acrescenta a leitura transacional da política, uma escrita de evidência e, para nomear a unidade física, uma leitura de cada área cadastrada no workspace mais uma leitura do cadastro quando houver correspondência. Com `U` áreas e `P` capturas, essa derivação custa aproximadamente `U × P` leituras; com 20 áreas e 5.200 capturas, cerca de 104 mil leituras adicionais/mês. Com evidências entre 0,8 e 1,5 KiB, o crescimento esperado é de aproximadamente 4 a 8 MiB por mês, antes de índices, backups e PITR.
 
 Não há cobrança de API para `navigator.geolocation` nem para Haversine local. Um mapa de configuração é opcional. Os custos do Firestore dependem da região, backups e banco elegível à franquia; devem ser medidos no projeto, conforme a [documentação oficial de cobrança](https://firebase.google.com/docs/firestore/pricing), sem transformar esta estimativa em orçamento garantido.
 

@@ -323,7 +323,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         auth.current?.uid?.let { uid ->
             timeSummaryUpdates.recorded(uid, OwnMarking(result.receiptId, pending.second, result.marking.nsr,
                 result.marking.markedAt, result.marking.executionUnitId, "01", result.receiptStatus,
-                result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot))
+                result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot,
+                result.location?.let { MarkingLocation(it.evaluation) }))
         }
         updateJourneyLocation(state, pending.second, result.marking.executionUnitId, selectedPurpose)
         if (auth.current?.uid == owner) mutable.value.options?.let { refreshPermit(it, android.os.SystemClock.elapsedRealtime()) }

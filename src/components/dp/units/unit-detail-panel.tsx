@@ -54,6 +54,7 @@ export function UnitDetailPanel({
   busy,
   onClose,
   onEdit,
+  onAddressSave,
   onRegister,
   onDetachFromGroup,
   onDelete,
@@ -69,6 +70,7 @@ export function UnitDetailPanel({
   busy: boolean;
   onClose: () => void;
   onEdit: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => void;
+  onAddressSave: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>, address: string | undefined) => Promise<void>;
   onRegister: (kioskId?: string) => void;
   onDetachFromGroup: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => void;
   onDelete: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => Promise<void>;
@@ -190,7 +192,8 @@ export function UnitDetailPanel({
 
           {dpUnit ? <PanelSection title="Registro de ponto">
             <LocationPolicyControl firebaseUser={firebaseUser} unitId={dpUnit.id} unitName={unit.name}
-              canManage={canManageTime} participants={locationParticipants} />
+              unitAddress={dpUnit.address} canManage={canManageTime} canManageAddress={canManage} participants={locationParticipants}
+              onAddressSave={(address) => onAddressSave(dpUnit, address)} />
           </PanelSection> : null}
 
           {canManage ? (
