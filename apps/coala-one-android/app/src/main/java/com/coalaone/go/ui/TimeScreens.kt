@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -167,7 +166,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 }
 
 /** Numbered sequence of a day: the order suggests the kind; struck lines were discarded by the DP, tagged ones included. */
-@Composable private fun PunchList(punches: List<DayPunch>, enabled: Boolean, units: List<ExecutionUnit> = emptyList(), onReceipt: (DayPunch) -> Unit) {
+@Composable private fun PunchList(punches: List<DayPunch>, enabled: Boolean, units: List<ExecutionUnit> = emptyList(),
+    onReceipt: (DayPunch) -> Unit, showLocation: Boolean = false) {
     var position = 0
     punches.forEachIndexed { punchIndex, punch ->
         val index = if (punch.discarded) null else position++
@@ -180,6 +180,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 Text(punch.time, style = MaterialTheme.typography.titleMedium.copy(textDecoration = if (punch.discarded) TextDecoration.LineThrough else null), color = if (punch.discarded) Tokens.faint else Tokens.ink)
                 val unitName = units.firstOrNull { it.id == punch.unitId }?.name
                 Text(listOfNotNull(when { punch.discarded -> "Desconsiderada pelo DP"; punch.included -> "Incluída por ajuste aprovado pelo DP"; else -> TimeRules.purposeLabel(punch.purpose) }, unitName).joinToString(" · "), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                if (showLocation) punch.location?.let { location -> Text(location.physicalUnitName ?: when (location.evaluation) {
+                    "inside" -> "Na unidade"
+                    "outside" -> "Fora da área" + (location.distanceMeters?.let { " · ~${it.toInt()} m" } ?: "")
+                    else -> "Localização não confirmada"
+                }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted, style = MaterialTheme.typography.bodySmall) }
             }
             when {
                 punch.receiptId == null -> Unit
@@ -358,7 +363,20 @@ private fun breakColors(level: BreakLevel) = when (level) {
         if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true || result[Manifest.permission.ACCESS_COARSE_LOCATION] == true) captureAndRecord()
         else declaredPurpose?.let { vm.record(true, failedLocationAttempt(status = "denied"), it) }
     }
-    val journeyLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    // Preparação única do aparelho: a permissão permanece concedida ao Coala Go, mas só há leitura quando a
+    // configuração do turno e da unidade mandar coletar na batida. Negar não bloqueia o ponto nem repete ao abrir.
+    val locationPermissionPreferences = remember { context.getSharedPreferences("point-location-permission", Context.MODE_PRIVATE) }
+    var locationPermissionPrepared by remember { mutableStateOf(hasPointLocationPermission(context)
+        || locationPermissionPreferences.getBoolean("requested", false)) }
+    val preparationLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    fun prepareLocationPermission() {
+        locationPermissionPrepared = true
+        locationPermissionPreferences.edit().putBoolean("requested", true).apply()
+        preparationLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+    LaunchedEffect(section, locationPermissionPrepared) {
+        if (section == "today" && !locationPermissionPrepared && !hasPointLocationPermission(context)) prepareLocationPermission()
+    }
     fun markedAtOf(punch: DayPunch) = state.markings.firstOrNull { it.receiptId == punch.receiptId }?.markedAt ?: today
     receipt?.let { (punch, markedAt) -> ReceiptSheet(punch, markedAt, vm) { receipt = null } }
     if (selectedMirror) FileSheet("Espelho de ponto", "Competência ${state.month} · versão ${state.mirror?.closure?.version ?: "—"}",
@@ -422,14 +440,6 @@ private fun breakColors(level: BreakLevel) = when (level) {
                 color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             else if (preserving) Text(if (pilotMode) "Este é um ensaio. Ele será salvo neste aparelho e enviado automaticamente quando possível."
                 else "Seu ponto será salvo neste aparelho e enviado automaticamente quando possível.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (pending == null && !preserving && locationPolicy.mode != "disabled") {
-                Text("Ao confirmar, o Coala Go fará uma leitura pontual de localização apenas para esta batida. O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade.",
-                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                locationPolicy.privacyNoticeUrl?.let { url ->
-                    TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
-                        enabled = !screenBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Aviso de privacidade", color = Tokens.wine) }
-                }
-            }
             val purpose = lockedPurpose ?: declaredPurpose
             FooterPair("Voltar", !screenBusy, { confirming = false }, when {
                 pending != null -> "Reenviar batida"
@@ -471,10 +481,6 @@ private fun breakColors(level: BreakLevel) = when (level) {
     }) {
         if (section == "today") {
             OfficialClockCard(state, online)
-            if (todayShift?.assignmentKind == "external_coverage" && todayShift.unitId != null && units.any { it.id == todayShift.unitId }) CardBlock {
-                Text("Escala excepcional", style = MaterialTheme.typography.titleMedium)
-                Text("Você foi escalado excepcionalmente para ${todayShift.unitName ?: "esta unidade"} nesta data.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            }
             // The scheduled unit is not repeated here (the clock card already names the unit of the punch); only the blocker stays.
             if (todayShift?.unitId != null && todayShift.unitId != state.unitId && units.none { it.id == todayShift.unitId }) CardBlock {
                 Text("A unidade da escala não está liberada para este dia. Peça ao DP para conferir o vínculo ou registrar a cobertura nesta escala.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
@@ -487,7 +493,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
                         locationPolicy.mode != "observe" -> Text("Acompanhamento durante a jornada configurado no turno, aguardando a política central desta unidade.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                         !hasPointLocationPermission(context) -> {
                             Text("Se você permitir, a localização será registrada periodicamente durante a jornada entre unidades, pausada no intervalo e encerrada no fim. Isso não bloqueia o ponto.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                            Action("Permitir localização", secondary = true) { journeyLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+                            Action("Permitir localização", secondary = true) { prepareLocationPermission() }
                         }
                         !deviceLocationEnabled(context) -> {
                             Text("A localização do aparelho está desligada. O ponto continua disponível.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
@@ -506,12 +512,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
                     Action("Encerrar acompanhamento", secondary = true) { vm.stopJourneyLocation() }
                 }
             }
-            breakStatus?.let { status ->
-                when {
-                    status.inPause -> BreakTimerPill(status)
-                    status.level != BreakLevel.OK -> BreakNoticeCard(status)
-                }
-            }
+            breakStatus?.takeIf { it.inPause }?.let { BreakTimerPill(it) }
             // One block for the reason and the contingency issue, instead of two stacked warnings.
             val blocked = if (!online && !state.offlineReady) "Conecte-se à internet para registrar o ponto."
                 else TimeRules.blockedReason(state.options, state.offlineReady)
@@ -534,10 +535,6 @@ private fun breakColors(level: BreakLevel) = when (level) {
                 Text("Deseja encerrar o acompanhamento deste ciclo? Isso conclui apenas os avisos e o resumo; uma nova batida continua sempre disponível.",
                     color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 FooterPair("Deixar em aberto", !feedback.busy, { vm.deferJourneyClosure() }, "Encerrar agora", !feedback.busy) { vm.closeJourneyCycle(today) }
-            } else if (declaredJourneyEnd && !cycleClosed) CardBlock(selected = true) {
-                Text("Fim da jornada registrado", style = MaterialTheme.typography.titleMedium)
-                Text("O ciclo continua aberto. Você pode encerrá-lo agora ou registrar outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                Action("Encerrar ciclo", secondary = true, enabled = !feedback.busy) { vm.closeJourneyCycle(today) }
             } else if (cycleClosed) CardBlock(selected = true) {
                 Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
                 Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -554,13 +551,6 @@ private fun breakColors(level: BreakLevel) = when (level) {
                     Text("${if (last.pilot) "Ensaio registrado" else "Ponto registrado"} · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
                     Text("${if (last.pilot) "Sequência do ensaio" else "Registro oficial"} ${last.marking.nsr} · ${units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                     if (last.pilot) Text("Teste sem validade como REP-P e fora do fechamento oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                    last.location?.let { location -> Text(when (location.evaluation) {
-                        "inside" -> "Localização compatível com a unidade."
-                        "outside" -> "Localização indicada fora da área da unidade; o ponto foi registrado normalmente."
-                        "indeterminate" -> "Não foi possível confirmar a localização; o ponto foi registrado normalmente."
-                        else -> "Localização não solicitada para esta unidade."
-                    }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
-                        style = MaterialTheme.typography.bodySmall) }
                     if (last.receiptStatus != "available") Text("Comprovante em emissão. Ele aparece no detalhe do dia.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -1027,7 +1017,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         TimeRules.breakStatus(shift, state.markings.filter { it.workDate == workDate }, detailNow, TimeRules.unitZone(state.options, state.unitId))
             ?.takeIf { it.level != BreakLevel.NEUTRAL }?.let { BreakNoticeCard(it) }
         HorizontalDivider(color = Tokens.border)
-        if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
+        if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt, showLocation = true)
     }
     CardBlock(selected = focus == "bank") {
         Text("Memória de cálculo", style = MaterialTheme.typography.titleMedium)

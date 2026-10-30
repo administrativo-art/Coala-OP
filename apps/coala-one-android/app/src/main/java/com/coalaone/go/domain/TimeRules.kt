@@ -12,7 +12,7 @@ import java.util.UUID
 
 /** One line of a day's sequence: an original punch, a punch the DP discarded, or one it included. */
 data class DayPunch(val time: String, val nsr: Long?, val receiptId: String?, val receiptStatus: String?, val discarded: Boolean = false, val included: Boolean = false, val unitId: String? = null,
-    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false)
+    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false, val location: MarkingLocation? = null)
 
 enum class BreakLevel { NEUTRAL, INFO, WARN, DANGER, OK }
 data class BreakStatus(val level: BreakLevel, val headline: String, val detail: String?, val usedMinutes: Int,
@@ -501,7 +501,7 @@ object TimeRules {
         val ofDay = treatments.filter { it.workDate == date }
         val discarded = ofDay.filter { it.type == "discard" }.mapNotNull { it.originalReceiptId }.toSet()
         val originals = markings.filter { it.workDate == date }.map { DayPunch(minuteOf(it.markedAt), it.nsr, it.receiptId, it.receiptStatus, discarded = it.receiptId in discarded, unitId = it.executionUnitId,
-            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt, pilot = it.pilot) }
+            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt, pilot = it.pilot, location = it.location) }
         val included = ofDay.filter { it.type == "inclusion" && it.markedAt != null }.map { DayPunch(minuteOf(it.markedAt!!), null, null, null, included = true, unitId = it.executionUnitId, markedAt = it.markedAt) }
         return (originals + included).sortedWith(compareBy<DayPunch> { instantOf(it) ?: java.time.Instant.MAX }.thenBy { it.time })
     }
