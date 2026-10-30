@@ -46,8 +46,8 @@ const BREAK_TONE: Record<BreakLevel, string> = {
   neutral: "border-white/10 bg-white/[0.04] text-ds-on-dark-2",
   info: "border-ds-info/40 bg-ds-info/15 text-white",
   warn: "border-ds-caution-border/40 bg-ds-caution-tile/15 text-ds-caution-tile",
-  danger: "border-ds-trouble-border/50 bg-ds-danger/20 text-ds-trouble-bg",
-  ok: "border-ds-ok-bg/30 bg-ds-ok/15 text-ds-ok-bg",
+  danger: "border-ds-on-dark-danger/30 bg-ds-danger/20 text-ds-on-dark-danger",
+  ok: "border-ds-on-dark-ok/30 bg-ds-ok/15 text-ds-on-dark-ok",
 };
 
 function modalityKey(shift: DayShift) {
