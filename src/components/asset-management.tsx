@@ -244,6 +244,11 @@ async function uploadAuditPhoto(file: File, assetId: string) {
   return payload as { storagePath: string; contentHash: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; size: number };
 }
 
+const ACQUISITION_STATUS_LABEL: Record<string, string> = { confirmed: 'Confirmado', pending: 'Pendente', received: 'Recebido', cancelled: 'Cancelado' };
+function formatAcquisitionDate(value: unknown) {
+  const date = typeof value === 'string' ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
+}
 const SUMMARY_LABEL = 'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground';
 const ASSET_CONDITION_LABEL: Record<string, string> = { new: 'Novo', good: 'Bom', regular: 'Regular', poor: 'Ruim', critical: 'Crítico' };
 const ASSET_OPERATIONAL_LABEL: Record<string, string> = { operational: 'Operacional', restricted: 'Operação restrita', stopped: 'Parado' };
@@ -1631,10 +1636,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     </div>
                     {asset.sourceType === 'purchase_receipt' ? (
                       acquisitionStatus === 'forbidden' ? <p className="mb-4 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">Os detalhes comerciais da aquisição exigem permissão de Compras.</p> : acquisitionStatus === 'error' ? <p className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">Não foi possível carregar os detalhes da aquisição.</p> : acquisitionModel ? (
-                        <div className="mb-4 grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-3">
-                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Pedido</p><p className="mt-1 text-sm font-medium">{String(acquisitionModel.order?.number ?? acquisitionModel.order?.id ?? '—')}</p><p className="text-xs text-muted-foreground">{String(acquisitionModel.order?.status ?? '')}</p></div>
-                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Recebimento</p><p className="mt-1 text-sm font-medium">{String(acquisitionModel.receipt?.number ?? acquisitionModel.receipt?.id ?? '—')}</p><p className="text-xs text-muted-foreground">{String(acquisitionModel.receipt?.receivedAt ?? '')}</p></div>
-                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Item recebido</p><p className="mt-1 text-sm font-medium">{String(acquisitionModel.item?.description ?? '—')}</p><p className="text-xs text-muted-foreground">Qtd. {String(acquisitionModel.item?.quantity ?? '—')} · {formatCurrency(Number(acquisitionModel.item?.unitPrice ?? 0))}</p></div>
+                        <div className="mb-4 grid gap-4 rounded-md border bg-muted/30 p-3 sm:grid-cols-3 [&>div]:min-w-0">
+                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Pedido</p><p className="mt-1 break-all text-sm font-medium" title={String(acquisitionModel.order?.number ?? acquisitionModel.order?.id ?? '')}>{String(acquisitionModel.order?.number ?? acquisitionModel.order?.id ?? '—')}</p><p className="text-xs text-muted-foreground">{ACQUISITION_STATUS_LABEL[String(acquisitionModel.order?.status ?? '')] ?? String(acquisitionModel.order?.status ?? '')}</p></div>
+                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Recebimento</p><p className="mt-1 break-all text-sm font-medium" title={String(acquisitionModel.receipt?.number ?? acquisitionModel.receipt?.id ?? '')}>{String(acquisitionModel.receipt?.number ?? acquisitionModel.receipt?.id ?? '—')}</p><p className="text-xs text-muted-foreground">{formatAcquisitionDate(acquisitionModel.receipt?.receivedAt)}</p></div>
+                          <div><p className="text-xs font-semibold uppercase text-muted-foreground">Item recebido</p><p className="mt-1 break-words text-sm font-medium">{String(acquisitionModel.item?.description ?? 'Sem item vinculado')}</p>{acquisitionModel.item ? <p className="text-xs text-muted-foreground">Qtd. {String(acquisitionModel.item.quantity ?? '—')} · {formatCurrency(Number(acquisitionModel.item.unitPrice ?? 0))}</p> : null}</div>
                         </div>
                       ) : acquisitionStatus === 'loading' ? <Skeleton className="mb-4 h-24 w-full" /> : null
                     ) : null}
