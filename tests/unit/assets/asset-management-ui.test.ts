@@ -8,7 +8,7 @@ const collaboratorAssets = readFileSync("src/components/collaborator-assets.tsx"
 
 test("detalhe patrimonial usa as cinco etapas horizontais na ordem aprovada", () => {
   assert.match(screen, /stepper="top"/);
-  const labels = ["Identificação", "Auditoria e manutenção", "Localização e posse", "Aquisição", "Histórico geral"];
+  const labels = ["Identificação", "Auditoria e manutenção", "Local e posse", "Aquisição", "Histórico geral"];
   let cursor = -1;
   for (const label of labels) {
     const next = screen.indexOf(`label: '${label}'`, cursor + 1);
@@ -20,12 +20,14 @@ test("detalhe patrimonial usa as cinco etapas horizontais na ordem aprovada", ()
 });
 
 test("posse, movimentação, auditoria e preventiva chamam contratos separados", () => {
-  assert.match(screen, /locationAction === 'custody'/);
+  assert.match(screen, /handleCustodyTransfer/);
+  assert.match(screen, /handleChangeLocation/);
   assert.match(screen, /custody-transfers/);
   assert.match(screen, /\/movements/);
   assert.match(screen, /\/audits/);
   assert.match(screen, /maintenance-plans/);
-  assert.match(screen, /Gerar termo de entrega/);
+  assert.match(screen, /Gerar termo e iniciar a trilha/);
+  assert.match(screen, /Tirar foto agora/);
   assert.match(screen, /disabled=\{movSaving \|\| !permissions\.assets\?\.transfer\}/);
   assert.match(screen, /setLifecycleVersion\(result\.lifecycleVersion\)/);
   assert.match(screen, /refreshAssets\(\)/);
