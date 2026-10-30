@@ -545,6 +545,8 @@ Todos necessários:
 9. Transição/retorno documentados.
 10. Aprovação RH por estabelecimento.
 
+**Decisão superveniente sobre falta automática (29/10/2026):** substitui a decisão de 20/10/2026 que deixava todo dia sem batida indefinidamente “a tratar”. Dia escalado sem batida recebe falta injustificada automática 24 horas depois do fim do turno quando não existe solicitação de ausência nem ajuste de ponto. O registro automático não bloqueia pedidos posteriores: ausência ou ajuste aprovados substituem seu efeito, preservando a auditoria; pedido recusado ou cancelado mantém a falta, o desconto na folha e o registro AEJ “2”.
+
 ## 15. Pendências
 
 | Insumo/decisão | Responsável | Até |

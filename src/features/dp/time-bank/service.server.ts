@@ -10,6 +10,8 @@ import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } f
 import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
 import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
 import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
+import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from '@/features/dp/time-adjustments/automatic-absence.server';
+import { automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -101,16 +103,24 @@ async function policiesAndTarget(deps: Dependencies, uid: string) {
 /** Apuração da pessoa no mês fechado, a partir da escala, da versão da jornada, das batidas tratadas e da declaração congelada. */
 async function liveDeclaration(deps: Dependencies, workspaceId: string, competence: string, uid: string): Promise<ClosurePerson> {
   const { start, end } = competenceRange(competence);
-  const [adjustments, absences] = await Promise.all([
+  const [adjustments, absences, automaticAbsences] = await Promise.all([
     deps.hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
       .where('workDate', '>=', start).where('workDate', '<=', end).limit(201).get(),
     deps.hrDb.collection(ABSENCES).where('workspaceId', '==', workspaceId).where('beneficiaryUid', '==', uid)
       .where('startDate', '<=', end).limit(201).get(),
+    deps.hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
+      .where('workDate', '>=', start).where('workDate', '<=', end).limit(201).get(),
   ]);
-  if (adjustments.size > 200 || absences.size > 200) throw fail('PTRP_BANK_PREVIEW_TRUNCATED', 'O mês tem ocorrências demais para uma prévia segura.', 'CONFLICT');
+  if (adjustments.size > 200 || absences.size > 200 || automaticAbsences.size > 200) throw fail('PTRP_BANK_PREVIEW_TRUNCATED', 'O mês tem ocorrências demais para uma prévia segura.', 'CONFLICT');
+  const adjustmentItems = adjustments.docs.map((doc) => doc.data() as AdjustmentRecord);
+  const absenceItems = absences.docs.map((doc) => doc.data() as AbsenceRequestRecord);
+  const approvedAdjustmentDays = new Set(adjustmentItems.filter((item) => item.status === 'approved').map((item) => item.workDate));
+  const approvedAbsences = absenceItems.filter((item) => item.status === 'approved');
+  const effectiveAutomaticAbsences = automaticAbsences.docs.map((doc) => doc.data() as AutomaticAbsenceRecord)
+    .filter((item) => item.status === 'active' && !automaticAbsenceSuperseded(item.workDate, approvedAdjustmentDays, approvedAbsences));
   return {
     uid, name: null,
-    adjustments: adjustments.docs.map((doc) => doc.data() as AdjustmentRecord).filter((item) => item.status === 'approved').map((item) => ({
+    adjustments: adjustmentItems.filter((item) => item.status === 'approved').map((item) => ({
       id: item.id, workDate: item.workDate, kind: item.kind, status: item.status,
       original: item.target ? { nsr: item.target.nsr, markedAt: item.target.markedAt } : null,
       inclusion: item.inclusion ? { markedAt: item.inclusion.markedAt } : null,
@@ -119,13 +129,17 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
         inclusion: operation.inclusion ? { markedAt: operation.inclusion.markedAt } : null })), reason: item.reason,
       requestedBy: item.employeeUid, requestedAt: item.createdAt, decidedBy: item.decidedBy ?? null, decidedAt: item.decidedAt ?? null, decisionReason: null,
     })),
-    absences: absences.docs.map((doc) => doc.data() as AbsenceRequestRecord)
+    absences: [...absenceItems
       .filter((item) => item.status === 'approved' && item.endDate >= start).map((item) => ({
         id: item.id, typeName: item.typeSnapshot?.name ?? item.typeId, startDate: item.startDate, endDate: item.endDate,
         startTime: item.input?.startTime ?? null, endTime: item.input?.endTime ?? null, quantity: item.quantity, unit: item.unit,
         status: item.status, approval: item.approvalOrigin ?? 'review', decidedBy: item.decidedAt ? item.history.at(-1)?.actorUid ?? null : null,
         decidedAt: item.decidedAt ?? null, attachmentCount: item.attachments?.length ?? 0,
-      })),
+        effect: item.typeSnapshot.workdayEffect,
+      })), ...effectiveAutomaticAbsences.map((item) => ({ id: item.id, typeName: 'Falta injustificada automática',
+        startDate: item.workDate, endDate: item.workDate, startTime: null, endTime: null, quantity: 1, unit: 'day' as const,
+        status: 'approved', approval: 'automatic_timeout' as const, decidedBy: null, decidedAt: item.createdAt,
+        attachmentCount: 0, effect: 'unexcused_absence' as const, automatic: true }))],
     shiftSwaps: [],
   };
 }
@@ -155,7 +169,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
   const absenceDocs = absenceIds.length ? await deps.hrDb.getAll(...absenceIds.map((id) => deps.hrDb.collection(ABSENCES).doc(id))) : [];
   const effectById = new Map(absenceDocs.filter((doc) => doc.exists).map((doc) => [doc.id, doc.get('typeSnapshot.workdayEffect') as DPAbsenceType['workdayEffect'] | undefined]));
   const absences: BankAbsence[] = (declaration?.absences ?? []).filter((item) => item.status === 'approved').map((item) => ({
-    id: item.id, typeName: item.typeName, effect: effectById.get(item.id) ?? 'manual_review', unit: item.unit, startDate: item.startDate, endDate: item.endDate,
+    id: item.id, typeName: item.typeName, effect: item.effect ?? effectById.get(item.id) ?? 'manual_review', unit: item.unit, startDate: item.startDate, endDate: item.endDate,
     minutes: item.unit === 'hour' ? (item.startTime && item.endTime ? Math.max(0, toMinutes(item.endTime) - toMinutes(item.startTime)) : Math.round(item.quantity * 60)) : null,
   }));
   const holidays = new Set(month.holidays);

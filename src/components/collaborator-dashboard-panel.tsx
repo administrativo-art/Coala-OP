@@ -580,7 +580,7 @@ function TimelineRail({ time, timeOverdue, dot, isLast, compact = false }: { tim
       <span className={`font-mono text-xs tabular-nums ${timeOverdue ? "font-semibold text-ds-danger" : "text-ds-ink-muted"}`}>
         {time}
       </span>
-      <span className={`absolute right-[-13px] ${compact ? "top-2.5" : "top-4"} h-2.5 w-2.5 rounded-full ring-4 ring-background ${dot}`} />
+      <span className={`absolute right-[-13px] ${compact ? "top-2.5" : "top-4"} h-2.5 w-2.5 rounded-full ring-4 ring-ds-page ${dot}`} />
       {!isLast ? <span className={`absolute right-[-8px] ${compact ? "top-5.5" : "top-7"} h-[calc(100%+0.75rem)] w-px bg-ds-divider`} /> : null}
     </div>
   );
@@ -714,13 +714,13 @@ function TimelineMarker({ time, label, now, isLast }: { time: string; label: str
           {time}
         </span>
         <span
-          className={`absolute right-[-13px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-background ${
+          className={`absolute right-[-13px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-ds-page ${
             now ? "bg-ds-accent" : "bg-ds-border"
           }`}
         />
         {!isLast ? <span className="absolute right-[-8px] top-3.5 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
       </div>
-      <div className="pt-0.5">
+      <div className="pl-3 pt-0.5">
         <span className={`text-sm ${now ? "font-semibold uppercase tracking-[0.12em] text-ds-accent-ink" : "text-ds-ink-muted"}`}>
           {label}
         </span>
@@ -1940,7 +1940,8 @@ function CollaboratorDashboardPanelInner() {
         const purpose = marking.classification?.purpose ?? null;
         items.push({
           sortMin: hhmmToMinutes(time) ?? 0,
-          order: 1,
+          // Desempata batidas no mesmo minuto pela sequência, para seguir a ordem decrescente da linha.
+          order: 1 + index / 1000,
           key: `punch-${marking.receiptId}`,
           render: (isLast) => (
             <TimelineItem type="punch" time={time} dot={purpose ? PURPOSE_DOT[purpose] : "bg-ds-ink-faint"} statusLabel="Registrada" statusClass="text-ds-ok"
@@ -1996,7 +1997,8 @@ function CollaboratorDashboardPanelInner() {
       }
     }
 
-    return items.sort((a, b) => a.sortMin - b.sortMin || a.order - b.order);
+    // Mais recente no topo: o que está acontecendo agora aparece antes do que já passou.
+    return items.sort((a, b) => b.sortMin - a.sortMin || b.order - a.order);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes, compactTimeline,
     punchEnabled, punchJourney.day, punch]);
@@ -2024,22 +2026,19 @@ function CollaboratorDashboardPanelInner() {
             <PageHero
               kicker={dateEyebrow}
               title={`${greetingFor(today)}, ${firstName}`}
-              subtitle={todayShift ? `${todayShift.name} · ${todayShift.time}${todayShift.unit ? ` · ${todayShift.unit}` : ""}` : "Sem turno hoje"}
-              actions={<>
-                {punchEnabled ? <HeroPunchButton marking={punch} day={punchJourney.day} onOpen={() => setPunchOpen(true)} /> : null}
-                <LiveClock onDark />
-              </>}
+              actions={<LiveClock onDark />}
               chips={
-                loadingForms ? <HeroChip value="…" label="Carregando rotinas" /> : allDone ? (
+                loadingForms || routinesTotal === 0 ? null : allDone ? (
                   <HeroChip value="✓" label="Rotina do dia concluída" />
-                ) : routinesTotal === 0 ? (
-                  <HeroChip value={0} label="Nenhuma rotina para hoje" />
                 ) : (
                   <HeroChip value={`${routinesDone}/${routinesTotal}`} label={`Rotinas do dia · ${pendingCount} pendente(s) até o fim do turno`} tone={pendingCount > 0 ? "warning" : "info"} />
                 )
               }
             >
-              {punchEnabled ? <HeroPunchRow day={punchJourney.day} today={punch.today} /> : null}
+              {punchEnabled ? (
+                <HeroPunchRow day={punchJourney.day} today={punch.today}
+                  action={<HeroPunchButton marking={punch} day={punchJourney.day} onOpen={() => setPunchOpen(true)} />} />
+              ) : null}
             </PageHero>
             {punchEnabled ? <RecordDialog open={punchOpen} onOpenChange={setPunchOpen} marking={punch} day={punchJourney.day} chooseUnit onRecorded={punchJourney.reload} /> : null}
             {!loadingForms && !formsError && nextAction ? <NextActionCard execution={nextAction} /> : null}
