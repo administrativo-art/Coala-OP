@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@/lib/zod-resolver';
-import { Check, ChevronRight, ChevronsUpDown, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Table2, Tags, TriangleAlert, Upload } from 'lucide-react';
+import { Camera, Check, ChevronRight, ChevronsUpDown, FileText, Grid2X2, History, ImageIcon, MapPin, Paperclip, Plus, X, Printer, QrCode, Rows3, Table2, Tags, TriangleAlert, Upload } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
 import { useAssets } from '@/hooks/use-assets';
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -154,7 +154,7 @@ function historyEventLabel(value: string) {
 const ASSET_STEPS: { id: AssetStep; label: string; description: string }[] = [
   { id: 'identification', label: 'Identificação', description: 'Nome, placa, status e dados do equipamento.' },
   { id: 'audit', label: 'Auditoria e manutenção', description: 'Auditorias, planos preventivos, ocorrências e ordens.' },
-  { id: 'location', label: 'Localização e posse', description: 'Posse, localização e movimentações do patrimônio.' },
+  { id: 'location', label: 'Local e posse', description: 'Onde o bem está, com quem está e o histórico de local e posse.' },
   { id: 'acquisition', label: 'Aquisição', description: 'Compra, recebimento, nota fiscal, garantia e classificação contábil.' },
   { id: 'history', label: 'Histórico geral', description: 'Linha cronológica consolidada do ciclo patrimonial.' },
 ];
@@ -242,6 +242,59 @@ async function uploadAuditPhoto(file: File, assetId: string) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || typeof payload.storagePath !== 'string' || typeof payload.contentHash !== 'string') throw new Error(payload.error || 'Falha ao enviar a foto da auditoria.');
   return payload as { storagePath: string; contentHash: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; size: number };
+}
+
+const SUMMARY_LABEL = 'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground';
+const ASSET_CONDITION_LABEL: Record<string, string> = { new: 'Novo', good: 'Bom', regular: 'Regular', poor: 'Ruim', critical: 'Crítico' };
+const ASSET_OPERATIONAL_LABEL: Record<string, string> = { operational: 'Operacional', restricted: 'Operação restrita', stopped: 'Parado' };
+
+/** Modal secundário centrado na área clara do detalhe (sidebar de 360px à esquerda); cabeçalho e rodapé fixos, só o corpo rola. */
+function AssetSheetDialog({ open, onOpenChange, title, description, footer, children }: {
+  open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; footer: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent flush className="flex max-h-[calc(100dvh-3rem)] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-2xl sm:left-[calc(50%+180px)]">
+        <DialogHeader className="shrink-0 px-6 pb-2 pt-6">
+          <DialogTitle>{title}</DialogTitle>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
+        </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-3">{children}</div>
+        <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:justify-end">{footer}</DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Foto na hora (câmera do celular/tablet) ou anexo de arquivo; várias imagens por registro. */
+function AssetPhotoPicker({ files, onChange, label }: { files: File[]; onChange: (files: File[]) => void; label: string }) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const previews = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
+  useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
+  const add = (list: FileList | null) => { if (list?.length) onChange([...files, ...Array.from(list)]); };
+  return (
+    <div className="space-y-2">
+      <FieldLabel required>{label}</FieldLabel>
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" onClick={() => cameraRef.current?.click()}><Camera className="mr-2 h-4 w-4" />Tirar foto agora</Button>
+        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}><Paperclip className="mr-2 h-4 w-4" />Anexar arquivo</Button>
+      </div>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => { add(event.target.files); event.target.value = ''; }} />
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(event) => { add(event.target.files); event.target.value = ''; }} />
+      {files.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {previews.map((url, index) => (
+            <div key={url} className="relative h-16 w-16 overflow-hidden rounded-xl border">
+              <img src={url} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" />
+              <button type="button" aria-label="Remover foto" onClick={() => onChange(files.filter((_, i) => i !== index))} className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <p className="text-[11.5px] text-muted-foreground">No celular e no tablet abre a câmera direto. Pelo menos uma foto é obrigatória.</p>
+    </div>
+  );
 }
 
 const OWNERSHIP_LABEL = { owned: 'Próprio', leased: 'Alugado', loaned: 'Comodato', third_party: 'De terceiro', unknown: 'Não informado' } as const;
@@ -773,10 +826,19 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [movRespFree, setMovRespFree] = useState('');
   const [movNotes, setMovNotes] = useState('');
   const [movSaving, setMovSaving] = useState(false);
-  const [locationAction, setLocationAction] = useState<'custody' | 'movement'>('custody');
+  const [locationPanelOpen, setLocationPanelOpen] = useState(false);
+  const [locationKind, setLocationKind] = useState<'unit' | 'external' | 'in_transit'>('unit');
+  const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
+  const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState<'corrective' | 'preventive'>('corrective');
+  const [maintenanceDescription, setMaintenanceDescription] = useState('');
+  const [maintenancePriority, setMaintenancePriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
+  const [maintenanceDueDate, setMaintenanceDueDate] = useState('');
+  const [maintenanceAssignee, setMaintenanceAssignee] = useState('');
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [generateTerm, setGenerateTerm] = useState(true);
   const [lifecycleVersion, setLifecycleVersion] = useState(asset?.lifecycleVersion ?? 1);
-  const [auditPhoto, setAuditPhoto] = useState<File | null>(null);
+  const [auditPhotos, setAuditPhotos] = useState<File[]>([]);
   const [auditCondition, setAuditCondition] = useState<'new' | 'good' | 'regular' | 'poor' | 'critical'>('good');
   const [auditOperational, setAuditOperational] = useState<'operational' | 'restricted' | 'stopped'>('operational');
   const [auditDescription, setAuditDescription] = useState('');
@@ -788,8 +850,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [planNextDate, setPlanNextDate] = useState('');
   const [planChecklist, setPlanChecklist] = useState('');
   const [planSaving, setPlanSaving] = useState(false);
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'lifecycle' | 'maintenance'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'lifecycle' | 'maintenance' | 'custody' | 'movement'>('all');
   const [auditsPage, setAuditsPage] = useState<AssetPage<AssetAuditRow>>({ items: [], nextCursor: null });
   const [plansPage, setPlansPage] = useState<AssetPage<AssetPlanRow>>({ items: [], nextCursor: null });
   const [occurrencesPage, setOccurrencesPage] = useState<AssetPage<AssetOccurrenceRow>>({ items: [], nextCursor: null });
@@ -952,6 +1013,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   }, [asset?.id, permissions.assets?.viewHistory]);
 
   useEffect(() => {
+    if (assetStep === 'location') setHistoryFilter((current) => (current === 'custody' || current === 'movement' ? current : 'lifecycle'));
+    if (assetStep === 'history') setHistoryFilter((current) => (current === 'custody' || current === 'movement' ? 'all' : current));
+  }, [assetStep]);
+
+  useEffect(() => {
     if (asset && permissions.assets?.viewHistory) void loadReadModels({ target: 'history' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilter]);
@@ -1050,55 +1116,38 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     }
   }
 
-  async function handleLifecycleAction() {
+  async function handleCustodyTransfer() {
     if (!asset || !user) return;
     const performedBy = movWithdrawerType === 'cadastrado'
       ? { type: 'employee' as const, id: movWithdrawerUserId, nameSnapshot: activeUsers.find((candidate) => candidate.id === movWithdrawerUserId)?.username ?? '' }
       : { type: 'third_party' as const, nameSnapshot: movWithdrawerFree.trim() };
     if (!performedBy.nameSnapshot || (performedBy.type !== 'third_party' && !performedBy.id)) {
-      toast({ title: 'Informe quem executou a entrega ou movimentação.', variant: 'destructive' });
+      toast({ title: 'Informe quem executou a entrega.', variant: 'destructive' });
       return;
     }
     setMovSaving(true);
     try {
-      if (locationAction === 'custody') {
-        const holderName = movRespType === 'cadastrado'
-          ? activeUsers.find((candidate) => candidate.id === movRespUserId)?.username ?? ''
-          : movRespFree.trim();
-        if (!holderName || (movRespType === 'cadastrado' && !movRespUserId)) throw new Error('Selecione quem receberá a posse.');
-        const result = await assetApi<{ transferId: string; status: string; lifecycleVersion: number }>(`/api/assets/${asset.id}/custody-transfers`, {
-          method: 'POST',
-          body: JSON.stringify({
-            expectedVersion: lifecycleVersion,
-            toHolder: { holderType: movRespType === 'cadastrado' ? 'employee' : 'third_party', ...(movRespType === 'cadastrado' ? { holderId: movRespUserId } : {}), holderNameSnapshot: holderName },
-            performedBy,
-            notes: movNotes.trim() || undefined,
-            generateTerm: movRespType === 'cadastrado' && generateTerm,
-          }),
-        });
-        setLifecycleVersion(result.lifecycleVersion);
-        if (result.status === 'term_generation_pending') {
-          await assetApi(`/api/assets/${asset.id}/custody-transfers/${result.transferId}/term`, { method: 'POST', body: JSON.stringify({ action: 'send' }) });
-          toast({ title: 'Posse transferida e termo enviado para assinatura.' });
-        } else toast({ title: 'Transferência de posse registrada.' });
-      } else {
-        const destinationName = movDestType === 'cadastrado'
-          ? kiosks.find((candidate) => candidate.id === movDestKioskId)?.name ?? ''
-          : movDestFree.trim();
-        if (!destinationName || (movDestType === 'cadastrado' && !movDestKioskId)) throw new Error('Informe o destino da movimentação.');
-        const result = await assetApi<{ lifecycleVersion: number }>(`/api/assets/${asset.id}/movements`, {
-          method: 'POST',
-          body: JSON.stringify({
-            expectedVersion: lifecycleVersion,
-            location: { type: movDestType === 'cadastrado' ? 'unit' : 'external', ...(movDestType === 'cadastrado' ? { refId: movDestKioskId } : {}), nameSnapshot: destinationName },
-            performedBy,
-            notes: movNotes.trim() || undefined,
-          }),
-        });
-        setLifecycleVersion(result.lifecycleVersion);
-        toast({ title: 'Movimentação registrada.' });
-      }
-      setMovNotes('');
+      const holderName = movRespType === 'cadastrado'
+        ? activeUsers.find((candidate) => candidate.id === movRespUserId)?.username ?? ''
+        : movRespFree.trim();
+      if (!holderName || (movRespType === 'cadastrado' && !movRespUserId)) throw new Error('Selecione quem receberá a posse.');
+      const result = await assetApi<{ transferId: string; status: string; lifecycleVersion: number }>(`/api/assets/${asset.id}/custody-transfers`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedVersion: lifecycleVersion,
+          toHolder: { holderType: movRespType === 'cadastrado' ? 'employee' : 'third_party', ...(movRespType === 'cadastrado' ? { holderId: movRespUserId } : {}), holderNameSnapshot: holderName },
+          performedBy,
+          notes: movNotes.trim() || undefined,
+          generateTerm: movRespType === 'cadastrado' && generateTerm,
+        }),
+      });
+      setLifecycleVersion(result.lifecycleVersion);
+      if (result.status === 'term_generation_pending') {
+        await assetApi(`/api/assets/${asset.id}/custody-transfers/${result.transferId}/term`, { method: 'POST', body: JSON.stringify({ action: 'send' }) });
+        toast({ title: 'Posse transferida e termo enviado para assinatura.' });
+      } else toast({ title: 'Transferência de posse registrada.' });
+      setMovNotes(''); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); setMovRespUserId(''); setMovRespFree('');
+      setCustodyDialogOpen(false);
       await Promise.all([refreshAssets(), loadMovements(), loadReadModels({ target: 'history' }), loadReadModels({ target: 'custody' })]);
     } catch (error) {
       toast({ title: 'Não foi possível registrar', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
@@ -1107,24 +1156,59 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     }
   }
 
+  async function handleChangeLocation() {
+    if (!asset || !user) return;
+    let location: { type: 'unit' | 'external' | 'in_transit'; refId?: string; nameSnapshot: string; details?: string };
+    if (locationKind === 'unit') {
+      const kiosk = kiosks.find((candidate) => candidate.id === movDestKioskId);
+      if (!kiosk) { toast({ title: 'Selecione a unidade.', variant: 'destructive' }); return; }
+      location = { type: 'unit', refId: kiosk.id, nameSnapshot: kiosk.name };
+    } else if (locationKind === 'external') {
+      if (!movDestFree.trim()) { toast({ title: 'Descreva o local.', variant: 'destructive' }); return; }
+      location = { type: 'external', nameSnapshot: movDestFree.trim() };
+    } else {
+      location = { type: 'in_transit', nameSnapshot: 'Em movimento', ...(asset.custody?.holderNameSnapshot ? { details: `Com ${asset.custody.holderNameSnapshot}` } : {}) };
+    }
+    setMovSaving(true);
+    try {
+      const result = await assetApi<{ lifecycleVersion: number }>(`/api/assets/${asset.id}/movements`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedVersion: lifecycleVersion,
+          location,
+          performedBy: { type: 'employee', id: user.id, nameSnapshot: user.username },
+          notes: movNotes.trim() || undefined,
+        }),
+      });
+      setLifecycleVersion(result.lifecycleVersion);
+      toast({ title: 'Local atualizado.' });
+      setMovNotes(''); setMovDestKioskId(''); setMovDestFree(''); setLocationPanelOpen(false);
+      await Promise.all([refreshAssets(), loadMovements(), loadReadModels({ target: 'history' }), loadReadModels({ target: 'custody' })]);
+    } catch (error) {
+      toast({ title: 'Não foi possível atualizar o local', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
+    } finally {
+      setMovSaving(false);
+    }
+  }
+
   async function handleCreateAudit() {
-    if (!asset || !auditPhoto || !auditDescription.trim()) {
+    if (!asset || auditPhotos.length === 0 || !auditDescription.trim()) {
       toast({ title: 'Inclua uma foto e descreva o estado do patrimônio.', variant: 'destructive' });
       return;
     }
     setAuditSaving(true);
     try {
-      const photo = await uploadAuditPhoto(auditPhoto, asset.id);
+      const photos = await Promise.all(auditPhotos.map((file) => uploadAuditPhoto(file, asset.id)));
       await assetApi(`/api/assets/${asset.id}/audits`, {
         method: 'POST',
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(), auditedAt: new Date().toISOString(), condition: auditCondition,
-          operationalStatus: auditOperational, description: auditDescription.trim(), photos: [photo],
+          operationalStatus: auditOperational, description: auditDescription.trim(), photos,
           correctiveMaintenance: { required: auditCorrective, priority: 'high', description: auditCorrective ? auditDescription.trim() : undefined, components: [] },
         }),
       });
       toast({ title: auditCorrective ? 'Auditoria salva e corretiva aberta.' : 'Auditoria registrada.' });
-      setAuditDescription(''); setAuditPhoto(null); setAuditCorrective(false);
+      setAuditDescription(''); setAuditPhotos([]); setAuditCorrective(false);
       setAuditDialogOpen(false);
       await loadMovements();
       await Promise.all([loadReadModels({ target: 'audits' }), loadReadModels({ target: 'occurrences' }), loadReadModels({ target: 'history' })]);
@@ -1149,11 +1233,33 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         }),
       });
       toast({ title: 'Plano preventivo salvo.' });
-      setPlanDialogOpen(false);
-      await loadReadModels({ target: 'plans' });
+      setMaintenanceDialogOpen(false);
+      await Promise.all([loadReadModels({ target: 'plans' }), loadReadModels({ target: 'occurrences' })]);
     } catch (error) {
       toast({ title: 'Falha ao salvar plano', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
     } finally { setPlanSaving(false); }
+  }
+
+  async function handleCreateCorrective() {
+    if (!asset || !user || !maintenanceDescription.trim() || !maintenanceDueDate) {
+      toast({ title: 'Descreva o problema e informe o prazo.', variant: 'destructive' }); return;
+    }
+    setMaintenanceSaving(true);
+    try {
+      await assetApi(`/api/assets/${asset.id}/maintenance-occurrences`, {
+        method: 'POST',
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(), dueDate: maintenanceDueDate, priority: maintenancePriority,
+          assignee: maintenanceAssignee.trim() ? { type: 'third_party', nameSnapshot: maintenanceAssignee.trim() } : { type: 'user', id: user.id, nameSnapshot: user.username },
+          description: maintenanceDescription.trim(), checklistSnapshot: [], components: [],
+        }),
+      });
+      toast({ title: 'Manutenção corretiva aberta.' });
+      setMaintenanceDescription(''); setMaintenanceDueDate(''); setMaintenanceAssignee(''); setMaintenanceDialogOpen(false);
+      await loadReadModels({ target: 'occurrences' });
+    } catch (error) {
+      toast({ title: 'Falha ao abrir manutenção', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
+    } finally { setMaintenanceSaving(false); }
   }
 
   async function handleStatus(status: AssetStatus) {
@@ -1338,9 +1444,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                 </div>
                 <dl className="space-y-3 text-[12.5px]">
                   <div>
-                    <dt className="flex items-center gap-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted"><MapPin className="h-3 w-3" />Unidade atual</dt>
+                    <dt className="flex items-center gap-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted"><MapPin className="h-3 w-3" />Local atual</dt>
                     <dd className="mt-0.5 font-semibold">{asset.currentKioskName || asset.currentKioskId}</dd>
                   </div>
+                  <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Posse atual</dt><dd className="mt-0.5 font-semibold">{asset.custody?.holderNameSnapshot || asset.responsibleName || 'Empresa'}</dd></div>
                   <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Origem</dt><dd className="mt-0.5 font-semibold">{asset.sourceType === 'purchase_receipt' ? 'Recebimento de compra' : 'Cadastro manual'}</dd></div>
                   {asset.supplierName ? <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Fornecedor</dt><dd className="mt-0.5 font-semibold">{asset.supplierName}</dd></div> : null}
                   {asset.purchaseValue ? <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Valor de aquisição</dt><dd className="mt-0.5 font-mono font-semibold">{formatCurrency(asset.purchaseValue)}</dd></div> : null}
@@ -1638,36 +1745,43 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
                   {assetStep === 'audit' ? (
                     <div className="space-y-4">
-                      <section className="rounded-md border bg-card p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div><h4 className="font-semibold">Auditoria patrimonial</h4><p className="mt-1 text-xs text-muted-foreground">Registre condição, funcionamento, fotos e, quando necessário, abra uma manutenção corretiva.</p></div>
-                          <Button type="button" onClick={() => setAuditDialogOpen(true)} disabled={!permissions.assets?.edit}><Plus className="mr-2 h-4 w-4" />Iniciar auditoria</Button>
-                        </div>
-                      </section>
-
-                      <section className="rounded-md border bg-card p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div><h4 className="font-semibold">Manutenção preventiva</h4><p className="mt-1 text-xs text-muted-foreground">Cadastre a periodicidade; o sistema cria a ocorrência, a tarefa e a ordem MNT no prazo configurado.</p></div>
-                          <Button type="button" variant="outline" onClick={() => setPlanDialogOpen(true)} disabled={!permissions.assets?.edit}><Plus className="mr-2 h-4 w-4" />Novo plano preventivo</Button>
-                        </div>
-                      </section>
-
-                      {readModelsError ? <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{readModelsError}<Button type="button" variant="ghost" size="sm" className="ml-2" onClick={() => void loadReadModels()}>Tentar novamente</Button></div> : null}
-                      <section className="rounded-md border bg-card p-4">
-                        <h4 className="font-semibold">Auditorias registradas</h4>
-                        {readModelsLoading && auditsPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : auditsPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma auditoria registrada.</p> : <div className="mt-3 space-y-2">{auditsPage.items.map((audit) => <div key={audit.id} className="rounded-md border p-3"><div className="flex justify-between gap-3"><strong className="text-sm">{audit.condition || 'Condição não informada'} · {audit.operationalStatus || '—'}</strong><span className="text-xs text-muted-foreground">{audit.auditedAt ? new Date(audit.auditedAt).toLocaleDateString('pt-BR') : '—'}</span></div><p className="mt-1 text-sm text-muted-foreground">{audit.description}</p><p className="mt-1 text-xs text-muted-foreground">Auditor: {audit.auditor?.nameSnapshot || '—'}</p></div>)}</div>}
-                        {auditsPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => void loadReadModels({ target: 'audits', append: true })}>Carregar mais auditorias</Button> : null}
-                      </section>
-                      <section className="rounded-md border bg-card p-4">
-                        <h4 className="font-semibold">Planos preventivos</h4>
-                        {readModelsLoading && plansPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : plansPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhum plano preventivo cadastrado.</p> : <div className="mt-3 space-y-2">{plansPage.items.map((plan) => <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"><div><strong className="text-sm">{plan.name || 'Plano preventivo'}</strong><p className="text-xs text-muted-foreground">Próxima: {plan.nextDueDate || '—'} · Responsável: {plan.assignee?.nameSnapshot || '—'}</p></div><StatusPill variant={plan.active === false ? 'neutral' : 'ok'}>{plan.active === false ? 'Inativo' : 'Ativo'}</StatusPill></div>)}</div>}
-                        {plansPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => void loadReadModels({ target: 'plans', append: true })}>Carregar mais planos</Button> : null}
-                      </section>
-                      <section className="rounded-md border bg-card p-4">
-                        <h4 className="font-semibold">Ocorrências, tarefas e ordens</h4>
-                        {readModelsLoading && occurrencesPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : occurrencesPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma manutenção agendada ou aberta.</p> : <div className="mt-3 space-y-2">{occurrencesPage.items.map((occurrence) => <div key={occurrence.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"><div><strong className="text-sm">{occurrence.type === 'preventive' ? 'Preventiva' : occurrence.type === 'corrective' ? 'Corretiva' : 'Manutenção'}</strong><p className="text-xs text-muted-foreground">{occurrence.description || 'Sem descrição'} · vencimento {occurrence.dueDate || '—'}</p><p className="mt-1 text-xs text-muted-foreground">Tarefa: {occurrence.taskStatus || '—'} · Ordem: {occurrence.orderStatus || '—'}</p></div>{occurrence.orderStatus === 'generated' ? <Button type="button" variant="outline" size="sm" onClick={() => void downloadAssetFile(`/api/assets/${asset.id}/maintenance-occurrences/${occurrence.id}/order`, `ordem-${occurrence.orderProtocol || occurrence.id}.pdf`).catch((error) => toast({ title: 'Falha no download', description: error.message, variant: 'destructive' }))}>Baixar ordem MNT</Button> : null}</div>)}</div>}
-                        {occurrencesPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => void loadReadModels({ target: 'occurrences', append: true })}>Carregar mais ocorrências</Button> : null}
-                      </section>
+                      {readModelsError ? <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{readModelsError}</div> : null}
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border bg-card p-4"><p className={SUMMARY_LABEL}>Estado</p><p className="mt-1.5 text-base font-bold">{ASSET_CONDITION_LABEL[form.watch('conservationState') ?? ''] || '—'}</p><p className="mt-1 text-xs text-muted-foreground">{ASSET_OPERATIONAL_LABEL[form.watch('operationalCondition') ?? ''] || 'Sem condição operacional'}</p></div>
+                        <div className="rounded-2xl border bg-card p-4"><p className={SUMMARY_LABEL}>Última auditoria</p><p className="mt-1.5 text-base font-bold">{auditsPage.items[0]?.auditedAt ? new Date(auditsPage.items[0].auditedAt as string).toLocaleDateString('pt-BR') : '—'}</p><p className="mt-1 text-xs text-muted-foreground">{auditsPage.items[0] ? `por ${auditsPage.items[0].auditor?.nameSnapshot || '—'}` : 'Nenhuma registrada'}</p></div>
+                        <div className="rounded-2xl border bg-card p-4"><p className={SUMMARY_LABEL}>Próxima conferência</p><p className="mt-1.5 text-base font-bold">{form.watch('nextInspectionDate') ? new Date(`${form.watch('nextInspectionDate')}T12:00:00`).toLocaleDateString('pt-BR') : '—'}</p><p className="mt-1 text-xs text-muted-foreground">Definida na auditoria</p></div>
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <section className="rounded-2xl border bg-card p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className={SUMMARY_LABEL}>Auditorias · {auditsPage.items.length}</p>
+                            <Button type="button" size="sm" onClick={() => setAuditDialogOpen(true)} disabled={!permissions.assets?.edit}><Plus className="mr-1.5 h-4 w-4" />Nova auditoria</Button>
+                          </div>
+                          {readModelsLoading && auditsPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : auditsPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma auditoria registrada.</p> : (
+                            <div className="mt-2 divide-y">{auditsPage.items.slice(0, 3).map((audit) => (
+                              <div key={audit.id} className="py-2.5"><div className="flex justify-between gap-3"><strong className="text-sm">{ASSET_CONDITION_LABEL[audit.condition ?? ''] || audit.condition || 'Condição não informada'} · {ASSET_OPERATIONAL_LABEL[audit.operationalStatus ?? ''] || audit.operationalStatus || '—'}</strong><span className="shrink-0 text-xs text-muted-foreground">{audit.auditedAt ? new Date(audit.auditedAt).toLocaleDateString('pt-BR') : '—'}</span></div><p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{audit.description} · {audit.auditor?.nameSnapshot || '—'}</p></div>
+                            ))}</div>
+                          )}
+                          {auditsPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => void loadReadModels({ target: 'audits', append: true })}>Carregar mais auditorias</Button> : null}
+                        </section>
+                        <section className="rounded-2xl border bg-card p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className={SUMMARY_LABEL}>Manutenção · {occurrencesPage.items.length + plansPage.items.length}</p>
+                            <Button type="button" size="sm" onClick={() => setMaintenanceDialogOpen(true)} disabled={!permissions.assets?.edit}><Plus className="mr-1.5 h-4 w-4" />Nova manutenção</Button>
+                          </div>
+                          {readModelsLoading && occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma manutenção agendada ou aberta.</p> : (
+                            <div className="mt-2 divide-y">
+                              {occurrencesPage.items.map((occurrence) => (
+                                <div key={occurrence.id} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><strong className="text-sm">{occurrence.type === 'preventive' ? 'Preventiva' : occurrence.type === 'corrective' ? 'Corretiva' : 'Manutenção'}</strong><p className="truncate text-xs text-muted-foreground">{occurrence.description || 'Sem descrição'} · vence {occurrence.dueDate || '—'}</p></div>
+                                  {occurrence.orderStatus === 'generated' ? <Button type="button" variant="outline" size="sm" onClick={() => void downloadAssetFile(`/api/assets/${asset.id}/maintenance-occurrences/${occurrence.id}/order`, `ordem-${occurrence.orderProtocol || occurrence.id}.pdf`).catch((error) => toast({ title: 'Falha no download', description: error.message, variant: 'destructive' }))}>Ordem MNT</Button> : null}</div>
+                              ))}
+                              {plansPage.items.map((plan) => (
+                                <div key={plan.id} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><strong className="text-sm">{plan.name || 'Plano preventivo'}</strong><p className="truncate text-xs text-muted-foreground">Preventiva · próxima {plan.nextDueDate || '—'}</p></div><StatusPill variant={plan.active === false ? 'neutral' : 'ok'}>{plan.active === false ? 'Inativo' : 'Ativo'}</StatusPill></div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      </div>
                     </div>
                   ) : null}
 
@@ -1677,61 +1791,42 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
                   {assetStep === 'location' ? (
                     <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-md border bg-card p-3"><p className="text-xs text-muted-foreground">Proprietário</p><p className="mt-1 font-semibold">{asset.owner?.nameSnapshot || 'Empresa'}</p></div>
-                        <div className="rounded-md border bg-card p-3"><p className="text-xs text-muted-foreground">Regime</p><p className="mt-1 font-semibold">{OWNERSHIP_LABEL[asset.ownershipRegime ?? 'unknown']}</p></div>
-                        <div className="rounded-md border bg-card p-3"><p className="text-xs text-muted-foreground">Posse atual</p><p className="mt-1 font-semibold">{asset.custody?.holderNameSnapshot || asset.responsibleName || 'Empresa'}</p></div>
-                      </div>
-                      <Segmented
-                        value={locationAction}
-                        onChange={setLocationAction}
-                        options={[{ value: 'custody', label: 'Transferir posse' }, { value: 'movement', label: 'Registrar movimentação' }]}
-                      />
-                      <div className="space-y-5 rounded-md border p-4">
-                        <div>
-                          <p className="text-sm font-semibold">{locationAction === 'custody' ? 'Nova posse' : 'Novo local'}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">O registro é feito por {user?.username || 'usuário autenticado'}; abaixo, informe quem executou fisicamente o procedimento.</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border bg-card p-4">
+                          <p className={SUMMARY_LABEL}>Local atual</p>
+                          <p className="mt-1.5 text-base font-bold">{asset.currentKioskName || asset.currentKioskId || '—'}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{asset.sourceType === 'purchase_receipt' ? 'Entrada por recebimento de compra' : 'Local registrado no cadastro'}</p>
+                          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setLocationPanelOpen((open) => !open)} disabled={!permissions.assets?.transfer}><MapPin className="mr-1.5 h-4 w-4" />Alterar local</Button>
                         </div>
-
-                        <div className="rounded-md border bg-muted/40 p-3">
-                          <p className="text-xs font-medium uppercase text-muted-foreground">Responsável atual</p>
-                          <p className="mt-1 text-sm font-semibold">{asset.responsibleName || '—'}</p>
+                        <div className="rounded-2xl border bg-card p-4">
+                          <p className={SUMMARY_LABEL}>Posse atual</p>
+                          <p className="mt-1.5 text-base font-bold">{asset.custody?.holderNameSnapshot || asset.responsibleName || 'Empresa'}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Proprietário: {asset.owner?.nameSnapshot || 'Empresa'} · {OWNERSHIP_LABEL[asset.ownershipRegime ?? 'unknown']}</p>
+                          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setCustodyDialogOpen(true)} disabled={!permissions.assets?.transfer}>Transferir posse</Button>
                         </div>
-
-                        <MovToggleField
-                          label="Quem está retirando"
-                          type={movWithdrawerType}
-                          onTypeChange={(t) => { setMovWithdrawerType(t); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
-                          freeValue={movWithdrawerFree}
-                          onFreeChange={setMovWithdrawerFree}
-                          freePlaceholder="Nome de quem está retirando"
-                          registeredId={movWithdrawerUserId}
-                          onRegisteredChange={setMovWithdrawerUserId}
-                          options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
-                          searchPlaceholder="Buscar colaborador..."
-                          emptyMessage="Nenhum colaborador encontrado."
-                          selectPlaceholder="Selecione um colaborador"
-                        />
-
-                        {locationAction === 'movement' ? (
-                          <MovToggleField label="Para onde vai" type={movDestType} onTypeChange={(t) => { setMovDestType(t); setMovDestKioskId(''); setMovDestFree(''); }} freeValue={movDestFree} onFreeChange={setMovDestFree} freePlaceholder="Destino externo" registeredId={movDestKioskId} onRegisteredChange={setMovDestKioskId} options={kiosks.map((k) => ({ id: k.id, label: k.name }))} searchPlaceholder="Buscar unidade..." emptyMessage="Nenhuma unidade encontrada." selectPlaceholder="Selecione uma unidade" />
-                        ) : (
-                          <>
-                            <MovToggleField label="Quem recebe a posse" type={movRespType} onTypeChange={(t) => { setMovRespType(t); setMovRespUserId(''); setMovRespFree(''); setGenerateTerm(t === 'cadastrado'); }} freeValue={movRespFree} onFreeChange={setMovRespFree} freePlaceholder="Nome do terceiro" registeredId={movRespUserId} onRegisteredChange={setMovRespUserId} options={activeUsers.map((u) => ({ id: u.id, label: u.username }))} searchPlaceholder="Buscar colaborador..." emptyMessage="Nenhum colaborador encontrado." selectPlaceholder="Selecione o colaborador" />
-                            <label className="flex items-start gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-                              <input type="checkbox" className="mt-1" checked={generateTerm} disabled={movRespType !== 'cadastrado'} onChange={(event) => setGenerateTerm(event.target.checked)} />
-                              <span><strong>Gerar termo de entrega</strong><span className="mt-0.5 block text-xs text-muted-foreground">Envia o documento timbrado ao Autentique e acompanha a assinatura. Disponível para colaborador cadastrado.</span></span>
-                            </label>
-                          </>
-                        )}
-
-                        <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
-
-                        <Button type="button" onClick={() => void handleLifecycleAction()} disabled={movSaving || !permissions.assets?.transfer}>
-                          <MoveRight className="mr-2 h-4 w-4" />
-                          {movSaving ? 'Registrando...' : locationAction === 'custody' ? 'Transferir posse' : 'Registrar movimentação'}
-                        </Button>
                       </div>
+
+                      {locationPanelOpen ? (
+                        <div className="space-y-3 rounded-2xl border border-primary/40 bg-card p-4">
+                          <p className={SUMMARY_LABEL}>Alterar local</p>
+                          <Segmented value={locationKind} onChange={setLocationKind} options={[{ value: 'unit', label: 'Unidade' }, { value: 'external', label: 'Texto livre' }, { value: 'in_transit', label: 'Em movimento' }]} aria-label="Tipo de local" />
+                          {locationKind === 'unit' ? (
+                            <Select value={movDestKioskId || undefined} onValueChange={setMovDestKioskId}>
+                              <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                              <SelectContent>{kiosks.map((kiosk) => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : locationKind === 'external' ? (
+                            <Input value={movDestFree} onChange={(event) => setMovDestFree(event.target.value)} placeholder="Ex.: Assistência técnica Samsung" />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Sem local fixo: o bem circula com {asset.custody?.holderNameSnapshot || 'o responsável'} entre as unidades.</p>
+                          )}
+                          <Textarea placeholder="Observação (opcional)" value={movNotes} onChange={(event) => setMovNotes(event.target.value)} rows={2} />
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={() => setLocationPanelOpen(false)}>Cancelar</Button>
+                            <Button type="button" size="sm" onClick={() => void handleChangeLocation()} disabled={movSaving || !permissions.assets?.transfer}>{movSaving ? 'Salvando...' : 'Salvar local'}</Button>
+                          </div>
+                        </div>
+                      ) : null}
 
                       {permissions.assets?.viewHistory ? (
                         <section className="rounded-md border bg-card p-4">
@@ -1759,6 +1854,22 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           {custodyTransfersPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => void loadReadModels({ target: 'custody', append: true })}>Carregar mais termos</Button> : null}
                         </section>
                       ) : null}
+
+                      <section className="rounded-2xl border bg-card p-4">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <p className={SUMMARY_LABEL}>Histórico · local e posse</p>
+                          <Segmented value={historyFilter === 'custody' || historyFilter === 'movement' ? historyFilter : 'lifecycle'} onChange={setHistoryFilter} options={[{ value: 'lifecycle', label: 'Tudo' }, { value: 'movement', label: 'Local' }, { value: 'custody', label: 'Posse' }]} aria-label="Filtrar histórico de local e posse" />
+                        </div>
+                        {readModelsLoading && historyPage.items.length === 0 ? <Skeleton className="h-20 w-full" /> : historyPage.items.length === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">Nenhum evento de local ou posse.</p> : (
+                          <div className="divide-y">{historyPage.items.map((item) => (
+                            <div key={`${item.source}-${item.id}`} className="flex items-start justify-between gap-3 py-2.5">
+                              <div className="min-w-0"><p className="text-sm font-semibold">{item.description || historyEventLabel(item.type)}</p><p className="mt-0.5 text-xs text-muted-foreground">{item.at ? new Date(item.at).toLocaleString('pt-BR') : '—'}</p></div>
+                              <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-bold text-muted-foreground">{HISTORY_SOURCE_LABEL[item.source] || historyEventLabel(item.source)}</span>
+                            </div>
+                          ))}</div>
+                        )}
+                        {historyPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => void loadReadModels({ target: 'history', append: true })}>Carregar mais eventos</Button> : null}
+                      </section>
                     </div>
                   ) : null}
 
@@ -1807,32 +1918,85 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   ) : null}
             </form>
           </WizardModal>
-        </Form>
-      )}
-      {asset && (
-        <Dialog open={auditDialogOpen} onOpenChange={setAuditDialogOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader><DialogTitle>Iniciar auditoria</DialogTitle><DialogDescription>O auditor é identificado automaticamente. Registre o estado observado e uma evidência fotográfica.</DialogDescription></DialogHeader>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div><FieldLabel required>Condição</FieldLabel><Select value={auditCondition} onValueChange={(value) => setAuditCondition(value as typeof auditCondition)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Novo</SelectItem><SelectItem value="good">Bom</SelectItem><SelectItem value="regular">Regular</SelectItem><SelectItem value="poor">Ruim</SelectItem><SelectItem value="critical">Crítico</SelectItem></SelectContent></Select></div>
-              <div><FieldLabel required>Operação</FieldLabel><Select value={auditOperational} onValueChange={(value) => setAuditOperational(value as typeof auditOperational)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="operational">Operacional</SelectItem><SelectItem value="restricted">Operação restrita</SelectItem><SelectItem value="stopped">Parado</SelectItem></SelectContent></Select></div>
+          <AssetSheetDialog
+            open={custodyDialogOpen}
+            onOpenChange={setCustodyDialogOpen}
+            title="Transferir posse"
+            description={`O registro é feito por ${user?.username || 'usuário autenticado'}; informe quem executou fisicamente a entrega.`}
+            footer={<>
+              <Button type="button" variant="outline" onClick={() => setCustodyDialogOpen(false)}>Cancelar</Button>
+              <Button type="button" onClick={() => void handleCustodyTransfer()} disabled={movSaving || !permissions.assets?.transfer}>{movSaving ? 'Registrando...' : generateTerm && movRespType === 'cadastrado' ? 'Iniciar trilha' : 'Transferir posse'}</Button>
+            </>}
+          >
+            <div className="rounded-xl border bg-muted/40 p-3"><p className={SUMMARY_LABEL}>Responsável atual</p><p className="mt-1 text-sm font-semibold">{asset.custody?.holderNameSnapshot || asset.responsibleName || 'Empresa'}</p></div>
+            <MovToggleField label="Quem está retirando" type={movWithdrawerType} onTypeChange={(t) => { setMovWithdrawerType(t); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }} freeValue={movWithdrawerFree} onFreeChange={setMovWithdrawerFree} freePlaceholder="Nome de quem está retirando" registeredId={movWithdrawerUserId} onRegisteredChange={setMovWithdrawerUserId} options={activeUsers.map((u) => ({ id: u.id, label: u.username }))} searchPlaceholder="Buscar colaborador..." emptyMessage="Nenhum colaborador encontrado." selectPlaceholder="Selecione um colaborador" />
+            <MovToggleField label="Quem recebe a posse" type={movRespType} onTypeChange={(t) => { setMovRespType(t); setMovRespUserId(''); setMovRespFree(''); setGenerateTerm(t === 'cadastrado'); }} freeValue={movRespFree} onFreeChange={setMovRespFree} freePlaceholder="Nome do terceiro" registeredId={movRespUserId} onRegisteredChange={setMovRespUserId} options={activeUsers.map((u) => ({ id: u.id, label: u.username }))} searchPlaceholder="Buscar colaborador..." emptyMessage="Nenhum colaborador encontrado." selectPlaceholder="Selecione o colaborador" />
+            <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
+            <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border px-3 py-2.5 text-[12px] font-bold">
+              {['Posse', 'Termo', 'Autentique', 'Assinatura'].map((label, index) => (
+                <span key={label} className="flex shrink-0 items-center gap-1.5">
+                  <span className={cn('grid h-6 w-6 place-items-center rounded-full text-[11px] text-white', index === 0 || (generateTerm && movRespType === 'cadastrado') ? 'bg-primary' : 'bg-muted-foreground/40')}>{index + 1}</span>{label}
+                  {index < 3 ? <span className="h-px w-4 bg-border" /> : null}
+                </span>
+              ))}
             </div>
-            <div><FieldLabel required>Descrição do estado</FieldLabel><Textarea value={auditDescription} onChange={(event) => setAuditDescription(event.target.value)} rows={4} placeholder="Descreva avarias, conservação e funcionamento observado." /></div>
-            <div className="space-y-2"><FieldLabel required>Foto da auditoria</FieldLabel><div className="grid gap-2 sm:grid-cols-2"><label className="flex min-h-10 cursor-pointer items-center justify-center rounded-md border px-3 text-sm font-medium hover:bg-muted"><Upload className="mr-2 h-4 w-4" />Anexar foto<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setAuditPhoto(event.target.files?.[0] ?? null)} /></label><label className="flex min-h-10 cursor-pointer items-center justify-center rounded-md border px-3 text-sm font-medium hover:bg-muted"><ImageIcon className="mr-2 h-4 w-4" />Tirar foto<input className="hidden" type="file" accept="image/*" capture="environment" onChange={(event) => setAuditPhoto(event.target.files?.[0] ?? null)} /></label></div>{auditPhoto ? <p className="text-xs text-muted-foreground">Selecionada: {auditPhoto.name}</p> : null}</div>
-            <label className="flex items-center gap-2 rounded-md border p-3 text-sm"><input type="checkbox" checked={auditCorrective} onChange={(event) => setAuditCorrective(event.target.checked)} />Abrir manutenção corretiva a partir desta auditoria</label>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAuditDialogOpen(false)}>Cancelar</Button><Button type="button" onClick={() => void handleCreateAudit()} loading={auditSaving} disabled={!permissions.assets?.edit}>Registrar auditoria</Button></div>
-          </DialogContent>
-        </Dialog>
-      )}
-      {asset && (
-        <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader><DialogTitle>Novo plano preventivo</DialogTitle><DialogDescription>Defina quando a manutenção deve ocorrer. O sistema criará a tarefa e a ordem MNT no período de antecedência.</DialogDescription></DialogHeader>
-            <div className="grid gap-3 sm:grid-cols-2"><div className="sm:col-span-2"><FieldLabel required>Nome do plano</FieldLabel><Input value={planName} onChange={(event) => setPlanName(event.target.value)} /></div><div><FieldLabel required>Periodicidade (meses)</FieldLabel><Input type="number" min={1} max={120} value={planInterval} onChange={(event) => setPlanInterval(event.target.value)} /></div><div><FieldLabel required>Próxima execução</FieldLabel><Input type="date" value={planNextDate} onChange={(event) => setPlanNextDate(event.target.value)} /></div></div>
-            <div><FieldLabel>Checklist (um item por linha)</FieldLabel><Textarea value={planChecklist} onChange={(event) => setPlanChecklist(event.target.value)} rows={5} placeholder={'Ex.:\nVerificar bateria\nTestar carregamento\nConferir tela e câmeras'} /></div>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button><Button type="button" onClick={() => void handleSavePlan()} loading={planSaving} disabled={!permissions.assets?.edit}>Salvar plano preventivo</Button></div>
-          </DialogContent>
-        </Dialog>
+            <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 text-sm">
+              <input type="checkbox" className="mt-1" checked={generateTerm} disabled={movRespType !== 'cadastrado'} onChange={(event) => setGenerateTerm(event.target.checked)} />
+              <span><strong>Gerar termo e iniciar a trilha</strong><span className="mt-0.5 block text-xs text-muted-foreground">Envia o documento timbrado ao Autentique e acompanha a assinatura. Disponível para colaborador cadastrado.</span></span>
+            </label>
+          </AssetSheetDialog>
+          <AssetSheetDialog
+            open={auditDialogOpen}
+            onOpenChange={setAuditDialogOpen}
+            title="Nova auditoria"
+            description={`O auditor é identificado pelo usuário autenticado (${user?.username || '—'}).`}
+            footer={<>
+              <Button type="button" variant="outline" onClick={() => setAuditDialogOpen(false)}>Cancelar</Button>
+              <Button type="button" onClick={() => void handleCreateAudit()} loading={auditSaving} disabled={!permissions.assets?.edit}>Registrar auditoria</Button>
+            </>}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><FieldLabel required>Condição</FieldLabel><Select value={auditCondition} onValueChange={(value) => setAuditCondition(value as typeof auditCondition)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ASSET_CONDITION_LABEL).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+              <div><FieldLabel required>Operação</FieldLabel><Select value={auditOperational} onValueChange={(value) => setAuditOperational(value as typeof auditOperational)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ASSET_OPERATIONAL_LABEL).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div><FieldLabel required>Descrição do estado</FieldLabel><Textarea value={auditDescription} onChange={(event) => setAuditDescription(event.target.value)} rows={3} placeholder="Descreva avarias, desgaste e funcionamento." /></div>
+            <AssetPhotoPicker files={auditPhotos} onChange={setAuditPhotos} label="Fotos e anexos da auditoria" />
+            <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 text-sm"><input type="checkbox" className="mt-1" checked={auditCorrective} onChange={(event) => setAuditCorrective(event.target.checked)} /><span><strong>Abrir manutenção corretiva</strong><span className="mt-0.5 block text-xs text-muted-foreground">Cria a ocorrência e a ordem MNT já vinculadas a esta auditoria.</span></span></label>
+          </AssetSheetDialog>
+          <AssetSheetDialog
+            open={maintenanceDialogOpen}
+            onOpenChange={setMaintenanceDialogOpen}
+            title="Nova manutenção"
+            description="Gera ocorrência, tarefa e ordem MNT no prazo configurado."
+            footer={<>
+              <Button type="button" variant="outline" onClick={() => setMaintenanceDialogOpen(false)}>Cancelar</Button>
+              {maintenanceMode === 'corrective'
+                ? <Button type="button" onClick={() => void handleCreateCorrective()} loading={maintenanceSaving} disabled={!permissions.assets?.edit}>Abrir manutenção</Button>
+                : <Button type="button" onClick={() => void handleSavePlan()} loading={planSaving} disabled={!permissions.assets?.edit}>Salvar plano preventivo</Button>}
+            </>}
+          >
+            <Segmented value={maintenanceMode} onChange={setMaintenanceMode} options={[{ value: 'corrective', label: 'Corretiva' }, { value: 'preventive', label: 'Plano preventivo' }]} aria-label="Tipo de manutenção" />
+            {maintenanceMode === 'corrective' ? (
+              <>
+                <div><FieldLabel required>Problema / descrição</FieldLabel><Textarea value={maintenanceDescription} onChange={(event) => setMaintenanceDescription(event.target.value)} rows={3} /></div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><FieldLabel>Prioridade</FieldLabel><Select value={maintenancePriority} onValueChange={(value) => setMaintenancePriority(value as typeof maintenancePriority)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Baixa</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">Alta</SelectItem><SelectItem value="urgent">Urgente</SelectItem></SelectContent></Select></div>
+                  <div><FieldLabel required>Prazo</FieldLabel><Input type="date" value={maintenanceDueDate} onChange={(event) => setMaintenanceDueDate(event.target.value)} /></div>
+                </div>
+                <div><FieldLabel>Assistência / responsável</FieldLabel><Input value={maintenanceAssignee} onChange={(event) => setMaintenanceAssignee(event.target.value)} placeholder="Em branco = você" /></div>
+              </>
+            ) : (
+              <>
+                <div><FieldLabel required>Plano</FieldLabel><Input value={planName} onChange={(event) => setPlanName(event.target.value)} /></div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><FieldLabel required>Periodicidade (meses)</FieldLabel><Input type="number" min={1} max={120} value={planInterval} onChange={(event) => setPlanInterval(event.target.value)} /></div>
+                  <div><FieldLabel required>Próxima execução</FieldLabel><Input type="date" value={planNextDate} onChange={(event) => setPlanNextDate(event.target.value)} /></div>
+                </div>
+                <div><FieldLabel>Checklist (um item por linha)</FieldLabel><Textarea value={planChecklist} onChange={(event) => setPlanChecklist(event.target.value)} rows={3} /></div>
+              </>
+            )}
+          </AssetSheetDialog>
+        </Form>
       )}
       {asset && (
         <BarcodeScannerModal
