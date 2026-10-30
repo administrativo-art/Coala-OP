@@ -60,8 +60,9 @@ import javax.inject.Singleton
     }
 
     /** Terminal response from the server: no final coordinate/control event may be queued again. */
-    fun stopFromServer() {
+    fun stopFromServer(expectedSessionId: String? = null) {
         val session = prefs.getString("session", null)
+        if (expectedSessionId != null && session != expectedSessionId) return
         val workDate = prefs.getString("date", null)
         val unitId = prefs.getString("unit", null)
         val stopAt = prefs.getLong("stopAt", 0L)

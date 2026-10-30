@@ -1009,6 +1009,8 @@ export type User = {
   id: string; // Firebase Auth UID
   username: string;
   email: string;
+  /** Conta Google Workspace autorizada para substituir o login legado sem trocar o UID. */
+  corporateGoogleEmail?: string | null;
   phone?: string;
   phoneVerifiedAt?: Timestamp | string;
   phoneVerificationSource?: 'hr' | 'onboarding' | 'user';

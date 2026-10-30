@@ -141,9 +141,15 @@ env:
     value: "enforce"
   - variable: MOBILE_APP_ATTESTATION_SECRET
     secret: MOBILE_APP_ATTESTATION_SECRET
-  # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
+  # Migração nominal do login legado para a conta Google Workspace no mesmo UID.
+  # O valor deve ser o mesmo OAuth Web Client ID usado pelo Credential Manager do Coala Go.
+  - variable: GOOGLE_AUTH_WEB_CLIENT_ID
+    secret: GOOGLE_AUTH_WEB_CLIENT_ID
+  - variable: GOOGLE_WORKSPACE_LOGIN_DOMAIN
+    value: "coalashakes.com"
+  # Gate autorizado em 30/10/2026. Ele não ativa turnos: todos permanecem opt-in e os atuais estão `disabled`.
   - variable: DP_JOURNEY_LOCATION_ENABLED
-    value: "false"
+    value: "true"
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET
@@ -223,3 +229,7 @@ env:
     secret: BIO_ANALYTICS_INGEST_TOKEN
   - variable: GOOGLE_MAPS_BROWSER_API_KEY
     secret: GOOGLE_MAPS_BROWSER_API_KEY
+  - variable: GOOGLE_MAPS_GEOCODING_API_KEY
+    secret: GOOGLE_MAPS_GEOCODING_API_KEY
+  - variable: GOOGLE_MAPS_GEOCODING_DAILY_LIMIT
+    value: "100"

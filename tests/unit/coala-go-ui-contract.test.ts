@@ -203,7 +203,9 @@ test('Detalhe do dia é único e o acompanhamento entre unidades respeita iníci
   assert.match(time, /Text\("Memória de cálculo"/);
   assert.match(time, /Text\("Ajustes e ocorrências"/);
   assert.match(time, /Permitir localização/);
-  assert.match(journeyLocationService, /300_000L, 100f/);
+  assert.match(journeyLocationService, /movingMinSeconds = 120L/);
+  assert.match(journeyLocationService, /stationaryMaxSeconds = 900L/);
+  assert.match(journeyLocationService, /requestLocationUpdates\(it, 60_000L, 25f/);
   assert.match(journeyLocationService, /ACTION_PAUSE/);
   assert.match(journeyLocationService, /ACTION_STOP/);
   assert.match(journeyLocationService, /ACTION_ABORT/);

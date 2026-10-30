@@ -42,6 +42,18 @@
     "fieldPath": "expiresAt",
     "ttl": true,
     "indexes": []
+  },
+  {
+    "collectionGroup": "dp_locationGeocodeCache",
+    "fieldPath": "expiresAt",
+    "ttl": true,
+    "indexes": []
+  },
+  {
+    "collectionGroup": "dp_locationGeocodeDailyUsage",
+    "fieldPath": "expiresAt",
+    "ttl": true,
+    "indexes": []
   }
 ]
 }

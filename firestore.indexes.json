@@ -104,6 +104,11 @@
       { "fieldPath": "ownerUid", "order": "ASCENDING" },
       { "fieldPath": "active", "order": "ASCENDING" }
     ] },
+    { "collectionGroup": "mobileCorporateDevices", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "ownerUid", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "movementHistory", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "type", "order": "ASCENDING" },
       { "fieldPath": "timestamp", "order": "ASCENDING" }
@@ -789,6 +794,7 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "authIdentityMigrations", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     {
       "collectionGroup": "shifts",
       "fieldPath": "date",
