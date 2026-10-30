@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **529 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **533 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -160,6 +160,7 @@ Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/employees/[employeeUid]` | POST | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/fiscal-options` | GET | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/journey-location` | POST | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/journey-location/lease` | POST | [src/app/api/dp/time-recording/journey-location/lease/route.ts](../../src/app/api/dp/time-recording/journey-location/lease/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/location-access` | POST | [src/app/api/dp/time-recording/location-access/route.ts](../../src/app/api/dp/time-recording/location-access/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/location-policies/[unitId]` | GET, PUT | [src/app/api/dp/time-recording/location-policies/[unitId]/route.ts](../../src/app/api/dp/time-recording/location-policies/%5BunitId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/markings` | POST, GET | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -458,6 +459,8 @@ Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
 | `/api/mobile/app-attestation` | POST, GET | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [android-direct-apk-attestation](android-direct-apk-attestation.md) |
+| `/api/mobile/auth/google-migration` | GET, POST | [src/app/api/mobile/auth/google-migration/route.ts](../../src/app/api/mobile/auth/google-migration/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/mobile/corporate-device` | GET, POST | [src/app/api/mobile/corporate-device/route.ts](../../src/app/api/mobile/corporate-device/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/mobile/profile` | GET | [src/app/api/mobile/profile/route.ts](../../src/app/api/mobile/profile/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/mobile/profile/photo` | POST | [src/app/api/mobile/profile/photo/route.ts](../../src/app/api/mobile/profile/photo/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/mobile/push/devices` | POST, DELETE | [src/app/api/mobile/push/devices/route.ts](../../src/app/api/mobile/push/devices/route.ts) | [coala-go-parity](coala-go-parity.md) |
@@ -559,6 +562,7 @@ Inclui **64 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/users/[userId]` | PATCH | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/%5BuserId%5D/route.ts) | [people-access](flows/people-access.md) |
 | `/api/users/[userId]/assets` | GET | [src/app/api/users/[userId]/assets/route.ts](../../src/app/api/users/%5BuserId%5D/assets/route.ts) | [assets](flows/assets.md) |
 | `/api/users/[userId]/contract-changes` | GET | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/%5BuserId%5D/contract-changes/route.ts) | [people-access](flows/people-access.md) |
+| `/api/users/[userId]/corporate-devices` | GET, POST | [src/app/api/users/[userId]/corporate-devices/route.ts](../../src/app/api/users/%5BuserId%5D/corporate-devices/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/webhooks/autentique` | POST | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/banking` | POST | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/cobranca` | POST | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) | [runtime-surfaces](runtime-surfaces.md) |

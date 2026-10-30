@@ -70,8 +70,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class JourneyLocationEvent(val eventId: String, val sessionId: String, val workDate: String,
     val executionUnitId: String, val eventType: String, val capturedAt: String,
     val latitude: Double? = null, val longitude: Double? = null, val accuracyMeters: Double? = null)
-@Serializable data class JourneyLocationBatch(val events: List<JourneyLocationEvent>)
+@Serializable data class JourneyLocationBatch(val leaseToken: String, val events: List<JourneyLocationEvent>)
 @Serializable data class JourneyLocationAccepted(val acceptedEventIds: List<String>, val stopRequested: Boolean = false)
+@Serializable data class JourneyLocationLeaseRequest(val sessionId: String, val workDate: String, val executionUnitId: String)
+@Serializable data class JourneyLocationLeaseConfig(val movingMinSeconds: Long = 120, val movingMinMeters: Float = 120f,
+    val stationaryMaxSeconds: Long = 900, val maxAccuracyMeters: Float = 150f)
+@Serializable data class JourneyLocationLease(val leaseToken: String, val expiresAt: String, val config: JourneyLocationLeaseConfig)
 
 @Serializable data class AdjustmentTarget(val receiptId: String, val nsr: Long? = null, val pilotSequence: Long? = null, val markedAt: String, val executionUnitId: String)
 @Serializable data class AdjustmentInclusion(val markedAt: String, val executionUnitId: String)

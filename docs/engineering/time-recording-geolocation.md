@@ -1,9 +1,9 @@
 # Especificação técnica do georreferenciamento no registro de ponto
 
-- **Estado:** captura pontual e complemento Entre unidades implementados; ativação real pendente de documentos de privacidade, configuração por unidade/turno, consulta autorizada, teste físico e liberação do kill switch.
+- **Estado:** captura pontual e complemento Entre unidades implementados; gate global autorizado em 30/10/2026, com todos os turnos atuais em `disabled`; primeiro turno real ainda depende da configuração nominal e homologação física.
 - **Escopo:** Coala One web e Coala Go, com a mesma avaliação no servidor.
 - **Fluxo relacionado:** [Registro de ponto REP-P](flows/dp-time-recording.md).
-- **Última revisão técnica:** 23/10/2026.
+- **Última revisão técnica:** 30/10/2026.
 
 ## Decisões aprovadas em 22/10/2026
 
@@ -20,13 +20,27 @@ A implementação adotou as coleções `repP_locationPolicies` e `repP_locationE
 
 ## Complemento Entre unidades — implementado, desativado e arquivado
 
-A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. Em 30/10 o recurso contínuo foi retirado da implantação atual e [arquivado para exploração futura](../planos/plano-monitoramento-continuo-celular-empresarial.md). O backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, cujo padrão deve permanecer falso, além da política nominal da unidade. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`.
+A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. Em 30/10 a implantação foi retomada com opt-in estrito: o backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, política nominal da unidade e uma lease curta renovada a cada 20 minutos. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`. Todos os turnos atuais permanecem `disabled`; ligar o gate não ativa nenhum deles.
 
-Quando e somente quando todos os gates forem aprovados, o Android poderá manter um serviço em primeiro plano durante a jornada, com amostras periódicas no intervalo operacional definido. A instalação existente pede uma única vez a permissão foreground ao abrir Ponto; concedê-la não inicia coleta. O ciclo contínuo arquivado só poderia começar após a finalidade declarada `Início da jornada`, pausar no intervalo e encerrar no fim, sempre sujeito a nova decisão de produto e jurídica. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
+O acompanhamento pertence à pessoa autenticada e à política copiada para a jornada. Pode funcionar em aparelho pessoal ou empresarial. A aprovação de aparelho empresarial é somente uma classificação administrativa adicional: não inicia, bloqueia nem prolonga rastreio. Logout ou troca de usuário encerram a sessão anterior e a nova pessoa passa a seguir exclusivamente a própria jornada.
+
+No Android, o serviço foreground só liga os sensores depois de obter a lease. Pontos com precisão pior que 150 m são descartados localmente; em movimento, a coleta guarda no máximo um marco a cada dois minutos e 120 m, e parada garante somente um marco a cada 15 minutos. A leitura do detalhe do dia é explícita e auditada. A geocodificação reversa seleciona no máximo cinco marcos separados por pelo menos 1 km, usa cache temporário de 30 dias e respeita cota diária; falha ou ausência de endereço não afeta o ponto nem a trilha.
+
+### Ciclo da lease da jornada
+
+1. O serviço solicita uma lease somente depois do início da jornada. O servidor relê o turno, a janela escalada, a política nominal, o UID, a data, a unidade e o gate global.
+2. A lease vale 20 minutos. O token aleatório permanece apenas em memória no Android; o servidor guarda somente seu hash, vinculado a UID, sessão, data e unidade.
+3. Antes de cada lote, o app renova a lease quando restarem menos de 90 segundos. Falha transitória de rede mantém o serviço aguardando e tenta novamente; recusa de política, turno, unidade, expiração ou kill switch encerra sensores e descarta a fila daquela sessão.
+4. O servidor limita a sessão a 500 eventos, ignora amostra redundante com menos de 30 segundos e recusa lote que misture unidades. Pausa, retomada e fim continuam ordenados pela máquina de estados.
+5. No fim da jornada ou na revogação da política, o servidor revoga a lease. Logout ou troca de usuário também encerram a coleta local; a classificação empresarial do aparelho nunca participa da emissão.
+
+Custo máximo técnico por sessão ativa: uma escrita de lease a cada 20 minutos (até 24 em oito horas), até 500 eventos persistidos e, somente quando alguém abre explicitamente o detalhe, até 20 evidências lidas mais uma auditoria. Não existe polling de coleções nem listener global.
+
+Com o gate global autorizado, o Android pode manter um serviço em primeiro plano durante a jornada somente quando o turno nominal também estiver em `workday`. A instalação existente pede uma única vez a permissão foreground ao abrir Ponto; concedê-la não inicia coleta. O ciclo começa após a finalidade declarada `Início da jornada`, pausa no intervalo e encerra no fim. Esse é um efeito operacional, não fiscal, financeiro ou disciplinar.
 
 O servidor é a autoridade da sessão: exige fuso brasileiro explícito na unidade, congela fuso, início e fim escalados, aceita chegada antecipada somente dentro da janela limitada de quatro horas, encerra a tolerância duas horas após o turno, rejeita amostras fora da janela, ordenação invertida, amostra sem início ou durante pausa e qualquer evento depois do encerramento. Cada lote revalida a política. Revogação ou kill switch devolvem instrução terminal: o Android interrompe sensores e indicador sem enfileirar outro evento e elimina os eventos posteriores daquela sessão. Sessões e eventos ficam separados em `dp_journeyLocationSessions` e `dp_journeyLocationEvents`, fora da ARP/PTRP, e só podem apoiar revisão humana.
 
-Antes de mudar o gate para verdadeiro, concluir e publicar: cláusula LGPD e aditivo dos atuais; finalidade específica e base legal já decididas; frequência efetiva; retenção de cinco anos; aviso e transparência; acesso pelo titular; perfis de consulta e auditoria; eliminação e `legalHold`; canal de contestação; RIPD; configuração dos turnos reais; e ensaio em aparelho físico. Até isso ocorrer, telas e contratos podem demonstrar a opção, mas nenhuma coleta periódica real deve iniciar.
+O programador confirmou em 30/10/2026 que a autorização geral de LGPD já existe e autorizou o gate global. Frequência, retenção, acesso restrito, auditoria, descarte e contestação permanecem documentados e sujeitos à governança interna. Como todos os turnos atuais continuam em `disabled`, nenhuma coleta periódica real inicia até uma configuração nominal futura e sua homologação física.
 
 ## Área da unidade separada da coleta (29/10/2026)
 
