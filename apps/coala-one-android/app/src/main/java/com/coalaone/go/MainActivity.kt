@@ -282,6 +282,12 @@ private fun installUpdate(context: android.content.Context, file: File) {
         Action("Registrar ponto", dark = true, onClick = onRecord)
     }
 }
+@Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(value, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
+        Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle(); val release by update.release.collectAsStateWithLifecycle()
