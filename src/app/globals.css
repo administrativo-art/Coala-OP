@@ -55,6 +55,7 @@
   --color-ds-input: var(--ds-surface-input);
   --color-ds-muted: var(--ds-surface-muted);
   --color-ds-seg: var(--ds-surface-seg);
+  --color-ds-seg-active: var(--ds-surface-seg-active);
   --color-ds-dark: var(--ds-surface-dark);
   --color-ds-dark-hover: var(--ds-surface-dark-hover);
   --color-ds-border: var(--ds-border);
@@ -797,6 +798,7 @@
     --ds-surface-input: #faf9f6;
     --ds-surface-muted: #f6f4ef;
     --ds-surface-seg: #e6e3dc;
+    --ds-surface-seg-active: #ffffff;
     --ds-surface-dark: #15151c;
     --ds-surface-dark-hover: #2a2a35;
     /* bordas */
@@ -871,6 +873,7 @@
     --ds-surface-input: #24242e;
     --ds-surface-muted: #24242e;
     --ds-surface-seg: #1c1c24;
+    --ds-surface-seg-active: #3a3a48;
     --ds-border: #2e2e3a;
     --ds-border-input: #3f3f4d;
     --ds-divider: #26262f;
