@@ -221,3 +221,5 @@ env:
     value: "v25.0"
   - variable: BIO_ANALYTICS_INGEST_TOKEN
     secret: BIO_ANALYTICS_INGEST_TOKEN
+  - variable: GOOGLE_MAPS_BROWSER_API_KEY
+    secret: GOOGLE_MAPS_BROWSER_API_KEY

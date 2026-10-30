@@ -56,7 +56,7 @@ export function Segmented<T extends string>({ value, onChange, options, classNam
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
               "h-8 whitespace-nowrap rounded-ds-sm px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
-              active ? "bg-white text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink"
+              active ? "bg-ds-seg-active text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink"
             )}
           >
             {o.label}
