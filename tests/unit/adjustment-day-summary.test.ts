@@ -176,3 +176,11 @@ test("os textos do painel nunca falam em hora extra, banco de horas, irregularid
   const texts = scenarios.flatMap((summary) => [summary.before.note.text, summary.after.note.text, summary.shiftText ?? ""]);
   for (const text of texts) assert.doesNotMatch(text, /hora extra|horas extras|banco de horas|irregular|ilegal|\blegal\b|limite/i, text);
 });
+
+test("horários próximos na linha do dia alternam acima e abaixo para não colarem", () => {
+  const day: AdjustmentDayContext = { ...luis, workDate: "2026-10-28",
+    markings: [["r1", "12:31"], ["r2", "14:10"], ["r3", "15:12"], ["r4", "23:48"]].map(([id, time], index) =>
+      ({ ...marking(id, time, index + 1), markedAt: at(time, "2026-10-28") })),
+    shifts: [{ ...luis.shifts[0], startTime: "09:00", endTime: "18:00", breakType: "flexible", breakStart: null, breakEnd: null }] };
+  assert.deepEqual(summarizeAdjustmentDay(day, []).before.markers.map((item) => item.side), ["above", "below", "above", "above"]);
+});
