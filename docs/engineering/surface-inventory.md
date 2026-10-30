@@ -2,7 +2,7 @@
 
 Inventário estrutural gerado de `src/app`: **512 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **62 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -613,3 +613,4 @@ Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `uberSftpDailySync` | `onSchedule` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberTransactionCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `vacationWorkflowDailyAlerts` | `onSchedule` | [functions/src/vacation-alerts.ts](../../functions/src/vacation-alerts.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `weeklyMatrixRestockEmail` | `onSchedule` | [functions/src/weekly-matrix-restock-email.ts](../../functions/src/weekly-matrix-restock-email.ts) | [runtime-surfaces](runtime-surfaces.md) |
