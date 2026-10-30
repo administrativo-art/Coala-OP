@@ -25,7 +25,7 @@ const movementInputSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 }).strict();
 
-const getContract = defineSecurityContract({ schemaVersion: 1, id: "assets.movements.list", version: 1, surface: { method: "GET", path: "/api/assets/[assetId]/movements" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "assets.viewHistory" }, resourceScope: { kind: "workspace" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const getContract = defineSecurityContract({ schemaVersion: 1, id: "assets.movements.list", version: 1, surface: { method: "GET", path: "/api/assets/[assetId]/movements" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "assets.view-history" }, resourceScope: { kind: "workspace" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
 const postContract = defineSecurityContract({ schemaVersion: 1, id: "assets.movements.create", version: 1, surface: { method: "POST", path: "/api/assets/[assetId]/movements" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "assets.transfer" }, resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "assets.movement.create-input", unknownFields: "reject" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
 
 async function loadAsset(routeContext: RouteContext): Promise<AssetResource> {

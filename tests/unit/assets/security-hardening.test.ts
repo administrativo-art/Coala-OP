@@ -36,7 +36,7 @@ test("foto de auditoria usa caminho dedicado e integridade confirmada no servido
 });
 
 test("aquisição comercial exige patrimônio e compras", () => {
-  assert.match(acquisition, /assets\.view\+stock\.purchasing\.view/);
+  assert.match(acquisition, /assets\.view-and-purchasing-view/);
   assert.match(acquisition, /permissions\.stock\?\.purchasing\?\.view/);
   assert.match(ui, /acquisitionStatus === 'forbidden'/);
   assert.match(ui, /exigem permissão de Compras/);

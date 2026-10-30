@@ -15,7 +15,7 @@ const contract = defineSecurityContract({
   schemaVersion: 1, id: "assets.acquisition.get", version: 1,
   surface: { method: "GET", path: "/api/assets/[assetId]/acquisition" },
   exposure: "authenticated", identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "assets.view+stock.purchasing.view" }, resourceScope: { kind: "workspace" },
+  authorization: { kind: "permission", action: "assets.view-and-purchasing-view" }, resourceScope: { kind: "workspace" },
   input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized",
 });
 

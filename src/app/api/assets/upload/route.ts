@@ -26,7 +26,7 @@ function detectFile(buffer: Buffer): Detected | null {
   return null;
 }
 
-const contract = defineSecurityContract({ schemaVersion: 1, id: "assets.upload", version: 1, surface: { method: "POST", path: "/api/assets/upload" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "assets.create|assets.edit" }, resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "assets.upload.multipart", unknownFields: "reject" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
+const contract = defineSecurityContract({ schemaVersion: 1, id: "assets.upload", version: 1, surface: { method: "POST", path: "/api/assets/upload" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "assets.create-or-edit" }, resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "assets.upload.multipart", unknownFields: "reject" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
 const enforcer = defineSecurityEnforcer<NextRequest, C, unknown, ServerUserContext, Input, { workspaceId: string }>({
   id: "assets-upload-v1", guarantees: ["authenticated-user", "active-user", "permission-checked", "workspace-scoped", "input-validated", "fields-allowlisted"],
   async enforce({ request }) {
