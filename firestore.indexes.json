@@ -1,6 +1,19 @@
 
 {
   "indexes": [
+    { "collectionGroup": "assetMaintenancePlans", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "active", "order": "ASCENDING" },
+      { "fieldPath": "materializeOn", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "assetMaintenancePlans", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "assetId", "order": "ASCENDING" },
+      { "fieldPath": "active", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "assetMaintenanceOccurrences", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "assetId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "actionLogs", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspace_id", "order": "ASCENDING" },
       { "fieldPath": "metadata.target_id", "order": "ASCENDING" },
@@ -715,6 +728,46 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "assetAudits",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "assetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "assetMaintenancePlans",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "assetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "assetMaintenanceOccurrences",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "assetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "assetMaintenanceOccurrences",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "provisioningStatus", "order": "ASCENDING" }, { "fieldPath": "nextProvisionAttemptAt", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "assetMovements",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "assetId", "order": "ASCENDING" }, { "fieldPath": "occurredAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "assetCustodyTransfers",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "assetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "generatedDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "sourceAssetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "assets",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "custody.holderType", "order": "ASCENDING" }, { "fieldPath": "custody.holderId", "order": "ASCENDING" }]
     },
     {
       "collectionGroup": "shifts",

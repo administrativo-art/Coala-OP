@@ -13,7 +13,7 @@ Arquivos locais percorridos: 34.
 Chamadas candidatas encontradas:
 
 - `/api/assets` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/route.ts`](../../src/app/api/assets/route.ts)
-- `/api/assets/` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/[assetId]/route.ts`](../../src/app/api/assets/%5BassetId%5D/route.ts)
+- `/api/assets/` — interface [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx); rota candidata [`src/app/api/assets/[assetId]/route.ts`](../../src/app/api/assets/%5BassetId%5D/route.ts)
 - `/api/assets/categories` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/categories/route.ts`](../../src/app/api/assets/categories/route.ts)
 - `/api/assets/upload` — interface [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx); rota candidata [`src/app/api/assets/upload/route.ts`](../../src/app/api/assets/upload/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
@@ -29,6 +29,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `assets.create` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.edit` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.printLabels` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
+- `assets.transfer` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.view` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.viewHistory` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 
@@ -640,7 +641,7 @@ Arquivos locais percorridos: 35.
 Chamadas candidatas encontradas:
 
 - `/api/assets` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/route.ts`](../../src/app/api/assets/route.ts)
-- `/api/assets/` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/[assetId]/route.ts`](../../src/app/api/assets/%5BassetId%5D/route.ts)
+- `/api/assets/` — interface [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx); rota candidata [`src/app/api/assets/[assetId]/route.ts`](../../src/app/api/assets/%5BassetId%5D/route.ts)
 - `/api/assets/categories` — interface [`src/components/assets-provider.tsx`](../../src/components/assets-provider.tsx); rota candidata [`src/app/api/assets/categories/route.ts`](../../src/app/api/assets/categories/route.ts)
 - `/api/assets/upload` — interface [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx); rota candidata [`src/app/api/assets/upload/route.ts`](../../src/app/api/assets/upload/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
@@ -656,6 +657,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `assets.create` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.edit` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.printLabels` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
+- `assets.transfer` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.view` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 - `assets.viewHistory` — [`src/components/asset-management.tsx`](../../src/components/asset-management.tsx)
 
@@ -973,7 +975,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 94.
+Arquivos locais percorridos: 95.
 
 Chamadas candidatas encontradas:
 
@@ -1010,7 +1012,7 @@ Chamadas candidatas encontradas:
 - `/api/uniforms/exchange` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/exchange/route.ts`](../../src/app/api/uniforms/exchange/route.ts)
 - `/api/uniforms/return` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/return/route.ts`](../../src/app/api/uniforms/return/route.ts)
 - `/api/uniforms/terms/` — interface [`src/components/collaborator-uniforms.tsx`](../../src/components/collaborator-uniforms.tsx); rota candidata [`src/app/api/uniforms/terms/[id]/route.ts`](../../src/app/api/uniforms/terms/%5Bid%5D/route.ts)
-- `/api/users/` — interface [`src/components/dp/contract-changes.tsx`](../../src/components/dp/contract-changes.tsx); rota candidata [`src/app/api/users/[userId]/route.ts`](../../src/app/api/users/%5BuserId%5D/route.ts)
+- `/api/users/` — interface [`src/components/collaborator-assets.tsx`](../../src/components/collaborator-assets.tsx); rota candidata [`src/app/api/users/[userId]/route.ts`](../../src/app/api/users/%5BuserId%5D/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -1531,6 +1533,8 @@ Chamadas candidatas encontradas:
 - `/api/documents/generate` — interface [`src/components/hr/recruitment/recruitment-onboarding-view.tsx`](../../src/components/hr/recruitment/recruitment-onboarding-view.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
 - `/api/documents/templates` — interface [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx); rota candidata [`src/app/api/documents/templates/route.ts`](../../src/app/api/documents/templates/route.ts)
 - `/api/documents/templates/` — interface [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
+- `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)

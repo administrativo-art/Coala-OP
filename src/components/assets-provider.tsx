@@ -18,6 +18,7 @@ export interface AssetsContextType {
   assets: Asset[];
   categories: AssetCategory[];
   loading: boolean;
+  refreshAssets: () => Promise<void>;
   addAsset: (asset: AssetInput) => Promise<void>;
   addCategory: (name: string, description?: string) => Promise<void>;
   updateAsset: (assetId: string, patch: Partial<Asset>) => Promise<void>;
@@ -208,6 +209,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     assets,
     categories,
     loading,
+    refreshAssets,
     addAsset,
     addCategory,
     updateAsset,
@@ -215,7 +217,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     recordLabelPrint,
     fetchMovements,
     recordRetirada,
-  }), [assets, categories, loading, addAsset, addCategory, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada]);
+  }), [assets, categories, loading, refreshAssets, addAsset, addCategory, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada]);
 
   return <AssetsContext.Provider value={value}>{children}</AssetsContext.Provider>;
 }
