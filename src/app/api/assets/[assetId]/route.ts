@@ -1,13 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
+import { z } from 'zod';
 
+import { changedPurchaseLinkedFields, normalizedAssetLifecycle } from '@/features/assets/lifecycle';
+import { deactivateAssetMaintenance } from '@/features/assets/maintenance.server';
 import { requireUser } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { AppError } from '@/lib/observability/app-error';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
 import { WORKSPACE_ID } from '@/lib/workspace';
 import type { AssetStatus } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+type RouteContext = { params: Promise<{ assetId: string }> };
+type AssetResource = { id: string; data: Record<string, any> };
+const routeBodySchema = z.record(z.string().max(80), z.unknown()).refine((body) => Object.keys(body).length <= 100, 'Muitos campos enviados.');
+
+function contract(method: 'GET' | 'PATCH' | 'POST', id: string, action: string, mode: 'read' | 'write') {
+  return defineSecurityContract({ schemaVersion: 1, id, version: 1, surface: { method, path: '/api/assets/[assetId]' }, exposure: 'authenticated', identity: { kind: 'active-user' }, authorization: { kind: 'custom', strategy: action }, resourceScope: { kind: 'workspace' }, input: method === 'GET' ? { kind: 'none' } : { kind: 'schema', schema: `assets.${method.toLowerCase()}-input`, unknownFields: 'reject' }, effects: { mode, audit: mode === 'write' ? 'server-authoritative' : 'none' }, errorExposure: 'sanitized' });
+}
+const getContract = contract('GET', 'assets.detail.get', 'assets-detail-view', 'read');
+const patchContract = contract('PATCH', 'assets.detail.patch', 'assets-detail-edit', 'write');
+const postContract = contract('POST', 'assets.detail.action', 'assets-detail-action', 'write');
+
+async function loadAsset(routeContext: RouteContext): Promise<AssetResource> {
+  const { assetId } = await routeContext.params;
+  const snapshot = await dbAdmin.collection('assets').doc(assetId).get();
+  if (!snapshot.exists) throw new AppError({ code: 'ASSET_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Patrimônio não encontrado.' });
+  return { id: snapshot.id, data: snapshot.data() ?? {} };
+}
+
+function makeEnforcer(routeContract: ReturnType<typeof contract>, method: 'GET' | 'PATCH' | 'POST') {
+  return createStandardSecurityEnforcer<any, RouteContext, unknown, Awaited<ReturnType<typeof requireUser>>, Record<string, unknown> | undefined, AssetResource>(routeContract, {
+    authenticate: ({ request }) => requireUser(request),
+    ...(method === 'GET' ? {} : { parseInput: async ({ request }: any) => { const parsed = routeBodySchema.safeParse(await request.clone().json().catch(() => null)); if (!parsed.success) throw new AppError({ code: 'ASSET_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Dados do patrimônio inválidos.' }); return parsed.data; } }),
+    loadResource: ({ routeContext }) => loadAsset(routeContext),
+    authorize: ({ actor, input }) => {
+      if (method === 'GET' && !actor.permissions.assets?.view) throw new AppError({ code: 'ASSET_VIEW_FORBIDDEN', kind: 'AUTHORIZATION' });
+      if (method === 'PATCH' && !actor.permissions.assets?.edit) throw new AppError({ code: 'ASSET_EDIT_FORBIDDEN', kind: 'AUTHORIZATION' });
+      if (method === 'POST') {
+        const action = String(input?.action ?? '');
+        const allowed = action === 'print-label' ? actor.permissions.assets?.printLabels : action === 'status' ? (input?.status === 'baixado' ? actor.permissions.assets?.retire : actor.permissions.assets?.edit) : actor.permissions.assets?.transfer;
+        if (!allowed) throw new AppError({ code: 'ASSET_ACTION_FORBIDDEN', kind: 'AUTHORIZATION' });
+      }
+    },
+    assertScope: ({ actor, resource }) => { if ((resource.data.workspaceId ?? WORKSPACE_ID) !== actor.workspace_id) throw new AppError({ code: 'ASSET_WORKSPACE_FORBIDDEN', kind: 'AUTHORIZATION' }); },
+  });
+}
+const getEnforcer = makeEnforcer(getContract, 'GET');
+const patchEnforcer = makeEnforcer(patchContract, 'PATCH');
+const postEnforcer = makeEnforcer(postContract, 'POST');
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -60,17 +105,18 @@ async function assertAssetCodeCanBeUsed(code: string, currentAssetId: string) {
   }
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ assetId: string }> }) {
+async function handleGet(request: NextRequest, context: RouteContext) {
   const userContext = await requireUser(request);
   if (!userContext.permissions.assets?.view) return jsonError('Sem permissão para visualizar patrimônio.', 403);
 
   const { assetId } = await context.params;
   const snap = await dbAdmin.collection('assets').doc(assetId).get();
   if (!snap.exists) return jsonError('Patrimônio não encontrado.', 404);
-  return NextResponse.json({ id: snap.id, ...snap.data() });
+  const raw = { id: snap.id, ...snap.data() };
+  return NextResponse.json({ ...raw, ...normalizedAssetLifecycle(raw) });
 }
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ assetId: string }> }) {
+async function handlePatch(request: NextRequest, context: RouteContext) {
   const userContext = await requireUser(request);
   if (!userContext.permissions.assets?.edit) return jsonError('Sem permissão para editar patrimônio.', 403);
 
@@ -80,6 +126,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
   const snap = await ref.get();
   if (!snap.exists) return jsonError('Patrimônio não encontrado.', 404);
   const current = snap.data()!;
+  const changedPurchaseFields = current.sourceType === 'purchase_receipt'
+    ? changedPurchaseLinkedFields(current, body)
+    : [];
+  if (changedPurchaseFields.length > 0) {
+    return jsonError(`Dados de aquisição vinculados à compra são somente leitura: ${changedPurchaseFields.join(', ')}.`, 409);
+  }
+  const responsibleChanged = [
+    ['responsibleUserId', current.responsibleUserId],
+    ['responsibleName', current.responsibleName],
+  ].some(([field, value]) => Object.prototype.hasOwnProperty.call(body, field) && String(body[field] ?? '') !== String(value ?? ''));
+  if (responsibleChanged) return jsonError('Use Transferir posse para alterar o responsável pelo patrimônio.', 409);
+  const purchaseLinked = current.sourceType === 'purchase_receipt';
   const now = new Date().toISOString();
   const incomingCode = body.code !== undefined ? normalizeAssetCodeInput(body.code) : String(current.code ?? '');
   let nextCode = String(current.code ?? '');
@@ -115,23 +173,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     description: body.description?.trim?.() || null,
     department: body.department?.trim?.() || null,
     exactLocation: body.exactLocation?.trim?.() || null,
-    responsibleUserId: body.responsibleUserId?.trim?.() || null,
-    responsibleName: body.responsibleName?.trim?.() || null,
-    responsibilityStatus: body.responsibleUserId ? 'assigned' : null,
+    responsibleUserId: current.responsibleUserId ?? null,
+    responsibleName: current.responsibleName ?? null,
+    responsibilityStatus: current.responsibilityStatus ?? null,
     previousResponsibleUserId: null,
     previousResponsibleName: null,
     responsibilityVacatedAt: null,
     inUse: typeof body.inUse === 'boolean' ? body.inUse : current.inUse ?? true,
     possessionStatus: body.possessionStatus?.trim?.() || null,
-    purchaseDate: body.purchaseDate || null,
-    purchaseValue: Number.isFinite(Number(body.purchaseValue)) ? Number(body.purchaseValue) : null,
-    supplierId: body.supplierId || null,
-    supplierName: body.supplierName || null,
-    invoiceNumber: body.invoiceNumber?.trim?.() || null,
-    paymentMethod: body.paymentMethod?.trim?.() || null,
-    costCenter: body.costCenter?.trim?.() || null,
-    accountingAccount: body.accountingAccount?.trim?.() || null,
-    documentUrl: body.documentUrl || null,
+    purchaseDate: purchaseLinked ? current.purchaseDate ?? null : body.purchaseDate || null,
+    purchaseValue: purchaseLinked ? current.purchaseValue ?? null : Number.isFinite(Number(body.purchaseValue)) ? Number(body.purchaseValue) : null,
+    supplierId: purchaseLinked ? current.supplierId ?? null : body.supplierId || null,
+    supplierName: purchaseLinked ? current.supplierName ?? null : body.supplierName || null,
+    invoiceNumber: purchaseLinked ? current.invoiceNumber ?? null : body.invoiceNumber?.trim?.() || null,
+    paymentMethod: purchaseLinked ? current.paymentMethod ?? null : body.paymentMethod?.trim?.() || null,
+    costCenter: purchaseLinked ? current.costCenter ?? null : body.costCenter?.trim?.() || null,
+    accountingAccount: purchaseLinked ? current.accountingAccount ?? null : body.accountingAccount?.trim?.() || null,
+    documentUrl: purchaseLinked ? current.documentUrl ?? null : body.documentUrl || null,
     usefulLifeYears: Number.isFinite(Number(body.usefulLifeYears)) ? Number(body.usefulLifeYears) : null,
     residualValue: Number.isFinite(Number(body.residualValue)) ? Number(body.residualValue) : null,
     depreciationMethod: body.depreciationMethod?.trim?.() || null,
@@ -181,7 +239,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
   return NextResponse.json({ ok: true });
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ assetId: string }> }) {
+async function handlePost(request: NextRequest, context: RouteContext) {
   const userContext = await requireUser(request);
   const { assetId } = await context.params;
   const body = await request.json().catch(() => ({}));
@@ -193,34 +251,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
   const now = new Date().toISOString();
 
   if (action === 'transfer') {
-    if (!userContext.permissions.assets?.transfer) return jsonError('Sem permissão para transferir patrimônio.', 403);
-    const toKioskId = String(body.toKioskId ?? '').trim();
-    if (!toKioskId) return jsonError('Unidade de destino obrigatória.');
-    await ref.update({
-      currentKioskId: toKioskId,
-      currentKioskName: body.toKioskName || null,
-      updatedAt: now,
-    });
-    await dbAdmin.collection('assetMovements').add({
-      assetId,
-      assetCode: current.code,
-      assetName: current.name,
-      type: 'TRANSFERENCIA',
-      fromKioskId: current.currentKioskId,
-      fromKioskName: current.currentKioskName,
-      toKioskId,
-      toKioskName: body.toKioskName || null,
-      userId: userContext.userDoc.id,
-      username: userContext.userDoc.username,
-      occurredAt: now,
-      notes: body.notes || null,
-    });
-    return NextResponse.json({ ok: true });
+    return jsonError('Use a rota de movimentação com versão esperada para alterar a localização.', 409);
   }
 
   if (action === 'status') {
-    if (!userContext.permissions.assets?.edit) return jsonError('Sem permissão para alterar status.', 403);
     const toStatus = body.status as AssetStatus;
+    const canChangeStatus = toStatus === 'baixado' ? userContext.permissions.assets?.retire : userContext.permissions.assets?.edit;
+    if (!canChangeStatus) return jsonError('Sem permissão para alterar status.', 403);
     if (!['ativo', 'em_manutencao', 'fora_de_uso', 'extraviado', 'vendido', 'descartado', 'baixado'].includes(toStatus)) return jsonError('Status inválido.');
     await ref.update({ status: toStatus, updatedAt: now });
     await dbAdmin.collection('assetMovements').add({
@@ -235,6 +272,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
       occurredAt: now,
       notes: body.notes || null,
     });
+    if (toStatus === 'baixado') await deactivateAssetMaintenance(userContext, assetId);
     return NextResponse.json({ ok: true });
   }
 
@@ -254,44 +292,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
   }
 
   if (action === 'retirada') {
-    if (!userContext.permissions.assets?.edit) return jsonError('Sem permissão.', 403);
-    const withdrawerName = String(body.withdrawerName ?? '').trim();
-    const destinationName = String(body.destinationName ?? '').trim();
-    const newResponsibleName = String(body.newResponsibleName ?? '').trim() || null;
-    const newResponsibleUserId = String(body.newResponsibleUserId ?? '').trim() || null;
-    if (!withdrawerName || !destinationName) return jsonError('Quem retira e destino são obrigatórios.');
-    await dbAdmin.collection('assetMovements').add({
-      assetId,
-      assetCode: current.code,
-      assetName: current.name,
-      type: 'RETIRADA',
-      userId: body.withdrawerUserId || 'externo',
-      username: withdrawerName,
-      fromKioskId: current.currentKioskId || null,
-      fromKioskName: current.currentKioskName || null,
-      toKioskId: body.destinationKioskId || null,
-      toKioskName: destinationName,
-      notes: body.notes || null,
-      occurredAt: now,
-    });
-    const assetUpdates: Record<string, unknown> = {};
-    if (body.destinationKioskId) {
-      assetUpdates.currentKioskId = body.destinationKioskId;
-      assetUpdates.currentKioskName = destinationName;
-    }
-    if (newResponsibleName) {
-      assetUpdates.responsibleName = newResponsibleName;
-      assetUpdates.responsibleUserId = newResponsibleUserId ?? FieldValue.delete();
-      assetUpdates.responsibilityStatus = 'assigned';
-      assetUpdates.previousResponsibleUserId = FieldValue.delete();
-      assetUpdates.previousResponsibleName = FieldValue.delete();
-      assetUpdates.responsibilityVacatedAt = FieldValue.delete();
-    }
-    if (Object.keys(assetUpdates).length > 0) {
-      await ref.update({ ...assetUpdates, updatedAt: now });
-    }
-    return NextResponse.json({ ok: true });
+    return jsonError('Escolha Registrar movimentação ou Transferir posse no novo fluxo patrimonial.', 409);
   }
 
   return jsonError('Ação inválida.');
 }
+
+export const GET = secureRoute<RouteContext>({ contract: getContract, enforcer: getEnforcer as any }, ({ request, routeContext }) => handleGet(request, routeContext));
+export const PATCH = secureRoute<RouteContext>({ contract: patchContract, enforcer: patchEnforcer as any }, ({ request, routeContext }) => handlePatch(request, routeContext));
+export const POST = secureRoute<RouteContext>({ contract: postContract, enforcer: postEnforcer as any }, ({ request, routeContext }) => handlePost(request, routeContext));

@@ -51,6 +51,7 @@ export {
 } from './uber-sftp/jobs.js';
 export { instagramPublishingScheduler } from './instagram-publishing-job.js';
 export { instagramInsightsSnapshotScheduler } from './instagram-insights-snapshot-job.js';
+export { assetMaintenanceDailyMaterialize } from './asset-maintenance-jobs.js';
 
 setGlobalOptions({ maxInstances: 10 });
 

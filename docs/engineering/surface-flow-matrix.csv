@@ -1,4 +1,5 @@
 kind,source,symbol,guide,note
+function,functions/src/asset-maintenance-jobs.ts,assetMaintenanceDailyMaterialize,docs/engineering/flows/assets.md,Agenda diaria limitada que chama a rota interna com segredo proprio e materializa planos pela antecedencia configurada; deploy nao confirmado.
 api,src/app/api/dp/time-recording/location-access/route.ts,,docs/engineering/flows/dp-time-recording.md,Consulta de coordenadas por titular ou permissao expressa com unidade dia paginacao e auditoria antes da resposta.
 api,src/app/api/mobile/push/devices/route.ts,,docs/engineering/coala-go-parity.md,Registro e revogacao propria de push com sessao e atestacao mobile; sem rota publica de envio.
 api,src/app/api/collaborator/absence-requests/options/route.ts,,docs/engineering/flows/dp-absences.md,Opcoes proprias limitadas e capacidade operacional condicionada ao cutover RH.
@@ -25,6 +26,13 @@ api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/[assetId]/movements/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/assets/[assetId]/custody-transfers/route.ts,,docs/engineering/flows/assets.md,Transferencia transacional de posse com versao esperada e processo documental separado.
+api,src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts,,docs/engineering/flows/assets.md,Gera envia ou reconcilia termo patrimonial idempotente sob permissao assets.transfer.
+api,src/app/api/assets/[assetId]/audits/route.ts,,docs/engineering/flows/assets.md,Fecha auditoria com fotos e pode abrir manutencao corretiva.
+api,src/app/api/assets/[assetId]/audits/upload/route.ts,,docs/engineering/flows/assets.md,Recebe evidencia fotografica em prefixo isolado e registra hash e metadados para verificacao no fechamento.
+api,src/app/api/assets/[assetId]/maintenance-plans/route.ts,,docs/engineering/flows/assets.md,Cadastra plano preventivo explicito com cadencia e snapshots.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/route.ts,,docs/engineering/flows/assets.md,Abre manutencao manual idempotente e integra Tarefas.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts,,docs/engineering/flows/assets.md,Conclui ocorrencia com versao esperada e calcula a proxima preventiva.
 api,src/app/api/assets/[assetId]/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/barcode-labels/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/categories/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -461,6 +469,7 @@ api,src/app/api/uploads/operations/route.ts,,docs/engineering/access-and-privacy
 api,src/app/api/users/[userId]/route.ts,,docs/engineering/flows/people-access.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/users/route.ts,,docs/engineering/flows/people-access.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/autentique/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/jobs/assets/maintenance-materialize/route.ts,,docs/engineering/flows/assets.md,Job diario autenticado materializa preventivas na janela com limite 100.
 api,src/app/api/webhooks/inter/banking/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/inter/cobranca/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/resend/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -594,3 +603,10 @@ api,src/app/api/users/[userId]/contract-changes/route.ts,,docs/engineering/flows
 function,functions/src/index.ts,activateCollaboratorPeriods,docs/engineering/flows/people-access.md,Ativacao contratual e projecoes operacionais por data; experiencia automatica vinculada ao ciclo atual; lotes limitados.
 api,src/app/api/jobs/users/operational-follow-up/route.ts,,docs/engineering/flows/people-access.md,POST interno a cada 15 minutos; conclui vigencias operacionais que entraram em vigor recalculando quiosques atribuidos e movendo criando ou removendo acessos do PDV Legal das unidades alteradas; lote limitado a 20 cadastros marcados.
 function,functions/src/system-notice-jobs.ts,operationalFollowUpJob,docs/engineering/flows/people-access.md,Agendada a cada 15 minutos; chama POST /api/jobs/users/operational-follow-up com SYSTEM_NOTICES_JOB_SECRET para concluir quiosques e PDV das vigencias ativadas.
+api,src/app/api/assets/[assetId]/acquisition/route.ts,,docs/engineering/flows/assets.md,Aquisição canônica vinculada a compra somente leitura e com allowlist.
+api,src/app/api/assets/[assetId]/audits/list/route.ts,,docs/engineering/flows/assets.md,Auditorias do ativo paginadas e limitadas.
+api,src/app/api/assets/[assetId]/history/route.ts,,docs/engineering/flows/assets.md,Histórico consolidado paginado com exportação CSV e PDF limitada.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts,,docs/engineering/flows/assets.md,Download privado e autorizado da ordem MNT.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/list/route.ts,,docs/engineering/flows/assets.md,Ocorrências de manutenção paginadas e limitadas.
+api,src/app/api/assets/[assetId]/maintenance-plans/list/route.ts,,docs/engineering/flows/assets.md,Planos preventivos paginados e limitados.
+api,src/app/api/users/[userId]/assets/route.ts,,docs/engineering/flows/assets.md,Equipamentos em posse atual com self-access e acesso RH ou Patrimônio.

@@ -13,6 +13,8 @@
 3. O [webhook da Autentique](../../../src/app/api/webhooks/autentique/route.ts) exige segredo e assinatura válidos, rejeita evento já registrado em `hrAutentiqueWebhookEvents`, localiza a solicitação pelo ID do documento no provedor e atualiza seu estado. Em `document.finished` com URL assinada, agenda o arquivamento após a resposta. A reconciliação manual consulta o provedor e também arquiva quando encontra assinatura completa. [Fonte](../../../src/features/hr/documents/signature-workflow.server.ts).
 4. [`archiveAutentiqueSignedDocument`](../../../src/features/hr/documents/signature-workflow.server.ts) baixa o PDF assinado e salva em `signed-documents/generated/{generatedDocumentId}/{signatureRequestId}/signed.pdf`. Se houver colaborador, pode criar `employeeDocuments/{id}` no banco de RH. Atualiza documento gerado e solicitação com hash, localização, status `signed` e data de arquivamento. Retorna o ID já arquivado quando a solicitação o registra.
 
+O termo de posse patrimonial reutiliza este percurso com `purpose: asset_custody_term`. A solicitação e o documento do colaborador preservam `sourceAssetId` e `sourceCustodyTransferId`; o webhook e a reconciliação projetam o resultado de volta em `assetCustodyTransfers`. O protocolo desse fluxo é `PAT`, em vez do fallback genérico do assinador avulso.
+
 ## Dados, acesso e dependências
 
 | Item | Operação | Controle observado |

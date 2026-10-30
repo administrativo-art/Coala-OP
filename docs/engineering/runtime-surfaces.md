@@ -49,6 +49,8 @@ As URLs desses disparadores são configuração: a correspondência indicada dev
 
 `automaticAbsenceJob` roda de hora em hora, no minuto 35, e chama `POST /api/jobs/dp/time-recording/automatic-absences` com o mesmo segredo interno. A rota registra de forma idempotente a falta injustificada vencida 24 horas após o fim do turno e conserva o registro quando uma solicitação posterior substitui seu efeito.
 
+[Patrimônio](flows/assets.md): `assetMaintenanceDailyMaterialize` roda diariamente às 05:15 em `America/Belem` e chama `POST /api/jobs/assets/maintenance-materialize` com `ASSET_MAINTENANCE_JOB_SECRET`. A rota lê até 100 planos ativos cuja antecedência venceu e usa IDs determinísticos para ocorrência, tarefa e ordem. O segredo e o índice `workspaceId + active + materializeOn` devem ser promovidos antes de habilitar a função.
+
 ## Webhooks e consumidores
 
 | Entrada | Autenticação observada | Dados e consumidores / limite |

@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **512 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **527 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **62 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -41,7 +41,20 @@ Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/app/version` | GET | [src/app/api/app/version/route.ts](../../src/app/api/app/version/route.ts) | [signage](flows/signage.md) |
 | `/api/assets` | GET, POST | [src/app/api/assets/route.ts](../../src/app/api/assets/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]` | GET, PATCH, POST | [src/app/api/assets/[assetId]/route.ts](../../src/app/api/assets/%5BassetId%5D/route.ts) | [assets](flows/assets.md) |
-| `/api/assets/[assetId]/movements` | GET | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/%5BassetId%5D/movements/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/acquisition` | GET | [src/app/api/assets/[assetId]/acquisition/route.ts](../../src/app/api/assets/%5BassetId%5D/acquisition/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/audits` | POST | [src/app/api/assets/[assetId]/audits/route.ts](../../src/app/api/assets/%5BassetId%5D/audits/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/audits/list` | GET | [src/app/api/assets/[assetId]/audits/list/route.ts](../../src/app/api/assets/%5BassetId%5D/audits/list/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/audits/upload` | POST | [src/app/api/assets/[assetId]/audits/upload/route.ts](../../src/app/api/assets/%5BassetId%5D/audits/upload/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/custody-transfers` | POST | [src/app/api/assets/[assetId]/custody-transfers/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/custody-transfers/[transferId]/term` | POST | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/%5BtransferId%5D/term/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/history` | GET | [src/app/api/assets/[assetId]/history/route.ts](../../src/app/api/assets/%5BassetId%5D/history/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-occurrences` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/%5BoccurrenceId%5D/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order` | GET | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/%5BoccurrenceId%5D/order/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-occurrences/list` | GET | [src/app/api/assets/[assetId]/maintenance-occurrences/list/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/list/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-plans` | POST | [src/app/api/assets/[assetId]/maintenance-plans/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-plans/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/maintenance-plans/list` | GET | [src/app/api/assets/[assetId]/maintenance-plans/list/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-plans/list/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/movements` | GET, POST | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/%5BassetId%5D/movements/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/barcode-labels` | GET, POST | [src/app/api/assets/barcode-labels/route.ts](../../src/app/api/assets/barcode-labels/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/categories` | GET, POST | [src/app/api/assets/categories/route.ts](../../src/app/api/assets/categories/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/upload` | POST | [src/app/api/assets/upload/route.ts](../../src/app/api/assets/upload/route.ts) | [assets](flows/assets.md) |
@@ -422,6 +435,7 @@ Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/integrations/pdvlegal/filiais` | GET | [src/app/api/integrations/pdvlegal/filiais/route.ts](../../src/app/api/integrations/pdvlegal/filiais/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/inspect` | GET | [src/app/api/integrations/pdvlegal/inspect/route.ts](../../src/app/api/integrations/pdvlegal/inspect/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/sync` | GET | [src/app/api/integrations/pdvlegal/sync/route.ts](../../src/app/api/integrations/pdvlegal/sync/route.ts) | [pdv-sync](flows/pdv-sync.md) |
+| `/api/jobs/assets/maintenance-materialize` | POST | [src/app/api/jobs/assets/maintenance-materialize/route.ts](../../src/app/api/jobs/assets/maintenance-materialize/route.ts) | [assets](flows/assets.md) |
 | `/api/jobs/cash-closures/daily-sync` | POST | [src/app/api/jobs/cash-closures/daily-sync/route.ts](../../src/app/api/jobs/cash-closures/daily-sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/cash-deposits/reconcile` | POST | [src/app/api/jobs/cash-deposits/reconcile/route.ts](../../src/app/api/jobs/cash-deposits/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/documents/retention-reconcile` | POST | [src/app/api/jobs/documents/retention-reconcile/route.ts](../../src/app/api/jobs/documents/retention-reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -541,6 +555,7 @@ Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/user-notifications` | GET, PATCH | [src/app/api/user-notifications/route.ts](../../src/app/api/user-notifications/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/users` | POST | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) | [people-access](flows/people-access.md) |
 | `/api/users/[userId]` | PATCH | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/%5BuserId%5D/route.ts) | [people-access](flows/people-access.md) |
+| `/api/users/[userId]/assets` | GET | [src/app/api/users/[userId]/assets/route.ts](../../src/app/api/users/%5BuserId%5D/assets/route.ts) | [assets](flows/assets.md) |
 | `/api/users/[userId]/contract-changes` | GET | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/%5BuserId%5D/contract-changes/route.ts) | [people-access](flows/people-access.md) |
 | `/api/webhooks/autentique` | POST | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/banking` | POST | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -558,6 +573,7 @@ Inclui **61 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `absenceTacitApprovalJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTerminationEffectsResume` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
 | `activateCollaboratorPeriods` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [people-access](flows/people-access.md) |
+| `assetMaintenanceDailyMaterialize` | `onSchedule` | [functions/src/asset-maintenance-jobs.ts](../../functions/src/asset-maintenance-jobs.ts) | [assets](flows/assets.md) |
 | `automaticAbsenceJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `cashClosureDailySync` | `onSchedule` | [functions/src/cash-closure-jobs.ts](../../functions/src/cash-closure-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `cashClosureSummaryReinforcement` | `onSchedule` | [functions/src/cash-closure-summaries.ts](../../functions/src/cash-closure-summaries.ts) | [runtime-surfaces](runtime-surfaces.md) |

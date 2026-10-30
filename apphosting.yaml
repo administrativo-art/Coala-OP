@@ -147,6 +147,9 @@ env:
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET
+  # Materialização diária dos planos preventivos na antecedência configurada em cada patrimônio.
+  - variable: ASSET_MAINTENANCE_JOB_SECRET
+    secret: ASSET_MAINTENANCE_JOB_SECRET
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
     value: "true"
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS

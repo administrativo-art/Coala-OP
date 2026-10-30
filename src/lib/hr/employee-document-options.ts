@@ -88,7 +88,7 @@ export const EMPLOYEE_DOCUMENT_SUBFOLDERS: Partial<Record<EmployeeDocumentCatego
     { id: "return_to_work", label: "Retorno ao trabalho", typeCodes: [], typeLabels: ["Documento de retorno ao trabalho", "Outro documento de afastamento"] },
   ],
   uniforms: [
-    { id: "deliveries", label: "Entregas", typeCodes: ["UNIFORM_DELIVERY"], typeLabels: ["Termo de entrega de equipamento"] },
+    { id: "deliveries", label: "Entregas", typeCodes: ["UNIFORM_DELIVERY", "ASSET_CUSTODY_TERM"], typeLabels: ["Termo de entrega de equipamento"] },
     { id: "exchanges", label: "Trocas", typeCodes: ["UNIFORM_EXCHANGE"], typeLabels: ["Controle de troca"] },
     { id: "returns", label: "Devoluções", typeCodes: ["UNIFORM_RETURN"], typeLabels: ["Termo de devolução de uniforme", "Termo de devolução de equipamento"] },
     { id: "responsibility_terms", label: "Termos de responsabilidade", typeCodes: [], typeLabels: ["Termo de responsabilidade"] },
@@ -676,6 +676,15 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
     defaultAccessLevel: "confidential",
     aliases: ["atestado", "declaração médica"],
     classificationHints: ["Afastamento ou comparecimento médico. Não extrair diagnóstico sem necessidade."],
+  },
+  {
+    code: "ASSET_CUSTODY_TERM",
+    label: "Termo de entrega de equipamento",
+    category: "uniforms",
+    folderCode: "UNIFORMS_EQUIPMENT_RESPONSIBILITIES",
+    defaultAccessLevel: "partial",
+    aliases: ["termo de posse patrimonial", "entrega de patrimônio", "responsabilidade por equipamento"],
+    classificationHints: ["Registra a transferência de posse de um patrimônio da empresa para um colaborador."],
   },
   {
     code: "UNIFORM_DELIVERY",
