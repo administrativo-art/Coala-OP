@@ -45,6 +45,7 @@ export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';
 export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
+export { weeklyMatrixRestockEmail } from './weekly-matrix-restock-email.js';
 export {
   uberExpenseCandidateWritten,
   uberSftpDailySync,
