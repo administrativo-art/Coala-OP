@@ -46,8 +46,12 @@ test('Resumo do ponto na Home é expansível e o cronômetro só aparece durante
   assert.match(activity, /if \(summaryExpanded\) \{/);
   assert.match(activity, /breakStatus\?\.takeIf \{ it\.inPause \}\?\.let \{ BreakTimerPill/);
   assert.match(components, /fun BreakTimerPill\(status: BreakStatus/);
-  assert.match(components, /Intervalo · faltam/);
-  assert.match(components, /Intervalo excedido · \+/);
+  assert.match(components, /countdown == null -> clock\(seconds\)/);
+  assert.match(components, /exceeded -> "\+\$\{clock\(seconds\)\}"/);
+  assert.match(components, /else -> "−\$\{clock\(seconds\)\}"/);
+  assert.match(components, /append\("Intervalo "\)/);
+  assert.match(components, /fontFamily = CodeFont, fontWeight = FontWeight\.Bold/);
+  assert.match(components, /contentDescription = accessible/);
   assert.match(time, /punch\.purpose == "break_start"/);
   assert.match(time, /end\?\.purpose == "break_end"/);
   assert.match(time, /CompletedBreakPill/);
@@ -101,8 +105,8 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
   assert.match(timeViewModel, /offlineQueue\.beginOnline\(owner, onlineRequest[\s\S]*?api\.mark\(onlineRequest, owner\)/);
   assert.match(timeViewModel, /cause\.code\(\) == 409\) \{ clearAttempt\(\)/);
   assert.match(timeViewModel, /TimeRules\.workDate\(officialNow\(state\), zone\)/);
-  // A unidade da batida vem da escala do dia: o Ponto não tem seletor (decisão de 29/10/2026).
-  assert.doesNotMatch(time, /UnitPickerHeader/);
+  // O seletor só aparece quando o turno não fixa uma unidade válida do vínculo.
+  assert.match(time, /TimeRules\.unitPickable\(state\.options, todayShift\)\) UnitPickerHeader/);
   assert.doesNotMatch(time, /Rules\.unitChoices/);
   assert.match(time, /capturePointLocation/);
   assert.doesNotMatch(time, /leitura pontual de localização|Aviso de privacidade|O ponto será registrado mesmo se a posição/);
@@ -141,7 +145,7 @@ test('Ponto do Coala Go reaproveita as rotas web, bate como coletor móvel e nã
 test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovante antes da sincronização', () => {
   // A ação permanece familiar; a confirmação distingue gravação local de confirmação oficial.
   assert.match(time, /"Registrar ponto"/);
-  assert.match(time, /salvo no aparelho/);
+  assert.match(time, /preservada no aparelho/);
   assert.doesNotMatch(time, /Registrar ponto offline/);
   // "HORA LEGAL BRASILEIRA" só é o rótulo quando a fonte não é a autorização local.
   for (const source of [time, activity]) {
@@ -149,6 +153,12 @@ test('Ponto offline existe somente no Coala Go e não inventa NSR nem comprovant
     assert.equal(source.match(/"HORA LEGAL BRASILEIRA"/g)?.length, 1);
   }
   assert.match(time, /Esta hora é apenas informativa: o comprovante terá a hora gravada pelo servidor\./);
+  // A tela inicial bate o ponto numa folha com a mesma confirmação de Ponto, e a sequência leva o nome de cada batida.
+  assert.match(home, /PunchSheet\(timeVm/);
+  assert.match(time, /@Composable fun PunchSheet\([\s\S]*?PunchConfirmation\(vm, state, online, busy, submitter/);
+  assert.doesNotMatch(activity, /"Próxima"|"Próxima: "/);
+  // Nenhuma finalidade é sugerida antes de ler as batidas de hoje.
+  assert.match(time, /state\.dayLoad == DayLoad\.READ && markings\.all/);
   // O reenvio mantém a finalidade da tentativa original.
   assert.match(time, /Definida na tentativa original; não pode ser trocada no reenvio\./);
   assert.match(timeViewModel, /PendingAttempt\(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource\)/);
@@ -206,13 +216,10 @@ test('Detalhe do dia é único e o acompanhamento entre unidades respeita iníci
   assert.doesNotMatch(time, /POST_NOTIFICATIONS/);
 });
 
-test('permissão pontual é preparada uma vez, mas turno sem configuração permanece sem coleta', () => {
-  assert.match(timeModels, /locationTrackingPolicy: String = "disabled"/);
-  assert.match(time, /getSharedPreferences\("point-location-permission"/);
-  assert.match(time, /putBoolean\("requested", true\)/);
-  assert.match(time, /section == "today" && !locationPermissionPrepared/);
-  assert.match(time, /locationPolicy\.mode == "disabled"[\s\S]*?vm\.record/);
-  assert.doesNotMatch(time, /ACCESS_BACKGROUND_LOCATION/);
+test('Aviso de intervalo fica restrito ao registro do dia', () => {
+  assert.match(time, /private fun BreakNoticeCard/);
+  assert.match(time, /TimeRules\.breakStatus\(shift,[\s\S]*?takeIf \{ it\.level != BreakLevel\.NEUTRAL \}\?\.let \{ BreakNoticeCard/);
+  assert.match(time, /Text\("Ajustes e ocorrências"[\s\S]*?TimeRules\.breakIssue/);
 });
 
 test('Troca de turno permanece em Solicitações e consome o contrato central', () => {
@@ -227,7 +234,7 @@ test('Troca de turno permanece em Solicitações e consome o contrato central', 
 });
 
 test('Jornada fica direta no início e separa consultas, escala e benefícios', () => {
-  assert.match(activity, /HomeTimeSummary\(visibleToday, \{ navigate\("time\/register"\) \}\)/);
+  assert.match(activity, /HomeModuleContent\(visibleModules, visibleToday, visiblePendingCount, navigate\) \{[\s\S]*?if \(developerViewAs\.targetUserId == null\) punching = true else navigate\("time\/register"\)/);
   assert.match(activity, /navigate\("time\/day\/\$date"\)/);
   assert.match(home, /JORNADA DE TRABALHO/);
   assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);

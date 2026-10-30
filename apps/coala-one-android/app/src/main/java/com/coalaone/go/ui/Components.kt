@@ -22,6 +22,8 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import com.coalaone.go.domain.Rules
 import com.coalaone.go.domain.BreakStatus
 import androidx.compose.foundation.BorderStroke
@@ -185,9 +187,10 @@ fun shortDate(value: String?): String? {
 
 /** Compact live interval indicator shared by Ponto and Home. It only exists while a pause is open. */
 @Composable fun BreakTimerPill(status: BreakStatus, dark: Boolean = false, modifier: Modifier = Modifier) {
-    if (!status.inPause || status.countdownSeconds == null) return
-    val exceeded = status.countdownSeconds < 0
-    val absolute = kotlin.math.abs(status.countdownSeconds)
+    if (!status.inPause) return
+    val countdown = status.countdownSeconds
+    val exceeded = countdown != null && countdown < 0
+    val seconds = countdown?.let { kotlin.math.abs(it) } ?: status.usedSeconds
     fun clock(seconds: Long, includeHours: Boolean = false): String {
         val hours = seconds / 3600
         val minutes = seconds % 3600 / 60
@@ -196,22 +199,26 @@ fun shortDate(value: String?): String? {
         else String.format(Locale.ROOT, "%02d:%02d", minutes, remainder)
     }
     val ink = when {
-        exceeded -> if (dark) Tokens.accentSoft else Tokens.danger
-        status.countdownSeconds <= 120 -> Tokens.warning
+        exceeded -> Tokens.danger
+        countdown != null && countdown <= 120 -> Tokens.warning
         dark -> Tokens.accentSoft
         else -> Tokens.wine
     }
     val background = when {
         dark -> Tokens.onDark.copy(alpha = .09f)
         exceeded -> Tokens.dangerBg
-        status.countdownSeconds <= 120 -> Tokens.warningBg
+        countdown != null && countdown <= 120 -> Tokens.warningBg
         else -> Tokens.accentSoft
     }
-    val text = if (exceeded) "Intervalo excedido · +${clock(absolute)} · total ${clock(status.usedSeconds, true)}"
-        else "Intervalo · faltam ${clock(absolute)} · total ${clock(status.usedSeconds, true)}"
-    Text(text, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.sp),
-        modifier = modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 5.dp))
+    val time = when { countdown == null -> clock(seconds); exceeded -> "+${clock(seconds)}"; else -> "−${clock(seconds)}" }
+    val accessible = "Intervalo $time"
+    Text(buildAnnotatedString {
+        pushStyle(SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp)); append("Intervalo "); pop()
+        pushStyle(SpanStyle(fontFamily = CodeFont, fontWeight = FontWeight.Bold, fontSize = 12.sp)); append(time); pop()
+    }, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
+        modifier = modifier.semantics { contentDescription = accessible }
+            .background(background, RoundedCornerShape(50)).padding(horizontal = 11.dp, vertical = 5.dp))
 }
 
 @Composable fun CompletedBreakPill(seconds: Long, modifier: Modifier = Modifier) {
