@@ -41,6 +41,7 @@ export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-jo
 export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
+export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';
 export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
