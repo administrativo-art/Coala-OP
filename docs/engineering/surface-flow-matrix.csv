@@ -526,6 +526,7 @@ function,functions/src/uber-sftp/jobs.ts,uberExpenseCandidateWritten,docs/engine
 function,functions/src/uber-sftp/jobs.ts,uberSftpDailySync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/uber-sftp/jobs.ts,uberTransactionCandidateWritten,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/vacation-alerts.ts,vacationWorkflowDailyAlerts,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/weekly-revenue-goals-email.ts,weeklyRevenueGoalsEmail,docs/engineering/runtime-surfaces.md,onSchedule semanal; le vendas e metas e envia e-mail pelo Resend; deploy nao confirmado.
 page,src/app/(modules)/escala/page.tsx,,docs/engineering/flows/dp-schedules.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/aso/candidato/[token]/page.tsx,,docs/engineering/flows/onboarding-aso.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/aso/clinica/[token]/page.tsx,,docs/engineering/flows/onboarding-aso.md,Entrada externa classificada no external-page-map; publicidade nao presumida.

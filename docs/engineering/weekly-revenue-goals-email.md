@@ -1,10 +1,21 @@
-# Pulso Coala — relatório semanal de faturamento e metas
+# Placar Coala — relatório semanal de faturamento e metas
 
 ## Estado
 
-Especificação e modelo visual para revisão. **Não há função, agendamento, envio, segredo, deploy ou alteração de produção neste worktree.**
+Implementado em 29/10/2026, **sem deploy, sem push e sem envio**: `weeklyRevenueGoalsEmail` em [weekly-revenue-goals-email.ts](../../functions/src/weekly-revenue-goals-email.ts) (leitura, trava de cobertura, envio único por semana) e cálculo/montagem puros em [weekly-revenue-goals-report.ts](../../functions/src/weekly-revenue-goals-report.ts), com teste em `tests/unit/weekly-revenue-goals-report.test.ts`.
 
-Proposta de execução futura: toda segunda-feira às 08:00, no fuso `America/Belem`, após aprovação explícita do conteúdo e da publicação.
+Agenda: toda segunda-feira às 08:00, no fuso `America/Belem`. O layout foi validado em 29/10/2026 com uma prévia de dados reais da semana de 19 a 25/10/2026 (não versionada).
+
+Decisões de implementação, todas configuráveis por parâmetro da função até confirmação:
+
+- Remetente e destinatário: `Margaret Hamilton · Coala One <relatorios@coalashakes.com>` → `administrativo@coalashakes.com` e `cesar@cesarthimotheo.com`, definidos em 29/10/2026 (`REVENUE_GOALS_EMAIL_FROM`, `REVENUE_GOALS_EMAIL_TO`, lista separada por vírgula).
+- Cobertura mínima da semana para enviar: 80% dos dias esperados (`REVENUE_GOALS_MIN_WEEK_COVERAGE`). Abaixo disso o envio é bloqueado e registrado em `scheduledEmailRuns` com `status: blocked`.
+- Status do mês: `No ritmo` ≥ 100% do esperado, `Atenção` ≥ 95%, `Em risco` abaixo (`REVENUE_GOALS_ON_TRACK_PERCENT`, `REVENUE_GOALS_ATTENTION_PERCENT`).
+- Percentuais, esperado e status usam a **Meta Alvo**; UP e TOP aparecem na legenda com o quanto falta.
+- Histórico legado (soma dos itens antes do contrato de cupons) entra com aviso na seção de qualidade.
+- Comparações semanais usam a média por dia aberto, porque dia sem relatório fica ausente.
+- Esperado do mês: distribuição configurada da meta. Em `scheduled_days`, mesmas datas do encerramento da meta (turnos de trabalho que contam para meta, de quem tem meta individual); sem escala encontrada, usa o calendário e avisa no cartão.
+- O nome do relatório fica em `REPORT_NAME` ("Placar Coala").
 
 ## Objetivo
 
@@ -46,7 +57,7 @@ O histórico anterior pode ser reconstruído por `items.quantity × items.unitPr
 
 ### 1. Cabeçalho Coala One
 
-- Título: `Pulso Coala — Faturamento e metas`.
+- Título: `Placar Coala — Faturamento e metas`.
 - Períodos exatos analisados.
 - Data e hora da atualização.
 - Visual: fundo quente, superfícies brancas, cabeçalho escuro e rosa Coala (`#d13670`) como destaque.
@@ -186,13 +197,9 @@ Todos os cálculos monetários devem usar centavos inteiros internamente.
 - Registrar execução idempotente para impedir envio duplicado em retentativas.
 - O envio é informativo e não altera metas, vendas ou financeiro.
 
-## Pendências antes da implementação
+## Pendências antes da publicação
 
-1. Aprovar o modelo visual e a quantidade de detalhe.
-2. Confirmar remetente e destinatários.
-3. Definir limite mínimo de cobertura para envio.
-4. Definir limiares de `No ritmo`, `Atenção` e `Em risco`.
-5. Decidir se histórico legado pode entrar com aviso ou se exige backfill validado.
-6. Validar o primeiro relatório em modo prévia, sem e-mail.
-7. Só depois criar scheduler, testes, deploy e envio de teste autorizado.
-
+1. Confirmar o nome do relatório.
+2. Confirmar cobertura mínima e limiares de status (valores padrão acima).
+3. Integrar por PR em `main` e publicar a função à parte; o merge não publica Functions.
+4. Fazer um envio de teste autorizado antes da primeira segunda-feira.
