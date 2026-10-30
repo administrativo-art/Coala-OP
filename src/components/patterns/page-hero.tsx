@@ -7,6 +7,8 @@ export interface PageHeroProps {
   /** Seção ou área da tela, em maiúsculas pequenas acima do título. */
   kicker: string
   title: string
+  /** Elemento antes do título, como a foto da pessoa em telas individuais. */
+  leading?: React.ReactNode
   subtitle?: React.ReactNode
   /** Ações à direita do título (a principal usa `primary-page`). */
   actions?: React.ReactNode
@@ -23,11 +25,12 @@ export interface PageHeroProps {
  * Cabeçalho das telas de lista: o título mora dentro do painel escuro, junto da ação principal e dos filtros
  * (docs/design/cabecalho-e-etapas.md). Telas da Programação do Instagram usam `PulseHero`, que acrescenta a faixa fina.
  */
-export function PageHero({ kicker, title, subtitle, actions, chips, children, compact = false, className }: PageHeroProps) {
+export function PageHero({ kicker, title, leading, subtitle, actions, chips, children, compact = false, className }: PageHeroProps) {
   return (
     <ControlPanel className={cn(compact ? "flex flex-col gap-3 px-5 pb-4 pt-4" : "flex flex-col gap-4 px-[26px] pb-5 pt-5", className)}>
       <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</span>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {leading}
         <h1 className={cn(compact ? "text-[24px]" : "text-[26px]", "font-extrabold tracking-[-0.03em] text-ds-on-dark")}>{title}</h1>
         {subtitle ? <span className="text-[13px] text-ds-on-dark-sub">{subtitle}</span> : null}
         {actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}

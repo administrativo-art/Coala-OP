@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliPreparation } from "./payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
 import { mainPaymentLookupQuery, summarizeMainPaymentLookup } from "./payment-cli-main-query-contract";
@@ -66,6 +66,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts cancel-replace --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --current-scheduled-for AAAA-MM-DD --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
@@ -184,6 +185,21 @@ async function coalaPost(token: string, id: string, action: "authorize" | "submi
   if (!response.ok) throw new PaymentCliError(`O Coala não confirmou ${action} (HTTP ${response.status}). O resultado pode ser incerto; consulte o status antes de tentar novamente.`);
   const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
   if (body?.request?.id !== id) throw new PaymentCliError(`O Coala não confirmou a solicitação esperada após ${action}. Consulte o status; não repita o comando automaticamente.`);
+  return body.request;
+}
+
+async function coalaCancelAndReplace(token: string, id: string, scheduledFor: string) {
+  const response = await paymentCliFetch(`${COALA_URL}/api/financial/payment-requests/${encodeURIComponent(id)}/cancel-and-replace`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ scheduledFor, confirmed: true }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o cancelamento e a substituição (HTTP ${response.status}). Consulte o status antes de tentar novamente.`);
+  const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
+  if (!body.request || body.request.supersedesPaymentRequestId !== id) {
+    throw new PaymentCliError("O Coala não confirmou a versão substituta esperada. Consulte o status; não repita automaticamente.");
+  }
   return body.request;
 }
 
@@ -652,7 +668,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -868,6 +884,24 @@ async function main() {
   if (!request) throw new PaymentCliError("A solicitação não apareceu entre as 100 mais recentes da consulta autenticada. Consulte pelo Coala; nenhuma ação foi feita.");
   if (command === "status") return printStatus(request);
   if (command === "refresh") return printStatus(await coalaPost(token, id, "refresh"));
+
+  if (command === "cancel-replace") {
+    if (!process.argv.includes("--confirm-financial-actions")) {
+      throw new PaymentCliError("Confirme explicitamente o cancelamento no banco e a substituição com --confirm-financial-actions.");
+    }
+    const amountCents = Number(requireOption("amount-cents"));
+    const currentScheduledFor = requireOption("current-scheduled-for");
+    const scheduledFor = requireOption("scheduled-for");
+    const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
+    const expenseId = requireOption("expense-id");
+    const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
+    validatePaymentCliCancellation({ request, amountCents, currentScheduledFor,
+      replacementScheduledFor: scheduledFor, beneficiaryDocument, expenseId, barcode });
+    const replacement = await coalaCancelAndReplace(token, id, scheduledFor);
+    validatePaymentCliAction({ request: replacement, action: "authorize", amountCents,
+      scheduledFor, beneficiaryDocument, expenseId, barcode });
+    return printStatus(replacement);
+  }
 
   const amountCents = Number(requireOption("amount-cents"));
   const scheduledFor = requireOption("scheduled-for");

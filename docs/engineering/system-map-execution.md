@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-10-29: ajuste local dos documentos de férias: descarte motivado, preservação das decisões em correções/reenvios, histórico interno e consulta conjunta dos originais. Guia `flows/vacation-receipts.md`. Sem migração, banco real ou publicação; cobertura integrada do fluxo permanece pendente.
+
 2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
 
 2026-10-27: [LGPD v5 integrada](../rep-p/homologacao/lgpd-v5-validacao-integrada.md) passou com emuladores, conversor oficial e pacote de oito modelos/24 páginas. Golden dirigido atualizado; a consulta posterior não encontrou modelo LGPD armazenado nem override no destino (`coala`), dispensando migração. Sem publicação ou promoção do grupo inteiro a Verificado.
@@ -197,3 +199,9 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 
 
 2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.
+
+2026-10-28: centralização local de unidades de operação/escala por data e editor contratual único, com auditoria atômica e ativação limitada. Integrações demo de concorrência, revisão original, experiência/desligamento e offline passaram; E2E de interface passou em Chromium demo com duas unidades e contrato no mesmo salvamento; publicação ainda pendente. Não promove o grupo inteiro a Verificado; ver [pessoas](flows/people-access.md).
+
+2026-10-28: ajuste de organização do editor concentra todos os seletores de unidade na aba Unidades, substitui o quadro de ajuda por ícones e preserva motivo/data na aba. Unitários e E2E demo do editor passaram; sem mudança nas fontes ou regras do ponto. Aguardar publicação desta correção.
+
+2026-10-29: correção local do pagamento de boleto permitiu cancelar no Inter uma ordem `expense_boleto` ainda aguardando aprovação ou agendada e criar uma nova versão para a data confirmada. A rota autenticada exige permissão de envio, workspace e snapshot íntegros; somente DELETE confirmado ou consulta `CANCELADO` cancela o débito esperado, troca o vínculo da despesa e libera nova autorização, sem reenvio automático. CLI e testes delimitam o contrato. A ordem real de vale-transporte continua para 07/11 até publicação autorizada e execução da rota; não aprovar essa versão no aplicativo.

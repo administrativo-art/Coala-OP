@@ -933,7 +933,9 @@ export type User = {
   avatarUrl?: string;
   color?: string;              // hex color for avatar/schedule display
   // Operacional (PDV)
+  /** @deprecated Legado. Escala, ponto e férias usam o vínculo (`employmentRelationshipType`); não ler nem gravar. */
   operacional?: boolean;
+  /** @deprecated Legado. Metas valem para qualquer pessoa ativa; não ler nem gravar. */
   participatesInGoals?: boolean;
   pdvOperatorIds?: { [kioskId: string]: number };
   pdvAccessProfileId?: string;
@@ -941,6 +943,11 @@ export type User = {
   pdvAccessFilialId?: string;
   pdvAccessFilialName?: string;
   pdvAccesses?: UserPdvAccess[];
+  /** Acesso ao PDV ligado: as unidades da vigência com filial recebem acesso. Ausente = "Sim" para quem já tem acesso ativo. */
+  pdvAccessEnabled?: boolean;
+  /** Pendência do job após uma vigência agendada entrar em vigor: quiosques atribuídos e PDV. */
+  operationalFollowUpPending?: boolean;
+  operationalFollowUpError?: string | null;
   // Departamento Pessoal (RH)
   /** ID canônico do cadastro em coala-rh/employees. */
   hrEmployeeId?: string;
@@ -986,6 +993,8 @@ export type User = {
   /** Unidades em que a pessoa pode ser escalada e atuar. */
   unitIds?: string[];
   admissionDate?: Timestamp;
+  /** Fonte datada das unidades habituais de operação e escala. Ausente em cadastros legados. */
+  operationalUnitPeriods?: import('@/lib/operational-unit-periods').OperationalUnitPeriod[];
   birthDate?: Timestamp;
   shiftDefinitionId?: string;
   overnight?: boolean;
@@ -1346,7 +1355,9 @@ export type OnboardingDocument = OnboardingDocumentTemplate & {
 };
 
 export type OnboardingFinalizationSettings = {
+  /** @deprecated Legado; a tela não envia mais. */
   operational?: boolean;
+  /** @deprecated Legado; a tela não envia mais. */
   participatesInGoals?: boolean;
   loginRestrictionEnabled?: boolean;
   needsTransportVoucher?: boolean;
@@ -4178,6 +4189,14 @@ export type DPVacationReceiptDocument = {
   status: 'processing' | 'review_pending' | 'analysis_failed' | 'selected' | 'superseded' | 'discarded';
   analysis?: DPVacationReceiptAnalysis | null;
   analyzedAt?: string | null;
+  discardedAt?: string | null;
+  discardedBy?: string | null;
+  discardReason?: string | null;
+  supersededAt?: string | null;
+  supersededBy?: string | null;
+  supersededReason?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
 };
 
 export type DPVacationWorkflow = {

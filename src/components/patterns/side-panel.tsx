@@ -6,6 +6,12 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Espaço para abas no pé do topo escuro. Um conteúdo do painel que tenha abas
+ * (ex.: edição do colaborador) as desenha ali por portal, mantendo o estado.
+ */
+export const SidePanelHeaderTabsContext = React.createContext<HTMLElement | null>(null)
+
 export interface SidePanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -19,6 +25,8 @@ export interface SidePanelProps {
   children: React.ReactNode
   /** Cabeçalho baixo (sem subtítulo visível), para painéis com muito conteúdo que não deve rolar. */
   compact?: boolean
+  /** Reserva o pé do topo escuro para abas (`SidePanelHeaderTabsContext`). */
+  headerTabs?: boolean
   className?: string
 }
 
@@ -26,7 +34,8 @@ export interface SidePanelProps {
  * Painel lateral de 460px (docs/design/painel-lateral.md). Fecha por ×, véu ou Esc;
  * o Radix prende o foco e o devolve ao gatilho ao fechar.
  */
-export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlights, children, compact, className }: SidePanelProps) {
+export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlights, children, compact, headerTabs, className }: SidePanelProps) {
+  const [tabsSlot, setTabsSlot] = React.useState<HTMLDivElement | null>(null)
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -39,7 +48,7 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
             className
           )}
         >
-          <header className={cn("relative bg-ds-dark px-6 text-ds-on-dark", compact ? "py-3.5" : "py-[22px]")}>
+          <header className={cn("relative bg-ds-dark px-6 text-ds-on-dark", compact ? "py-3.5" : "py-[22px]", headerTabs && "pb-0")}>
             {kicker && (
               <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</p>
             )}
@@ -56,8 +65,11 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </DialogPrimitive.Close>
+            {headerTabs ? <div ref={setTabsSlot} data-ui="side-panel-header-tabs" className="mt-4 min-h-[42px]" /> : null}
           </header>
-          <div className={cn("flex flex-1 flex-col overflow-y-auto px-6", compact ? "gap-3.5 py-4" : "gap-5 py-5")}>{children}</div>
+          <div className={cn("flex flex-1 flex-col overflow-y-auto px-6", compact ? "gap-3.5 py-4" : "gap-5 py-5")}>
+            <SidePanelHeaderTabsContext.Provider value={tabsSlot}>{children}</SidePanelHeaderTabsContext.Provider>
+          </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

@@ -17,7 +17,7 @@ import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
-import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
+import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
 import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
@@ -77,7 +77,7 @@ import {
   getPrimaryShiftDefinitionUnitId,
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
-import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { userMatchesDPUnit } from '@/lib/dp-schedule-roster';
 import {
   buildCrossUnitConflictShiftIds,
   buildShiftStreakState,
@@ -104,6 +104,7 @@ import {
 import { DPBulkShiftEditPanel } from '@/components/dp/dp-bulk-shift-edit-dialog';
 import { DPBulkShiftCreatePanel } from '@/components/dp/dp-bulk-shift-create-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
+import { isWorkforceEmploymentRelationship } from '@/lib/hr/employment-relationship';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -171,20 +172,6 @@ function shiftVacationKey(shift: Pick<DPShift, 'scheduleId' | 'id'>) {
   return `${shift.scheduleId}:${shift.id}`;
 }
 
-function userMatchesDPUnit(user: Pick<User, 'unitIds' | 'assignedKioskIds'>, unitId: string | undefined, units: DPUnit[], kiosks: Kiosk[]) {
-  if (!unitId) return true;
-  if (user.unitIds?.includes(unitId)) return true;
-
-  const assignedKioskIds = user.assignedKioskIds ?? [];
-  if (assignedKioskIds.length === 0 || units.length === 0 || kiosks.length === 0) return false;
-
-  return assignedKioskIds.some((kioskId) => {
-    const kiosk = kiosks.find((item) => item.id === kioskId);
-    if (!kiosk) return false;
-    return matchDPUnitForKiosk(kiosk.name, units)?.id === unitId;
-  });
-}
-
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const shiftSchema = z.object({
@@ -233,6 +220,7 @@ function ShiftDialog({
     username: string;
     originUnitId: string;
     originUnitName: string;
+    affiliatedUnitNames: string[];
     jobRoleName?: string;
     jobFunctionNames?: string[];
     shiftDefinitionId?: string;
@@ -249,13 +237,6 @@ function ShiftDialog({
 
   // Active unit for filtering (defaultUnitId when locked, or single unit in per-unit mode)
   const activeUnitIdForDefs = defaultUnitId ?? (units.length === 1 ? units[0].id : undefined);
-
-  // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
-  const operationalUsers = (() => {
-    const all = activeUsers.filter(u => u.operacional === true);
-    if (!activeUnitIdForDefs) return all;
-    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
-  })();
 
   const form = useForm<ShiftFormValues>({
     resolver: zodResolver(shiftSchema),
@@ -291,12 +272,21 @@ function ShiftDialog({
         username: shift.userName ?? activeUsers.find((candidate) => candidate.id === shift.userId)?.username ?? 'Colaboradora externa',
         originUnitId: shift.originUnitId ?? '',
         originUnitName: units.find((unit) => unit.id === shift.originUnitId)?.name ?? shift.originUnitId ?? 'Unidade de origem',
+        affiliatedUnitNames: [],
       } : null);
     }
   }, [activeUsers, defaultDate, defaultUnitId, form, open, shift, units]);
 
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
+  // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
+  const operationalUsers = (() => {
+    const all = activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType));
+    if (!activeUnitIdForDefs) return all;
+    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks, form.watch('date') || undefined));
+  })();
+
+
   const selectedUnitId = form.watch('unitId');
   const selectedShiftDefinitionId = form.watch('shiftDefinitionId');
   const hasSelectedShiftDefinition = Boolean(selectedShiftDefinitionId);
@@ -335,7 +325,7 @@ function ShiftDialog({
     setCandidateError(null);
     try {
       const result = await api<{ candidates: ExternalCandidate[]; truncated: boolean }>(
-        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15`,
+        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15&date=${encodeURIComponent(form.getValues('date') || '')}`,
         { fallbackError: 'Falha ao buscar colaboradoras de outras unidades.' },
       );
       setExternalCandidates(result.candidates);
@@ -464,7 +454,7 @@ function ShiftDialog({
                       <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Colaboradora externa</FormLabel>
                       <Select value={field.value} onValueChange={(value) => { field.onChange(value); setSelectedExternal(externalCandidates.find((candidate) => candidate.id === value) ?? null); }}>
                         <FormControl><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.originUnitName}</SelectItem>)}</SelectContent>
+                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.affiliatedUnitNames.join(' e ')}</SelectItem>)}</SelectContent>
                       </Select>
                       <FormMessage className="text-[11px]" />
                     </FormItem>
@@ -473,7 +463,9 @@ function ShiftDialog({
                 {selectedExternal ? (
                   <div className="rounded-lg border border-border bg-background px-3 py-2">
                     <p className="text-xs font-bold text-foreground">{selectedExternal.username}</p>
-                    <p className="text-[11px] text-muted-foreground">Unidade de origem: {selectedExternal.originUnitName}</p>
+                    <p className="text-[11px] text-muted-foreground">{selectedExternal.affiliatedUnitNames.length
+                      ? `${selectedExternal.affiliatedUnitNames.length === 1 ? 'Atrelado à unidade' : 'Atrelado às unidades'} ${selectedExternal.affiliatedUnitNames.join(' e ')}`
+                      : 'Confira as unidades de escala e operação no cadastro da pessoa.'}</p>
                   </div>
                 ) : null}
                 {candidateError ? <p role="alert" className="text-[11px] font-semibold text-destructive">{candidateError}</p> : null}
@@ -726,6 +718,7 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
 
 interface ShiftCardProps {
   shift: DPShift;
+  originUnitName?: string;
   vacationConflict?: DPVacationRecord | null;
   userName: string;
   userAvatar?: string;
@@ -742,6 +735,7 @@ interface ShiftCardProps {
 
 function ShiftCard({
   shift,
+  originUnitName,
   vacationConflict,
   userName,
   userAvatar,
@@ -760,7 +754,7 @@ function ShiftCard({
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
   const externalCoverage = shift.assignmentKind === 'external_coverage';
-  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ' · Cobertura externa, não participa das metas' : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
+  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
       role={selectionMode ? 'button' : 'group'}
@@ -796,7 +790,7 @@ function ShiftCard({
         <p className="mt-px whitespace-normal wrap-break-word text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
           {shiftLabel}
         </p>
-        {externalCoverage ? <p className="mt-0.5 text-[8.5px] font-extrabold uppercase leading-[10px] text-primary">Cobertura externa · não participa das metas</p> : null}
+        {externalCoverage ? <p className="mt-0.5 text-[8.5px] font-extrabold uppercase leading-[10px] text-primary">Cobertura externa{originUnitName ? ` · origem: ${originUnitName}` : ''} · não participa das metas</p> : null}
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -1294,9 +1288,9 @@ function CoverageDemandDialog({
   );
 }
 
-function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
+function UnassignedBadge({ user, statusLabel = 'Sem turno neste dia' }: {
   user: { username: string; avatarUrl?: string; color?: string };
-  statusLabel?: 'Sem unidade vinculada' | 'Férias';
+  statusLabel?: 'Sem turno neste dia' | 'Férias';
 }) {
   const color = user.color ?? getUserColor(user.username);
   const isVacation = statusLabel === 'Férias';
@@ -1308,7 +1302,7 @@ function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
           ? 'border-violet-200 bg-violet-50/70 text-violet-700 dark:border-violet-900 dark:bg-violet-950/20 dark:text-violet-300'
           : 'border-slate-200 bg-slate-50/70 text-slate-600 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300',
       )}
-      title={`${user.username} — ${isVacation ? 'Férias aprovadas' : 'Sem unidade vinculada neste dia'}`}
+      title={`${user.username} — ${isVacation ? 'Férias aprovadas' : 'Sem turno neste dia'}`}
     >
       <div className="flex min-w-0 items-center gap-2">
         <Avatar className="h-5 w-5 shrink-0">
@@ -1715,12 +1709,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   }, [shiftDefinitions]);
 
   const operationalUsers = useMemo(() =>
-    activeUsers.filter(u => u.operacional === true),
+    activeUsers.filter(u => isWorkforceEmploymentRelationship(u.employmentRelationshipType)),
     [activeUsers]
   );
-  const usersOfUnit = useCallback((unitId: string | undefined) => {
+  const usersOfUnit = useCallback((unitId: string | undefined, date?: string) => {
     if (!unitId) return operationalUsers;
-    const linked = operationalUsers.filter((candidate) => userMatchesDPUnit(candidate, unitId, units, kiosks));
+    const linked = operationalUsers.filter((candidate) => userMatchesDPUnit(candidate, unitId, units, kiosks, date));
     return linked.length > 0 ? linked : operationalUsers;
   }, [kiosks, operationalUsers, units]);
   const manualDayOffUsers = useMemo(() => usersOfUnit(manualDayOffDialog?.unitId), [manualDayOffDialog?.unitId, usersOfUnit]);
@@ -1755,10 +1749,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const bulkPeople = useMemo(() => {
     if (!schedule.unitId) return operationalUsers;
     const linked = operationalUsers.filter((candidate) => (
-      userMatchesDPUnit(candidate, schedule.unitId, units, kiosks)
+      days.some((day) => userMatchesDPUnit(candidate, schedule.unitId, units, kiosks, day.date))
     ));
     return linked.length > 0 ? linked : operationalUsers;
-  }, [kiosks, operationalUsers, schedule.unitId, units]);
+  }, [days, kiosks, operationalUsers, schedule.unitId, units]);
 
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
@@ -1814,10 +1808,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       ...(isPerUnit ? siblingWorkShifts : []),
     ]),
     [isPerUnit, siblingWorkShifts, visibleDayOffShifts, workShifts],
-  );
-  const currentScheduleUserIds = useMemo(
-    () => new Set(shifts.map((shift) => shift.userId)),
-    [shifts],
   );
   const approvedVacationIndex = useMemo(
     () => buildApprovedVacationIndex(vacations),
@@ -1907,15 +1897,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const ghostIndex = useMemo(() => {
     if (!isPerUnit || !schedule.unitId) return {} as Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>>;
     // Users who are officially linked to this unit (multi-unit workers)
-    const linkedUserIds = new Set([
-      operationalUsers
-        .filter(u => userMatchesDPUnit(u, schedule.unitId, units, kiosks))
-        .map(u => u.id),
-      ...currentScheduleUserIds,
-    ].flat());
     const idx: Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>> = {};
     for (const s of siblingWorkShifts) {
-      if (!linkedUserIds.has(s.userId)) continue;
+      const person = operationalUsers.find((user) => user.id === s.userId);
+      if (!person || !userMatchesDPUnit(person, schedule.unitId, units, kiosks, s.date)) continue;
       const unitName = units.find(u => u.id === s.unitId)?.name ?? s.unitId;
       const consecutiveDayCount = consecutiveCountMap.get(s.id) ?? 1;
       if (!idx[s.date]) idx[s.date] = {};
@@ -1930,7 +1915,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return idx;
   }, [
     consecutiveCountMap,
-    currentScheduleUserIds,
     isPerUnit,
     kiosks,
     operationalUsers,
@@ -2029,9 +2013,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       let displayUnitId = shift.unitId;
       if (isPerUnit && schedule.unitId) {
         const linkedToCurrentUser = operationalUsers.find((user) => user.id === shift.userId);
-        const linkedToCurrent = currentScheduleUserIds.has(shift.userId) || (linkedToCurrentUser
-          ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
-          : false);
+        const linkedToCurrent = linkedToCurrentUser
+          ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks, shift.date)
+          : false;
         if (linkedToCurrent || shift.unitId === schedule.unitId) displayUnitId = schedule.unitId;
         else return;
       }
@@ -2050,9 +2034,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         let displayUnitId = item.sourceUnitId;
         if (isPerUnit && schedule.unitId) {
           const linkedToCurrentUser = operationalUsers.find((user) => user.id === userId);
-          const linkedToCurrent = currentScheduleUserIds.has(userId) || (linkedToCurrentUser
-            ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
-            : false);
+          const linkedToCurrent = linkedToCurrentUser
+            ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks, item.date)
+            : false;
           if (linkedToCurrent || item.sourceUnitId === schedule.unitId) displayUnitId = schedule.unitId;
           else return;
         }
@@ -2083,7 +2067,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return idx;
   }, [
     activeUnits,
-    currentScheduleUserIds,
     currentMonthDateSet,
     dayOffShifts,
     isPerUnit,
@@ -2095,29 +2078,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     units,
     userFilter,
   ]);
-
-  const rosterUserIdsByUnit = useMemo(() => {
-    const roster = new Map<string, Set<string>>(
-      activeUnits.map((unit) => [unit.id, new Set<string>()]),
-    );
-
-    activeUnits.forEach((unit) => {
-      operationalUsers.forEach((candidate) => {
-        if (userMatchesDPUnit(candidate, unit.id, units, kiosks)) {
-          roster.get(unit.id)?.add(candidate.id);
-        }
-      });
-    });
-
-    [...workShifts, ...dayOffShifts].forEach((shift) => {
-      const unit = activeUnits.find((candidate) => operationalUnitIdsMatch(candidate.id, shift.unitId, units));
-      if (unit) roster.get(unit.id)?.add(shift.userId);
-    });
-
-    return new Map(
-      Array.from(roster.entries()).map(([unitId, userIds]) => [unitId, Array.from(userIds)]),
-    );
-  }, [activeUnits, dayOffShifts, kiosks, operationalUsers, units, workShifts]);
 
   const occupiedUserDateKeys = useMemo(
     () => new Set(
@@ -2921,7 +2881,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         ? Object.values(ghostIndex[date] ?? {}).flat()
                         : [];
                       const visibleDayOffUserIds = new Set(dayOffEntries.map((entry) => entry.userId));
-                      const unassignedUsers = (rosterUserIdsByUnit.get(unit.id) ?? [])
+                      const unassignedUsers = operationalUsers.filter((person) => userMatchesDPUnit(person, unit.id, units, kiosks, date)).map((person) => person.id)
                         .filter((userId) => (
                           (userFilter === '__all__' || userFilter === userId)
                           && !occupiedUserDateKeys.has(`${date}::${userId}`)
@@ -2934,7 +2894,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           return [{
                             userId,
                             user: candidate,
-                            statusLabel: vacation ? 'Férias' as const : 'Sem unidade vinculada' as const,
+                            statusLabel: vacation ? 'Férias' as const : 'Sem turno neste dia' as const,
                           }];
                         })
                         .sort((left, right) => left.user.username.localeCompare(right.user.username, 'pt-BR'));
@@ -2947,6 +2907,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           <ShiftCard
                             key={`own-${shift.id}`}
                             shift={shift}
+                            originUnitName={shift.originUnitId ? units.find((item) => item.id === shift.originUnitId)?.name ?? shift.originUnitId : undefined}
                             vacationConflict={vacationConflictForShift(shift)}
                             userName={user?.username ?? 'Desconhecido'}
                             userAvatar={user?.avatarUrl}

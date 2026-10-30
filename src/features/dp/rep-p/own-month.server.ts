@@ -4,9 +4,12 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 
 import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
+import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-absence.server';
+import { automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
@@ -20,6 +23,7 @@ export type RepPOwnScheduledShift = {
   overnight: boolean;
   unitId: string | null;
   unitName: string | null;
+  assignmentKind?: 'regular' | 'external_coverage';
   unitTimeZone: string | null;
   shiftName: string | null;
   breakType: 'none' | 'fixed' | 'flexible' | 'staggered';
@@ -42,11 +46,17 @@ export type RepPOwnScheduledShift = {
   referenceMinutes: number | null;
 };
 
+export type RepPOwnMonth = {
+  month: string; shifts: RepPOwnScheduledShift[]; holidays: string[];
+  /** Optional keeps injected readers and older clients compatible during rollout. */
+  automaticAbsences?: string[]; truncated: boolean;
+};
+
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
 const MAX_OWN_SHIFTS = 62;
 
-type Dependencies = { db: Firestore };
-const defaults: Dependencies = { db: dbAdmin };
+type Dependencies = { db: Firestore; hrDb: Firestore };
+const defaults: Dependencies = { db: dbAdmin, hrDb: hrDbAdmin };
 
 function toMinutes(value: string) { return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)); }
 function text(value: unknown) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
@@ -73,27 +83,31 @@ function millis(value: unknown) {
  * e mais recente primeiro, como em Minha escala), só os turnos da pessoa pelo índice userId+date e os cadastros
  * de turno, unidade e versão de jornada citados. Custo por abertura: escalas do mês + turnos da pessoa (≤62) + cadastros citados.
  */
-export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
+export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}): Promise<RepPOwnMonth> {
   const parsed = repPOwnMonthSchema.safeParse(raw);
   if (!parsed.success) throw new AppError({ code: 'REP_P_MONTH_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Mês inválido.' });
-  return readRepPMonthOfPerson([context.decoded.uid, text(context.userDoc.id), text(context.userDoc.hrEmployeeId)], parsed.data.month, injected);
+  return readRepPMonthOfPerson([context.decoded.uid, text(context.userDoc.id), text(context.userDoc.hrEmployeeId)], parsed.data.month, injected,
+    { automaticAbsence: { workspaceId: context.workspace_id, uid: context.decoded.uid } });
 }
 
 /**
  * Escala do mês de uma pessoa pelos identificadores dela (uid e cadastro do RH). Usada pela tela própria e pelo
  * espelho do fechamento, que confere a permissão antes de chamar.
  */
-export async function readRepPMonthOfPerson(ids: Array<string | null | undefined>, competence: string, injected: Partial<Dependencies> = {}, options: { holidays?: boolean } = {}) {
-  const { db } = { ...defaults, ...injected };
+export async function readRepPMonthOfPerson(ids: Array<string | null | undefined>, competence: string, injected: Partial<Dependencies> = {}, options: { holidays?: boolean; automaticAbsence?: { workspaceId: string; uid: string } } = {}): Promise<RepPOwnMonth> {
+  const { db, hrDb } = { ...defaults, ...injected };
   const [year, month] = competence.split('-').map(Number);
   const start = `${competence}-01`;
   const end = `${competence}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
   const ownIds = [...new Set(ids.filter((value): value is string => Boolean(value)))].slice(0, 10);
 
-  const [schedules, shifts] = await Promise.all([
+  const [schedules, shifts, automaticAbsences] = await Promise.all([
     db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'locked', 'createdAt', 'calendarId').get(),
     db.collectionGroup('shifts').where('userId', 'in', ownIds).where('date', '>=', start).where('date', '<=', end)
       .orderBy('date', 'asc').limit(MAX_OWN_SHIFTS).get(),
+    options.automaticAbsence ? hrDb.collection(AUTOMATIC_ABSENCES)
+      .where('workspaceId', '==', options.automaticAbsence.workspaceId).where('employeeUid', '==', options.automaticAbsence.uid)
+      .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(32).get() : null,
   ]);
   const latestByUnit = new Map<string, string>();
   for (const schedule of [...schedules.docs].sort((left, right) =>
@@ -146,6 +160,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       overnight: doc.get('overnight') === true,
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
+      assignmentKind: doc.get('assignmentKind') === 'external_coverage' ? 'external_coverage' : 'regular',
       unitTimeZone: unitId ? unitTimeZoneById.get(unitId) ?? null : null,
       shiftName: text(definition?.get('name')),
       breakType,
@@ -170,5 +185,21 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       referenceMinutes: journeyReferenceMinutes(journeyOf(journeyById.get(text(doc.get('journeyResolution.journeyId')) ?? '')), String(doc.get('date'))),
     };
   });
-  return { month: competence, shifts: result, holidays, truncated: shifts.size >= MAX_OWN_SHIFTS };
+  const automaticDates = new Set(automaticAbsences?.docs.filter((doc) => doc.get('status') === 'active').map((doc) => String(doc.get('workDate'))) ?? []);
+  let effectiveAutomaticDates = [...automaticDates];
+  if (options.automaticAbsence && automaticDates.size) {
+    const [approvedAbsences, approvedAdjustments] = await Promise.all([
+      hrDb.collection('dp_absenceRequests').where('workspaceId', '==', options.automaticAbsence.workspaceId)
+        .where('beneficiaryUid', '==', options.automaticAbsence.uid).where('startDate', '<=', end).limit(100).get(),
+      hrDb.collection('ptrp_adjustmentRequests').where('workspaceId', '==', options.automaticAbsence.workspaceId)
+        .where('employeeUid', '==', options.automaticAbsence.uid).where('workDate', '>=', start).where('workDate', '<=', end).limit(100).get(),
+    ]);
+    const periods = approvedAbsences.docs.filter((doc) => doc.get('status') === 'approved')
+      .map((doc) => ({ startDate: String(doc.get('startDate')), endDate: String(doc.get('endDate')) }));
+    const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => doc.get('status') === 'approved').map((doc) => String(doc.get('workDate'))));
+    effectiveAutomaticDates = effectiveAutomaticDates.filter((date) => !automaticAbsenceSuperseded(date, adjustmentDates, periods));
+  }
+  return { month: competence, shifts: result, holidays,
+    automaticAbsences: effectiveAutomaticDates.sort(),
+    truncated: shifts.size >= MAX_OWN_SHIFTS };
 }

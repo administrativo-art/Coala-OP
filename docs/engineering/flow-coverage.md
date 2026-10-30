@@ -16,6 +16,8 @@
 
 2026-10-27: o Registro REP-P ganhou candidata local para simular pedidos de ajuste no ensaio em coleção segregada e para confirmar o encerramento organizacional após `Fim da jornada`. A simulação não cria tratamento nem participa de PTRP/ARP/AFD/AEJ/espelho/fechamento; o encerramento não bloqueia nova batida e não fabrica marcação. Também foram corrigidos os estados de autorização offline, tentativa pendente e cache da Home. Testes integrados, revisão final independente e aparelho físico permanecem gates; o grupo continua Traçado.
 
+2026-10-28: [contextos de unidade](unit-contexts.md) foram separados no cadastro, na busca de coberturas e no Registro REP-P. Unidade financeira não define origem operacional; uma cobertura externa autoriza a unidade de execução na data, preservando empregador e comprovante. Candidata local em revisão Doc Brown e testes de emulador; o grupo permanece Traçado.
+
 2026-10-27: a página Solicitações do DP passou a ter as abas Para analisar, Acompanhamento e Pendências de documento; o [fechamento do ponto](flows/dp-time-recording.md) ganhou página própria em Gestão do colaborador, a exportação AFD/AEJ foi para Configurações → Tempo e a [aprovação de ausência](flows/dp-absences.md) ganhou a etapa de cobertura do turno com elegibilidade por jornada e escala. Código local, sem publicação; revisão Doc Brown e E2E pendentes.
 
 2026-10-26: o [Registro REP-P](flows/dp-time-recording.md) ganhou clareza local na prévia web: orientação da escala antes da primeira batida, intervalo somente após o início real, memória numérica do dia, fatos das ocorrências, faixa noturna física e resumo compacto do banco com acesso ao extrato dedicado. A apuração e os contratos fiscais permanecem inalterados; validação visual integrada e publicação desta candidata seguem pendentes. O grupo permanece Traçado.
@@ -123,3 +125,9 @@ Consulta de coordenadas traçada em `location-access.server.ts` e `POST /api/dp/
 
 
 2026-10-28 — Candidata local do REP-P: preparo v2 por24horas e ciclo por24horas da primeira batida. Primeira marcação online preserva a candidatura no original e projeta o ciclo após o commit; primeira offline usa prova assinada e relógio monotônico. Lease por titular/aparelho impede dois preparos concorrentes. Encerramento exige titular autenticado, atestação e prova assinada, fila confirmada e último comprovante; coleções auxiliares negadas ao cliente. Não amplia permissões do DP nem ativa coleta. Migração v1 e limites em [homologação do ciclo](../rep-p/homologacao/ciclo-offline-24h.md). Ainda não publicado.
+
+2026-10-28: centralização local de unidades de operação/escala por data e editor contratual único, com auditoria atômica e ativação limitada. Integrações demo de concorrência, revisão original, experiência/desligamento e offline passaram; E2E de interface passou em Chromium demo com duas unidades e contrato no mesmo salvamento; publicação ainda pendente. Não promove o grupo inteiro a Verificado; ver [pessoas](flows/people-access.md).
+
+2026-10-28: ajuste de organização do editor concentra todos os seletores de unidade na aba Unidades, substitui o quadro de ajuda por ícones e preserva motivo/data na aba. Unitários e E2E demo do editor passaram; sem mudança nas fontes ou regras do ponto. Aguardar publicação desta correção.
+
+Ajuste documental de férias (29/10/2026): histórico interno com decisões preservadas, descarte motivado e consulta conjunta dos originais; verificação local em `vacation-receipts.md`, execução integrada completa do fluxo permanece pendente.

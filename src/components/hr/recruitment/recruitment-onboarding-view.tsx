@@ -550,8 +550,6 @@ function accountantCurrentStepNumber(process: OnboardingProcess) {
 function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFinalizationSettings {
   if (!process) {
     return {
-      operational: false,
-      participatesInGoals: false,
       loginRestrictionEnabled: false,
       needsTransportVoucher: false,
       transportVoucherValue: 8.4,
@@ -560,8 +558,6 @@ function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFina
   }
   const settings = process.finalizationSettings ?? {};
   return {
-    operational: settings.operational ?? false,
-    participatesInGoals: settings.participatesInGoals ?? false,
     loginRestrictionEnabled: settings.loginRestrictionEnabled ?? false,
     needsTransportVoucher: settings.needsTransportVoucher ?? onboardingAnswerYes(process.publicFormAnswers, 'wantsTransportVoucher'),
     transportVoucherValue: settings.transportVoucherValue ?? 8.4,
@@ -627,19 +623,10 @@ function OnboardingFinalizationControls({
     onChange(current => ({ ...current, ...next }));
   }
 
-  function handleOperationalChange(next: boolean) {
-    patch({
-      operational: next,
-      ...(next ? { loginRestrictionEnabled: true } : {}),
-    });
-  }
-
   return (
     <div className="space-y-3">
       <div className={compact ? "grid gap-3 sm:grid-cols-2" : "space-y-3"}>
         {[
-          ['operational', 'Operacional', 'Entra em escala e rotinas operacionais.'],
-          ['participatesInGoals', 'Participa de metas', 'Pode entrar nos acompanhamentos de metas.'],
           ['loginRestrictionEnabled', 'Login por escala', 'Acesso passa a respeitar a escala montada.'],
           ...(transportVoucherMode === 'editable'
             ? [['needsTransportVoucher', 'Vale-transporte', 'Usa valor diário por dia trabalhado.']]
@@ -650,10 +637,6 @@ function OnboardingFinalizationControls({
               type="checkbox"
               checked={Boolean(value[key as keyof OnboardingFinalizationSettings])}
               onChange={event => {
-                if (key === 'operational') {
-                  handleOperationalChange(event.target.checked);
-                  return;
-                }
                 patch({
                   [key]: event.target.checked,
                   ...(key === 'needsTransportVoucher' && !event.target.checked ? { transportVoucherValue: null } : {}),
@@ -1113,8 +1096,6 @@ function StartOnboardingModal({
           shiftDefinitionId: finalizationSettings.shiftDefinitionId || null,
           expectedAdmissionDate: expectedAdmissionDate || null,
           probationFirstPeriodDays: Number(probationFirstPeriodDays),
-          operational: finalizationSettings.operational ?? false,
-          participatesInGoals: finalizationSettings.participatesInGoals ?? false,
           loginRestrictionEnabled: finalizationSettings.loginRestrictionEnabled ?? false,
           transportVoucherValue: finalizationSettings.transportVoucherValue ?? null,
           generateSignatureDocuments,
@@ -1410,8 +1391,6 @@ function StartOnboardingModal({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <span className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${generateSignatureDocuments ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>Documentos para assinatura: {generateSignatureDocuments ? 'sim' : 'não'}</span>
-                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Operacional: {finalizationSettings.operational ? 'sim' : 'não'}</span>
-                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Participa de metas: {finalizationSettings.participatesInGoals ? 'sim' : 'não'}</span>
                 </div>
                 {error ? <ErrorLine msg={error} /> : null}
               </div>

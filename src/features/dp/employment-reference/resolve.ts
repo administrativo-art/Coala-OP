@@ -18,7 +18,9 @@ export type EmploymentResolution =
   | { status: 'missing' }
   | { status: 'gap'; historyId: string; revision: number; date: string }
   | { status: 'inconsistent'; historyId?: string; revision?: number }
-  | { status: 'matched'; historyId: string; revision: number; date: string; period: EmploymentPeriod };
+  | { status: 'matched'; historyId: string; revision: number; date: string; period: EmploymentPeriod;
+      contractualDataReference?: { changeId: string; validFrom: string; validTo: string | null };
+      operationalUnitReference?: { hash: string; validFrom: string; validTo: string | null; unitIds: string[] } };
 
 export function isCivilDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -42,7 +44,6 @@ export function validEmploymentHistory(history: EmploymentHistory): boolean {
       || typeof period.unitId !== 'string' || !period.unitId
       || !Array.isArray(period.unitIds) || period.unitIds.length < 1 || period.unitIds.length > 20
       || !period.unitIds.every((id) => typeof id === 'string' && Boolean(id))
-      || !period.unitIds.includes(period.unitId)
       || new Set(period.unitIds).size !== period.unitIds.length
       || period.jobRoleId !== undefined && (typeof period.jobRoleId !== 'string' || !period.jobRoleId)
       || !Array.isArray(period.jobFunctionIds) || period.jobFunctionIds.length > 20

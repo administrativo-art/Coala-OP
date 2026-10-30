@@ -107,3 +107,50 @@ export const timeClosingOverdueJob = onSchedule({
   const result = await response.json() as { checked?: number; overdueClosures?: number };
   if (result.overdueClosures) console.log('[timeClosingOverdueJob] Concluída.', result);
 });
+
+/**
+ * Acompanhamento das vigências operacionais que entraram em vigor (a cada 15 minutos): recalcula os
+ * quiosques atribuídos e acompanha os acessos ao PDV. Sem pendências, a rota faz uma única consulta limitada.
+ */
+export const operationalFollowUpJob = onSchedule({
+  schedule: '*/15 * * * *',
+  timeZone: 'America/Belem',
+  retryCount: 0,
+  timeoutSeconds: 300,
+  memory: '256MiB',
+  maxInstances: 1,
+  secrets: [jobSecret],
+}, async () => {
+  const response = await fetch(new URL('/api/jobs/users/operational-follow-up', jobUrl.value()), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Acompanhamento das vigências respondeu HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const result = await response.json() as { processed?: number; failed?: number };
+  if (result.processed || result.failed) console.log('[operationalFollowUpJob] Concluída.', result);
+});
+
+/** Dia escalado sem batida nem solicitação: registra falta injustificada 24 h após o fim do turno. */
+export const automaticAbsenceJob = onSchedule({
+  schedule: '35 * * * *',
+  timeZone: 'America/Belem',
+  retryCount: 0,
+  timeoutSeconds: 300,
+  memory: '256MiB',
+  maxInstances: 1,
+  secrets: [jobSecret],
+}, async () => {
+  const response = await fetch(new URL('/api/jobs/dp/time-recording/automatic-absences', jobUrl.value()), {
+    method: 'POST', headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Faltas automáticas responderam HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const result = await response.json() as { checked?: number; created?: number };
+  if (result.created) console.log('[automaticAbsenceJob] Concluída.', result);
+});

@@ -41,6 +41,7 @@ import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
 import type { EmployeeFieldValue, FieldMapEntry, FieldVisibility, NormalizedFieldVisibility, RhRole } from "@/types/rh";
 import { canViewField, normalizeFieldVisibility } from "@/types/rh";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CYCLE_STATUS_CONFIG, getVacationCycleHistory, type VacationCycle } from "@/lib/utils/vacation-logic";
 import { FieldValue } from "@/features/rh/components/FieldValue";
 import { formatFieldValue } from "@/features/rh/lib/field-format";
@@ -122,7 +123,10 @@ import {
 } from "@/lib/hr/employment-relationship";
 import { createManagedTerminationProcess } from "@/features/hr/termination/client";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
-import { EmploymentReferenceCard } from "@/features/dp/employment-reference/employment-reference-card";
+import { Button } from "@/components/ui/button";
+import { ContractChanges } from "@/components/dp/contract-changes";
+import { contractProbationDates } from "@/components/dp/contract-probation-dates";
+import { pdvAccessUnitLabel } from "@/features/hr/lib/pdv-access-presentation";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -1287,10 +1291,6 @@ function EmployeeProfileFields({
   const [visibilityMessage, setVisibilityMessage] = useState<string | null>(null);
   const [systemActionSaving, setSystemActionSaving] = useState<string | null>(null);
   const [systemActionMessage, setSystemActionMessage] = useState<string | null>(null);
-  const [systemFlags, setSystemFlags] = useState({
-    operacional: user.operacional === true,
-    participatesInGoals: user.participatesInGoals === true,
-  });
   const [pdvAccessOverride, setPdvAccessOverride] = useState<UserPdvAccess[] | null>(null);
   const [pdvEditorAccessId, setPdvEditorAccessId] = useState<string | null>(null);
   const [pdvUnitId, setPdvUnitId] = useState("");
@@ -1403,31 +1403,6 @@ function EmployeeProfileFields({
   const pdvAccesses = (pdvAccessOverride ?? (user.pdvAccesses?.length ? user.pdvAccesses : legacyPdvAccess))
     .filter((access) => access.status === "active");
   const pdvUnits = units.filter((unit) => !unit.isArchived && Boolean(unit.pdvFilialId));
-
-  async function updateSystemFlag(field: "operacional" | "participatesInGoals", value: boolean) {
-    if (!canManageFieldVisibility || systemActionSaving) return;
-    setSystemActionSaving(field);
-    setSystemActionMessage(null);
-    try {
-      await onUpdateUser({ ...user, [field]: value });
-      setSystemFlags((current) => ({ ...current, [field]: value }));
-      if (firebaseUser) {
-        await createAuditLog(firebaseUser, {
-          module: "dp.collaborators",
-          action: field === "operacional" ? "operational_status_updated" : "goals_participation_updated",
-          targetType: "user",
-          targetId: user.id,
-          targetName: user.username,
-          metadata: { value },
-        }).catch(() => undefined);
-      }
-      setSystemActionMessage("Configuração do Coala One atualizada.");
-    } catch (error) {
-      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao atualizar a configuração.");
-    } finally {
-      setSystemActionSaving(null);
-    }
-  }
 
   async function openPdvEditor(access: UserPdvAccess) {
     if (!firebaseUser || !canManageFieldVisibility) return;
@@ -1621,8 +1596,6 @@ function EmployeeProfileFields({
       SYSTEM_FIELD_KEYS.loginPdv,
       SYSTEM_FIELD_KEYS.loginCoalaOne,
       SYSTEM_FIELD_KEYS.accessProfile,
-      SYSTEM_FIELD_KEYS.operational,
-      SYSTEM_FIELD_KEYS.goals,
       SYSTEM_FIELD_KEYS.functions,
     ]);
     return {
@@ -1664,30 +1637,6 @@ function EmployeeProfileFields({
       hasValue: pdvAccesses.length > 0 || pdvRegistrationLabel(user) !== "-",
     },
     {
-      key: SYSTEM_FIELD_KEYS.loginCoalaOne,
-      value: user.email || "-",
-      hasValue: Boolean(user.email),
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.operational,
-      value: systemFlags.operacional ? "Sim" : "Não",
-      hasValue: true,
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.goals,
-      value: systemFlags.participatesInGoals ? "Participa" : "Não participa",
-      hasValue: true,
-    },
-    {
-      key: SYSTEM_FIELD_KEYS.functions,
-      value: user.jobFunctionNames && user.jobFunctionNames.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {user.jobFunctionNames.map((name) => <Chip key={name} tone="good">{name}</Chip>)}
-        </div>
-      ) : "Nenhuma função vinculada.",
-      hasValue: Boolean(user.jobFunctionNames?.length),
-    },
-    {
       key: SYSTEM_FIELD_KEYS.accessProfile,
       value: Array.from(new Set(pdvAccesses.map((access) => access.profileName).filter(Boolean))).join(", ") || user.pdvAccessProfileName || "-",
       hasValue: pdvAccesses.some((access) => Boolean(access.profileName)) || Boolean(user.pdvAccessProfileName),
@@ -1703,20 +1652,32 @@ function EmployeeProfileFields({
     });
   });
 
-  const relationshipEntry = systemField("Tipo de vínculo", "Dados contratuais", 5, "restricted_partial");
-  if (canManageFieldVisibility || canViewField(relationshipEntry.visibility, role, visibilityContext, relationshipEntry.access, fieldMap.access_matrix)) {
-    const relationshipType = resolveEmploymentRelationshipType(user.employmentRelationshipType, user.personRecordType);
-    const contractSection = profileDisplaySection("Dados contratuais");
-    if (!sections[contractSection]) sections[contractSection] = [];
-    sections[contractSection].push({
-      key: EMPLOYMENT_RELATIONSHIP_FIELD_KEY,
-      entry: relationshipEntry,
-      staticValue: employmentRelationshipLabel(relationshipType),
-      staticHasValue: Boolean(relationshipType),
-      readOnly: true,
-      fixedVisibility: true,
-    });
-  }
+  const contractSection = profileDisplaySection("Dados contratuais");
+  sections[contractSection] = (sections[contractSection] ?? []).map((row) => ({ ...row, readOnly: true }));
+  const addContractRow = (key: string, label: string, order: number, value: React.ReactNode, hasValue: boolean, inheritKey?: string) => {
+    const fallback = fieldMap.fields[inheritKey ?? key] ?? systemField(label, contractSection, order, "restricted_partial");
+    const entry = { ...fallback, label, section: contractSection, order };
+    if (!canManageFieldVisibility && !canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix)) return;
+    sections[contractSection] = (sections[contractSection] ?? []).filter((row) => row.key !== key);
+    sections[contractSection].push({ key, entry, staticValue: hasValue ? value : "Não informado", staticHasValue: hasValue, readOnly: true });
+  };
+  const relationshipType = resolveEmploymentRelationshipType(user.employmentRelationshipType, user.personRecordType);
+  addContractRow(EMPLOYMENT_RELATIONSHIP_FIELD_KEY, "Tipo de vínculo", 5, employmentRelationshipLabel(relationshipType), Boolean(relationshipType));
+  const employer = units.find((unit) => unit.id === user.employerUnitId);
+  addContractRow("employee.employer_cnpj", "CNPJ do empregador", 10, user.employerCnpj || employer?.cnpj || "", Boolean(user.employerCnpj || employer?.cnpj));
+  addContractRow("system.contract.admission", "Data de admissão", 25, fmtDate(user.admissionDate), Boolean(user.admissionDate));
+  addContractRow("employee.job_role_id", "Cargo", 30, user.jobRoleName || user.jobRoleId || "", Boolean(user.jobRoleId));
+  addContractRow("system.contract.functions", "Função", 35, user.jobFunctionNames?.join(", ") || user.jobFunctionIds?.join(", ") || "", Boolean(user.jobFunctionIds?.length), SYSTEM_FIELD_KEYS.functions);
+  const probationDates = contractProbationDates(profileState.data.periodo_experiencia, {
+    firstEnd: fieldDateIso(fieldValues["employee.probation_eval_1"]),
+    finalEnd: fieldDateIso(fieldValues["employee.probation_eval_2"]),
+  });
+  addContractRow("system.contract.probation_start", "Início da experiência", 38, formatIsoDate(probationDates.start), Boolean(probationDates.start), "employee.probation_eval_1");
+  const firstExperienceEnd = probationDates.firstEnd ?? fieldDateIso(fieldValues["employee.probation_eval_1"]);
+  const secondExperienceEnd = probationDates.finalEnd ?? fieldDateIso(fieldValues["employee.probation_eval_2"]);
+  addContractRow("employee.probation_eval_1", "Fim do 1º período de experiência", 40, formatIsoDate(firstExperienceEnd), Boolean(firstExperienceEnd));
+  addContractRow("employee.probation_eval_2", "Fim do 2º período de experiência", 50, formatIsoDate(secondExperienceEnd), Boolean(secondExperienceEnd));
+  addContractRow("system.contract.indefinite_start", probationDates.indefiniteLabel, 55, formatIsoDate(probationDates.indefiniteStart), Boolean(probationDates.indefiniteStart), "employee.probation_eval_2");
 
   Object.values(sections).forEach((items) => {
     items.sort((left, right) => (left.entry.order ?? 0) - (right.entry.order ?? 0));
@@ -1764,17 +1725,6 @@ function EmployeeProfileFields({
         SYSTEM_FIELD_KEYS.loginPdv,
         SYSTEM_FIELD_KEYS.registrationPdv,
         SYSTEM_FIELD_KEYS.accessProfile,
-      ],
-    },
-    {
-      id: "coala",
-      title: "Coala One",
-      description: "Conta interna, permissões e participação operacional.",
-      keys: [
-        SYSTEM_FIELD_KEYS.loginCoalaOne,
-        SYSTEM_FIELD_KEYS.operational,
-        SYSTEM_FIELD_KEYS.goals,
-        SYSTEM_FIELD_KEYS.functions,
       ],
     },
   ];
@@ -1848,11 +1798,6 @@ function EmployeeProfileFields({
   function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly, fixedVisibility }: EmployeeProfileFieldRow) {
     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
     const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
-    const managedFlag = key === SYSTEM_FIELD_KEYS.operational
-      ? { field: "operacional" as const, active: systemFlags.operacional }
-      : key === SYSTEM_FIELD_KEYS.goals
-        ? { field: "participatesInGoals" as const, active: systemFlags.participatesInGoals }
-        : null;
     return (
       <div key={key} className="rounded-xl border border-ds-divider bg-ds-input p-3">
         <div className="flex items-start justify-between gap-2">
@@ -1863,7 +1808,7 @@ function EmployeeProfileFields({
                 staticValue
               ) : hasValue ? (
                 <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
-              ) : role !== "employee" ? (
+              ) : role !== "employee" && !readOnlyFromOrgChart ? (
                 <button type="button" onClick={() => setEditKey(key)} className="text-ds-accent-ink">
                   + Adicionar
                 </button>
@@ -1892,23 +1837,6 @@ function EmployeeProfileFields({
             ) : null}
           </div>
         </div>
-        {managedFlag && canManageFieldVisibility ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={managedFlag.active}
-            disabled={Boolean(systemActionSaving)}
-            onClick={() => void updateSystemFlag(managedFlag.field, !managedFlag.active)}
-            className="mt-3 flex w-full items-center justify-between gap-3 border-t border-ds-divider pt-3 text-left disabled:opacity-60"
-          >
-            <span className="text-[10px] font-black text-ds-ink-muted">
-              {managedFlag.active ? "Ativo" : "Inativo"}
-            </span>
-            <span className={`h-6 w-11 rounded-full p-1 transition ${managedFlag.active ? "bg-ds-accent" : "bg-ds-disabled"}`}>
-              <span className={`block h-4 w-4 rounded-full bg-white transition ${managedFlag.active ? "translate-x-5" : ""}`} />
-            </span>
-          </button>
-        ) : null}
       </div>
     );
   }
@@ -1921,7 +1849,7 @@ function EmployeeProfileFields({
       const text = formatFieldValue(row.fv, row.entry.type, role, fieldKey);
       return text === "—" ? null : text;
     });
-    const editable = role !== "employee" && def.editKeys.some((fieldKey) => rowsByKey.has(fieldKey));
+    const editable = role !== "employee" && rows.some((row) => !row.readOnly) && def.editKeys.some((fieldKey) => rowsByKey.has(fieldKey));
     const visibilityKey = `section:${def.label}`;
     return (
       <div key={def.id} className="rounded-xl border border-ds-divider bg-ds-input p-3">
@@ -2107,7 +2035,7 @@ function EmployeeProfileFields({
                                 <div key={access.externalUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ds-input p-3 ring-1 ring-ds-border">
                                   <div className="min-w-0">
                                     <p className="text-xs font-black text-ds-ink">
-                                      {access.unitName ?? access.filialName ?? `Filial ${access.filialId || "não identificada"}`}
+                                      {pdvAccessUnitLabel(access, units)}
                                     </p>
                                     <p className="mt-1 text-[10px] font-bold text-ds-ink-muted">
                                       Usuário {access.externalUserId} · {access.profileName ?? "Perfil do PDV ainda não sincronizado"}
@@ -2146,6 +2074,7 @@ function EmployeeProfileFields({
                 ) : (
                   renderSectionBody(section, sectionFields)
                 )}
+                {section === contractSection ? <ContractChanges userId={user.id} units={units} /> : null}
               </section>
             );
           })}
@@ -2256,83 +2185,24 @@ function EmployeeProfileFields({
   );
 }
 
-function EmployeeProfileHeaderSummary({
-  userId,
-  profileState,
-}: {
-  userId: string;
-  profileState: EmployeeProfileState;
-}) {
-  const { firebaseUser, permissions, user: currentUser } = useAuth();
-
-  if (profileState.status === "idle" || profileState.status === "loading") {
-    return (
-      <div className="min-w-[280px] rounded-2xl border border-ds-divider bg-ds-input px-4 py-3">
-        <div className="h-4 w-32 animate-pulse rounded bg-ds-divider" />
-        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-ds-neutral-bg" />
-      </div>
-    );
-  }
-
-  if (profileState.status === "error") {
-    return (
-      <div className="min-w-[280px] rounded-2xl border border-ds-warn-bg bg-ds-warn-bg px-4 py-3">
-        <p className="text-xs font-black text-ds-warn">Cadastro local indisponível</p>
-        <p className="mt-1 text-[11px] font-bold text-ds-warn">
-          Os campos complementares ainda não foram preparados para este colaborador.
-        </p>
-      </div>
-    );
-  }
-
-  const { employee, fieldValues, fieldMap, cache } = profileState.data;
-  const role = cache.rh_role as RhRole;
-  const visibilityContext = {
-    isOwner: firebaseUser?.uid === userId || employee.auth_uid === firebaseUser?.uid || currentUser?.id === userId,
-    canViewConfidential: permissions.settings?.manageUsers === true,
-    userId: currentUser?.id ?? firebaseUser?.uid ?? null,
-    roleIds: currentUser?.jobRoleId ? [currentUser.jobRoleId] : [],
-    functionIds: (currentUser?.jobFunctionIds ?? []).filter(Boolean),
-  };
-  const visibleFields = Object.entries(fieldMap.fields)
-    .filter(([key, entry]) => {
-      if (isSystemStaticField(key) || isSystemPanelProfileField(key) || isLegacyUniformField(key, entry)) return false;
-      return canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix) && conditionalMatches(entry, fieldValues);
-    });
-  const filledFields = visibleFields.filter(([key]) => fieldHasValue(fieldValues[key])).length;
-  const totalFields = visibleFields.length;
-  const completionPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : employee.profile_completion;
-
+/** Atalho só com ícone na barra do perfil: o nome aparece ao passar o mouse ou focar, e leitores de tela leem o rótulo. */
+function HeaderIconLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   return (
-    <div className="min-w-[320px] rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3">
-      <div className="flex items-center gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full"
-            style={{ background: `conic-gradient(#df2f78 ${completionPct * 3.6}deg, #ececf0 0deg)` }}
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href={href}
+            aria-label={label}
+            className="grid h-9 w-9 place-items-center rounded-ds-btn border border-white/15 bg-white/[0.07] text-ds-accent shadow-xs hover:border-ds-accent hover:bg-white/[0.12] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
           >
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-ds-ink text-xs font-black text-white">
-              {completionPct}%
-            </div>
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-white">Perfil completo</p>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${completionPct >= 80 ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger"}`}>
-                {completionPct >= 80 ? "Completo" : "Incompleto"}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
-              {filledFields}/{totalFields} campos preenchidos
-            </p>
-            <p className="mt-0.5 text-[11px] font-bold text-ds-on-dark-2">
-              Cadastro local do Coala
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+            {icon}
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 function TerminationDialog({
@@ -2659,6 +2529,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     }
     setDiscardEditOpen(false);
     setEditDrawerDirty(false);
+    if (reason === 'saved') setEmployeeProfileReloadKey((value) => value + 1);
     setEditDrawerInUrl(false);
   }, [editDrawerDirty, setEditDrawerInUrl]);
 
@@ -2730,10 +2601,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const blockOrder = (id: keyof typeof DEFAULT_PROFILE_BLOCKS) => profileBlocks[id]?.order ?? DEFAULT_PROFILE_BLOCKS[id].order;
   const canManageSystemFieldVisibility = Boolean(
     permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true
-  );
-  const canPublishEmploymentReference = Boolean(
-    !ownProfileOnly
-    && (isDefaultAdmin || permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true)
   );
   const viewingOwnProfile = firebaseUser?.uid === collaborator.id || currentUser?.id === collaborator.id;
   const canReadTimeRecording = Boolean(
@@ -3262,7 +3129,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             }}
             kicker="Editar colaborador"
             title={displayName(collaborator.username)}
-            subtitle="Identificação, atuação, jornada e comportamento no sistema."
+            subtitle="Identificação, jornada, unidades e acesso no sistema."
+            headerTabs
             className="w-[min(920px,100vw)]"
           >
             <UserManagement
@@ -3373,31 +3241,25 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               </div>
             </div>
           </div>
-          <div className="min-w-0 md:w-[320px]">
-            <EmployeeProfileHeaderSummary
-              userId={user.id}
-              profileState={employeeProfileState}
-            />
-          </div>
-          <div className="grid shrink-0 gap-2 xl:justify-items-end">
+          <div className="shrink-0">
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               {canManageSystemFieldVisibility ? (
                 <button
                   type="button"
                   onClick={() => setEditDrawerInUrl(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-accent bg-ds-accent px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent-hover hover:bg-ds-accent-hover"
                 >
-                  <Pencil className="h-4 w-4 text-ds-accent" />
+                  <Pencil className="h-4 w-4" />
                   Editar dados
                 </button>
               ) : null}
-              <Link
-                href={`/dashboard/dp/collaborators/${user.id}/documents`}
-                className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-              >
-                <FileText className="h-4 w-4 text-ds-accent" />
-                Documentos
-              </Link>
+              <HeaderIconLink href={`/dashboard/dp/collaborators/${user.id}/documents`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
+              {canReadTimeRecording ? (
+                <>
+                  <HeaderIconLink href={timeRecordingHref} label="Registro de ponto" icon={<Clock className="h-[18px] w-[18px]" />} />
+                  <HeaderIconLink href={`${timeRecordingHref}?view=time-bank`} label="Banco de horas" icon={<TimerReset className="h-[18px] w-[18px]" />} />
+                </>
+              ) : null}
               <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
                 <PopoverTrigger asChild>
                   <button
@@ -3443,24 +3305,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </PopoverContent>
               </Popover>
             </div>
-            {canReadTimeRecording ? (
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                <Link
-                  href={timeRecordingHref}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-                >
-                  <Clock className="h-4 w-4 text-ds-accent" />
-                  Registro de ponto
-                </Link>
-                <Link
-                  href={`${timeRecordingHref}?view=time-bank`}
-                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-white/15 bg-white/[0.07] px-3 text-xs font-extrabold text-white shadow-xs hover:border-ds-accent hover:bg-white/[0.12]"
-                >
-                  <TimerReset className="h-4 w-4 text-ds-accent" />
-                  Banco de horas
-                </Link>
-              </div>
-            ) : null}
           </div>
         </div>
       </section>
@@ -3486,12 +3330,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
               <div className="space-y-2.5">
                 {renderSystemBlock("system.schedule_units")}
-                <EmploymentReferenceCard
-                  user={collaborator}
-                  units={units}
-                  firebaseUser={firebaseUser}
-                  canPublish={canPublishEmploymentReference}
-                />
+
               </div>
               {renderSystemBlock("system.vacations")}
             </div>

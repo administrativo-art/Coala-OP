@@ -8,14 +8,17 @@ import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 
 const QUERY_MULTIPLIER = 3;
+const MAX_AFFILIATED_UNITS = 20;
 export const EXTERNAL_CANDIDATE_MAX_RESULTS = 20;
-export const EXTERNAL_CANDIDATE_MAX_READS = (EXTERNAL_CANDIDATE_MAX_RESULTS * QUERY_MULTIPLIER + 1) * 5;
+export const EXTERNAL_CANDIDATE_MAX_READS = (EXTERNAL_CANDIDATE_MAX_RESULTS * QUERY_MULTIPLIER + 1) * 5
+  + EXTERNAL_CANDIDATE_MAX_RESULTS * MAX_AFFILIATED_UNITS;
 
 export async function listExternalCoverageCandidates(params: {
   context: ServerUserContext;
   scheduleId: string;
   search: string;
   limit: number;
+  date?: string;
 }) {
   const { context, scheduleId, search, limit } = params;
   if (!context.isDefaultAdmin && (
@@ -46,7 +49,7 @@ export async function listExternalCoverageCandidates(params: {
     .orderBy('username')
     .startAt(variant)
     .endAt(`${variant}\uf8ff`)
-    .select('username', 'isActive', 'unitId', 'unitIds', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
+    .select('username', 'isActive', 'unitId', 'unitIds', 'operationalUnitPeriods', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
     .limit(boundedLimit * QUERY_MULTIPLIER + 1)
     .get()));
   const documents = [...new Map(snapshots.flatMap((snapshot) => snapshot.docs).map((document) => [document.id, document])).values()]
@@ -57,6 +60,7 @@ export async function listExternalCoverageCandidates(params: {
     try {
       const assignment = resolveDPShiftAssignment({
         executionUnitId,
+        date: params.date,
         executionUnitExternalId: typeof unit.get('externalId') === 'string' ? unit.get('externalId') : undefined,
         user: document.data(),
       });
@@ -65,6 +69,8 @@ export async function listExternalCoverageCandidates(params: {
         id: document.id,
         username: String(document.get('username') ?? ''),
         originUnitId: assignment.originUnitId,
+        affiliatedUnitIds: [...new Set((Array.isArray(document.get('unitIds')) ? document.get('unitIds') as unknown[] : [])
+          .filter((id): id is string => typeof id === 'string' && Boolean(id)))].slice(0, MAX_AFFILIATED_UNITS),
         jobRoleId: typeof document.get('jobRoleId') === 'string' ? document.get('jobRoleId') : undefined,
         jobRoleName: typeof document.get('jobRoleName') === 'string' ? document.get('jobRoleName') : undefined,
         jobFunctionIds: Array.isArray(document.get('jobFunctionIds')) ? document.get('jobFunctionIds') : [],
@@ -76,14 +82,17 @@ export async function listExternalCoverageCandidates(params: {
     }
   }).slice(0, boundedLimit);
 
-  const originIds = [...new Set(candidates.map((candidate) => candidate.originUnitId))];
+  const originIds = [...new Set(candidates.flatMap((candidate) => [candidate.originUnitId, ...candidate.affiliatedUnitIds]))];
   const origins = originIds.length
     ? await dbAdmin.getAll(...originIds.map((id) => dbAdmin.collection('dp_units').doc(id)))
     : [];
   const originNameById = new Map(origins.filter((origin) => origin.exists).map((origin) => [origin.id, String(origin.get('name') ?? origin.id)]));
 
   return {
-    candidates: candidates.map((candidate) => ({ ...candidate, originUnitName: originNameById.get(candidate.originUnitId) ?? candidate.originUnitId })),
+    candidates: candidates.map((candidate) => ({ ...candidate,
+      originUnitName: originNameById.get(candidate.originUnitId) ?? candidate.originUnitId,
+      affiliatedUnitNames: (candidate.affiliatedUnitIds.length ? candidate.affiliatedUnitIds : [candidate.originUnitId])
+        .map((id) => originNameById.get(id) ?? id) })),
     truncated: snapshots.some((snapshot) => snapshot.size > boundedLimit * QUERY_MULTIPLIER),
   };
 }

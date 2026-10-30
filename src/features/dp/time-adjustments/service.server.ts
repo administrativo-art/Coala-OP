@@ -23,6 +23,7 @@ import {
   type AdjustmentAct, type AdjustmentKind, type AdjustmentStatus,
 } from './core';
 import type { AdjustmentDecisionInput, AdjustmentMonthInput, CreateAdjustmentInput } from './schemas';
+import { discardedReceiptIds, pilotTreatmentsOf } from './pilot-treatments';
 
 export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const PILOT_ADJUSTMENTS = 'repP_pilotAdjustmentRequests';
@@ -128,7 +129,7 @@ async function assertNoPilotMarkingForDay(repDb: Firestore, workspaceId: string,
   }
 }
 
-function canReview(context: ServerUserContext) {
+export function canReview(context: ServerUserContext) {
   return context.isDefaultAdmin || context.permissions.dp?.requests?.review === true;
 }
 
@@ -442,6 +443,7 @@ export async function listAdjustmentsOfPerson(workspaceId: string, employeeUid: 
     deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
       .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(MONTH_LIMIT * 2).get(),
   ]);
+  const pilotRecords = pilotRequests.docs.map((doc) => doc.data() as PilotAdjustmentRecord);
   return {
     month: input.month,
     adjustments: [
@@ -453,8 +455,45 @@ export async function listAdjustmentsOfPerson(workspaceId: string, employeeUid: 
       id: doc.id, adjustmentId: String(doc.get('adjustmentId')), workDate: String(doc.get('workDate')),
       type: doc.get('type') as 'discard' | 'inclusion', originalReceiptId: (doc.get('originalReceiptId') as string | null) ?? null,
       markedAt: (doc.get('markedAt') as string | null) ?? null, executionUnitId: (doc.get('executionUnitId') as string | null) ?? null,
-    })),
+    })).concat(pilotTreatmentsOf(pilotRecords)),
   };
+}
+
+// Leituras do dia de um pedido para a análise (só consulta). Ficam aqui porque tocam as coleções protegidas do ponto
+// (repP_ e ptrp_), que só os serviços delimitados podem citar (tests/unit/dp-rep-p-arp-deletion-guard.test.ts).
+export const DAY_MARKINGS_LIMIT = 40;
+const DAY_TREATMENTS_LIMIT = 40;
+const DAY_HISTORY_LIMIT = 60;
+type DayReadDeps = Pick<Dependencies, 'hrDb' | 'repDb'>;
+
+/** Pedido pelo id, oficial ou da simulação do ensaio. */
+export async function readAdjustmentRequestForDay(deps: DayReadDeps, adjustmentId: string) {
+  const official = await deps.hrDb.collection(ADJUSTMENTS).doc(adjustmentId).get();
+  if (official.exists) return { scope: 'official' as const, snapshot: official };
+  return { scope: 'pilot' as const, snapshot: await deps.hrDb.collection(PILOT_ADJUSTMENTS).doc(adjustmentId).get() };
+}
+
+/**
+ * Batidas do dia da pessoa: oficiais (banco do REP-P) para o pedido oficial, do ensaio (banco coala-rh, como em
+ * `readOwnPilotMarkingForAdjustment`) para a simulação, nunca as duas.
+ */
+export function readDayMarkingDocuments(deps: DayReadDeps, scope: 'official' | 'pilot', workspaceId: string, employeeUid: string, workDate: string) {
+  const database = scope === 'pilot' ? deps.hrDb : deps.repDb;
+  return database.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
+    .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(DAY_MARKINGS_LIMIT + 1).get();
+}
+
+/** Tratamentos oficiais do dia. O ensaio não grava tratamento: o do ensaio é derivado dos pedidos aprovados (`pilot-treatments.ts`). */
+export function readDayTreatmentDocuments(deps: DayReadDeps, workspaceId: string, employeeUid: string, workDate: string) {
+  return deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
+    .where('workDate', '==', workDate).limit(DAY_TREATMENTS_LIMIT).get();
+}
+
+/** Pedidos recentes da pessoa (oficiais e do ensaio) até o dia, pelo mesmo índice da lista mensal. */
+export function readAdjustmentHistoryDocuments(deps: DayReadDeps, workspaceId: string, employeeUid: string, fromDate: string, toDate: string) {
+  const query = (collection: string) => deps.hrDb.collection(collection).where('workspaceId', '==', workspaceId).where('employeeUid', '==', employeeUid)
+    .where('workDate', '>=', fromDate).where('workDate', '<=', toDate).orderBy('workDate').limit(DAY_HISTORY_LIMIT).get();
+  return Promise.all([query(ADJUSTMENTS), query(PILOT_ADJUSTMENTS)]);
 }
 
 /** Fila de quem analisa: em análise, nas unidades acessíveis, sem os próprios pedidos. */
@@ -576,6 +615,15 @@ async function decidePilotAdjustment(context: ServerUserContext, adjustmentId: s
     const value = snapshot.data() as PilotAdjustmentRecord;
     if (value.status !== 'in_review') throw fail('PTRP_ADJUSTMENT_NOT_PENDING', 'Este pedido já foi decidido.', 'CONFLICT');
     if (value.version !== input.expectedVersion) throw fail('PTRP_ADJUSTMENT_VERSION_CONFLICT', 'O pedido mudou. Atualize e tente de novo.', 'CONFLICT');
+    if (action === 'approved') {
+      // Mesma regra do oficial: a batida desconsiderada por um pedido aprovado não pode ser desconsiderada de novo.
+      const sameDay = await tx.get(deps.hrDb.collection(PILOT_ADJUSTMENTS).where('workspaceId', '==', value.workspaceId)
+        .where('employeeUid', '==', value.employeeUid).where('workDate', '==', value.workDate).limit(40));
+      const taken = discardedReceiptIds(pilotTreatmentsOf(sameDay.docs.map((doc) => doc.data() as PilotAdjustmentRecord).filter((item) => item.id !== value.id)));
+      if (pilotAdjustmentOperations(value).some((operation) => operation.kind !== 'include' && operation.target && taken.has(operation.target.receiptId))) {
+        throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por outro ajuste aprovado.', 'CONFLICT');
+      }
+    }
     const act = { action, actorUid: context.decoded.uid, role: isOwner ? 'titular' as const : 'reviewer' as const, at, clockSource,
       ...('reason' in input ? { reason: input.reason } : {}) };
     const previousHash = value.acts.at(-1)?.hash ?? null;

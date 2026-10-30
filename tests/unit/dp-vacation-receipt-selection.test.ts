@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  supersedeVacationReceiptDocuments,
   activeVacationReceiptDocuments,
   suggestVacationReceiptDocument,
   vacationReceiptCandidateScore,
   vacationReceiptDocuments,
 } from '../../src/features/hr/vacations/receipt-documents';
+import { updateVacationSchema } from '../../src/features/hr/vacations/schemas';
 import type { DPVacationReceiptAnalysis, DPVacationReceiptDocument, DPVacationWorkflow } from '../../src/types';
 
 function analysis(overrides: Partial<DPVacationReceiptAnalysis> = {}): DPVacationReceiptAnalysis {
@@ -121,4 +123,33 @@ test('quando todos os documentos estão descartados não há sugestão nem docum
 
   assert.equal(suggestVacationReceiptDocument([first, second], {}), null);
   assert.deepEqual(activeVacationReceiptDocuments(receipt), []);
+});
+
+test('correção preserva descarte e original, registrando decisão somente nas versões ativas', () => {
+  const discarded = { ...document('discarded', analysis()), status: 'discarded' as const,
+    discardedAt: '2026-09-20T10:00:00Z', discardedBy: 'rh-1', discardReason: 'Documento de outra pessoa' };
+  const previous = { ...document('previous', analysis()), status: 'superseded' as const,
+    supersededReason: 'Correção anterior' };
+  const current = document('current', analysis());
+  const decision = { at: '2026-09-22T12:00:00Z', by: 'rh-2', reason: 'Corrigir período de gozo' };
+  const result = supersedeVacationReceiptDocuments([discarded, previous, current], decision);
+  assert.deepEqual(result.slice(0, 2), [discarded, previous]);
+  assert.equal(result[2].status, 'superseded');
+  assert.equal(result[2].supersededReason, decision.reason);
+  assert.equal(result[2].supersededBy, decision.by);
+  assert.equal(result[2].supersededAt, decision.at);
+  assert.equal(result[2].storagePath, current.storagePath);
+  assert.equal(result[2].hashSha256, current.hashSha256);
+  assert.equal(current.status, 'review_pending');
+  assert.deepEqual(supersedeVacationReceiptDocuments(result, decision), result);
+  assert.equal(suggestVacationReceiptDocument(result, {}), null);
+});
+
+test('descarte exige motivo limitado e remove campos não permitidos do comando', () => {
+  const command = { action: 'discard_receipt_document', documentId: `receipt_${'a'.repeat(32)}` };
+  for (const reason of [undefined, '', '   ', 'x'.repeat(2001)]) {
+    assert.equal(updateVacationSchema.safeParse({ ...command, reason }).success, false);
+  }
+  assert.deepEqual(updateVacationSchema.parse({ ...command, reason: ' Documento de outra pessoa ', discardedBy: 'client-forged' }),
+    { ...command, reason: 'Documento de outra pessoa' });
 });

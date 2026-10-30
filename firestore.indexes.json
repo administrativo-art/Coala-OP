@@ -1,6 +1,16 @@
 
 {
   "indexes": [
+    { "collectionGroup": "actionLogs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspace_id", "order": "ASCENDING" },
+      { "fieldPath": "metadata.target_id", "order": "ASCENDING" },
+      { "fieldPath": "timestamp", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_schedules", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "year", "order": "ASCENDING" },
+      { "fieldPath": "month", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "dp_shiftSwapRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" }
@@ -725,5 +735,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "shifts",
+      "fieldPath": "date",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }

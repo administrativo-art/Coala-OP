@@ -201,6 +201,7 @@ export async function applyWorkShiftBulkChange(params: {
 
     let targetUserName: string | null = null;
     let targetAssignment: DPShiftAssignment | null = null;
+    const targetAssignments = new Map<string, DPShiftAssignment>();
     const journeyResolutionByDate = new Map<string, { journey: DPJourney; resolvedBy: DPJourneyResolvedBy }>();
     let occupancyByDate = new Map<string, QueryDocumentSnapshot[]>();
     if (targetUserRef && targetUserSnapshot && targetUserId) {
@@ -214,9 +215,11 @@ export async function applyWorkShiftBulkChange(params: {
       targetUserName = typeof targetUserSnapshot.get('username') === 'string'
         ? targetUserSnapshot.get('username')
         : null;
+      for (const { date } of selected) {
       try {
         targetAssignment = resolveDPShiftAssignment({
           executionUnitId: scheduleUnitId,
+          date,
           executionUnitExternalId: typeof unitSnapshot.get('externalId') === 'string' ? unitSnapshot.get('externalId') : undefined,
           user: targetUserSnapshot.data() ?? {},
         });
@@ -230,6 +233,9 @@ export async function applyWorkShiftBulkChange(params: {
         if (!replacePatch?.exceptionReason) {
           throw new AppError({ code: 'DP_SHIFT_EXTERNAL_REASON_REQUIRED', kind: 'VALIDATION', safeMessage: 'Informe o motivo da cobertura em outra unidade.' });
         }
+      }
+
+      targetAssignments.set(date, targetAssignment);
       }
 
       const primaryUnitId = typeof targetUserSnapshot.get('unitId') === 'string' && targetUserSnapshot.get('unitId')
@@ -428,6 +434,7 @@ export async function applyWorkShiftBulkChange(params: {
           && document.get('type') !== 'day_off'
           && scheduleIdFromShift(document) !== scheduleId
         ));
+        const targetAssignment = targetAssignments.get(date);
         if (targetAssignment) {
           update.assignmentKind = targetAssignment.assignmentKind;
           update.countsTowardGoals = targetAssignment.countsTowardGoals;
@@ -734,6 +741,7 @@ async function applyWorkShiftBulkCreate(params: {
       try {
         assignment = resolveDPShiftAssignment({
           executionUnitId: scheduleUnitId,
+          date: entry.date,
           executionUnitExternalId: typeof unitSnapshot.get('externalId') === 'string' ? unitSnapshot.get('externalId') : undefined,
           user: userSnapshot.data() ?? {},
         });

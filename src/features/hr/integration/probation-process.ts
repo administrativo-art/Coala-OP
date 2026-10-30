@@ -9,9 +9,9 @@ export type ProbationRuntimeConfig = ProbationConfig & {
   evaluationFormId?: string;
 };
 export type ProbationEvaluation = { id: "first" | "second"; label: string; windowStartDate: string; windowEndDate: string; status: "scheduled" | "available" | "overdue" | "completed"; completedAt: string | null; completedBy: string | null; result: "approved" | "rejected" | "review" | null; notes: string | null };
-export type ProbationProcessState = { status: "awaiting_admission" | "active" | "decision_pending" | "effective" | "terminated"; admissionDate: string | null; config: ProbationRuntimeConfig; schedule: ProbationSchedule | null; evaluations: ProbationEvaluation[]; alerts: Array<{ id: string; evaluationId: string; dueDate: string; status: "scheduled" | "due" | "sent"; sentAt: string | null }>; extensionTerm: { required: boolean; generatedDocumentId: string | null; signedAt: string | null }; decision: { result: "effective" | "terminated" | null; decidedAt: string | null; decidedBy: string | null; notes: string | null }; updatedAt: string };
+export type ProbationProcessState = { employmentCycleVersion?: number; status: "awaiting_admission" | "active" | "decision_pending" | "effective" | "terminated"; admissionDate: string | null; config: ProbationRuntimeConfig; schedule: ProbationSchedule | null; evaluations: ProbationEvaluation[]; alerts: Array<{ id: string; evaluationId: string; dueDate: string; status: "scheduled" | "due" | "sent"; sentAt: string | null }>; extensionTerm: { required: boolean; generatedDocumentId: string | null; signedAt: string | null }; decision: { result: "effective" | "terminated" | null; decidedAt: string | null; decidedBy: string | null; notes: string | null }; updatedAt: string };
 
-export const DEFAULT_PROBATION_RUNTIME_CONFIG: ProbationRuntimeConfig = { ...DEFAULT_PROBATION_CONFIG, alertsBeforeDays: [10, 5, 1], extensionTermRequired: false, evaluator: { strategy: "direct_manager", fallback: "hr_pool" }, effectivenessRule: "manual" };
+export const DEFAULT_PROBATION_RUNTIME_CONFIG: ProbationRuntimeConfig = { ...DEFAULT_PROBATION_CONFIG, alertsBeforeDays: [10, 5, 1], extensionTermRequired: false, evaluator: { strategy: "direct_manager", fallback: "hr_pool" }, effectivenessRule: "automatic_at_end" };
 
 export function probationIsReleasedAfterFormalization(process: {
   status?: string | null;
@@ -49,7 +49,7 @@ export function refreshProbationProcess(state: ProbationProcessState, today: str
   let status: ProbationProcessState["status"] = normalizedState.status;
   if (allCompleted || today > normalizedState.schedule.finalEndDate) status = "decision_pending";
   if (normalizedState.config.effectivenessRule === "approved_evaluations" && allCompleted && evaluations.every((evaluation) => evaluation.result === "approved")) status = "effective";
-  if (normalizedState.config.effectivenessRule === "automatic_at_end" && today > normalizedState.schedule.finalEndDate) status = "effective";
+  // Automatic effectiveness is committed by the guarded job, never fabricated during a GET.
   return { ...normalizedState, status, evaluations, alerts };
 }
 

@@ -39,6 +39,9 @@ test("dados pessoais são divididos em subgrupos e nada some", () => {
     "employee.state",
     "employee.city",
     "employee.address",
+    "employee.mother_name",
+    "employee.father_name",
+    "employee.employer_name",
     "employee.address_zipcode",
     "employee.address_street",
     "employee.address_number",
@@ -48,7 +51,9 @@ test("dados pessoais são divididos em subgrupos e nada some", () => {
     "employee.campo_novo",
   ].map((key) => ({ key }));
   const items = buildProfileDisplayItems(rows);
-  assert.ok(!items.some((item) => item.key === "employee.address"), "linha livre de endereço não aparece");
+  for (const hidden of ["employee.address", "employee.mother_name", "employee.father_name", "employee.employer_name"]) {
+    assert.ok(!items.some((item) => item.key === hidden), `${hidden} não aparece na ficha`);
+  }
   const groups = groupProfileSection("Dados pessoais", items);
   assert.ok(groups);
   assert.deepEqual(groups.map((group) => group.title), ["Identificação", "Contato", "Endereço residencial", "Documentos", "Outros dados"]);
@@ -61,7 +66,7 @@ test("benefícios ficam em vale-transporte, alimentação e convênios", () => {
   const rows = ["employee.has_vt", "employee.vt_daily_value", "employee.vt_notes", "employee.has_va_vr", "employee.va_vr_daily_value", "employee.has_health_plan"].map((key) => ({ key }));
   const groups = groupProfileSection("Benefícios", buildProfileDisplayItems(rows));
   assert.deepEqual(groups?.map((group) => [group.title, group.items.map((item) => item.key)]), [
-    ["Vale-transporte", ["composite.transport_voucher", "employee.vt_notes"]],
+    ["Vale-transporte", ["composite.transport_voucher"]],
     ["Vale-alimentação / refeição", ["composite.meal_voucher"]],
     ["Convênios", ["employee.has_health_plan"]],
   ]);

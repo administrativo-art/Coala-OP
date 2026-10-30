@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **507 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **512 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **62 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -134,6 +134,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/vacations/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/time-recording/adjustments` | GET, POST | [src/app/api/dp/time-recording/adjustments/route.ts](../../src/app/api/dp/time-recording/adjustments/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/adjustments/[adjustmentId]` | PATCH | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/adjustments/[adjustmentId]/day` | GET | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/day/route.ts](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/day/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/adjustments/review` | GET | [src/app/api/dp/time-recording/adjustments/review/route.ts](../../src/app/api/dp/time-recording/adjustments/review/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/aej` | POST | [src/app/api/dp/time-recording/aej/route.ts](../../src/app/api/dp/time-recording/aej/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/afd` | POST | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -265,6 +266,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/management-analysis` | POST | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) | [financial-overview](flows/financial-overview.md) |
 | `/api/financial/payment-requests` | GET, POST | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/authorize` | POST | [src/app/api/financial/payment-requests/[id]/authorize/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/authorize/route.ts) | [payment-requests](flows/payment-requests.md) |
+| `/api/financial/payment-requests/[id]/cancel-and-replace` | POST | [src/app/api/financial/payment-requests/[id]/cancel-and-replace/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/cancel-and-replace/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/proof` | GET | [src/app/api/financial/payment-requests/[id]/proof/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/proof/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/recover` | POST | [src/app/api/financial/payment-requests/[id]/recover/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/recover/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/refresh` | POST | [src/app/api/financial/payment-requests/[id]/refresh/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/refresh/route.ts) | [payment-requests](flows/payment-requests.md) |
@@ -425,6 +427,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/documents/retention-reconcile` | POST | [src/app/api/jobs/documents/retention-reconcile/route.ts](../../src/app/api/jobs/documents/retention-reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/dp/absences/tacit-approval` | POST | [src/app/api/jobs/dp/absences/tacit-approval/route.ts](../../src/app/api/jobs/dp/absences/tacit-approval/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/jobs/dp/time-closing/overdue` | POST | [src/app/api/jobs/dp/time-closing/overdue/route.ts](../../src/app/api/jobs/dp/time-closing/overdue/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/jobs/dp/time-recording/automatic-absences` | POST | [src/app/api/jobs/dp/time-recording/automatic-absences/route.ts](../../src/app/api/jobs/dp/time-recording/automatic-absences/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/financial-budgets/generate` | POST | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/jobs/financial-inbox/maintenance` | POST | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/cobrancas/reconcile` | POST | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -435,6 +438,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/stone-pix/request` | POST | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/jobs/system-notices/daily` | POST | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) | [system-notices](flows/system-notices.md) |
+| `/api/jobs/users/operational-follow-up` | POST | [src/app/api/jobs/users/operational-follow-up/route.ts](../../src/app/api/jobs/users/operational-follow-up/route.ts) | [people-access](flows/people-access.md) |
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
 | `/api/mobile/app-attestation` | POST, GET | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [android-direct-apk-attestation](android-direct-apk-attestation.md) |
@@ -537,6 +541,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/user-notifications` | GET, PATCH | [src/app/api/user-notifications/route.ts](../../src/app/api/user-notifications/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/users` | POST | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) | [people-access](flows/people-access.md) |
 | `/api/users/[userId]` | PATCH | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/%5BuserId%5D/route.ts) | [people-access](flows/people-access.md) |
+| `/api/users/[userId]/contract-changes` | GET | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/%5BuserId%5D/contract-changes/route.ts) | [people-access](flows/people-access.md) |
 | `/api/webhooks/autentique` | POST | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/banking` | POST | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/webhooks/inter/cobranca` | POST | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -552,6 +557,8 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `absenceRetentionReconciliation` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTacitApprovalJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTerminationEffectsResume` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
+| `activateCollaboratorPeriods` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [people-access](flows/people-access.md) |
+| `automaticAbsenceJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `cashClosureDailySync` | `onSchedule` | [functions/src/cash-closure-jobs.ts](../../functions/src/cash-closure-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `cashClosureSummaryReinforcement` | `onSchedule` | [functions/src/cash-closure-summaries.ts](../../functions/src/cash-closure-summaries.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `cashClosureSummaryWritten` | `onDocumentWritten` | [functions/src/cash-closure-summaries.ts](../../functions/src/cash-closure-summaries.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -582,6 +589,7 @@ Inclui **59 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `onResponsibilityUnitGroupChange` | `onDocumentWritten` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
 | `onTermination` | `onDocumentWritten` | [functions/src/rh/termination.ts](../../functions/src/rh/termination.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `onUserProfileChange` | `onDocumentWritten` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `operationalFollowUpJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [people-access](flows/people-access.md) |
 | `reactivateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc-schedule.ts](../../functions/src/stock-min-recalc-schedule.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcileGeneratedDocumentRetention` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |

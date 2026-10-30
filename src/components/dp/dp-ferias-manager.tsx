@@ -11,7 +11,7 @@ import {
   startOfMonth,
   subDays,
 } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { ChevronRight, Search } from 'lucide-react';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
@@ -20,36 +20,39 @@ import {
   VACATION_WORKFLOW_DISPLAY_STAGE_META,
   vacationWorkflowDisplayStageId,
 } from '@/lib/dp-vacation-workflow';
-import type {
-  DPVacationRecord,
-  DPVacationWorkflow,
-  DPVacationWorkflowOwner,
-  User,
-} from '@/types';
+import type { DPVacationRecord, DPVacationWorkflow, User } from '@/types';
+import { cn } from '@/lib/utils';
 
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
-import { ArrowUpRight, CalendarDays, Search } from 'lucide-react';
+import { PageHero } from '@/components/patterns/page-hero';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { Segmented } from '@/components/patterns/segmented';
+import { LiftRow } from '@/components/patterns/lift-row';
 import { DPVacationTimeline } from './dp-vacation-timeline';
 import {
   calculateVacationHealth,
-  CYCLE_STATUS_CONFIG,
   getVacationCycleHistory,
-  RISK_PROGRESS_CLASS,
-  VACATION_STATUS_HEX,
   type VacationCycle,
   type VacationHealthStatus,
-  type VacationRisk,
 } from '@/lib/utils/vacation-logic';
+import {
+  VacationLegend,
+  VacationPill,
+  VacationStageDots,
+  workflowOperationalSummary,
+  type VacationPillTone,
+} from './dp-ferias-shared';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Férias da CLT valem para empregados e aprendizes. Cadastros antigos sem vínculo informado seguem pelo critério
+ * anterior (operacional), para ninguém sumir do Panorama até o vínculo ser preenchido.
+ */
+function hasVacationEntitlement(user: User) {
+  if (user.employmentRelationshipType) return ['clt', 'apprenticeship'].includes(user.employmentRelationshipType);
+  return user.operacional === true;
+}
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
@@ -58,839 +61,422 @@ function initials(name: string) {
 function toDate(ts: unknown): Date | undefined {
   if (!ts) return undefined;
   if (ts instanceof Date) return ts;
-  if (typeof (ts as any).toDate === 'function') return (ts as any).toDate();
+  if (typeof (ts as { toDate?: () => Date }).toDate === 'function') return (ts as { toDate: () => Date }).toDate();
   if (typeof ts === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? parseISO(ts) : new Date(ts);
   return undefined;
 }
 
-const RISK_CONFIG: Record<VacationRisk, { label: string; bg: string; text: string }> = {
-  VENCIDA:  { label: 'Vencida', bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
-  CRITICA:  { label: 'Crítica', bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300' },
-  ATENCAO:  { label: 'Atenção', bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300' },
-  EM_DIA:   { label: 'Em dia',  bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-300'   },
-};
+const fmt = (date: Date) => format(date, 'dd/MM/yyyy');
 
-const RISK_ACCENT: Record<VacationRisk, string> = {
-  VENCIDA: 'border-l-red-500',
-  CRITICA: 'border-l-orange-500',
-  ATENCAO: 'border-l-yellow-500',
-  EM_DIA:  'border-l-green-500',
-};
+type PeopleFilter = 'all' | 'schedule' | 'trail' | 'ok' | 'acquiring';
+type View = 'panorama' | 'trails' | 'calendar';
+type TrailFilter = 'hr' | 'external' | 'all';
 
-const RISK_CHIPS: { key: 'ALL' | VacationRisk; label: string }[] = [
-  { key: 'ALL', label: 'Todas' },
-  { key: 'VENCIDA', label: 'Vencida' },
-  { key: 'CRITICA', label: 'Crítica' },
-  { key: 'ATENCAO', label: 'Atenção' },
-  { key: 'EM_DIA', label: 'Em dia' },
-];
-
-const WORKFLOW_OWNER_LABEL: Record<DPVacationWorkflowOwner, string> = {
-  hr: 'RH',
-  employee: 'Colaborador',
-  accountant: 'Contador',
-  finance: 'Financeiro',
-  system: 'Sistema',
-};
-
-interface Enriched {
+interface Person {
   user: User;
   health: VacationHealthStatus;
   role: string;
   unitName: string;
-  balance: number;
-  cycle?: VacationCycle;
-  noticeDeadline?: Date;
-  noticeDaysLeft?: number;
+  /** Período concessivo que está correndo: em aberto ou, se quitado, o mais recente ainda no prazo. */
+  concessive?: VacationCycle;
+  acquisitive?: VacationCycle;
+  hasActiveTrail: boolean;
+  /** Último dia das férias em gozo hoje, quando houver. */
+  onVacationUntil?: Date;
+  priority: { label: string; tone: VacationPillTone; rank: number; filter: PeopleFilter };
 }
 
 interface ActiveTrail {
-  item: Enriched;
+  person: Person;
   record: DPVacationRecord;
   workflow: DPVacationWorkflow;
+  owner: string;
+  action: string;
+  waitingExternal: boolean;
+  idleDays: number;
 }
 
-function workflowOperationalSummary(workflow: DPVacationWorkflow) {
-  const currentStep = workflow.steps.find(step => step.id === workflow.currentStage);
-  const fallbackOwner = WORKFLOW_OWNER_LABEL[currentStep?.owner ?? 'hr'];
-
-  if (workflow.currentStage === 'notice') {
-    if (workflow.notice.status === 'not_generated') return { owner: 'RH', action: 'Gerar o aviso de férias' };
-    if (workflow.notice.status === 'generating') return { owner: 'Sistema', action: 'Gerando o aviso de férias' };
-    if (workflow.notice.status === 'draft') return { owner: 'RH', action: 'Validar o aviso de férias' };
-    if (workflow.notice.status === 'validated') return { owner: 'RH', action: 'Enviar o aviso para assinatura' };
-    if (workflow.notice.status === 'sending') return { owner: 'Sistema', action: 'Enviando o aviso para assinatura' };
-    if (workflow.notice.status === 'failed') return { owner: 'RH', action: 'Corrigir e reenviar o aviso' };
-    return { owner: 'Colaborador', action: 'Assinar o aviso de férias' };
+function personPriority(concessive: VacationCycle | undefined, acquisitive: VacationCycle | undefined, hasActiveTrail: boolean, today: Date): Person['priority'] {
+  if (!concessive) return { label: 'Em aquisição', tone: 'info', rank: 8, filter: 'acquiring' };
+  const daysLeft = differenceInCalendarDays(concessive.concessivePeriod.end, today);
+  if (concessive.status === 'VENCIDO') return { label: 'Vencido', tone: 'danger', rank: 0, filter: 'schedule' };
+  if (concessive.status === 'PENDENTE' || concessive.status === 'PARCIAL') {
+    const label = concessive.status === 'PARCIAL' ? 'Agendar o resto' : 'Agendar agora';
+    return { label, tone: daysLeft <= 120 ? 'danger' : 'warn', rank: daysLeft <= 120 ? 1 : 2, filter: 'schedule' };
   }
-
-  if (workflow.currentStage === 'accountant') {
-    if (workflow.accountant.status === 'sending') return { owner: 'Sistema', action: 'Enviando documentos à contabilidade' };
-    if (workflow.accountant.status === 'failed') return { owner: 'RH', action: 'Corrigir o envio à contabilidade' };
-    if (workflow.accountant.status === 'correction_requested') return { owner: 'RH', action: 'Solicitar correção ao contador' };
-    if (workflow.accountant.status === 'ready_to_send') return { owner: 'RH', action: 'Enviar documentos à contabilidade' };
-    return { owner: 'Contador', action: 'Enviar o recibo original' };
-  }
-
-  if (workflow.currentStage === 'receipt_review') {
-    if (workflow.receipt.status === 'processing') return { owner: 'Sistema', action: 'Processar o recibo original' };
-    if (workflow.receipt.status === 'correction_requested') return { owner: 'Contador', action: 'Corrigir o recibo de férias' };
-    return { owner: 'RH', action: 'Auditar o recibo recebido' };
-  }
-
-  if (workflow.currentStage === 'payment') {
-    if (workflow.payment.status === 'preparing') return { owner: 'Sistema', action: 'Preparando o pagamento' };
-    if (workflow.payment.status === 'not_started') return { owner: 'RH', action: 'Preparar o pagamento' };
-    if (workflow.payment.status === 'failed') return { owner: 'RH', action: 'Corrigir a preparação do pagamento' };
-    return { owner: 'Financeiro', action: 'Autorizar e confirmar o pagamento' };
-  }
-
-  if (workflow.currentStage === 'receipt_signature') {
-    if (workflow.receiptSignature.status === 'ready') return { owner: 'RH', action: 'Enviar o recibo para assinatura' };
-    if (workflow.receiptSignature.status === 'sending') return { owner: 'Sistema', action: 'Enviando o recibo para assinatura' };
-    if (workflow.receiptSignature.status === 'failed') return { owner: 'RH', action: 'Reenviar o recibo para assinatura' };
-    if (workflow.receiptSignature.status === 'blocked_until_payment') return { owner: 'Financeiro', action: 'Confirmar o pagamento' };
-    return { owner: 'Colaborador', action: 'Assinar o recibo de férias' };
-  }
-
-  if (workflow.currentStage === 'closure') {
-    return { owner: 'RH', action: 'Conferir e finalizar a trilha' };
-  }
-
-  return { owner: fallbackOwner, action: 'Revisar e aprovar o agendamento' };
-}
-
-// ─── Cards ────────────────────────────────────────────────────────────────────
-
-function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }) {
-  if (item.health.status !== 'CONCESSIVO') return null;
-  const { risk, deadline, progress } = item.health.details;
-  const cfg = RISK_CONFIG[risk];
-  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={`w-full cursor-pointer rounded-2xl border border-l-4 ${RISK_ACCENT[risk]} bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md`}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-          style={{ background: item.user.color || '#8B5CF6' }}
-        >
-          {initials(item.user.username)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-semibold">{item.user.username}</span>
-            <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
-              {risk === 'VENCIDA' && <span className="h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />}
-              {cfg.label}
-            </span>
-          </div>
-          {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
-        </div>
-      </div>
-      <Progress value={progress} className={`mt-3 h-[5px] ${RISK_PROGRESS_CLASS[risk]}`} />
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-muted-foreground">Vence {format(deadline, 'dd/MM/yyyy', { locale: ptBR })}</span>
-        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
-          {risk === 'VENCIDA' && item.balance === 0 ? 'Período fora do prazo' : `${Math.max(0, item.balance)}d a agendar`}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void }) {
-  if (item.health.status !== 'CONCESSIVO') return null;
-  const awaitingApproval = item.health.cycleStatus === 'AGUARDANDO_APROVACAO';
-  const cfg = CYCLE_STATUS_CONFIG[item.health.cycleStatus];
-  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={`w-full cursor-pointer rounded-2xl border border-l-4 ${awaitingApproval ? 'border-l-amber-500' : 'border-l-purple-500'} bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md`}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-          style={{ background: item.user.color || '#8B5CF6' }}
-        >
-          {initials(item.user.username)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-semibold">{item.user.username}</span>
-            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
-              {awaitingApproval ? 'Aguardando aprovação' : 'Agendada'}
-            </span>
-          </div>
-          {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5 text-[11px] text-muted-foreground">
-        <span>Vence {format(item.health.details.deadline, 'dd/MM/yyyy', { locale: ptBR })}</span>
-        <span className="font-semibold">{awaitingApproval ? '30d lançados' : '30d programados'}</span>
-      </div>
-    </button>
-  );
-}
-
-function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }) {
-  if (item.health.status !== 'AQUISITIVO') return null;
-  const { progress, end } = item.health.details;
-  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full cursor-pointer rounded-2xl border border-l-4 border-l-border bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md"
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-          style={{ background: item.user.color || '#8B5CF6' }}
-        >
-          {initials(item.user.username)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold">{item.user.username}</span>
-          {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
-        </div>
-      </div>
-      <Progress value={progress} className="mt-3 h-[5px] *:bg-slate-400" />
-      <div className="mt-2 text-[11px] text-muted-foreground">
-        Aquisição até {format(end, 'dd/MM/yyyy', { locale: ptBR })}
-      </div>
-    </button>
-  );
-}
-
-function CardSkeleton() {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-l-4 border-l-muted bg-card px-4 py-3.5 animate-pulse">
-      <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
-      <div className="flex-1 space-y-2">
-        <div className="h-3.5 w-3/5 rounded bg-muted" />
-        <div className="h-[5px] w-full rounded bg-muted" />
-        <div className="h-3 w-2/5 rounded bg-muted/60" />
-      </div>
-    </div>
-  );
-}
-
-const KPI_TONES = {
-  neutral: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
-  warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
-  danger: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
-  purple: 'border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-300',
-  info: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300',
-} as const;
-
-function KpiCard({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: number;
-  hint: string;
-  tone: keyof typeof KPI_TONES;
-}) {
-  return (
-    <div className={`rounded-[13px] border px-3.5 py-3 ${KPI_TONES[tone]}`}>
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-current" />
-        <span className="text-[10.5px] font-black uppercase tracking-[0.09em]">{label}</span>
-      </div>
-      <div className="mt-1.5 flex items-baseline gap-2 text-foreground">
-        <span className="text-2xl font-black tracking-tight tabular-nums">{value}</span>
-        <span className="text-[11px] font-semibold text-muted-foreground">{hint}</span>
-      </div>
-    </div>
-  );
-}
-
-function QueueRow({
-  item,
-  kind,
-  onOpen,
-}: {
-  item: Enriched;
-  kind: 'scheduling' | 'approval';
-  onOpen: () => void;
-}) {
-  if (item.health.status !== 'CONCESSIVO' || !item.cycle) return null;
-  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
-  const risk = RISK_CONFIG[item.health.details.risk];
-  const pendingRecord = item.cycle.records.find(record => record.status === 'PENDING' || record.status === 'PLANNED');
-  const period = kind === 'scheduling'
-    ? `${item.balance}d a agendar`
-    : pendingRecord?.startDate && pendingRecord?.endDate
-      ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
-      : `${item.balance}d a agendar`;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full flex-wrap items-center gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-muted/35"
-    >
-      <span
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-black text-white"
-        style={{ background: item.user.color || '#8B5CF6' }}
-      >
-        {initials(item.user.username)}
-      </span>
-      <span className="min-w-0 basis-[190px]">
-        <span className="block truncate text-[13.5px] font-black">{item.user.username}</span>
-        <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">{meta || '—'}</span>
-      </span>
-      <span className="min-w-[190px] flex-1">
-        <span className="block text-xs font-extrabold">{period}</span>
-        <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">
-          Ciclo {item.cycle.id} · concessivo até {format(item.cycle.concessivePeriod.end, 'dd/MM/yyyy')}
-        </span>
-        {kind === 'scheduling' && item.noticeDeadline ? (
-          <span className={`mt-0.5 block text-[11px] font-extrabold ${
-            (item.noticeDaysLeft ?? 0) <= 60 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'
-          }`}>
-            Avisar até {format(item.noticeDeadline, 'dd/MM/yyyy')} · {item.noticeDaysLeft} dias
-          </span>
-        ) : null}
-      </span>
-      <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-extrabold ${risk.bg} ${risk.text}`}>
-        {kind === 'approval' ? 'Aguardando aprovação' : risk.label}
-      </span>
-      <span className="text-[10px] font-black uppercase tracking-[0.08em] text-muted-foreground">
-        {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
-      </span>
-      <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
-        Abrir ficha
-        <ArrowUpRight className="h-3.5 w-3.5" />
-      </span>
-    </button>
-  );
-}
-
-function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void }) {
-  const { item, record, workflow } = trail;
-  const currentDisplayStage = vacationWorkflowDisplayStageId(workflow.currentStage);
-  const stageIndex = Math.max(0, VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === currentDisplayStage));
-  const stage = VACATION_WORKFLOW_DISPLAY_STAGE_META[stageIndex];
-  const completedSteps = VACATION_WORKFLOW_DISPLAY_STAGE_META.filter(stageMeta => (
-    stageMeta.stageIds.every(stageId => workflow.steps.find(step => step.id === stageId)?.status === 'completed')
-  )).length;
-  const progress = Math.round((completedSteps / VACATION_WORKFLOW_DISPLAY_STAGE_META.length) * 100);
-  const summary = workflowOperationalSummary(workflow);
-  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
-  const period = record.startDate && record.endDate
-    ? `${format(parseISO(record.startDate), 'dd/MM/yyyy')} → ${format(parseISO(record.endDate), 'dd/MM/yyyy')}`
-    : 'Período não informado';
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="grid w-full gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-sky-50/45 dark:hover:bg-sky-950/15 md:grid-cols-[minmax(220px,1.15fr)_minmax(180px,.85fr)_minmax(260px,1.3fr)_auto] md:items-center"
-    >
-      <span className="flex min-w-0 items-center gap-3">
-        <span
-          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-black text-white"
-          style={{ background: item.user.color || '#8B5CF6' }}
-        >
-          {initials(item.user.username)}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-[13.5px] font-black">{item.user.username}</span>
-          <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">{meta || '—'}</span>
-        </span>
-      </span>
-
-      <span className="min-w-0">
-        <span className="block text-[11px] font-black uppercase tracking-[0.07em] text-sky-700 dark:text-sky-300">
-          Etapa {stageIndex + 1} de {VACATION_WORKFLOW_DISPLAY_STAGE_META.length} · {stage.short}
-        </span>
-        <span className="mt-1 block truncate text-[11px] font-semibold text-muted-foreground">
-          {period} · {record.days}d
-        </span>
-        <span className="mt-2 flex items-center gap-2">
-          <Progress value={progress} className="h-1.5 flex-1 *:bg-sky-600" />
-          <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/{VACATION_WORKFLOW_DISPLAY_STAGE_META.length}</span>
-        </span>
-      </span>
-
-      <span className="min-w-0 rounded-xl bg-sky-50 px-3 py-2 dark:bg-sky-950/30">
-        <span className="block truncate text-[12px] font-extrabold text-slate-900 dark:text-slate-100">{summary.action}</span>
-        <span className="mt-0.5 block text-[10.5px] font-semibold text-muted-foreground">Responsável: {summary.owner}</span>
-      </span>
-
-      <span className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] border bg-background px-3.5 text-[12.5px] font-extrabold">
-        Abrir ficha
-        <ArrowUpRight className="h-3.5 w-3.5" />
-      </span>
-    </button>
-  );
+  if (concessive.status === 'AGUARDANDO_APROVACAO') return { label: 'Aguardando aprovação', tone: 'warn', rank: 3, filter: 'trail' };
+  if (hasActiveTrail || concessive.status === 'AGENDADO') return { label: 'Agendado', tone: 'ok', rank: 4, filter: hasActiveTrail ? 'trail' : 'ok' };
+  void acquisitive;
+  return { label: 'Em dia', tone: 'ok', rank: 6, filter: 'ok' };
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPFeriasManager() {
   const router = useRouter();
-  const { activeUsers, users } = useAuth();
+  const { activeUsers } = useAuth();
   const { vacations, units, vacationsLoading, vacationsError, unitsError } = useDPBootstrap();
-
   const [search, setSearch] = useState('');
   const [unitFilter, setUnitFilter] = useState<string>('__all__');
-  const [riskFilter, setRiskFilter] = useState<'ALL' | VacationRisk>('ALL');
-  const [monthModal, setMonthModal] = useState(false);
+  const [view, setView] = useState<View>('panorama');
+  const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('all');
+  const [trailFilter, setTrailFilter] = useState<TrailFilter>('all');
 
+  const today = useMemo(() => startOfDay(new Date()), []);
   const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
 
-  const operationalUsers = useMemo(() => {
-    const ops = activeUsers.filter(u => u.operacional === true);
-    if (unitFilter === '__all__') return ops;
-    return ops.filter(u => u.unitIds?.includes(unitFilter));
-  }, [activeUsers, unitFilter]);
-
-  const enriched = useMemo<Enriched[]>(() => {
-    return operationalUsers
-      .map(user => {
-        const admDate = toDate(user.admissionDate);
-        const userVacations = vacations.filter(v => v.userId === user.id);
-        const health = calculateVacationHealth(admDate, userVacations);
-
-        let balance = 0;
-        let cycle: VacationCycle | undefined;
-        let noticeDeadline: Date | undefined;
-        let noticeDaysLeft: number | undefined;
-        if (health.status === 'CONCESSIVO' && admDate) {
-          const cycles = getVacationCycleHistory(admDate, userVacations);
-          cycle = cycles.find(c => c.status !== 'GOZADO' && c.status !== 'AQUISITIVO');
-          if (cycle) {
-            balance = Math.max(0, cycle.balance);
-            const daysToDistribute = Math.max(1, balance);
-            noticeDeadline = subDays(cycle.concessivePeriod.end, daysToDistribute + 29);
-            noticeDaysLeft = differenceInCalendarDays(noticeDeadline, startOfDay(new Date()));
-          }
-        }
-
-        const unitName = user.unitIds?.[0]
-          ? units.find(u => u.id === user.unitIds![0])?.name ?? ''
-          : '';
-
-        return {
+  const people = useMemo<Person[]>(() => {
+    const entitled = activeUsers.filter(hasVacationEntitlement);
+    return entitled
+      .filter(user => unitFilter === '__all__' || user.unitIds?.includes(unitFilter))
+      .filter(user => user.username.toLowerCase().includes(search.toLowerCase()))
+      .flatMap((user): Person[] => {
+        const admission = toDate(user.admissionDate);
+        const userVacations = vacations.filter(record => record.userId === user.id);
+        const health = calculateVacationHealth(admission, userVacations);
+        if (health.status === 'INVALIDO' || !admission) return [];
+        const cycles = getVacationCycleHistory(admission, userVacations);
+        const open = cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO');
+        const settledInDeadline = cycles.find(cycle => cycle.status === 'GOZADO' && cycle.concessivePeriod.end >= today);
+        const concessive = open ?? settledInDeadline;
+        const acquisitive = cycles.find(cycle => cycle.status === 'AQUISITIVO');
+        const hasActiveTrail = userVacations.some(record => record.workflow?.status === 'active' && record.status !== 'REJECTED');
+        const unitName = user.unitIds?.[0] ? units.find(unit => unit.id === user.unitIds![0])?.name ?? '' : '';
+        const enjoying = userVacations.find(record => (
+          record.recordType === 'gozo' && record.status !== 'REJECTED' && record.startDate && record.endDate
+          && parseISO(record.startDate) <= today && parseISO(record.endDate) >= today
+        ));
+        return [{
           user,
           health,
           role: user.jobRoleName ?? '',
           unitName,
-          balance,
-          cycle,
-          noticeDeadline,
-          noticeDaysLeft,
-        };
-      })
-      .filter(e => e.health.status !== 'INVALIDO');
-  }, [operationalUsers, vacations, units]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return enriched.filter(e => e.user.username.toLowerCase().includes(q));
-  }, [enriched, search]);
-
-  const concessivo = useMemo(() =>
-    filtered
-      .filter(e => e.health.status === 'CONCESSIVO'
-        && e.health.cycleStatus !== 'AGENDADO'
-        && e.health.cycleStatus !== 'AGUARDANDO_APROVACAO'
-        && (riskFilter === 'ALL' || (e.health.status === 'CONCESSIVO' && e.health.details.risk === riskFilter)))
-      .sort((a, b) => {
-        if (a.health.status !== 'CONCESSIVO' || b.health.status !== 'CONCESSIVO') return 0;
-        const order: Record<VacationRisk, number> = { VENCIDA: 0, CRITICA: 1, ATENCAO: 2, EM_DIA: 3 };
-        const d = order[a.health.details.risk] - order[b.health.details.risk];
-        if (d !== 0) return d;
-        return a.health.details.deadline.getTime() - b.health.details.deadline.getTime();
-      }),
-    [filtered, riskFilter]);
-
-  const awaitingApproval = useMemo(() =>
-    filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGUARDANDO_APROVACAO'),
-    [filtered]);
-
-  const pendingScheduling = useMemo(() =>
-    filtered
-      .filter(e => (
-        e.health.status === 'CONCESSIVO'
-        && ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(e.health.cycleStatus)
-        && e.balance > 0
-      ))
-      .sort((left, right) => (left.noticeDaysLeft ?? Number.POSITIVE_INFINITY) - (right.noticeDaysLeft ?? Number.POSITIVE_INFINITY)),
-    [filtered]);
-
-  const noticeAtRisk = useMemo(() =>
-    filtered.filter(item => (
-      item.health.status === 'CONCESSIVO'
-      && ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(item.health.cycleStatus)
-      && (item.noticeDaysLeft ?? Number.POSITIVE_INFINITY) <= 60
-    )),
-    [filtered]);
-
-  const scheduled = useMemo(() =>
-    filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGENDADO'),
-    [filtered]);
-
-  const activeTrails = useMemo<ActiveTrail[]>(() => {
-    const visibleUsers = new Map(filtered.map(item => [item.user.id, item]));
-    return vacations
-      .flatMap(record => {
-        const item = visibleUsers.get(record.userId);
-        const workflow = record.workflow;
-        if (
-          !item
-          || record.recordType !== 'gozo'
-          || record.status === 'REJECTED'
-          || !workflow
-          || workflow.status !== 'active'
-          || workflow.currentStage === 'scheduling'
-        ) return [];
-        return [{ item, record, workflow }];
+          concessive,
+          acquisitive,
+          hasActiveTrail,
+          onVacationUntil: enjoying?.endDate ? parseISO(enjoying.endDate) : undefined,
+          priority: personPriority(concessive, acquisitive, hasActiveTrail, today),
+        }];
       })
       .sort((left, right) => {
-        const leftStage = VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === vacationWorkflowDisplayStageId(left.workflow.currentStage));
-        const rightStage = VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === vacationWorkflowDisplayStageId(right.workflow.currentStage));
-        if (leftStage !== rightStage) return leftStage - rightStage;
-        return (left.record.startDate ?? '').localeCompare(right.record.startDate ?? '');
+        const leftEnd = left.concessive?.concessivePeriod.end.getTime() ?? Number.POSITIVE_INFINITY;
+        const rightEnd = right.concessive?.concessivePeriod.end.getTime() ?? Number.POSITIVE_INFINITY;
+        if (left.priority.rank !== right.priority.rank && (left.priority.rank <= 2 || right.priority.rank <= 2)) {
+          return left.priority.rank - right.priority.rank;
+        }
+        return leftEnd - rightEnd;
       });
-  }, [filtered, vacations]);
+  }, [activeUsers, unitFilter, search, vacations, units, today]);
 
-  const aquisitivo = useMemo(() =>
-    filtered
-      .filter(e => e.health.status === 'AQUISITIVO')
-      .sort((a, b) => {
-        if (a.health.status !== 'AQUISITIVO' || b.health.status !== 'AQUISITIVO') return 0;
-        return b.health.details.progress - a.health.details.progress;
-      }),
-    [filtered]);
-
-  // "Férias do mês": gozo records overlapping the current month.
-  const monthVacations = useMemo(() => {
-    const start = startOfMonth(new Date());
-    const end = endOfMonth(new Date());
+  const activeTrails = useMemo<ActiveTrail[]>(() => {
+    const byUser = new Map(people.map(person => [person.user.id, person]));
     return vacations
-      .filter(v => v.recordType === 'gozo' && v.status !== 'REJECTED' && v.startDate && v.endDate)
-      .filter(v => {
-        const s = parseISO(v.startDate!);
-        const e = parseISO(v.endDate!);
-        return s <= end && e >= start;
+      .flatMap((record): ActiveTrail[] => {
+        const person = byUser.get(record.userId);
+        const workflow = record.workflow;
+        if (!person || record.recordType !== 'gozo' || record.status === 'REJECTED' || !workflow || workflow.status !== 'active') return [];
+        const summary = workflowOperationalSummary(workflow, person.user.username);
+        const updated = workflow.updatedAt ? parseISO(workflow.updatedAt) : today;
+        return [{
+          person,
+          record,
+          workflow,
+          owner: summary.owner,
+          action: summary.action,
+          waitingExternal: !['RH', 'Sistema'].includes(summary.owner),
+          idleDays: Math.max(0, differenceInCalendarDays(today, updated)),
+        }];
       })
-      .map(v => {
-        const u = users.find(x => x.id === v.userId);
-        const cfg = VACATION_STATUS_HEX[v.status] ?? VACATION_STATUS_HEX.PENDING;
-        return {
-          id: v.id,
-          name: u?.username ?? 'Colaborador',
-          color: u?.color || '#8B5CF6',
-          start: format(parseISO(v.startDate!), 'dd/MM'),
-          end: format(parseISO(v.endDate!), 'dd/MM'),
-          days: v.days,
-          status: v.status,
-          statusFg: cfg.fg,
-          statusBg: cfg.bg,
-          statusLabel: cfg.label,
-          sortKey: v.startDate!,
-        };
-      })
-      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [vacations, users]);
+      .sort((left, right) => right.idleDays - left.idleDays);
+  }, [people, vacations, today]);
 
-  const approvedInMonth = useMemo(
-    () => monthVacations.filter(vacation => vacation.status === 'APPROVED').length,
-    [monthVacations],
+  const needsHr = activeTrails.filter(trail => !trail.waitingExternal);
+  const withThirdParties = activeTrails.filter(trail => trail.waitingExternal);
+  const noticeAtRisk = people.filter(person => {
+    const cycle = person.concessive;
+    if (!cycle || !['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(cycle.status)) return false;
+    const noticeDeadline = subDays(cycle.concessivePeriod.end, Math.max(1, cycle.balance) + 29);
+    return differenceInCalendarDays(noticeDeadline, today) <= 60;
+  });
+  const monthStart = startOfMonth(today);
+  const monthEnd = endOfMonth(today);
+  const visibleIds = new Set(people.map(person => person.user.id));
+  const enjoyingThisMonth = vacations.filter(record => (
+    visibleIds.has(record.userId)
+    && record.recordType === 'gozo'
+    && record.status === 'APPROVED'
+    && record.startDate && record.endDate
+    && parseISO(record.startDate) <= monthEnd
+    && parseISO(record.endDate) >= monthStart
+  ));
+
+  const visiblePeople = people.filter(person => peopleFilter === 'all' || person.priority.filter === peopleFilter);
+  const visibleTrails = trailFilter === 'all' ? activeTrails : trailFilter === 'hr' ? needsHr : withThirdParties;
+  const timelineVacations = vacations.filter(record => (
+    visibleIds.has(record.userId) && record.recordType === 'gozo' && record.status !== 'REJECTED' && record.startDate && record.endDate
+  ));
+
+  const openPerson = (userId: string) => router.push(`/dashboard/dp/ferias/${encodeURIComponent(userId)}`);
+  const openTrail = (trail: ActiveTrail) => router.push(
+    `/dashboard/dp/ferias/${encodeURIComponent(trail.record.userId)}?vacation=${encodeURIComponent(trail.record.id)}`,
   );
-
-  const visibleUserIds = useMemo(() => new Set(filtered.map(item => item.user.id)), [filtered]);
-  const timelineVacations = useMemo(
-    () => vacations.filter(vacation => (
-      visibleUserIds.has(vacation.userId)
-      && vacation.recordType === 'gozo'
-      && vacation.status !== 'REJECTED'
-      && vacation.startDate
-      && vacation.endDate
-    )),
-    [vacations, visibleUserIds],
-  );
-
   const isLoading = vacationsLoading && vacations.length === 0;
   const warningError = vacationsError ?? unitsError;
 
   return (
-    <div className="space-y-8">
-      {warningError && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs">
-          <p className="font-medium text-destructive">Falha ao carregar férias.</p>
-          <p className="mt-1 text-muted-foreground">{warningError}</p>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[180px] max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar colaborador..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <span className="text-[12.5px] text-muted-foreground">{filtered.length} colaborador(es)</span>
-        <div className="ml-auto flex items-center gap-3">
-          <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="w-[190px]">
-              <SelectValue placeholder="Todas as unidades" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todas as unidades</SelectItem>
-              {activeUnits.map(u => (
-                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <button
-            onClick={() => setMonthModal(true)}
-            className="rounded-lg border bg-muted px-3 py-2 text-xs font-semibold hover:bg-muted/70"
-          >
-            Férias do mês
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <KpiCard label="Pendente de agendamento" value={pendingScheduling.length} hint="com saldo aberto" tone="neutral" />
-        <KpiCard label="Aguardando aprovação" value={awaitingApproval.length} hint="sua decisão" tone="warning" />
-        <KpiCard label="Trilhas em andamento" value={activeTrails.length} hint="até finalizar" tone="info" />
-        <KpiCard label="Prazo de aviso em risco" value={noticeAtRisk.length} hint="≤ 60 dias" tone="danger" />
-        <KpiCard label="Em gozo neste mês" value={approvedInMonth} hint="na operação" tone="purple" />
-      </div>
-
-      {(isLoading || pendingScheduling.length > 0) && (
-        <section className="rounded-[18px] border border-slate-300 bg-card p-4 dark:border-slate-700">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-slate-200 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">•</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-slate-700 dark:text-slate-200">Pendente de agendamento</h2>
-            {!isLoading && <Badge className="bg-slate-700 text-white hover:bg-slate-700">{pendingScheduling.length}</Badge>}
-            <span className="ml-auto text-[11.5px] font-semibold text-muted-foreground">Saldo de férias ainda não distribuído · comece ou complete o agendamento</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {isLoading
-              ? [...Array(2)].map((_, index) => <CardSkeleton key={index} />)
-              : pendingScheduling.map(item => (
-                  <QueueRow
-                    key={item.user.id}
-                    item={item}
-                    kind="scheduling"
-                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
-                  />
-                ))}
-          </div>
-        </section>
-      )}
-
-      {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
-        <section className="rounded-[18px] border border-amber-300 bg-linear-to-b from-amber-50 to-card p-4 dark:border-amber-900 dark:from-amber-950/25">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-amber-200 text-xs font-black text-amber-900 dark:bg-amber-900 dark:text-amber-200">!</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-amber-900 dark:text-amber-200">Aguardando aprovação</h2>
-            {!isLoading && <Badge className="bg-amber-900 text-white hover:bg-amber-900">{awaitingApproval.length}</Badge>}
-            <span className="ml-auto text-[11.5px] font-semibold text-amber-800/75 dark:text-amber-300/75">Ordenado por prazo concessivo · a decisão acontece na ficha</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {isLoading
-              ? [...Array(2)].map((_, index) => <CardSkeleton key={index} />)
-              : awaitingApproval.map(item => (
-                  <QueueRow
-                    key={item.user.id}
-                    item={item}
-                    kind="approval"
-                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
-                  />
-                ))}
-          </div>
-        </section>
-      )}
-
-      {activeTrails.length > 0 && (
-        <section className="rounded-[18px] border border-sky-200 bg-linear-to-b from-sky-50/80 to-card p-4 dark:border-sky-900 dark:from-sky-950/20">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-sky-200 text-xs font-black text-sky-900 dark:bg-sky-900 dark:text-sky-200">→</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-sky-900 dark:text-sky-200">Trilhas em andamento</h2>
-            <Badge className="bg-sky-800 text-white hover:bg-sky-800">{activeTrails.length}</Badge>
-            <span className="ml-auto text-[11.5px] font-semibold text-sky-800/75 dark:text-sky-300/75">Do aviso à finalização · etapa, responsável e próxima ação</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {activeTrails.map(trail => (
-              <TrailRow
-                key={trail.record.id}
-                trail={trail}
-                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(trail.item.user.id)}?vacation=${encodeURIComponent(trail.record.id)}`)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Risk filter chips */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-[11.5px] font-black uppercase tracking-[0.13em] text-muted-foreground">Prioridade de agendamento</span>
-        {RISK_CHIPS.map(chip => {
-          const active = riskFilter === chip.key;
-          return (
-            <button
-              key={chip.key}
-              onClick={() => setRiskFilter(chip.key)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                active
-                  ? 'border border-primary bg-primary text-primary-foreground'
-                  : 'border border-border bg-card text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Prioridade de agendamento */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Prioridade de agendamento
-          </h2>
-          {!isLoading && <Badge variant="secondary" className="text-xs">{concessivo.length}</Badge>}
-        </div>
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}
-          </div>
-        ) : concessivo.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-10 text-muted-foreground">
-            <CalendarDays className="h-8 w-8 opacity-30" />
-            <p className="text-sm">Nenhum colaborador nesse filtro.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {concessivo.map(item => (
-              <ConcessivoCard
-                key={item.user.id}
-                item={item}
-                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
-              />
-            ))}
-          </div>
+    <div className="space-y-4">
+      <PageHero
+        kicker="Pessoal · Departamento pessoal"
+        title="Férias"
+        subtitle="Quem precisa agir, em qual etapa e até quando."
+        chips={(
+          <>
+            <HeroChip value={needsHr.length} label="com o RH" tone="info" active={view === 'trails' && trailFilter === 'hr'} onClick={() => { setView('trails'); setTrailFilter('hr'); }} />
+            <HeroChip value={withThirdParties.length} label="com terceiros" tone="warning" active={view === 'trails' && trailFilter === 'external'} onClick={() => { setView('trails'); setTrailFilter('external'); }} />
+            <HeroChip value={noticeAtRisk.length} label="prazos em risco" tone="danger" active={view === 'panorama' && peopleFilter === 'schedule'} onClick={() => { setView('panorama'); setPeopleFilter('schedule'); }} />
+            <HeroChip value={enjoyingThisMonth.length} label="em gozo neste mês" active={view === 'calendar'} onClick={() => setView('calendar')} />
+          </>
         )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] max-w-sm flex-1">
+            <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-on-dark-muted" />
+            <Input
+              aria-label="Buscar colaborador"
+              placeholder="Buscar colaborador"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              className="h-9 rounded-full border-white/10 bg-white/5 pl-9 text-[13px] text-ds-on-dark placeholder:text-ds-on-dark-muted"
+            />
+          </div>
+          <span className="ml-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Unidade</span>
+          {[{ id: '__all__', name: 'Todas' }, ...activeUnits].map(unit => (
+            <button
+              key={unit.id}
+              type="button"
+              aria-pressed={unitFilter === unit.id}
+              onClick={() => setUnitFilter(unit.id)}
+              className={cn(
+                'h-8 rounded-full px-3 text-[12px] font-bold text-ds-on-dark-2 ring-1 ring-inset transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
+                unitFilter === unit.id ? 'bg-white/10 ring-2 ring-ds-accent-kicker' : 'bg-white/5 ring-white/10 hover:bg-white/10',
+              )}
+            >
+              {unit.name}
+            </button>
+          ))}
+        </div>
+      </PageHero>
+
+      {warningError ? (
+        <p className="rounded-ds-card border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-[13px] font-semibold text-ds-alert-ink">
+          Falha ao carregar férias: {warningError}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented<View>
+          aria-label="Visão"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'panorama', label: 'Panorama' },
+            { value: 'trails', label: 'Em andamento' },
+            { value: 'calendar', label: 'Calendário' },
+          ]}
+        />
+        {view !== 'calendar' ? <VacationLegend className="ml-auto" /> : null}
       </div>
 
-      {riskFilter === 'ALL' && scheduled.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Férias agendadas</h2>
-            <Badge variant="secondary" className="text-xs">{scheduled.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {scheduled.map(item => (
-              <ScheduledCard
-                key={item.user.id}
-                item={item}
-                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
-              />
+      {view === 'panorama' ? (
+        <>
+          {needsHr.length > 0 ? (
+            <section aria-label="Precisa de você" className="rounded-ds-card-lg border border-ds-accent/25 bg-ds-surface px-2 pb-2 pt-3.5">
+              <div className="flex items-baseline gap-2 px-3.5 pb-1.5">
+                <h2 className="text-[14px] font-extrabold text-ds-ink">Precisa de você</h2>
+                <span className="text-[12px] text-ds-ink-muted">ações do RH, mais antigas primeiro</span>
+              </div>
+              {needsHr.map(trail => (
+                <TrailLine key={trail.record.id} trail={trail} onOpen={() => openTrail(trail)} />
+              ))}
+            </section>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Pessoas</span>
+            {([
+              ['all', 'Todos'],
+              ['schedule', 'Agendar agora'],
+              ['trail', 'Com parcela em andamento'],
+              ['ok', 'Em dia'],
+              ['acquiring', 'Em aquisição'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={peopleFilter === value}
+                onClick={() => setPeopleFilter(value)}
+                className={cn(
+                  'h-8 rounded-ds-pill border px-3 text-[12px] font-bold transition-colors',
+                  peopleFilter === value ? 'border-ds-accent bg-ds-accent-soft text-ds-accent-ink' : 'border-ds-border bg-ds-surface text-ds-ink-2 hover:bg-ds-muted',
+                )}
+              >
+                {label}
+              </button>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Período aquisitivo */}
-      {(isLoading || aquisitivo.length > 0) && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Período aquisitivo
-            </h2>
-            {!isLoading && <Badge variant="secondary" className="text-xs">{aquisitivo.length}</Badge>}
+            <span className="ml-auto text-[12px] font-semibold text-ds-ink-muted">Ordenado pelo prazo para conceder</span>
           </div>
 
-          {isLoading ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {[...Array(2)].map((_, i) => <CardSkeleton key={i} />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {aquisitivo.map(item => (
-                <AquisitivoCard
-                  key={item.user.id}
-                  item={item}
-                  onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
-                />
+          <section aria-label="Pessoas e períodos de férias" className="overflow-x-auto rounded-ds-card-lg border border-ds-border bg-ds-surface p-1.5">
+            <div className="min-w-[860px]">
+              <div className="grid grid-cols-[minmax(230px,1.4fr)_minmax(240px,1.4fr)_minmax(220px,1.2fr)_150px_18px] gap-4 px-[18px] py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">
+                <span>Colaborador</span><span>Período concessivo</span><span>Período aquisitivo</span><span>Prioridade</span><span />
+              </div>
+              {isLoading ? (
+                <p className="px-[18px] py-6 text-[13px] text-ds-ink-muted">Carregando férias…</p>
+              ) : visiblePeople.length === 0 ? (
+                <p className="m-2 rounded-ds-card-lg border border-dashed border-ds-border-input px-4 py-8 text-center text-[13px] text-ds-ink-muted">Ninguém nesse filtro.</p>
+              ) : visiblePeople.map(person => (
+                <PersonRow key={person.user.id} person={person} today={today} onOpen={() => openPerson(person.user.id)} />
               ))}
             </div>
-          )}
-        </div>
-      )}
+          </section>
+        </>
+      ) : null}
 
-      <DPVacationTimeline
-        users={filtered.map(item => item.user)}
-        vacations={timelineVacations}
-        onSelectUser={(selectedUserId) => router.push(`/dashboard/dp/ferias/${encodeURIComponent(selectedUserId)}`)}
-      />
-
-      {/* Férias do mês modal */}
-      <Dialog open={monthModal} onOpenChange={setMonthModal}>
-        <DialogContent className="max-w-[420px] p-4">
-          <DialogHeader>
-            <span className="mb-1 inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-[11.5px] font-bold text-primary">
-              Calendário de ausências
-            </span>
-            <DialogTitle className="text-xl">Férias do mês</DialogTitle>
-            <DialogDescription>
-              Ausências previstas para {format(new Date(), 'MMMM', { locale: ptBR })}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2.5 pt-2">
-            {monthVacations.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma ausência prevista neste mês.</p>
-            ) : (
-              monthVacations.map(v => (
-                <div key={v.id} className="flex items-center gap-3 rounded-xl border p-2.5">
-                  <span
-                    className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                    style={{ background: v.color }}
-                  >
-                    {initials(v.name)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13.5px] font-semibold">{v.name}</div>
-                    <div className="text-xs text-muted-foreground">{v.start} a {v.end} · {v.days}d</div>
-                  </div>
-                  <span
-                    className="rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold"
-                    style={{ background: v.statusBg, color: v.statusFg }}
-                  >
-                    {v.statusLabel}
-                  </span>
-                </div>
-              ))
-            )}
+      {view === 'trails' ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {([
+              ['hr', `Com o RH · ${needsHr.length}`],
+              ['external', `Com terceiros · ${withThirdParties.length}`],
+              ['all', `Todas · ${activeTrails.length}`],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={trailFilter === value}
+                onClick={() => setTrailFilter(value)}
+                className={cn(
+                  'h-8 rounded-ds-pill border px-3 text-[12px] font-bold transition-colors',
+                  trailFilter === value ? 'border-ds-accent bg-ds-accent-soft text-ds-accent-ink' : 'border-ds-border bg-ds-surface text-ds-ink-2 hover:bg-ds-muted',
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        </DialogContent>
-      </Dialog>
+          <section aria-label="Parcelas em andamento" className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-1.5">
+            {visibleTrails.length === 0 ? (
+              <p className="m-2 rounded-ds-card-lg border border-dashed border-ds-border-input px-4 py-8 text-center text-[13px] text-ds-ink-muted">Nenhuma parcela nesse filtro.</p>
+            ) : visibleTrails.map(trail => (
+              <TrailLine key={trail.record.id} trail={trail} onOpen={() => openTrail(trail)} showPerson />
+            ))}
+          </section>
+        </>
+      ) : null}
+
+      {view === 'calendar' ? (
+        <DPVacationTimeline
+          users={people.map(person => person.user)}
+          vacations={timelineVacations}
+          onSelectUser={openPerson}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// ─── Rows ─────────────────────────────────────────────────────────────────────
+
+function PersonRow({ person, today, onOpen }: { person: Person; today: Date; onOpen: () => void }) {
+  const { concessive, acquisitive } = person;
+  const concessiveDaysLeft = concessive ? differenceInCalendarDays(concessive.concessivePeriod.end, today) : null;
+  const concessiveUrgent = Boolean(concessive && concessive.balance > 0 && (concessiveDaysLeft ?? 0) <= 120);
+  const concessiveLine = !concessive
+    ? 'Nenhum período em concessão'
+    : concessive.status === 'GOZADO'
+      ? 'Quitado · sem saldo'
+      : concessive.balance > 0
+        ? `Saldo de ${concessive.balance} dias`
+        : 'Tudo agendado · sem saldo';
+  const acquisitiveProgress = acquisitive
+    ? Math.max(0, Math.min(100, Math.round(
+        differenceInCalendarDays(today, acquisitive.acquisitivePeriod.start)
+        / Math.max(1, differenceInCalendarDays(acquisitive.acquisitivePeriod.end, acquisitive.acquisitivePeriod.start)) * 100,
+      )))
+    : 0;
+  const meta = [person.role, person.unitName].filter(Boolean).join(' · ');
+
+  return (
+    <LiftRow table onClick={onOpen} aria-label={`Abrir férias de ${person.user.username}`} className="grid grid-cols-[minmax(230px,1.4fr)_minmax(240px,1.4fr)_minmax(220px,1.2fr)_150px_18px] items-center gap-4">
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ds-neutral-bg text-xs font-extrabold text-ds-ink-2">{initials(person.user.username)}</span>
+        <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[13.5px] font-extrabold text-ds-ink">{person.user.username}</span>
+            {person.onVacationUntil ? (
+              <VacationPill tone="info" className="h-[18px] px-[7px] text-[10.5px]">Em gozo até {format(person.onVacationUntil, 'dd/MM')}</VacationPill>
+            ) : null}
+          </span>
+          <span className="block truncate text-[12px] text-ds-ink-muted">{meta || '—'}</span>
+        </span>
+      </span>
+      <span>
+        <span className="block font-ds-mono text-[12px] font-bold text-ds-ink">
+          {concessive ? `${fmt(concessive.acquisitivePeriod.start)} – ${fmt(concessive.acquisitivePeriod.end)}` : '—'}
+        </span>
+        <span className="mt-0.5 block text-[12.5px] font-extrabold text-ds-ink">{concessiveLine}</span>
+        <span className={cn('block text-[11.5px] font-bold', concessiveUrgent ? 'text-ds-danger' : 'text-ds-ink-muted')}>
+          {concessive
+            ? `conceder até ${fmt(concessive.concessivePeriod.end)} · ${(concessiveDaysLeft ?? 0) < 0 ? `vencido há ${-(concessiveDaysLeft ?? 0)} dias` : `em ${concessiveDaysLeft} dias`}`
+            : 'ainda sem direito a férias'}
+        </span>
+      </span>
+      <span>
+        <span className="block font-ds-mono text-[12px] font-bold text-ds-ink">
+          {acquisitive ? `${fmt(acquisitive.acquisitivePeriod.start)} – ${fmt(acquisitive.acquisitivePeriod.end)}` : '—'}
+        </span>
+        <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ds-neutral-bg">
+          <span className="block h-full rounded-full bg-ds-info" style={{ width: `${acquisitiveProgress}%` }} />
+        </span>
+        <span className="mt-1 block text-[11.5px] text-ds-ink-muted">
+          {acquisitive ? `${acquisitiveProgress}% · completa em ${fmt(acquisitive.acquisitivePeriod.end)}` : '—'}
+        </span>
+      </span>
+      <VacationPill tone={person.priority.tone}>{person.priority.label}</VacationPill>
+      <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />
+    </LiftRow>
+  );
+}
+
+function TrailLine({ trail, onOpen, showPerson = false }: { trail: ActiveTrail; onOpen: () => void; showPerson?: boolean }) {
+  const stageId = vacationWorkflowDisplayStageId(trail.workflow.currentStage);
+  const stageIndex = Math.max(0, VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === stageId));
+  const stage = VACATION_WORKFLOW_DISPLAY_STAGE_META[stageIndex];
+  const period = trail.record.startDate && trail.record.endDate
+    ? `${format(parseISO(trail.record.startDate), 'dd/MM')} a ${fmt(parseISO(trail.record.endDate))}`
+    : 'Sem período';
+
+  return (
+    <LiftRow table onClick={onOpen} aria-label={`Ver etapas das férias de ${trail.person.user.username}`} className="grid grid-cols-[minmax(220px,1.3fr)_minmax(180px,1fr)_minmax(240px,1.6fr)_150px_18px] items-center gap-4">
+      <span className="min-w-0">
+        <span className="block truncate text-[13.5px] font-extrabold text-ds-ink">{trail.person.user.username}</span>
+        <span className="block truncate text-[12px] text-ds-ink-muted">{period} · {trail.record.days} dias{showPerson && trail.person.unitName ? ` · ${trail.person.unitName}` : ''}</span>
+      </span>
+      <span>
+        <VacationStageDots current={stageIndex + 1} waitingExternal={trail.waitingExternal} />
+        <span className="mt-1.5 block text-[11.5px] font-extrabold text-ds-ink-2">Etapa {stageIndex + 1} de 6 · {stage.short}</span>
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13.5px] font-extrabold text-ds-ink">{trail.action}</span>
+        <span className="block text-[12px] text-ds-ink-muted">Responsável: {trail.owner}</span>
+      </span>
+      {trail.waitingExternal ? (
+        <VacationPill tone={trail.idleDays >= 5 ? 'danger' : 'warn'}>Parada há {trail.idleDays} dia{trail.idleDays === 1 ? '' : 's'}</VacationPill>
+      ) : (
+        <VacationPill tone="info">Ação do RH</VacationPill>
+      )}
+      <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />
+    </LiftRow>
   );
 }

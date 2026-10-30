@@ -31,6 +31,7 @@ import { evaluateRepPLocation, repPLocationEvidenceDigest, repPLocationSummary,
   REP_P_LOCATION_RETENTION_DAYS, type RepPLocationAttempt, type RepPLocationPolicySnapshot } from './location';
 import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_EVIDENCE,
   repPLocationPolicyRef, disabledRepPLocationPolicy } from './location-policy.server';
+import { allowedExecutionUnit, externalCoverageGrants, externalCoverageUnits } from './execution-units.server';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
@@ -128,15 +129,37 @@ type EstablishmentDocument = {
   profile: RepPAfdProfile; lastNsr: number; lastType7Hash: string | null; lastType7Nsr: number | null;
 };
 
+type OperationalUnitReference = NonNullable<Extract<import('@/features/dp/employment-reference/resolve').EmploymentResolution, { status: 'matched' }>['operationalUnitReference']>;
+type ContractualDataReference = NonNullable<Extract<import('@/features/dp/employment-reference/resolve').EmploymentResolution, { status: 'matched' }>['contractualDataReference']>;
+
+function operationalEvidence(reference: { operationalUnitReference?: OperationalUnitReference; contractualDataReference?: ContractualDataReference },
+  permit?: { operationalUnitReference?: OperationalUnitReference; contractualDataReference?: ContractualDataReference }) {
+  const source = permit ?? reference;
+  return { ...(source.operationalUnitReference ? { operationalUnitReference: source.operationalUnitReference } : {}),
+    ...(source.contractualDataReference ? { contractualDataReference: source.contractualDataReference } : {}) };
+}
+
 type OfflinePermitDocument = {
+  operationalUnitReference?: OperationalUnitReference;
+  contractualDataReference?: ContractualDataReference;
   schemaVersion: 1; scope?: 'official' | 'pilot'; workspaceId: string; employeeId: string; requestDigest: string;
   permitId: string; installationId: string; deviceKeyId: string; devicePublicKey: string;
   keySecurity: 'tee' | 'strongbox'; bootCount: number; anchorElapsedRealtimeMs: number;
   anchorInstant: string; issuedAt: string; expiresAt: string; establishmentId: string;
   employerCnpj: string; units: Array<{ id: string; name: string; timeZone: string }>;
+  coverageGrants?: Array<Awaited<ReturnType<typeof externalCoverageGrants>>[number] & {
+    workDate: string; workLocation: string | null; timeZone: string;
+  }>;
   protocolVersion?: 2; preparationExpiresAt?: string; cycle?: import('./offline-cycle.server').OfflineCycleDto;
   status: 'active' | 'revoked' | 'closed'; lastAcceptedSequence: number; lastAcceptedHash: string | null;
 };
+
+function offlineCoverageGrant(permit: OfflinePermitDocument, workDate: string, unitId: string) {
+  return permit.coverageGrants?.find((grant) => (grant.workDate === workDate
+    || grant.overnight && grant.scheduledDate === grant.workDate
+      && new Date(`${grant.workDate}T00:00:00.000Z`).getTime() + 86_400_000 === new Date(`${workDate}T00:00:00.000Z`).getTime())
+    && grant.executionUnitId === unitId) ?? null;
+}
 
 type PilotMarkingDocument = {
   cycleId?: string;
@@ -394,11 +417,27 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
   if (reference.period.employer.cnpj !== CT_SORVETES_CNPJ) {
     throw fail('REP_P_PILOT_EMPLOYER_UNSUPPORTED', 'O ensaio está limitado ao empregador homologado.', 'DATA_INTEGRITY');
   }
-  const unitDocs = await Promise.all([...new Set(reference.period.unitIds)].slice(0, 30)
+  const coverage = await externalCoverageGrants(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds);
+  const permittedUnitIds = [...new Set([...reference.period.unitIds,
+    ...coverage.map((grant) => grant.executionUnitId)])].slice(0, 30);
+  const unitDocs = await Promise.all(permittedUnitIds
     .map((unitId) => deps.mainDb.collection('dp_units').doc(unitId).get()));
-  const units = unitDocs.filter((unit) => unit.exists && isBrazilTimeZone(unit.get('timeZone'))).map((unit) => ({
+  const readyCoverageIds = new Set(coverage.flatMap((grant) => {
+    const unit = unitDocs.find((doc) => doc.id === grant.executionUnitId);
+    return unit?.exists && isBrazilTimeZone(unit.get('timeZone')) && String(unit.get('address') ?? '').trim()
+      ? [grant.executionUnitId] : [];
+  }));
+  const units = unitDocs.filter((unit) => unit.exists && isBrazilTimeZone(unit.get('timeZone'))
+    && (reference.period.unitIds.includes(unit.id) || readyCoverageIds.has(unit.id))).map((unit) => ({
     id: unit.id, name: String(unit.get('name') ?? unit.id), timeZone: String(unit.get('timeZone')),
   }));
+  const coverageGrants = coverage.flatMap((grant) => {
+    const unit = unitDocs.find((doc) => doc.id === grant.executionUnitId);
+    const permitted = units.find((item) => item.id === grant.executionUnitId);
+    const workLocation = String(unit?.get('address') ?? '').trim();
+    return permitted && workLocation ? [{ ...grant, workDate: input.workDate, workLocation,
+      timeZone: permitted.timeZone }] : [];
+  });
   if (!units.length) throw fail('REP_P_PILOT_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade antes do ensaio.', 'DATA_INTEGRITY');
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
@@ -407,6 +446,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
   }
   const issuedAt = reading.instant.toISOString();
   const permit: OfflinePermitDocument = {
+    ...operationalEvidence(reference),
     schemaVersion: 1, scope: 'pilot', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
@@ -416,7 +456,7 @@ async function issueOwnPilotOfflinePermit(context: ServerUserContext, input: Rep
     expiresAt: new Date(reading.instant.getTime() + (input.protocolVersion === 2
       ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : REP_P_OFFLINE_PERMIT_TTL_MS)).toISOString(),
     establishmentId: `pilot_${digest([context.workspace_id, reference.period.employer.cnpj])}`,
-    employerCnpj: reference.period.employer.cnpj, units, status: 'active', lastAcceptedSequence: 0,
+    employerCnpj: reference.period.employer.cnpj, units, coverageGrants, status: 'active', lastAcceptedSequence: 0,
     lastAcceptedHash: null,
   };
   try { return offlinePermitDto(await createOfflineCyclePermit(deps.pilotDb, permitRef, permit) as OfflinePermitDocument); }
@@ -465,17 +505,33 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
+  const coverage = await externalCoverageGrants(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds);
   const [establishment, ...unitDocs] = await Promise.all([
     deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get(),
-    ...[...new Set(reference.period.unitIds)].slice(0, 30).map((unitId) => deps.mainDb.collection('dp_units').doc(unitId).get()),
+    ...[...new Set([...reference.period.unitIds,
+      ...coverage.map((grant) => grant.executionUnitId)])].slice(0, 30)
+      .map((unitId) => deps.mainDb.collection('dp_units').doc(unitId).get()),
   ]);
   const establishmentData = establishment.data();
   if (!validEstablishment(establishmentData) || establishmentData.workspaceId !== context.workspace_id
     || establishmentData.profile.employerCnpj !== reference.period.employer.cnpj) {
     throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'O estabelecimento ainda não está habilitado no REP-P.', 'DATA_INTEGRITY');
   }
-  const units = unitDocs.filter((unit) => unit.exists).map((unit) => ({ id: unit.id,
+  const readyCoverageIds = new Set(coverage.flatMap((grant) => {
+    const unit = unitDocs.find((doc) => doc.id === grant.executionUnitId);
+    return unit?.exists && isBrazilTimeZone(unit.get('timeZone')) && String(unit.get('address') ?? '').trim()
+      ? [grant.executionUnitId] : [];
+  }));
+  const units = unitDocs.filter((unit) => unit.exists
+    && (reference.period.unitIds.includes(unit.id) || readyCoverageIds.has(unit.id))).map((unit) => ({ id: unit.id,
     name: String(unit.get('name') ?? unit.id), timeZone: repPMarkingTimeZone(unit.get('timeZone'), establishmentData.timeZone) }));
+  const coverageGrants = coverage.flatMap((grant) => {
+    const unit = unitDocs.find((doc) => doc.id === grant.executionUnitId);
+    const permitted = units.find((item) => item.id === grant.executionUnitId);
+    const workLocation = String(unit?.get('address') ?? '').trim();
+    return permitted && workLocation ? [{ ...grant, workDate: input.workDate, workLocation,
+      timeZone: permitted.timeZone }] : [];
+  });
   if (!units.length) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Nenhuma unidade válida está disponível para a contingência.', 'DATA_INTEGRITY');
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
@@ -484,6 +540,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   }
   const issuedAt = reading.instant.toISOString();
   const permit: OfflinePermitDocument = {
+    ...operationalEvidence(reference),
     schemaVersion: 1, scope: 'official', workspaceId: context.workspace_id, employeeId: context.decoded.uid, requestDigest,
     permitId, installationId: input.installationId, deviceKeyId: input.deviceKeyId,
     devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity, bootCount: input.bootCount,
@@ -492,7 +549,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
       preparationExpiresAt: new Date(reading.instant.getTime() + REP_P_OFFLINE_PREPARATION_TTL_MS).toISOString() } : {}),
     expiresAt: new Date(reading.instant.getTime() + (input.protocolVersion === 2
       ? REP_P_OFFLINE_PREPARATION_TTL_MS + REP_P_OFFLINE_CYCLE_TTL_MS : REP_P_OFFLINE_PERMIT_TTL_MS)).toISOString(),
-    establishmentId, employerCnpj: reference.period.employer.cnpj, units, status: 'active',
+    establishmentId, employerCnpj: reference.period.employer.cnpj, units, coverageGrants, status: 'active',
     lastAcceptedSequence: 0, lastAcceptedHash: null,
   };
   try { return offlinePermitDto(await createOfflineCyclePermit(deps.repDb, permitRef, permit) as OfflinePermitDocument); }
@@ -622,15 +679,19 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
   if (!['clt', 'apprenticeship'].includes(reference.period.employmentRelationshipType)) {
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
-  if (!reference.period.unitIds.includes(input.executionUnitId)) {
-    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
+  if (input.offline?.cycle) await reconcileOnlineCycles(deps.pilotDb, context, 'pilot');
+  const offline = input.offline ? await preparePilotOfflineMarking(context, input, deps) : null;
+  const coverageGrant = offline && offlineCoverageGrant(offline.permit, input.workDate, input.executionUnitId);
+  if (!coverageGrant && !offline?.permit.units.some((unit) => unit.id === input.executionUnitId)
+    && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
+    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
   const [identity, executionUnit] = await Promise.all([
     loadStrictIdentity(deps.hrDb, context.decoded.uid),
     deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
   ]);
-  if (!executionUnit.exists) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
-  const timeZone = String(executionUnit.get('timeZone') ?? '');
+  if (!executionUnit.exists && !coverageGrant) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
+  const timeZone = coverageGrant?.timeZone ?? String(executionUnit.get('timeZone') ?? '');
   if (!isBrazilTimeZone(timeZone)) throw fail('REP_P_PILOT_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade antes do ensaio.', 'DATA_INTEGRITY');
   const employeeName = identity.name;
   const employeeCpf = identity.cpf;
@@ -639,13 +700,11 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
     throw fail('REP_P_PILOT_EMPLOYER_UNSUPPORTED', 'O ensaio está limitado ao empregador homologado.', 'DATA_INTEGRITY');
   }
   const employerName = CT_SORVETES_LEGAL_NAME;
-  const unitName = String(executionUnit.get('name') ?? '').trim();
-  const workLocation = String(executionUnit.get('address') ?? '').trim();
+  const unitName = coverageGrant ? offline!.permittedUnit.name : String(executionUnit.get('name') ?? '').trim();
+  const workLocation = coverageGrant?.workLocation ?? String(executionUnit.get('address') ?? '').trim();
   if (!employeeName || !employerName || !unitName || !workLocation) {
     throw fail('REP_P_PILOT_IDENTITY_INCOMPLETE', 'Identificação da pessoa, empregador ou unidade incompleta.', 'DATA_INTEGRITY');
   }
-  if (input.offline?.cycle) await reconcileOnlineCycles(deps.pilotDb, context, 'pilot');
-  const offline = input.offline ? await preparePilotOfflineMarking(context, input, deps) : null;
   if (offline && (offline.permit.employerCnpj !== employerCnpj
     || offline.permittedUnit.timeZone !== timeZone || offline.permit.establishmentId !== `pilot_${digest([context.workspace_id, employerCnpj])}`)) {
     throw fail('REP_P_PILOT_OFFLINE_CONTEXT_CHANGED', 'O vínculo ou a unidade mudou depois da autorização local.', 'CONFLICT');
@@ -720,7 +779,7 @@ async function recordOwnPilotMarking(context: ServerUserContext, input: RepPMark
       executionUnitId: input.executionUnitId, establishmentId, collectorId, hash, employeeName, unitName,
       workLocation, status: 'pending', snapshot, locationSummary: null, ...organizationalClassification };
     const cycleInfo = cycle?.commit(receiptId);
-    transaction.create(markingRef, { ...marking, ...(offline ? {} : { cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId } }), attemptId: input.attemptId, employmentHistoryId: reference.historyId,
+    transaction.create(markingRef, { ...marking, ...operationalEvidence(reference, offline?.permit), ...(offline ? {} : { cycleCandidate: { committedAt: FieldValue.serverTimestamp(), attemptId: input.attemptId, instantMs: reading.instant.getTime(), purpose: input.declaredPurpose ?? null, receiptId } }), attemptId: input.attemptId, employmentHistoryId: reference.historyId,
       employmentRevision: reference.revision, trustedClock: { source: reading.source, assurance: reading.assurance,
         observedOffsetMs: reading.observedOffsetMs, verifiedAt: reading.verifiedAt.toISOString(),
         serverInstant: reading.instant.toISOString(), attestationId: reading.attestationId,
@@ -828,8 +887,8 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
-  if (!reference.period.unitIds.includes(input.executionUnitId)) {
-    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade de execução não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
+  if (!await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
+    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   const [identity, executionUnit, establishmentBefore] = await Promise.all([
@@ -841,6 +900,9 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (!validEstablishment(establishmentData) || establishmentData.workspaceId !== context.workspace_id
     || establishmentData.profile.employerCnpj !== reference.period.employer.cnpj) {
     throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'O estabelecimento ainda não está habilitado no REP-P.', 'DATA_INTEGRITY');
+  }
+  if (!reference.period.unitIds.includes(input.executionUnitId) && !isBrazilTimeZone(executionUnit.get('timeZone'))) {
+    throw fail('REP_P_EXECUTION_UNIT_TIME_ZONE_MISSING', 'Cadastre o fuso da unidade externa antes da batida.', 'DATA_INTEGRITY');
   }
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
@@ -901,7 +963,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     const location = prepareLocationEvidence({ policy: locationPolicy, attempt: input.locationAttempt,
       markedAt: reading.instant, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
-    transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
+    transaction.create(eventRef, { ...prepared.marking, ...operationalEvidence(reference), arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
         verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
         attestationId: reading.attestationId, attestationMode: reading.attestationMode,
@@ -1003,8 +1065,10 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
   if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
-  if (!reference.period.unitIds.includes(input.executionUnitId)) {
-    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não pertence à abrangência vigente do vínculo.', 'AUTHORIZATION');
+  const coverageGrant = offlineCoverageGrant(permit, input.workDate, input.executionUnitId);
+  if (!coverageGrant && !permit.units.some((unit) => unit.id === input.executionUnitId)
+    && !await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
+    throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   if (establishmentId !== permit.establishmentId || reference.period.employer.cnpj !== permit.employerCnpj) {
@@ -1014,19 +1078,19 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     loadStrictIdentity(deps.hrDb, context.decoded.uid), deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
     deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId).get(),
   ]);
-  if (!executionUnit.exists) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
+  if (!executionUnit.exists && !coverageGrant) throw fail('REP_P_EXECUTION_UNIT_MISSING', 'Unidade de execução não encontrada.', 'NOT_FOUND');
   const establishmentData = establishmentBefore.data();
   if (!validEstablishment(establishmentData) || establishmentData.workspaceId !== context.workspace_id
     || establishmentData.profile.employerCnpj !== reference.period.employer.cnpj) {
     throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'O estabelecimento ainda não está habilitado no REP-P.', 'DATA_INTEGRITY');
   }
-  if (repPMarkingTimeZone(executionUnit.get('timeZone'), establishmentData.timeZone) !== permittedUnit.timeZone) {
+  if ((coverageGrant?.timeZone ?? repPMarkingTimeZone(executionUnit.get('timeZone'), establishmentData.timeZone)) !== permittedUnit.timeZone) {
     throw fail('REP_P_OFFLINE_UNIT_CHANGED', 'O fuso da unidade mudou depois da autorização offline.', 'CONFLICT');
   }
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
   const recordedAt = formatRepPAfdTimestamp(reading.instant, permittedUnit.timeZone);
-  const workLocation = String(executionUnit.get('address') ?? '').trim() || null;
+  const workLocation = coverageGrant?.workLocation ?? (String(executionUnit.get('address') ?? '').trim() || null);
   if (missingRepPReceiptFields({ employerLegalName: establishmentData.profile.employerLegalName, workLocation,
     inpiRegistration: establishmentData.profile.inpiRegistration, employeeName: identity.name }).length) {
     throw fail('REP_P_RECEIPT_PREREQUISITES_MISSING',
@@ -1088,7 +1152,7 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
       workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
     cycle?.commit(eventRef.id);
-    transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
+    transaction.create(eventRef, { ...prepared.marking, ...operationalEvidence(reference, permit), arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       offlineEvidence: { permitId: permit.permitId, installationId: permit.installationId,
         deviceKeyId: evidence.deviceKeyId, keySecurity: permit.keySecurity, bootCount: evidence.bootCount,
         sequence: evidence.sequence, previousLocalHash: evidence.previousLocalHash, localHash: evidence.localHash,
@@ -1632,7 +1696,7 @@ export async function listPendingRepPReceipts(context: ServerUserContext, inject
 }
 
 /**
- * Unidades em que o colaborador pode registrar na data, pela abrangência do vínculo histórico.
+ * Unidades em que o colaborador pode registrar na data, pelo vínculo histórico ou por cobertura excepcional escalada.
  * Só leitura: consulta a HLB para o relógio informativo, não toca a ARP e não antecipa se o
  * estabelecimento está habilitado. Hora disponível nunca substitui vínculo, gate ou unidade.
  */
@@ -1656,13 +1720,16 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
     officialClock: await readInformationalClock(deps) };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
-  const unitIds = [...new Set(reference.period.unitIds)].slice(0, 30);
+  const unitIds = [...new Set([...reference.period.unitIds,
+    ...await externalCoverageUnits(deps.mainDb, context.decoded.uid, parsed.data.workDate, reference.period.unitIds)])].slice(0, 30);
   const units = unitIds.length
     ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
   const locationPolicies = mode === 'pilot'
     ? new Map(unitIds.map((unitId) => [unitId, disabledRepPLocationPolicy(context.workspace_id, unitId)]))
     : await loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds);
-  const executionUnits = units.filter((unit) => unit.exists)
+  const executionUnits = units.filter((unit) => unit.exists
+    && (reference.period.unitIds.includes(unit.id)
+      || isBrazilTimeZone(unit.get('timeZone')) && String(unit.get('address') ?? '').trim()))
     .map((unit) => {
       const location = locationPolicies.get(unit.id)!;
       const collectorLocation = locationPolicyForActor(context, location);

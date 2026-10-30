@@ -106,7 +106,6 @@ export function incompleteDraftFields(draft: EmploymentPeriodDraft, user: User):
   if (!draft.employerUnitId) missing.push('unidade empregadora');
   if (!draft.unitId) missing.push('lotação principal');
   if (draft.unitIds.length === 0) missing.push('unidades operacionais');
-  else if (draft.unitId && !draft.unitIds.includes(draft.unitId)) missing.push('lotação principal entre as unidades operacionais');
   if (!draft.validFrom) missing.push('início da vigência');
   else if (!isCivilDate(draft.validFrom)) missing.push('início da vigência válido');
   if (!draft.sourceDocumentId.trim()) missing.push('código ou referência do documento-base');

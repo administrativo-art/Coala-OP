@@ -10,7 +10,7 @@
 
 **Titular do sistema:** CT Sorvetes LTDA — CNPJ 14.276.603/0001-25, informado pelo proprietário em 17/10/2026. O e-CNPJ utilizado é o dessa pessoa jurídica; “Coala” identifica o sistema/marca neste plano.
 
-> CT Sorvetes LTDA usa seu e-CNPJ como titular e desenvolvedora do sistema; Coala é a marca/produto. No uso próprio, a CT Sorvetes também é a empregadora destinatária. As amostras criptográficas foram aprovadas no VALIDAR/ITI em 25/10/2026; INPI e atestados definitivos antecedem o piloto com empregados reais. O [estado documental canônico](rep-p/homologacao/README.md#fonte-canônica-do-estado-documental) prevalece sobre registros históricos deste plano. Este documento não declara conformidade fiscal já alcançada.
+> CT Sorvetes LTDA usa seu e-CNPJ como titular e desenvolvedora do sistema; Coala é a marca/produto. No uso próprio, a CT Sorvetes também é a empregadora destinatária. As amostras criptográficas foram aprovadas no VALIDAR/ITI em 25/10/2026; INPI e atestados definitivos antecedem o piloto com empregados reais. O [estado documental canônico](../rep-p/homologacao/README.md#fonte-canônica-do-estado-documental) prevalece sobre registros históricos deste plano. Este documento não declara conformidade fiscal já alcançada.
 
 ## Documentos deste plano
 
@@ -18,9 +18,9 @@
 | --- | --- |
 | Este plano mestre | Decisões, fases, PTRP, fechamento, contador e critérios de promoção |
 | [REP-P e conformidade](plano-rep-p-controle-de-ponto.md) | Registro original, documentos fiscais, assinaturas e matriz jurídica |
-| [Ausências do DP](engineering/flows/dp-absences.md) | Ausências, efeitos na escala e integração futura com ponto/folha |
-| [Escalas do DP](engineering/flows/dp-schedules.md) | Escala atual, turnos, folgas e validações |
-| [Férias](engineering/flows/vacation-scheduling.md) e [desligamento](termination-effects-map.md) | Entradas da competência e efeitos sobre vínculos/acessos |
+| [Ausências do DP](../engineering/flows/dp-absences.md) | Ausências, efeitos na escala e integração futura com ponto/folha |
+| [Escalas do DP](../engineering/flows/dp-schedules.md) | Escala atual, turnos, folgas e validações |
+| [Férias](../engineering/flows/vacation-scheduling.md) e [desligamento](../termination-effects-map.md) | Entradas da competência e efeitos sobre vínculos/acessos |
 
 A especificação jurídica e do REP-P fica no documento complementar; PTRP e fechamento ficam neste plano, sem fontes normativas paralelas.
 
@@ -127,7 +127,7 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-O portal web permanece on-line. A contingência foi implementada somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, preservação local tanto sem rede quanto após indisponibilidade explícita da HLB, bloqueio após reinício, fila cifrada e assinada e envio ordenado. No escopo oficial, o NSR só nasce no servidor; no ensaio, autorização, assinatura e coleções são segregadas e nunca produzem NSR/ARP/AFD/AEJ. Ainda depende de Play Integrity `enforce` e teste físico antes do piloto oficial. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila local não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
+O portal web permanece on-line. A contingência foi implementada somente no Coala Go: pré-autorização on-line por até 12 horas, Hora Legal ancorada ao relógio monotônico, preservação local tanto sem rede quanto após indisponibilidade explícita da HLB, bloqueio após reinício, fila cifrada e assinada e envio ordenado. No escopo oficial, o NSR só nasce no servidor; no ensaio, autorização, assinatura e coleções são segregadas e nunca produzem NSR/ARP/AFD/AEJ. Ainda depende de Play Integrity `enforce` e teste físico antes do piloto oficial. Geolocalização foi implementada localmente como extensão do piloto na [especificação técnica](../engineering/time-recording-geolocation.md): coleta somente na batida on-line, sem bloqueio, lista nominal por unidade, evidência separada da ARP e guarda fixa de cinco anos. A fila local não aceita coordenadas. Publicação, cláusula/aditivo, parâmetros reais e teste físico continuam pendentes. Biometria/reconhecimento facial ficam fora do escopo.
 
 ### 3.8. Estágios
 
@@ -144,7 +144,7 @@ Piloto real produz dados pessoais e pode produzir prova. Divergência que indiqu
 
 ### 3.9. Experiência de ponto e documentos no aplicativo e na web
 
-Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](design/app.md). Entrada **Ponto**, com as seguintes entregas. Estado em 22/10/2026 (sem teste em aparelho): itens 1 e 2 implementados para o mês corrente e anteriores; item 3 inclui comprovante individual, espelho e ZIP limitado do mês selecionado com índice de completude; item 4 implementado para comprovante, espelho e ZIP; item 5 implementado com saldo provisório/fechado, ciclo e extrato. A pasta de documentos pessoais permanece exclusivamente no Coala One. Solicitações (ausência, vale-transporte e troca de turno) ficaram nativas:
+Ampliar o Coala Go nativo em `apps/coala-one-android`, reutilizando autenticação, navegação e componentes existentes, conforme [guia do app](../design/app.md). Entrada **Ponto**, com as seguintes entregas. Estado em 22/10/2026 (sem teste em aparelho): itens 1 e 2 implementados para o mês corrente e anteriores; item 3 inclui comprovante individual, espelho e ZIP limitado do mês selecionado com índice de completude; item 4 implementado para comprovante, espelho e ZIP; item 5 implementado com saldo provisório/fechado, ciclo e extrato. A pasta de documentos pessoais permanece exclusivamente no Coala One. Solicitações (ausência, vale-transporte e troca de turno) ficaram nativas:
 
 1. **Hoje / bater ponto:** identidade do colaborador, estabelecimento, data/hora e ação de registro; mostrar confirmação somente após persistência. Exibir marcação registrada e acesso ao respectivo comprovante. Distinguir falha de registro, registro persistido com comprovante pendente e comprovante disponível; recuperação não pode duplicar batida nem aguardar indefinidamente sem alerta/contingência.
 2. **Histórico:** linha do tempo de hoje, seleção de outro dia e intervalo de datas, com marcações originais, origem app/web/terminal e tratamentos identificados separadamente. Turno planejado, jornada de referência e trabalho apurado aparecem com rótulos distintos; dia em andamento é parcial, não fechamento definitivo. Considerar fuso do estabelecimento e jornadas que atravessam meia-noite.
@@ -180,7 +180,7 @@ Histórico obrigatório **a partir do início dos testes**, com regras fiéis à
 
 ### 3.11. Empregador, lotação e trabalho em outra unidade
 
-Reaproveitar os campos existentes de `users`, definidos em [tipos do colaborador](../src/types/index.ts). Não criar outro cadastro de empregador:
+Reaproveitar os campos existentes de `users`, definidos em [tipos do colaborador](../../src/types/index.ts). Não criar outro cadastro de empregador:
 
 | Campo existente | Papel no ponto e fechamento |
 | --- | --- |
@@ -206,7 +206,7 @@ Ausência/conflito de identificação jurídica impede finalizar documentos/folh
 - **ARP:** banco exclusivo e escrita por serviço dedicado, com acessos mínimos. Demonstrar proteção contra escrita privilegiada; cadeia de hashes e backup diário isoladamente não bastam.
 - **PTRP/Tempo:** coleções próprias em `coala-rh`. Migrações necessárias seguem transição controlada, sem duas fontes editáveis.
 - **Escala:** permanece em `coala`, preservando proteção de ocupação e histórico.
-- **Documentos:** identidade, versão, origem e assinatura quando exigida; registrar geradores em `SYSTEM_DOCUMENT_TEMPLATES`, conforme [catálogo oficial](engineering/generated-documents-registry.md).
+- **Documentos:** identidade, versão, origem e assinatura quando exigida; registrar geradores em `SYSTEM_DOCUMENT_TEMPLATES`, conforme [catálogo oficial](../engineering/generated-documents-registry.md).
 - **Operação:** filas idempotentes, consultas limitadas, índices e custos dimensionados antes da implantação.
 
 ## 5. Estado de partida
@@ -269,15 +269,15 @@ Os limites de tolerância precisam ser modelados conforme [CLT, art. 58, §1º](
 
 | ID | Bloco | Diagnóstico com evidência | Trabalho necessário / aceite |
 | --- | --- | --- | --- |
-| G01 | Identificação fiscal e territorial | CNPJs/endereço em `dp_units`; município estruturado em calendários/cadastro empresarial; [tipos](../src/types/index.ts) | **Adaptar:** mapear unidade → estabelecimento → empregador, município/UF/fuso com fonte explícita; aceitar múltiplos municípios; não duplicar cadastro |
-| G02 | Jornadas e políticas | [Serviço Tempo](../src/features/dp/time-config/service.server.ts) mantém rascunho/publicação, versão e vigência; bloqueia edição de publicado | **Reaproveitar:** serviço e catálogo; ampliar regras jurídicas específicas, sem refazer CRUD |
+| G01 | Identificação fiscal e territorial | CNPJs/endereço em `dp_units`; município estruturado em calendários/cadastro empresarial; [tipos](../../src/types/index.ts) | **Adaptar:** mapear unidade → estabelecimento → empregador, município/UF/fuso com fonte explícita; aceitar múltiplos municípios; não duplicar cadastro |
+| G02 | Jornadas e políticas | [Serviço Tempo](../../src/features/dp/time-config/service.server.ts) mantém rascunho/publicação, versão e vigência; bloqueia edição de publicado | **Reaproveitar:** serviço e catálogo; ampliar regras jurídicas específicas, sem refazer CRUD |
 | G03 | Histórico de turnos | `updateShiftDefinition` atualiza o mesmo documento; ocorrência grava início/fim e referência de jornada, mas não a definição completa do intervalo | **Adaptar:** versão/snapshot imutável do turno e intervalo; alteração futura não muda a leitura de dia passado |
-| G04 | Vínculo histórico | [Validação de escala](../src/features/dp/journey-validation/service.server.ts) lê cargo, funções e unidade atuais de `users` para resolver datas passadas | **Adaptar:** resolver vínculo por vigência e preservar decisão aplicada. Não reconstruir passado exclusivamente com cadastro atual |
-| G05 | Resolução e validação | [Resolvedor](../src/lib/dp-journey-resolution.ts) distingue ausência/ambiguidade e vigência; [núcleo de escala](../src/features/dp/journey-validation/core.ts) verifica dias consecutivos e compatibilidade | **Reaproveitar/adaptar:** resolvedor; complementar totais diário/semanal, intervalos, interjornada e domingos no motor próprio |
-| G06 | Cadência de domingos | Campo existe e tem valor 3; núcleo de validação da escala não o usa. Há consumidor no [solver consultivo Natasha](../src/lib/natasha-roster-solver.ts) | **Adaptar:** enforcement no fluxo autoritativo e no PTRP; não confundir sugestão do solver com validação operacional |
-| G07 | Jornada contratual versus turno | [Duração de turno](../src/lib/dp-shift-duration.ts) calcula duração prevista e saída esperada; não apura batidas reais | **Implementar decisão confirmada:** seção 3.10; 7h20 de referência e 6h cumpridas resultam em −1h20 no banco, sem dupla contagem; cobrir demais turnos e ocorrências |
-| G08 | Ausências e escala original | [Protocolo](../src/features/dp/absences/operational/protocol.server.ts) já arquiva `shift.data()` em `dp_absenceDisplacedShifts` antes de remover a ocorrência | **Reaproveitar/adaptar:** consumir arquivo existente e ocorrência aprovada. Não criar segundo arquivo de ausências; complementar histórico das demais alterações de escala |
-| G09 | Banco, tolerância, noturno e extras | [Schemas](../src/features/dp/time-config/schemas.ts) oferecem parâmetros; não há razão de banco nem motor remuneratório identificado no percurso examinado | **Construir:** motor, movimentos reversíveis, vigência, critérios de classificação e eventos; ampliar schema onde insuficiente |
+| G04 | Vínculo histórico | [Validação de escala](../../src/features/dp/journey-validation/service.server.ts) lê cargo, funções e unidade atuais de `users` para resolver datas passadas | **Adaptar:** resolver vínculo por vigência e preservar decisão aplicada. Não reconstruir passado exclusivamente com cadastro atual |
+| G05 | Resolução e validação | [Resolvedor](../../src/lib/dp-journey-resolution.ts) distingue ausência/ambiguidade e vigência; [núcleo de escala](../../src/features/dp/journey-validation/core.ts) verifica dias consecutivos e compatibilidade | **Reaproveitar/adaptar:** resolvedor; complementar totais diário/semanal, intervalos, interjornada e domingos no motor próprio |
+| G06 | Cadência de domingos | Campo existe e tem valor 3; núcleo de validação da escala não o usa. Há consumidor no [solver consultivo Natasha](../../src/lib/natasha-roster-solver.ts) | **Adaptar:** enforcement no fluxo autoritativo e no PTRP; não confundir sugestão do solver com validação operacional |
+| G07 | Jornada contratual versus turno | [Duração de turno](../../src/lib/dp-shift-duration.ts) calcula duração prevista e saída esperada; não apura batidas reais | **Implementar decisão confirmada:** seção 3.10; 7h20 de referência e 6h cumpridas resultam em −1h20 no banco, sem dupla contagem; cobrir demais turnos e ocorrências |
+| G08 | Ausências e escala original | [Protocolo](../../src/features/dp/absences/operational/protocol.server.ts) já arquiva `shift.data()` em `dp_absenceDisplacedShifts` antes de remover a ocorrência | **Reaproveitar/adaptar:** consumir arquivo existente e ocorrência aprovada. Não criar segundo arquivo de ausências; complementar histórico das demais alterações de escala |
+| G09 | Banco, tolerância, noturno e extras | [Schemas](../../src/features/dp/time-config/schemas.ts) oferecem parâmetros; não há razão de banco nem motor remuneratório identificado no percurso examinado | **Construir:** motor, movimentos reversíveis, vigência, critérios de classificação e eventos; ampliar schema onde insuficiente |
 | G10 | REP-P | Não identificado núcleo de coleta regulada, ARP, NSR, hora legal ou serviço PAdES/CAdES no inventário/busca dirigida | **Construir:** fronteira REP-P, identidade, persistência original, comprovante, AFD, contingência e testes de integridade |
 | G11 | PTRP e fiscalização | Fluxos de ausência são insumos; AEJ/espelho regulados não identificados | **Construir:** ajuste com proveniência, AEJ, espelho e atendimento fiscal, reutilizando catálogo de documentos/acessos |
 | G12 | Competência e contador | Há processos de férias/desligamento; não foi identificado fechamento integrado da jornada descrito neste plano | **Construir:** eventos, snapshots, reabertura, envio/retorno e conciliação. Reutilizar canais existentes sem confundir provisão financeira com apuração de ponto |
@@ -367,7 +367,7 @@ Incremento local de simulação, sem conclusão desta fase: `src/features/dp/tim
 
 Versionar turnos, contratos, escala e regras; preservar planejamento anterior às ausências. Implementar turno ajustado para recomposição por horas conforme escopo já combinado. Mapear unidade operacional para estabelecimento fiscal. Migrar Tempo quando necessário, sem fontes duplicadas. Confirmar dependências de mudanças retroativas.
 
-Incremento local disponível: gravação individual e substituição em lote preservam referências privadas de planejamento em `dp_shiftReferenceHistory`, com revisões anteriores, turno/intervalo e separação empregador/lotação; campos ausentes são pendências. O serviço privado de vínculo resolve pessoa/data e a ficha do colaborador permite consultar e acrescentar vigências sem alterar `users`. Ainda faltam o histórico efetivo dos cadastros reais, o consumo da referência por pessoa/data no PTRP, a cobertura dos demais escritores e eventos de remoção. Nenhum cadastro real foi preenchido automaticamente. Detalhes e limites nos guias de [escalas](engineering/flows/dp-schedules.md) e [pessoas](engineering/flows/people-access.md).
+Incremento local disponível: gravação individual e substituição em lote preservam referências privadas de planejamento em `dp_shiftReferenceHistory`, com revisões anteriores, turno/intervalo e separação empregador/lotação; campos ausentes são pendências. O serviço privado de vínculo resolve pessoa/data e a ficha do colaborador permite consultar e acrescentar vigências sem alterar `users`. Ainda faltam o histórico efetivo dos cadastros reais, o consumo da referência por pessoa/data no PTRP, a cobertura dos demais escritores e eventos de remoção. Nenhum cadastro real foi preenchido automaticamente. Detalhes e limites nos guias de [escalas](../engineering/flows/dp-schedules.md) e [pessoas](../engineering/flows/people-access.md).
 
 ### Fase 2 — Núcleo REP-P
 
@@ -462,7 +462,7 @@ Esquecimento, falha, marcação indevida, intervalo/saída ausente e conflito co
 - Identificar inclusão, desconsideração e pré-assinalação nos documentos.
 - Lote exige compatibilidade, prévia e auditoria.
 - Estados: nova → análise → aguardando informação → tratada/desconsiderada → reaberta.
-- **Implementado em 19/10/2026 (etapa 5):** pedido, decisão com justificativa, tratamentos D/I e relatório; ver [fluxo do Registro de ponto](engineering/flows/dp-time-recording.md). Falta gerar o AEJ e o espelho a partir dos tratamentos (fases 4 e 5).
+- **Implementado em 19/10/2026 (etapa 5):** pedido, decisão com justificativa, tratamentos D/I e relatório; ver [fluxo do Registro de ponto](../engineering/flows/dp-time-recording.md). Falta gerar o AEJ e o espelho a partir dos tratamentos (fases 4 e 5).
 - Pedido do colaborador (orientação Doc Brown, 19/10/2026): batida esquecida = inclusão; errada/duplicada = desconsideração; horário errado = desconsideração + inclusão na mesma transação; unidade errada = tratamento de local, sem tocar a ARP. Justificativa obrigatória; hora sempre informada pela pessoa; evidência opcional (sem dado de saúde). Cada pedido tem um histórico consultável com original × novo, justificativa, autor, decisor, instantes, estado e reversões; se virar PDF persistente, entra em `SYSTEM_DOCUMENT_TEMPLATES`. Detalhes e perguntas ao advogado na [seção 10-A do plano REP-P](plano-rep-p-controle-de-ponto.md).
 
 ## 9. Eventos de folha
@@ -544,6 +544,8 @@ Todos necessários:
 8. Competência piloto conciliada; diferenças críticas resolvidas.
 9. Transição/retorno documentados.
 10. Aprovação RH por estabelecimento.
+
+**Decisão superveniente sobre falta automática (29/10/2026):** substitui a decisão de 20/10/2026 que deixava todo dia sem batida indefinidamente “a tratar”. Dia escalado sem batida recebe falta injustificada automática 24 horas depois do fim do turno quando não existe solicitação de ausência nem ajuste de ponto. O registro automático não bloqueia pedidos posteriores: ausência ou ajuste aprovados substituem seu efeito, preservando a auditoria; pedido recusado ou cancelado mantém a falta, o desconto na folha e o registro AEJ “2”.
 
 ## 15. Pendências
 

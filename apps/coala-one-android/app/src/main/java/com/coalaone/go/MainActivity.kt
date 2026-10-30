@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
@@ -152,10 +153,10 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
-        composable("time") { TimeScreen(hiltViewModel(), back) }
-        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true) }
+        composable("time") { TimeScreen(hiltViewModel(), back, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
         composable("time/day/{date}", arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
-            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"))
+            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"), onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
         }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
@@ -190,6 +191,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val planned = TimeRules.plannedPunchTimes(today.timeShift)
     val classified = today.timePunches.all { it.classification?.purpose != null }
     val nextPurpose = if (classified) TimeRules.suggestedPurpose(today.timePunches.sortedBy { it.markedAt }, today.timeShift) else null
+    val breakStatus = if (showTime) TimeRules.breakStatus(today.timeShift, today.timePunches, official, zone) else null
+    var summaryExpanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -201,22 +204,33 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
                 style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
             val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
-            listOfNotNull(unitName, TimeRules.shiftText(today.timeShift)).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
-                Text(it, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+            // Only the unit and the hours, each in its own pill; the shift name stays in the schedule.
+            val hours = TimeRules.shiftHours(today.timeShift)
+            if (!unitName.isNullOrBlank() || hours != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                unitName?.takeIf { it.isNotBlank() }?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f), Modifier.weight(1f, fill = false)) }
+                hours?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f)) }
             }
-            if (local) Text("Seu ponto será salvo neste aparelho e enviado depois.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
         }
+        breakStatus?.takeIf { it.inPause }?.let { BreakTimerPill(it, dark = true, modifier = Modifier.padding(top = 5.dp)) }
         HorizontalDivider(color = Tokens.onDark4.copy(alpha = .45f), modifier = Modifier.padding(vertical = 7.dp))
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button,
+                onClickLabel = if (summaryExpanded) "Recolher resumo da jornada" else "Expandir resumo da jornada") { summaryExpanded = !summaryExpanded },
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("RESUMO DA JORNADA", color = Tokens.onDark4,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.weight(1f))
+            DropdownChevron(summaryExpanded, Tokens.onDark3)
+        }
+        if (summaryExpanded) {
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Ver o dia") { onDetails(workDate) },
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("RESUMO DA JORNADA", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                 val state = summary?.state
                 Text(when {
-                    punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas indisponíveis sem conexão"
+                    punches.isEmpty() && today.timeMarkingsAvailable == false -> "Batidas ainda não consultadas"
                     punches.isEmpty() -> "Nenhuma batida hoje"
                     state == com.coalaone.go.domain.DaySummaryState.COMPLETE -> "Jornada encerrada às ${punches.last().time}"
                     state == com.coalaone.go.domain.DaySummaryState.IN_PROGRESS && punches.last().purpose == "break_start" -> "Em intervalo desde ${punches.last().time}"
@@ -258,6 +272,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 Text("Intervalo previsto: ${TimeRules.durationText(it)}", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
             }
             Text("Prévia; banco e folha são apurados no fechamento.", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall)
+        }
         }
         Spacer(Modifier.height(5.dp))
         if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
@@ -314,7 +329,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         onDispose { lifecycle.removeObserver(observer) }
     }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
-    Page("Início", feedback, onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, header = {
+    Page("Início", feedback.copy(error = feedback.error?.takeUnless { it.startsWith("Sem conexão.") }), onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, showConnectivityNotice = false, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

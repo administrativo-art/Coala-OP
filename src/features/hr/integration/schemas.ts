@@ -313,7 +313,7 @@ export const probationConfigSchema = z.object({
   extensionTermRequired: z.boolean().default(false),
   extensionDocumentTemplateId: z.string().trim().max(180).optional(),
   evaluator: integrationAssigneeSchema.default({ strategy: "direct_manager", fallback: "hr_pool" }),
-  effectivenessRule: z.enum(["manual", "approved_evaluations", "automatic_at_end"]).default("manual"),
+  effectivenessRule: z.enum(["manual", "approved_evaluations", "automatic_at_end"]).default("automatic_at_end"),
   evaluationFormId: z.string().trim().max(180).optional(),
 }).superRefine((value, ctx) => {
   if (value.firstPeriodDays + value.secondPeriodDays > 90) {

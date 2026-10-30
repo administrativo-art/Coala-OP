@@ -11,7 +11,7 @@ import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
 import { ensureEmployeeDocumentFolderProfile } from "@/lib/hr/employee-document-folder-profile.server";
-import { canDelegateUnitAccess } from "@/lib/unit-access";
+import { canAccessUnit, canDelegateUnitAccess } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,9 +127,11 @@ export async function POST(request: NextRequest) {
     if (!isEmploymentRelationshipType(rawUserData.employmentRelationshipType)) {
       return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, Aprendiz, PJ, Estágio ou Societário." }, { status: 400 });
     }
-    if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })) {
+    const requestedFinancialUnitId = text(rawUserData.unitId);
+    if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })
+      || (requestedFinancialUnitId && !canAccessUnit(actor.userDoc, requestedFinancialUnitId, { isDefaultAdmin: actor.isDefaultAdmin }))) {
       return NextResponse.json(
-        { error: "O escopo do novo usuário não pode ultrapassar o seu próprio escopo de unidades." },
+        { error: "As unidades operacionais, a referência financeira e o escopo do novo usuário devem estar no seu próprio escopo de unidades." },
         { status: 403 },
       );
     }
@@ -166,13 +168,9 @@ export async function POST(request: NextRequest) {
     const userData = cleanUserData(rawUserData);
     const linkedUnitIds = Array.isArray(userData.unitIds)
       ? userData.unitIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
-      : Array.isArray(userData.assignedKioskIds)
-        ? userData.assignedKioskIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
-        : [];
+      : [];
     const primaryUnitId = text(userData.unitId) || linkedUnitIds[0] || null;
-    const unitIds = primaryUnitId
-      ? [primaryUnitId, ...linkedUnitIds.filter((unitId) => unitId !== primaryUnitId)]
-      : linkedUnitIds;
+    const unitIds = [...new Set(linkedUnitIds)];
     if (primaryUnitId) userData.unitId = primaryUnitId;
     else delete userData.unitId;
     userData.unitIds = unitIds;
