@@ -1,5 +1,6 @@
 "use client";
 
+import { canConfigureFieldVisibility } from "@/features/rh/lib/field-visibility";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -119,6 +120,10 @@ const InternalAuditPanel = dynamic(
 );
 const FieldConfigPage = dynamic(
   () => import("@/features/rh/components/FieldConfigPage").then((m) => m.FieldConfigPage),
+  { ssr: false }
+);
+const FieldVisibilityList = dynamic(
+  () => import("@/features/rh/components/FieldVisibilityList").then((m) => m.FieldVisibilityList),
   { ssr: false }
 );
 const AssetBarcodeLabelsPanel = dynamic(
@@ -563,6 +568,13 @@ export default function SettingsPage() {
       content: <FieldConfigPage />,
     },
     {
+      value: "field-visibility",
+      label: "Visibilidade dos campos",
+      title: "Visibilidade dos campos",
+      description: "Defina quem enxerga cada campo do perfil, por campo ou por bloco inteiro.",
+      content: <FieldVisibilityList />,
+    },
+    {
       value: "recruitment",
       label: "Recrutamento",
       title: "Recrutamento",
@@ -676,6 +688,9 @@ export default function SettingsPage() {
         permissions.dp?.collaborators?.edit
       );
     }
+    if (tab.value === "field-visibility") {
+      return canConfigureFieldVisibility({ isDefaultAdmin, permissions });
+    }
     if (tab.value === "profile-fields") {
       return !!(
         permissions.settings.manageUsers ||
@@ -734,7 +749,7 @@ export default function SettingsPage() {
       title: "Equipe e organograma",
       description: "Gerencie cargos, funções, perfis de colaboradores e a estrutura organizacional.",
       content: null,
-      children: pickPersonalTabs(["roles", "organogram", "access-profiles", "profile-fields"]),
+      children: pickPersonalTabs(["roles", "organogram", "access-profiles", "profile-fields", "field-visibility"]),
     },
     {
       value: "responsibilities",

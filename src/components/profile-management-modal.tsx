@@ -809,6 +809,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                       {renderPermissionSwitch("permissions.dp.settings.manageTime" as any, "Gerenciar Tempo", "Permite configurar jornadas e políticas de hora extra.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageAbsences" as any, "Gerenciar Ausências", "Permite configurar tipos, regras e vigência de ausências.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de trabalho e feriados.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageFieldVisibility" as any, "Configurar Visibilidade dos Campos", "Permite definir quem enxerga cada campo do perfil do colaborador, por campo ou por bloco.", !settingsViewWatch)}
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
@@ -1128,6 +1129,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   {renderPermissionSwitch("permissions.dp.settings.manageTime" as any, "Gerenciar Tempo", "Permite configurar jornadas e políticas de hora extra.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageAbsences" as any, "Gerenciar Ausências", "Permite configurar tipos, regras e vigência de ausências.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de feriados.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageFieldVisibility" as any, "Configurar Visibilidade dos Campos", "Permite definir quem enxerga cada campo do perfil do colaborador, por campo ou por bloco.", !dpViewWatch)}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>

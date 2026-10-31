@@ -421,6 +421,7 @@ api,src/app/api/registry/cnpj/[cnpj]/route.ts,,docs/engineering/flows/registry.m
 api,src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/rh/employee-profile/[employeeId]/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/rh/field-map/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/rh/field-visibility/route.ts,,docs/engineering/flows/people-access.md,GET lista campos configuraveis; PATCH grava niveis de visibilidade com a permissao dp.settings.manageFieldVisibility.
 api,src/app/api/settings/ai-management/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/media/[id]/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/media/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
