@@ -54,6 +54,14 @@ describe('AFD 004 REP-P', () => {
       generatedAt: '2026-10-18T10:00:00-0300', events: [] }));
   });
 
+  it('preserva campo INPI vazio sem fabricar identificador no AFD', () => {
+    const result = generateRepPAfd({ profile: { ...profile, inpiRegistration: '' },
+      startDate: '2026-10-18', endDate: '2026-10-18', generatedAt: '2026-10-18T10:00:00-0300', events });
+    assert.equal(result.filename, 'AFD14276603000125REP_P.txt');
+    assert.equal(result.bytes.toString('latin1').split('\r\n')[0].length, 302);
+    assert.ok(!result.bytes.toString('latin1').includes('00000000000000000'));
+  });
+
   it('accepts only a detached CAdES result for the configured developer CNPJ', async () => {
     const pkg = generateRepPAfd({ profile, startDate: '2026-10-18', endDate: '2026-10-18',
       generatedAt: '2026-10-18T10:00:00-0300', events });

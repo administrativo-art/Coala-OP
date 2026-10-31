@@ -45,8 +45,8 @@ android {
         applicationId = "coalaone.go"
         minSdk = 26
         targetSdk = 36
-        versionCode = configured("COALA_VERSION_CODE", "40").toInt()
-        versionName = configured("COALA_VERSION_NAME", "0.3.35")
+        versionCode = configured("COALA_VERSION_CODE", "41").toInt()
+        versionName = configured("COALA_VERSION_NAME", "0.3.36")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoted(configured("COALA_API_BASE_URL", "https://op.coalashakes.com")))
         buildConfigField("String", "FIREBASE_API_KEY", quoted(configured("COALA_FIREBASE_API_KEY")))

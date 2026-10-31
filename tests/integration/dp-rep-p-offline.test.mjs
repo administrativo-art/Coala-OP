@@ -36,7 +36,6 @@ test('Coala Go preserva offline, servidor valida a corrente e só então atribui
     observations: [{ server: 'a', status: 'accepted', offsetMs: 4, roundTripMs: 10, stratum: 1 },
       { server: 'b', status: 'accepted', offsetMs: 6, roundTripMs: 12, stratum: 1 }] }; } };
   const dependencies = { repDb: repPDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock, markingEnabled: true,
-    officialUserIds: new Set([userId, `${prefix}-other`]),
     signer: { async signDetached() { throw new Error('unused'); } },
     receiptSigner: { async signPdf() { throw new Error('receipt pending'); } } };
   const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',

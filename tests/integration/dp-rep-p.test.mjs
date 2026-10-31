@@ -69,8 +69,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { server: '200.20.186.75', status: 'accepted', offsetMs: 10, roundTripMs: 20, stratum: 1 },
       { server: '200.20.186.94', status: 'accepted', offsetMs: 14, roundTripMs: 22, stratum: 1 },
     ] }; } };
-  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
-    inpiRegistration: '12345678901234567', developerCnpj: employerCnpj };
+  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT SORVETES LTDA',
+    inpiRegistration: '', developerCnpj: employerCnpj };
   const fiscalObjects = new Map();
   const fiscalStore = {
     async put(path, bytes, contentType, sha256, retainUntilTime) {
@@ -80,7 +80,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     },
   };
   const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true, officialUserIds: new Set([userId]), fiscalStore,
+    markingEnabled: true, fiscalStore, referenceResponsibleUid: userId,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -121,12 +121,14 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       unitIds: [employerUnitId, executionUnitId], jobFunctionIds: [], sourceDocumentId: 'admission-1',
       sourceReason: 'Admissão conferida para o ensaio',
     }] });
-    const setup = await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies);
-    assert.deepEqual(setup, { establishmentId, replayed: false });
-    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
-    { establishmentId, replayed: true });
+    const viewed = await listOwnRepPExecutionUnits({ ...context, viewAs: {
+      targetUserId: userId, targetUsername: 'Maria Teste', readOnly: true,
+    } }, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(viewed.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
+    const prepared = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(prepared.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
     await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, {
       expectedRevision: 0, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
@@ -172,6 +174,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(first.marking.markedAt, '2026-10-18T07:15:00-0400');
     assert.equal(second.status, 'recorded');
     assert.deepEqual([first.marking.nsr, second.marking.nsr].sort(), [3, 4]);
+    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
+      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
+    { establishmentId, replayed: true });
     assert.ok(first.marking.employerUnitId === employerUnitId && second.marking.employerUnitId === employerUnitId);
     assert.ok(first.marking.executionUnitId === executionUnitId && second.marking.executionUnitId === executionUnitId);
     assert.deepEqual(first.location, { captureStatus: 'captured', evaluation: 'inside' });
@@ -210,7 +215,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const ownLocations = Object.fromEntries(history.markings.map((item) => [item.nsr, item.location]));
     assert.equal(ownLocations[first.marking.nsr].evaluation, 'inside');
     assert.equal(typeof ownLocations[first.marking.nsr].distanceMeters, 'number');
-    assert.deepEqual(ownLocations[second.marking.nsr], { evaluation: 'indeterminate', distanceMeters: null });
+    assert.deepEqual(ownLocations[second.marking.nsr], { evaluation: 'indeterminate', distanceMeters: null,
+      physicalUnitId: null, physicalUnitName: null });
     assert.ok(!JSON.stringify(history).includes(String(mobileLocation.latitude)));
     const viewerContext = { ...context, decoded: { uid: `${prefix}-viewer` }, isDefaultAdmin: false,
       userDoc: { id: `${prefix}-viewer`, unitIds: [employerUnitId] }, permissions: structuredClone(defaultAdminPermissions) };
@@ -305,7 +311,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
 
     const receiptSnapshot = await repPDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
-    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
+    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT SORVETES LTDA');
 
     // Sem endereço da unidade de execução, o comprovante não poderia ser emitido: recusa sem consumir NSR.
     const nsrBefore = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
@@ -795,7 +801,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(synchronized.marking.sequence, 2);
     assert.equal(synchronized.marking.markedAt, '2026-10-22T09:16:00-0300');
     assert.equal((await recordOwnRepPMarking(context, offlineRequest, { ...dependencies, markingEnabled: true,
-      pilotEnabled: false, officialUserIds: new Set() })).status, 'replayed',
+      pilotEnabled: false })).status, 'replayed',
     'uma fila piloto continua no domínio piloto mesmo depois da troca dos gates');
     await assert.rejects(recordOwnRepPMarking(context, { ...offlineRequest, attemptId: 'pilot-rebooted-attempt',
       offline: { ...offlineRequest.offline, bootCount: 8 } }, dependencies),
@@ -838,7 +844,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
 
     await t.test('corte oficial drena fila piloto no domínio original sem promovê-la a AFD, AEJ ou espelho', async () => {
       clockInstant = '2026-11-01T12:00:00.000Z';
-      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false, officialUserIds: new Set([userId]),
+      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false,
         officialStartDate: '2026-11-01' };
       const queuedCore = { ...secondCore, attemptId: 'pilot-pending-at-cutover', elapsedRealtimeMs: 181_000,
         sequence: 3, previousLocalHash: secondHash, markedAt: '2026-10-22T09:18:00-0300' };

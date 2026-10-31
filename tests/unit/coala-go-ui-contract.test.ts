@@ -236,7 +236,8 @@ test('Troca de turno permanece em Solicitações e consome o contrato central', 
 });
 
 test('Jornada fica direta no início e separa consultas, escala e benefícios', () => {
-  assert.match(activity, /HomeModuleContent\(visibleModules, visibleToday, visiblePendingCount, navigate\) \{[\s\S]*?if \(developerViewAs\.targetUserId == null\) punching = true else navigate\("time\/register"\)/);
+  assert.match(activity, /HomeModuleContent\(visibleModules, visibleToday, visiblePendingCount, navigate,[\s\S]*?readOnly = developerViewAs\.targetUserId != null/);
+  assert.match(activity, /if \(readOnly\) null else onRecord/);
   assert.match(activity, /navigate\("time\/day\/\$date"\)/);
   assert.match(home, /JORNADA DE TRABALHO/);
   assert.match(home, /Triple\(modules\.timeRecording, "Ponto", "time"\), Triple\(modules\.schedule, "Escala", "schedule"\)/);
