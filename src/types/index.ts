@@ -844,7 +844,7 @@ export type PermissionSet = {
     timeClosure?: { close: boolean; reopen: boolean; };
     responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
-    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; /** Define quem enxerga cada campo do perfil; ausente em perfis antigos (desligado). */ manageFieldVisibility?: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
     rh?: {
       collaborators: { view: boolean; edit: boolean; };
@@ -3099,7 +3099,7 @@ export const defaultGuestPermissions: PermissionSet = {
       timeClosure: { close: false, reopen: false },
       responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
-      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false, manageFieldVisibility: false },
       rh_role: undefined,
       rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
     },
@@ -3215,7 +3215,7 @@ export const defaultAdminPermissions: PermissionSet = {
       timeClosure: { close: true, reopen: true },
       responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
-      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true, manageFieldVisibility: true },
       rh_role: 'admin' as const,
       rh: { collaborators: { view: true, edit: true }, can_view_salary: true },
     },

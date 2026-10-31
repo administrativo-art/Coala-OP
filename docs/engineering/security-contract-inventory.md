@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **533**
-- Totalmente contratados: **194**
+- Arquivos de rota: **534**
+- Totalmente contratados: **195**
 - Legados congelados: **331**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -470,6 +470,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/rh/employee-profile/[employeeId]` | GET ✓ | `CONTRACTED` | [src/app/api/rh/employee-profile/[employeeId]/route.ts](../../src/app/api/rh/employee-profile/[employeeId]/route.ts) |
 | `/api/rh/employee-profile/[employeeId]/image-voice-consent` | POST | `LEGACY_BASELINE` | [src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts](../../src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts) |
 | `/api/rh/field-map` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/rh/field-map/route.ts](../../src/app/api/rh/field-map/route.ts) |
+| `/api/rh/field-visibility` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/rh/field-visibility/route.ts](../../src/app/api/rh/field-visibility/route.ts) |
 | `/api/settings/ai-management` | GET ✓ | `CONTRACTED` | [src/app/api/settings/ai-management/route.ts](../../src/app/api/settings/ai-management/route.ts) |
 | `/api/settings/public-bio` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/route.ts](../../src/app/api/settings/public-bio/route.ts) |
 | `/api/settings/public-bio/media` | POST | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/media/route.ts](../../src/app/api/settings/public-bio/media/route.ts) |
