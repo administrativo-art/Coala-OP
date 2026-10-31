@@ -44,6 +44,12 @@ test('AEJ segue o leiaute 002: registros, ordem, E/S/D, origem, motivo, trailer 
   assert.ok(pkg.bytes.includes(Buffer.from('saída', 'latin1')));
 });
 
+test('AEJ mantém INPI ausente em branco, sem criar número fictício', () => {
+  const data = input();
+  data.rep.inpiRegistration = '';
+  assert.equal(generateAej(data).bytes.toString('latin1').split('\r\n')[1], '02|1|3|');
+});
+
 test('AEJ avisa dia sem escala e batidas ímpares, sem inventar horário', () => {
   const data = input();
   data.employees[0].shifts = [];

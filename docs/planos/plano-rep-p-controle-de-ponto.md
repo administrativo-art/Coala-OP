@@ -2,13 +2,23 @@
 
 **Produto:** Coala OP / Coala Go
 
-**Status:** Fases técnicas 1–6 publicadas com a coleta oficial desligada; ensaio nominal segregado em validação; conformidade formal e lançamento pendentes
+**Status:** Ativação antecipada autorizada em 31/10/2026; candidata técnica em publicação, coleta oficial ainda desligada. Sem conformidade formal REP-P enquanto INPI e atestados faltarem.
 
-**Última atualização:** 25/10/2026
+**Última atualização:** 31/10/2026
 
 **Titular do sistema:** CT Sorvetes LTDA — CNPJ 14.276.603/0001-25, informado pelo proprietário em 17/10/2026. O e-CNPJ é o dessa pessoa jurídica; “Coala” identifica o sistema/marca neste plano.
 
-> O [plano mestre](plano-jornada-fechamento-rh.md#6-fases) define a execução. CT Sorvetes LTDA usa seu e-CNPJ e está definida como titular e desenvolvedora; no uso próprio, também é a empregadora destinatária. Desenvolvimento e validação integrada usam dados sintéticos. As assinaturas de amostra foram validadas no ITI; INPI e atestados definitivos antecedem o piloto com empregados reais. O [estado documental canônico](../rep-p/homologacao/README.md#fonte-canônica-do-estado-documental) prevalece sobre anotações históricas deste plano. Esta especificação não é certificado de conformidade.
+> O [plano mestre](plano-jornada-fechamento-rh.md#6-fases) define a execução. CT Sorvetes LTDA usa seu e-CNPJ e está definida como titular e desenvolvedora; no uso próprio, também é a empregadora destinatária. As assinaturas de amostra foram validadas no ITI. A decisão de ativação antecipada abaixo registra a pendência do INPI e dos atestados. O [estado documental canônico](../rep-p/homologacao/README.md#fonte-canônica-do-estado-documental) prevalece sobre anotações históricas deste plano. Esta especificação não é certificado de conformidade.
+
+## Decisão e execução de 31/10/2026
+
+O programador autorizou iniciar a coleta antes do INPI, com o campo vazio, assumindo a questão jurídica. A revisão Doc Brown concluiu que essa operação **não pode ser declarada REP-P regular**: o registro e os atestados faltam e AFD/AEJ terão campo obrigatório vazio. O sistema não preencherá identificador fictício nem reescreverá os originais assinados quando o registro chegar. Esta decisão posterior substitui, para o piloto atual, as frases históricas deste plano que condicionavam toda primeira batida ao INPI ou ao início de novembro.
+
+O piloto oficial será aberto a quem tiver permissão de marcação, vínculo CLT/aprendiz vigente e unidade de execução válida, sem lista nominal no servidor. Isso não dispensa a identidade fiscal mínima de cada pessoa na ARP antes de sua primeira batida; a regularização dos demais campos do cadastro pode continuar gradualmente. A Heucilene fará as próprias marcações na conta dela. A visualização pelo acesso de Tiago é somente leitura e não pode criar uma batida, inclusive offline. O vínculo de aparelho empresarial é automático apenas para a conta da Heucilene na primeira instalação; outras contas não recebem botão de vínculo.
+
+Ordem desta ativação: (1) concluir CI e publicar backend/APK 0.3.36 com a flag desligada; (2) provisionar estabelecimento e identidade fiscal da Heucilene com Tiago como responsável já cadastrado, usando Hora Legal; (3) conferir versão publicada, assinatura do APK, fuso, permissões e Hora Legal; (4) ativar `REP_P_MARKING_ENABLED` e conferir a resposta oficial; (5) a Heucilene registra na própria conta conforme a escala. A localização pontual e o acompanhamento contínuo continuam desligados até o RH concluir o aditivo e a equipe configurar política, pessoas/unidades e turnos. A publicação do aviso ao trabalhador é atividade do RH.
+
+Na semana seguinte, com batidas reais, conferir NSR, comprovantes, sincronização, localização quando autorizada, ajustes que ocorrerem, troca de turno, espelho, fechamento, AFD e AEJ; simular offline e falhas de rede sem criar batida em nome de outra pessoa. Anexar a evidência já produzida do AEJ/CAdES, concluir ensaios físicos restantes e obter INPI/atestados durante o mês. O [dossiê de homologação](../rep-p/homologacao/README.md) registra o estado observado após cada etapa.
 
 ## 1. Escopo
 

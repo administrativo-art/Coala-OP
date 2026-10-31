@@ -114,12 +114,9 @@ env:
   # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
   - variable: REP_P_MARKING_ENABLED
     value: "false"
-  # Mesmo depois de publicar a versão, o modo oficial só pode iniciar na competência de novembro.
+  # Data de corte entre ensaio segregado e marcações oficiais.
   - variable: REP_P_OFFICIAL_START_DATE
-    value: "2026-11-01"
-  # Allowlist do piloto oficial de novembro; vazia ou ausente deve bloquear o modo oficial.
-  - variable: REP_P_OFFICIAL_USER_IDS
-    value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+    value: "2026-10-31"
   # O Cloud Monitoring e o segredo da sonda externa entram na etapa de monitoramento,
   # depois que a rota pública e o piloto estiverem validados.
   - variable: REP_P_AVAILABILITY_POLICY_NAME
