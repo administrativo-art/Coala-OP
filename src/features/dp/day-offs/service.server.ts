@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import { FieldValue, Timestamp, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
@@ -18,6 +18,9 @@ import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { prepareActiveRevisionOperationalChanges, readActiveRevisionPersonMonth, readActiveRevisionShift } from '@/features/dp/schedules/operational-overlay.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 import type {
   PublishDayOffInput,
   PublishDayOffResult,
@@ -43,6 +46,7 @@ type PreparedDayOff = {
   source: 'predicted' | 'manual';
   bizneoUserId: number;
   alreadyPublished: boolean;
+  revisionId: string | null;
 };
 
 type PreparedDayOffRemoval = {
@@ -56,7 +60,50 @@ type PreparedDayOffRemoval = {
   date: string;
   bizneoUserId: number;
   alreadyRemoved: boolean;
+  revisionId: string | null;
 };
+
+type ShiftRecord = { id: string; ref: DocumentReference; exists: boolean;
+  get: (field: string) => unknown; data: () => Record<string, unknown> | undefined };
+
+function shiftRecord(ref: DocumentReference, value: Record<string, unknown> | null): ShiftRecord {
+  return { id: ref.id, ref, exists: Boolean(value), get: (field) => value?.[field], data: () => value ?? undefined };
+}
+
+async function readEffectiveShift(tx: Transaction, schedule: DocumentSnapshot, ref: DocumentReference): Promise<ShiftRecord> {
+  const value = schedule.get('activeRevisionId')
+    ? await readActiveRevisionShift(tx, schedule, ref.id)
+    : (await tx.get(ref)).data() ?? null;
+  return shiftRecord(ref, value);
+}
+
+async function readEffectivePersonShifts(tx: Transaction, userId: string, from: string, through: string,
+  physical: QueryDocumentSnapshot[]): Promise<ShiftRecord[]> {
+  const scheduleRefs = [...new Map(physical.filter(isScheduleShift)
+    .map((document) => [document.ref.parent.parent!.path, document.ref.parent.parent!] as const)).values()];
+  const schedules = scheduleRefs.length ? await tx.getAll(...scheduleRefs) : [];
+  const pointerPaths = new Set(schedules.filter((schedule) => schedule.get('activeRevisionId')).map((schedule) => schedule.ref.path));
+  const rows = physical.filter((document) => isScheduleShift(document)
+    && !pointerPaths.has(document.ref.parent.parent!.path)) as ShiftRecord[];
+  const months = [...new Set([from.slice(0, 7), through.slice(0, 7)])];
+  if (months.length === 2 && from.slice(0, 7) !== through.slice(0, 7)) {
+    const middle = new Date(`${from.slice(0, 7)}-01T00:00:00.000Z`);
+    while (true) {
+      middle.setUTCMonth(middle.getUTCMonth() + 1);
+      const month = middle.toISOString().slice(0, 7);
+      if (month >= through.slice(0, 7)) break;
+      months.push(month);
+    }
+  }
+  if (months.length > 4) throw new AppError({ code: 'DP_DAY_OFF_PERIOD_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Período de validação muito longo.' });
+  for (const month of months) {
+    const shifts = await readActiveRevisionPersonMonth(tx, userId, month);
+    shifts.filter((shift) => typeof shift.date === 'string' && shift.date >= from && shift.date <= through)
+      .forEach((shift) => rows.push(shiftRecord(dbAdmin.collection('dp_schedules').doc(shift.scheduleId)
+        .collection('shifts').doc(shift.id), shift)));
+  }
+  return rows;
+}
 
 function opaqueId(...parts: string[]) {
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 32);
@@ -82,7 +129,7 @@ function isScheduleShift(document: QueryDocumentSnapshot) {
   return segments.length === 4 && segments[0] === 'dp_schedules' && segments[2] === 'shifts';
 }
 
-function scheduleIdFromShift(document: QueryDocumentSnapshot) {
+function scheduleIdFromShift(document: ShiftRecord) {
   return document.ref.parent.parent?.id ?? '';
 }
 
@@ -189,13 +236,19 @@ async function prepareDayOff(params: {
 
   return dbAdmin.runTransaction(async (transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
+    const revisionId = typeof scheduleSnapshot.get('activeRevisionId') === 'string' ? scheduleSnapshot.get('activeRevisionId') as string : null;
     const userSnapshot = await transaction.get(userRef);
     const unitSnapshot = await transaction.get(unitRef);
     const operationSnapshot = await transaction.get(operationRef);
     const shiftsSnapshot = await transaction.get(shiftQuery);
+    const relevantShifts = await readEffectivePersonShifts(transaction, input.userId, validationDates[0], input.date, shiftsSnapshot.docs);
 
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+    }
+    if (!hasPublishedScheduleVersion(scheduleSnapshot.data() ?? {})) {
+      throw new AppError({ code: 'DP_DAY_OFF_DRAFT_NOT_OPERATIONAL', kind: 'CONFLICT',
+        safeMessage: 'A escala precisa ser publicada antes de lançar folgas operacionais.' });
     }
     if (!userSnapshot.exists) {
       throw new AppError({ code: 'DP_DAY_OFF_USER_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Colaboradora não encontrada.' });
@@ -251,7 +304,6 @@ async function prepareDayOff(params: {
       });
     }
 
-    const relevantShifts = shiftsSnapshot.docs.filter(isScheduleShift);
     const targetShifts = relevantShifts.filter((document) => document.get('date') === input.date);
     const targetWorkShifts = targetShifts.filter((document) => document.get('type') !== 'day_off');
     if (targetWorkShifts.length > 0) {
@@ -355,13 +407,6 @@ async function prepareDayOff(params: {
       }
     }
 
-    if (scheduleSnapshot.get('locked') === true && !existingDayOff) {
-      throw new AppError({
-        code: 'DP_DAY_OFF_SCHEDULE_LOCKED',
-        kind: 'CONFLICT',
-        safeMessage: 'A escala está trancada e não aceita uma nova folga.',
-      });
-    }
 
     const operation = operationSnapshot.data() ?? {};
     if (
@@ -420,6 +465,7 @@ async function prepareDayOff(params: {
         source,
         bizneoUserId,
         alreadyPublished: true,
+        revisionId,
       };
     }
     if (
@@ -443,8 +489,11 @@ async function prepareDayOff(params: {
       });
     }
 
+    const legacyPublicationFence = !revisionId ? await preparePublicationFenceAdvance(transaction,
+      context.workspace_id, [input.userId]) : null;
     if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
       [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
+    legacyPublicationFence?.apply();
     const now = Timestamp.now();
     const confirmedAt = existingDayOff?.get('dayOffConfirmedAt') ?? now;
     const shiftPayload = {
@@ -467,9 +516,16 @@ async function prepareDayOff(params: {
       updatedAt: now,
       ...(!existingDayOff ? { createdAt: now } : {}),
     };
-    transaction.set(shiftRef, shiftPayload, { merge: true });
-    if (!existingDayOff) {
-      transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
+    if (revisionId) {
+      const next = { ...(existingDayOff?.data() ?? {}), ...shiftPayload } as Record<string, unknown>;
+      delete next.bizneoLastErrorCode;
+      const overlay = await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
+        changes: [{ shiftId: shiftRef.id, previous: existingDayOff?.data() ?? null, next }],
+        actorId: context.decoded.uid, reason: 'day_off_publishing' });
+      overlay.apply();
+    } else {
+      transaction.set(shiftRef, shiftPayload, { merge: true });
+      if (!existingDayOff) transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
     }
     transaction.set(operationRef, {
       workspaceId: context.workspace_id,
@@ -517,6 +573,7 @@ async function prepareDayOff(params: {
       source,
       bizneoUserId,
       alreadyPublished: false,
+      revisionId,
     };
   });
 }
@@ -528,7 +585,9 @@ async function markPublished(
 ) {
   await dbAdmin.runTransaction(async (transaction) => {
     const operationSnapshot = await transaction.get(prepared.operationRef);
-    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    const currentSchedule = await transaction.get(dbAdmin.collection('dp_schedules').doc(prepared.scheduleId));
+    if ((currentSchedule.get('activeRevisionId') ?? null) !== prepared.revisionId) throw new AppError({ code: 'DP_DAY_OFF_REVISION_CHANGED', kind: 'CONFLICT' });
+    const shiftSnapshot = await readEffectiveShift(transaction, currentSchedule, prepared.shiftRef);
     if (!operationSnapshot.exists || !shiftSnapshot.exists) {
       throw new AppError({ code: 'DP_DAY_OFF_PUBLICATION_STATE_MISSING', kind: 'DATA_INTEGRITY' });
     }
@@ -541,13 +600,19 @@ async function markPublished(
     }
 
     const now = Timestamp.now();
+    const published: Record<string, unknown> = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'published',
+      bizneoSyncUpdatedAt: now, bizneoPublishedAt: now, updatedAt: now };
+    delete published.bizneoLastErrorCode;
+    const overlay = prepared.revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction,
+      schedule: currentSchedule, workspaceId: context.workspace_id, changes: [{ shiftId: prepared.shiftId, previous: shiftSnapshot.data() ?? null, next: published }],
+      actorId: context.decoded.uid, reason: 'day_off_published' }) : null;
     transaction.update(prepared.operationRef, {
       status: 'published',
       publishedAt: now,
       updatedAt: now,
       lastErrorCode: FieldValue.delete(),
     });
-    transaction.update(prepared.shiftRef, {
+    if (overlay) overlay.apply(); else transaction.update(prepared.shiftRef, {
       bizneoSyncStatus: 'published',
       bizneoSyncUpdatedAt: now,
       bizneoPublishedAt: now,
@@ -580,7 +645,9 @@ async function markFailed(
 ) {
   await dbAdmin.runTransaction(async (transaction) => {
     const operationSnapshot = await transaction.get(prepared.operationRef);
-    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    const currentSchedule = await transaction.get(dbAdmin.collection('dp_schedules').doc(prepared.scheduleId));
+    if ((currentSchedule.get('activeRevisionId') ?? null) !== prepared.revisionId) throw new AppError({ code: 'DP_DAY_OFF_REVISION_CHANGED', kind: 'CONFLICT' });
+    const shiftSnapshot = await readEffectiveShift(transaction, currentSchedule, prepared.shiftRef);
     if (!operationSnapshot.exists || !shiftSnapshot.exists) return;
     if (
       operationSnapshot.get('shiftId') !== prepared.shiftId
@@ -592,8 +659,13 @@ async function markFailed(
     ) return;
 
     const now = Timestamp.now();
+    const failed = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'failed',
+      bizneoSyncUpdatedAt: now, bizneoLastErrorCode: errorCode, updatedAt: now };
+    const overlay = prepared.revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction,
+      schedule: currentSchedule, workspaceId: context.workspace_id, changes: [{ shiftId: prepared.shiftId, previous: shiftSnapshot.data() ?? null, next: failed }],
+      actorId: context.decoded.uid, reason: 'day_off_publication_failed' }) : null;
     transaction.update(prepared.operationRef, { status: 'failed', updatedAt: now, lastErrorCode: errorCode });
-    transaction.update(prepared.shiftRef, {
+    if (overlay) overlay.apply(); else transaction.update(prepared.shiftRef, {
       bizneoSyncStatus: 'failed',
       bizneoSyncUpdatedAt: now,
       bizneoLastErrorCode: errorCode,
@@ -700,7 +772,8 @@ async function prepareDayOffRemoval(params: {
 
   return dbAdmin.runTransaction(async (transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
-    const shiftSnapshot = await transaction.get(shiftRef);
+    const revisionId = typeof scheduleSnapshot.get('activeRevisionId') === 'string' ? scheduleSnapshot.get('activeRevisionId') as string : null;
+    const shiftSnapshot = await readEffectiveShift(transaction, scheduleSnapshot, shiftRef);
     const operationSnapshot = await transaction.get(operationRef);
     const userSnapshot = await transaction.get(userRef);
     const unitSnapshot = await transaction.get(unitRef);
@@ -744,6 +817,7 @@ async function prepareDayOffRemoval(params: {
         date: input.date,
         bizneoUserId: Number(operation.bizneoUserId ?? 0),
         alreadyRemoved: true,
+        revisionId,
       };
     }
     if (!shiftSnapshot.exists) {
@@ -788,7 +862,13 @@ async function prepareDayOffRemoval(params: {
     if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
       [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     const now = Timestamp.now();
-    transaction.update(shiftRef, {
+    const removing: Record<string, unknown> = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'removing',
+      bizneoSyncUpdatedAt: now, updatedAt: now };
+    delete removing.bizneoLastErrorCode;
+    const overlay = revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
+      changes: [{ shiftId: shiftRef.id, previous: shiftSnapshot.data() ?? null, next: removing }],
+      actorId: context.decoded.uid, reason: 'day_off_removing' }) : null;
+    if (overlay) overlay.apply(); else transaction.update(shiftRef, {
       bizneoSyncStatus: 'removing',
       bizneoSyncUpdatedAt: now,
       bizneoLastErrorCode: FieldValue.delete(),
@@ -827,6 +907,7 @@ async function prepareDayOffRemoval(params: {
       date: input.date,
       bizneoUserId,
       alreadyRemoved: false,
+      revisionId,
     };
   });
 }
@@ -839,8 +920,9 @@ async function markDayOffRemoved(
   await dbAdmin.runTransaction(async (transaction) => {
     const scheduleRef = dbAdmin.collection('dp_schedules').doc(prepared.scheduleId);
     const scheduleSnapshot = await transaction.get(scheduleRef);
+    if ((scheduleSnapshot.get('activeRevisionId') ?? null) !== prepared.revisionId) throw new AppError({ code: 'DP_DAY_OFF_REVISION_CHANGED', kind: 'CONFLICT' });
     const operationSnapshot = await transaction.get(prepared.operationRef);
-    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    const shiftSnapshot = await readEffectiveShift(transaction, scheduleSnapshot, prepared.shiftRef);
     if (!operationSnapshot.exists) {
       throw new AppError({ code: 'DP_DAY_OFF_REMOVAL_STATE_MISSING', kind: 'DATA_INTEGRITY' });
     }
@@ -857,9 +939,15 @@ async function markDayOffRemoved(
     }
 
     const now = Timestamp.now();
-    transaction.delete(prepared.shiftRef);
-    if (scheduleSnapshot.exists) {
-      transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
+    const overlay = prepared.revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction,
+      schedule: scheduleSnapshot, workspaceId: context.workspace_id, changes: [{ shiftId: prepared.shiftId, previous: shiftSnapshot.data() ?? null, next: null }],
+      actorId: context.decoded.uid, reason: 'day_off_removed' }) : null;
+    const legacyPublicationFence = overlay ? null : await preparePublicationFenceAdvance(transaction,
+      context.workspace_id, [String(shiftSnapshot.get('userId'))]);
+    if (overlay) overlay.apply(); else {
+      legacyPublicationFence?.apply();
+      transaction.delete(prepared.shiftRef);
+      if (scheduleSnapshot.exists) transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
     }
     transaction.update(prepared.operationRef, {
       status: 'removed',
@@ -892,7 +980,9 @@ async function markDayOffRemovalFailed(
 ) {
   await dbAdmin.runTransaction(async (transaction) => {
     const operationSnapshot = await transaction.get(prepared.operationRef);
-    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    const currentSchedule = await transaction.get(dbAdmin.collection('dp_schedules').doc(prepared.scheduleId));
+    if ((currentSchedule.get('activeRevisionId') ?? null) !== prepared.revisionId) throw new AppError({ code: 'DP_DAY_OFF_REVISION_CHANGED', kind: 'CONFLICT' });
+    const shiftSnapshot = await readEffectiveShift(transaction, currentSchedule, prepared.shiftRef);
     if (!operationSnapshot.exists || !shiftSnapshot.exists) return;
     if (
       operationSnapshot.get('workspaceId') !== context.workspace_id
@@ -903,12 +993,17 @@ async function markDayOffRemovalFailed(
     ) return;
 
     const now = Timestamp.now();
+    const failed = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'removal_failed',
+      bizneoSyncUpdatedAt: now, bizneoLastErrorCode: errorCode, updatedAt: now };
+    const overlay = prepared.revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction,
+      schedule: currentSchedule, workspaceId: context.workspace_id, changes: [{ shiftId: prepared.shiftId, previous: shiftSnapshot.data() ?? null, next: failed }],
+      actorId: context.decoded.uid, reason: 'day_off_removal_failed' }) : null;
     transaction.update(prepared.operationRef, {
       status: 'removal_failed',
       updatedAt: now,
       lastErrorCode: errorCode,
     });
-    transaction.update(prepared.shiftRef, {
+    if (overlay) overlay.apply(); else transaction.update(prepared.shiftRef, {
       bizneoSyncStatus: 'removal_failed',
       bizneoSyncUpdatedAt: now,
       bizneoLastErrorCode: errorCode,

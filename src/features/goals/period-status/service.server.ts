@@ -10,6 +10,7 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { EmployeeGoal, GoalClosureSnapshot, GoalPeriodDoc } from '@/types';
 import { resolveGoalDPUnit } from '@/features/goals/unit-resolution.server';
+import { readOfficialScheduleShiftsInTransaction } from '@/features/dp/schedules/official-revision.server';
 
 import type { TransitionGoalPeriodInput } from './schemas';
 
@@ -120,13 +121,13 @@ async function loadClosureEvidence(
     schedules.push(...snapshot.docs);
   }
 
-  const shiftDocuments: QueryDocumentSnapshot[] = [];
+  const shiftDocuments: Array<{ get: (field: string) => unknown; data: () => Record<string, unknown> }> = [];
   for (const schedule of schedules) {
-    const snapshot = await transaction.get(schedule.ref.collection('shifts').limit(MAX_SHIFTS_PER_SCHEDULE + 1));
-    if (snapshot.size > MAX_SHIFTS_PER_SCHEDULE) {
+    const shifts = await readOfficialScheduleShiftsInTransaction(transaction, schedule);
+    if (shifts.length > MAX_SHIFTS_PER_SCHEDULE) {
       throw new AppError({ code: 'GOAL_PERIOD_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há turnos demais para encerrar a meta com segurança.' });
     }
-    shiftDocuments.push(...snapshot.docs);
+    shiftDocuments.push(...shifts.map((shift) => ({ get: (field: string) => shift[field], data: () => shift })));
   }
 
   const externalEmployeeIds = new Set<string>();

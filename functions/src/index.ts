@@ -22,6 +22,7 @@ import { assertActiveSession } from './active-session.js';
 import { setEmploymentCyclePatch } from './employment-cycle.js';
 import { reconcileOpenResponsibilityTasks } from './responsibility-coverage.js';
 import { occupancyMode } from './absence-occupancy-clock.js';
+import { readOfficialScheduleShifts } from './official-schedule.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -42,6 +43,7 @@ export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
 export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';
+export { onScheduleGoalEligibilityChange } from './schedule-goals.js';
 export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
@@ -1435,11 +1437,16 @@ export const checklistDailyGenerate = onSchedule(
     const formsEnabled = await isFormsEngineEnabled();
     console.log(`[checklistDailyGenerate] Gerando para ${today} — motor: ${formsEnabled ? 'forms' : 'legacy'}`);
 
-    const [shiftsSnap, unitsSnap, shiftDefsSnap] = await Promise.all([
-      db.collectionGroup('shifts').where('date', '==', today).get(),
+    const [schedulesSnap, unitsSnap, shiftDefsSnap] = await Promise.all([
+      db.collection('dp_schedules').where('year', '==', Number(today.slice(0, 4)))
+        .where('month', '==', Number(today.slice(5, 7))).limit(201).get(),
       db.collection('dp_units').get(),
       db.collection('dp_shiftDefinitions').get(),
     ]);
+    if (schedulesSnap.size === 201) throw new Error('Checklist daily schedule limit reached.');
+    const shiftRows = (await Promise.all(schedulesSnap.docs.map((schedule) =>
+      readOfficialScheduleShifts(db, schedule, { date: today })))).flat();
+    const shiftsSnap = { docs: shiftRows.map((shift) => ({ id: shift.id, data: () => shift })) };
 
     const unitNames = new Map<string, string>();
     const shiftDefNames = new Map<string, string>();

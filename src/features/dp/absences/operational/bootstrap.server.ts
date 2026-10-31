@@ -5,6 +5,7 @@ import { FieldPath, type DocumentSnapshot, type Firestore, type QueryDocumentSna
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { WORKSPACE_ID } from '@/lib/workspace';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 import { absenceCivilDateSchema } from '../requests/schemas';
 import { ABSENCE_OPERATIONAL_COVERAGE_HASH, operationalGuardRequested,
   operationalReadinessRef, shiftOccupancySlices } from './occupancy-guard.server';
@@ -76,12 +77,11 @@ function expectSource(doc: DocumentSnapshot | undefined, label: string) {
   return doc;
 }
 /**
- * Escala legada do formato antigo (uma por mês para todas as unidades, unidade só no turno): aceita como
- * histórico somente se trancada; seus turnos precisam ser anteriores à janela de cobertura e continuam no hash.
- * Turnos trancados não recebem escrita pelas APIs, então não participam do cálculo de ocupação da janela.
+ * Escala legada do formato antigo (uma por mês para todas as unidades, unidade só no turno):
+ * o estado ausente é publicado e seus turnos precisam ser anteriores à janela de cobertura.
  */
 function legacyHistoricalSchedule(schedule: QueryDocumentSnapshot) {
-  return !stringValue(schedule.get('unitId')) && schedule.get('locked') === true;
+  return !stringValue(schedule.get('unitId')) && hasPublishedScheduleVersion(schedule.data());
 }
 
 function validate(pass: Collected, workspaceId: string, epoch: string, coverageFrom: string) {
@@ -95,6 +95,7 @@ function validate(pass: Collected, workspaceId: string, epoch: string, coverageF
   const clocks = byId(all.dp_absenceOccupancyClocks);
   const outbox = byId(all.dp_absenceOutbox);
   for (const schedule of all.dp_schedules.values()) {
+    if (schedule.get('activeRevisionId')) throw fail('revisão oficial exige bootstrap de ocupação por overlay');
     if (schedule.get('workspaceId') && schedule.get('workspaceId') !== workspaceId) throw fail('workspace da escala');
     if (!stringValue(schedule.get('unitId')) && !legacyHistoricalSchedule(schedule)) throw fail('unidade da escala');
   }

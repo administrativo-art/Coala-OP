@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readOfficialScheduleShifts } from './official-schedule.js';
 import { convertValue } from './conversion.js';
 import { normalizePdvCouponRevenue, PDV_REVENUE_VERSION } from './pdv-revenue.js';
 import {
@@ -554,15 +555,9 @@ async function persistPdvSnapshot(
       for (let index = 0; index < employeeIds.length; index += 30) {
         const chunk = employeeIds.slice(index, index + 30);
         if (chunk.length === 0) continue;
-        const shiftsSnap = await transaction.get(
-          scheduleDoc.ref.collection('shifts')
-            .where('userId', 'in', chunk)
-            .where('date', '==', dateStr)
-            .limit(GOAL_QUERY_LIMITS.shiftsPerScheduleChunk),
-        );
-        assertCatalogQueryWithinLimit('de turnos da escala', shiftsSnap.size, GOAL_QUERY_LIMITS.shiftsPerScheduleChunk);
-        for (const shiftDoc of shiftsSnap.docs) {
-          const shift = shiftDoc.data();
+        const shifts = await readOfficialScheduleShifts(db, scheduleDoc, { date: dateStr, userIds: chunk, transaction });
+        assertCatalogQueryWithinLimit('de turnos da escala', shifts.length, GOAL_QUERY_LIMITS.shiftsPerScheduleChunk);
+        for (const shift of shifts) {
           if (shift.type !== 'work' || !shift.userId) continue;
           if (shift.countsTowardGoals === false) {
             externalCoverageEmployeeIds.add(shift.userId);

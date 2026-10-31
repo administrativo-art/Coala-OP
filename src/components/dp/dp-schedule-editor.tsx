@@ -17,7 +17,9 @@ import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
-import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
+import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
@@ -68,7 +70,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, LockOpen, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
@@ -210,7 +212,7 @@ function ShiftDialog({
 }: ShiftDialogProps) {
   const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
-  const { addShift, updateShift } = useDPShifts(scheduleId);
+  const { addShift, updateShift } = useDPShifts(scheduleId, true);
   const api = useAuthenticatedApi();
   const { toast } = useToast();
   const isEdit = !!shift;
@@ -1334,7 +1336,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const { activeUsers, permissions, updateUser, user, isDefaultAdmin, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const {
-    updateSchedule,
+    setSchedules,
     units,
     shiftDefinitions,
     schedules,
@@ -1352,13 +1354,14 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     shifts,
     loading,
     error: shiftsError,
+    conflicts: draftConflicts,
+    draftVersion,
+    reload: reloadShifts,
     applyShiftsBatch,
     deleteShift: doDelete,
-  } = useDPShifts(schedule.id);
+  } = useDPShifts(schedule.id, isDefaultAdmin || permissions.dp?.schedules?.edit === true);
   const {
     validation: journeyValidation,
-    loading: journeyValidationLoading,
-    error: journeyValidationError,
   } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
@@ -1367,6 +1370,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   } = useDPScheduleVacations(schedule.id);
   const { absences: scheduleAbsences, loading: absencesLoading, error: absencesError } = useDPScheduleAbsences(schedule.id);
   const { toast } = useToast();
+  const [publication, setPublication] = useState<DPSchedule>(schedule);
+  const [publishing, setPublishing] = useState(false);
+  React.useEffect(() => { setPublication(schedule); }, [schedule]);
+  React.useEffect(() => subscribeToDPScheduleShiftChanges([schedule.id], () => {
+    void fetchSchedule(schedule.id).then((fresh) => {
+      setPublication(fresh);
+      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+    }).catch(() => undefined);
+  }), [schedule.id, schedules, setSchedules]);
+  const publicationStatus = schedulePublicationStatus(publication);
+  const hasPublishedVersion = hasPublishedScheduleVersion(publication);
   const api = useAuthenticatedApi();
   const bootstrapLoading =
     (unitsLoading && units.length === 0) ||
@@ -1397,10 +1411,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     });
     return s;
   }, [holidays]);
-
-  async function handleCalendarChange(calendarId: string) {
-    await updateSchedule({ ...schedule, calendarId: calendarId === '__none__' ? undefined : calendarId });
-  }
 
   // Load previous month's schedule shifts for carry-over consecutive count + preview
   const prevPeriod = useMemo(() => {
@@ -1473,14 +1483,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     )
   );
   const vacationDataReady = !vacationsLoading && !vacationsError;
-  const canEdit = canManageSchedule && !schedule.locked && vacationDataReady;
+  const canEdit = canManageSchedule && vacationDataReady;
+  const canPublish = canManageSchedule && (isDefaultAdmin || permissions.dp?.schedules?.publish === true);
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
   // Ausência lançada pela escala: primeiro a pessoa, depois o pedido com a data já preenchida.
   const [absencePicker, setAbsencePicker] = useState<{ date: string; unitId: string } | null>(null);
   const [absenceLaunch, setAbsenceLaunch] = useState<{ date: string; userId: string } | null>(null);
-  const canLaunchAbsence = !isArchivedUnitSchedule && (isDefaultAdmin || permissions.dp?.requests?.review === true);
+  const canLaunchAbsence = canManageSchedule && (isDefaultAdmin || permissions.dp?.requests?.review === true);
   const [publishingDayOffKey, setPublishingDayOffKey] = useState<string | null>(null);
   const [removingDayOffKey, setRemovingDayOffKey] = useState<string | null>(null);
   const [dayOffRemovalTarget, setDayOffRemovalTarget] = useState<{
@@ -1491,7 +1502,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [editShift, setEditShift] = useState<DPShift | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPShift | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
   const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set());
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
@@ -1499,12 +1509,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
   const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
   const [vtDialogOpen, setVtDialogOpen] = useState(false);
-  const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.coverageDemands));
+  const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.draftCoverageDemands ?? schedule.coverageDemands));
   const [coverageDemandDialog, setCoverageDemandDialog] = useState<{ date: string; unit: DPUnit } | null>(null);
 
   React.useEffect(() => {
-    setCoverageDemands(normalizeDPCoverageDemands(schedule.coverageDemands));
-  }, [schedule.coverageDemands, schedule.id]);
+    setCoverageDemands(normalizeDPCoverageDemands(publication.draftCoverageDemands ?? publication.coverageDemands));
+  }, [publication.coverageDemands, publication.draftCoverageDemands, publication.id]);
 
   async function handlePublishDayOff(params: {
     scheduleId?: string;
@@ -1580,44 +1590,33 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     }
   }
 
-  async function handleLock() {
-    if (!permissions.dp?.schedules?.edit) return;
-    setLocking(true);
+  async function handlePublish() {
+    if (!canPublish || publishing) return;
+    setPublishing(true);
     try {
-      const snapshotUsers: DPScheduleSnapshot['users'] = {};
-      operationalUsers.forEach(u => {
-        const entry: DPScheduleSnapshot['users'][string] = { username: u.username };
-        if (u.color !== undefined) entry.color = u.color;
-        if (u.avatarUrl !== undefined) entry.avatarUrl = u.avatarUrl;
-        if (u.needsTransportVoucher !== undefined) entry.needsTransportVoucher = u.needsTransportVoucher;
-        if (u.transportVoucherValue !== undefined) entry.transportVoucherValue = u.transportVoucherValue;
-        snapshotUsers[u.id] = entry;
-      });
-      // JSON round-trip to strip any remaining undefined values (Firestore rejects them)
-      const cleanSnapshot = JSON.parse(JSON.stringify({ users: snapshotUsers }));
-      await updateSchedule({ ...schedule, locked: true, snapshot: cleanSnapshot });
-      toast({ title: 'Escala trancada.' });
+      const currentDraft = await fetchDraftScheduleShifts(schedule.id);
+      if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
+      await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
+      const fresh = await fetchSchedule(schedule.id);
+      setPublication(fresh);
+      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+      await reloadShifts();
+      notifyDPScheduleShiftsChanged(schedule.id);
+      toast({ title: 'Escala publicada.', description: 'Os demais módulos passam a usar a versão publicada.' });
     } catch (caught) {
-      toast({
-        title: 'Não foi possível trancar a escala.',
-        description: caught instanceof Error ? caught.message : 'Revise as jornadas aplicáveis.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLocking(false);
-    }
+      toast({ title: 'Não foi possível publicar a escala.', description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
+    } finally { setPublishing(false); }
   }
 
-  async function handleUnlock() {
-    if (!permissions.dp?.schedules?.edit) return;
-    setLocking(true);
+  async function handleDiscardConflicts() {
+    if (!canEdit || !draftConflicts.length) return;
     try {
-      await updateSchedule({ ...schedule, locked: false });
-      toast({ title: 'Escala destrancada.' });
-    } catch {
-      toast({ title: 'Erro ao destrancar.', variant: 'destructive' });
-    } finally {
-      setLocking(false);
+      const result = await discardDraftConflicts(schedule.id, draftVersion);
+      await reloadShifts();
+      toast({ title: `${result.discarded} alteração(ões) conflitante(s) descartada(s).`,
+        description: result.remaining ? 'Ainda há conflitos. Repita a resolução após revisar a escala.' : 'As alterações operacionais foram preservadas.' });
+    } catch (caught) {
+      toast({ title: 'Não foi possível resolver os conflitos.', description: caught instanceof Error ? caught.message : 'Atualize a escala.', variant: 'destructive' });
     }
   }
 
@@ -1727,13 +1726,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return m;
   }, [operationalUsers]);
 
-  // When locked, use snapshot user data; otherwise use live data
+  // A versão publicada preserva os dados de pessoas capturados na publicação.
   const effectiveUserMap = useMemo(() => {
-    if (schedule.locked && schedule.snapshot?.users) {
+    if (hasPublishedVersion && schedule.snapshot?.users) {
       return new Map(Object.entries(schedule.snapshot.users));
     }
     return userMap;
-  }, [schedule.locked, schedule.snapshot, userMap]);
+  }, [hasPublishedVersion, schedule.snapshot, userMap]);
 
   const selectedBulkShifts = useMemo(() => {
     const selectedSet = new Set(selectedShiftIds);
@@ -2253,7 +2252,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (shiftDate.getMonth() !== schedule.month - 1 || shiftDate.getFullYear() !== schedule.year) return;
       let userName = '';
-      if (schedule.locked && schedule.snapshot?.users) {
+      if (hasPublishedVersion && schedule.snapshot?.users) {
         userName = schedule.snapshot.users[shift.userId]?.username ?? shift.userId;
       } else {
         userName = operationalUsers.find(u => u.id === shift.userId)?.username ?? shift.userId;
@@ -2281,7 +2280,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       let vtValue = 0;
       let userName = '';
 
-      if (schedule.locked && schedule.snapshot?.users) {
+      if (hasPublishedVersion && schedule.snapshot?.users) {
         const snap = schedule.snapshot.users[shift.userId];
         needsVT = snap?.needsTransportVoucher ?? false;
         vtValue = snap?.transportVoucherValue ?? 0;
@@ -2425,18 +2424,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             Bizneo · {bizneoQueueItems.length} pendente{bizneoQueueItems.length === 1 ? '' : 's'}
           </Button>
         )}
-        {canManageSchedule && (
-          schedule.locked ? (
-            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="h-8 rounded-[10px] border-amber-300 px-3 text-[12.5px] font-bold text-amber-600 hover:bg-amber-50">
-              <LockOpen className="mr-2 h-4 w-4" />
-              {locking ? 'Destrancando...' : 'Destrancar'}
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
-              <Lock className="mr-2 h-4 w-4" />
-              {locking ? 'Trancando...' : 'Trancar'}
-            </Button>
-          )
+        <Badge className={publicationStatus === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
+          Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
+        </Badge>
+        {canPublish && publicationStatus === 'draft' && (
+          <Button size="sm" onClick={handlePublish} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
+            {publishing ? 'Publicando...' : hasPublishedVersion ? 'Publicar novamente' : 'Publicar escala'}
+          </Button>
         )}
         {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <div className="flex items-center gap-2">
@@ -2464,31 +2458,20 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         )}
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
-      {schedule.locked && (
-        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-          <Lock className="h-3.5 w-3.5 shrink-0" />
-          Escala trancada — dados de colaboradores e vale-transporte estão congelados.
+      {publicationStatus === 'draft' && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
+          {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
+          {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
         </div>
       )}
-      {!schedule.locked && journeyValidationLoading && (
-        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-          Validando a jornada de cada colaborador e a sequência entre competências e unidades.
+      {publicationStatus === 'draft' && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          As jornadas e conflitos operacionais serão validados ao publicar.
         </div>
       )}
-      {!schedule.locked && journeyValidationError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          A validação de jornadas não foi concluída: {journeyValidationError}
-        </div>
-      )}
-      {!schedule.locked && journeyValidation?.status === 'blocked' && (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {journeyValidation.issues.length} pendência{journeyValidation.issues.length === 1 ? '' : 's'} de jornada impedem o fechamento. {journeyValidation.issues[0]?.message}
-        </div>
-      )}
-      {!schedule.locked && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
+      {publicationStatus === 'published' && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
           <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
           Jornadas resolvidas e sequência contínua validada para esta escala.
@@ -2500,7 +2483,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
         </div>
       )}
-      {canManageSchedule && !schedule.locked && vacationsLoading && (
+      {canManageSchedule && vacationsLoading && (
         <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300">
           <CalendarDays className="h-3.5 w-3.5 shrink-0" />
           Carregando férias aprovadas. A edição da escala será liberada após a validação.
@@ -2509,7 +2492,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       {vacationsError && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {canManageSchedule && !schedule.locked
+          {canManageSchedule
             ? 'Não foi possível validar as férias. A edição da escala está bloqueada até os dados serem carregados.'
             : 'Não foi possível validar as férias. Alguns conflitos podem não ser exibidos.'}
         </div>
@@ -2973,7 +2956,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             shift={shift}
                             user={user}
                             contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
-                            canPublish={canPublishDayOff && (explicit || !schedule.locked)}
+                            canPublish={canPublishDayOff}
                             canRemove={canPublishDayOff && explicit}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
                             removing={removingDayOffKey === `${userId}::${date}`}
@@ -2999,7 +2982,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           statusLabel={candidate.statusLabel}
                         />
                       ));
-                      const canAddDayOff = canPublishDayOff && !schedule.locked;
+                      const canAddDayOff = canPublishDayOff;
                       const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
                         <DayLaunchMenu
                           canShift={canEdit}
@@ -3257,6 +3240,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
               else delete next[date];
               return next;
             });
+            void fetchSchedule(schedule.id).then((fresh) => {
+              setPublication(fresh);
+              setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+            }).catch(() => undefined);
           }}
         />
       ) : null}

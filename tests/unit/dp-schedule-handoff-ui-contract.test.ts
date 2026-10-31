@@ -9,8 +9,8 @@ const editorSource = readFileSync('src/components/dp/dp-schedule-editor.tsx', 'u
 const bulkSource = readFileSync('src/components/dp/dp-bulk-shift-edit-dialog.tsx', 'utf8');
 const bulkCreateSource = readFileSync('src/components/dp/dp-bulk-shift-create-dialog.tsx', 'utf8');
 const schedulePageSource = readFileSync('src/app/dashboard/dp/schedules/[id]/page.tsx', 'utf8');
-const scheduleStoreSource = readFileSync('src/store/use-dp-store.ts', 'utf8');
-const scheduleStateSource = readFileSync('src/features/dp/schedules/state-service.server.ts', 'utf8');
+const publicationSource = readFileSync('src/features/dp/schedules/publication-service.server.ts', 'utf8');
+const publishRouteSource = readFileSync('src/app/api/dp/schedules/[scheduleId]/publish/route.ts', 'utf8');
 const schedulesShiftsHookSource = readFileSync('src/hooks/use-dp-schedules-shifts.ts', 'utf8');
 
 test('lista mantém planejamento por ano, inclusão de mês e exportação global', () => {
@@ -82,12 +82,12 @@ test('editor busca uma escala histórica sem cancelar a própria requisição', 
   assert.doesNotMatch(lookupEffect, /lookupError, lookupLoading,/);
 });
 
-test('fechamento usa validação autoritativa de jornada e rejeita resultado obsoleto', () => {
+test('publicação usa validação autoritativa de jornada e rejeita resultado obsoleto', () => {
   assert.match(editorSource, /useDPScheduleJourneyValidation\(schedule\.id\)/);
-  assert.match(editorSource, /pendência.*de jornada impedem o fechamento/);
-  assert.match(scheduleStoreSource, /action: 'lock'/);
-  assert.match(scheduleStoreSource, /\/api\/dp\/schedules\/\$\{encodeURIComponent\(id\)\}/);
-  assert.match(scheduleStateSource, /validateScheduleJourneys/);
-  assert.match(scheduleStateSource, /DP_SCHEDULE_JOURNEY_VALIDATION_STALE/);
-  assert.match(scheduleStateSource, /journeyValidationVersion/);
+  assert.match(editorSource, /Publicar novamente/);
+  assert.match(editorSource, /Situação:/);
+  assert.match(publishRouteSource, /dp\.schedules\.publish/);
+  assert.match(publicationSource, /validateScheduleJourneys/);
+  assert.match(publicationSource, /DP_SCHEDULE_JOURNEY_BLOCKED/);
+  assert.match(publicationSource, /journeyValidationVersion/);
 });

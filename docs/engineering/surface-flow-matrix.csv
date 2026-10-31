@@ -94,7 +94,9 @@ api,src/app/api/dp/natasha/journeys/route.ts,,docs/engineering/flows/dp-schedule
 api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Disponibilidade candidata v2 cruza férias e ausências operacionais ativas com ack RH e readiness; leitura autenticada limitada sem folgas ou indisponibilidades externas.
 api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp-schedules.md,Definicoes minimas de horario para unidades autorizadas; leitura limitada sem classificar posicoes nem escrever escala.
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual; trancamento com validacao autoritativa de jornada; destrancamento; ou exclusao transacional e auditada; todos revalidam permissao e unidade.
+api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual ou exclusao transacional e auditada; ambos revalidam permissao e unidade.
+api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura do rascunho e descarte explicito de conflitos para editores com acesso a unidade.
+api,src/app/api/dp/schedules/[scheduleId]/publish/route.ts,,docs/engineering/flows/dp-schedules.md,Publicacao do rascunho com permissao propria e ativacao atomica da revisao oficial.
 api,src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts,,docs/engineering/flows/dp-schedules.md,Busca prefixada e limitada de pessoas externas; exige permissao especifica e acesso a unidade da escala; retorna projecao minima.
 api,src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts,,docs/engineering/flows/dp-schedules.md,Resolve a jornada por colaborador e valida sequencia entre competencias e unidades; leitura limitada sob permissao e escopo da escala.
@@ -535,6 +537,7 @@ function,functions/src/rh/sync.ts,syncRhAccessCache,docs/engineering/runtime-sur
 function,functions/src/rh/termination.ts,lgpdScheduledCleanup,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/termination.ts,onTermination,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stock-min-recalc-schedule.ts,recalculateMinimumStock,docs/engineering/runtime-surfaces.md,onSchedule; legado mais preview com flag false; nova politica com true; deploy nao confirmado.
+function,functions/src/schedule-goals.ts,onScheduleGoalEligibilityChange,docs/engineering/flows/goals.md,onDocumentWritten em escala; relê revisão oficial e recalcula metas ativas após publicação ou mutação operacional; deploy não confirmado.
 function,functions/src/stone-portfolio-job.ts,stonePortfolioDailySync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stone-pix-job.ts,stonePixDailyRequest,docs/engineering/flows/stone-sales-review.md,onSchedule; solicita datas Pix ausentes e aguarda webhook; deploy nao confirmado.
 function,functions/src/stone-sales-review-job.ts,stoneSalesReviewScheduler,docs/engineering/flows/stone-sales-review.md,onSchedule; revalida dias recentes e completa historico anual em lotes; deploy nao confirmado.
@@ -583,6 +586,7 @@ api,src/app/api/stock/mobile-reposition/receive/route.ts,,docs/engineering/flows
 api,src/app/api/stock/mobile-reposition/photo/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Foto privada de lote despachado; permissao app.reposition.receive e unidade de destino; GET sem escrita.
 api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio e resumo de todas as unidades (scope=all); GET sem escrita.
 api,src/app/api/goals/employee-goals/route.ts,,docs/engineering/flows/goals.md,Cria participante de meta com permissao e escopo da unidade; recusa cobertura externa no periodo e audita no servidor.
+api,src/app/api/goals/schedule-shifts/route.ts,,docs/engineering/flows/goals.md,Leitura autenticada da escala oficial para distribuicao de metas por unidade e pessoas permitidas.
 api,src/app/api/goals/periods/[periodId]/status/route.ts,,docs/engineering/flows/goals.md,Encerra cancela ou reabre meta no servidor; relê escala e exclui cobertura externa antes de congelar prêmio.
 api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.
 api,src/app/api/mobile/profile/route.ts,,docs/engineering/access-and-privacy.md,Cartao do proprio usuario (nome cargo foto) e modulos do aplicativo liberados pelo perfil; GET sem escrita.

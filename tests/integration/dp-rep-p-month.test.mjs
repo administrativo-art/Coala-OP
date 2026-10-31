@@ -111,3 +111,60 @@ test('fuso da unidade para o ponto: grava, registra histórico e volta ao do est
   assert.deepEqual(history.sort((a, b) => String(a[0]).localeCompare(String(b[0]))), [['America/Manaus', null, 'rep-p-tz-admin'], [null, 'America/Manaus', 'rep-p-tz-admin']]);
   await assert.rejects(setUnitTimeZone(context, 'rep-p-tz-missing', { timeZone: 'America/Manaus' }), { code: 'DP_UNIT_NOT_FOUND' });
 });
+
+test('revisão por ponteiro substitui turno legado no REP-P e na escala web/app', async () => {
+  const { createHash } = await import('node:crypto');
+  const { buildCollaboratorSchedulePayload } = await import('../../src/features/collaborator-schedule/server.ts');
+  const prefix = 'rep-p-revision-reader';
+  const uid = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  const revisionId = 'revision-1';
+  const revision = schedule.collection('revisions').doc(revisionId);
+  const base = { id: 'shift-a', scheduleId: schedule.id, unitId, userId: uid, date: '2027-08-12',
+    type: 'work', startTime: '08:00', endTime: '14:00' };
+  const changed = { ...base, startTime: '09:00', endTime: '15:00' };
+  const indexId = createHash('sha256').update(`${uid}:2027-08`).digest('hex');
+  await Promise.all([
+    schedule.set({ year: 2027, month: 8, unitId, createdAt: Timestamp.fromMillis(1000),
+      publicationStatus: 'published', publicationVersion: 1, activeRevisionId: revisionId }),
+    schedule.collection('shifts').doc('shift-a').set({ ...base, startTime: '06:00', endTime: '12:00' }),
+    revision.set({ status: 'ready', scheduleId: schedule.id, shiftCount: 1 }),
+    revision.collection('entries').doc('shift-a').set(base),
+    revision.collection('people').doc(uid).set({ shifts: [base] }),
+    schedule.collection('operationalOverlays').doc(revisionId).collection('entries').doc('shift-a').set({ value: changed }),
+    schedule.collection('operationalOverlays').doc(revisionId).collection('people').doc(uid).set({ edits: { 'shift-a': changed } }),
+    dbAdmin.collection('dp_personScheduleIndex').doc(indexId).set({ userId: uid, competence: '2027-08', scheduleIds: [schedule.id] }),
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Unidade Revisão' }),
+  ]);
+  const context = { decoded: { uid }, userDoc: { id: uid, unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: false, workspace_id: 'coala-one' };
+  const rep = await readOwnRepPMonth(context, { month: '2027-08' });
+  assert.deepEqual(rep.shifts.map((item) => [item.date, item.startTime]), [['2027-08-12', '09:00']]);
+  const web = await buildCollaboratorSchedulePayload(context, 2027, 8);
+  assert.deepEqual(web.shifts.map((item) => [item.date, item.startTime]), [['2027-08-12', '09:00']]);
+});
+
+test('cobertura externa por ponteiro usa índice da pessoa e ignora turno legado antigo', async () => {
+  const { createHash } = await import('node:crypto');
+  const prefix = 'rep-p-revision-coverage';
+  const uid = `${prefix}-employee`;
+  const origin = `${prefix}-origin`;
+  const unitId = `${prefix}-destination`;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  const revisionId = 'revision-1';
+  const shift = { id: 'coverage', scheduleId: schedule.id, userId: uid, unitId, originUnitId: origin,
+    date: '2027-09-14', type: 'work', assignmentKind: 'external_coverage',
+    exceptionReason: 'Cobertura autorizada', startTime: '09:00', endTime: '15:00' };
+  const indexId = createHash('sha256').update(`${uid}:2027-09`).digest('hex');
+  await Promise.all([
+    schedule.set({ year: 2027, month: 9, unitId, createdAt: Timestamp.fromMillis(2000),
+      publicationStatus: 'published', publicationVersion: 1, activeRevisionId: revisionId }),
+    schedule.collection('shifts').doc('stale').set({ ...shift, id: 'stale', date: '2027-09-15' }),
+    schedule.collection('revisions').doc(revisionId).set({ status: 'ready', scheduleId: schedule.id, shiftCount: 1 }),
+    schedule.collection('revisions').doc(revisionId).collection('people').doc(uid).set({ shifts: [shift] }),
+    dbAdmin.collection('dp_personScheduleIndex').doc(indexId).set({ userId: uid, competence: '2027-09', scheduleIds: [schedule.id] }),
+  ]);
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, '2027-09-14', [origin]), [unitId]);
+  assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, '2027-09-15', [origin]), []);
+});
