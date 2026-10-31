@@ -70,7 +70,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { server: '200.20.186.94', status: 'accepted', offsetMs: 14, roundTripMs: 22, stratum: 1 },
     ] }; } };
   const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
-    inpiRegistration: '12345678901234567', developerCnpj: employerCnpj };
+    inpiRegistration: '', developerCnpj: employerCnpj };
   const fiscalObjects = new Map();
   const fiscalStore = {
     async put(path, bytes, contentType, sha256, retainUntilTime) {
@@ -80,7 +80,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     },
   };
   const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true, officialUserIds: new Set([userId]), fiscalStore,
+    markingEnabled: true, fiscalStore,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -210,7 +210,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const ownLocations = Object.fromEntries(history.markings.map((item) => [item.nsr, item.location]));
     assert.equal(ownLocations[first.marking.nsr].evaluation, 'inside');
     assert.equal(typeof ownLocations[first.marking.nsr].distanceMeters, 'number');
-    assert.deepEqual(ownLocations[second.marking.nsr], { evaluation: 'indeterminate', distanceMeters: null });
+    assert.deepEqual(ownLocations[second.marking.nsr], { evaluation: 'indeterminate', distanceMeters: null,
+      physicalUnitId: null, physicalUnitName: null });
     assert.ok(!JSON.stringify(history).includes(String(mobileLocation.latitude)));
     const viewerContext = { ...context, decoded: { uid: `${prefix}-viewer` }, isDefaultAdmin: false,
       userDoc: { id: `${prefix}-viewer`, unitIds: [employerUnitId] }, permissions: structuredClone(defaultAdminPermissions) };
@@ -795,7 +796,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(synchronized.marking.sequence, 2);
     assert.equal(synchronized.marking.markedAt, '2026-10-22T09:16:00-0300');
     assert.equal((await recordOwnRepPMarking(context, offlineRequest, { ...dependencies, markingEnabled: true,
-      pilotEnabled: false, officialUserIds: new Set() })).status, 'replayed',
+      pilotEnabled: false })).status, 'replayed',
     'uma fila piloto continua no domínio piloto mesmo depois da troca dos gates');
     await assert.rejects(recordOwnRepPMarking(context, { ...offlineRequest, attemptId: 'pilot-rebooted-attempt',
       offline: { ...offlineRequest.offline, bootCount: 8 } }, dependencies),
@@ -838,7 +839,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
 
     await t.test('corte oficial drena fila piloto no domínio original sem promovê-la a AFD, AEJ ou espelho', async () => {
       clockInstant = '2026-11-01T12:00:00.000Z';
-      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false, officialUserIds: new Set([userId]),
+      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false,
         officialStartDate: '2026-11-01' };
       const queuedCore = { ...secondCore, attemptId: 'pilot-pending-at-cutover', elapsedRealtimeMs: 181_000,
         sequence: 3, previousLocalHash: secondHash, markedAt: '2026-10-22T09:18:00-0300' };

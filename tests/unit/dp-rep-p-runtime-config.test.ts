@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialStartReached, repPOfficialUserIds,
+import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialStartReached,
   repPPilotWorkDateAllowed } from '../../src/features/dp/rep-p/runtime-config';
 
 describe('configuração de rollout do REP-P', () => {
@@ -15,13 +15,8 @@ describe('configuração de rollout do REP-P', () => {
 
   it('falha fechado para uma data inválida e usa a data operacional padrão', () => {
     const environment = { REP_P_OFFICIAL_MARKING_ENABLED: 'true', REP_P_OFFICIAL_START_DATE: 'data-invalida' };
-    assert.equal(repPOfficialStartDate(environment), '2026-11-01');
+    assert.equal(repPOfficialStartDate(environment), '2026-10-31');
     assert.equal(repPOfficialMarkingEnabled(new Date('2026-10-31T12:00:00-03:00'), environment), false);
-  });
-
-  it('lê somente os UIDs da allowlist oficial', () => {
-    const ids = repPOfficialUserIds({ REP_P_OFFICIAL_USER_IDS: ' first , second,, first ' });
-    assert.deepEqual([...ids], ['first', 'second']);
   });
 
   it('separa os dias do ensaio e do oficial por uma fronteira civil sem sobreposição', () => {

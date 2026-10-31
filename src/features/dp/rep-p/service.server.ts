@@ -38,7 +38,7 @@ import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, rend
 import { buildRepPReceiptArchive } from './receipt-archive';
 import { isValidRepPPilotReceiptSnapshot, REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt,
   type RepPPilotReceiptSnapshot } from './pilot-receipt';
-import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialUserIds, repPPilotWorkDateAllowed } from './runtime-config';
+import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPPilotWorkDateAllowed } from './runtime-config';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -72,7 +72,7 @@ const CT_SORVETES_LEGAL_NAME = 'CT SORVETES LTDA';
 
 type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; officialUserIds: ReadonlySet<string>;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean;
   pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>; officialStartDate: string;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
@@ -133,7 +133,6 @@ const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb:
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: repPOfficialMarkingEnabled(),
-  officialUserIds: repPOfficialUserIds(),
   officialStartDate: repPOfficialStartDate(),
   pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
   pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
@@ -198,9 +197,6 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 }
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
-}
-function markingAllowedForOfficialUser(context: ServerUserContext, deps: Dependencies) {
-  return deps.officialUserIds.has(context.decoded.uid);
 }
 function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
   return policy.participantUserIds.includes(context.decoded.uid)
@@ -375,7 +371,9 @@ export async function provisionRepPReferenceData(input: {
   const deps = { ...defaults, ...injected };
   if (!input.workspaceId.trim() || !input.timeZone.trim() || input.profile.developerCnpj !== CT_SORVETES_CNPJ
     || !isValidCpf(input.responsibleCpf) || !isValidCpf(input.employee.cpf) || !input.employee.userId.trim()
-    || !input.employee.name.trim() || !input.workLocation.trim() || !REP_P_INPI_PATTERN.test(input.profile.inpiRegistration)
+    || !input.employee.name.trim() || !input.workLocation.trim()
+    || typeof input.profile.inpiRegistration !== 'string'
+    || input.profile.inpiRegistration !== '' && !REP_P_INPI_PATTERN.test(input.profile.inpiRegistration)
     || !input.profile.employerLegalName.trim()) throw fail('REP_P_SETUP_INVALID', 'Cadastro REP-P inválido.');
   const expectedId = establishmentKey(input.workspaceId, input.profile.employerCnpj);
   if (input.profile.establishmentId !== expectedId) throw fail('REP_P_ESTABLISHMENT_ID_INVALID', 'Identificador fiscal do estabelecimento inválido.');
@@ -544,7 +542,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   const deps = { ...defaults, ...injected };
   if (!deps.markingEnabled && deps.pilotEnabled) return issueOwnPilotOfflinePermit(context, input, deps);
   if (!deps.markingEnabled) throw fail('REP_P_MARKING_DISABLED', 'O registro de ponto ainda não foi liberado.', 'AUTHORIZATION');
-  if (!markingAllowedForProfile(context) || !markingAllowedForOfficialUser(context, deps)) {
+  if (!markingAllowedForProfile(context)) {
     throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
   }
   if (input.protocolVersion === 2) await reconcileOnlineCycles(deps.repDb, context, 'official');
@@ -933,7 +931,6 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
   }
   if (!markingAllowedForProfile(context)
-    || deps.markingEnabled && !markingAllowedForOfficialUser(context, deps)
     || !deps.markingEnabled && deps.pilotEnabled && !deps.pilotUserIds.has(context.decoded.uid)) {
     throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
@@ -1818,10 +1815,9 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
   const mode = deps.markingEnabled ? 'official' as const : deps.pilotEnabled ? 'pilot' as const : 'disabled' as const;
-  const officialUserAllowed = markingAllowedForOfficialUser(context, deps);
-  const journeyLocationEnabled = mode === 'official' && officialUserAllowed && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
+  const journeyLocationEnabled = mode === 'official' && markingAllowedForProfile(context)
+    && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
   if (mode === 'disabled' || !markingAllowedForProfile(context)
-    || mode === 'official' && !officialUserAllowed
     || mode === 'pilot' && !deps.pilotUserIds.has(context.decoded.uid)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
       mode, journeyLocationEnabled, executionUnits: [], officialClock: await readInformationalClock(deps) };
@@ -1829,7 +1825,7 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const,
-    markingEnabled: true as const, mode, journeyLocationEnabled, executionUnits: [],
+    markingEnabled: false as const, mode, journeyLocationEnabled: false, executionUnits: [],
     officialClock: await readInformationalClock(deps) };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
@@ -1857,7 +1853,8 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
           privacyNoticeUrl: collectorLocation.privacyNoticeUrl } };
     })
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, mode, journeyLocationEnabled,
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: eligible, mode,
+    journeyLocationEnabled: eligible && journeyLocationEnabled,
     executionUnits: eligible ? executionUnits : [],
     officialClock: eligible && executionUnits.length ? (mode === 'pilot'
       ? await readPilotClock(deps, executionUnits.find((unit) => unit.timeZone)?.timeZone ?? null)

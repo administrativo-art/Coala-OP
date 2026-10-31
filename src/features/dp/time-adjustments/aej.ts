@@ -64,7 +64,7 @@ export function generateAej(input: AejInput) {
   const cnpj = digits(input.employer.cnpj);
   push('01', ['01', '1', cnpj, digits(input.employer.caepf ?? ''), digits(input.employer.cno ?? ''), aejText(input.employer.legalName, 150),
     input.startDate, input.endDate, input.generatedAt, AEJ_LAYOUT_VERSION].join('|'));
-  push('02', ['02', '1', '3', digits(input.rep.inpiRegistration).padStart(17, '0')].join('|'));
+  push('02', ['02', '1', '3', input.rep.inpiRegistration ? digits(input.rep.inpiRegistration).padStart(17, '0') : ''].join('|'));
   const employees = [...input.employees].sort((left, right) => left.cpf.localeCompare(right.cpf));
   employees.forEach((employee, index) => push('03', ['03', String(index + 1), digits(employee.cpf), aejText(employee.name, 150)].join('|')));
   const byKey = new Map<string, AejShift>();
