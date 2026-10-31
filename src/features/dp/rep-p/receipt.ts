@@ -72,7 +72,8 @@ export function missingRepPReceiptFields(snapshot: Pick<RepPReceiptSnapshot, Rep
   if (!present(snapshot.employerLegalName)) missing.push('employerLegalName');
   if (!present(snapshot.workLocation)) missing.push('workLocation');
   // Registro INPI: só dígitos, até 17 posições (o número atual tem 13; o AFD completa com espaços).
-  if (!REP_P_INPI_PATTERN.test(snapshot.inpiRegistration ?? '')) missing.push('inpiRegistration');
+  if (typeof snapshot.inpiRegistration !== 'string'
+    || snapshot.inpiRegistration !== '' && !REP_P_INPI_PATTERN.test(snapshot.inpiRegistration)) missing.push('inpiRegistration');
   if (!present(snapshot.employeeName)) missing.push('employeeName');
   return missing;
 }

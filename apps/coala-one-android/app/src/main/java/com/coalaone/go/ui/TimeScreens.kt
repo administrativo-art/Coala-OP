@@ -268,6 +268,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
 @Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null,
     onInformAbsence: (String) -> Unit = {}) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val viewAsActive = LocalDeveloperViewAsActive.current
     val context = LocalContext.current
     val online = rememberOnline()
     DisposableEffect(Unit) {
@@ -291,7 +292,8 @@ private fun breakColors(level: BreakLevel) = when (level) {
     }
     var section by rememberSaveable { mutableStateOf(if (startDayDetail == null) "today" else "day") }
     var confirming by rememberSaveable { mutableStateOf(false) }
-    var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming) }
+    var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming && !viewAsActive) }
+    LaunchedEffect(viewAsActive) { if (viewAsActive) { confirming = false; pendingDirectRecord = false } }
     val submitter = rememberPunchSubmitter(vm)
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
@@ -358,7 +360,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
         }
     }
     // One main action: the punch, confirmed in the footer itself; the history has no footer.
-    val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today") null else { {
+    val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today" || viewAsActive) null else { {
         if (confirming) {
             PunchConfirmation(vm, state, online, screenBusy, submitter, onCancel = { confirming = false }, onSubmitted = { confirming = false })
         } else {
@@ -1524,6 +1526,7 @@ internal class PunchSubmitter(val capturing: State<Boolean>, val submit: (online
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun PunchSheet(vm: TimeViewModel, onOpenTime: () -> Unit, onDismiss: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val viewAsActive = LocalDeveloperViewAsActive.current
     val context = LocalContext.current
     val online = rememberOnline()
     val submitter = rememberPunchSubmitter(vm)
@@ -1546,8 +1549,9 @@ internal class PunchSubmitter(val capturing: State<Boolean>, val submit: (online
             val local = state.lastOffline
             val pending = vm.hasPendingAttempt()
             // Same gate as the Ponto button: a pending attempt is only resent on-line, never replaced by a new one.
-            val canPunch = if (pending) online else TimeRules.canRecord(state.options, state.unitId)
+            val canPunch = !viewAsActive && (if (pending) online else TimeRules.canRecord(state.options, state.unitId)
                 || TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)
+            )
             val loading = !started || state.dayLoad == DayLoad.PENDING
             when {
                 submitted && last != null -> PunchRecordedCard(last, units.firstOrNull { it.id == last.marking.executionUnitId }?.name.orEmpty(), { receipt = it }) { close() }

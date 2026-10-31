@@ -136,7 +136,7 @@ export function serializeRepPAfdEvent(event: RepPAfdEvent): string {
 
 function header(profile: RepPAfdProfile, startDate: string, endDate: string, generatedAt: string): string {
   const prefix = `00000000011${cnpj(profile.employerCnpj)}${digits(profile.cnoCaepf, 14, false)}`
-    + `${text(profile.employerLegalName, 150)}${digits(profile.inpiRegistration, 17)}`
+    + `${text(profile.employerLegalName, 150)}${digits(profile.inpiRegistration, 17, false)}`
     + `${civilDate(startDate)}${civilDate(endDate)}${timestamp(generatedAt)}${REP_P_AFD_LAYOUT_VERSION}`
     + `1${cnpj(profile.developerCnpj)}${text('', 30, false)}`;
   return withCrc(prefix);
@@ -161,7 +161,7 @@ export function generateRepPAfd(input: {
     text(AFD_SIGNATURE_LITERAL, 100)];
   const content = `${lines.join('\r\n')}\r\n`;
   const bytes = Buffer.from(content, 'latin1');
-  const filename = `AFD${digits(profile.inpiRegistration, 17).trim()}${cnpj(profile.employerCnpj)}REP_P.txt`;
+  const filename = `AFD${digits(profile.inpiRegistration, 17, false).trim()}${cnpj(profile.employerCnpj)}REP_P.txt`;
   return Object.freeze({ filename, signatureFilename: `${filename}.p7s`, bytes,
     sha256: createHash('sha256').update(bytes).digest('hex'), lineCount: lines.length, counts: Object.freeze(counts) });
 }

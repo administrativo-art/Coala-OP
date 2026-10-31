@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class CorporateDeviceState(val loading: Boolean = false, val busy: Boolean = false,
-    val status: String? = null, val model: String? = null, val error: String? = null)
+    val status: String? = null, val model: String? = null, val enrollmentExpected: Boolean = false,
+    val reviewRequired: Boolean = false, val error: String? = null)
 
 @HiltViewModel class CorporateDeviceViewModel @Inject constructor(
     private val auth: AuthGateway, private val api: ApiService, private val identity: TimeDeviceIdentity,
@@ -28,7 +29,13 @@ data class CorporateDeviceState(val loading: Boolean = false, val busy: Boolean 
         if (auth.current == null || mutable.value.loading) return
         mutable.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            try { val result = api.corporateDevice(identity.installationId()); mutable.update { it.copy(status = result.device?.status, model = result.device?.model) } }
+            try {
+                val result = api.corporateDevice(identity.installationId())
+                mutable.update { it.copy(status = result.device?.status, model = result.device?.model,
+                    enrollmentExpected = result.autoEnrollAllowed || result.reviewRequired,
+                    reviewRequired = result.reviewRequired) }
+                if (result.autoEnrollAllowed && result.device == null) request()
+            }
             catch (cause: kotlinx.coroutines.CancellationException) { throw cause }
             catch (cause: Exception) { mutable.update { it.copy(error = Errors.classify(cause).message) } }
             finally { mutable.update { it.copy(loading = false) } }

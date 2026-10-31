@@ -20,9 +20,9 @@ describe('REP-P ARP isolation', () => {
       && entry.fieldPath === 'expiresAt' && entry.ttl === true));
     const appHosting = readFileSync('apphosting.yaml', 'utf8');
     assert.match(appHosting, /variable: REP_P_FIRESTORE_DATABASE_ID\s+value: "coala-rep-p"/);
-    assert.match(appHosting, /variable: REP_P_MARKING_ENABLED\s+value: "false"/);
-    assert.match(appHosting, /variable: DP_JOURNEY_LOCATION_ENABLED\s+value: "true"/);
-    assert.match(appHosting, /Gate autorizado em 30\/10\/2026/);
+    assert.match(appHosting, /variable: REP_P_MARKING_ENABLED\s+value: "true"/);
+    assert.match(appHosting, /variable: DP_JOURNEY_LOCATION_ENABLED\s+value: "false"/);
+    assert.match(appHosting, /Acompanhamento contínuo aguarda o aditivo do RH/);
   });
 
   it('rollout nominal só corrige fusos no estado bruto inspecionado e relê todo o catálogo crítico na transação', () => {

@@ -56,6 +56,7 @@ import java.util.Locale
 val LocalImages = staticCompositionLocalOf<ImageLoader> { error("ImageLoader unavailable") }
 val LocalOwner = staticCompositionLocalOf { "anonymous" }
 val LocalDeveloperViewAsName = staticCompositionLocalOf<String?> { null }
+val LocalDeveloperViewAsActive = staticCompositionLocalOf { false }
 fun money(cents: Long) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(cents / 100.0)
 fun moneyValue(value: Double) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(value)
 

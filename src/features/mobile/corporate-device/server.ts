@@ -10,6 +10,7 @@ import { assertEmployeeUnitAccess } from '@/features/hr/lib/employee-document-ac
 import type { CorporateDeviceDecisionInput, CorporateDeviceRequestInput } from './schemas';
 
 const devices = dbAdmin.collection('mobileCorporateDevices');
+const AUTO_ENROLL_OWNER_UID = 'fvrLOh1JOIOtU5QhZQZydN3UBf22';
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
 function deviceId(workspaceId: string, installationId: string) {
@@ -23,34 +24,61 @@ function audit(actor: ServerUserContext, action: string, ownerUid: string, id: s
 }
 
 export async function requestCorporateDevice(actor: ServerUserContext, input: CorporateDeviceRequestInput) {
+  if (actor.decoded.uid !== AUTO_ENROLL_OWNER_UID) {
+    throw new AppError({ code: 'CORPORATE_DEVICE_REQUEST_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Vínculo empresarial indisponível para esta conta.' });
+  }
   const id = deviceId(actor.workspace_id, input.installationId);
   const ref = devices.doc(id);
   let status = 'pending';
   await dbAdmin.runTransaction(async (tx) => {
-    const current = await tx.get(ref);
-    if (current.exists && (current.get('workspaceId') !== actor.workspace_id || current.get('ownerUid') !== actor.decoded.uid)) {
+    const [current, active] = await Promise.all([tx.get(ref), tx.get(devices.where('workspaceId', '==', actor.workspace_id)
+      .where('ownerUid', '==', actor.decoded.uid).where('status', '==', 'active').limit(10))]);
+    if (current.exists && (current.get('workspaceId') !== actor.workspace_id ||
+      current.get('ownerUid') !== actor.decoded.uid && current.get('status') !== 'revoked')) {
       throw new AppError({ code: 'CORPORATE_DEVICE_ALREADY_OWNED', kind: 'CONFLICT', safeMessage: 'Esta instalação já pertence a outro cadastro.' });
     }
-    status = current.exists ? String(current.get('status') ?? 'pending') : 'pending';
-    if (status === 'replaced' || status === 'revoked' || status === 'rejected') status = 'pending';
+    status = current.exists ? String(current.get('status') ?? 'active') : 'active';
+    if (current.exists && current.get('ownerUid') === actor.decoded.uid &&
+      (status === 'revoked' || status === 'rejected' || status === 'suspended' || status === 'replaced')) {
+      throw new AppError({ code: 'CORPORATE_DEVICE_REVIEW_REQUIRED', kind: 'AUTHORIZATION', safeMessage: 'Este aparelho requer revisão administrativa.' });
+    }
+    if (current.exists && current.get('ownerUid') === actor.decoded.uid && status === 'active' &&
+      (current.get('deviceKeyId') !== input.deviceKeyId || current.get('devicePublicKey') !== input.devicePublicKey)) {
+      throw new AppError({ code: 'CORPORATE_DEVICE_KEY_CHANGED', kind: 'CONFLICT', safeMessage: 'A chave deste aparelho mudou; procure a administração.' });
+    }
+    if (active.docs.some((item) => item.id !== ref.id)) {
+      throw new AppError({ code: 'CORPORATE_DEVICE_ALREADY_ACTIVE', kind: 'CONFLICT', safeMessage: 'Outro aparelho já está vinculado; procure a administração.' });
+    }
+    status = 'active';
     const now = FieldValue.serverTimestamp();
     tx.set(ref, { workspaceId: actor.workspace_id, ownerUid: actor.decoded.uid,
       installationHash: hash(input.installationId), deviceKeyId: input.deviceKeyId,
       devicePublicKey: input.devicePublicKey, keySecurity: input.keySecurity,
       appVersion: input.appVersion, model: input.model, androidVersion: input.androidVersion,
-      status, requestedAt: current.get('requestedAt') ?? now, updatedAt: now, lastSeenAt: now,
-      createdAt: current.get('createdAt') ?? now }, { merge: true });
-    tx.set(dbAdmin.collection('actionLogs').doc(), audit(actor, current.exists ? 'device_request_refreshed' : 'device_requested', actor.decoded.uid, id));
+      status, requestedAt: current.get('ownerUid') === actor.decoded.uid ? current.get('requestedAt') ?? now : now,
+      approvedAt: current.get('ownerUid') === actor.decoded.uid ? current.get('approvedAt') ?? now : now,
+      approvedBy: current.get('ownerUid') === actor.decoded.uid ? current.get('approvedBy') ?? 'system:corporate-device-heucilene' : 'system:corporate-device-heucilene',
+      updatedAt: now, lastSeenAt: now,
+      createdAt: current.get('ownerUid') === actor.decoded.uid ? current.get('createdAt') ?? now : now }, { merge: true });
+    tx.set(dbAdmin.collection('actionLogs').doc(), audit(actor,
+      current.exists && current.get('ownerUid') === actor.decoded.uid ? 'device_auto_refreshed' : 'device_auto_activated', actor.decoded.uid, id));
   });
   return { deviceId: id, status };
 }
 
 export async function ownCorporateDevice(actor: ServerUserContext, installationId: string) {
+  if (actor.viewAs?.readOnly) return { device: null, autoEnrollAllowed: false, reviewRequired: false };
   const snapshot = await devices.doc(deviceId(actor.workspace_id, installationId)).get();
-  if (!snapshot.exists || snapshot.get('ownerUid') !== actor.decoded.uid || snapshot.get('workspaceId') !== actor.workspace_id) {
-    return { device: null };
+  if (!snapshot.exists) {
+    return { device: null, autoEnrollAllowed: actor.decoded.uid === AUTO_ENROLL_OWNER_UID, reviewRequired: false };
   }
-  return { device: project(snapshot) };
+  if (snapshot.get('ownerUid') !== actor.decoded.uid || snapshot.get('workspaceId') !== actor.workspace_id) {
+    const eligible = actor.decoded.uid === AUTO_ENROLL_OWNER_UID;
+    const transferable = snapshot.get('workspaceId') === actor.workspace_id && snapshot.get('status') === 'revoked';
+    return { device: null, autoEnrollAllowed: eligible && transferable, reviewRequired: eligible && !transferable };
+  }
+  return { device: project(snapshot), autoEnrollAllowed: false,
+    reviewRequired: actor.decoded.uid === AUTO_ENROLL_OWNER_UID && snapshot.get('status') !== 'active' };
 }
 
 function project(document: FirebaseFirestore.DocumentSnapshot) {
