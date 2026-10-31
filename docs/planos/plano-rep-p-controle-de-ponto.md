@@ -2,7 +2,7 @@
 
 **Produto:** Coala OP / Coala Go
 
-**Status:** Ativação antecipada autorizada em 31/10/2026; candidata técnica em publicação, coleta oficial ainda desligada. Sem conformidade formal REP-P enquanto INPI e atestados faltarem.
+**Status:** Coleta oficial ativada em produção em 31/10/2026 para os elegíveis atuais, com localização desligada. Sem conformidade formal REP-P enquanto INPI e atestados faltarem.
 
 **Última atualização:** 31/10/2026
 
@@ -16,9 +16,20 @@ O programador autorizou iniciar a coleta antes do INPI, com o campo vazio, assum
 
 O piloto oficial será aberto a quem tiver permissão de marcação, vínculo CLT/aprendiz vigente e unidade de execução válida, sem lista nominal no servidor. Isso não dispensa a identidade fiscal mínima de cada pessoa na ARP antes de sua primeira batida; a regularização dos demais campos do cadastro pode continuar gradualmente. A Heucilene fará as próprias marcações na conta dela. A visualização pelo acesso de Tiago é somente leitura e não pode criar uma batida, inclusive offline. O vínculo de aparelho empresarial é automático apenas para a conta da Heucilene na primeira instalação; outras contas não recebem botão de vínculo.
 
-Ordem desta ativação: (1) concluir CI e publicar backend/APK 0.3.36; (2) conferir versão publicada, assinatura do APK, fuso, permissões e Hora Legal; (3) ativar `REP_P_MARKING_ENABLED` com acompanhamento contínuo desligado e conferir a resposta oficial; (4) Heucilene e os demais elegíveis registram nas próprias contas conforme suas escalas. A primeira ação de escrita de cada titular provisiona a identidade fiscal na ARP pelo runtime autorizado, com Tiago como responsável já cadastrado; opções e visualização administrativa não criam eventos. A auditoria atual encontrou Heucilene e Luís elegíveis com CPF completo. Localização pontual e acompanhamento contínuo continuam desligados até o RH concluir o aditivo e a equipe configurar política, pessoas/unidades e turnos. A publicação do aviso ao trabalhador é atividade do RH.
+Execução confirmada: PRs #680, #681 e #683 integrados em `main`; promoção #684 integrada em `production` no commit `ff66c5d2ba627911097988b64572cfed22a27d7b`. O App Hosting concluiu o rollout `rollout-2026-10-31-001` em `SUCCEEDED`, build `READY` no mesmo SHA. A promoção independente #685 veio depois, preservou `REP_P_MARKING_ENABLED=true`, `REP_P_REFERENCE_RESPONSIBLE_UID` e `DP_JOURNEY_LOCATION_ENABLED=false`, e concluiu `rollout-2026-10-31-002` em `SUCCEEDED`/`READY` no SHA final servido `923ffc2ddf0ca693495d8fe880f6e961ed3bc6e3`. Após cada rollout, `https://op.coalashakes.com/` respondeu HTTP 200 e `/api/dp/time-recording/availability` respondeu `{"status":"ok"}`/HTTP 200. O APK oficial 0.3.36 foi instalado no Samsung SM-S911B por USB; a visualização como Heucilene pelo acesso de Tiago não oferece ação de marcação. A auditoria prévia encontrou Heucilene e Luís elegíveis com CPF completo e nenhum turno ou política de localização ativo. A primeira ação de escrita de cada titular provisionará a identidade fiscal na ARP pelo runtime autorizado, com Tiago como responsável já cadastrado; opções e visualização administrativa não criam eventos. Localização pontual e acompanhamento contínuo continuam desligados até o RH concluir o aditivo e a equipe configurar política, pessoas/unidades e turnos. A publicação do aviso ao trabalhador é atividade do RH.
 
-Na semana seguinte, com batidas reais, conferir NSR, comprovantes, sincronização, localização quando autorizada, ajustes que ocorrerem, troca de turno, espelho, fechamento, AFD e AEJ; simular offline e falhas de rede sem criar batida em nome de outra pessoa. Anexar a evidência já produzida do AEJ/CAdES, concluir ensaios físicos restantes e obter INPI/atestados durante o mês. O [dossiê de homologação](../rep-p/homologacao/README.md) registra o estado observado após cada etapa.
+Próximos passos após a ativação, com a Heucilene marcando somente na própria conta conforme a escala:
+
+1. Conferir as primeiras batidas reais: criação única dos eventos fiscais 2/5, NSR da marcação, comprovante, assinatura e sincronização no Coala One e no Coala Go.
+2. Concluir no aparelho físico os ciclos online/offline, reinício e bateria, expiração de autorização, fila cifrada, ordem de sincronização, recebimento posterior do NSR/comprovante e Play Integrity em `enforce` após ensaio.
+3. O RH publica o aditivo e o aviso; depois configurar áreas, raios, pessoas e turnos e testar localização precisa, aproximada, negada e consulta auditada antes de habilitar a coleta de posição.
+4. Regularizar gradualmente os cadastros restantes. A entrada de novo elegível exige CPF/nome fiscal válidos, vínculo e unidade; o runtime faz o provisionamento na primeira ação de escrita, sem lista nominal.
+5. Fazer troca de turno ponta a ponta com duas contas reais, perda/retomada da Hora Legal publicada, reentrega 503 → 200 do monitor e recuperação de dependência em canário.
+6. Localizar e anexar a evidência já produzida do AEJ/CAdES ao dossiê, sem repetir a validação.
+7. Simular uma competência completa com batidas, ajustes e ausências que ocorram, banco de horas, fechamento, espelho, comprovantes, AFD e AEJ; corrigir divergências observadas.
+8. Obter INPI e atestados no decorrer do mês, sem reescrever originais. Congelar a candidata regular, executar simulação fiscal final e pedir revisão de Doc Brown antes de declarar conformidade.
+
+O [dossiê de homologação](../rep-p/homologacao/README.md) registra evidências e limites de cada etapa. Nenhuma batida foi feita nesta sessão por acesso de visualização.
 
 ## 1. Escopo
 
@@ -279,7 +290,7 @@ Revisão orientativa, sem valor de parecer, sobre o código local das etapas 1�
 
 **Configuração atualizada em 25/10/2026:** `coala-rep-p` guarda a ARP oficial com backup diário de 14 semanas, PITR e proteção contra exclusão. O teste `dp-rep-p-arp-deletion-guard` impede exclusões e enumeração; regras dedicadas negam clientes. A deny policy condicionada à tag nega escrita às contas genéricas, e a restauração do primeiro backup dedicado terminou com comparação idêntica e remoção do banco descartável.
 
-Pendências nomeadas, mantidas por decisão do programador. `REP_P_MARKING_ENABLED=false` bloqueia toda batida real antes de tocar a ARP, mesmo com Hora Legal saudável; além disso, quando o gate vier a ser liberado, cada batida continuará falhando fechada se a Hora Legal pública não for atestada:
+Fotografia histórica de 18/10: `REP_P_MARKING_ENABLED=false` bloqueava toda batida real antes de tocar a ARP. O estado publicado em 31/10 está registrado no início deste plano; a falha da Hora Legal continua bloqueando cada nova batida:
 
 | Pendência | Origem | Gate |
 | --- | --- | --- |
