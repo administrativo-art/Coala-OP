@@ -976,7 +976,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 95.
+Arquivos locais percorridos: 96.
 
 Chamadas candidatas encontradas:
 
@@ -1008,6 +1008,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/terminations` — interface [`src/features/hr/termination/client.ts`](../../src/features/hr/termination/client.ts); rota candidata [`src/app/api/hr/terminations/route.ts`](../../src/app/api/hr/terminations/route.ts)
 - `/api/rh/employee-profile/` — interface [`src/features/rh/hooks/useEmployeeProfile.ts`](../../src/features/rh/hooks/useEmployeeProfile.ts); rota candidata [`src/app/api/rh/employee-profile/[employeeId]/route.ts`](../../src/app/api/rh/employee-profile/%5BemployeeId%5D/route.ts)
 - `/api/rh/field-map` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx); rota candidata [`src/app/api/rh/field-map/route.ts`](../../src/app/api/rh/field-map/route.ts)
+- `/api/rh/field-visibility` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx); rota candidata [`src/app/api/rh/field-visibility/route.ts`](../../src/app/api/rh/field-visibility/route.ts)
 - `/api/uniforms` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/route.ts`](../../src/app/api/uniforms/route.ts)
 - `/api/uniforms/deliver` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/deliver/route.ts`](../../src/app/api/uniforms/deliver/route.ts)
 - `/api/uniforms/exchange` — interface [`src/features/uniforms/client.ts`](../../src/features/uniforms/client.ts); rota candidata [`src/app/api/uniforms/exchange/route.ts`](../../src/app/api/uniforms/exchange/route.ts)
@@ -1068,6 +1069,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageAbsences` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageCalendars` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.settings.manageFieldVisibility` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageShifts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageTime` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageUnits` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1517,7 +1519,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 243.
+Arquivos locais percorridos: 245.
 
 Chamadas candidatas encontradas:
 
@@ -1603,6 +1605,7 @@ Chamadas candidatas encontradas:
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/registry/products/` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/rh/field-map` — interface [`src/features/rh/components/FieldConfigPage.tsx`](../../src/features/rh/components/FieldConfigPage.tsx); rota candidata [`src/app/api/rh/field-map/route.ts`](../../src/app/api/rh/field-map/route.ts)
+- `/api/rh/field-visibility` — interface [`src/features/rh/components/FieldVisibilityList.tsx`](../../src/features/rh/components/FieldVisibilityList.tsx); rota candidata [`src/app/api/rh/field-visibility/route.ts`](../../src/app/api/rh/field-visibility/route.ts)
 - `/api/settings/ai-management` — interface [`src/components/ai-management/ai-billing-settings.tsx`](../../src/components/ai-management/ai-billing-settings.tsx); rota candidata [`src/app/api/settings/ai-management/route.ts`](../../src/app/api/settings/ai-management/route.ts)
 - `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 
@@ -1681,6 +1684,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageAbsences` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageCalendars` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
+- `dp.settings.manageFieldVisibility` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageShifts` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageTime` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageUnits` — [`src/components/dp/dp-settings-units.tsx`](../../src/components/dp/dp-settings-units.tsx)
