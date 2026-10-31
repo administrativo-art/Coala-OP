@@ -74,6 +74,7 @@ type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
   receiptSigner: RepPPadesSigner; markingEnabled: boolean;
   pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>; officialStartDate: string;
+  referenceResponsibleUid: string | null;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
@@ -134,6 +135,7 @@ const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb:
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: repPOfficialMarkingEnabled(),
   officialStartDate: repPOfficialStartDate(),
+  referenceResponsibleUid: process.env.REP_P_REFERENCE_RESPONSIBLE_UID ?? null,
   pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
   pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
   fiscalStore: fiscalArtifactStore };
@@ -424,6 +426,39 @@ export async function provisionRepPReferenceData(input: {
   });
 }
 
+/** Primeira ação de escrita pelo titular prepara a ARP usando exclusivamente o runtime escritor protegido. */
+async function ensureOwnRepPReferenceData(context: ServerUserContext, reference: Awaited<ReturnType<typeof resolveEmploymentReferenceForSystem>>,
+  deps: Dependencies) {
+  if (context.viewAs) throw fail('REP_P_VIEW_AS_READ_ONLY', 'A visualização de outra pessoa é somente leitura.', 'AUTHORIZATION');
+  if (reference.status !== 'matched' || !deps.referenceResponsibleUid
+    || reference.period.employer.cnpj !== CT_SORVETES_CNPJ) return;
+  const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
+  const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
+  const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
+  const [existing, establishment] = await deps.repDb.getAll(employeeRef, establishmentRef);
+  if (existing.exists) return;
+  const established = establishment.data();
+  if (establishment.exists && (!validEstablishment(established) || established.workspaceId !== context.workspace_id
+    || established.profile.employerCnpj !== CT_SORVETES_CNPJ)) {
+    throw fail('REP_P_ESTABLISHMENT_INCONSISTENT', 'O cadastro fiscal do estabelecimento está inconsistente.', 'DATA_INTEGRITY');
+  }
+  const unit = await deps.mainDb.collection('dp_units').doc(reference.period.employerUnitId).get();
+  const unitTimeZone = unit.get('timeZone');
+  if (!unit.exists || !isBrazilTimeZone(unitTimeZone) || !reference.period.employer.address) {
+    throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'A unidade empregadora precisa de fuso e endereço válidos.', 'DATA_INTEGRITY');
+  }
+  const [responsible, employee] = await Promise.all([
+    readRepPEmployeeIdentity(deps.referenceResponsibleUid, deps),
+    readRepPEmployeeIdentity(context.decoded.uid, deps),
+  ]);
+  await provisionRepPReferenceData({ workspaceId: context.workspace_id, responsibleCpf: responsible.cpf,
+    timeZone: established?.timeZone ?? unitTimeZone,
+    profile: established?.profile ?? { establishmentId, employerCnpj: CT_SORVETES_CNPJ,
+      employerLegalName: CT_SORVETES_LEGAL_NAME, inpiRegistration: '', developerCnpj: CT_SORVETES_CNPJ },
+    employee: { userId: context.decoded.uid, cpf: employee.cpf, name: employee.name },
+    workLocation: reference.period.employer.address }, deps);
+}
+
 function offlinePermitDto(permit: OfflinePermitDocument) {
   return {
     scope: permit.scope ?? 'official',
@@ -565,6 +600,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
+  await ensureOwnRepPReferenceData(context, reference, deps);
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   const coverage = await externalCoverageGrants(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds);
   const [establishment, ...unitDocs] = await Promise.all([
@@ -951,6 +987,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (!await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
     throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
+  await ensureOwnRepPReferenceData(context, reference, deps);
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   const [identity, executionUnit, establishmentBefore] = await Promise.all([
     loadStrictIdentity(deps.hrDb, context.decoded.uid), deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
@@ -1858,7 +1895,8 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
     executionUnits: eligible ? executionUnits : [],
     officialClock: eligible && executionUnits.length ? (mode === 'pilot'
       ? await readPilotClock(deps, executionUnits.find((unit) => unit.timeZone)?.timeZone ?? null)
-      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj))
+      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj,
+        units.find((unit) => unit.id === reference.period.employerUnitId)?.get('timeZone')))
       : await readInformationalClock(deps) };
 }
 
@@ -1882,15 +1920,18 @@ async function readPilotClock(deps: Dependencies, timeZone: string | null) {
  * Hora oficial para o relógio exibido no coletor (Anexo IX, item 3): instante verificado contra a
  * Hora Legal e fuso do estabelecimento. Indisponível vira null com o motivo; a batida também falharia.
  */
-async function readOfficialClock(deps: Dependencies, workspaceId: string, employerCnpj: string) {
+async function readOfficialClock(deps: Dependencies, workspaceId: string, employerCnpj: string, fallbackTimeZone?: unknown) {
   const establishment = (await deps.repDb.collection(ESTABLISHMENTS).doc(establishmentKey(workspaceId, employerCnpj)).get()).data();
-  if (!validEstablishment(establishment) || establishment.workspaceId !== workspaceId) {
+  const timeZone = validEstablishment(establishment) && establishment.workspaceId === workspaceId
+    ? establishment.timeZone : !establishment && employerCnpj === CT_SORVETES_CNPJ
+      && deps.referenceResponsibleUid && isBrazilTimeZone(fallbackTimeZone) ? fallbackTimeZone : null;
+  if (!timeZone) {
     return { available: false as const, issue: 'REP_P_ESTABLISHMENT_NOT_READY' };
   }
   try {
     const reading = await deps.clock.read();
     assertTrustedRepPClockReading(reading);
-    return { available: true as const, instant: reading.instant.toISOString(), timeZone: establishment.timeZone };
+    return { available: true as const, instant: reading.instant.toISOString(), timeZone };
   } catch (cause) {
     return { available: false as const, issue: cause instanceof AppError ? cause.code : 'REP_P_TIME_UNAVAILABLE' };
   }

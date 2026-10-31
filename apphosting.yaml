@@ -111,9 +111,12 @@ env:
   # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
   - variable: REP_P_HLB_NTP_ENABLED
     value: "true"
-  # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
+  # Coleta antecipada autorizada em 31/10/2026; identidades e vínculos elegíveis foram conferidos.
   - variable: REP_P_MARKING_ENABLED
-    value: "false"
+    value: "true"
+  # CPF do responsável fiscal é lido no RH; nenhum número pessoal fica no YAML.
+  - variable: REP_P_REFERENCE_RESPONSIBLE_UID
+    value: "U0Q9YZIl7XhQU2B0tB5U6Zpt5Td2"
   # Data de corte entre ensaio segregado e marcações oficiais.
   - variable: REP_P_OFFICIAL_START_DATE
     value: "2026-10-31"
@@ -144,9 +147,9 @@ env:
     secret: GOOGLE_AUTH_WEB_CLIENT_ID
   - variable: GOOGLE_WORKSPACE_LOGIN_DOMAIN
     value: "coalashakes.com"
-  # Gate autorizado em 30/10/2026. Ele não ativa turnos: todos permanecem opt-in e os atuais estão `disabled`.
+  # Acompanhamento contínuo aguarda o aditivo do RH e a configuração dos turnos.
   - variable: DP_JOURNEY_LOCATION_ENABLED
-    value: "true"
+    value: "false"
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET

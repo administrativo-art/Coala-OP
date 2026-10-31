@@ -69,7 +69,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { server: '200.20.186.75', status: 'accepted', offsetMs: 10, roundTripMs: 20, stratum: 1 },
       { server: '200.20.186.94', status: 'accepted', offsetMs: 14, roundTripMs: 22, stratum: 1 },
     ] }; } };
-  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
+  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT SORVETES LTDA',
     inpiRegistration: '', developerCnpj: employerCnpj };
   const fiscalObjects = new Map();
   const fiscalStore = {
@@ -80,7 +80,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     },
   };
   const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true, fiscalStore,
+    markingEnabled: true, fiscalStore, referenceResponsibleUid: userId,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -121,12 +121,14 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       unitIds: [employerUnitId, executionUnitId], jobFunctionIds: [], sourceDocumentId: 'admission-1',
       sourceReason: 'Admissão conferida para o ensaio',
     }] });
-    const setup = await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies);
-    assert.deepEqual(setup, { establishmentId, replayed: false });
-    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
-    { establishmentId, replayed: true });
+    const viewed = await listOwnRepPExecutionUnits({ ...context, viewAs: {
+      targetUserId: userId, targetUsername: 'Maria Teste', readOnly: true,
+    } }, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(viewed.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
+    const prepared = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(prepared.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
     await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, {
       expectedRevision: 0, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
@@ -172,6 +174,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(first.marking.markedAt, '2026-10-18T07:15:00-0400');
     assert.equal(second.status, 'recorded');
     assert.deepEqual([first.marking.nsr, second.marking.nsr].sort(), [3, 4]);
+    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
+      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
+    { establishmentId, replayed: true });
     assert.ok(first.marking.employerUnitId === employerUnitId && second.marking.employerUnitId === employerUnitId);
     assert.ok(first.marking.executionUnitId === executionUnitId && second.marking.executionUnitId === executionUnitId);
     assert.deepEqual(first.location, { captureStatus: 'captured', evaluation: 'inside' });
@@ -306,7 +311,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
 
     const receiptSnapshot = await repPDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
-    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
+    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT SORVETES LTDA');
 
     // Sem endereço da unidade de execução, o comprovante não poderia ser emitido: recusa sem consumir NSR.
     const nsrBefore = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
