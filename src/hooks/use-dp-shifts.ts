@@ -5,10 +5,10 @@ import { auth, db } from '@/lib/firebase';
 import { collection, doc } from 'firebase/firestore';
 import type { DPShift } from '@/types';
 import type { BulkWorkShiftInput } from '@/features/dp/shifts/schemas';
-import { rebalanceGoalsForSchedule } from '@/lib/goals-schedule-rebalance';
 import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
 import {
   fetchScheduleShifts,
+  fetchDraftScheduleShifts,
   notifyDPScheduleShiftsChanged,
   subscribeToDPScheduleShiftChanges,
 } from '@/features/dp/schedules/client';
@@ -41,16 +41,21 @@ export interface DPShiftsHookResult {
   shifts: DPShift[];
   loading: boolean;
   error: string | null;
+  draftVersion: number;
+  conflicts: string[];
+  reload: () => Promise<void>;
   addShift: (data: Omit<DPShift, 'id' | 'createdAt'>) => Promise<void>;
   updateShift: (shift: DPShift) => Promise<void>;
   applyShiftsBatch: (input: BulkWorkShiftInput) => Promise<void>;
   deleteShift: (shift: Pick<DPShift, 'id' | 'type'> | string) => Promise<void>;
 }
 
-export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
+export function useDPShifts(scheduleId: string | null, editable = false): DPShiftsHookResult {
   const [shifts, setShifts] = useState<DPShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [conflicts, setConflicts] = useState<string[]>([]);
 
   const loadShifts = useCallback(async () => {
     if (!scheduleId) {
@@ -62,14 +67,23 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
     setLoading(true);
     setError(null);
     try {
-      setShifts(await fetchScheduleShifts(scheduleId));
+      if (editable) {
+        const draft = await fetchDraftScheduleShifts(scheduleId);
+        setShifts(draft.shifts);
+        setDraftVersion(draft.draftVersion);
+        setConflicts(draft.conflicts);
+      } else {
+        setShifts(await fetchScheduleShifts(scheduleId));
+        setDraftVersion(0);
+        setConflicts([]);
+      }
     } catch (loadError) {
       console.error('[useDPShifts] Secure fetch failed.', loadError);
       setError('Falha ao carregar os turnos da escala.');
     } finally {
       setLoading(false);
     }
-  }, [scheduleId]);
+  }, [scheduleId, editable]);
 
   useEffect(() => {
     void Promise.resolve().then(loadShifts);
@@ -81,14 +95,12 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
     const shiftRef = doc(collection(db, 'dp_schedules', scheduleId, 'shifts'));
     await saveWorkShiftRequest(scheduleId, shiftRef.id, 'PUT', data);
     notifyDPScheduleShiftsChanged(scheduleId);
-    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const updateShift = useCallback(async ({ id, ...data }: DPShift) => {
     if (!scheduleId) return;
     await saveWorkShiftRequest(scheduleId, id, 'PATCH', data as DPShift);
     notifyDPScheduleShiftsChanged(scheduleId);
-    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const applyShiftsBatch = useCallback(async (input: BulkWorkShiftInput) => {
@@ -99,7 +111,6 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
     });
     notifyDPScheduleShiftsChanged(scheduleId);
-    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const deleteShift = useCallback(async (shift: Pick<DPShift, 'id' | 'type'> | string) => {
@@ -113,13 +124,15 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       },
     );
     notifyDPScheduleShiftsChanged(scheduleId);
-    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   return {
     shifts,
     loading,
     error,
+    draftVersion,
+    conflicts,
+    reload: loadShifts,
     addShift,
     updateShift,
     applyShiftsBatch,

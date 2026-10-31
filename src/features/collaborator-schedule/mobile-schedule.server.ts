@@ -4,8 +4,8 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { matchDPUnitForKiosk } from "@/lib/dp-kiosk-match";
 import { canAccessUnit } from "@/lib/unit-access";
-import { countsDPShiftTowardGoals } from "@/lib/dp-external-coverage";
 import { AppError } from "@/lib/observability/app-error";
+import { readOfficialScheduleShifts } from '@/features/dp/schedules/official-revision.server';
 import type { DPUnit } from "@/types";
 import { buildCollaboratorSchedulePayload } from "./server";
 import { mobileProfileRole, safeAvatarUrl, safePersonColor, toMobileSchedule } from "./mobile-schedule";
@@ -101,18 +101,18 @@ export async function loadScheduledGoalEvidence(input: { kioskName: string; star
   const dates = new Set<string>();
   const externalCoverageUserIds = new Set<string>();
   for (const schedule of schedules) {
-    for (let index = 0; index < input.employeeIds.length; index += 30) {
-      const shifts = await schedule.ref.collection("shifts").where("userId", "in", input.employeeIds.slice(index, index + 30)).limit(501).get();
-      if (shifts.size > 500) {
+    const allowed = new Set(input.employeeIds);
+    const shifts = (await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts;
+    if (shifts.length > 2_000) {
         throw new AppError({ code: 'MOBILE_GOALS_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há turnos demais para validar a meta com segurança.' });
-      }
-      for (const shift of shifts.docs) {
-        const date = String(shift.get("date") ?? "");
-        if (shift.get("type") !== "work" || date < input.startKey || date > input.endKey) continue;
-        const userId = String(shift.get("userId") ?? "");
-        if (!countsDPShiftTowardGoals(shift.data())) externalCoverageUserIds.add(userId);
+    }
+    for (const shift of shifts) {
+        const userId = String(shift.userId ?? '');
+        if (!allowed.has(userId)) continue;
+        const date = String(shift.date ?? "");
+        if (shift.type !== "work" || date < input.startKey || date > input.endKey) continue;
+        if (shift.countsTowardGoals === false) externalCoverageUserIds.add(userId);
         else dates.add(date);
-      }
     }
   }
   return {

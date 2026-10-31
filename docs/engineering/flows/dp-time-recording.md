@@ -2,6 +2,8 @@
 
 **Estado:** a coleta oficial continua bloqueada por configuração e homologação. Um ensaio nominal pré-homologação pode ser ligado separadamente para pessoas autorizadas, sem tocar a ARP nem o fechamento oficial. Na tela de ponto, a unidade de execução vem das unidades operacionais da revisão histórica ou de uma cobertura externa válida. A referência financeira é independente. Quando a escala vigente identifica cobertura externa e libera o local, web e Android informam “Você foi escalado excepcionalmente para [unidade] nesta data.” Um turno regular na unidade operacional não recebe esse aviso.
 
+A publicação manual de escala usa a mesma trava `repP_competenceFences` do fechamento da competência: publicação recusa `closing` ou `closed`, e o fechamento recusa `publishing`. A trava serializa a ativação da revisão oficial com o fechamento, preservando a escala usada por espelho e AEJ de competência fechada. Reabertura formal libera uma publicação posterior. A trava `publishing` não bloqueia batidas; falha sem liberação exige conferência operacional antes de reabrir a trava.
+
 ## Superfícies e fronteira
 
 - `POST /api/dp/time-recording/markings`: batida do próprio usuário autenticado. O corpo aceita somente `attemptId`, `workDate`, `executionUnitId`, canal `mobile|browser` e, nos clientes atuais, `declaredPurpose` (`journey_start|break_start|break_end|journey_end`). A finalidade é metadado organizacional separado da marca fiscal. Para compatibilidade, o backend aceita cliente legado sem o campo e deixa a classificação pendente; nunca inventa uma declaração do trabalhador.

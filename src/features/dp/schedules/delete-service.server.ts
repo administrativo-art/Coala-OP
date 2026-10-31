@@ -7,8 +7,9 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices, type OccupancySlice } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { preparePublicationFenceAdvance } from './publication-fence.server';
 
-const MAX_SHIFT_DELETIONS = 450;
+const MAX_SHIFT_DELETIONS = 400;
 const AUDIT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 export async function deleteDPSchedule(params: {
@@ -26,6 +27,9 @@ export async function deleteDPSchedule(params: {
     const schedule = await transaction.get(scheduleRef);
     if (!schedule.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+    }
+    if (schedule.get('activeRevisionId')) {
+      throw new AppError({ code: 'DP_SCHEDULE_DELETE_REVISION_NOT_READY', kind: 'CONFLICT', safeMessage: 'A exclusão desta revisão oficial aguarda integração.' });
     }
     const unitId = schedule.get('unitId');
     if (typeof unitId !== 'string' || !unitId) {
@@ -61,6 +65,8 @@ export async function deleteDPSchedule(params: {
       });
     }
 
+    const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id,
+      shifts.docs.map((shift) => String(shift.get('userId') ?? '')));
     if (operationalGuardRequested()) {
       const slices: OccupancySlice[] = shifts.docs.flatMap((shift) => {
         const beneficiaryUid = String(shift.get('userId') ?? '');
@@ -72,6 +78,7 @@ export async function deleteDPSchedule(params: {
       });
       await guardOccupancyWrite(transaction, context.workspace_id, slices, shifts.size + 2);
     }
+    publicationFence.apply();
     const now = Timestamp.now();
     shifts.docs.forEach((shift) => transaction.delete(shift.ref));
     transaction.delete(scheduleRef);

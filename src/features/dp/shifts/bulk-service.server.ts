@@ -12,6 +12,8 @@ import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney, DPShiftDefinition } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 
 import type { BulkWorkShiftInput } from './schemas';
 
@@ -64,6 +66,7 @@ export async function applyWorkShiftBulkChange(params: {
 
   return dbAdmin.runTransaction(async (transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
+    if (scheduleSnapshot.get('activeRevisionId')) throw new AppError({ code: 'DP_SHIFT_BULK_REVISION_NOT_READY', kind: 'CONFLICT', safeMessage: 'A edição em lote desta revisão oficial aguarda integração.' });
     const shiftSnapshots = await transaction.getAll(...shiftRefs);
     const targetUserSnapshot = targetUserRef ? await transaction.get(targetUserRef) : null;
     const targetShiftDefinitionSnapshot = targetShiftDefinitionRef
@@ -73,8 +76,8 @@ export async function applyWorkShiftBulkChange(params: {
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
     }
-    if (scheduleSnapshot.get('locked') === true) {
-      throw new AppError({ code: 'DP_SHIFT_SCHEDULE_LOCKED', kind: 'CONFLICT', safeMessage: 'A escala está trancada.' });
+    if (!hasPublishedScheduleVersion(scheduleSnapshot.data() ?? {})) {
+      throw new AppError({ code: 'DP_SHIFT_DRAFT_NOT_OPERATIONAL', kind: 'CONFLICT', safeMessage: 'A escala precisa ser publicada antes de receber turnos operacionais.' });
     }
 
     const scheduleUnitId = scheduleSnapshot.get('unitId');
@@ -363,6 +366,9 @@ export async function applyWorkShiftBulkChange(params: {
     }
 
     const selectedPaths = new Set(selected.map(({ snapshot }) => snapshot.ref.path));
+    const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id,
+      selected.flatMap(({ snapshot }) => [String(snapshot.get('userId')),
+        ...(input.action === 'delete' ? [] : [replacePatch?.userId ?? String(snapshot.get('userId'))])]));
     if (operationalGuardRequested()) {
       const slices = selected.flatMap(({ snapshot, date }) => [
         ...shiftOccupancySlices({ beneficiaryUid: String(snapshot.get('userId')), date,
@@ -378,6 +384,7 @@ export async function applyWorkShiftBulkChange(params: {
       await guardOccupancyWrite(transaction, context.workspace_id, slices,
         (input.action === 'delete' ? selected.length : selected.length * 2) + 2);
     }
+    publicationFence.apply();
     const now = Timestamp.now();
     selected.forEach(({ snapshot, date }) => {
       if (input.action === 'delete') {
@@ -528,11 +535,12 @@ async function applyWorkShiftBulkCreate(params: {
 
   return dbAdmin.runTransaction(async (transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
+    if (scheduleSnapshot.get('activeRevisionId')) throw new AppError({ code: 'DP_SHIFT_BULK_REVISION_NOT_READY', kind: 'CONFLICT', safeMessage: 'A edição em lote desta revisão oficial aguarda integração.' });
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
     }
-    if (scheduleSnapshot.get('locked') === true) {
-      throw new AppError({ code: 'DP_SHIFT_SCHEDULE_LOCKED', kind: 'CONFLICT', safeMessage: 'A escala está trancada.' });
+    if (!hasPublishedScheduleVersion(scheduleSnapshot.data() ?? {})) {
+      throw new AppError({ code: 'DP_SHIFT_DRAFT_NOT_OPERATIONAL', kind: 'CONFLICT', safeMessage: 'A escala precisa ser publicada antes de receber turnos operacionais.' });
     }
 
     const scheduleUnitId = scheduleSnapshot.get('unitId');
@@ -809,6 +817,8 @@ async function applyWorkShiftBulkCreate(params: {
       });
     }
 
+    const publicationFence = plannedWrites.length > 0
+      ? await preparePublicationFenceAdvance(transaction, context.workspace_id, plannedWrites.map(({ userId }) => userId)) : null;
     if (plannedWrites.length > 0 && operationalGuardRequested()) {
       const slices = plannedWrites.flatMap(({ userId, date }) => shiftOccupancySlices({
         beneficiaryUid: userId,
@@ -819,8 +829,9 @@ async function applyWorkShiftBulkCreate(params: {
       }));
       await guardOccupancyWrite(transaction, context.workspace_id, slices, plannedWrites.length * 2 + 2);
     }
+    publicationFence?.apply();
 
-    plannedWrites.forEach(({ shiftRef, referenceRef, payload, userId, date, reference }) => {
+    plannedWrites.forEach(({ shiftRef, referenceRef, payload, userId, reference }) => {
       transaction.create(shiftRef, payload);
       transaction.create(referenceRef, {
         workspaceId: context.workspace_id,

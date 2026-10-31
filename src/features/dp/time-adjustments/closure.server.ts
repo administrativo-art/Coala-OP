@@ -62,7 +62,7 @@ async function acquireRepPClosureFence(deps: Dependencies, workspaceId: string, 
     const current = await tx.get(ref);
     const status = current.get('status');
     if (status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
-    if (status === 'closing') throw fail('PTRP_CLOSURE_IN_PROGRESS', 'Outro fechamento desta competência está em andamento.', 'CONFLICT');
+    if (status === 'closing' || status === 'publishing') throw fail('PTRP_CLOSURE_IN_PROGRESS', 'Há um fechamento ou publicação de escala em andamento nesta competência.', 'CONFLICT');
     tx.set(ref, { schemaVersion: 1, workspaceId, competence, status: 'closing', token, closingAt: at,
       closedAt: null, closureVersion: null, updatedAt: at }, { merge: true });
   });
