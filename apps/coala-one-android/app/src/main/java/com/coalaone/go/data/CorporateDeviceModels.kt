@@ -12,5 +12,6 @@ import kotlinx.serialization.Serializable
     val requestedAt: String? = null, val approvedAt: String? = null,
     val updatedAt: String? = null, val lastSeenAt: String? = null,
 )
-@Serializable data class CorporateDeviceStatus(val device: CorporateDeviceSummary? = null)
+@Serializable data class CorporateDeviceStatus(val device: CorporateDeviceSummary? = null, val autoEnrollAllowed: Boolean = false,
+    val reviewRequired: Boolean = false)
 @Serializable data class CorporateDeviceRequested(val deviceId: String, val status: String)

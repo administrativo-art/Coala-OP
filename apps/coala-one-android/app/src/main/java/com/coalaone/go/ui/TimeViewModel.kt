@@ -50,7 +50,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
     private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates(),
     private val appAttestation: AppAttestation? = null,
-    private val offlinePreparation: TimeOfflinePreparation? = null) : FeedbackViewModel() {
+    private val offlinePreparation: TimeOfflinePreparation? = null,
+    private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore()) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState(closedJourneyDate = saved.get<String>("closedJourneyDate")))
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -237,6 +238,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun pendingAttempt(): PendingAttempt? = attempt?.let { PendingAttempt(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource) }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
+        require(developerViewAsStore.current() == null) { "Visualizar como é somente leitura. Volte ao seu perfil para registrar ponto." }
         val owner = auth.current?.uid ?: error("Entre novamente.")
         if (attempt != null && attemptOwnerUid != null && attemptOwnerUid != owner) {
             clearAttempt() // Its durable row remains sealed for the original owner.

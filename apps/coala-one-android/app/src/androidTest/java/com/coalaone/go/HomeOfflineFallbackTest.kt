@@ -51,4 +51,14 @@ class HomeOfflineFallbackTest {
 
         compose.onNodeWithText("Ponto").assertDoesNotExist()
     }
+
+    @Test fun viewAsPointSummaryHasNoRecordAction() {
+        compose.setContent { CoalaTheme { Column {
+            HomeModuleContent(Modules(timeRecording = true), HomeToday(contextKey = "target", loaded = true),
+                0, {}, readOnly = true) {}
+        } } }
+
+        compose.onNodeWithText("Ponto").assertExists()
+        compose.onNodeWithText("Registrar ponto").assertDoesNotExist()
+    }
 }
