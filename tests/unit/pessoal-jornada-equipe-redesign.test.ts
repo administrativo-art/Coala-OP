@@ -106,7 +106,7 @@ test('Acesso por escala mostra uma visão por vez e a página usa o wrapper', ()
 test('Pessoal organiza tempo sem quebrar o valor legado de deep link', () => {
   const page = readFileSync('src/app/dashboard/settings/page.tsx', 'utf8');
   assert.match(page, /value: "journey",\s*label: "Tempo"/);
-  assert.match(page, /children: pickPersonalTabs\(\["roles", "organogram", "access-profiles", "profile-fields"\]\)/);
+  assert.match(page, /children: pickPersonalTabs\(\["roles", "organogram", "access-profiles", "profile-fields", "field-visibility"\]\)/);
   assert.doesNotMatch(page, /value: "collaborator-profile",\s*label:/);
   assert.match(page, /requestedTab === "collaborator-profile"/);
   assert.match(page, /children: pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars", "fiscal-exports"\]\)/);
