@@ -178,10 +178,13 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
 }
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit) {
     val nav = rememberNavController()
+    val corporateDevice: CorporateDeviceViewModel = hiltViewModel()
+    LaunchedEffect(corporateDevice) { corporateDevice.load() }
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val back: () -> Unit = { nav.popBackStack(); Unit }
     val motion = LocalMotionEnabled.current
-    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName) { NavHost(nav, startDestination = "home",
+    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName,
+        LocalDeveloperViewAsActive provides (developerViewAs.targetUserId != null)) { NavHost(nav, startDestination = "home",
         enterTransition = { fadeIn(tween(if (motion) 280 else 0)) + slideInVertically(tween(if (motion) 280 else 0)) { if (motion) 6 else 0 } },
         exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
@@ -190,7 +193,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         val homeEntry: (androidx.navigation.NavBackStackEntry) -> androidx.navigation.NavBackStackEntry = { nav.getBackStackEntry("home") }
         composable("home") { entry -> HomeScreen(hiltViewModel(), hiltViewModel(entry), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
-        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, hiltViewModel(), back, onPrepareBiometric) }
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, corporateDevice, back, onPrepareBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -218,7 +221,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
 }
-@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit, onDetails: (String) -> Unit) {
+@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: (() -> Unit)?, onDetails: (String) -> Unit) {
     val options = today.timeOptions
     val unitId = TimeRules.punchUnitId(options, today.timeShift) ?: today.timeShift?.unitId
     val zone = TimeRules.unitZone(options, unitId)
@@ -329,7 +332,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         }
         Spacer(Modifier.height(5.dp))
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
-        Action("Registrar ponto", dark = true, onClick = onRecord)
+        onRecord?.let { Action("Registrar ponto", dark = true, onClick = it) }
     }
 }
 @Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
@@ -398,9 +401,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Action("Baixar atualização", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
-        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate) {
-            if (developerViewAs.targetUserId == null) punching = true else navigate("time/register")
-        }
+        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate,
+            readOnly = developerViewAs.targetUserId != null) { punching = true }
         state?.modules?.let { modules ->
             if (punching) PunchSheet(timeVm, onOpenTime = { navigate("time") }) {
                 punching = false
@@ -410,9 +412,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
     }
 }
 @Composable internal fun HomeModuleContent(modules: Modules?, visibleToday: HomeToday, visiblePendingCount: Int,
-    navigate: (String) -> Unit, onRecord: () -> Unit = { navigate("time/register") }) {
+    navigate: (String) -> Unit, readOnly: Boolean = false, onRecord: () -> Unit = { navigate("time/register") }) {
     modules ?: return
-    if (modules.timeRecording) HomeTimeSummary(visibleToday, onRecord) { date -> navigate("time/day/$date") }
+    if (modules.timeRecording) HomeTimeSummary(visibleToday, if (readOnly) null else onRecord) { date -> navigate("time/day/$date") }
     val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
     if (journey.isNotEmpty()) {
         Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
@@ -453,9 +455,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val push by session.push.state.collectAsStateWithLifecycle()
     val sessionState by session.state.collectAsStateWithLifecycle()
     val googleMigration by session.googleMigration.collectAsStateWithLifecycle()
-    val corporateDeviceState by corporateDevice.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
+    val corporateDeviceState by corporateDevice.state.collectAsStateWithLifecycle()
     val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
     LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
     val owner = LocalOwner.current
@@ -463,7 +465,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val state = profileState.visibleFor(dataOwner)
     LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
     LaunchedEffect(dataOwner, developerViewAs.targetUserId) { if (developerViewAs.targetUserId == null) session.loadGoogleMigration() }
-    LaunchedEffect(dataOwner, developerViewAs.targetUserId) { if (developerViewAs.targetUserId == null) corporateDevice.load() }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)
         else session.push.reflect(owner)
@@ -473,6 +474,10 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
+        if (developerViewAs.targetUserId == null && corporateDeviceState.enrollmentExpected &&
+            (corporateDeviceState.reviewRequired || corporateDeviceState.error != null))
+            Text("A classificação deste aparelho precisa de revisão administrativa. O registro de ponto continua disponível conforme a sua escala.",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
         if (canDeveloperViewAs) CardBlock(selected = developerViewAs.targetUserId != null) {
             Text("Visualizar como usuário", style = MaterialTheme.typography.titleMedium)
             Text("A navegação usa o perfil escolhido, mas alterações ficam bloqueadas. Seu login real continua registrado para auditoria.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -529,25 +534,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 }
             }
             googleMigration.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
-        }
-        if (developerViewAs.targetUserId == null) CardBlock(selected = corporateDeviceState.status == "active") {
-            Text("Aparelho empresarial", style = MaterialTheme.typography.titleMedium)
-            when (corporateDeviceState.status) {
-                "active" -> Text("Este aparelho está identificado como equipamento da empresa. O rastreio continua dependendo da pessoa autenticada e da política do turno.", color = Tokens.ok, style = MaterialTheme.typography.bodySmall)
-                "pending" -> Text("Solicitação enviada. Aguarde a aprovação no Coala One.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                "suspended" -> Text("Este aparelho está suspenso. Procure a administração.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                "rejected", "revoked", "replaced" -> {
-                    Text("Este vínculo não está ativo. Envie uma nova solicitação se a administração orientar.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                    Action("Solicitar novo vínculo", corporateDeviceState.busy, enabled = !corporateDeviceState.busy, onClick = corporateDevice::request)
-                }
-                else -> {
-                    Text("Vincule este celular somente se ele pertence à empresa e foi entregue para seu uso.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                    Action("Vincular este aparelho empresarial", corporateDeviceState.busy || corporateDeviceState.loading,
-                        enabled = !corporateDeviceState.busy && !corporateDeviceState.loading, onClick = corporateDevice::request)
-                }
-            }
-            corporateDeviceState.model?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
-            corporateDeviceState.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
         if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)
