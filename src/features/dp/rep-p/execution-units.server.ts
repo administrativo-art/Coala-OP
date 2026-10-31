@@ -2,6 +2,8 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
+import { readOfficialPersonMonth, type OfficialShift } from '@/features/dp/schedules/official-revision.server';
 
 const MAX_DAY_SHIFTS = 30;
 const MAX_UNIT_SCHEDULES = 20;
@@ -21,46 +23,58 @@ export async function externalCoverageGrants(db: Firestore, uid: string, workDat
     .limit(MAX_DAY_SHIFTS).get();
   // Sem visão completa do dia, nenhuma autorização excepcional é inferida.
   if (shifts.size >= MAX_DAY_SHIFTS) return [];
-  const candidates = shifts.docs.filter((shift) => {
-    const unitId = shift.get('unitId');
-    const originUnitId = shift.get('originUnitId');
+  const months = [...new Set([priorWorkDate.slice(0, 7), workDate.slice(0, 7)])];
+  const revisionRows = await Promise.all(months.map(async (competence) => {
+    const from = competence === priorWorkDate.slice(0, 7) ? priorWorkDate : workDate;
+    const through = competence === workDate.slice(0, 7) ? workDate : priorWorkDate;
+    const indexed = await readOfficialPersonMonth({ db, userId: uid, competence, from, through });
+    return indexed.shifts;
+  }));
+  const legacy: OfficialShift[] = shifts.docs.map((shift) => ({ id: shift.id,
+    scheduleId: shift.ref.parent.parent?.id ?? '', ...shift.data() }));
+  const candidates = [...legacy, ...revisionRows.flat()].filter((shift) => {
+    const unitId = shift.unitId;
+    const originUnitId = shift.originUnitId;
     return typeof unitId === 'string' && unitId && !linkedUnitIds.includes(unitId)
       && typeof originUnitId === 'string' && linkedUnitIds.includes(originUnitId)
-      && (shift.get('date') === workDate || shift.get('date') === priorWorkDate && shift.get('overnight') === true)
-      && typeof shift.get('exceptionReason') === 'string' && String(shift.get('exceptionReason')).trim()
-      && shift.get('type') === 'work' && shift.get('assignmentKind') === 'external_coverage';
+      && (shift.date === workDate || shift.date === priorWorkDate && shift.overnight === true)
+      && typeof shift.exceptionReason === 'string' && shift.exceptionReason.trim()
+      && shift.type === 'work' && shift.assignmentKind === 'external_coverage';
   });
   if (!candidates.length) return [];
   const scopes = [...new Map(candidates.map((shift) => {
-    const unitId = String(shift.get('unitId'));
-    const competence = String(shift.get('date')).slice(0, 7);
+    const unitId = String(shift.unitId);
+    const competence = String(shift.date).slice(0, 7);
     return [`${unitId}:${competence}`, { unitId, competence }] as const;
   })).entries()];
   const schedulePages = await Promise.all(scopes.map(([, { unitId, competence }]) => {
     const [year, month] = competence.split('-').map(Number);
     return db.collection('dp_schedules').where('unitId', '==', unitId)
       .where('year', '==', year).where('month', '==', month)
-      .select('locked', 'createdAt').limit(MAX_UNIT_SCHEDULES).get();
+      .select('createdAt', 'publicationStatus', 'publicationVersion', 'activeRevisionId').limit(MAX_UNIT_SCHEDULES).get();
   }));
   if (schedulePages.some((page) => page.size >= MAX_UNIT_SCHEDULES)) return [];
   const currentByUnit = new Map<string, string>();
   for (const [index, page] of schedulePages.entries()) {
-    const latest = [...page.docs].sort((a, b) =>
-      Number(b.get('locked') === true) - Number(a.get('locked') === true)
-        || millis(b.get('createdAt')) - millis(a.get('createdAt')))[0];
+    const latest = page.docs.filter((item) => hasPublishedScheduleVersion(item.data())).sort((a, b) =>
+      millis(b.get('createdAt')) - millis(a.get('createdAt')))[0];
     if (latest) currentByUnit.set(scopes[index][0], latest.id);
   }
+  const revisionBySchedule = new Map(schedulePages.flatMap((page) => page.docs.map((schedule) => [schedule.id,
+    typeof schedule.get('activeRevisionId') === 'string'] as const)));
   return candidates.flatMap((shift) => {
-    const unitId = shift.get('unitId');
-    const scope = `${unitId}:${String(shift.get('date')).slice(0, 7)}`;
-    return typeof unitId === 'string' && currentByUnit.get(scope) === shift.ref.parent.parent?.id
-      ? [{ executionUnitId: unitId, originUnitId: String(shift.get('originUnitId')),
-        scheduleId: String(shift.ref.parent.parent?.id), shiftId: shift.id,
-        scheduledDate: String(shift.get('date')), overnight: shift.get('overnight') === true,
-        shiftHash: createHash('sha256').update(JSON.stringify([shift.ref.parent.parent?.id, shift.id,
-          shift.get('userId'), shift.get('unitId'), shift.get('originUnitId'), shift.get('date'),
-          shift.get('type'), shift.get('assignmentKind'), shift.get('overnight') === true,
-          shift.get('startTime'), shift.get('endTime'), shift.get('exceptionReason')])).digest('hex') }] : [];
+    const unitId = shift.unitId;
+    const scope = `${unitId}:${String(shift.date).slice(0, 7)}`;
+    const cameFromRevision = revisionRows.flat().some((row) => row.scheduleId === shift.scheduleId && row.id === shift.id);
+    if (revisionBySchedule.get(shift.scheduleId) !== cameFromRevision) return [];
+    return typeof unitId === 'string' && currentByUnit.get(scope) === shift.scheduleId
+      ? [{ executionUnitId: unitId, originUnitId: String(shift.originUnitId),
+        scheduleId: shift.scheduleId, shiftId: shift.id,
+        scheduledDate: String(shift.date), overnight: shift.overnight === true,
+        shiftHash: createHash('sha256').update(JSON.stringify([shift.scheduleId, shift.id,
+          shift.userId, shift.unitId, shift.originUnitId, shift.date,
+          shift.type, shift.assignmentKind, shift.overnight === true,
+          shift.startTime, shift.endTime, shift.exceptionReason])).digest('hex') }] : [];
   });
 }
 

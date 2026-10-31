@@ -11,6 +11,7 @@ const { personAgendaClockRef, readPersonAgendaVersion } = await import('../../sr
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { assertCoverageCompetenceOpen } = await import('../../src/features/dp/absences/coverage/service.server.ts');
 const { CLOSURES, closureKey } = await import('../../src/features/dp/time-adjustments/service.server.ts');
+const { capturePublicationFence } = await import('../../src/features/dp/schedules/publication-fence.server.ts');
 
 test('referência privada preserva empregador e revisões após edição e exclusão', async () => {
   const prefix = 'reference-integration';
@@ -44,6 +45,8 @@ test('referência privada preserva empregador e revisões após edição e exclu
         applicability: { scope: { kind: 'company' }, collaboratorIds: [userId] }, allowedShiftDefinitionIds: [] }),
     ]);
     await saveWorkShift({ context, scheduleId, shiftId: shift.id, input, mode: 'create', requestId: 'create' });
+    const initialFence = await capturePublicationFence(context.workspace_id, [userId]);
+    assert.ok([...initialFence.values()].every((version) => version === 1));
     const first = await shift.get();
     assert.equal(first.get('reference'), undefined);
     const firstRef = dbAdmin.collection('dp_shiftReferenceHistory').doc(first.get('referenceRevisionId'));

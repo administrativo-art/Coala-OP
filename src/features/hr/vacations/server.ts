@@ -11,6 +11,7 @@ import { financialExpenseAccountingFields } from '@/features/financial/lib/expen
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
 import { supersedeVacationReceiptDocuments, vacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
 import { guardOccupancyWrite, operationalGuardRequested, vacationOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -1115,10 +1116,12 @@ export async function createVacation(request: NextRequest, input: CreateVacation
       createdBy: context.decoded.uid,
       updatedBy: context.decoded.uid,
     };
-    if (operationalGuardRequested() && input.status === 'APPROVED' && core.recordType === 'gozo') {
-      await guardOccupancyWrite(transaction, context.workspace_id,
+    if (input.status === 'APPROVED' && core.recordType === 'gozo') {
+      const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id, [input.userId]);
+      if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
         vacationOccupancySlices({ beneficiaryUid: input.userId, startDate: core.startDate,
           endDate: core.endDate, addsOccupancy: true }), 2, 'any_absence');
+      publicationFence.apply();
     }
     transaction.create(vacationRef, created);
     transaction.create(eventRef, vacationEvent(
@@ -2962,10 +2965,12 @@ export async function updateVacation(
           updatedBy: context.decoded.uid,
         };
       }
-      if (operationalGuardRequested() && current.recordType === 'gozo') {
-        await guardOccupancyWrite(transaction, context.workspace_id,
+      if (current.recordType === 'gozo') {
+        const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id, [userId]);
+        if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
           vacationOccupancySlices({ beneficiaryUid: userId, startDate: String(current.startDate),
             endDate: String(current.endDate), addsOccupancy: true }), 2, 'any_absence');
+        publicationFence.apply();
       }
       transaction.update(vacationRef, updated);
       transaction.create(eventRef, vacationEvent(
@@ -3016,10 +3021,12 @@ export async function updateVacation(
         updatedAt: new Date(now),
         updatedBy: context.decoded.uid,
       };
-      if (operationalGuardRequested() && current.recordType === 'gozo') {
-        await guardOccupancyWrite(transaction, context.workspace_id,
+      if (current.recordType === 'gozo') {
+        const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id, [userId]);
+        if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
           vacationOccupancySlices({ beneficiaryUid: userId, startDate: String(current.startDate),
             endDate: String(current.endDate), addsOccupancy: false }), 2);
+        publicationFence.apply();
       }
       transaction.update(vacationRef, updated);
       transaction.create(eventRef, vacationEvent(
@@ -3095,10 +3102,12 @@ export async function deleteVacation(request: NextRequest, vacationId: string) {
         'Férias com aviso gerado devem ser canceladas, não excluídas.',
       );
     }
-    if (operationalGuardRequested() && current.status === 'APPROVED' && current.recordType === 'gozo') {
-      await guardOccupancyWrite(transaction, context.workspace_id,
+    if (current.status === 'APPROVED' && current.recordType === 'gozo') {
+      const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id, [String(current.userId)]);
+      if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
         vacationOccupancySlices({ beneficiaryUid: String(current.userId), startDate: String(current.startDate),
           endDate: String(current.endDate), addsOccupancy: false }), 2);
+      publicationFence.apply();
     }
     transaction.delete(vacationRef);
     transaction.create(eventRef, vacationEvent(

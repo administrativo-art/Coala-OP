@@ -1,4 +1,5 @@
 import type { DPSchedule, DPShift } from '@/types';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 
 type TransportVoucherUser = {
   id: string;
@@ -35,7 +36,7 @@ function schedulePeriod(schedule: Pick<DPSchedule, 'year' | 'month'>) {
 
 /**
  * Consolida o VT por colaboradora e dia trabalhado em todas as unidades do mês.
- * Escalas trancadas usam o snapshot; escalas abertas usam o cadastro vigente.
+ * Escalas publicadas com snapshot usam os dados congelados na publicação.
  */
 export function buildMonthlyTransportVoucherSummaries({
   schedules,
@@ -58,8 +59,8 @@ export function buildMonthlyTransportVoucherSummaries({
     if (!shift.date.startsWith(`${period}-`)) return;
 
     const liveUser = userById.get(shift.userId);
-    const snapshotUser = schedule.locked ? schedule.snapshot?.users?.[shift.userId] : undefined;
-    const source = schedule.locked ? snapshotUser : liveUser;
+    const snapshotUser = hasPublishedScheduleVersion(schedule) ? schedule.snapshot?.users?.[shift.userId] : undefined;
+    const source = snapshotUser ?? liveUser;
     if (!source?.needsTransportVoucher || !source.transportVoucherValue || source.transportVoucherValue <= 0) return;
 
     const candidate: VoucherDay = {
@@ -68,7 +69,7 @@ export function buildMonthlyTransportVoucherSummaries({
       date: shift.date,
       name: source.username || shift.userName || liveUser?.username || shift.userId,
       amountCents: Math.round(source.transportVoucherValue * 100),
-      frozen: schedule.locked === true,
+      frozen: Boolean(snapshotUser),
     };
     const key = `${period}:${shift.userId}:${shift.date}`;
     const current = uniqueDays.get(key);

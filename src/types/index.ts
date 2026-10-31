@@ -835,7 +835,7 @@ export type PermissionSet = {
   signage: { view: boolean; manage: boolean; };
   dp: {
     view: boolean;
-    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
+    schedules: { view: boolean; create: boolean; edit: boolean; publish: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     requests: { view: boolean; review: boolean; };
     /** Consulta somente leitura do registro e banco de horas de terceiros; ausente em perfis antigos (desligado). */
@@ -3092,7 +3092,7 @@ export const defaultGuestPermissions: PermissionSet = {
     signage: { view: false, manage: false },
     dp: {
       view: false,
-      schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
+      schedules: { view: false, create: false, edit: false, publish: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       requests: { view: false, review: false },
       timeRecording: { view: false, readLocation: false },
@@ -3208,7 +3208,7 @@ export const defaultAdminPermissions: PermissionSet = {
     signage: { view: true, manage: true },
     dp: {
       view: true,
-      schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
+      schedules: { view: true, create: true, edit: true, publish: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       requests: { view: true, review: true },
       timeRecording: { view: true, readLocation: false },
@@ -4072,6 +4072,13 @@ export type DPSchedule = {
   month: number; // 1–12
   year: number;
   shiftCount: number;
+  /** Ausente em escalas legadas, que são consideradas publicadas. */
+  publicationStatus?: 'draft' | 'published';
+  /** Zero em escala nova ainda não publicada; ausente nas escalas legadas publicadas. */
+  publicationVersion?: number;
+  activeRevisionId?: string;
+  publishedAt?: Timestamp;
+  publishedBy?: string;
   unitId?: string;     // per-unit schedule; absent = legacy (all units)
   calendarId?: string; // optional: linked holiday calendar
   locked?: boolean;    // when true, snapshot is frozen
@@ -4086,6 +4093,7 @@ export type DPSchedule = {
     blockingIssueCount: number;
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
+  draftCoverageDemands?: DPCoverageDemands;
   createdAt: Timestamp;
 };
 

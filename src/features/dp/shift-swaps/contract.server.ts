@@ -1,10 +1,14 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 import { todayInBelem } from '@/features/hr/requests/core';
+import { readOfficialScheduleShifts } from '@/features/dp/schedules/official-revision.server';
+import { prepareActiveRevisionOperationalChanges, readActiveRevisionPersonDay, readActiveRevisionShift } from '@/features/dp/schedules/operational-overlay.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { buildDPShiftReference } from '@/lib/dp-shift-reference';
@@ -27,9 +31,21 @@ export const SHIFT_SWAP_REQUESTS = 'dp_shiftSwapRequests';
 const REQUESTS = SHIFT_SWAP_REQUESTS;
 const REFERENCE_HISTORY = 'dp_shiftReferenceHistory';
 const MAX_OPTIONS = 200;
+const MAX_OPTION_SCHEDULES = 20;
 const MAX_OCCUPANCIES = 21;
 const MAX_JOURNEYS = 100;
 const AUDIT_TTL_MS = 20 * 366 * 24 * 60 * 60 * 1_000;
+
+type ShiftDocument = Pick<DocumentSnapshot, 'id' | 'ref' | 'exists' | 'get' | 'data'>;
+function logicalShift(ref: DocumentReference, value: Record<string, unknown> | null): ShiftDocument {
+  return { id: ref.id, ref, exists: value !== null, data: () => value ?? undefined,
+    get: (field: string) => field.split('.').reduce<unknown>((item, key) =>
+      item && typeof item === 'object' ? (item as Record<string, unknown>)[key] : undefined, value) } as ShiftDocument;
+}
+async function transactionShift(tx: Transaction, schedule: DocumentSnapshot, ref: DocumentReference): Promise<ShiftDocument> {
+  if (!schedule.get('activeRevisionId')) return tx.get(ref);
+  return logicalShift(ref, await readActiveRevisionShift(tx, schedule, ref.id));
+}
 
 type Notification = { recipientUid: string; eventId: string; path: '/dashboard/collaborator/requests' };
 
@@ -162,7 +178,7 @@ export function shiftSwapForViewer(request: ShiftSwapRequest, viewerUid: string)
   } };
 }
 
-function option(document: QueryDocumentSnapshot, scheduleId: string, unitName: string, shiftName: string | null, occupantName: string): ShiftSwapOption {
+function option(document: ShiftDocument, scheduleId: string, unitName: string, shiftName: string | null, occupantName: string): ShiftSwapOption {
   return {
     scheduleId, shiftId: document.id, unitId: String(document.get('unitId') ?? ''), unitName,
     date: String(document.get('date') ?? ''), startTime: String(document.get('startTime') ?? ''), endTime: String(document.get('endTime') ?? ''),
@@ -179,23 +195,26 @@ export async function listShiftSwapOptions(context: ServerUserContext) {
   const scheduleSnapshots = await Promise.all(monthsBetween(today, end).map(({ year, month }) => dbAdmin.collection('dp_schedules')
     .where('year', '==', year).where('month', '==', month).get()));
   const selected = new Map<string, QueryDocumentSnapshot>();
-  for (const schedule of scheduleSnapshots.flatMap((snapshot) => snapshot.docs).sort((left, right) => (
-    Number(right.get('locked') === true) - Number(left.get('locked') === true)
-    || millis(right.get('createdAt')) - millis(left.get('createdAt'))
+  for (const schedule of scheduleSnapshots.flatMap((snapshot) => snapshot.docs)
+    .filter((item) => hasPublishedScheduleVersion(item.data())).sort((left, right) => (
+    millis(right.get('createdAt')) - millis(left.get('createdAt'))
   ))) {
     const unitId = String(schedule.get('unitId') ?? '');
     if (unitId && !selected.has(`${schedule.get('year')}-${schedule.get('month')}-${unitId}`)) selected.set(`${schedule.get('year')}-${schedule.get('month')}-${unitId}`, schedule);
   }
+  if (selected.size > MAX_OPTION_SCHEDULES) throw fail('SHIFT_SWAP_SCHEDULE_LIMIT', 'Há escalas demais para montar as opções com segurança.', 'CONFLICT');
   const groups = await Promise.all([...selected.values()].map(async (schedule) => ({ schedule,
-    shifts: await schedule.ref.collection('shifts').where('date', '>', today).where('date', '<=', end).limit(MAX_OPTIONS + 1).get() })));
-  if (groups.some((group) => group.shifts.size > MAX_OPTIONS)) throw fail('SHIFT_SWAP_OPTIONS_LIMIT', 'Há turnos demais para montar as opções com segurança.', 'CONFLICT');
-  const all = groups.flatMap(({ schedule, shifts }) => shifts.docs.map((shift) => ({ schedule, shift })))
+    shifts: (await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts
+      .filter((shift) => typeof shift.date === 'string' && shift.date > today && shift.date <= end)
+      .map((shift) => logicalShift(schedule.ref.collection('shifts').doc(shift.id), shift)) })));
+  const all = groups.flatMap(({ schedule, shifts }) => shifts.map((shift) => ({ schedule, shift })))
     .filter(({ shift }) => shift.get('type') === 'work' && text(shift.get('userId'), 180) && text(shift.get('unitId'), 180)
       && text(shift.get('startTime'), 8) && text(shift.get('endTime'), 8));
   const own = all.filter(({ shift }) => shift.get('userId') === context.decoded.uid);
   const ownKeys = new Set(own.map(({ shift }) => `${shift.get('unitId')}|${shift.get('date')}`));
   const candidates = all.filter(({ shift }) => shift.get('userId') !== context.decoded.uid && ownKeys.has(`${shift.get('unitId')}|${shift.get('date')}`));
   const included = [...own, ...candidates];
+  if (included.length > MAX_OPTIONS) throw fail('SHIFT_SWAP_OPTIONS_LIMIT', 'Há turnos demais para montar as opções com segurança.', 'CONFLICT');
   const unitIds = [...new Set(included.map(({ shift }) => String(shift.get('unitId'))))];
   const definitionIds = [...new Set(included.map(({ shift }) => text(shift.get('shiftDefinitionId'), 180)).filter((value): value is string => Boolean(value)))];
   const userIds = [...new Set(included.map(({ shift }) => String(shift.get('userId'))))];
@@ -207,7 +226,7 @@ export async function listShiftSwapOptions(context: ServerUserContext) {
   const units = new Map(unitDocs.map((doc) => [doc.id, String(doc.get('name') ?? 'Unidade')]));
   const definitions = new Map(definitionDocs.map((doc) => [doc.id, text(doc.get('name'), 180)]));
   const users = new Map(userDocs.filter((doc) => doc.exists && doc.get('isActive') !== false).map((doc) => [doc.id, displayName(doc, doc.id)]));
-  const format = ({ schedule, shift }: { schedule: QueryDocumentSnapshot; shift: QueryDocumentSnapshot }) => option(shift, schedule.id,
+  const format = ({ schedule, shift }: { schedule: QueryDocumentSnapshot; shift: ShiftDocument }) => option(shift, schedule.id,
     units.get(String(shift.get('unitId'))) ?? 'Unidade', definitions.get(String(shift.get('shiftDefinitionId') ?? '')) ?? null,
     users.get(String(shift.get('userId'))) ?? 'Colaborador');
   return {
@@ -217,7 +236,7 @@ export async function listShiftSwapOptions(context: ServerUserContext) {
   };
 }
 
-function shiftSnapshot(document: DocumentSnapshot, scheduleId: string, unit: DocumentSnapshot, definition: DocumentSnapshot | null, user: DocumentSnapshot): ShiftSwapShift {
+function shiftSnapshot(document: ShiftDocument, scheduleId: string, unit: DocumentSnapshot, definition: DocumentSnapshot | null, user: DocumentSnapshot): ShiftSwapShift {
   const data = document.data() ?? {};
   return {
     scheduleId, shiftId: document.id, unitId: String(data.unitId ?? ''), unitName: String(unit.get('name') ?? 'Unidade'),
@@ -267,7 +286,8 @@ export async function createShiftSwap(context: ServerUserContext, input: CreateS
       }
       return { request: stored, notification: null as Notification | null };
     }
-    const [schedule, offered, requested] = await Promise.all([tx.get(scheduleRef), tx.get(offeredRef), tx.get(requestedRef)]);
+    const schedule = await tx.get(scheduleRef);
+    const [offered, requested] = await Promise.all([transactionShift(tx, schedule, offeredRef), transactionShift(tx, schedule, requestedRef)]);
     if (!schedule.exists || !offered.exists || !requested.exists) throw fail('SHIFT_SWAP_SHIFT_NOT_FOUND', 'Um dos turnos não está mais disponível.', 'NOT_FOUND');
     const offeredUid = String(offered.get('userId') ?? '');
     const requestedUid = String(requested.get('userId') ?? '');
@@ -340,7 +360,7 @@ async function buildIncomingReference(params: {
   unit: DocumentSnapshot;
   definition: DocumentSnapshot | null;
   journeys: DPJourney[];
-  shift: DocumentSnapshot;
+  shift: ShiftDocument;
   scheduleId: string;
   previousRevisionId: string | null;
   actorUid: string;
@@ -416,7 +436,8 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
     const scheduleRef = dbAdmin.collection('dp_schedules').doc(stored.offeredShift.scheduleId);
     const offeredRef = scheduleRef.collection('shifts').doc(stored.offeredShift.shiftId);
     const requestedRef = scheduleRef.collection('shifts').doc(stored.requestedShift.shiftId);
-    const [schedule, offered, requested] = await Promise.all([tx.get(scheduleRef), tx.get(offeredRef), tx.get(requestedRef)]);
+    const schedule = await tx.get(scheduleRef);
+    const [offered, requested] = await Promise.all([transactionShift(tx, schedule, offeredRef), transactionShift(tx, schedule, requestedRef)]);
     if (!schedule.exists || !offered.exists || !requested.exists) throw fail('SHIFT_SWAP_SHIFT_NOT_FOUND', 'Um dos turnos deixou de existir.', 'CONFLICT');
     const stillValid = shiftFingerprint(offered.data() ?? {}) === stored.offeredShift.fingerprint
       && shiftFingerprint(requested.data() ?? {}) === stored.requestedShift.fingerprint
@@ -430,7 +451,7 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
     }
     const unitId = String(offered.get('unitId'));
     const date = String(offered.get('date'));
-    const [requester, target, unit, offeredDefinition, requestedDefinition, journeysSnapshot, requesterOccupancies, targetOccupancies] = await Promise.all([
+    const [requester, target, unit, offeredDefinition, requestedDefinition, journeysSnapshot, requesterOccupancies, targetOccupancies, requesterRevisionOccupancies, targetRevisionOccupancies] = await Promise.all([
       tx.get(dbAdmin.collection('users').doc(stored.requesterUid)), tx.get(dbAdmin.collection('users').doc(stored.targetUid)),
       tx.get(dbAdmin.collection('dp_units').doc(unitId)),
       text(offered.get('shiftDefinitionId'), 180) ? tx.get(dbAdmin.collection('dp_shiftDefinitions').doc(String(offered.get('shiftDefinitionId')))) : null,
@@ -438,6 +459,8 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
       tx.get(dbAdmin.collection('dp_journeys').where('status', 'in', ['published', 'archived']).limit(MAX_JOURNEYS + 1)),
       tx.get(dbAdmin.collectionGroup('shifts').where('userId', '==', stored.requesterUid).where('date', '==', date).limit(MAX_OCCUPANCIES)),
       tx.get(dbAdmin.collectionGroup('shifts').where('userId', '==', stored.targetUid).where('date', '==', date).limit(MAX_OCCUPANCIES)),
+      readActiveRevisionPersonDay(tx, stored.requesterUid, date),
+      readActiveRevisionPersonDay(tx, stored.targetUid, date),
     ]);
     if (!requester.exists || requester.get('isActive') === false || !target.exists || target.get('isActive') === false || !unit.exists || unit.get('isArchived') === true) {
       throw fail('SHIFT_SWAP_PARTICIPANT_UNAVAILABLE', 'Uma pessoa ou unidade deixou de estar disponível.', 'CONFLICT');
@@ -446,8 +469,14 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
       throw fail('SHIFT_SWAP_VALIDATION_LIMIT', 'Não foi possível validar a troca com segurança.', 'DATA_INTEGRITY');
     }
     const selectedPaths = new Set([offeredRef.path, requestedRef.path]);
-    const extra = [...requesterOccupancies.docs, ...targetOccupancies.docs].filter((doc) => isScheduleShift(doc) && !selectedPaths.has(doc.ref.path));
-    if (extra.length) throw fail('SHIFT_SWAP_OTHER_OCCUPANCY', 'Uma das pessoas possui outro turno ou folga nessa data.', 'CONFLICT');
+    const legacyOccupancies = [...requesterOccupancies.docs, ...targetOccupancies.docs].filter(isScheduleShift);
+    const legacyScheduleRefs = [...new Map(legacyOccupancies.map((doc) => [doc.ref.parent.parent!.id, doc.ref.parent.parent!] as const)).values()];
+    const legacySchedules = legacyScheduleRefs.length ? await tx.getAll(...legacyScheduleRefs) : [];
+    const pointerIds = new Set(legacySchedules.filter((item) => item.get('activeRevisionId')).map((item) => item.id));
+    const extraLegacy = legacyOccupancies.filter((doc) => !pointerIds.has(doc.ref.parent.parent!.id) && !selectedPaths.has(doc.ref.path));
+    const extraRevision = [...requesterRevisionOccupancies, ...targetRevisionOccupancies]
+      .filter((item) => !selectedPaths.has(`dp_schedules/${item.scheduleId}/shifts/${item.id}`));
+    if (extraLegacy.length || extraRevision.length) throw fail('SHIFT_SWAP_OTHER_OCCUPANCY', 'Uma das pessoas possui outro turno ou folga nessa data.', 'CONFLICT');
     const journeys = journeysSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as DPJourney));
     const [newOfferedReference, newRequestedReference] = await Promise.all([
       buildIncomingReference({ tx, user: target, unit, definition: offeredDefinition, journeys, shift: offered,
@@ -455,6 +484,26 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
       buildIncomingReference({ tx, user: requester, unit, definition: requestedDefinition, journeys, shift: requested,
         scheduleId: schedule.id, previousRevisionId: text(requested.get('referenceRevisionId'), 180), actorUid: context.decoded.uid, requestId, now }),
     ]);
+    const offeredPatch = { userId: stored.targetUid, userName: stored.targetName, referenceRevisionId: newOfferedReference.ref.id,
+      journeyResolution: { journeyId: newOfferedReference.resolution.journey.id, lineageId: newOfferedReference.resolution.journey.lineageId,
+        version: newOfferedReference.resolution.journey.version, name: newOfferedReference.resolution.journey.name,
+        resolvedBy: newOfferedReference.resolution.resolvedBy, validationMode: newOfferedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
+        maxConsecutiveWorkDays: newOfferedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
+      shiftSwapRequestId: requestId, updatedAt: now };
+    const requestedPatch = { userId: stored.requesterUid, userName: stored.requesterName, referenceRevisionId: newRequestedReference.ref.id,
+      journeyResolution: { journeyId: newRequestedReference.resolution.journey.id, lineageId: newRequestedReference.resolution.journey.lineageId,
+        version: newRequestedReference.resolution.journey.version, name: newRequestedReference.resolution.journey.name,
+        resolvedBy: newRequestedReference.resolution.resolvedBy, validationMode: newRequestedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
+        maxConsecutiveWorkDays: newRequestedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
+      shiftSwapRequestId: requestId, updatedAt: now };
+    const preparedOverlay = schedule.get('activeRevisionId')
+      ? await prepareActiveRevisionOperationalChanges({ tx, schedule, workspaceId: context.workspace_id, actorId: context.decoded.uid,
+        reason: 'shift_swap_accepted', changes: [
+          { shiftId: offered.id, previous: offered.data() ?? null, next: { ...offered.data(), ...offeredPatch } },
+          { shiftId: requested.id, previous: requested.data() ?? null, next: { ...requested.data(), ...requestedPatch } },
+        ] }) : null;
+    const publicationFence = preparedOverlay ? null : await preparePublicationFenceAdvance(tx,
+      context.workspace_id, [stored.requesterUid, stored.targetUid]);
     if (operationalGuardRequested()) {
       await guardOccupancyWrite(tx, context.workspace_id, [
         ...shiftOccupancySlices({ beneficiaryUid: stored.requesterUid, date, startTime: String(offered.get('startTime')), endTime: String(offered.get('endTime')), addsOccupancy: false }),
@@ -465,21 +514,15 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
     }
     const accepted = event('accepted', now, evidence,
       `Aceito trocar meu turno de ${date}, ${requested.get('startTime')}–${requested.get('endTime')}, pelo turno de ${stored.requesterName}, ${offered.get('startTime')}–${offered.get('endTime')}.`, operationFingerprint);
-    tx.update(offeredRef, { userId: stored.targetUid, userName: stored.targetName, referenceRevisionId: newOfferedReference.ref.id,
-      journeyResolution: { journeyId: newOfferedReference.resolution.journey.id, lineageId: newOfferedReference.resolution.journey.lineageId,
-        version: newOfferedReference.resolution.journey.version, name: newOfferedReference.resolution.journey.name,
-        resolvedBy: newOfferedReference.resolution.resolvedBy, validationMode: newOfferedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
-        maxConsecutiveWorkDays: newOfferedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
-      shiftSwapRequestId: requestId, updatedAt: now });
-    tx.update(requestedRef, { userId: stored.requesterUid, userName: stored.requesterName, referenceRevisionId: newRequestedReference.ref.id,
-      journeyResolution: { journeyId: newRequestedReference.resolution.journey.id, lineageId: newRequestedReference.resolution.journey.lineageId,
-        version: newRequestedReference.resolution.journey.version, name: newRequestedReference.resolution.journey.name,
-        resolvedBy: newRequestedReference.resolution.resolvedBy, validationMode: newRequestedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
-        maxConsecutiveWorkDays: newRequestedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
-      shiftSwapRequestId: requestId, updatedAt: now });
+    if (preparedOverlay) preparedOverlay.apply();
+    else {
+      publicationFence?.apply();
+      tx.update(offeredRef, offeredPatch);
+      tx.update(requestedRef, requestedPatch);
+    }
     tx.create(newOfferedReference.ref, { ...newOfferedReference.data, workspaceId: context.workspace_id });
     tx.create(newRequestedReference.ref, { ...newRequestedReference.data, workspaceId: context.workspace_id });
-    tx.update(scheduleRef, { goalEligibilityVersion: FieldValue.increment(1), journeyValidationVersion: FieldValue.increment(1),
+    tx.update(scheduleRef, { ...(preparedOverlay ? {} : { goalEligibilityVersion: FieldValue.increment(1), journeyValidationVersion: FieldValue.increment(1) }),
       lastAuthorizedShiftSwapAt: now, lastAuthorizedShiftSwapRequestId: requestId });
     tx.update(requestRef, { status: 'accepted', version: nextVersion, events: FieldValue.arrayUnion(accepted), updatedAt: now, decidedAt: now,
       applied: { at: now, scheduleId: schedule.id, offeredReferenceRevisionId: newOfferedReference.ref.id, requestedReferenceRevisionId: newRequestedReference.ref.id } });
@@ -488,7 +531,7 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
     tx.create(dbAdmin.collection('userNotifications').doc(notice.id), notice.data);
     tx.create(dbAdmin.collection('actionLogs').doc(), audit(context, 'shift_swap_accepted', requestId, input.operationId, now,
       { schedule_id: schedule.id, date, unit_id: unitId, offered_shift_id: offered.id, requested_shift_id: requested.id,
-        requester_uid: stored.requesterUid, target_uid: stored.targetUid, schedule_was_locked: schedule.get('locked') === true }));
+        requester_uid: stored.requesterUid, target_uid: stored.targetUid }));
     return { request: { ...stored, status: 'accepted' as const, version: nextVersion, events: [...stored.events, { ...accepted, at: now.toDate().toISOString() }], updatedAt: now.toDate().toISOString(), decidedAt: now.toDate().toISOString() }, notification: notice.notification };
   });
 }

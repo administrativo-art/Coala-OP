@@ -6,8 +6,9 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
+import { readOfficialScheduleShifts } from './official-revision.server';
 
-const SHIFT_LIST_LIMIT = 500;
+const SHIFT_LIST_LIMIT = 2_000;
 
 function serializeValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
@@ -74,15 +75,15 @@ export async function listScheduleShifts(context: ServerUserContext, scheduleId:
     throw new AppError({ code: 'DP_SCHEDULE_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta escala.' });
   }
 
-  const shifts = await schedule.ref.collection('shifts').orderBy('date').limit(SHIFT_LIST_LIMIT + 1).get();
-  if (shifts.size > SHIFT_LIST_LIMIT) {
+  const shifts = (await readOfficialScheduleShifts({ scheduleId })).shifts;
+  if (shifts.length > SHIFT_LIST_LIMIT) {
     throw new AppError({
       code: 'DP_SCHEDULE_SHIFT_LIMIT_REACHED',
       kind: 'DATA_INTEGRITY',
       safeMessage: 'A escala possui turnos demais para carregar com segurança.',
     });
   }
-  return shifts.docs.map(serializeDocument);
+  return shifts.map((shift) => ({ ...serializeValue(shift) as Record<string, unknown>, id: shift.id }));
 }
 
 /** Lista somente a projeção operacional mínima; motivo e documentos nunca chegam à escala. */
