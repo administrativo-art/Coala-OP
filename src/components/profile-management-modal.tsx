@@ -430,6 +430,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
   const dpViewWatch = form.watch('permissions.dp.view' as any);
   const appScheduleViewWatch = form.watch('permissions.app.schedule.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
+  const dpSchedulesEditWatch = form.watch('permissions.dp.schedules.edit' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpRequestsViewWatch = form.watch('permissions.dp.requests.view' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
@@ -442,6 +443,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
   const formalizationCompanyDocumentsViewWatch = form.watch('permissions.hr.formalization.companyDocuments.view' as any);
   const formalizationTemplatesViewWatch = form.watch('permissions.hr.formalization.templates.view' as any);
   const formalizationTemplatesManageWatch = form.watch('permissions.hr.formalization.templates.manage' as any);
+
+  useEffect(() => {
+    if (!dpSchedulesEditWatch) {
+      form.setValue('permissions.dp.schedules.publish' as any, false);
+    }
+  }, [dpSchedulesEditWatch, form]);
 
   useEffect(() => {
     if (!dpCollaboratorsViewWatch) {
@@ -1051,10 +1058,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                 {/* Escalas */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Escalas</h4>
-                                  {renderPermissionSwitch("permissions.dp.schedules.view" as any, "Visualizar Escalas", "Permite ver a lista e abrir escalas.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.schedules.view" as any, "Visualizar Escalas", "Permite ver a lista e abrir escalas. Sem as permissões abaixo, o acesso é somente leitura.", !dpViewWatch)}
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.dp.schedules.create" as any, "Criar Escalas", "Permite criar novas escalas mensais.", !dpSchedulesViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.schedules.edit" as any, "Editar Escalas", "Permite adicionar/editar/remover turnos.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.edit" as any, "Editar Escalas", "Permite montar e alterar o rascunho da escala, sem afetar os demais módulos até a publicação.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.publish" as any, "Publicar Escalas", "Exige Editar Escalas. Disponibiliza o rascunho aos colaboradores e demais módulos.", !dpSchedulesViewWatch || !dpSchedulesEditWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.delete" as any, "Excluir Escalas", "Permite excluir escalas completas.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.export" as any, "Exportar para Bizneo", "Permite gerar o arquivo de exportação.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.publishBizneo" as any, "Publicar no Bizneo", "Permite confirmar folgas e alterar a escala publicada no Bizneo.", !dpSchedulesViewWatch, true)}

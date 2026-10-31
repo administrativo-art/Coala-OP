@@ -37,6 +37,27 @@ export function fetchScheduleShifts(scheduleId: string) {
   ).then((payload) => payload.shifts);
 }
 
+export function fetchDraftScheduleShifts(scheduleId: string) {
+  return authenticatedApiRequest<{ shifts: DPShift[]; conflicts: string[]; draftVersion: number }>(
+    `/api/dp/schedules/${encodeURIComponent(scheduleId)}/draft-shifts`,
+    { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+  );
+}
+
+export function publishDraftSchedule(scheduleId: string, expectedDraftVersion: number) {
+  return authenticatedApiRequest<{ publicationStatus: 'published'; publicationVersion: number; shiftCount: number }>(
+    `/api/dp/schedules/${encodeURIComponent(scheduleId)}/publish`,
+    { method: 'POST', json: { expectedDraftVersion }, getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+  );
+}
+
+export function discardDraftConflicts(scheduleId: string, expectedDraftVersion: number) {
+  return authenticatedApiRequest<{ discarded: number; remaining: number }>(
+    `/api/dp/schedules/${encodeURIComponent(scheduleId)}/draft-shifts`,
+    { method: 'POST', json: { expectedDraftVersion }, getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+  );
+}
+
 export function fetchScheduleAbsences(scheduleId: string) {
   return authenticatedApiRequest<{ absences: DPScheduleAbsence[] }>(
     `/api/dp/schedules/${encodeURIComponent(scheduleId)}/absences`,

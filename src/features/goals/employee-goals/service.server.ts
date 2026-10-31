@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
-import { countsDPShiftTowardGoals } from '@/lib/dp-external-coverage';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import { resolveGoalDPUnit } from '@/features/goals/unit-resolution.server';
+import { readOfficialScheduleShiftsInTransaction } from '@/features/dp/schedules/official-revision.server';
 
 import type { CreateEmployeeGoalInput } from './schemas';
 
@@ -111,20 +111,16 @@ export async function createEmployeeGoal(params: {
     }
 
     for (const schedule of schedules) {
-      const shifts = await transaction.get(
-        schedule.ref.collection('shifts')
-          .where('userId', '==', input.employeeId)
-          .limit(MAX_EMPLOYEE_SHIFTS_PER_SCHEDULE + 1),
-      );
-      if (shifts.size > MAX_EMPLOYEE_SHIFTS_PER_SCHEDULE) {
+      const shifts = await readOfficialScheduleShiftsInTransaction(transaction, schedule, { userId: input.employeeId });
+      if (shifts.length > MAX_EMPLOYEE_SHIFTS_PER_SCHEDULE) {
         throw new AppError({ code: 'EMPLOYEE_GOAL_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há turnos demais para validar este colaborador com segurança.' });
       }
-      if (shifts.docs.some((shift) => {
-        const shiftDate = String(shift.get('date') ?? '');
-        return shift.get('type') === 'work'
+      if (shifts.some((shift) => {
+        const shiftDate = String(shift.date ?? '');
+        return shift.type === 'work'
           && shiftDate >= startKey
           && shiftDate <= endKey
-          && !countsDPShiftTowardGoals(shift.data());
+          && shift.countsTowardGoals === false;
       })) {
         throw new AppError({
           code: 'EMPLOYEE_GOAL_EXTERNAL_COVERAGE_INELIGIBLE',

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -12,6 +12,8 @@ import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney, DPShiftDefinition } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 
 import { assertPersonAgendaUnchanged, personAgendaClockRef, personAgendaVersion } from './agenda-clock.server';
 import type { SaveWorkShiftInput } from './schemas';
@@ -48,8 +50,10 @@ export async function saveWorkShift(params: {
   requestId: string;
   /** Versão da agenda da pessoa lida antes de uma conferência feita fora desta transação (cobertura de turno). */
   expectedAgendaVersion?: number;
+  /** Permite que a cobertura grave turno e decisão na mesma transação. */
+  transaction?: Transaction;
 }) {
-  const { context, scheduleId, shiftId, input, mode, requestId, expectedAgendaVersion } = params;
+  const { context, scheduleId, shiftId, input, mode, requestId, expectedAgendaVersion, transaction: providedTransaction } = params;
   assertEditPermission(context);
 
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
@@ -65,7 +69,7 @@ export async function saveWorkShift(params: {
     .limit(OCCUPANCY_QUERY_LIMIT);
   const agendaClockRef = personAgendaClockRef(context.workspace_id, input.userId);
 
-  return dbAdmin.runTransaction(async (transaction) => {
+  const execute = async (transaction: Transaction) => {
     const scheduleSnapshot = await transaction.get(scheduleRef);
     const shiftSnapshot = await transaction.get(shiftRef);
     const userSnapshot = await transaction.get(userRef);
@@ -80,11 +84,15 @@ export async function saveWorkShift(params: {
       ? personAgendaClockRef(context.workspace_id, previousUserId) : null;
     const previousAgendaVersion = previousAgendaClockRef ? personAgendaVersion(await transaction.get(previousAgendaClockRef)) : null;
 
+    if (scheduleSnapshot.get('activeRevisionId')) {
+      throw new AppError({ code: 'DP_SHIFT_REVISION_NOT_READY', kind: 'CONFLICT', safeMessage: 'Coberturas em escalas por revisão aguardam integração operacional.' });
+    }
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
     }
-    if (scheduleSnapshot.get('locked') === true) {
-      throw new AppError({ code: 'DP_SHIFT_SCHEDULE_LOCKED', kind: 'CONFLICT', safeMessage: 'A escala está trancada.' });
+    if (!hasPublishedScheduleVersion(scheduleSnapshot.data() ?? {})) {
+      throw new AppError({ code: 'DP_SHIFT_DRAFT_NOT_OPERATIONAL', kind: 'CONFLICT',
+        safeMessage: 'A escala precisa ser publicada antes de receber turnos operacionais.' });
     }
     if (!userSnapshot.exists || userSnapshot.get('isActive') === false) {
       throw new AppError({ code: 'DP_SHIFT_USER_UNAVAILABLE', kind: 'EXPECTED_BUSINESS', safeMessage: 'Colaboradora não encontrada ou inativa.' });
@@ -284,6 +292,8 @@ export async function saveWorkShift(params: {
         ? { originUnitId: FieldValue.delete(), exceptionReason: FieldValue.delete() }
         : {};
 
+    const publicationFence = await preparePublicationFenceAdvance(transaction, context.workspace_id,
+      [input.userId, ...(typeof previousUserId === 'string' ? [previousUserId] : [])]);
     if (operationalGuardRequested()) {
       const oldSlices = shiftSnapshot.exists ? shiftOccupancySlices({
         beneficiaryUid: String(shiftSnapshot.get('userId')), date: String(shiftSnapshot.get('date')),
@@ -296,6 +306,7 @@ export async function saveWorkShift(params: {
           startTime: input.startTime, endTime: input.endTime, addsOccupancy: true }),
       ], 4);
     }
+    publicationFence.apply();
 
     if (mode === 'create') {
       transaction.create(shiftRef, {
@@ -363,5 +374,6 @@ export async function saveWorkShift(params: {
     });
 
     return { shiftId, hasConflict: hasCrossUnitConflict };
-  });
+  };
+  return providedTransaction ? execute(providedTransaction) : dbAdmin.runTransaction(execute);
 }

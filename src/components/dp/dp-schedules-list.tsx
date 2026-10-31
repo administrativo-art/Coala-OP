@@ -26,6 +26,7 @@ import { resolveDPUnitCity } from '@/lib/dp-unit-city';
 import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
 import { buildMonthlyTransportVoucherSummaries } from '@/lib/dp-transport-voucher-summary';
 import { cn } from '@/lib/utils';
+import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -54,7 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { AlertTriangle, ChevronRight, Download, Lock, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Download, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
 import { DPSchedulesSidebar, type DPSchedulesSidebarGroup } from '@/components/dp/dp-schedules-sidebar';
@@ -458,8 +459,8 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
     [schedules, selectedMonth, selectedYear]
   );
 
-  const exportableSchedules = useMemo(() => monthSchedules.filter(s => !s.locked), [monthSchedules]);
-  const lockedSchedules = useMemo(() => monthSchedules.filter(s => s.locked), [monthSchedules]);
+  const exportableSchedules = useMemo(() => monthSchedules.filter(hasPublishedScheduleVersion), [monthSchedules]);
+  const unpublishedSchedules = useMemo(() => monthSchedules.filter(s => !hasPublishedScheduleVersion(s)), [monthSchedules]);
 
   // Reset checklist when month/year changes
   React.useEffect(() => {
@@ -695,18 +696,17 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
                     </div>
                   );
                 })}
-                {lockedSchedules.map(s => {
+                {unpublishedSchedules.map(s => {
                   const unitName = units.find(u => u.id === s.unitId)?.name ?? s.unitId;
                   return (
                     <div key={s.id} className="flex items-center gap-2.5 px-3 py-2.5 opacity-50">
-                      <Checkbox id={`sched-locked-${s.id}`} checked={false} disabled />
+                      <Checkbox id={`sched-unpublished-${s.id}`} checked={false} disabled />
                       <label
-                        htmlFor={`sched-locked-${s.id}`}
+                        htmlFor={`sched-unpublished-${s.id}`}
                         className="text-sm text-muted-foreground flex-1 flex items-center gap-1.5 cursor-not-allowed"
                       >
-                        <Lock className="h-3 w-3 shrink-0" />
                         {unitName}
-                        <span className="text-xs ml-0.5">· trancada</span>
+                        <span className="text-xs ml-0.5">· ainda não publicada</span>
                       </label>
                     </div>
                   );
@@ -859,7 +859,7 @@ export function DPSchedulesList() {
                 return {
                   key: unit.id,
                   name: unit.name,
-                  locked: schedule?.locked,
+                  draft: schedule ? schedulePublicationStatus(schedule) === 'draft' : false,
                   filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
                   expectedDays: countExpectedDPUnitDays({ unit, year: currentYear, month: currentMonth, shiftDefinitions }),
                   onClick: () => router.push(
@@ -880,7 +880,7 @@ export function DPSchedulesList() {
   const summarize = React.useCallback((year: number, month: number) => {
     const items = visibleSchedules.filter((s) => s.year === year && s.month === month);
     const hasData = items.length > 0;
-    const allLocked = hasData && items.every((s) => s.locked);
+    const hasDraft = items.some((s) => schedulePublicationStatus(s) === 'draft');
     const legacyAllUnits = items.some((s) => !s.unitId);
     const startedCanonical = new Set(items.filter((s) => s.unitId).map((s) => canonicalOf(s.unitId!)));
     const startedCount = !hasData
@@ -889,35 +889,21 @@ export function DPSchedulesList() {
         ? totalUnits
         : accessibleUnits.filter((u) => startedCanonical.has(canonicalOf(u.id))).length;
     const shiftCount = items.reduce((sum, s) => sum + (s.shiftCount ?? 0), 0);
-    const isPast = year < currentYear || (year === currentYear && month < currentMonth);
     const isCurrent = year === currentYear && month === currentMonth;
     const missing = Math.max(0, totalUnits - startedCount);
-    const tone: 'active' | 'draft' | 'locked' | 'empty' = !hasData
+    const tone: 'active' | 'draft' | 'empty' = !hasData
       ? 'empty'
-      : allLocked || isPast
-        ? 'locked'
-        : isCurrent
-          ? 'active'
-          : 'draft';
+      : hasDraft ? 'draft' : 'active';
     const statusLabel = !hasData
       ? 'Não iniciada'
-      : allLocked
-        ? 'Trancada'
-        : isPast
-          ? 'Encerrada'
-          : isCurrent
-            ? 'Em andamento'
-            : 'Rascunho';
-    const alert = hasData && !allLocked && isPast
-      ? 'Rever'
-      : isCurrent && missing > 0
+      : hasDraft ? 'Rascunho' : 'Publicada';
+    const alert = isCurrent && missing > 0
         ? `${missing} sem escala`
         : null;
     return {
       period: formatDPSchedulePeriod(year, month),
       month,
       hasData,
-      allLocked,
       startedCount,
       missing,
       shiftCount,
@@ -983,10 +969,10 @@ export function DPSchedulesList() {
       for (let offset = 1; offset <= 3; offset += 1) {
         const d = new Date(currentYear, currentMonth - 1 - offset, 1);
         const s = summarize(d.getFullYear(), d.getMonth() + 1);
-        if (s.hasData && !s.allLocked) {
+        if (s.hasData && s.statusLabel === 'Rascunho') {
           out.push({
             key: `open-${s.period}`,
-            title: `${MONTHS[d.getMonth()]} ainda não foi trancada`,
+            title: `${MONTHS[d.getMonth()]} tem alterações por publicar`,
             detail: `${s.startedCount} de ${totalUnits} unidades · mês encerrado`,
             tone: 'err',
             period: s.period,
@@ -997,10 +983,9 @@ export function DPSchedulesList() {
     return out.slice(0, 3);
   }, [currentMonth, currentYear, summarize, totalUnits]);
 
-  const toneStyles: Record<'active' | 'draft' | 'locked' | 'empty', { card: string; bar: string; status: string }> = {
+  const toneStyles: Record<'active' | 'draft' | 'empty', { card: string; bar: string; status: string }> = {
     active: { card: 'border-[#f9a8c4] bg-white shadow-[0_16px_28px_-22px_rgba(219,39,119,0.65)]', bar: 'bg-[#db2777]', status: 'text-[#db2777]' },
     draft: { card: 'border-[#dbe7f4] bg-white', bar: 'bg-[#0ea5e9]', status: 'text-[#0369a1]' },
-    locked: { card: 'border-[#e3e9f1] bg-white', bar: 'bg-[#94a3b8]', status: 'text-[#94a3b8]' },
     empty: { card: 'border-[#e3e9f1] bg-[#f5f7fa]', bar: 'bg-[#d9e0e9]', status: 'text-[#a3aec0]' },
   };
 
@@ -1110,9 +1095,8 @@ export function DPSchedulesList() {
         })}
         <div className="ml-auto hidden flex-wrap items-center gap-[14px] md:flex">
           {([
-            ['Em andamento', 'bg-[#db2777]'],
+            ['Publicada', 'bg-[#db2777]'],
             ['Rascunho', 'bg-[#0ea5e9]'],
-            ['Trancada', 'bg-[#94a3b8]'],
             ['Não iniciada', 'bg-[#d9e0e9]'],
           ] as const).map(([label, dot]) => (
             <span key={label} className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#7d8a9d]">
@@ -1143,7 +1127,6 @@ export function DPSchedulesList() {
               >
               <div className="flex items-center gap-2">
                 <span className={cn('text-[15.5px] font-black tracking-[-0.01em]', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#0f172a]')}>{card.name}</span>
-                {card.allLocked && <Lock className="h-3 w-3 text-[#94a3b8]" />}
                 <span className={cn('ml-auto text-[10.5px] font-extrabold', s.status)}>
                   {card.statusLabel}
                 </span>

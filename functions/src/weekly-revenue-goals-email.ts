@@ -2,6 +2,7 @@ import { getFirestore, FieldValue, Timestamp, type Firestore } from "firebase-ad
 import { defineSecret, defineString } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
+import { readOfficialScheduleShifts } from "./official-schedule.js";
 
 import {
   buildReport,
@@ -87,10 +88,10 @@ async function scheduledDates(db: Firestore, periodId: string, dpUnitId: string,
     db.collection("dp_schedules").where("unitId", "==", dpUnitId).where("year", "==", year).where("month", "==", month).limit(2).get(),
   ]);
   if (employeeGoals.size > MAX_EMPLOYEE_GOALS || schedules.size !== 1) return [];
-  const shifts = await schedules.docs[0].ref.collection("shifts").limit(MAX_SHIFTS_PER_SCHEDULE + 1).get();
-  if (shifts.size > MAX_SHIFTS_PER_SCHEDULE) return [];
+  const shifts = await readOfficialScheduleShifts(db, schedules.docs[0]);
+  if (shifts.length > MAX_SHIFTS_PER_SCHEDULE) return [];
   const employees = new Set(employeeGoals.docs.map(document => String(document.get("employeeId") ?? "")));
-  const inPeriod = shifts.docs.map(document => document.data()).filter(shift => shift.type === "work" && employees.has(String(shift.userId ?? "")) && shift.date >= start && shift.date <= end);
+  const inPeriod = shifts.filter(shift => shift.type === "work" && employees.has(String(shift.userId ?? "")) && shift.date >= start && shift.date <= end);
   const external = new Set(inPeriod.filter(shift => shift.countsTowardGoals === false).map(shift => String(shift.userId)));
   return [...new Set(inPeriod.filter(shift => shift.countsTowardGoals !== false && !external.has(String(shift.userId))).map(shift => String(shift.date)))].sort();
 }

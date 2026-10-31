@@ -63,6 +63,9 @@ export async function changeDPScheduleLock(params: {
     if (!schedule.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
     }
+    if (schedule.get('activeRevisionId')) {
+      throw new AppError({ code: 'DP_SCHEDULE_STATE_REVISION_NOT_READY', kind: 'CONFLICT', safeMessage: 'O trancamento desta revisão oficial aguarda integração.' });
+    }
     const locked = schedule.get('locked') === true;
     if ((params.action === 'lock' && locked) || (params.action === 'unlock' && !locked)) return;
     const currentVersion = Number(schedule.get('journeyValidationVersion') ?? 0);

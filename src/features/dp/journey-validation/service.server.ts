@@ -6,9 +6,11 @@ import type { DocumentSnapshot, QueryDocumentSnapshot } from 'firebase-admin/fir
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 import type { DPJourney } from '@/types';
 
 import { getSchedule } from '../schedules/read-service.server';
+import { readOfficialPersonMonth, readOfficialScheduleShifts } from '../schedules/official-revision.server';
 import {
   validateDPJourneySchedule,
   type DPJourneyValidationPerson,
@@ -17,11 +19,11 @@ import {
   type DPJourneyValidationShiftDefinition,
 } from './core';
 
-const CURRENT_SHIFT_LIMIT = 500;
-const PARTICIPANT_LIMIT = 100;
+const CURRENT_SHIFT_LIMIT = 2_000;
+const PARTICIPANT_LIMIT = 500;
 const HISTORY_DAY_LIMIT = 62;
-const HISTORY_SHIFT_LIMIT = 6_500;
-const JOURNEY_LIMIT = 100;
+const HISTORY_SHIFT_LIMIT = 31_000;
+const JOURNEY_LIMIT = 500;
 const SHIFT_DEFINITION_LIMIT = 500;
 const FIRESTORE_IN_LIMIT = 30;
 
@@ -90,17 +92,31 @@ export async function validateScheduleJourneys(params: {
   context: ServerUserContext;
   scheduleId: string;
   authorizedSchedule?: Record<string, unknown>;
+  proposedShifts?: Array<Record<string, unknown> & { id: string }>;
 }): Promise<DPJourneyValidationResult> {
   const schedule = params.authorizedSchedule ?? await getSchedule(params.context, params.scheduleId);
   const { periodStart, periodEnd } = periodForSchedule(schedule);
   const historyFrom = format(addDays(parseISO(periodStart), -HISTORY_DAY_LIMIT), 'yyyy-MM-dd');
-  const scheduleRef = dbAdmin.collection('dp_schedules').doc(params.scheduleId);
-  const currentSnapshot = await scheduleRef.collection('shifts').orderBy('date').limit(CURRENT_SHIFT_LIMIT + 1).get();
-  if (currentSnapshot.size > CURRENT_SHIFT_LIMIT) {
+  const currentOfficial = params.proposedShifts ? [] : (await readOfficialScheduleShifts({ scheduleId: params.scheduleId })).shifts;
+  if (currentOfficial.length > CURRENT_SHIFT_LIMIT) {
     throw new AppError({ code: 'DP_SCHEDULE_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'A escala possui turnos demais para validar com segurança.' });
   }
 
-  const currentShifts = currentSnapshot.docs.map(shiftFromDocument).filter((shift): shift is DPJourneyValidationShift => Boolean(shift));
+  const proposedShift = (shift: Record<string, unknown> & { id: string }): DPJourneyValidationShift | null => {
+    const userId = stringValue(shift.userId);
+    const date = stringValue(shift.date);
+    const unitId = stringValue(shift.unitId);
+    const type = shift.type;
+    if (!userId || !date || !unitId || (type !== 'work' && type !== 'day_off')) return null;
+    const shiftDefinitionId = stringValue(shift.shiftDefinitionId);
+    return { id: shift.id, userId, date, unitId, type, ...(shiftDefinitionId ? { shiftDefinitionId } : {}) };
+  };
+  const currentShifts: DPJourneyValidationShift[] = params.proposedShifts
+    ? params.proposedShifts.map(proposedShift).filter((shift): shift is DPJourneyValidationShift => Boolean(shift))
+    : currentOfficial.map(proposedShift).filter((shift): shift is DPJourneyValidationShift => Boolean(shift));
+  if (currentShifts.length > CURRENT_SHIFT_LIMIT) {
+    throw new AppError({ code: 'DP_SCHEDULE_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'A escala possui turnos demais para validar com segurança.' });
+  }
   const participantIds = [...new Set(currentShifts.filter((shift) => shift.type === 'work').map((shift) => shift.userId))].sort();
   if (participantIds.length > PARTICIPANT_LIMIT) {
     throw new AppError({ code: 'DP_JOURNEY_VALIDATION_PARTICIPANT_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'A escala possui colaboradores demais para validar em uma única operação.' });
@@ -117,25 +133,62 @@ export async function validateScheduleJourneys(params: {
     });
   }
 
-  const historyDocuments = new Map(currentSnapshot.docs.map((document) => [document.ref.path, document]));
+  const historyShifts = new Map<string, DPJourneyValidationShift>();
+  const months: string[] = [];
+  for (let cursor = new Date(`${historyFrom.slice(0, 7)}-01T00:00:00Z`);
+    cursor.toISOString().slice(0, 7) <= periodEnd.slice(0, 7); cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+    months.push(cursor.toISOString().slice(0, 7));
+  }
   for (const participantChunk of chunks(participantIds, FIRESTORE_IN_LIMIT)) {
-    const remaining = HISTORY_SHIFT_LIMIT - historyDocuments.size;
+    const remaining = HISTORY_SHIFT_LIMIT - historyShifts.size;
     if (remaining <= 0) {
       throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
     }
     const participantSet = new Set(participantChunk);
     const currentDuplicateAllowance = currentShifts.filter((shift) => participantSet.has(shift.userId)).length;
+    const historyQueryLimit = remaining + currentDuplicateAllowance + 1;
     const historySnapshot = await dbAdmin.collectionGroup('shifts')
       .where('userId', 'in', participantChunk)
       .where('date', '>=', historyFrom)
       .where('date', '<=', periodEnd)
       .orderBy('date', 'asc')
-      .limit(remaining + currentDuplicateAllowance + 1)
+      .limit(historyQueryLimit)
       .get();
-    historySnapshot.docs.filter(isScheduleShift).forEach((document) => historyDocuments.set(document.ref.path, document));
-    if (historyDocuments.size > HISTORY_SHIFT_LIMIT) {
+    if (historySnapshot.size === historyQueryLimit) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
+    const physical = historySnapshot.docs.filter(isScheduleShift);
+    const scheduleRefs = [...new Map(physical.map((doc) => [doc.ref.parent.parent!.path, doc.ref.parent.parent!] as const)).values()];
+    const schedules = scheduleRefs.length ? await dbAdmin.getAll(...scheduleRefs) : [];
+    const legacyPaths = new Set(schedules.filter((doc) => !doc.get('activeRevisionId')
+      && hasPublishedScheduleVersion(doc.data() ?? {})).map((doc) => doc.ref.path));
+    physical.filter((document) => legacyPaths.has(document.ref.parent.parent!.path)
+      && document.ref.parent.parent?.id !== params.scheduleId)
+      .forEach((document) => { const shift = shiftFromDocument(document); if (shift) historyShifts.set(document.ref.path, shift); });
+    if (historyShifts.size > HISTORY_SHIFT_LIMIT) {
       throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
     }
+  }
+  const pointerSchedulesByMonth = new Map<string, Promise<string[]>>();
+  const jobs = participantIds.flatMap((userId) => months.map((competence) => ({ userId, competence })));
+  for (const jobChunk of chunks(jobs, 20)) {
+    const results = await Promise.all(jobChunk.map(async ({ userId, competence }) => {
+      const indexed = await readOfficialPersonMonth({ userId, competence, db: dbAdmin });
+      if (indexed.indexed) return indexed.shifts;
+      if (!pointerSchedulesByMonth.has(competence)) {
+        pointerSchedulesByMonth.set(competence, (async () => {
+          const [year, month] = competence.split('-').map(Number);
+          const schedules = await dbAdmin.collection('dp_schedules').where('year', '==', year).where('month', '==', month).limit(21).get();
+          if (schedules.size === 21) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_POINTER_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há escalas demais para validar o histórico oficial.' });
+          return schedules.docs.filter((item) => item.get('activeRevisionId')).map((item) => item.id);
+        })());
+      }
+      const scheduleIds = await pointerSchedulesByMonth.get(competence)!;
+      return (await Promise.all(scheduleIds.map((id) =>
+        readOfficialScheduleShifts({ scheduleId: id, userId, db: dbAdmin })))).flatMap((item) => item.shifts);
+    }));
+    results.flat().filter((shift) => typeof shift.date === 'string' && shift.date >= historyFrom && shift.date <= periodEnd
+      && shift.scheduleId !== params.scheduleId)
+      .forEach((shift) => { const value = proposedShift(shift); if (value) historyShifts.set(`dp_schedules/${shift.scheduleId}/shifts/${shift.id}`, value); });
+    if (historyShifts.size > HISTORY_SHIFT_LIMIT) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
   }
 
   const userDocuments = await dbAdmin.getAll(...participantIds.map((id) => dbAdmin.collection('users').doc(id)));
@@ -170,7 +223,7 @@ export async function validateScheduleJourneys(params: {
   });
 
   const journeys = await loadJourneyCandidates();
-  const shifts = [...historyDocuments.values()].map(shiftFromDocument).filter((shift): shift is DPJourneyValidationShift => Boolean(shift));
+  const shifts = [...historyShifts.values()].concat(currentShifts);
   const shiftDefinitionIds = [...new Set(shifts.flatMap((shift) => shift.shiftDefinitionId ? [shift.shiftDefinitionId] : []))];
   if (shiftDefinitionIds.length > SHIFT_DEFINITION_LIMIT) {
     throw new AppError({

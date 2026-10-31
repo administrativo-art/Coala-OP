@@ -442,6 +442,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.schedules.create` — [`src/components/dp/dp-schedule-month-view.tsx`](../../src/components/dp/dp-schedule-month-view.tsx)
 - `dp.schedules.delete` — [`src/components/dp/dp-schedule-month-view.tsx`](../../src/components/dp/dp-schedule-month-view.tsx)
 - `dp.schedules.edit` — [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
+- `dp.schedules.publish` — [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
 - `dp.schedules.publishBizneo` — [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
 - `dp.schedules.view` — [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx)
 
@@ -1065,6 +1066,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.schedules.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.export` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.schedules.publish` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.publishBizneo` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageAbsences` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1680,6 +1682,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.schedules.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.export` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.schedules.publish` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.publishBizneo` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageAbsences` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
