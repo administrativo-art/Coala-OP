@@ -20,7 +20,7 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Firebase/FCM |
 | `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 40; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.35 |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.36 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.
