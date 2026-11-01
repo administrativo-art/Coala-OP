@@ -2597,7 +2597,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         })()}
         {!isPerUnit && (
           <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
+            <SelectTrigger flushIcon className="h-8 w-[160px] text-xs"><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas as unidades</SelectItem>
               {allUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
@@ -2605,7 +2605,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           </Select>
         )}
         <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="h-[34px] w-[250px] max-w-full rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
+          <SelectTrigger flushIcon className="h-[34px] w-[250px] max-w-full rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as colaboradoras</SelectItem>
             {operationalUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
@@ -2619,7 +2619,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             return next;
           });
         }}>
-          <SelectTrigger className="h-[34px] w-[155px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
+          <SelectTrigger flushIcon className="h-[34px] w-[155px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Mês inteiro</SelectItem>
             {monthWeeks.map(w => <SelectItem key={w} value={String(w)}>Semana {w}</SelectItem>)}
