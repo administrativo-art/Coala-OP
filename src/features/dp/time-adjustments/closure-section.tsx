@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 
+import { cn } from "@/lib/utils";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { LiftRow } from "@/components/patterns/lift-row";
 import { errorMessageOf } from "@/components/patterns/panel-form";
-import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import { PanelSection } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
-import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
 import type { ClosurePerson } from "./closure-core";
@@ -17,6 +17,9 @@ import { ClosingPackageCard } from "./closing-package-card";
 import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
 import { belongsToTimeClosureRoster } from "@/lib/hr/employment-relationship";
+import { ClosurePersonTrail } from "./closure-person-trail";
+import { ClosureSidebar, type ClosureSidebarGroup } from "./closure-sidebar";
+import { ClosureYearOverview, competenceLabel, pendingOfPerson, useOrganizationOf, NO_ORGANIZATION } from "./closure-year-overview";
 
 type ClosureView = {
   status: "open" | "closed"; version: number; closedAt: string | null; closedBy: string | null; manifestHash: string | null;
@@ -46,11 +49,14 @@ function previousCompetence() {
 }
 
 /** Fechamento do ponto por competência: declaração por pessoa, bloqueio com pedido pendente, versão e reabertura. */
-// Último dia da competência (o banco do DP olha o ciclo que contém o fim do mês fechado).
-const lastDayOf = (competence: string) => new Date(Date.UTC(Number(competence.slice(0, 4)), Number(competence.slice(5, 7)), 0)).toISOString().slice(0, 10);
 
-export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; employmentRelationshipType?: string | null }> }) {
+export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; employmentRelationshipType?: string | null; unitId?: string | null; employerUnitId?: string | null }> }) {
   const [competence, setCompetence] = useState(previousCompetence);
+  // Visão geral do ano (cards por mês) até o usuário abrir uma competência.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const organizationOf = useOrganizationOf(people);
+  const [sidebarQuery, setSidebarQuery] = useState("");
+  const [orgName, setOrgName] = useState<string | null>(null);
   const [data, setData] = useState<ClosurePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -70,12 +76,20 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     : activeTeam;
   const names = new Map([...people.map((person) => [person.id, person.username ?? "Responsável"] as const),
     ...(data?.people ?? []).map((person) => [person.uid, person.name ?? "Responsável"] as const)]);
+  const orgOptions = (() => {
+    const counts = new Map<string, number>();
+    for (const member of activeTeam) counts.set(organizationOf(member.id), (counts.get(organizationOf(member.id)) ?? 0) + 1);
+    return [...counts.entries()].sort(([left], [right]) => (left === NO_ORGANIZATION ? 1 : right === NO_ORGANIZATION ? -1 : left.localeCompare(right, "pt-BR")));
+  })();
+  const activeOrg = orgOptions.some(([name]) => name === orgName) ? orgName : (orgOptions[0]?.[0] ?? null);
+  const orgTeam = team.filter((member) => organizationOf(member.id) === activeOrg);
   const individualByUid = new Map((summary?.people ?? []).map((person) => [person.uid, person]));
   const nameOf = (uid: string | null) => uid ? names.get(uid) ?? "Responsável" : "—";
   const request = useCallback(<T,>(input: string, init: { method?: string; json?: unknown; fallbackError: string }) =>
     authenticatedApiRequest<T>(input, { ...init, getIdToken: () => firebaseUser?.getIdToken() ?? Promise.resolve(null) }), [firebaseUser]);
 
   const load = useCallback(async () => {
+    if (!detailOpen) return;
     setError(null);
     setData(null);
     try {
@@ -83,7 +97,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     } catch (cause) {
       setError(errorMessageOf(cause, "Não foi possível carregar o fechamento."));
     }
-  }, [competence, request]);
+  }, [competence, detailOpen, request]);
   useEffect(() => { void load(); }, [load]);
   const closedVersion = data?.closure?.status === "closed" ? data.closure.version : null;
   const loadSummary = useCallback(async () => {
@@ -116,7 +130,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     setBulk({ running: true, sent: 0, skipped: [] });
     let sent = 0;
     const skipped: string[] = [];
-    for (const person of team) {
+    for (const person of orgTeam) {
       try {
         await request("/api/dp/time-recording/closing-packages", { method: "POST", json: { action: "send", competence, expectedVersion: data.closure.version, employeeUid: person.id },
           fallbackError: "Não foi possível enviar." });
@@ -151,69 +165,85 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   }
 
   const closed = data?.closure?.status === "closed";
+  const emptyPerson = (uid: string, name: string | null): ClosurePerson => ({ uid, name, adjustments: [], absences: [], shiftSwaps: [] });
+  const orgPeople = (data?.people ?? []).filter((person) => organizationOf(person.uid) === activeOrg);
+  const orgPending = orgPeople.reduce((sum, person) => sum + pendingOfPerson(person), 0);
+  const sidebarGroups: ClosureSidebarGroup[] = (() => {
+    if (!detailOpen) {
+      return [{ organization: "", people: orgOptions.map(([name, count]) => ({
+        key: name, name, pending: 0, meta: String(count), detail: `${count} ${count === 1 ? "pessoa" : "pessoas"} no fechamento`, selected: name === activeOrg,
+        onClick: () => setOrgName(name),
+      })) }];
+    }
+    const query = sidebarQuery.trim().toLocaleLowerCase("pt-BR");
+    const members = orgTeam.filter((member) => !query || (member.username ?? "").toLocaleLowerCase("pt-BR").includes(query)).map((member) => {
+      const name = member.username ?? "Sem nome";
+      const record = data?.people.find((item) => item.uid === member.id);
+      return { key: member.id, name, pending: record ? pendingOfPerson(record) : 0, selected: selected?.uid === member.id,
+        detail: record ? `${record.adjustments.length} ajustes · ${record.absences.length} ausências · ${record.shiftSwaps.length} trocas` : "Sem pedidos no mês",
+        onClick: () => setSelected(record ?? emptyPerson(member.id, name)) };
+    });
+    return members.length ? [{ organization: activeOrg ?? NO_ORGANIZATION, people: members }] : [];
+  })();
+  const sidebarTotal = sidebarGroups.reduce((sum, group) => sum + group.people.length, 0);
+  const sidebarClear = sidebarGroups.reduce((sum, group) => sum + group.people.filter((person) => !person.pending).length, 0);
   const blocked = Boolean(data && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps || data.truncated));
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="space-y-1.5 text-xs font-bold text-ds-ink">Competência
-          <input type="month" value={competence} max={new Date().toISOString().slice(0, 7)} onChange={(event) => event.target.value && setCompetence(event.target.value)}
-            className="block h-11 rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-sm text-ds-ink" />
-        </label>
+    <div className="flex flex-col gap-[14px] lg:flex-row lg:items-start">
+    <ClosureSidebar mode={detailOpen ? "people" : "organizations"} title={detailOpen ? activeOrg ?? "Fechamento" : "Fechamento · DP"} subtitle={detailOpen ? competenceLabel(competence) : "Organizações"}
+      groups={sidebarGroups} query={sidebarQuery} onQueryChange={setSidebarQuery} showBack={detailOpen}
+      onBack={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}
+      doneCount={sidebarClear} totalCount={sidebarTotal} />
+    <div className="min-w-0 flex-1 space-y-3">
+      {!detailOpen ? <ClosureYearOverview firebaseUser={firebaseUser} people={people} organization={activeOrg} onOpen={(value) => { setCompetence(value); setDetailOpen(true); }} /> : null}
+      {detailOpen ? <div className="flex flex-wrap items-center gap-3">
+        <Button variant="ds-secondary" size="sm" onClick={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}>← Todos os meses</Button>
+        <h2 className="text-lg font-black text-ds-ink">{competenceLabel(competence)}</h2>
         {data ? <StatusPill variant={closed ? "ok" : "neutral"}>{closed ? `Fechada · versão ${data.closure!.version}` : data.closure?.reopenings.length ? "Reaberta" : "Aberta"}</StatusPill> : null}
-      </div>
-      {error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
-      {!data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
-      {data ? <>
-        <p className="text-sm text-ds-ink">{data.people.length} {data.people.length === 1 ? "pessoa" : "pessoas"} no fechamento · {data.counts.adjustments} ajustes de ponto · {data.counts.absences} ausências · {data.counts.shiftSwaps} trocas de turno.</p>
+      </div> : null}
+      {detailOpen && error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
+      {detailOpen && !data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
+      {detailOpen && data && !selected ? <>
+        <p className="text-sm text-ds-ink">{orgPeople.length} {orgPeople.length === 1 ? "pessoa" : "pessoas"} em {activeOrg} · {orgPeople.reduce((sum, person) => sum + person.adjustments.length, 0)} ajustes de ponto · {orgPeople.reduce((sum, person) => sum + person.absences.length, 0)} ausências · {orgPeople.reduce((sum, person) => sum + person.shiftSwaps.length, 0)} trocas de turno.</p>
         {closed ? <p className="text-xs text-ds-ink-muted">Fechada em {whenBR(data.closure!.closedAt)} por {nameOf(data.closure!.closedBy)}. Carimbo da declaração: <span className="font-mono">{data.closure!.manifestHash?.slice(0, 16)}…</span></p> : null}
         {closed && data.closure!.changes ? <p className="text-xs text-ds-ink-muted">Em relação à versão anterior: {data.closure!.changes.added.length} itens novos, {data.closure!.changes.changed.length} alterados, {data.closure!.changes.removed.length} retirados.</p> : null}
-        {!closed && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
-          Há pedidos sem decisão: {data.pending.adjustments} de ajuste, {data.pending.absences} de ausência e {data.pending.shiftSwaps} de troca de turno. Decida-os antes de fechar.</p> : null}
-        {!closed && data.truncated ? <p role="alert" className="text-xs font-semibold text-ds-danger">O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.</p> : null}
-        {data.people.filter((person) => person.adjustments.length || person.absences.length || person.shiftSwaps.length).map((person) => {
-          const pending = person.adjustments.filter((item) => item.status === "in_review").length
-            + person.absences.filter((item) => ["submitted", "in_review", "adjustments_requested"].includes(item.status)).length
-            + person.shiftSwaps.filter((item) => item.status === "pending").length;
-          return (
-            <LiftRow key={person.uid} table onClick={() => setSelected(person)} className="flex items-center justify-between gap-3">
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-extrabold text-ds-ink">{person.name ?? nameOf(person.uid)}</span>
-                <span className="block text-sm text-ds-ink-muted">{person.adjustments.length} ajustes · {person.absences.length} ausências · {person.shiftSwaps.length} trocas</span>
-              </span>
-              {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : <StatusPill variant="neutral">Declarado</StatusPill>}
-            </LiftRow>
-          );
-        })}
-        {closed ? <div className="space-y-2 border-t border-ds-divider pt-3">
-          <p className="text-sm font-extrabold text-ds-ink">Fechamentos individuais e fechamento geral</p>
-          <p className="text-xs text-ds-ink-muted">Cada pessoa conclui seu fechamento individual ao assinar na Autentique o documento com o espelho e o contracheque. O fechamento geral só pode ser concluído depois da assinatura de todos.</p>
-          {summary ? <div className="flex flex-wrap items-center gap-2">
-            {summary.finalization ? <StatusPill variant="ok">Fechamento geral concluído em {whenBR(summary.finalization.at)}</StatusPill> : <StatusPill variant="warn">Fechamento geral pendente</StatusPill>}
-            <span className="text-xs text-ds-ink-muted">{summary.counts.closed} individuais fechados · {summary.counts.pending} pendentes · {summary.counts.overdue} atrasados</span>
-          </div> : null}
-          {summary?.overdue.length ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
-            {summary.overdue.length} {summary.overdue.length === 1 ? "pessoa não assinou" : "pessoas não assinaram"} em 24 horas ou recusou: {summary.overdue.map((item) => item.name ?? nameOf(item.uid)).join(", ")}. O fechamento geral continua pendente; reenvie para assinatura.</p> : null}
-          {summary && !summary.finalization && data.can.close ? (confirmFinalize
-            ? <InlineConfirm message="Concluir o fechamento geral? Todos os colaboradores desta versão assinaram seus documentos." confirmLabel="Concluir fechamento geral" loadingLabel="Finalizando…"
-                loading={busy} onConfirm={() => void finalize()} onCancel={() => setConfirmFinalize(false)} />
-            : <Button variant="primary-page" size="sm" disabled={busy || summary.counts.total === 0 || summary.counts.pending > 0}
-                onClick={() => setConfirmFinalize(true)}>Concluir fechamento geral</Button>) : null}
-          {data.can.close ? (confirmBulk
-            ? <InlineConfirm message={`Enviar os pacotes de ${team.length} pessoas? Quem ainda não tem contracheque ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
-                loadingLabel="Enviando…" loading={bulk?.running ?? false} onConfirm={() => void sendAll()} onCancel={() => setConfirmBulk(false)} />
-            : <Button variant="ds-secondary" size="sm" disabled={bulk?.running} onClick={() => setConfirmBulk(true)}>Enviar todos os prontos</Button>) : null}
-          {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
-          {team.map((person) => {
-            const individual = individualByUid.get(person.id);
-            return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [], shiftSwaps: [] })}
-              className="flex items-center justify-between gap-3">
-              <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
-              {individual?.status === "closed" ? <StatusPill variant="ok">Individual fechado</StatusPill>
-                : individual?.overdue ? <StatusPill variant="danger">Individual atrasado</StatusPill>
-                  : <StatusPill variant="warn">Individual pendente</StatusPill>}
-            </LiftRow>;
-          })}
-        </div> : null}
+        <TrailStep number={1} title="Sanar pendências da folha" state={closed || (!orgPending && !blocked) ? "done" : "active"}
+          summary={closed ? "Folha declarada" : orgPending ? `${orgPending} ${orgPending === 1 ? "pedido sem decisão" : "pedidos sem decisão"} nesta organização` : blocked ? "Esta organização está em dia; há pendências em outra" : "Nenhuma pendência"}>
+          {!closed && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
+            Há pedidos sem decisão no mês: {data.pending.adjustments} de ajuste, {data.pending.absences} de ausência e {data.pending.shiftSwaps} de troca de turno (todas as organizações). Decida-os antes de fechar.</p> : null}
+          {!closed && data.truncated ? <p role="alert" className="text-xs font-semibold text-ds-danger">O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.</p> : null}
+        {(() => {
+          const declared = orgPeople.filter((person) => person.adjustments.length || person.absences.length || person.shiftSwaps.length).sort((left, right) => pendingOfPerson(right) - pendingOfPerson(left));
+          const groups = new Map<string, typeof declared>();
+          for (const person of declared) groups.set(organizationOf(person.uid), [...(groups.get(organizationOf(person.uid)) ?? []), person]);
+          const ordered = [...groups.entries()].sort(([left], [right]) => (left === NO_ORGANIZATION ? 1 : right === NO_ORGANIZATION ? -1 : left.localeCompare(right, "pt-BR")));
+          return ordered.map(([organization, members]) => {
+            const pendingPeople = members.filter((person) => pendingOfPerson(person)).length;
+            return (
+              <section key={organization} className="space-y-1.5">
+                <div className="flex items-baseline gap-2 pt-2">
+                  <h3 className="text-sm font-black text-ds-ink">{organization}</h3>
+                  <span className="text-xs font-bold text-ds-ink-muted">{members.length} {members.length === 1 ? "pessoa" : "pessoas"}{pendingPeople ? ` · ${pendingPeople} com pendência` : ""}</span>
+                </div>
+                {members.map((person) => {
+                  const pending = pendingOfPerson(person);
+                  return (
+                    <LiftRow key={person.uid} table onClick={() => setSelected(person)} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-extrabold text-ds-ink">{person.name ?? nameOf(person.uid)}</span>
+                        <span className="block text-sm text-ds-ink-muted">{person.adjustments.length} ajustes · {person.absences.length} ausências · {person.shiftSwaps.length} trocas</span>
+                      </span>
+                      {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : <StatusPill variant="neutral">Declarado</StatusPill>}
+                    </LiftRow>
+                  );
+                })}
+              </section>
+            );
+          });
+        })()}
+        </TrailStep>
+        <TrailStep number={2} title="Fechar a competência" state={closed ? "done" : blocked ? "locked" : "active"}
+          summary={closed ? `Fechada · versão ${data.closure!.version}` : blocked ? "Libera quando não houver pedido sem decisão" : "Congela a declaração de todas as organizações"}>
         {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
         {!closed && data.can.close ? (confirming === "close"
           ? <InlineConfirm message={`Fechar ${dateBR(`${competence}-01`).slice(3)}? A declaração fica congelada e o mês deixa de aceitar pedido de ajuste.`} confirmLabel="Fechar competência" loadingLabel="Fechando…"
@@ -229,14 +259,52 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
         </div> : null}
         {data.closure?.reopenings.length ? <ul className="space-y-1 text-xs text-ds-ink-muted">{data.closure.reopenings.map((entry) => (
           <li key={entry.at}>Reaberta em {whenBR(entry.at)} por {nameOf(entry.by)} (da versão {entry.fromVersion}): {entry.reason}</li>))}</ul> : null}
+        </TrailStep>
+        <TrailStep number={3} title="Assinaturas e fechamento geral" state={!closed ? "locked" : summary?.finalization ? "done" : "active"}
+          summary={!closed ? "Libera depois de fechar a competência" : summary?.finalization ? "Fechamento geral concluído" : "Cada pessoa assina o espelho e o contracheque"}>
+        {closed ? <div className="space-y-2">
+          <p className="text-xs text-ds-ink-muted">Cada pessoa conclui seu fechamento individual ao assinar na Autentique o documento com o espelho e o contracheque. O fechamento geral só pode ser concluído depois da assinatura de todos.</p>
+          {summary ? <div className="flex flex-wrap items-center gap-2">
+            {summary.finalization ? <StatusPill variant="ok">Fechamento geral concluído em {whenBR(summary.finalization.at)}</StatusPill> : <StatusPill variant="warn">Fechamento geral pendente</StatusPill>}
+            <span className="text-xs text-ds-ink-muted">{summary.counts.closed} individuais fechados · {summary.counts.pending} pendentes · {summary.counts.overdue} atrasados</span>
+          </div> : null}
+          {summary?.overdue.length ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
+            {summary.overdue.length} {summary.overdue.length === 1 ? "pessoa não assinou" : "pessoas não assinaram"} em 24 horas ou recusou: {summary.overdue.map((item) => item.name ?? nameOf(item.uid)).join(", ")}. O fechamento geral continua pendente; reenvie para assinatura.</p> : null}
+          {summary && !summary.finalization && data.can.close ? (confirmFinalize
+            ? <InlineConfirm message="Concluir o fechamento geral? Todos os colaboradores desta versão assinaram seus documentos." confirmLabel="Concluir fechamento geral" loadingLabel="Finalizando…"
+                loading={busy} onConfirm={() => void finalize()} onCancel={() => setConfirmFinalize(false)} />
+            : <Button variant="primary-page" size="sm" disabled={busy || summary.counts.total === 0 || summary.counts.pending > 0}
+                onClick={() => setConfirmFinalize(true)}>Concluir fechamento geral</Button>) : null}
+          {data.can.close ? (confirmBulk
+            ? <InlineConfirm message={`Enviar os pacotes de ${orgTeam.length} pessoas? Quem ainda não tem contracheque ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
+                loadingLabel="Enviando…" loading={bulk?.running ?? false} onConfirm={() => void sendAll()} onCancel={() => setConfirmBulk(false)} />
+            : <Button variant="ds-secondary" size="sm" disabled={bulk?.running} onClick={() => setConfirmBulk(true)}>Enviar todos os prontos</Button>) : null}
+          {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
+          {orgTeam.map((person) => {
+            const individual = individualByUid.get(person.id);
+            return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [], shiftSwaps: [] })}
+              className="flex items-center justify-between gap-3">
+              <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
+              {individual?.status === "closed" ? <StatusPill variant="ok">Individual fechado</StatusPill>
+                : individual?.overdue ? <StatusPill variant="danger">Individual atrasado</StatusPill>
+                  : <StatusPill variant="warn">Individual pendente</StatusPill>}
+            </LiftRow>;
+          })}
+        </div> : null}
+        </TrailStep>
       </> : null}
-      {selected ? (
-        <SidePanel open onOpenChange={(next) => { if (!next) setSelected(null); }} kicker={`Declaração do fechamento · ${dateBR(`${competence}-01`).slice(3)}`} title={selected.name ?? nameOf(selected.uid)}
-          subtitle={`${selected.adjustments.length} ajustes · ${selected.absences.length} ausências · ${selected.shiftSwaps.length} trocas`}>
-          {closed ? <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} /> : null}
-          {closed ? <ClosingPackageCard firebaseUser={firebaseUser} competence={competence} employeeUid={selected.uid} onChanged={() => setPackagesKey((value) => value + 1)} /> : null}
-          {closed ? <TimeBankCard firebaseUser={firebaseUser} employeeUid={selected.uid} date={lastDayOf(competence)} canManage={data.can.close} /> : null}
-          <PanelSection title="Ajustes de ponto">
+      {detailOpen && selected ? (() => {
+        const person = data?.people.find((item) => item.uid === selected.uid) ?? selected;
+        const pending = pendingOfPerson(person);
+        return <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-black text-ds-ink">{person.name ?? nameOf(person.uid)}</h2>
+            {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : null}
+          </div>
+          <ClosurePersonTrail key={person.uid} firebaseUser={firebaseUser} competence={competence} person={person} closed={closed} canManage={data?.can.close ?? false}
+            requests={<>
+            <div className="space-y-4">
+              <PanelSection title="Ajustes de ponto">
             {selected.adjustments.length ? selected.adjustments.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">
                 <p className="font-bold text-ds-ink">{dateBR(item.workDate)} · {ADJUSTMENT_KIND_LABELS[item.kind].title} · {ADJUSTMENT_STATUS_LABELS[item.status]}</p>
@@ -245,7 +313,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
                 {item.decidedBy ? <p className="text-xs text-ds-ink-muted">Decidido por {nameOf(item.decidedBy)} em {whenBR(item.decidedAt)}{item.decisionReason ? `: ${item.decisionReason}` : ""}</p> : null}
               </div>)) : <p className="text-sm text-ds-ink-muted">Nenhum ajuste no mês.</p>}
           </PanelSection>
-          <PanelSection title="Ausências" aside="sem motivo nem anexo">
+              <PanelSection title="Ausências" aside="sem motivo nem anexo">
             {selected.absences.length ? selected.absences.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">
                 <p className="font-bold text-ds-ink">{item.typeName} · {ABSENCE_STATUS[item.status] ?? item.status}{item.approval === "tacit_timeout" ? " por decurso de prazo" : ""}</p>
@@ -253,7 +321,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
                 <p className="text-xs text-ds-ink-muted">{item.attachmentCount ? `${item.attachmentCount} comprovante(s) no pedido` : "Sem comprovante"}{item.decidedBy ? ` · decidido por ${nameOf(item.decidedBy)} em ${whenBR(item.decidedAt)}` : ""}</p>
               </div>)) : <p className="text-sm text-ds-ink-muted">Nenhuma ausência no mês.</p>}
           </PanelSection>
-          <PanelSection title="Trocas de turno" aside="aceite autenticado">
+              <PanelSection title="Trocas de turno" aside="aceite autenticado">
             {selected.shiftSwaps.length ? selected.shiftSwaps.map((item) => {
               const requester = item.requesterUid === selected.uid;
               const own = requester ? item.offeredShift : item.requestedShift;
@@ -269,8 +337,42 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
               </div>;
             }) : <p className="text-sm text-ds-ink-muted">Nenhuma troca de turno no mês.</p>}
           </PanelSection>
-        </SidePanel>
-      ) : null}
+            </div>
+            </>}
+            closing={closed ? <>
+              <MirrorCard firebaseUser={firebaseUser} competence={competence} employeeUid={person.uid} />
+              <ClosingPackageCard firebaseUser={firebaseUser} competence={competence} employeeUid={person.uid} onChanged={() => setPackagesKey((value) => value + 1)} />
+            </> : <div className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface px-4 py-3">
+              <h4 className="text-sm font-black text-ds-ink">Fechar a folha de ponto</h4>
+              <p className="text-xs text-ds-ink-muted">Hoje o fechamento congela a competência de todas as pessoas de uma vez e gera o espelho de cada uma. O espelho só vai ao colaborador no envio final, junto com o contracheque.</p>
+              {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
+              {data?.can.close ? (confirming === "close"
+                ? <InlineConfirm message={`Fechar ${competenceLabel(competence)}? A declaração de todas as pessoas fica congelada e o mês deixa de aceitar pedido de ajuste.`} confirmLabel="Fechar competência" loadingLabel="Fechando…"
+                    loading={busy} onConfirm={() => void act("close")} onCancel={() => setConfirming(null)} />
+                : <Button variant="primary-page" disabled={blocked} onClick={() => { setActionError(null); setConfirming("close"); }}>Fechar competência</Button>) : null}
+              {blocked ? <p className="text-xs text-ds-caution">Há pedidos sem decisão no mês (em alguma pessoa). Decida-os antes de fechar.</p> : null}
+            </div>} />
+        </div>;
+      })() : null}
     </div>
+    </div>
+  );
+}
+
+type TrailState = "done" | "active" | "locked";
+/** Etapa da trilha de fechamento: número, situação e resumo; o conteúdo só abre quando a etapa não está bloqueada. */
+function TrailStep({ number, title, state, summary, children }: { number: number; title: string; state: TrailState; summary: string; children: React.ReactNode }) {
+  return (
+    <section className={cn("rounded-[16px] border bg-ds-surface px-4 py-3.5", state === "active" ? "border-ds-accent-ink/40" : "border-ds-border", state === "locked" && "opacity-70")}>
+      <div className="flex items-center gap-3">
+        <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-black",
+          state === "done" ? "bg-ds-ok text-white" : state === "active" ? "bg-ds-accent-ink text-white" : "bg-ds-divider text-ds-ink-muted")}>{state === "done" ? "✓" : number}</span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-black text-ds-ink">{title}</h3>
+          <p className="text-xs font-semibold text-ds-ink-muted">{summary}</p>
+        </div>
+      </div>
+      {state !== "locked" ? <div className="mt-3 space-y-2">{children}</div> : null}
+    </section>
   );
 }

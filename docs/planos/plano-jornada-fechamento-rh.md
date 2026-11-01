@@ -200,6 +200,29 @@ Ausência/conflito de identificação jurídica impede finalizar documentos/folh
 
 **Aceite:** testar cobertura em outra unidade, divisão do mesmo dia entre duas unidades, unidade fora de `unitIds`, vínculo fiscal ausente/divergente, transferência com vigência e mudança posterior de lotação. Conferir horas consolidadas, empregador nos documentos, saldo único, rastreabilidade do local e ausência de ampliação de acesso. Verificar preenchimento individual antes do piloto; a existência dos campos no código não comprova sua completude real.
 
+### 3.12. Trilha de fechamento por pessoa (pedido do programador, 01/11/2026)
+
+**Tela (implementada localmente, sem commit, 01/11/2026):** `/dashboard/dp/fechamento` abre com lateral de **organizações** (unidade empregadora → organização) e cards de mês daquela organização. Ao abrir o mês, a lateral lista os colaboradores. Cada colaborador tem trilha numerada, e a tela abre na primeira etapa não concluída:
+
+1. **Saneamento da folha:** consulta do ponto do mês (embutida), com indicadores de dias a conferir, ajustes em análise, solicitações a tratar e finalizadas. Concluída sem pedido sem decisão e sem dia com alerta grave (sem batida, ímpar, intervalo).
+2. **Banco de horas e extras:** lançamentos do mês com destino definido pela política (folha × banco × revisão) e aprovação das extras que a exigem. Concluída sem item em aprovação ou revisão.
+3. **Resumo do colaborador:** dias sem pendência, faltas, ausências, extras para a folha por percentual, créditos e débitos no banco.
+4. **Fechamento da folha:** hoje usa o fechamento global da competência (todas as pessoas), que gera o espelho; o espelho só vai ao colaborador no envio final, com o contracheque.
+
+**Modo foco do saneamento (branch `feat/fechamento-trilha`, 01/11/2026):** na etapa 1, "Tratar N dias em sequência" ou o clique num dia abre um diálogo amplo, com um dia por vez. Ele não fecha ao clicar fora; fecha com Esc ou "Fechar". O conteúdo vem em três faixas: resumo do dia, "O que precisa de decisão" e "Evidências do dia" (batidas e política). Usa só ações existentes: decisão de ajuste (`PATCH /api/dp/time-recording/adjustments/[id]`, justificativa mínima de 10 caracteres) e de ausência (aprovar, `request_adjustments` e recusar, pelo fluxo de ausências, só quando `canReview`), além da abertura do comprovante, com acesso restrito e auditado. Ausência válida do dia inteiro cobre "dia sem batidas" e "batidas ímpares"; ausência por horas não cobre. O "Pedir ao colaborador" aparece desabilitado até existir o backend abaixo. A conferência do comprovante (checklist) e o "marcar dia como conferido" ficaram fora, por não existirem no sistema.
+
+**Pendências de backend (exigem revisão do Doc Brown antes do commit):**
+
+- **Pedido de correção ao colaborador:** o DP não ajusta batida em nome do colaborador; ele seleciona um ou vários dias e envia ao colaborador o pedido para que ele mesmo solicite o ajuste. Envio individual (pelo painel do dia) e em lote (todos os dias a conferir da pessoa). Falta: coleção, rota `secureRoute`, notificação, exibição no Coala One e no Coala Go, e efeito no saneamento.
+- **Destino por lançamento de extra:** o auditor escolhe, por lançamento, banco ou folha (inclusive as de pagamento obrigatório pela política, que ficam informativas). Hoje o destino vem só da categoria da política (`destination`) e da aprovação (`approve_overtime`). Falta a decisão auditada por lançamento e seu reflexo no extrato e no envio ao contador. Pergunta ao advogado: limites para levar ao banco extra que a política manda pagar.
+- **Fechamento por pessoa:** a trilha fecha a folha de cada colaborador. Hoje a competência é fechada de uma vez. Falta decidir versão e reabertura individuais.
+- **Revisão do Doc Brown (01/11/2026):** a única correção obrigatória era a cobertura por ausência enquanto o pedido não carrega. Ela foi corrigida, com teste. Ficam como decisão jurídica:
+  - (J1) se a visão de conferência deve mostrar só "ausência" em vez do tipo (atestado é dado de saúde, LGPD art. 11) para quem não decide o pedido. Isso é anterior a esta mudança, com risco médio.
+  - (J2) natureza, retenção e prazo do pedido de correção ao colaborador.
+  - (J3) limites para levar ao banco a extra que a política manda pagar.
+  - (J4) fechamento individual e acesso do contador.
+- **Envio ao contador:** só com todas as folhas da competência fechadas, em conjunto, ou com acesso de leitura do contador às folhas para emitir o recibo de salário. Etapas finais (contracheque, envio ao colaborador, assinatura, fechamento geral) a confirmar.
+
 ## 4. Arquitetura
 
 - **REP-P:** código e versão próprios; coleta, hora, NSR, ARP, comprovante e AFD.

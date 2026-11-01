@@ -33,16 +33,33 @@ export function operationalUnitsDiffer(saved: string[] | undefined, selected: st
  * corresponde a um quiosque (mesma filial do PDV ou, sem filial, mesmo nome)
  * entra; unidades sem quiosque, como o CD, não geram atribuição.
  */
+/** Unidade que corresponde a um quiosque: mesma filial do PDV ou, sem filial, mesmo nome. */
+export function unitIdForKiosk(
+  kiosk: { name: string; pdvFilialId?: string | null },
+  units: (Pick<DPUnit, 'id' | 'name'> & { pdvFilialId?: string | null })[],
+) {
+  const filial = kiosk.pdvFilialId?.trim();
+  const byFilial = filial ? units.find((unit) => unit.pdvFilialId?.trim() === filial)?.id : undefined;
+  return byFilial ?? matchDPUnitForKiosk(kiosk.name, units as DPUnit[])?.id ?? null;
+}
+
+/** Tradutor quiosque → unidade para leituras que só conhecem o id do quiosque (acessos antigos do PDV). */
+export function kioskUnitResolver(
+  kiosks: { id: string; name: string; pdvFilialId?: string | null }[],
+  units: (Pick<DPUnit, 'id' | 'name'> & { pdvFilialId?: string | null })[],
+) {
+  const byKiosk = new Map(kiosks.map((kiosk) => [kiosk.id, unitIdForKiosk(kiosk, units)]));
+  return (kioskId: string) => byKiosk.get(kioskId) ?? null;
+}
+
 export function kioskIdsForOperationalUnits(
   unitIds: readonly string[],
   kiosks: { id: string; name: string; pdvFilialId?: string | null }[],
   units: (Pick<DPUnit, 'id' | 'name'> & { pdvFilialId?: string | null })[],
 ) {
   const selected = new Set(unitIds);
-  const filialToUnit = new Map(units.flatMap((unit) => unit.pdvFilialId?.trim() ? [[unit.pdvFilialId.trim(), unit.id] as const] : []));
   return kiosks.flatMap((kiosk) => {
-    const filial = kiosk.pdvFilialId?.trim();
-    const unitId = (filial ? filialToUnit.get(filial) : undefined) ?? matchDPUnitForKiosk(kiosk.name, units as DPUnit[])?.id;
+    const unitId = unitIdForKiosk(kiosk, units);
     return unitId && selected.has(unitId) ? [kiosk.id] : [];
   });
 }
