@@ -403,3 +403,33 @@ test("acumula os IDs das três filiais ao confirmar duas inclusões na mesma alt
     ["100", "200", "300"],
   );
 });
+
+test("acesso antigo por quiosque vai para a unidade do quiosque, nunca pela posição nas listas", async () => {
+  const { listPdvAccesses } = await import("../../src/features/hr/lib/pdv-operational-unit-sync");
+  const { kioskUnitResolver } = await import("../../src/lib/collaborator-operational-selection");
+  // Caso real: unidades e quiosques em ordens diferentes (o CD não tem quiosque com filial).
+  const user = {
+    unitIds: ["unit-jp", "unit-cd", "unit-shopping", "unit-tirirical"],
+    assignedKioskIds: ["k-shopping", "k-jp", "k-cd", "k-tirirical"],
+    pdvOperatorIds: { "k-tirirical": 184256, "k-jp": 415369, "k-shopping": 664450 },
+  };
+  const units = [
+    { id: "unit-jp", name: "Quiosque João Paulo", pdvFilialId: "17344" },
+    { id: "unit-cd", name: "Centro de distribuição - Matriz", pdvFilialId: null },
+    { id: "unit-shopping", name: "Quiosque Shopping do Automóvel", pdvFilialId: "39033" },
+    { id: "unit-tirirical", name: "Quiosque Tirirical", pdvFilialId: "17343" },
+  ];
+  const kiosks = [
+    { id: "k-shopping", name: "Quiosque Shopping do Automóvel", pdvFilialId: "39033" },
+    { id: "k-jp", name: "Quiosque João Paulo", pdvFilialId: "17344" },
+    { id: "k-cd", name: "Centro de distribuição", pdvFilialId: null },
+    { id: "k-tirirical", name: "Quiosque Tirirical", pdvFilialId: "17343" },
+  ];
+  const byId = (accesses: Array<{ externalUserId: string; unitId: string | null }>) =>
+    Object.fromEntries(accesses.map((access) => [access.externalUserId, access.unitId]));
+
+  assert.deepEqual(byId(listPdvAccesses(user, kioskUnitResolver(kiosks, units))),
+    { "184256": "unit-tirirical", "415369": "unit-jp", "664450": "unit-shopping" });
+  // Sem o tradutor, o vínculo fica em aberto em vez de cair na unidade errada.
+  assert.deepEqual(byId(listPdvAccesses(user)), { "184256": null, "415369": null, "664450": null });
+});

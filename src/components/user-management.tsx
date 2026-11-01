@@ -1706,6 +1706,7 @@ export function UserManagement({
                           user={editingUser}
                           unitIds={currentOperationalUnitIds}
                           units={units}
+                          kiosks={kiosks}
                         />
                       )} />
                     </EditRow>
