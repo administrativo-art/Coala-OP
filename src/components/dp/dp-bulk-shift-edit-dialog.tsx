@@ -252,7 +252,7 @@ export function DPBulkShiftEditPanel({
   }
 
   return (
-    <aside className="flex flex-col overflow-hidden border-l border-[#e3e9f1] bg-white min-[1180px]:sticky min-[1180px]:top-0 min-[1180px]:h-[calc(100vh-10rem)] min-[1180px]:max-h-[780px] max-[1179px]:mt-3 max-[1179px]:rounded-[14px] max-[1179px]:border">
+    <section className="flex max-h-[90vh] min-h-0 flex-col overflow-hidden rounded-lg bg-white">
       <div className="flex shrink-0 items-start gap-2 border-b border-[#eef1f6] px-[14px] py-[13px]">
         <div className="min-w-0">
           <div className="text-[13.5px] font-black leading-4 text-[#0f172a]">Edição em lote</div>
@@ -429,6 +429,6 @@ export function DPBulkShiftEditPanel({
           {submitting ? 'Aplicando...' : action === 'clear' ? `Remover ${selectedShifts.length}` : swapPerson ? `Passar ${selectedShifts.length} para ${swapPerson.name}` : `Substituir ${selectedShifts.length}`}
         </Button>
       </div>
-    </aside>
+    </section>
   );
 }

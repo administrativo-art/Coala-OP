@@ -17,6 +17,10 @@ Use o [índice](../system-map.md) para escolher o assunto. Este guia registra **
 
 **Permissões e verificação.** Identifique a rota ou ação concreta, leia a autorização no servidor e as regras do Firestore; visibilidade do botão não basta. Testes úteis: [`hr-onboarding`](../../../tests/unit/hr-onboarding), [`hr-termination-core.test.ts`](../../../tests/unit/hr-termination-core.test.ts) e testes de férias no mesmo diretório `tests/unit`. **Lacuna:** este guia não certifica todos os estados e permissões de cada etapa de RH.
 
+### Leitura da escala no DP (01/11/2026)
+
+No [editor da escala](../../../src/components/dp/dp-schedule-editor.tsx), as semanas começam recolhidas; o filtro de semana abre a semana escolhida. A cor identifica cada semana por uma borda estreita e pelo número, preservando o fundo neutro. A edição em lote mantém a escala na largura total: a seleção de turnos usa uma barra compacta e a configuração abre em diálogo. O preenchimento em lote também abre em diálogo. O nome da escala quebra linha quando necessário; a navegação ao mês seguinte só é habilitada quando existe uma escala acessível nele. A prévia do mês anterior mostra turnos em cartões compactos com a contagem sequencial já calculada. Essas mudanças são de apresentação e não alteram publicação, permissões, turnos ou regras de jornada.
+
 ### Ficha do colaborador — apresentação (29/10/2026)
 
 A ficha oculta filiação, observação de VT e razão social, preservando os valores armazenados. Dados contratuais omite unidade empregadora, unidade financeira e o botão de edição duplicado; o editor geral **Editar dados** continua autorizado pelas mesmas permissões. A seção Sistemas exibe Bizneo e PDV Legal, sem repetir a conta Coala One.
