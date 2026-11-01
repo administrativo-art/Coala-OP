@@ -3,7 +3,7 @@ import "server-only";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 
 import { dbAdmin } from "@/lib/firebase-admin";
-import { kioskIdsForOperationalUnits } from "@/lib/collaborator-operational-selection";
+import { kioskIdsForOperationalUnits, kioskUnitResolver } from "@/lib/collaborator-operational-selection";
 import {
   PdvApiError,
   clonePdvLegalUserAccessToFilial,
@@ -11,6 +11,7 @@ import {
   movePdvLegalUserAccessToFilial,
 } from "@/lib/integrations/pdv-legal-admin";
 import {
+  type KioskUnitResolver,
   PdvOperationalUnitSyncError,
   pdvOperationalUnitPatch,
   pdvRemovalPatch,
@@ -36,6 +37,18 @@ export async function loadPdvUnitIds(unitIds: readonly string[]) {
  * vigência. Os catálogos de quiosques e unidades são pequenos (um documento por
  * ponto de venda), por isso a leitura integral é limitada e aceitável aqui.
  */
+/** Tradutor quiosque → unidade com os catálogos atuais (pequenos e limitados), para acessos antigos do PDV. */
+export async function loadKioskUnitResolver() {
+  const [kiosks, units] = await Promise.all([
+    dbAdmin.collection("kiosks").limit(200).get(),
+    dbAdmin.collection("dp_units").limit(300).get(),
+  ]);
+  return kioskUnitResolver(
+    kiosks.docs.map((doc) => ({ id: doc.id, name: text(doc.get("name")), pdvFilialId: text(doc.get("pdvFilialId")) || null })),
+    units.docs.map((doc) => ({ id: doc.id, name: text(doc.get("name")), pdvFilialId: text(doc.get("pdvFilialId")) || null })),
+  );
+}
+
 export async function deriveAssignedKioskIds(unitIds: readonly string[]) {
   if (unitIds.length === 0) return [];
   const [kiosks, units] = await Promise.all([
@@ -61,6 +74,7 @@ export async function executePdvSyncPlans(params: {
   actorId: string;
   actorName: string;
   action?: string;
+  unitForKiosk?: KioskUnitResolver;
 }) {
   const { userRef, plans } = params;
   const targetIds = [...new Set(plans.flatMap((plan) => plan.targetUnitId ? [plan.targetUnitId] : []))];
@@ -107,7 +121,7 @@ export async function executePdvSyncPlans(params: {
       completedAt = new Date().toISOString();
       if (plan.kind === "remove") {
         await deletePdvLegalUser(source);
-        const removal = pdvRemovalPatch({ currentUser: workingUser, externalUserId: source, updatedAt: completedAt });
+        const removal = pdvRemovalPatch({ currentUser: workingUser, externalUserId: source, updatedAt: completedAt, unitForKiosk: params.unitForKiosk });
         workingUser = { ...workingUser, ...removal };
         Object.assign(patch, removal);
         results.push({ operation: "remove", externalUserId: source, unitId: plan.sourceUnitId, status: "completed" });
@@ -122,6 +136,7 @@ export async function executePdvSyncPlans(params: {
       }
       if (plan.kind === "move" && updated.id !== source) renamed.set(plan.sourceExternalUserId, updated.id);
       const unitPatch = pdvOperationalUnitPatch({
+        unitForKiosk: params.unitForKiosk,
         currentUser: workingUser,
         plan: { ...plan, sourceExternalUserId: source },
         externalUserId: updated.id,

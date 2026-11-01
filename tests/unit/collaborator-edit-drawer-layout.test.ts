@@ -49,6 +49,6 @@ test("cada aba do drawer tem painel próprio e as linhas de unidade explicam o e
   assert.match(source, /<PdvAccessControl/);
   assert.doesNotMatch(source, /<FormLabel>Quiosques atribuídos<\/FormLabel>/);
   assert.match(source, /<OperationalUnitPeriodsField/);
-  assert.match(source, /Referência do financeiro/);
+  assert.match(source, /Unidade que paga os custos da pessoa nos relatórios/);
   assert.match(source, /Onde aparece como gestor no organograma/);
 });

@@ -13,10 +13,21 @@ const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
 
+/**
+ * Altura menor que o padrão (`h-10`): a seta em botão de 32px não cabe e invade a borda. Nesses casos o gatilho usa a
+ * seta colada à borda direita (docs/design/campos.md). `flushIcon` explícito continua valendo.
+ */
+const COMPACT_HEIGHT = /(?:^|\s)h-(?:7|8|9|\[(?:2\d|3\d)px\])(?=\s|$)/
+export function isCompactSelectTrigger(className: string | undefined) {
+  return COMPACT_HEIGHT.test(className ?? "")
+}
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { flushIcon?: boolean }
->(({ className, children, flushIcon = false, ...props }, ref) => (
+>(({ className, children, flushIcon: flushIconProp, ...props }, ref) => {
+  const flushIcon = flushIconProp ?? isCompactSelectTrigger(className)
+  return (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -36,7 +47,8 @@ const SelectTrigger = React.forwardRef<
       </span>
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
-))
+  )
+})
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 
 const SelectScrollUpButton = React.forwardRef<
