@@ -127,6 +127,7 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
   pending_audit: "Pendente auditoria",
   paid: "Pago",
+  scheduled: "Agendado no Inter",
   reported_paid: "Pago informado",
   payment_found_pending_document: "Pagamento confirmado",
   partially_paid: "Parcialmente pago",
@@ -624,7 +625,7 @@ export function ExpensesPage() {
         const matchesStatus =
           statusFilter === "all" ||
           (statusFilter === "reconciled" && Boolean(expense.reconciledProvisionId)) ||
-          (statusFilter === "pending" && ["pending", "due_soon", "overdue"].includes(computedStatus)) ||
+          (statusFilter === "pending" && ["pending", "scheduled", "due_soon", "overdue"].includes(computedStatus)) ||
           cardStatementOverdueCandidate ||
           (statusFilter === "overdue" && expenseHasOverdueBalance(expense, now)) ||
           computedStatus === "pending_audit" && statusFilter === "pending_audit" ||

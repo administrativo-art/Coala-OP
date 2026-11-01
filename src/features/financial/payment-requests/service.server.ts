@@ -538,6 +538,9 @@ function inactiveInterBarcodeStatus(status: unknown) {
 }
 
 function assertExpenseBoletoCancellationTarget(request: BankPaymentRequest, replacementScheduledFor: string) {
+  if (request.bankInstructionOrigin === "inter_dda") {
+    throw new PaymentRequestCancellationError("Agendamento importado do Inter não pode ser cancelado por este fluxo.");
+  }
   if (request.sourceType !== "expense_boleto" || request.paymentRail !== "barcode") {
     throw new PaymentRequestCancellationError("Somente boleto anexado à despesa aceita esta correção de data.");
   }
@@ -954,6 +957,9 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     const snapshot = await transaction.get(requestRef);
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.bankInstructionOrigin === "inter_dda") {
+      throw new Error("Agendamento importado do Inter não pode ser reenviado.");
+    }
     if (!["ready_to_submit", "failed"].includes(current.status)) {
       throw new Error(`A solicitação está em ${current.status} e não pode ser enviada ao banco.`);
     }
