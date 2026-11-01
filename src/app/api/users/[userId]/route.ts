@@ -34,7 +34,7 @@ import {
   planPdvOperationalUnitSyncs,
   sameOperationalUnits,
 } from "@/features/hr/lib/pdv-operational-unit-sync";
-import { deriveAssignedKioskIds, executePdvSyncPlans, loadPdvUnitIds } from "@/features/hr/lib/pdv-unit-sync.server";
+import { deriveAssignedKioskIds, executePdvSyncPlans, loadKioskUnitResolver, loadPdvUnitIds } from "@/features/hr/lib/pdv-unit-sync.server";
 import { PdvApiError } from "@/lib/integrations/pdv-legal-admin";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
@@ -509,12 +509,14 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
           safeMessage: "Esta conta Google empresarial já está autorizada para outro cadastro." });
       }
     };
+    let unitForKiosk: Awaited<ReturnType<typeof loadKioskUnitResolver>> | undefined;
     const pdvWasEnabled = pdvAccessEnabled(existingUser);
     const pdvEnabled = pdvAccessEnabled(nextUser);
     const pdvSyncPlans = pdvWasEnabled && !pdvEnabled
       ? planPdvAccessRevocation(existingUser)
       : pdvEnabled && !sameOperationalUnits(existingUser, nextUser)
         ? planPdvOperationalUnitSyncs(existingUser, nextUser, {
+            unitForKiosk: unitForKiosk ??= await loadKioskUnitResolver(),
             pdvUnitIds: await loadPdvUnitIds([...operationalUnitIds(existingUser), ...operationalUnitIds(nextUser)]),
           })
         : [];
@@ -536,6 +538,7 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
 
     if (pdvSyncPlans.length > 0) {
       const execution = await executePdvSyncPlans({
+        unitForKiosk,
         userRef,
         user: existingUser,
         plans: pdvSyncPlans,
