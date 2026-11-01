@@ -23,6 +23,6 @@ function tsxFiles(directory: string): string[] {
 }
 
 test('alternância de visualização não usa ToggleGroupItem de largura fixa (o padding padrão esmaga o ícone)', () => {
-  const offenders = tsxFiles('src').filter((file) => /<ToggleGroupItem\b[^>]*className="[^"]*\bw-(?:6|7|8|9)\b/s.test(readFileSync(file, 'utf8')));
+  const offenders = tsxFiles('src').filter((file) => /<ToggleGroupItem\b[^>]*className="[^"]*\bw-(?:6|7|8|9)\b/.test(readFileSync(file, 'utf8')));
   assert.deepEqual(offenders, [], 'Use o Segmented (docs/design/selecao-e-filtros.md).');
 });

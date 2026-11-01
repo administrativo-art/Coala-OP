@@ -425,7 +425,7 @@ test("acesso antigo por quiosque vai para a unidade do quiosque, nunca pela posi
     { id: "k-cd", name: "Centro de distribuição", pdvFilialId: null },
     { id: "k-tirirical", name: "Quiosque Tirirical", pdvFilialId: "17343" },
   ];
-  const byId = (accesses: Array<{ externalUserId: string; unitId: string | null }>) =>
+  const byId = (accesses: Array<{ externalUserId: string; unitId?: string | null }>) =>
     Object.fromEntries(accesses.map((access) => [access.externalUserId, access.unitId]));
 
   assert.deepEqual(byId(listPdvAccesses(user, kioskUnitResolver(kiosks, units))),
