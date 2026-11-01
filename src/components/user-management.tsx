@@ -1512,7 +1512,7 @@ export function UserManagement({
                 <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
                   <EditFormRow number={createOnly ? undefined : 1} label="Tipo de vínculo" compact={createOnly} description="Habilita só os fluxos compatíveis (CLT, estágio, PJ…).">
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger flushIcon><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {EMPLOYMENT_RELATIONSHIP_TYPES.map((item) => (
                           <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
@@ -1537,7 +1537,7 @@ export function UserManagement({
                       }}
                       disabled={hrLoading}
                     >
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cargo" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger flushIcon><SelectValue placeholder="Selecione um cargo" /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="__none__">Sem cargo</SelectItem>
                         {roleOptions.map((role) => (
@@ -1561,7 +1561,7 @@ export function UserManagement({
                       disabled={hrLoading || !selectedRoleId}
                     >
                       <FormControl>
-                        <SelectTrigger className={selectedRoleId ? '' : 'opacity-70'}>
+                        <SelectTrigger flushIcon className={selectedRoleId ? '' : 'opacity-70'}>
                           <SelectValue placeholder={selectedRoleId ? 'Selecione a função' : 'Selecione primeiro um cargo'} />
                         </SelectTrigger>
                       </FormControl>
@@ -1618,7 +1618,7 @@ export function UserManagement({
                           onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
                           disabled={shiftDefsLoading}
                         >
-                          <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger flushIcon><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="__none__">— Nenhum —</SelectItem>
                             {filteredShiftDefinitions.map(def => (
@@ -1672,7 +1672,7 @@ export function UserManagement({
                     <FormField control={form.control} name="employerUnitId" render={({ field }) => (
                       <EditFormRow number={1} label="Unidade empregadora" description="CNPJ que assina a carteira." help="Unidade de cadastro do empregador e de seu CNPJ no contrato. Não muda ao alterar unidades operacionais ou cobrir um turno.">
                         <Select value={field.value || '__none__'} onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger flushIcon><SelectValue placeholder="Selecione a unidade empregadora" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="__none__">Não informada</SelectItem>
                             {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${unit.cnpj}` : ''}</SelectItem>)}
@@ -1706,6 +1706,7 @@ export function UserManagement({
                           user={editingUser}
                           unitIds={currentOperationalUnitIds}
                           units={units}
+                          kiosks={kiosks}
                         />
                       )} />
                     </EditRow>
@@ -1740,10 +1741,10 @@ export function UserManagement({
                   )}
 
                   <FormField control={form.control} name="unitId" render={({ field }) => (
-                    <EditFormRow number={createOnly ? undefined : 3} label="Principal financeira" compact={createOnly} description="Lotação, custos e relatórios. Não muda a unidade do turno." help="Referência do financeiro: lotação e custos do colaborador. É independente das unidades em que ele trabalha e não muda ao escalar um turno em outro local. Não libera escala nem batida de ponto.">
+                    <EditFormRow number={createOnly ? undefined : 3} label="Principal financeira" compact={createOnly} description="Unidade que paga os custos da pessoa nos relatórios. Não é onde ela trabalha." help="É a unidade em que entram os custos da pessoa (salário, benefícios, vale-transporte) nos relatórios do financeiro. Também define quais regras de ausência valem para ela. Não diz onde ela trabalha: escala, ponto, quiosques e PDV seguem a Escala e operação. Escalar um turno em outro local não muda esta unidade.">
                       <Select value={field.value || undefined} onValueChange={field.onChange} disabled={units.length === 0}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger flushIcon>
                             <SelectValue placeholder="Selecione a referência financeira" />
                           </SelectTrigger>
                         </FormControl>
@@ -1991,7 +1992,7 @@ export function UserManagement({
               />
             </div>
             <Select value={profileFilter} onValueChange={setProfileFilter}>
-              <SelectTrigger className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[210px]">
+              <SelectTrigger flushIcon className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[210px]">
                 <SelectValue placeholder="Perfil" />
               </SelectTrigger>
               <SelectContent>
@@ -2002,7 +2003,7 @@ export function UserManagement({
               </SelectContent>
             </Select>
             <Select value={kioskFilter} onValueChange={setKioskFilter}>
-              <SelectTrigger className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[260px]">
+              <SelectTrigger flushIcon className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[260px]">
                 <SelectValue placeholder="Quiosque" />
               </SelectTrigger>
               <SelectContent>
@@ -2274,7 +2275,7 @@ export function UserManagement({
                 <div className="sm:col-span-2">
                   <Label>{selectedTerminationRelationship === 'pj' ? 'CNPJ da contratante' : 'CNPJ empregador'}</Label>
                   <Select value={terminationEmployerUnitId} onValueChange={setTerminationEmployerUnitId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a empresa responsável pelo vínculo" /></SelectTrigger>
+                    <SelectTrigger flushIcon><SelectValue placeholder="Selecione a empresa responsável pelo vínculo" /></SelectTrigger>
                     <SelectContent>
                       {units.filter((unit) => CnpjValidator.validate(unit.cnpj ?? '').valid).map((unit) => (
                         <SelectItem key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</SelectItem>
@@ -2290,7 +2291,7 @@ export function UserManagement({
                 <div>
                   <Label>{terminationCopy.reasonLabel}</Label>
                   <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (!requiresTerminationSubtype(value)) setTerminationCause(''); }}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectTrigger flushIcon><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {availableTerminationReasons.map((reason) => (
                         <SelectItem key={reason} value={reason}>{reason}</SelectItem>
@@ -2302,7 +2303,7 @@ export function UserManagement({
                   <div className="sm:col-span-2">
                     <Label>Tipo de justa causa</Label>
                     <Select value={terminationCause} onValueChange={setTerminationCause}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectTrigger flushIcon><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>
                         {JUST_CAUSE_TYPES.map((cause) => (
                           <SelectItem key={cause} value={cause}>{cause}</SelectItem>
