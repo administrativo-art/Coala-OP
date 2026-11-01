@@ -36,11 +36,11 @@ test('visão mensal agrupa unidades por estado e cidade sem ação criar por lin
   assert.doesNotMatch(monthSource, /Adicionar unidade/);
 });
 
-test('editor expõe grade operacional, fila Bizneo e modais de apoio', () => {
+test('editor expõe grade operacional e modais de apoio sem fila Bizneo no cabeçalho', () => {
   assert.match(editorSource, />Turnos</);
   assert.match(editorSource, /Folgas &amp; férias/);
   assert.match(editorSource, />Alertas</);
-  assert.match(editorSource, /Fila do Bizneo/);
+  assert.doesNotMatch(editorSource, /Fila do Bizneo|Bizneo ·/);
   assert.match(editorSource, /Vale-transporte da escala/);
   assert.match(editorSource, /Demanda do dia/);
   assert.match(editorSource, /aria-pressed=\{onlyAlerts\}/);

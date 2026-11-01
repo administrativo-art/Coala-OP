@@ -1510,7 +1510,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [bulkCreateActive, setBulkCreateActive] = useState(false);
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
-  const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
   const [vtDialogOpen, setVtDialogOpen] = useState(false);
   const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.draftCoverageDemands ?? schedule.coverageDemands));
   const [coverageDemandDialog, setCoverageDemandDialog] = useState<{ date: string; unit: DPUnit } | null>(null);
@@ -1781,12 +1780,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const visibleDayOffShifts = useMemo(
     () => isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts,
     [dayOffShifts, isPerUnit, siblingDayOffShifts],
-  );
-  const bizneoQueueItems = useMemo(
-    () => dayOffShifts
-      .filter((shift) => shift.bizneoSyncStatus !== 'published')
-      .sort((left, right) => left.date.localeCompare(right.date)),
-    [dayOffShifts],
   );
   const dayOffOccupied = useMemo(() => {
     const occupied = new Map<string, Set<string>>();
@@ -2408,12 +2401,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        )}
-        {isPerUnit && (
-          <Button type="button" size="sm" variant="outline" onClick={() => setBizneoQueueOpen(true)} className="h-8 rounded-[10px] border-sky-200 bg-sky-50 px-3 text-[12.5px] font-extrabold text-sky-700 hover:bg-sky-100">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-sky-500" />
-            Bizneo · {bizneoQueueItems.length} pendente{bizneoQueueItems.length === 1 ? '' : 's'}
-          </Button>
         )}
         <Badge className={publicationStatus === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
           Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
@@ -3126,70 +3113,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       </Dialog>
 
       {/* Dialogs */}
-      <Dialog open={bizneoQueueOpen} onOpenChange={setBizneoQueueOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Fila do Bizneo · {scheduleUnit?.name ?? 'Unidade'}</DialogTitle>
-            <DialogDescription>
-              Folgas desta escala que ainda precisam de confirmação ou nova tentativa no Bizneo.
-            </DialogDescription>
-          </DialogHeader>
-          {bizneoQueueItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-              Nenhuma pendência nesta unidade.
-            </div>
-          ) : (
-            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-              {bizneoQueueItems.map((shift) => {
-                const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
-                const busy = publishingDayOffKey === `${shift.userId}::${shift.date}`
-                  || removingDayOffKey === `${shift.userId}::${shift.date}`;
-                const isRemovalFailure = shift.bizneoSyncStatus === 'removal_failed';
-                return (
-                  <div key={shift.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{userName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(parseISO(shift.date), "dd 'de' MMMM", { locale: ptBR })} · {shift.bizneoSyncStatus ?? 'pendente'}
-                      </p>
-                    </div>
-                    {canPublishDayOff && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isRemovalFailure ? 'destructive' : 'outline'}
-                        disabled={busy}
-                        onClick={() => {
-                          if (isRemovalFailure) {
-                            setBizneoQueueOpen(false);
-                            setDayOffRemovalTarget({
-                              shift,
-                              userName,
-                              unitName: scheduleUnit?.name ?? shift.unitId,
-                            });
-                            return;
-                          }
-                          void handlePublishDayOff({
-                            scheduleId: shift.scheduleId,
-                            userId: shift.userId,
-                            unitId: shift.unitId,
-                            date: shift.date,
-                            source: 'retry',
-                          });
-                        }}
-                      >
-                        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        {isRemovalFailure ? 'Tentar remover' : 'Enviar novamente'}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={vtDialogOpen} onOpenChange={setVtDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>

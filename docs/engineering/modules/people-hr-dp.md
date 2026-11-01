@@ -23,6 +23,8 @@ No [editor da escala](../../../src/components/dp/dp-schedule-editor.tsx), as sem
 
 Os filtros de unidade, colaboradora e semana usam `SelectTrigger` com o botão da seta alinhado à borda direita do campo, sem margem ou sombra interna.
 
+O cabeçalho não mostra fila do Bizneo; confirmação, reenvio e remoção de DSR continuam nos cartões de folga do respectivo dia.
+
 ### Ficha do colaborador — apresentação (29/10/2026)
 
 A ficha oculta filiação, observação de VT e razão social, preservando os valores armazenados. Dados contratuais omite unidade empregadora, unidade financeira e o botão de edição duplicado; o editor geral **Editar dados** continua autorizado pelas mesmas permissões. A seção Sistemas exibe Bizneo e PDV Legal, sem repetir a conta Coala One.
