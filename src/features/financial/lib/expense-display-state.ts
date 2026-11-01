@@ -4,6 +4,7 @@ type ExpenseState = {
   status?: string; paymentState?: string; provisionType?: string; originModule?: string; originStatus?: string;
   dueDate?: unknown; totalValue?: number; budgetMigration?: unknown;
   hiddenFromExpensePanel?: boolean;
+  installments?: Array<{ status?: string; paymentSchedulingStatus?: string }>;
   settlementSummary?: { reconciliationStatus?: string; balanceAmountCents?: number | null;
     principalSettledAmountCents?: number; settlementCreditsAmountCents?: number } | null;
 };
@@ -41,6 +42,7 @@ export function expenseDisplayStatus(expense: ExpenseState, now: Date) {
   if (expenseAwaitingConfirmation(expense)) return "payment_found_pending_document";
   if (["reported_paid", "paid_divergent"].includes(expense.paymentState ?? "")) return expense.paymentState!;
   if (expense.status === "pending") {
+    if (expense.installments?.some((part) => part.status !== "paid" && part.paymentSchedulingStatus === "scheduled")) return "scheduled";
     if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") return "pending_audit";
     const due = expenseDueDateKey(expense);
     const today = financialDateKey(now);

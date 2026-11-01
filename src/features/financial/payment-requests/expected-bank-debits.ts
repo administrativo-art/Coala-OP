@@ -24,11 +24,14 @@ const COUNTERPARTY_STOP_WORDS = new Set([
 ]);
 
 function normalizedTokens(value: string) {
-  return value.normalize("NFD")
+  const normalized = value.normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
+    .toUpperCase();
+  // O Inter descreve alguns fornecedores por letras separadas ("T V N").
+  const withAcronym = normalized.replace(/\b(?:[A-Z]\s+){2,}[A-Z]\b/g, (match) => match.replace(/\s+/g, ""));
+  return withAcronym
     .split(/[^A-Z0-9]+/)
-    .filter((token) => token.length >= 4 && !COUNTERPARTY_STOP_WORDS.has(token));
+    .filter((token) => (token.length >= 4 || token === "TVN") && !COUNTERPARTY_STOP_WORDS.has(token));
 }
 
 function counterpartySignature(value: string | null | undefined) {
@@ -84,7 +87,8 @@ export function findExpectedBankDebitGroupMatches(
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     const signatureTokens = counterpartySignature(group[0]?.counterpartyName).split("|").filter(Boolean);
-    if (signatureTokens.length < 2 || group.some((candidate) => counterpartySignature(candidate.counterpartyName) !== signatureTokens.join("|"))) continue;
+    if ((signatureTokens.length < 2 && signatureTokens[0] !== "TVN")
+      || group.some((candidate) => counterpartySignature(candidate.counterpartyName) !== signatureTokens.join("|"))) continue;
 
     const matchingEntries = entries.filter((entry) => {
       if (entry.amount >= 0 || Math.abs(group[0]!.amount - Math.abs(entry.amount)) > 0.05) return false;
