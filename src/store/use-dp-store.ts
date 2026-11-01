@@ -97,7 +97,6 @@ export interface DPStoreState {
   updateShiftDefinition: (id: string, data: DPShiftDefinitionUpdate) => Promise<void>;
   deleteShiftDefinition: (defId: string) => Promise<void>;
   addSchedule: (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>) => Promise<string>;
-  updateSchedule: (schedule: DPSchedule) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<void>;
   addVacation: (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => Promise<void>;
   updateVacation: (vacation: DPVacationRecord) => Promise<void>;
@@ -393,33 +392,16 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
       }
       transaction.set(
         scheduleRef,
-        stripUndefinedForCreate({ ...data, shiftCount: 0, journeyValidationVersion: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
+        stripUndefinedForCreate({ ...data, shiftCount: 0, journeyValidationVersion: 0, publicationStatus: 'draft', publicationVersion: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
       );
     });
     set((current) => ({
       schedules: [
         ...current.schedules.filter((schedule) => schedule.id !== scheduleRef.id),
-        { id: scheduleRef.id, ...data, unitId: canonicalUnitId ?? unit.id, shiftCount: 0, journeyValidationVersion: 0, createdAt: Timestamp.now() },
+        { id: scheduleRef.id, ...data, unitId: canonicalUnitId ?? unit.id, shiftCount: 0, journeyValidationVersion: 0, publicationStatus: 'draft', publicationVersion: 0, createdAt: Timestamp.now() },
       ],
     }));
     return scheduleRef.id;
-  },
-  updateSchedule: async ({ id, ...data }) => {
-    const existing = get().schedules.find((schedule) => schedule.id === id);
-    const existingUnit = existing?.unitId ? get().units.find((unit) => unit.id === existing.unitId) : undefined;
-    if (existingUnit?.isArchived === true) {
-      throw new Error('Escalas históricas de unidades incorporadas são somente para leitura.');
-    }
-    if (existing && typeof data.locked === 'boolean' && data.locked !== (existing.locked === true)) {
-      await authorizedDpJson(`/api/dp/schedules/${encodeURIComponent(id)}`, 'PATCH', data.locked
-        ? { action: 'lock', snapshot: data.snapshot ?? { users: {} } }
-        : { action: 'unlock' });
-    } else {
-      await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
-    }
-    set((state) => ({
-      schedules: state.schedules.map((schedule) => schedule.id === id ? { ...schedule, ...data, id } : schedule),
-    }));
   },
   deleteSchedule: async (scheduleId) => {
     const existing = get().schedules.find((schedule) => schedule.id === scheduleId);

@@ -178,7 +178,7 @@ function labelFor(purpose: string | null, index: number, total: number) {
 
 /** Rótulos acima ou abaixo da linha, para batidas próximas não se sobreporem. */
 function layoutSides(minutes: number[], axis: { start: number; end: number }) {
-  const gap = 9;
+  const gap = 13;
   let lastAbove = -Infinity;
   let lastBelow = -Infinity;
   return minutes.map((minute) => {

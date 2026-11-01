@@ -111,15 +111,15 @@ env:
   # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
   - variable: REP_P_HLB_NTP_ENABLED
     value: "true"
-  # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
+  # Coleta antecipada autorizada em 31/10/2026; identidades e vínculos elegíveis foram conferidos.
   - variable: REP_P_MARKING_ENABLED
-    value: "false"
-  # Mesmo depois de publicar a versão, o modo oficial só pode iniciar na competência de novembro.
+    value: "true"
+  # CPF do responsável fiscal é lido no RH; nenhum número pessoal fica no YAML.
+  - variable: REP_P_REFERENCE_RESPONSIBLE_UID
+    value: "U0Q9YZIl7XhQU2B0tB5U6Zpt5Td2"
+  # Data de corte entre ensaio segregado e marcações oficiais.
   - variable: REP_P_OFFICIAL_START_DATE
-    value: "2026-11-01"
-  # Allowlist do piloto oficial de novembro; vazia ou ausente deve bloquear o modo oficial.
-  - variable: REP_P_OFFICIAL_USER_IDS
-    value: "fvrLOh1JOIOtU5QhZQZydN3UBf22,SShCdcgzs0ZkRrlTXpW0IZp4ABu2"
+    value: "2026-10-31"
   # O Cloud Monitoring e o segredo da sonda externa entram na etapa de monitoramento,
   # depois que a rota pública e o piloto estiverem validados.
   - variable: REP_P_AVAILABILITY_POLICY_NAME
@@ -141,12 +141,21 @@ env:
     value: "enforce"
   - variable: MOBILE_APP_ATTESTATION_SECRET
     secret: MOBILE_APP_ATTESTATION_SECRET
-  # O ensaio nominal não autoriza acompanhamento contínuo. Só ligar após decisão jurídica e novo rollout explícito.
+  # Migração nominal do login legado para a conta Google Workspace no mesmo UID.
+  # O valor deve ser o mesmo OAuth Web Client ID usado pelo Credential Manager do Coala Go.
+  - variable: GOOGLE_AUTH_WEB_CLIENT_ID
+    secret: GOOGLE_AUTH_WEB_CLIENT_ID
+  - variable: GOOGLE_WORKSPACE_LOGIN_DOMAIN
+    value: "coalashakes.com"
+  # Acompanhamento contínuo aguarda o aditivo do RH e a configuração dos turnos.
   - variable: DP_JOURNEY_LOCATION_ENABLED
     value: "false"
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET
+  # Materialização diária dos planos preventivos na antecedência configurada em cada patrimônio.
+  - variable: ASSET_MAINTENANCE_JOB_SECRET
+    secret: ASSET_MAINTENANCE_JOB_SECRET
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
     value: "true"
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS
@@ -218,3 +227,9 @@ env:
     value: "v25.0"
   - variable: BIO_ANALYTICS_INGEST_TOKEN
     secret: BIO_ANALYTICS_INGEST_TOKEN
+  - variable: GOOGLE_MAPS_BROWSER_API_KEY
+    secret: GOOGLE_MAPS_BROWSER_API_KEY
+  - variable: GOOGLE_MAPS_GEOCODING_API_KEY
+    secret: GOOGLE_MAPS_GEOCODING_API_KEY
+  - variable: GOOGLE_MAPS_GEOCODING_DAILY_LIMIT
+    value: "100"

@@ -14,6 +14,12 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { logAction } from "@/lib/log-action";
 import { verifyAuth } from "@/lib/verify-auth";
+import { readOfficialPersonMonth, readOfficialScheduleShifts } from '@/features/dp/schedules/official-revision.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
+import { AppError } from '@/lib/observability/app-error';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { secureRoute } from '@/lib/security/secure-route.server';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +27,47 @@ export const dynamic = "force-dynamic";
 const justificationSchema = z.object({
   userId: z.string().trim().min(1).optional(),
   justificationText: z.string().trim().min(5).max(2000),
+}).strict();
+
+const getContract = defineSecurityContract({ schemaVersion: 1, id: 'hr.login-access.get', version: 1,
+  surface: { method: 'GET', path: '/api/hr/login-access' }, exposure: 'authenticated',
+  identity: { kind: 'custom', strategy: 'firebase-auth-token', guarantees: ['authenticated-user'] },
+  authorization: { kind: 'custom', strategy: 'self-or-hr-manage' },
+  resourceScope: { kind: 'custom', strategy: 'self-or-hr-managed-user' },
+  input: { kind: 'schema', schema: 'hr.login-access-query', unknownFields: 'reject' },
+  effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized' });
+const postContract = defineSecurityContract({ schemaVersion: 1, id: 'hr.login-access.post', version: 1,
+  surface: { method: 'POST', path: '/api/hr/login-access' }, exposure: 'authenticated',
+  identity: { kind: 'custom', strategy: 'firebase-auth-token', guarantees: ['authenticated-user'] },
+  authorization: { kind: 'custom', strategy: 'self-or-hr-manage' },
+  resourceScope: { kind: 'custom', strategy: 'self-or-hr-managed-user' },
+  input: { kind: 'schema', schema: 'hr.login-access-justification', unknownFields: 'reject' },
+  effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized' });
+const guarantees = ['identity:firebase-auth-token', 'authenticated-user', 'authorization:self-or-hr-manage',
+  'scope:self-or-hr-managed-user', 'input-validated', 'fields-allowlisted'] as const;
+const getEnforcer = defineSecurityEnforcer({ id: 'hr-login-access-get-v1', guarantees,
+  async enforce({ request }: { request: NextRequest }) {
+    const decoded = await verifyAuth(request).catch(() => { throw new AppError({ code: 'HR_LOGIN_ACCESS_AUTH_REQUIRED', kind: 'AUTHENTICATION' }); });
+    if (!decoded.uid) throw new AppError({ code: 'HR_LOGIN_ACCESS_AUTH_REQUIRED', kind: 'AUTHENTICATION' });
+    const query = z.object({ userId: z.string().trim().min(1).max(180).optional(),
+      at: z.string().max(80).optional(), timeZone: z.string().max(80).optional() }).strict()
+      .safeParse(Object.fromEntries(request.nextUrl.searchParams));
+    if (!query.success) throw new AppError({ code: 'HR_LOGIN_ACCESS_QUERY_INVALID', kind: 'VALIDATION' });
+    const targetUserId = query.data.userId || decoded.uid;
+    if (targetUserId !== decoded.uid) await assertHrAccess(request, 'manage');
+    return { actor: decoded, input: query.data, resource: { targetUserId } };
+  },
+});
+const postEnforcer = defineSecurityEnforcer({ id: 'hr-login-access-post-v1', guarantees,
+  async enforce({ request }: { request: NextRequest }) {
+    const decoded = await verifyAuth(request).catch(() => { throw new AppError({ code: 'HR_LOGIN_ACCESS_AUTH_REQUIRED', kind: 'AUTHENTICATION' }); });
+    if (!decoded.uid) throw new AppError({ code: 'HR_LOGIN_ACCESS_AUTH_REQUIRED', kind: 'AUTHENTICATION' });
+    const input = justificationSchema.safeParse(await request.clone().json().catch(() => null));
+    if (!input.success) throw new AppError({ code: 'HR_LOGIN_ACCESS_INPUT_INVALID', kind: 'VALIDATION' });
+    const targetUserId = input.data.userId || decoded.uid;
+    if (targetUserId !== decoded.uid) await assertHrAccess(request, 'manage');
+    return { actor: decoded, input: input.data, resource: { targetUserId } };
+  },
 });
 
 type LoginAccessUserPayload = {
@@ -91,15 +138,36 @@ async function loadLoginAccessShifts(
         .collectionGroup("shifts")
         .where("userId", "==", targetUserId)
         .where("date", "==", date)
-        .get()
+        .limit(101).get()
     )
   );
-
-  return snapshots.flatMap((snapshot) =>
-    snapshot.docs.map((doc): LoginRestrictionShiftInput => {
-      const data = doc.data() ?? {};
+  if (snapshots.some((snapshot) => snapshot.size === 101)) throw new Error('Há turnos demais para conferir o acesso com segurança.');
+  const physical = snapshots.flatMap((snapshot) => snapshot.docs);
+  const scheduleRefs = [...new Map(physical.map((doc) => [doc.ref.parent.parent!.path, doc.ref.parent.parent!] as const)).values()];
+  const schedules = scheduleRefs.length ? await dbAdmin.getAll(...scheduleRefs) : [];
+  const allowed = new Set(schedules.filter((schedule) => !schedule.get('activeRevisionId')
+    && hasPublishedScheduleVersion(schedule.data() ?? {})).map((schedule) => schedule.ref.path));
+  const months = [...new Set(dates.map((date) => date.slice(0, 7)))];
+  const indexed = (await Promise.all(months.map(async (competence) => {
+    const result = await readOfficialPersonMonth({ userId: targetUserId, competence, db: dbAdmin });
+    if (result.indexed) return result.shifts;
+    const [year, month] = competence.split('-').map(Number);
+    const schedules = await dbAdmin.collection('dp_schedules').where('year', '==', year)
+      .where('month', '==', month).limit(21).get();
+    if (schedules.size === 21) throw new Error('Há escalas demais para conferir o acesso com segurança.');
+    const pointer = schedules.docs.filter((schedule) => schedule.get('activeRevisionId'));
+    return (await Promise.all(pointer.map((schedule) => readOfficialScheduleShifts({
+      scheduleId: schedule.id, userId: targetUserId, db: dbAdmin,
+    })))).flatMap((item) => item.shifts);
+  }))).flat();
+  const effective = new Map<string, Record<string, unknown> & { id: string }>();
+  physical.filter((doc) => allowed.has(doc.ref.parent.parent!.path)).forEach((doc) => effective.set(doc.ref.path,
+    { id: doc.id, ...doc.data() }));
+  indexed.filter((shift) => dates.includes(String(shift.date))).forEach((shift) => effective.set(
+    `dp_schedules/${shift.scheduleId}/shifts/${shift.id}`, shift));
+  return [...effective.values()].map((data): LoginRestrictionShiftInput => {
       return {
-        id: doc.id,
+        id: data.id,
         scheduleId: typeof data.scheduleId === "string" ? data.scheduleId : "",
         unitId: typeof data.unitId === "string" ? data.unitId : "",
         date: typeof data.date === "string" ? data.date : "",
@@ -109,8 +177,7 @@ async function loadLoginAccessShifts(
         shiftDefinitionId:
           typeof data.shiftDefinitionId === "string" ? data.shiftDefinitionId : undefined,
       };
-    })
-  );
+    });
 }
 
 async function loadLoginAccessJustifications(
@@ -203,7 +270,7 @@ async function appendLoginAccessAudit(event: string, payload: Record<string, unk
   });
 }
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const decoded = await verifyAuth(request);
     if (!decoded.uid) {
@@ -236,14 +303,13 @@ export async function GET(request: NextRequest) {
       evaluation: payload.evaluation,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Erro ao avaliar acesso por escala.";
-    const status = message === "Colaborador não encontrado." ? 404 : 400;
+    const status = error instanceof Error && error.message === "Colaborador não encontrado." ? 404 : 400;
+    const message = status === 404 ? "Colaborador não encontrado." : "Não foi possível avaliar o acesso por escala.";
     return NextResponse.json({ error: message }, { status });
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const decoded = await verifyAuth(request);
     if (!decoded.uid) {
@@ -377,8 +443,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Erro ao registrar justificativa.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: "Não foi possível registrar a justificativa." }, { status: 400 });
   }
 }
+
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ request }) => handleGET(request));
+export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ request }) => handlePOST(request));

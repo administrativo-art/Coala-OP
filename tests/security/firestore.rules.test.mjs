@@ -135,8 +135,11 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
     });
 
     const editor = environment.authenticatedContext("editor").firestore();
-    await assertSucceeds(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
       name: "Setembro de 2026 — revisada",
+    }));
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      publicationStatus: "draft", draftVersion: 1,
     }));
     await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
       coverageDemands: {
@@ -244,7 +247,8 @@ test("escala respeita o escopo de unidades e participante de meta só nasce pela
       const target = doc(scoped, "dp_schedules/new-scoped-schedule");
       const existing = await transaction.get(target);
       if (!existing.exists()) {
-        transaction.set(target, { name: "Nova", month: 10, year: 2026, unitId: "unit-1" });
+        transaction.set(target, { name: "Nova", month: 10, year: 2026, unitId: "unit-1",
+          publicationStatus: "draft", publicationVersion: 0 });
       }
     }));
     await assertFails(setDoc(doc(scoped, "employeeGoals/forged-external-participant"), {

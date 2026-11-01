@@ -25,6 +25,7 @@ export interface WizardModalProps {
   mode?: "new" | "edit"
   readOnly?: boolean
   stepper?: "sidebar" | "top"
+  topStepperVariant?: "bars" | "connected"
   saveMode?: "final" | "per-step"
   sidebarWidth?: 340 | 360 | 380
   height?: "auto" | 780 | 800 | 820
@@ -44,7 +45,10 @@ export interface WizardModalProps {
   sidebar: React.ReactNode
   title: string
   description?: string
+  showTopSummary?: boolean
+  showCloseButton?: boolean
   headerActions?: React.ReactNode
+  footerActions?: React.ReactNode
   footerNote?: React.ReactNode
   children: React.ReactNode
 }
@@ -72,6 +76,7 @@ export function WizardModal({
   mode = "edit",
   readOnly = false,
   stepper = "sidebar",
+  topStepperVariant = "bars",
   saveMode = "final",
   sidebarWidth = 360,
   height = 800,
@@ -90,7 +95,10 @@ export function WizardModal({
   sidebar,
   title,
   description,
+  showTopSummary = true,
+  showCloseButton = true,
   headerActions,
+  footerActions,
   footerNote,
   children,
 }: WizardModalProps) {
@@ -152,7 +160,10 @@ export function WizardModal({
     const blocked = !readOnly && mode === "new" && index > highestStep
 
     return (
-      <li key={step.id} className={cn(placement === "top" && "min-w-0 flex-1")}>
+      <li key={step.id} className={cn(
+        placement === "top" && "min-w-[148px] flex-1 md:min-w-0",
+        placement === "top" && topStepperVariant === "connected" && "relative min-w-[168px]"
+      )}>
         <button
           type="button"
           disabled={blocked}
@@ -166,7 +177,26 @@ export function WizardModal({
             placement === "top" && "block"
           )}
         >
-          {placement === "top" ? (
+          {placement === "top" && topStepperVariant === "connected" ? (
+            <span className="relative flex min-h-[62px] flex-col items-center text-center">
+              {index < visibleSteps.length - 1 ? (
+                <span aria-hidden="true" className={cn(
+                  "absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-[15px] h-0.5",
+                  index < stepIndex ? "bg-ds-modal" : "bg-ds-border"
+                )} />
+              ) : null}
+              <span className={cn(
+                "relative z-10 inline-flex h-[30px] w-[30px] items-center justify-center rounded-ds-pill border bg-ds-surface text-[11px] font-extrabold",
+                current ? "border-ds-modal bg-ds-modal text-white" : "border-ds-border text-ds-ink-muted"
+              )}>
+                {complete ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : String(index + 1).padStart(2, "0")}
+              </span>
+              <span className={cn(
+                "mt-2 block whitespace-normal text-[11.5px] leading-[1.2]",
+                current ? "font-bold text-ds-modal" : "font-semibold text-ds-ink-muted"
+              )}>{step.label}</span>
+            </span>
+          ) : placement === "top" ? (
             <>
               <span className={cn("block h-1 rounded-ds-pill", current || complete ? "bg-ds-modal" : "bg-ds-border")} />
               <span className={cn("mt-2 block truncate text-xs", current ? "font-bold text-ds-modal" : "font-semibold text-ds-ink-muted")}>
@@ -223,19 +253,28 @@ export function WizardModal({
 
           <div className="flex min-h-0 flex-col">
             {stepper === "top" && !readOnly ? (
-              <header className="flex items-start gap-4 border-b border-ds-border-footer px-7 pb-[18px] pt-6">
-                <nav aria-label="Etapas do cadastro" className="min-w-0 flex-1">
-                  <ol className="flex gap-2">{visibleSteps.map((candidate, index) => renderStepButton(candidate, index, "top"))}</ol>
+              <header className="shrink-0 border-b border-ds-border-footer bg-ds-input">
+                {showTopSummary || headerActions || showCloseButton ? <div className={cn("flex items-start gap-4 px-5 pt-5 sm:px-7 sm:pt-[22px]", showTopSummary ? "justify-between pb-4" : "justify-end pb-2")}>
+                  {showTopSummary ? <div className="min-w-0">
+                    <h3 className="truncate text-[21px] font-extrabold tracking-[-0.02em] text-ds-ink">{title}</h3>
+                    {description && <p className="mt-0.5 truncate text-[13px] text-ds-ink-muted">{description}</p>}
+                  </div> : null}
+                  <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                    {headerActions}
+                    {showCloseButton ? <button
+                      ref={closeButtonRef}
+                      type="button"
+                      aria-label="Fechar"
+                      onClick={requestClose}
+                      className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+                    >
+                      <X aria-hidden="true" className="h-4 w-4" />
+                    </button> : null}
+                  </div>
+                </div> : null}
+                <nav aria-label="Etapas do cadastro" className={cn("overflow-x-auto px-5 pb-[18px] sm:px-7", !showTopSummary && !headerActions && !showCloseButton && "pt-[18px]")}>
+                  <ol className="flex min-w-max gap-2 md:min-w-0">{visibleSteps.map((candidate, index) => renderStepButton(candidate, index, "top"))}</ol>
                 </nav>
-                <button
-                  ref={closeButtonRef}
-                  type="button"
-                  aria-label="Fechar"
-                  onClick={requestClose}
-                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
-                >
-                  <X aria-hidden="true" className="h-4 w-4" />
-                </button>
               </header>
             ) : (
               <header className="border-b border-ds-border-footer px-7 pb-[18px] pt-[22px]">
@@ -246,7 +285,7 @@ export function WizardModal({
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     {headerActions}
-                    <button
+                    {showCloseButton ? <button
                       ref={closeButtonRef}
                       type="button"
                       aria-label="Fechar"
@@ -254,7 +293,7 @@ export function WizardModal({
                       className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
                     >
                       <X aria-hidden="true" className="h-4 w-4" />
-                    </button>
+                    </button> : null}
                   </div>
                 </div>
                 {stepper === "sidebar" && !readOnly && (
@@ -298,9 +337,12 @@ export function WizardModal({
                         <Button type="button" variant="primary-modal" size="lg" loading={submitting} onClick={saveCurrentStep}>Salvar etapa</Button>
                       </>
                     ) : (
-                      <Button type="button" variant="primary-modal" size="lg" loading={submitting} onClick={advance}>
-                        {last ? submitLabel : "Avançar →"}
-                      </Button>
+                      <>
+                        {!last ? footerActions : null}
+                        <Button type="button" variant="primary-modal" size="lg" loading={submitting} onClick={advance}>
+                          {last ? submitLabel : "Avançar →"}
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

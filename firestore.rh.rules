@@ -206,6 +206,9 @@ service cloud.firestore {
     match /repP_pilotDayGuards/{id} { allow read, write: if false; }
     match /repP_pilotAdjustmentRequests/{id} { allow read, write: if false; }
     match /dp_timeRecordingAccessAudit/{id} { allow read, write: if false; }
+    match /dp_journeyLocationEvents/{id} { allow read, write: if false; }
+    match /dp_journeyLocationSessions/{id} { allow read, write: if false; }
+    match /dp_journeyLocationLeases/{id} { allow read, write: if false; }
 
     // Tratamento do ponto (PTRP): pedidos de ajuste e tratamentos só pelas APIs autenticadas; o original segue na ARP.
     match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }

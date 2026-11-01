@@ -31,6 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CreateScheduleDialog } from '@/components/dp/dp-schedules-list';
 import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
 import { DPSchedulesSidebar } from '@/components/dp/dp-schedules-sidebar';
+import { schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
 import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
 
@@ -107,6 +108,10 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
+  const nextMonthDate = new Date(year, month, 1);
+  const hasNextMonthSchedule = accessibleSchedules.some((item) => (
+    item.year === nextMonthDate.getFullYear() && item.month === nextMonthDate.getMonth() + 1
+  ));
   const createDependenciesReady =
     !schedulesLoading &&
     !schedulesError &&
@@ -351,7 +356,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
                 return {
                   key,
                   name: unit?.name ?? schedule?.unitId ?? 'Todas as unidades',
-                  locked: schedule?.locked,
+                  draft: schedule ? schedulePublicationStatus(schedule) === 'draft' : false,
                   selected: !!schedule && selectedSchedule?.id === schedule.id,
                   disabled: !interactive,
                   filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
@@ -360,7 +365,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
                     if (schedule) selectSchedule(schedule.id);
                     else if (canCreate && createDependenciesReady) openCreate(unit?.id);
                   } : undefined,
-                  onDelete: canDelete && !isArchived && schedule ? () => setDeleteTarget(schedule) : undefined,
+                  onDelete: canDelete && !isArchived && schedule && !schedule.activeRevisionId ? () => setDeleteTarget(schedule) : undefined,
                 };
               }),
             })),
@@ -401,6 +406,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
               variant="ghost"
               size="icon"
               aria-label="Próximo mês"
+              disabled={!hasNextMonthSchedule}
               className="h-8 w-8 rounded-none"
               onClick={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, 1)}`)}
             >
@@ -424,6 +430,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
               onBack={() => router.push('/dashboard/dp/schedules')}
               onPreviousMonth={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, -1)}`)}
               onNextMonth={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, 1)}`)}
+              canGoNextMonth={hasNextMonthSchedule}
             />
           ) : (
             <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-muted-foreground">

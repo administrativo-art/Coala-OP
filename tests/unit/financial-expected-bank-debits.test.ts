@@ -52,6 +52,17 @@ test("concilia como conjunto débitos indistinguíveis do mesmo favorecido", () 
   assert.deepEqual([...matches.values()].map((match) => match.id).sort(), ["matriz", "tirirical"]);
 });
 
+test("concilia duas contas TVN como conjunto quando o Inter separa as letras do nome", () => {
+  const candidates = [candidate("joao-paulo", { amount: 101.32, counterpartyName: "T V N", expectedDate: new Date("2026-11-10T12:00:00-03:00") }),
+    candidate("tirirical", { amount: 101.32, counterpartyName: "T V N", expectedDate: new Date("2026-11-10T12:00:00-03:00") })];
+  const entries = [
+    { externalId: "tvn-1", amount: -101.32, date: "2026-11-10", description: "Pagamento de Título — T V N", references: [] },
+    { externalId: "tvn-2", amount: -101.32, date: "2026-11-10", description: "Pagamento de Título — T V N", references: [] },
+  ];
+  assert.equal(findExpectedBankDebitGroupMatches(entries, candidates, new Set()).size, 2);
+  assert.equal(findExpectedBankDebitGroupMatches(entries.slice(0, 1), candidates, new Set()).size, 0);
+});
+
 test("não concilia conjunto com quantidade, favorecido ou candidato concorrente divergente", () => {
   const maximus = [candidate("a", { amount: 548.27, counterpartyName: "Maximus Contabilidade Ltda" }),
     candidate("b", { amount: 548.27, counterpartyName: "Maximus Contabilidade Ltda" })];

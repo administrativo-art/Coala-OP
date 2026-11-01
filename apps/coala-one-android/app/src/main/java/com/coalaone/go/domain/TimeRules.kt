@@ -12,7 +12,7 @@ import java.util.UUID
 
 /** One line of a day's sequence: an original punch, a punch the DP discarded, or one it included. */
 data class DayPunch(val time: String, val nsr: Long?, val receiptId: String?, val receiptStatus: String?, val discarded: Boolean = false, val included: Boolean = false, val unitId: String? = null,
-    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false)
+    val purpose: String? = null, val classificationSource: String? = null, val markedAt: String? = null, val pilot: Boolean = false, val location: MarkingLocation? = null)
 
 enum class BreakLevel { NEUTRAL, INFO, WARN, DANGER, OK }
 data class BreakStatus(val level: BreakLevel, val headline: String, val detail: String?, val usedMinutes: Int,
@@ -151,6 +151,37 @@ object TimeRules {
         }
         return listOfNotNull(position, purpose?.let(::purposeLabel)).joinToString(" · ")
     }
+    /** The scheduled unit is not one the person may punch at (outside the employment scope): never chosen silently. */
+    fun scheduledUnitOutside(options: TimeOptions?, shift: OwnShift?): Boolean = options != null && shift?.type == "work"
+        && shift.unitId != null && options.executionUnits.isNotEmpty() && options.executionUnits.none { it.id == shift.unitId }
+    /** The person picks the unit when the day names none, allows any, or names one outside the employment scope. */
+    fun unitPickable(options: TimeOptions?, shift: OwnShift?): Boolean = (options?.executionUnits?.size ?: 0) > 1
+        && (shift?.unitId == null || shift.executionUnitPolicy == "free" || scheduledUnitOutside(options, shift))
+    /** Unit a punch goes to: the person's choice, else the scheduled unit when allowed, else the first (employer) unit. */
+    fun punchUnitId(options: TimeOptions?, shift: OwnShift?, chosen: String? = null): String? {
+        val units = options?.executionUnits.orEmpty()
+        return chosen?.takeIf { id -> units.any { it.id == id } }
+            ?: shift?.takeIf { it.type == "work" }?.unitId?.takeIf { id -> units.any { it.id == id } }
+            ?: units.firstOrNull()?.id
+    }
+    /** Short name of a slot in the day's sequence: the punch's own purpose when done, else its planned position. */
+    fun slotLabel(index: Int, slots: Int, planned: Boolean, purpose: String?): String {
+        val pauses = (slots - 2) / 2
+        val numbered = planned && pauses > 1
+        val pause = (index + 1) / 2
+        return when (purpose) {
+            "journey_start" -> "Início"
+            "journey_end" -> "Fim"
+            "break_start" -> if (numbered) "P$pause" else "Pausa"
+            "break_end" -> if (numbered) "V$pause" else "Volta"
+            else -> when {
+                index == 0 -> "Início"
+                planned && index == slots - 1 -> "Fim"
+                index % 2 == 1 -> if (numbered) "P$pause" else "Pausa"
+                else -> if (numbered) "V$pause" else "Volta"
+            }
+        }
+    }
     fun suggestedLabel(index: Int, expected: Int?): String = when {
         index == 0 -> "Entrada"
         expected != null && index == expected - 1 -> "Saída"
@@ -178,7 +209,21 @@ object TimeRules {
 
     /** Live organizational guidance. It never blocks or changes the fiscal punch. */
     fun breakStatus(shift: OwnShift?, markings: List<OwnMarking>, nowEpochMillis: Long, zone: ZoneId): BreakStatus? {
-        if (shift == null || shift.type != "work" || shift.breakType == null || shift.breakType == "none" || shift.endTime == null) return null
+        if (shift == null || shift.type != "work" || shift.breakType == null || shift.breakType == "none" || shift.endTime == null) {
+            if (markings.any { it.classification?.purpose == null }) return null
+            var pauseStart: Instant? = null
+            markings.sortedBy { markingInstant(it.markedAt) }.forEach { marking ->
+                val instant = markingInstant(marking.markedAt) ?: return@forEach
+                when (marking.classification?.purpose) {
+                    "break_start" -> pauseStart = instant
+                    "break_end" -> pauseStart = null
+                }
+            }
+            val start = pauseStart ?: return null
+            val elapsed = java.time.Duration.between(start, Instant.ofEpochMilli(nowEpochMillis)).seconds.coerceAtLeast(0)
+            return BreakStatus(BreakLevel.INFO, "Intervalo em andamento", null, (elapsed / 60).toInt(), 0,
+                0, null, true, null, "Intervalo", elapsed)
+        }
         val total = plannedBreakMinutes(shift)
         if (total <= 0) return null
         val planned = plannedPauses(shift)
@@ -501,7 +546,7 @@ object TimeRules {
         val ofDay = treatments.filter { it.workDate == date }
         val discarded = ofDay.filter { it.type == "discard" }.mapNotNull { it.originalReceiptId }.toSet()
         val originals = markings.filter { it.workDate == date }.map { DayPunch(minuteOf(it.markedAt), it.nsr, it.receiptId, it.receiptStatus, discarded = it.receiptId in discarded, unitId = it.executionUnitId,
-            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt, pilot = it.pilot) }
+            purpose = it.classification?.purpose, classificationSource = it.classification?.source, markedAt = it.markedAt, pilot = it.pilot, location = it.location) }
         val included = ofDay.filter { it.type == "inclusion" && it.markedAt != null }.map { DayPunch(minuteOf(it.markedAt!!), null, null, null, included = true, unitId = it.executionUnitId, markedAt = it.markedAt) }
         return (originals + included).sortedWith(compareBy<DayPunch> { instantOf(it) ?: java.time.Instant.MAX }.thenBy { it.time })
     }

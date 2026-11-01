@@ -1,6 +1,16 @@
 # Homologação do REP-P
 
-Pacote para levar o REP-P do estado "publicado e bloqueado" à liberação de `REP_P_MARKING_ENABLED`. A competência de **outubro/2026 permanece exclusivamente como ensaio nominal segregado**. A competência de **novembro/2026 será o piloto controlado**, limitado a uma unidade e a um ou dois colaboradores autorizados. Estado em 26/10/2026.
+## Decisão de 31/10/2026 — coleta antecipada ativada
+
+O programador autorizou preparar a coleta com INPI vazio, sem identificador fictício, e substituir a lista nominal oficial pela permissão `app.timeRecording.mark` e pela elegibilidade do vínculo vigente (CLT/aprendiz), unidade e estabelecimento. A lista nominal do ensaio segregado permanece própria desse ensaio. Os comprovantes preservam o campo INPI vazio; AFD e AEJ não inventam número. Quando o INPI chegar, os bytes e assinaturas anteriores não serão reescritos.
+
+Doc Brown classificou essa candidata como **não conforme para declarar REP-P regular**: o registro no INPI e os atestados não foram emitidos, e o campo obrigatório dos arquivos fiscais ficará vazio. A decisão do programador de assumir a questão jurídica foi explícita; ela não altera esse veredito técnico. A coleta está **ligada** desde `rollout-2026-10-31-001` (`SUCCEEDED`, build `READY`, SHA `ff66c5d2ba627911097988b64572cfed22a27d7b`). O rollout posterior `rollout-2026-10-31-002` também concluiu em `SUCCEEDED`/`READY` no SHA `923ffc2ddf0ca693495d8fe880f6e961ed3bc6e3`, preservando a flag ligada; a URL e a sonda pública responderam HTTP 200 após ambos. O corte de 31/10 não encontrou marcações, autorizações offline, travas de dia nem pedidos de ajuste nas consultas limitadas anteriores à publicação. A primeira batida real continua reservada à conta do próprio titular.
+
+O CPF do responsável Tiago foi confirmado no RH por leitura sem exposição do número. A deny policy protege a ARP contra escrita por usuário administrativo; por isso, o cadastro fiscal idempotente ocorre no runtime autorizado na primeira ação de escrita do próprio trabalhador (marcação ou autorização offline), após vínculo elegível, CPF, unidade e Hora Legal. A consulta de opções e a visualização como outra pessoa permanecem somente leitura. Em 31/10, a auditoria encontrou dois elegíveis com identidade fiscal completa, Heucilene e Luís; não havia estabelecimento nem empregados provisionados na ARP. A integração no emulador cobriu duas marcações concorrentes, cadastro único e leitura sem escrita.
+
+Próximos passos: a primeira ação de escrita do titular cria os eventos fiscais de estabelecimento/empregado; se for uma batida, o evento de marcação vem depois. Após as batidas feitas pelos titulares, verificar NSR, comprovante, sincronização online/offline, ajustes que ocorram, espelho, AFD e AEJ. A auditoria de 31/10 encontrou zero políticas de localização ativas, zero definições de turno ativas para posição e zero turnos ativos para posição; localização pontual depende do aditivo conduzido pelo RH e da configuração por unidade. O acompanhamento contínuo está desligado. Anexar a evidência já produzida do AEJ/CAdES e concluir INPI/atestados sem alterar originais anteriores. O [plano atualizado](../../planos/plano-rep-p-controle-de-ponto.md#decisão-e-execução-de-31102026) ordena os oito passos pendentes.
+
+Pacote para acompanhar a preparação e a liberação de `REP_P_MARKING_ENABLED`. O plano original de 26/10 previa corte em novembro e lista nominal; a decisão vigente de 31/10, acima, os substituiu. As seções históricas abaixo registram a evolução e não são gates atuais quando divergirem da decisão de 31/10.
 
 ## Fonte canônica do estado documental
 
@@ -21,12 +31,12 @@ Esta seção é a fonte única de verdade para certificados, assinaturas, relat�
 
 Arquivos de ensaio comprovam o mecanismo criptográfico, mas não transformam marcações de outubro em registros oficiais. Depois do INPI, a conferência final deve apenas confirmar que o número definitivo e os bytes finais foram incorporados corretamente; ela não reabre as validações criptográficas já aprovadas.
 
-## Decisão operacional registrada em 25/10/2026
+## Decisão operacional de 25/10/2026 — substituída em 31/10
 
 - Outubro/2026: ensaio segregado, sem validade fiscal, sem NSR/ARP/AFD/AEJ e sem fechamento oficial.
 - Novembro/2026: teste controlado com um ou dois colaboradores-piloto, em uma unidade, após publicação do backend, testes físicos e conferência das pré-condições.
 - A coleta oficial continua bloqueada até que a versão publicada esteja confirmada e o início do piloto de novembro seja preparado.
-- Atenção de segurança: hoje `REP_P_MARKING_ENABLED=true` libera o modo oficial para qualquer perfil que tenha `app.timeRecording.mark`; a lista `REP_P_PILOT_USER_IDS` só limita o modo de ensaio. Antes do piloto oficial de novembro, é necessário criar e testar uma allowlist oficial de um ou dois colaboradores (ou um escopo equivalente por unidade), para não liberar todos os empregados.
+- Posição de 25/10, substituída em 31/10: a lista `REP_P_PILOT_USER_IDS` só limitava o ensaio; foi proposta uma allowlist oficial de um ou dois colaboradores. A decisão atual libera todos os que tiverem permissão, vínculo e unidade elegíveis, sem essa lista nominal.
 
 ## Relatório de gates
 
@@ -43,14 +53,14 @@ Arquivos de ensaio comprovam o mecanismo criptográfico, mas não transformam ma
 | 9 | IAM revisado (privilégio mínimo sobre a ARP) | Atendido | `coala-rep-p` tem PITR, proteção contra exclusão, backup diário, tag, regras, cinco índices `READY` e TTL `ACTIVE`. Em 25/10, a deny policy condicionada à tag passou a negar criação/alteração/exclusão às contas genéricas, preservando somente App Hosting e o agente do Firestore ([inventário](iam-e-restauracao.md#inventário-iam)) |
 | 10 | Decisões regulatórias do REP-P | Atendido | Não há parecer jurídico genérico como gate. As decisões e o estado das validações estão no [registro de normas](../referencias/README.md#decisões-registradas-e-validações-técnicas) e na fonte canônica acima |
 | 11 | Certificados e ReSinc | Decidido | ACT não bloqueia a liberação. Preservar bytes/cadeia, monitorar e renovar e-CNPJ/e-CPFs antes do vencimento e impedir novas assinaturas com certificado vencido. ReSinc certificada não é requisito adotado; permanece a Hora Legal já implementada |
-| 11-A | Pré-condições operacionais | Parcial, infraestrutura publicada | Bucket fiscal e retenção `Locked` foram reconferidos ao vivo em 26/10/2026; banco dedicado protegido; deny policy aplicada; primeira restauração do `coala-rep-p` concluída com comparação idêntica e destino descartável removido. AFD/AEJ só são entregues depois do ZIP preservado. `REP_P_MARKING_ENABLED=false` permanece. Faltam aprovar cadastro fiscal/local, comunicar os trabalhadores e concluir LGPD; os ensaios locais do assinador e do acesso por 72 h passaram |
-| 12 | E2E da tela, Coala Go e piloto fiscal | Parcial | Em 23/10/2026 passaram o E2E local da tela pessoal × conferência administrativa, os testes JVM/lint do Coala Go e o APK assinado 0.3.21/code26. Offline, geolocalização pontual, troca de turno e acompanhamento de jornada estão implementados. Faltam aparelho físico, Play Integrity `enforce`, configuração operacional da localização e piloto fiscal com um único estabelecimento |
+| 11-A | Pré-condições operacionais | Coleta ligada; conformidade pendente | Bucket fiscal `Locked`, banco dedicado, deny policy e restauração foram conferidos. `REP_P_MARKING_ENABLED=true` foi publicado em 31/10; o cadastro fiscal ocorre na primeira escrita pelo titular no runtime autorizado. Permanecem INPI/atestados, aditivo/aviso do RH, ensaios físicos e fechamento fiscal; AFD/AEJ só são entregues depois do ZIP preservado. |
+| 12 | E2E da tela, Coala Go e piloto fiscal | Parcial | APK assinado 0.3.36/code41 instalado no Samsung SM-S911B em 31/10. A visualização administrativa como Heucilene mostrou somente leitura e nenhuma ação de marcação. A integração no emulador passou com duas batidas concorrentes e bootstrap único. Faltam batidas reais dos titulares, ciclo offline físico completo e Play Integrity `enforce`. |
 
-`REP_P_MARKING_ENABLED` só pode virar `true` para o início do piloto de novembro com os gates 1–6, 8–11 e 11-A atendidos (o 7 vale para o PTRP), revisão do Doc Brown e decisão registrada do programador. Ligar essa flag inicia o **piloto fiscal do REP-P**, limitado a um estabelecimento e com o Bizneo como registro oficial. As obrigações do art. 80 e do Anexo IX valem desde a primeira batida oficial de novembro.
+O critério de ativação originalmente aprovado em 25/10 exigia início em novembro, gates 1–6 e 8–11-A e revisão Doc Brown. A decisão posterior de 31/10 antecipou a data, removeu a lista nominal oficial e aceitou INPI vazio sob responsabilidade do programador. Doc Brown manteve veredito não conforme; a primeira batida dessa candidata não deve ser descrita como REP-P regular.
 
 O **ensaio pré-homologação segregado** não antecipa essa decisão: `REP_P_PILOT_ENABLED=true` aceita somente as identidades nominais autorizadas e mantém `REP_P_MARKING_ENABLED=false`. Seus documentos dizem que não têm validade REP-P; os dados não podem ser promovidos, copiados ou convertidos em batida oficial. A contingência do ensaio usa autorização, coleção e domínio de assinatura próprios e pode ser testada sem rede ou após indisponibilidade explícita da HLB; a sincronização continua fora de NSR, ARP, AFD, AEJ, espelho e fechamento. O servidor também impede qualquer mistura entre ajuste formal e ensaio no mesmo dia: pedido e batida disputam a mesma trava transacional, a batida procura solicitações anteriores e a aprovação relê trava e marcações. A existência de uma solicitação formal reserva o dia ao fluxo oficial, mesmo que depois rejeitada ou cancelada. Cada reclassificação do ensaio permanece em evento imutável. O objetivo é validar identidade, vínculo, unidade, fuso, Hora Legal, telas, contingência e prévia do banco antes da ativação fiscal. Geolocalização pontual e acompanhamento durante a jornada fazem parte do produto aprovado; durante o ensaio continuam desligados para pessoas reais até a publicação da cláusula/aditivo, configuração das unidades e dos turnos, acesso autorizado e teste físico. O acompanhamento usa `DP_JOURNEY_LOCATION_ENABLED=false` como kill switch até esses itens serem concluídos. O pacote mensal de comprovantes continua sendo exclusivamente oficial; o app não conta ensaios como parte dele e oferece o comprovante de ensaio somente na batida individual. A inspeção bruta confirmou que as quatro unidades não possuíam o campo `timeZone`; o rollout aceita somente esse estado exato para gravar `America/Fortaleza`, relendo e comparando a versão integral de cada unidade na transação antes de qualquer escrita.
 
-## Pendências para considerar o ponto pronto, salvo INPI
+## Pendências da fotografia de 26/10 — consultar atualização de 31/10 acima
 
 Esta é a lista operacional vigente. Não entram nela homologação no MTE, Inmetro, CAREP, ReSinc ou parecer jurídico genérico. Migração do histórico, encerramento do sistema anterior e consulta geral de documentos no Coala Go também não fazem parte deste critério.
 
@@ -69,7 +79,7 @@ Esta é a lista operacional vigente. Não entram nela homologação no MTE, Inme
 
 Protocolar e obter o número do registro do programa. Com o número definitivo, preencher e assinar os atestados do REP-P e do PTRP e configurar o identificador nos comprovantes e arquivos fiscais. Essa é a única dependência externa excluída da lista operacional acima.
 
-## Ordem recomendada
+## Ordem recomendada em 26/10 — substituída pela atualização de 31/10
 
 1. Anexar ao dossiê a evidência já produzida do AEJ/CAdES; não repetir a validação, salvo se o arquivo final mudar.
 2. Finalizar offline, geolocalização e acompanhamento configurado por turno em aparelho físico, antes do piloto de novembro.

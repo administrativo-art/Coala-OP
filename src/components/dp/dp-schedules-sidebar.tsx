@@ -1,13 +1,13 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, Lock, Search, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 export type DPSchedulesSidebarUnit = {
   key: string;
   name: string;
-  locked?: boolean;
+  draft?: boolean;
   selected?: boolean;
   disabled?: boolean;
   filledDays: number;
@@ -146,7 +146,7 @@ export function DPSchedulesSidebar({
                           )}>
                             {unit.name}
                           </span>
-                          {unit.locked && <Lock className="h-2.5 w-2.5 shrink-0 text-[#67758c]" strokeWidth={2.6} />}
+                          {unit.draft && <span title="Rascunho" className="shrink-0 rounded bg-amber-500 px-1 text-[9px] font-bold text-white">R</span>}
                           <span className={cn(
                             'shrink-0 text-[10px] font-extrabold tabular-nums',
                             unit.filledDays > 0 ? 'text-[#90a0b8]' : 'text-[#f472a5]',

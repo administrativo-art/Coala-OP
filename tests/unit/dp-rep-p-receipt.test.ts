@@ -49,7 +49,8 @@ describe('Comprovante REP-P', () => {
 
   it('refuses to render while a legal field is missing or the snapshot is inconsistent', async () => {
     assert.deepEqual(missingRepPReceiptFields({ ...snapshot, workLocation: null, inpiRegistration: '' }),
-      ['workLocation', 'inpiRegistration']);
+      ['workLocation']);
+    assert.ok((await renderRepPReceiptPdf({ ...snapshot, inpiRegistration: '' })).length > 0);
     // Número real do INPI (BR 51 AAAA NNNNNN-D) tem 13 dígitos; só dígitos, até 17 posições.
     assert.deepEqual(missingRepPReceiptFields({ ...snapshot, inpiRegistration: '5120221234567' }), []);
     assert.deepEqual(missingRepPReceiptFields({ ...snapshot, inpiRegistration: 'BR 51 2022 123456-7' }), ['inpiRegistration']);

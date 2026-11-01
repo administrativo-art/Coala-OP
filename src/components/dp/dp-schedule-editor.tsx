@@ -17,7 +17,9 @@ import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
-import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
+import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
@@ -68,9 +70,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, LockOpen, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
+import { buildVisibleSchedulePeople } from '@/lib/dp-schedule-bulk-selection';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
 import {
@@ -116,12 +119,12 @@ const MONTHS = [
 ];
 
 const WEEK_TONES = [
-  { bar: 'border-l-sky-400', bg: 'bg-sky-50', hover: 'hover:bg-sky-100', text: 'text-sky-700' },
-  { bar: 'border-l-violet-400', bg: 'bg-violet-50', hover: 'hover:bg-violet-100', text: 'text-violet-700' },
-  { bar: 'border-l-emerald-400', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', text: 'text-emerald-700' },
-  { bar: 'border-l-amber-400', bg: 'bg-amber-50', hover: 'hover:bg-amber-100', text: 'text-amber-700' },
-  { bar: 'border-l-rose-400', bg: 'bg-rose-50', hover: 'hover:bg-rose-100', text: 'text-rose-700' },
-  { bar: 'border-l-cyan-400', bg: 'bg-cyan-50', hover: 'hover:bg-cyan-100', text: 'text-cyan-700' },
+  { bar: 'border-l-sky-400', chip: 'border-sky-200 bg-sky-50 text-sky-700' },
+  { bar: 'border-l-violet-400', chip: 'border-violet-200 bg-violet-50 text-violet-700' },
+  { bar: 'border-l-emerald-400', chip: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  { bar: 'border-l-amber-400', chip: 'border-amber-200 bg-amber-50 text-amber-700' },
+  { bar: 'border-l-rose-400', chip: 'border-rose-200 bg-rose-50 text-rose-700' },
+  { bar: 'border-l-cyan-400', chip: 'border-cyan-200 bg-cyan-50 text-cyan-700' },
 ] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -210,7 +213,7 @@ function ShiftDialog({
 }: ShiftDialogProps) {
   const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
-  const { addShift, updateShift } = useDPShifts(scheduleId);
+  const { addShift, updateShift } = useDPShifts(scheduleId, true);
   const api = useAuthenticatedApi();
   const { toast } = useToast();
   const isEdit = !!shift;
@@ -1328,13 +1331,14 @@ interface DPScheduleEditorProps {
   onBack?: () => void;
   onPreviousMonth?: () => void;
   onNextMonth?: () => void;
+  canGoNextMonth?: boolean;
 }
 
-export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth }: DPScheduleEditorProps) {
+export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth, canGoNextMonth = true }: DPScheduleEditorProps) {
   const { activeUsers, permissions, updateUser, user, isDefaultAdmin, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const {
-    updateSchedule,
+    setSchedules,
     units,
     shiftDefinitions,
     schedules,
@@ -1352,13 +1356,14 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     shifts,
     loading,
     error: shiftsError,
+    conflicts: draftConflicts,
+    draftVersion,
+    reload: reloadShifts,
     applyShiftsBatch,
     deleteShift: doDelete,
-  } = useDPShifts(schedule.id);
+  } = useDPShifts(schedule.id, isDefaultAdmin || permissions.dp?.schedules?.edit === true);
   const {
     validation: journeyValidation,
-    loading: journeyValidationLoading,
-    error: journeyValidationError,
   } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
@@ -1367,6 +1372,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   } = useDPScheduleVacations(schedule.id);
   const { absences: scheduleAbsences, loading: absencesLoading, error: absencesError } = useDPScheduleAbsences(schedule.id);
   const { toast } = useToast();
+  const [publication, setPublication] = useState<DPSchedule>(schedule);
+  const [publishing, setPublishing] = useState(false);
+  React.useEffect(() => { setPublication(schedule); }, [schedule]);
+  React.useEffect(() => subscribeToDPScheduleShiftChanges([schedule.id], () => {
+    void fetchSchedule(schedule.id).then((fresh) => {
+      setPublication(fresh);
+      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+    }).catch(() => undefined);
+  }), [schedule.id, schedules, setSchedules]);
+  const publicationStatus = schedulePublicationStatus(publication);
+  const hasPublishedVersion = hasPublishedScheduleVersion(publication);
   const api = useAuthenticatedApi();
   const bootstrapLoading =
     (unitsLoading && units.length === 0) ||
@@ -1397,10 +1413,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     });
     return s;
   }, [holidays]);
-
-  async function handleCalendarChange(calendarId: string) {
-    await updateSchedule({ ...schedule, calendarId: calendarId === '__none__' ? undefined : calendarId });
-  }
 
   // Load previous month's schedule shifts for carry-over consecutive count + preview
   const prevPeriod = useMemo(() => {
@@ -1473,14 +1485,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     )
   );
   const vacationDataReady = !vacationsLoading && !vacationsError;
-  const canEdit = canManageSchedule && !schedule.locked && vacationDataReady;
+  const canEdit = canManageSchedule && vacationDataReady;
+  const canPublish = canManageSchedule && (isDefaultAdmin || permissions.dp?.schedules?.publish === true);
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
   // Ausência lançada pela escala: primeiro a pessoa, depois o pedido com a data já preenchida.
   const [absencePicker, setAbsencePicker] = useState<{ date: string; unitId: string } | null>(null);
   const [absenceLaunch, setAbsenceLaunch] = useState<{ date: string; userId: string } | null>(null);
-  const canLaunchAbsence = !isArchivedUnitSchedule && (isDefaultAdmin || permissions.dp?.requests?.review === true);
+  const canLaunchAbsence = canManageSchedule && (isDefaultAdmin || permissions.dp?.requests?.review === true);
   const [publishingDayOffKey, setPublishingDayOffKey] = useState<string | null>(null);
   const [removingDayOffKey, setRemovingDayOffKey] = useState<string | null>(null);
   const [dayOffRemovalTarget, setDayOffRemovalTarget] = useState<{
@@ -1491,20 +1504,19 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [editShift, setEditShift] = useState<DPShift | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPShift | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
-  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set());
+  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set([1, 2, 3, 4, 5, 6]));
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [bulkCreateActive, setBulkCreateActive] = useState(false);
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
-  const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
   const [vtDialogOpen, setVtDialogOpen] = useState(false);
-  const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.coverageDemands));
+  const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.draftCoverageDemands ?? schedule.coverageDemands));
   const [coverageDemandDialog, setCoverageDemandDialog] = useState<{ date: string; unit: DPUnit } | null>(null);
 
   React.useEffect(() => {
-    setCoverageDemands(normalizeDPCoverageDemands(schedule.coverageDemands));
-  }, [schedule.coverageDemands, schedule.id]);
+    setCoverageDemands(normalizeDPCoverageDemands(publication.draftCoverageDemands ?? publication.coverageDemands));
+  }, [publication.coverageDemands, publication.draftCoverageDemands, publication.id]);
 
   async function handlePublishDayOff(params: {
     scheduleId?: string;
@@ -1580,44 +1592,33 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     }
   }
 
-  async function handleLock() {
-    if (!permissions.dp?.schedules?.edit) return;
-    setLocking(true);
+  async function handlePublish() {
+    if (!canPublish || publishing) return;
+    setPublishing(true);
     try {
-      const snapshotUsers: DPScheduleSnapshot['users'] = {};
-      operationalUsers.forEach(u => {
-        const entry: DPScheduleSnapshot['users'][string] = { username: u.username };
-        if (u.color !== undefined) entry.color = u.color;
-        if (u.avatarUrl !== undefined) entry.avatarUrl = u.avatarUrl;
-        if (u.needsTransportVoucher !== undefined) entry.needsTransportVoucher = u.needsTransportVoucher;
-        if (u.transportVoucherValue !== undefined) entry.transportVoucherValue = u.transportVoucherValue;
-        snapshotUsers[u.id] = entry;
-      });
-      // JSON round-trip to strip any remaining undefined values (Firestore rejects them)
-      const cleanSnapshot = JSON.parse(JSON.stringify({ users: snapshotUsers }));
-      await updateSchedule({ ...schedule, locked: true, snapshot: cleanSnapshot });
-      toast({ title: 'Escala trancada.' });
+      const currentDraft = await fetchDraftScheduleShifts(schedule.id);
+      if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
+      await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
+      const fresh = await fetchSchedule(schedule.id);
+      setPublication(fresh);
+      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+      await reloadShifts();
+      notifyDPScheduleShiftsChanged(schedule.id);
+      toast({ title: 'Escala publicada.', description: 'Os demais módulos passam a usar a versão publicada.' });
     } catch (caught) {
-      toast({
-        title: 'Não foi possível trancar a escala.',
-        description: caught instanceof Error ? caught.message : 'Revise as jornadas aplicáveis.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLocking(false);
-    }
+      toast({ title: 'Não foi possível publicar a escala.', description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
+    } finally { setPublishing(false); }
   }
 
-  async function handleUnlock() {
-    if (!permissions.dp?.schedules?.edit) return;
-    setLocking(true);
+  async function handleDiscardConflicts() {
+    if (!canEdit || !draftConflicts.length) return;
     try {
-      await updateSchedule({ ...schedule, locked: false });
-      toast({ title: 'Escala destrancada.' });
-    } catch {
-      toast({ title: 'Erro ao destrancar.', variant: 'destructive' });
-    } finally {
-      setLocking(false);
+      const result = await discardDraftConflicts(schedule.id, draftVersion);
+      await reloadShifts();
+      toast({ title: `${result.discarded} alteração(ões) conflitante(s) descartada(s).`,
+        description: result.remaining ? 'Ainda há conflitos. Repita a resolução após revisar a escala.' : 'As alterações operacionais foram preservadas.' });
+    } catch (caught) {
+      toast({ title: 'Não foi possível resolver os conflitos.', description: caught instanceof Error ? caught.message : 'Atualize a escala.', variant: 'destructive' });
     }
   }
 
@@ -1631,6 +1632,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
   function resetBulkSelection() {
     setBulkSelectionActive(false);
+    setBulkEditDialogOpen(false);
     setSelectedShiftIds([]);
   }
 
@@ -1727,13 +1729,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return m;
   }, [operationalUsers]);
 
-  // When locked, use snapshot user data; otherwise use live data
+  // A versão publicada preserva os dados de pessoas capturados na publicação.
   const effectiveUserMap = useMemo(() => {
-    if (schedule.locked && schedule.snapshot?.users) {
+    if (hasPublishedVersion && schedule.snapshot?.users) {
       return new Map(Object.entries(schedule.snapshot.users));
     }
     return userMap;
-  }, [schedule.locked, schedule.snapshot, userMap]);
+  }, [hasPublishedVersion, schedule.snapshot, userMap]);
 
   const selectedBulkShifts = useMemo(() => {
     const selectedSet = new Set(selectedShiftIds);
@@ -1778,12 +1780,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const visibleDayOffShifts = useMemo(
     () => isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts,
     [dayOffShifts, isPerUnit, siblingDayOffShifts],
-  );
-  const bizneoQueueItems = useMemo(
-    () => dayOffShifts
-      .filter((shift) => shift.bizneoSyncStatus !== 'published')
-      .sort((left, right) => left.date.localeCompare(right.date)),
-    [dayOffShifts],
   );
   const dayOffOccupied = useMemo(() => {
     const occupied = new Map<string, Set<string>>();
@@ -2181,28 +2177,14 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     () => onlyAlerts ? visibleDays.filter(({ date }) => alertDates.has(date)) : visibleDays,
     [alertDates, onlyAlerts, visibleDays],
   );
-  const renderDateSet = useMemo(() => new Set(renderDays.map(({ date }) => date)), [renderDays]);
-
-  const visiblePeople = useMemo(() => {
-    const idsByUser = new Map<string, string[]>();
-    Object.entries(shiftIndex).forEach(([date, byUnit]) => {
-      if (!renderDateSet.has(date)) return;
-      Object.values(byUnit).forEach((items) => {
-        items.forEach((shift) => {
-          const ids = idsByUser.get(shift.userId) ?? [];
-          ids.push(shift.id);
-          idsByUser.set(shift.userId, ids);
-        });
-      });
-    });
-    return Array.from(idsByUser.entries())
-      .map(([id, shiftIds]) => ({
-        id,
-        name: effectiveUserMap.get(id)?.username ?? id,
-        shiftIds: Array.from(new Set(shiftIds)),
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
-  }, [effectiveUserMap, renderDateSet, shiftIndex]);
+  const visiblePeople = useMemo(() => buildVisibleSchedulePeople(
+    renderDays,
+    collapsedWeeks,
+    shiftIndex,
+    effectiveUserMap,
+  ), [collapsedWeeks, effectiveUserMap, renderDays, shiftIndex]);
+  const visibleShiftIds = useMemo(() => Array.from(new Set(visiblePeople.flatMap((person) => person.shiftIds))), [visiblePeople]);
+  const allVisibleShiftsSelected = visibleShiftIds.length > 0 && visibleShiftIds.every((id) => selectedShiftIds.includes(id));
 
   function toggleShiftSelectionGroup(shiftIds: string[]) {
     const groupIds = new Set(shiftIds);
@@ -2253,7 +2235,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (shiftDate.getMonth() !== schedule.month - 1 || shiftDate.getFullYear() !== schedule.year) return;
       let userName = '';
-      if (schedule.locked && schedule.snapshot?.users) {
+      if (hasPublishedVersion && schedule.snapshot?.users) {
         userName = schedule.snapshot.users[shift.userId]?.username ?? shift.userId;
       } else {
         userName = operationalUsers.find(u => u.id === shift.userId)?.username ?? shift.userId;
@@ -2281,7 +2263,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       let vtValue = 0;
       let userName = '';
 
-      if (schedule.locked && schedule.snapshot?.users) {
+      if (hasPublishedVersion && schedule.snapshot?.users) {
         const snap = schedule.snapshot.users[shift.userId];
         needsVT = snap?.needsTransportVoucher ?? false;
         vtValue = snap?.transportVoucherValue ?? 0;
@@ -2382,7 +2364,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
       {/* Header */}
       <div className={cn(
-        'flex flex-wrap items-center gap-3',
+        'grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2',
         embedded && 'shrink-0 border-b border-[#eef1f6] px-[22px] py-[14px]',
       )}>
         {embedded && onBack ? (
@@ -2397,62 +2379,52 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         ) : !embedded && (
           <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         )}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           {embedded ? (
-            <h1 className="dp-schedule-month-title truncate text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
+            <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
               {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
             </h1>
           ) : (
-            <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
+            <h1 className="text-xl font-semibold">{schedule.name}</h1>
           )}
           {!embedded && (
             <p className="text-sm text-muted-foreground">{MONTHS[schedule.month - 1]} {schedule.year}</p>
           )}
         </div>
+        <div className="col-span-full flex flex-wrap items-center justify-end gap-2">
         {embedded && onPreviousMonth && onNextMonth && (
           <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
             <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
+            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         )}
-        {isPerUnit && (
-          <Button type="button" size="sm" variant="outline" onClick={() => setBizneoQueueOpen(true)} className="h-8 rounded-[10px] border-sky-200 bg-sky-50 px-3 text-[12.5px] font-extrabold text-sky-700 hover:bg-sky-100">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-sky-500" />
-            Bizneo · {bizneoQueueItems.length} pendente{bizneoQueueItems.length === 1 ? '' : 's'}
+        <Badge className={publicationStatus === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
+          Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
+        </Badge>
+        {canPublish && publicationStatus === 'draft' && (
+          <Button size="sm" onClick={handlePublish} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
+            {publishing ? 'Publicando...' : hasPublishedVersion ? 'Publicar novamente' : 'Publicar escala'}
           </Button>
-        )}
-        {canManageSchedule && (
-          schedule.locked ? (
-            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="h-8 rounded-[10px] border-amber-300 px-3 text-[12.5px] font-bold text-amber-600 hover:bg-amber-50">
-              <LockOpen className="mr-2 h-4 w-4" />
-              {locking ? 'Destrancando...' : 'Destrancar'}
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
-              <Lock className="mr-2 h-4 w-4" />
-              {locking ? 'Trancando...' : 'Trancar'}
-            </Button>
-          )
         )}
         {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <div className="flex items-center gap-2">
             {schedule.unitId ? (
-              <Button size="sm" variant="outline" onClick={() => setBulkCreateActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+              <Button size="sm" variant="outline" onClick={() => setBulkCreateActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] bg-white px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc] hover:text-[#334155] focus-visible:text-[#334155] active:text-[#334155]">
                 <Plus className="mr-2 h-4 w-4" />
                 Preencher em lote
               </Button>
             ) : null}
-            <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+            <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] bg-white px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc] hover:text-[#334155] focus-visible:text-[#334155] active:text-[#334155]">
               <Sparkles className="mr-2 h-4 w-4" />
               Alterar em lote
             </Button>
           </div>
         )}
-        {canEdit && (
+        {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <Button
             size="sm"
             onClick={() => setAddDialog({ date: days[0]?.date ?? '', unitId: activeUnits[0]?.id ?? '' })}
@@ -2462,36 +2434,20 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             Adicionar turno
           </Button>
         )}
+        </div>
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
-      {schedule.locked && (
-        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-          <Lock className="h-3.5 w-3.5 shrink-0" />
-          Escala trancada — dados de colaboradores e vale-transporte estão congelados.
+      {publicationStatus === 'draft' && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
+          {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
+          {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
         </div>
       )}
-      {!schedule.locked && journeyValidationLoading && (
-        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-          Validando a jornada de cada colaborador e a sequência entre competências e unidades.
-        </div>
-      )}
-      {!schedule.locked && journeyValidationError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          A validação de jornadas não foi concluída: {journeyValidationError}
-        </div>
-      )}
-      {!schedule.locked && journeyValidation?.status === 'blocked' && (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {journeyValidation.issues.length} pendência{journeyValidation.issues.length === 1 ? '' : 's'} de jornada impedem o fechamento. {journeyValidation.issues[0]?.message}
-        </div>
-      )}
-      {!schedule.locked && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-          Jornadas resolvidas e sequência contínua validada para esta escala.
+      {publicationStatus === 'draft' && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          As jornadas e conflitos operacionais serão validados ao publicar.
         </div>
       )}
       {isArchivedUnitSchedule && (
@@ -2500,7 +2456,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
         </div>
       )}
-      {canManageSchedule && !schedule.locked && vacationsLoading && (
+      {canManageSchedule && vacationsLoading && (
         <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300">
           <CalendarDays className="h-3.5 w-3.5 shrink-0" />
           Carregando férias aprovadas. A edição da escala será liberada após a validação.
@@ -2509,7 +2465,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       {vacationsError && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {canManageSchedule && !schedule.locked
+          {canManageSchedule
             ? 'Não foi possível validar as férias. A edição da escala está bloqueada até os dados serem carregados.'
             : 'Não foi possível validar as férias. Alguns conflitos podem não ser exibidos.'}
         </div>
@@ -2543,10 +2499,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       )}
 
-      <div className={cn(
-        'grid items-start',
-        (bulkSelectionActive || bulkCreateActive) && 'min-[1180px]:grid-cols-[minmax(0,1fr)_314px]',
-      )}>
+      <div className="grid items-start">
         <div className={cn('min-w-0 space-y-4', embedded && 'px-[22px] pb-5 pt-[14px]')}>
       {/* Stats boxes */}
       <div className="grid grid-cols-2 gap-[10px] lg:grid-cols-5">
@@ -2631,7 +2584,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         })()}
         {!isPerUnit && (
           <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
+            <SelectTrigger flushIcon className="h-8 w-[160px] text-xs"><SelectValue placeholder="Todas as unidades" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas as unidades</SelectItem>
               {allUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
@@ -2639,27 +2592,27 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           </Select>
         )}
         <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="h-[30px] w-[210px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569] [&>span]:whitespace-nowrap"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
+          <SelectTrigger flushIcon className="h-[34px] w-[250px] max-w-full rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as colaboradoras</SelectItem>
             {operationalUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="h-[30px] w-[120px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
+        <Select value={weekFilter} onValueChange={(value) => {
+          setWeekFilter(value);
+          if (value !== '__all__') setCollapsedWeeks((current) => {
+            const next = new Set(current);
+            next.delete(Number(value));
+            return next;
+          });
+        }}>
+          <SelectTrigger flushIcon className="h-[34px] w-[155px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Mês inteiro</SelectItem>
             {monthWeeks.map(w => <SelectItem key={w} value={String(w)}>Semana {w}</SelectItem>)}
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          <span
-            className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex"
-            title="Indicador da sequência realizada na escala. A regra aplicável pertence à jornada do colaborador."
-          >
-            Sequência realizada
-            <span className="normal-case tracking-normal">o indicador se adapta ao limite da jornada</span>
-          </span>
           <button
             type="button"
             aria-pressed={onlyAlerts}
@@ -2676,6 +2629,19 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       </div>
 
+      {canEdit && bulkSelectionActive && (
+        <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 shadow-sm">
+          <span className="mr-auto text-xs font-bold text-sky-900">Edição em lote · {selectedShiftIds.length} turno{selectedShiftIds.length === 1 ? '' : 's'} selecionado{selectedShiftIds.length === 1 ? '' : 's'}{selectedShiftIds.length === 0 ? ' · Abra uma semana para selecionar' : ''}</span>
+          {visibleShiftIds.length > 0 && (
+            <Button type="button" size="sm" variant="outline" onClick={() => toggleShiftSelectionGroup(visibleShiftIds)} className="h-8 border-sky-200 bg-white text-sky-800 hover:bg-sky-100 hover:text-sky-900">
+              {allVisibleShiftsSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="outline" onClick={resetBulkSelection} className="h-8 bg-white text-slate-700 hover:text-slate-900">Cancelar</Button>
+          <Button type="button" size="sm" disabled={selectedShiftIds.length === 0} onClick={() => setBulkEditDialogOpen(true)} className="h-8 bg-[#db2777] text-white hover:bg-[#be185d]">Alterar selecionados</Button>
+        </div>
+      )}
+
       {/* Grid */}
       {activeUnits.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
@@ -2683,18 +2649,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       ) : (
         <div className="overflow-auto rounded-[14px] border border-[#e9edf4]">
-          <table className="w-max min-w-full text-sm border-collapse">
+          <table className={cn('min-w-full border-collapse text-sm', isPerUnit ? 'w-full table-fixed' : 'w-max')}>
             <thead>
               <tr className="bg-muted/40">
                 {/* Sticky day column header */}
-                <th className="sticky left-0 z-20 min-w-[88px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
+                <th className="sticky left-0 z-20 w-20 border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
                   Data
                 </th>
                 {isPerUnit ? (
                   <>
-                    <th className="min-w-[600px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
-                    <th className="w-[360px] min-w-[360px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
-                    <th className="w-44 min-w-44 border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
+                    <th className="w-[52%] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
+                    <th className="w-[30%] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
+                    <th className="w-[12%] border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
                   </>
                 ) : activeUnits.map(unit => (
                   <th
@@ -2738,7 +2704,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     const isSunday = dow === 0;
                     const isHoliday = holidaySet.has(date);
                     return (
-                      <tr key={`prev-${date}`} className={`border-b opacity-55 ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/20' : ''}`}>
+                      <tr key={`prev-${date}`} className={`border-b ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/20' : 'bg-slate-50/50'}`}>
                         <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/30' : 'bg-background'}`}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span className={`text-[10px] font-medium uppercase tracking-wider ${isSunday ? 'text-red-400' : 'text-muted-foreground/60'}`}>{dowLabel}</span>
@@ -2754,7 +2720,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           const cellShifts = prevShiftIndexWithCount[date]?.[unit.id] ?? [];
                           return (
                             <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]">
-                              <div className="flex flex-col gap-1">
+                              <div className={cn('grid gap-1', isPerUnit ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1')}>
                                 {cellShifts.map(shift => {
                                   const user = effectiveUserMap.get(shift.userId);
                                   const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
@@ -2803,13 +2769,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                 const weekCollapsed = collapsedWeeks.has(week);
                 const weekTone = WEEK_TONES[(week - 1) % WEEK_TONES.length];
                 const weekLabel = weekDays.length > 0
-                  ? `Semana ${week} · ${weekDays[0].day} a ${weekDays[weekDays.length - 1].day} de ${MONTHS[schedule.month - 1].toLowerCase()}`
-                  : `Semana ${week}`;
+                  ? `${weekDays[0].day} a ${weekDays[weekDays.length - 1].day} de ${MONTHS[schedule.month - 1].toLowerCase()}`
+                  : '';
 
                 const rowBg = isHoliday
                   ? 'bg-orange-50 dark:bg-orange-900/10'
                   : dayIsToday ? 'bg-blue-50 dark:bg-blue-900/10'
-                  : isWeekend ? 'bg-muted/20' : 'hover:bg-muted/10';
+                  : isWeekend ? 'bg-muted/20' : 'bg-background';
 
                 const stickyBg = isHoliday
                   ? 'bg-orange-50 dark:bg-orange-900/10'
@@ -2826,17 +2792,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       >
                         <button
                           type="button"
+                          aria-label={`Semana ${week}, ${weekLabel || 'sem dias'}`}
                           aria-expanded={!weekCollapsed}
                           onClick={() => toggleWeek(week)}
                           className={cn(
-                            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[9.5px] font-extrabold uppercase tracking-[0.12em] transition-colors',
-                            weekTone.bg,
-                            weekTone.hover,
-                            weekTone.text,
+                            'flex w-full items-center gap-2 bg-white px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-700 transition-colors hover:bg-slate-50',
                           )}
                         >
                           <ChevronRight className={cn('h-3 w-3 shrink-0 transition-transform', !weekCollapsed && 'rotate-90')} strokeWidth={2.6} />
-                          <span>{weekLabel}</span>
+                          <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[10px] tabular-nums', weekTone.chip)}>{week}</span>
+                          <span>Semana {week} · {weekLabel}</span>
                           <span className="ml-auto text-[9.5px] font-bold normal-case tracking-normal opacity-60">
                             {weekCollapsed ? 'Recolhida' : `${weekDays.length} ${weekDays.length === 1 ? 'dia' : 'dias'}`}
                           </span>
@@ -2845,10 +2810,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     </tr>
                   )}
                   {!weekCollapsed && <tr
-                    className={`border-b transition-colors last:border-b-0 ${rowBg}`}
+                    className={cn('group/day border-b transition-colors last:border-b-0 hover:bg-sky-50/80 hover:shadow-[inset_0_0_0_1px_#7dd3fc]', rowBg)}
                   >
                     {/* Day label cell */}
-                    <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${stickyBg}`}>
+                    <td className={cn('sticky left-0 z-10 border-r px-3 py-2 align-top transition-colors group-hover/day:bg-sky-100 group-hover/day:shadow-[inset_-3px_0_0_#0ea5e9]', stickyBg)}>
                       <div className="flex flex-col items-center gap-0.5">
                         <span className={`text-[10px] font-medium uppercase tracking-wider
                           ${isSunday ? 'text-red-500' : 'text-muted-foreground'}
@@ -2973,7 +2938,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             shift={shift}
                             user={user}
                             contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
-                            canPublish={canPublishDayOff && (explicit || !schedule.locked)}
+                            canPublish={canPublishDayOff}
                             canRemove={canPublishDayOff && explicit}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
                             removing={removingDayOffKey === `${userId}::${date}`}
@@ -2999,7 +2964,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           statusLabel={candidate.statusLabel}
                         />
                       ));
-                      const canAddDayOff = canPublishDayOff && !schedule.locked;
+                      const canAddDayOff = canPublishDayOff;
                       const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
                         <DayLaunchMenu
                           canShift={canEdit}
@@ -3012,11 +2977,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       ) : null;
 
                       return (
-                        <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-[200px] border-r p-0 align-top last:border-r-0">
+                        <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-0 border-r p-0 align-top last:border-r-0">
                           {isPerUnit ? (
-                            <div className="grid min-h-[52px] grid-cols-[minmax(600px,1fr)_360px_176px] divide-x divide-[#eef1f6]">
-                            <div className="p-2">
-                              <div className="grid max-w-[600px] grid-cols-3 gap-1">
+                            <div className="grid min-h-[52px] grid-cols-[55%_32%_13%] divide-x divide-[#eef1f6]">
+                            <div className="min-w-0 p-2">
+                              <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-1">
                                 {workCards}
                                 {addShiftButton}
                               </div>
@@ -3037,11 +3002,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                 </div>
                               )}
                               </div>
-                              <div className="flex flex-col gap-1 p-2">
+                              <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {dayOffCards}
                                 {unassignedCards}
                               </div>
-                              <div className="flex flex-col gap-1 p-2">
+                              <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {coverageAlert ? (
                                   <CoverageStatus
                                     coverage={coverageAlert}
@@ -3105,7 +3070,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
         </div>
 
-        {canEdit && bulkSelectionActive && (
+      </div>
+      </div>
+
+      <Dialog open={canEdit && bulkSelectionActive && bulkEditDialogOpen} onOpenChange={setBulkEditDialogOpen}>
+        <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
+          <DialogTitle className="sr-only">Edição em lote</DialogTitle>
           <DPBulkShiftEditPanel
             selectedShifts={selectedBulkShifts}
             allCurrentShifts={shifts}
@@ -3120,10 +3090,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             onRemoveSelected={removeShiftSelectionGroup}
             applyShiftsBatch={applyShiftsBatch}
             onApplied={resetBulkSelection}
-            onCancel={resetBulkSelection}
+            onCancel={() => setBulkEditDialogOpen(false)}
           />
-        )}
-        {canEdit && bulkCreateActive && schedule.unitId && (
+        </DialogContent>
+      </Dialog>
+      <Dialog open={canEdit && bulkCreateActive && !!schedule.unitId} onOpenChange={(open) => { if (!open) resetBulkCreate(); }}>
+        <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
+          <DialogTitle className="sr-only">Preencher em lote</DialogTitle>
           <DPBulkShiftCreatePanel
             people={bulkPeople.map((person) => ({ id: person.id, name: person.username }))}
             dates={days.map((day) => ({ date: day.date, label: String(day.day), dowLabel: day.dowLabel }))}
@@ -3136,75 +3109,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             onApplied={resetBulkCreate}
             onCancel={resetBulkCreate}
           />
-        )}
-      </div>
-      </div>
-
-      {/* Dialogs */}
-      <Dialog open={bizneoQueueOpen} onOpenChange={setBizneoQueueOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Fila do Bizneo · {scheduleUnit?.name ?? 'Unidade'}</DialogTitle>
-            <DialogDescription>
-              Folgas desta escala que ainda precisam de confirmação ou nova tentativa no Bizneo.
-            </DialogDescription>
-          </DialogHeader>
-          {bizneoQueueItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-              Nenhuma pendência nesta unidade.
-            </div>
-          ) : (
-            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-              {bizneoQueueItems.map((shift) => {
-                const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
-                const busy = publishingDayOffKey === `${shift.userId}::${shift.date}`
-                  || removingDayOffKey === `${shift.userId}::${shift.date}`;
-                const isRemovalFailure = shift.bizneoSyncStatus === 'removal_failed';
-                return (
-                  <div key={shift.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{userName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(parseISO(shift.date), "dd 'de' MMMM", { locale: ptBR })} · {shift.bizneoSyncStatus ?? 'pendente'}
-                      </p>
-                    </div>
-                    {canPublishDayOff && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isRemovalFailure ? 'destructive' : 'outline'}
-                        disabled={busy}
-                        onClick={() => {
-                          if (isRemovalFailure) {
-                            setBizneoQueueOpen(false);
-                            setDayOffRemovalTarget({
-                              shift,
-                              userName,
-                              unitName: scheduleUnit?.name ?? shift.unitId,
-                            });
-                            return;
-                          }
-                          void handlePublishDayOff({
-                            scheduleId: shift.scheduleId,
-                            userId: shift.userId,
-                            unitId: shift.unitId,
-                            date: shift.date,
-                            source: 'retry',
-                          });
-                        }}
-                      >
-                        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        {isRemovalFailure ? 'Tentar remover' : 'Enviar novamente'}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
+      {/* Dialogs */}
       <Dialog open={vtDialogOpen} onOpenChange={setVtDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -3257,6 +3165,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
               else delete next[date];
               return next;
             });
+            void fetchSchedule(schedule.id).then((fresh) => {
+              setPublication(fresh);
+              setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+            }).catch(() => undefined);
           }}
         />
       ) : null}

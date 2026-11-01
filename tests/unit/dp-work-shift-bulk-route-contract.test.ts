@@ -4,19 +4,23 @@ import test from 'node:test';
 import { bulkWorkShiftSchema } from '../../src/features/dp/shifts/schemas';
 
 const serviceSource = readFileSync('src/features/dp/shifts/bulk-service.server.ts', 'utf8');
+const publicationSource = readFileSync('src/features/dp/schedules/publication-service.server.ts', 'utf8');
 const routeSource = readFileSync('src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts', 'utf8');
 const hookSource = readFileSync('src/hooks/use-dp-shifts.ts', 'utf8');
 const schemaSource = readFileSync('src/features/dp/shifts/schemas.ts', 'utf8');
 
-test('edição em lote passa por autenticação, transação e auditoria', () => {
+test('edição manual em lote exige permissão e grava somente no rascunho com auditoria', () => {
   assert.match(routeSource, /requireUser\(request\)/);
   assert.match(routeSource, /bulkWorkShiftSchema\.safeParse/);
-  assert.match(serviceSource, /dbAdmin\.runTransaction/);
-  assert.match(serviceSource, /DP_SHIFT_SCHEDULE_LOCKED/);
-  assert.match(serviceSource, /canAccessUnit/);
+  assert.match(routeSource, /stageBulkWorkShift/);
+  assert.match(routeSource, /schedules\.edit/);
+  assert.match(publicationSource, /dbAdmin\.runTransaction/);
+  assert.match(publicationSource, /canAccessUnit/);
+  assert.match(publicationSource, /draftEdits/);
+  assert.match(publicationSource, /shift_draft_changed/);
+  assert.match(publicationSource, /actionLogs/);
   assert.match(serviceSource, /DP_SHIFT_BULK_VACATION_CONFLICT/);
   assert.match(serviceSource, /DP_SHIFT_BULK_DAY_OFF_CONFLICT/);
-  assert.match(serviceSource, /actionLogs/);
 });
 
 test('painel em lote não grava turnos diretamente pelo cliente', () => {

@@ -21,6 +21,13 @@
 - O plano registra situação atual verificada, decisões com data, pendências a confirmar e ordem de execução. Documentos de apoio de um plano (homologação, referências, anexos) podem ficar em pastas temáticas, mas o plano em si continua em `docs/planos/` e aponta para eles.
 - Registros de chamado (`.ai-work/development-technology/<id>/`) e decisões de design (`docs/design/decisoes/`) não são planos e continuam nos seus lugares.
 
+## Registro obrigatório de documentos gerados
+
+- Todo PDF, DOCX, termo, recibo, declaração, aviso, ordem, relatório ou pacote persistido que o sistema gere automaticamente deve ser registrado, na mesma alteração, em `SYSTEM_DOCUMENT_TEMPLATES`, conforme `docs/engineering/generated-documents-registry.md`. A lista **Configurações → Pessoal → Documentos → Geração e publicação** deriva desse catálogo e não admite uma lista paralela.
+- O registro deve declarar identidade estável, origem, modo de geração, versão, formato, timbre, assinatura, retenção, publicação e caminho do fluxo. Documento contextual também entra no catálogo; `generationMode: "reference"` só é válido para exceção deliberada e justificada no guia do fluxo.
+- Instâncias enviadas por usuário e exportações transitórias não preservadas não viram modelos automaticamente. Se o resultado for arquivado, assinado, publicado, reutilizado ou apresentado como documento oficial, trate-o como gerado e catalogado.
+- Antes de concluir qualquer gerador, execute o harness em `docs/engineering/generated-documents-harness.md`, atualize os testes do catálogo e prove que o documento aparece em **Geração e publicação**, ou registre explicitamente a exceção `reference`. Gerador persistente sem catálogo bloqueia commit e rollout.
+
 ## Departamento de Desenvolvimento e Tecnologia
 
 - Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os oito especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown.

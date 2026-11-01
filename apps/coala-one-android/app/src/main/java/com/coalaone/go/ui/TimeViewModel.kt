@@ -38,7 +38,9 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val offlineIssue: String? = null, val offlineReady: Boolean = false,
     val monthDataAvailable: Boolean = false,
     val journeyTrackingActive: Boolean = false, val journeyClosurePromptDate: String? = null,
-    val closedJourneyDate: String? = null)
+    val closedJourneyDate: String? = null, val dayLoad: DayLoad = DayLoad.PENDING)
+/** Whether today's punches and shift are known: a punch is never suggested or confirmed over an unread day. */
+enum class DayLoad { PENDING, READ, UNREAD }
 /** The attempt the screen resends as is: its purpose and unit cannot change, and the time is when it was first tried. */
 data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTriedAt: Long?, val firstTriedSource: String? = null)
 
@@ -48,7 +50,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     private val offlineScheduler: TimeOfflineWorkScheduler, private val journeyLocation: JourneyLocationController? = null,
     private val timeSummaryUpdates: TimeSummaryUpdates = TimeSummaryUpdates(),
     private val appAttestation: AppAttestation? = null,
-    private val offlinePreparation: TimeOfflinePreparation? = null) : FeedbackViewModel() {
+    private val offlinePreparation: TimeOfflinePreparation? = null,
+    private val developerViewAsStore: DeveloperViewAsSelectionStore = InMemoryDeveloperViewAsStore()) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(TimeState(closedJourneyDate = saved.get<String>("closedJourneyDate")))
     val state = mutable.asStateFlow()
     private val api get() = repository.api
@@ -117,10 +120,11 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
 
     /** Options of today and the month on screen; read when the screen opens and on pull-to-refresh. */
     fun load(online: Boolean = true) = serverRun {
+        mutable.update { it.copy(dayLoad = DayLoad.PENDING) }
         val today = LocalDate.now()
         val elapsed = android.os.SystemClock.elapsedRealtime()
         if (!online) {
-            mutable.update { it.copy(monthDataAvailable = false) }
+            mutable.update { it.copy(monthDataAvailable = false, dayLoad = DayLoad.UNREAD) }
             restoreLocalAuthorization(IOException("offline"), elapsed)
             return@serverRun
         }
@@ -137,8 +141,11 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             // The Ponto screen reads the current month: browsing Registros in another month must not take today's shift with it.
             readMonth(YearMonth.from(today))
         } catch (cause: IOException) {
-            mutable.update { it.copy(monthDataAvailable = false) }
+            mutable.update { it.copy(monthDataAvailable = false, dayLoad = DayLoad.UNREAD) }
             restoreLocalAuthorization(cause, elapsed)
+        } catch (cause: Exception) {
+            if (cause !is CancellationException) mutable.update { it.copy(monthDataAvailable = false, dayLoad = DayLoad.UNREAD) }
+            throw cause
         }
     }
     private suspend fun restoreLocalAuthorization(cause: IOException, elapsed: Long) {
@@ -182,7 +189,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val adjustmentReads = months.map { api.adjustments(it.toString()) }
         val offset = TimeRules.clockOffset(options.officialClock, android.os.SystemClock.elapsedRealtime())
         mutable.update { current -> current.copy(options = options, clockOffset = offset, clockSource = sourceOf(offset),
-            today = LocalDate.now(), month = YearMonth.from(date), monthDataAvailable = true, markings = markings.markings,
+            today = LocalDate.now(), month = YearMonth.from(date), monthDataAvailable = true, markings = markings.markings, dayLoad = DayLoad.PENDING,
             truncated = markings.truncated || monthReads.any { it.truncated }, shifts = monthReads.flatMap { it.shifts },
             automaticAbsences = monthReads.flatMap { it.automaticAbsences }.toSet(),
             adjustments = adjustmentReads.flatMap { it.adjustments }, treatments = adjustmentReads.flatMap { it.treatments },
@@ -219,6 +226,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 automaticAbsences = shifts.automaticAbsences.toSet(),
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments,
+                dayLoad = if (month == YearMonth.from(current.today)) DayLoad.READ else DayLoad.PENDING,
                 // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.
                 unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
                     ?: current.options?.executionUnits?.firstOrNull()?.id ?: current.unitId)
@@ -230,6 +238,7 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
     fun pendingAttempt(): PendingAttempt? = attempt?.let { PendingAttempt(attemptPurpose, attemptUnitId, attemptFirstTriedAt, attemptFirstTriedSource) }
     fun hasPendingLocationAttempt() = attempt != null && pendingLocation != null
     fun record(online: Boolean = true, capturedLocation: LocationAttempt? = null, declaredPurpose: String) = serverRun {
+        require(developerViewAsStore.current() == null) { "Visualizar como é somente leitura. Volte ao seu perfil para registrar ponto." }
         val owner = auth.current?.uid ?: error("Entre novamente.")
         if (attempt != null && attemptOwnerUid != null && attemptOwnerUid != owner) {
             clearAttempt() // Its durable row remains sealed for the original owner.
@@ -323,7 +332,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         auth.current?.uid?.let { uid ->
             timeSummaryUpdates.recorded(uid, OwnMarking(result.receiptId, pending.second, result.marking.nsr,
                 result.marking.markedAt, result.marking.executionUnitId, "01", result.receiptStatus,
-                result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot))
+                result.receiptIssue, MarkingClassification(selectedPurpose), result.pilot,
+                result.location?.let { MarkingLocation(it.evaluation) }))
         }
         updateJourneyLocation(state, pending.second, result.marking.executionUnitId, selectedPurpose)
         if (auth.current?.uid == owner) mutable.value.options?.let { refreshPermit(it, android.os.SystemClock.elapsedRealtime()) }

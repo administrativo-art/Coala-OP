@@ -2,6 +2,8 @@ import { collection, getDocs, limit, orderBy, query, where } from 'firebase/fire
 import { eachDayOfInterval } from 'date-fns';
 
 import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { countsDPShiftTowardGoals } from '@/lib/dp-external-coverage';
 import type { DPUnit, EmployeeGoal, GoalClosureSnapshot, GoalDistributionMode, GoalPeriodDoc } from '@/types';
@@ -167,7 +169,7 @@ export async function loadGoalDistributionSnapshot(
         if (matched) unitIdToKioskId.set(matched.id, kioskId);
       }
     } catch (error) {
-      console.warn('[goals-distribution] failed to load dp_units for kiosk matching', error);
+      throw new Error('Não foi possível validar as unidades das escalas para distribuir as metas.', { cause: error });
     }
   }
 
@@ -175,7 +177,6 @@ export async function loadGoalDistributionSnapshot(
 
   // scheduleId → kioskId (resolved from unitId, or null if unknown)
   const scheduleKioskId = new Map<string, string | null>();
-  const scheduleUnitId = new Map<string, string>();
   for (const [unitId, kioskId] of unitIdToKioskId) {
     for (const { year, month } of monthKeysBetween(globalRangeStart, globalRangeEnd)) {
       const schedulesSnap = await getDocs(
@@ -190,7 +191,6 @@ export async function loadGoalDistributionSnapshot(
       if (schedulesSnap.size > 1) throw new Error('Há mais de uma escala da unidade na mesma competência.');
       for (const doc of schedulesSnap.docs) {
         scheduleKioskId.set(doc.id, kioskId);
-        scheduleUnitId.set(doc.id, unitId);
       }
     }
   }
@@ -288,16 +288,12 @@ export async function loadGoalDistributionSnapshot(
   for (const [scheduleId] of scheduleKioskId) {
     for (let i = 0; i < allEmployeeIds.length; i += IN_CHUNK_SIZE) {
       const chunk = allEmployeeIds.slice(i, i + IN_CHUNK_SIZE);
-      const shiftsSnap = await getDocs(
-        query(
-          collection(db, 'dp_schedules', scheduleId, 'shifts'),
-          where('unitId', '==', scheduleUnitId.get(scheduleId)),
-          where('userId', 'in', chunk),
-          limit(501),
-        )
-      );
-      if (shiftsSnap.size > 500) throw new Error('Há turnos demais para validar a distribuição de metas.');
-      shiftsSnap.docs.forEach(d => processShift(d.data() as ShiftRecord, scheduleId));
+      const params = new URLSearchParams({ scheduleId });
+      chunk.forEach((id) => params.append('employeeId', id));
+      const result = await authenticatedApiRequest<{ shifts: ShiftRecord[] }>(`/api/goals/schedule-shifts?${params}`,
+        { getIdToken: async () => auth.currentUser?.getIdToken() ?? null });
+      if (result.shifts.length > 2_000) throw new Error('Há turnos demais para validar a distribuição de metas.');
+      result.shifts.forEach((shift) => processShift(shift, scheduleId));
     }
   }
 

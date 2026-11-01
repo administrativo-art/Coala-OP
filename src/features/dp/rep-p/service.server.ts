@@ -2,8 +2,8 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import type { Firestore } from 'firebase-admin/firestore';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import { resolveEmploymentReferenceForSystem } from '@/features/dp/employment-reference/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -29,15 +29,16 @@ import { deriveRepPOfflineMarkedAt, repPDeviceKeyId, REP_P_OFFLINE_PERMIT_TTL_MS
 import { applyOfflineCycleAction, createOfflineCyclePermit, loadOfflineCycle, reconcileOnlineCycles, readOfflineCycleDto } from './offline-cycle.server';
 import { evaluateRepPLocation, repPLocationEvidenceDigest, repPLocationSummary,
   REP_P_LOCATION_RETENTION_DAYS, type RepPLocationAttempt, type RepPLocationPolicySnapshot } from './location';
-import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_EVIDENCE,
+import { effectiveRepPLocationPolicy, loadRepPLocationPolicies, REP_P_LOCATION_EVIDENCE, REP_P_LOCATION_POLICIES,
   repPLocationPolicyRef, disabledRepPLocationPolicy } from './location-policy.server';
 import { allowedExecutionUnit, externalCoverageGrants, externalCoverageUnits } from './execution-units.server';
+import { readRepPMonthOfPerson } from './own-month.server';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
 import { buildRepPReceiptArchive } from './receipt-archive';
 import { isValidRepPPilotReceiptSnapshot, REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt,
   type RepPPilotReceiptSnapshot } from './pilot-receipt';
-import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPOfficialUserIds, repPPilotWorkDateAllowed } from './runtime-config';
+import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPPilotWorkDateAllowed } from './runtime-config';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -71,11 +72,30 @@ const CT_SORVETES_LEGAL_NAME = 'CT SORVETES LTDA';
 
 type Dependencies = Readonly<{
   repDb: Firestore; pilotDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; officialUserIds: ReadonlySet<string>;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean;
   pilotEnabled: boolean; pilotUserIds: ReadonlySet<string>; officialStartDate: string;
+  referenceResponsibleUid: string | null;
   fiscalStore: FiscalArtifactStore;
   afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
+
+/** A configuração do turno é a porta de entrada da coleta: sem turno ou sem opção explícita, não pede nem grava posição. */
+async function shiftLocationPolicy(context: ServerUserContext, workDate: string, deps: Dependencies) {
+  const month = await readRepPMonthOfPerson([
+    context.decoded.uid,
+    typeof context.userDoc.id === 'string' ? context.userDoc.id : null,
+    typeof context.userDoc.hrEmployeeId === 'string' ? context.userDoc.hrEmployeeId : null,
+  ], workDate.slice(0, 7), { db: deps.mainDb, hrDb: deps.hrDb });
+  const shifts = month.shifts.filter((shift) => shift.date === workDate);
+  const shift = shifts.find((item) => item.type === 'work') ?? shifts[0] ?? null;
+  return shift?.type === 'work' ? shift.locationTrackingPolicy : 'disabled';
+}
+
+/** Localização é acessória: falha ao resolver a escala desliga somente a captura e nunca a marcação. */
+async function safeShiftLocationPolicy(context: ServerUserContext, workDate: string, deps: Dependencies) {
+  try { return await shiftLocationPolicy(context, workDate, deps); }
+  catch { return 'disabled' as const; }
+}
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
   async signDetached(): Promise<never> {
@@ -114,8 +134,8 @@ const defaults: Dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb:
   clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: repPOfficialMarkingEnabled(),
-  officialUserIds: repPOfficialUserIds(),
   officialStartDate: repPOfficialStartDate(),
+  referenceResponsibleUid: process.env.REP_P_REFERENCE_RESPONSIBLE_UID ?? null,
   pilotEnabled: process.env.REP_P_PILOT_ENABLED === 'true',
   pilotUserIds: new Set((process.env.REP_P_PILOT_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean)),
   fiscalStore: fiscalArtifactStore };
@@ -180,9 +200,6 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
 }
-function markingAllowedForOfficialUser(context: ServerUserContext, deps: Dependencies) {
-  return deps.officialUserIds.has(context.decoded.uid);
-}
 function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
   return policy.participantUserIds.includes(context.decoded.uid)
     ? policy : disabledRepPLocationPolicy(context.workspace_id, policy.executionUnitId);
@@ -214,6 +231,7 @@ function storedLocationSummary(value: unknown): LocationSummary | null {
 function prepareLocationEvidence(params: {
   policy: RepPLocationPolicySnapshot; attempt?: RepPLocationAttempt; markedAt: Date;
   workspaceId: string; employeeId: string; markingId: string; evidenceId: string; executionUnitId: string;
+  shiftLocationTrackingPolicy?: 'punch_only' | 'workday';
 }) {
   if (params.policy.mode === 'disabled') return { summary: null, evidence: null, expiresAt: null };
   const result = evaluateRepPLocation(params.policy, params.attempt, params.markedAt);
@@ -224,6 +242,7 @@ function prepareLocationEvidence(params: {
   const core = {
     schemaVersion: 1, workspaceId: params.workspaceId, employeeId: params.employeeId,
     markingId: params.markingId, evidenceId: params.evidenceId, executionUnitId: params.executionUnitId,
+    shiftLocationTrackingPolicy: params.shiftLocationTrackingPolicy,
     channelTrust: 'client_reported', retentionClass: 'time_location_evidence', legalHold: false,
     policy: {
       schemaVersion: params.policy.schemaVersion, workspaceId: params.policy.workspaceId,
@@ -261,8 +280,50 @@ async function persistLocationEvidenceBestEffort(deps: Dependencies, prepared: {
       }
       return;
     }
+    let physicalUnit: { id: string; name: string; digest: string } | null = null;
+    const captured = prepared.evidence.capture.location;
+    if (captured && typeof captured.latitude === 'number' && typeof captured.longitude === 'number'
+      && typeof captured.accuracyMeters === 'number') {
+      try {
+        const capturedPoint = { latitude: captured.latitude, longitude: captured.longitude };
+        const capturedAccuracy = captured.accuracyMeters;
+        const policyDocuments: QueryDocumentSnapshot[] = [];
+        let cursor: QueryDocumentSnapshot | null = null;
+        for (let page = 0; page < 10; page += 1) {
+          let query = deps.repDb.collection(REP_P_LOCATION_POLICIES).where('workspaceId', '==', prepared.evidence.workspaceId)
+            .orderBy(FieldPath.documentId()).limit(50);
+          if (cursor) query = query.startAfter(cursor);
+          const snapshot = await query.get();
+          policyDocuments.push(...snapshot.docs);
+          if (snapshot.size < 50) break;
+          cursor = snapshot.docs.at(-1) ?? null;
+        }
+        if (policyDocuments.length === 500) throw new Error('REP_P_LOCATION_AREA_LIMIT_REACHED');
+        const matches = policyDocuments.flatMap((document) => {
+          const unitId = String(document.get('executionUnitId') ?? '');
+          const policy = effectiveRepPLocationPolicy(document.data(), prepared.evidence.workspaceId, unitId);
+          const areaResult = evaluateRepPLocation({ ...policy, mode: 'observe' }, {
+            captureId: String(prepared.evidence.capture.captureId ?? ''), status: 'captured',
+            elapsedMs: Number(prepared.evidence.capture.elapsedMs ?? 0), capturedAt: captured.capturedAt,
+            latitude: capturedPoint.latitude, longitude: capturedPoint.longitude, accuracyMeters: capturedAccuracy,
+          }, prepared.recordedAt);
+          return areaResult.evaluation === 'inside' && areaResult.distanceMeters !== null
+            ? [{ unitId, distance: areaResult.distanceMeters }] : [];
+        }).sort((left, right) => left.distance - right.distance);
+        const matched = matches[0];
+        if (matched) {
+          const unit = await deps.mainDb.collection('dp_units').doc(matched.unitId).get();
+          if (unit.exists) {
+            const name = String(unit.get('name') ?? unit.id);
+            physicalUnit = { id: unit.id, name,
+              digest: repPLocationEvidenceDigest({ evidenceDigest: prepared.evidence.digest, id: unit.id, name }) };
+          }
+        }
+      } catch { /* A classificação nominal derivada nunca impede a evidência original. */ }
+    }
     await target.create({
       ...prepared.evidence, recordedDate: prepared.recordedDate,
+      physicalUnit,
       recordedAt: Timestamp.fromDate(prepared.recordedAt), expiresAt: Timestamp.fromDate(prepared.expiresAt),
       createdAt: Timestamp.now(),
     });
@@ -312,7 +373,9 @@ export async function provisionRepPReferenceData(input: {
   const deps = { ...defaults, ...injected };
   if (!input.workspaceId.trim() || !input.timeZone.trim() || input.profile.developerCnpj !== CT_SORVETES_CNPJ
     || !isValidCpf(input.responsibleCpf) || !isValidCpf(input.employee.cpf) || !input.employee.userId.trim()
-    || !input.employee.name.trim() || !input.workLocation.trim() || !REP_P_INPI_PATTERN.test(input.profile.inpiRegistration)
+    || !input.employee.name.trim() || !input.workLocation.trim()
+    || typeof input.profile.inpiRegistration !== 'string'
+    || input.profile.inpiRegistration !== '' && !REP_P_INPI_PATTERN.test(input.profile.inpiRegistration)
     || !input.profile.employerLegalName.trim()) throw fail('REP_P_SETUP_INVALID', 'Cadastro REP-P inválido.');
   const expectedId = establishmentKey(input.workspaceId, input.profile.employerCnpj);
   if (input.profile.establishmentId !== expectedId) throw fail('REP_P_ESTABLISHMENT_ID_INVALID', 'Identificador fiscal do estabelecimento inválido.');
@@ -361,6 +424,39 @@ export async function provisionRepPReferenceData(input: {
       lastType7Hash: state?.lastType7Hash ?? null, lastType7Nsr: state?.lastType7Nsr ?? null });
     return { establishmentId: expectedId, replayed: false } as const;
   });
+}
+
+/** Primeira ação de escrita pelo titular prepara a ARP usando exclusivamente o runtime escritor protegido. */
+async function ensureOwnRepPReferenceData(context: ServerUserContext, reference: Awaited<ReturnType<typeof resolveEmploymentReferenceForSystem>>,
+  deps: Dependencies) {
+  if (context.viewAs) throw fail('REP_P_VIEW_AS_READ_ONLY', 'A visualização de outra pessoa é somente leitura.', 'AUTHORIZATION');
+  if (reference.status !== 'matched' || !deps.referenceResponsibleUid
+    || reference.period.employer.cnpj !== CT_SORVETES_CNPJ) return;
+  const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
+  const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
+  const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
+  const [existing, establishment] = await deps.repDb.getAll(employeeRef, establishmentRef);
+  if (existing.exists) return;
+  const established = establishment.data();
+  if (establishment.exists && (!validEstablishment(established) || established.workspaceId !== context.workspace_id
+    || established.profile.employerCnpj !== CT_SORVETES_CNPJ)) {
+    throw fail('REP_P_ESTABLISHMENT_INCONSISTENT', 'O cadastro fiscal do estabelecimento está inconsistente.', 'DATA_INTEGRITY');
+  }
+  const unit = await deps.mainDb.collection('dp_units').doc(reference.period.employerUnitId).get();
+  const unitTimeZone = unit.get('timeZone');
+  if (!unit.exists || !isBrazilTimeZone(unitTimeZone) || !reference.period.employer.address) {
+    throw fail('REP_P_ESTABLISHMENT_NOT_READY', 'A unidade empregadora precisa de fuso e endereço válidos.', 'DATA_INTEGRITY');
+  }
+  const [responsible, employee] = await Promise.all([
+    readRepPEmployeeIdentity(deps.referenceResponsibleUid, deps),
+    readRepPEmployeeIdentity(context.decoded.uid, deps),
+  ]);
+  await provisionRepPReferenceData({ workspaceId: context.workspace_id, responsibleCpf: responsible.cpf,
+    timeZone: established?.timeZone ?? unitTimeZone,
+    profile: established?.profile ?? { establishmentId, employerCnpj: CT_SORVETES_CNPJ,
+      employerLegalName: CT_SORVETES_LEGAL_NAME, inpiRegistration: '', developerCnpj: CT_SORVETES_CNPJ },
+    employee: { userId: context.decoded.uid, cpf: employee.cpf, name: employee.name },
+    workLocation: reference.period.employer.address }, deps);
 }
 
 function offlinePermitDto(permit: OfflinePermitDocument) {
@@ -481,7 +577,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   const deps = { ...defaults, ...injected };
   if (!deps.markingEnabled && deps.pilotEnabled) return issueOwnPilotOfflinePermit(context, input, deps);
   if (!deps.markingEnabled) throw fail('REP_P_MARKING_DISABLED', 'O registro de ponto ainda não foi liberado.', 'AUTHORIZATION');
-  if (!markingAllowedForProfile(context) || !markingAllowedForOfficialUser(context, deps)) {
+  if (!markingAllowedForProfile(context)) {
     throw fail('REP_P_MARKING_PROFILE_DISABLED', 'O registro de ponto ainda não foi liberado para este perfil.', 'AUTHORIZATION');
   }
   if (input.protocolVersion === 2) await reconcileOnlineCycles(deps.repDb, context, 'official');
@@ -504,6 +600,7 @@ export async function issueOwnRepPOfflinePermit(context: ServerUserContext, raw:
   if (reference.period.employmentRelationshipType !== 'clt' && reference.period.employmentRelationshipType !== 'apprenticeship') {
     throw fail('REP_P_EMPLOYMENT_NOT_ELIGIBLE', 'O vínculo não está habilitado para registro de ponto.', 'VALIDATION');
   }
+  await ensureOwnRepPReferenceData(context, reference, deps);
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   const coverage = await externalCoverageGrants(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds);
   const [establishment, ...unitDocs] = await Promise.all([
@@ -870,7 +967,6 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
   }
   if (!markingAllowedForProfile(context)
-    || deps.markingEnabled && !markingAllowedForOfficialUser(context, deps)
     || !deps.markingEnabled && deps.pilotEnabled && !deps.pilotUserIds.has(context.decoded.uid)) {
     throw new AppError({ code: 'REP_P_MARKING_PROFILE_DISABLED', kind: 'AUTHORIZATION', retryable: false,
       safeMessage: 'O registro de ponto ainda não foi liberado para este perfil.' });
@@ -881,6 +977,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
   const replay = await readOwnOfficialOnlineReplay(context, input, deps);
   if (replay) return replay;
+  const locationTrackingPolicy = await safeShiftLocationPolicy(context, input.workDate, deps);
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: input.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') throw fail('REP_P_EMPLOYMENT_UNRESOLVED', 'Não há vínculo histórico válido para a data da marcação.', 'DATA_INTEGRITY');
@@ -890,6 +987,7 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (!await allowedExecutionUnit(deps.mainDb, context.decoded.uid, input.workDate, reference.period.unitIds, input.executionUnitId)) {
     throw fail('REP_P_EXECUTION_UNIT_OUTSIDE_EMPLOYMENT', 'A unidade não está no vínculo nem na cobertura escalada para esta data.', 'AUTHORIZATION');
   }
+  await ensureOwnRepPReferenceData(context, reference, deps);
   const establishmentId = establishmentKey(context.workspace_id, reference.period.employer.cnpj);
   const [identity, executionUnit, establishmentBefore] = await Promise.all([
     loadStrictIdentity(deps.hrDb, context.decoded.uid), deps.mainDb.collection('dp_units').doc(input.executionUnitId).get(),
@@ -958,11 +1056,12 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     });
     if (prepared.status !== 'created') throw fail('REP_P_SEQUENCE_INVALID', 'Sequência fiscal inconsistente.', 'DATA_INTEGRITY');
     const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
-    const locationPolicy = locationPolicyForActor(context,
-      effectiveRepPLocationPolicy(locationPolicyDocument.data(), context.workspace_id, input.executionUnitId));
+    const locationPolicy = locationTrackingPolicy === 'disabled' ? disabledRepPLocationPolicy(context.workspace_id, input.executionUnitId)
+      : locationPolicyForActor(context, effectiveRepPLocationPolicy(locationPolicyDocument.data(), context.workspace_id, input.executionUnitId));
     const location = prepareLocationEvidence({ policy: locationPolicy, attempt: input.locationAttempt,
       markedAt: reading.instant, workspaceId: context.workspace_id, employeeId: context.decoded.uid,
-      markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId });
+      markingId: prepared.marking.markingId, evidenceId: eventRef.id, executionUnitId: input.executionUnitId,
+      shiftLocationTrackingPolicy: locationTrackingPolicy === 'workday' ? 'workday' : 'punch_only' });
     transaction.create(eventRef, { ...prepared.marking, ...operationalEvidence(reference), arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
         verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
@@ -1100,10 +1199,9 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
   const establishmentRef = deps.repDb.collection(ESTABLISHMENTS).doc(establishmentId);
   const employeeRef = deps.repDb.collection(EMPLOYEES).doc(employeeKey(establishmentId, context.decoded.uid));
   const competenceFenceRef = repPCompetenceFenceRef(deps.repDb, context.workspace_id, input.workDate.slice(0, 7));
-  const locationPolicyRef = repPLocationPolicyRef(deps.repDb, context.workspace_id, input.executionUnitId);
   const committed = await deps.repDb.runTransaction(async (transaction) => {
-    const [establishment, employee, attempt, currentPermit, competenceFence, locationPolicyDocument] = await transaction.getAll(
-      establishmentRef, employeeRef, attemptRef, permitRef, competenceFenceRef, locationPolicyRef);
+    const [establishment, employee, attempt, currentPermit, competenceFence] = await transaction.getAll(
+      establishmentRef, employeeRef, attemptRef, permitRef, competenceFenceRef);
     const current = establishment.data();
     if (!validEstablishment(current) || current.workspaceId !== context.workspace_id
       || !sameProfile(current.profile, establishmentData.profile) || current.timeZone !== establishmentData.timeZone) {
@@ -1143,8 +1241,9 @@ async function recordOwnOfflineRepPMarking(context: ServerUserContext, input: Re
     });
     if (prepared.status !== 'created') throw fail('REP_P_SEQUENCE_INVALID', 'Sequência fiscal inconsistente.', 'DATA_INTEGRITY');
     const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
-    const locationPolicy = locationPolicyForActor(context,
-      effectiveRepPLocationPolicy(locationPolicyDocument.data(), context.workspace_id, input.executionUnitId));
+    // A autorização offline atual não assina coordenadas; não cria nem mesmo evidência "indisponível" quando a
+    // configuração do turno não pôde ser congelada no permit. Uma futura coleta offline exige contrato próprio.
+    const locationPolicy = disabledRepPLocationPolicy(context.workspace_id, input.executionUnitId);
     // A fila offline atual assina a marcação, mas não a coordenada. Por isso ela registra somente a indisponibilidade,
     // sem aceitar posição não vinculada à assinatura criptográfica do aparelho.
     const location = prepareLocationEvidence({ policy: locationPolicy,
@@ -1417,7 +1516,7 @@ function receiptTimestampMillis(value: unknown) {
  * filtrado por pessoa e data no Firestore e limitado; nunca devolve bytes, CPF nem dados de terceiros.
  */
 export async function listOwnRepPMarkings(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
-  return listRepPMarkingsOfPerson(context.workspace_id, context.decoded.uid, raw, injected);
+  return listRepPMarkingsOfPerson(context.workspace_id, context.decoded.uid, raw, injected, { locationVisible: () => true });
 }
 
 /** Classificação organizacional: nunca altera a marcação fiscal. Em competência fechada vira pedido pendente. */
@@ -1556,7 +1655,50 @@ export async function exportOwnRepPReceipts(context: ServerUserContext, raw: unk
 }
 
 /** Mesma leitura limitada do histórico, para uma pessoa já autorizada pelo chamador. */
-export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid: string, raw: unknown, injected: Partial<Dependencies> = {}) {
+/** Resultado da localização gravado na batida, sem coordenadas: só a avaliação e a distância até a área da unidade. */
+export type RepPMarkingLocation = { evaluation: 'inside' | 'outside' | 'indeterminate'; distanceMeters: number | null;
+  physicalUnitId: string | null; physicalUnitName: string | null };
+
+async function markingLocations(deps: Dependencies, receiptIds: string[]) {
+  if (!receiptIds.length) return new Map<string, RepPMarkingLocation>();
+  let documents;
+  try {
+    documents = await deps.repDb.getAll(...receiptIds.map((id) => deps.repDb.collection(REP_P_LOCATION_EVIDENCE).doc(id)));
+  } catch (cause) {
+    reportSystemError({ error: cause, source: 'rep-p', operation: 'read-marking-location-results',
+      code: 'REP_P_LOCATION_EVIDENCE_READ_FAILED', kind: 'TRANSIENT_EXTERNAL', severity: 'medium', isTerminal: false,
+      metadata: { count: receiptIds.length } });
+    return new Map<string, RepPMarkingLocation>();
+  }
+  const now = Date.now();
+  const result = new Map<string, RepPMarkingLocation>();
+  for (const document of documents) {
+    const expiry = document.get('expiresAt');
+    // O TTL pode atrasar: evidência vencida não volta a aparecer.
+    if (!document.exists || !(expiry instanceof Timestamp) || expiry.toMillis() <= now) continue;
+    const shiftPolicy = document.get('shiftLocationTrackingPolicy');
+    if (shiftPolicy !== 'punch_only' && shiftPolicy !== 'workday') continue;
+    const evaluation = document.get('result.evaluation');
+    const distance = document.get('result.distanceMeters');
+    if (evaluation !== 'inside' && evaluation !== 'outside' && evaluation !== 'indeterminate') continue;
+    const physicalUnitId = typeof document.get('physicalUnit.id') === 'string' ? String(document.get('physicalUnit.id')) : null;
+    const physicalUnitName = typeof document.get('physicalUnit.name') === 'string' ? String(document.get('physicalUnit.name')) : null;
+    const physicalUnitDigest = typeof document.get('physicalUnit.digest') === 'string' ? String(document.get('physicalUnit.digest')) : null;
+    const evidenceDigest = typeof document.get('digest') === 'string' ? String(document.get('digest')) : null;
+    const physicalUnitValid = physicalUnitId && physicalUnitName && evidenceDigest && physicalUnitDigest
+      === repPLocationEvidenceDigest({ evidenceDigest, id: physicalUnitId, name: physicalUnitName });
+    result.set(document.id, { evaluation, distanceMeters: typeof distance === 'number' && Number.isFinite(distance) ? Math.round(distance) : null,
+      physicalUnitId: physicalUnitValid ? physicalUnitId : null, physicalUnitName: physicalUnitValid ? physicalUnitName : null });
+  }
+  return result;
+}
+
+/**
+ * `locationVisible` decide, por unidade de execução, se o leitor vê o resultado da localização da batida.
+ * Sem ele, nenhuma evidência é lida.
+ */
+export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid: string, raw: unknown, injected: Partial<Dependencies> = {},
+  options: { locationVisible?: (executionUnitId: string) => boolean } = {}) {
   const parsed = repPOwnHistorySchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_HISTORY_INPUT_INVALID', 'Período de consulta inválido.');
   const input: RepPOwnHistoryRequest = parsed.data;
@@ -1571,13 +1713,18 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
   ]);
   const overlays = snapshot.docs.length ? await deps.hrDb.getAll(...snapshot.docs
     .map((document) => deps.hrDb.collection(CLASSIFICATIONS).doc(document.id))) : [];
+  const visible = options.locationVisible;
+  const locations = visible ? await markingLocations(deps, snapshot.docs
+    .filter((document) => visible(String((document.get('snapshot') as RepPReceiptSnapshot).executionUnitId)))
+    .map((document) => document.id)) : new Map<string, RepPMarkingLocation>();
   const official = snapshot.docs.map((document, index) => {
     const receipt = document.get('snapshot') as RepPReceiptSnapshot;
     return { receiptId: document.id, workDate: String(document.get('recordedDate')), nsr: receipt.nsr,
       markedAt: receipt.markedAt, executionUnitId: receipt.executionUnitId, collectorId: receipt.collectorId,
       hash: receipt.hash, receiptStatus: document.get('status') === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: document.get('status') === 'issued' ? null : (document.get('lastIssue') as string | null) ?? null,
-      classification: overlays[index]?.get('classification') ?? document.get('classification') ?? null, pilot: false as const };
+      classification: overlays[index]?.get('classification') ?? document.get('classification') ?? null, pilot: false as const,
+      location: locations.get(document.id) ?? null };
   });
   const pilot = pilotSnapshot.docs.flatMap((document) => {
     const data = document.data();
@@ -1586,7 +1733,7 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
       markedAt: data.markedAt, executionUnitId: data.executionUnitId, collectorId: data.collectorId,
       hash: data.hash, receiptStatus: data.status === 'issued' ? 'available' as const : 'pending' as const,
       receiptIssue: data.status === 'issued' ? null : String(document.get('lastIssue') ?? '') || null,
-      classification: document.get('classification') ?? null, pilot: true as const }];
+      classification: document.get('classification') ?? null, pilot: true as const, location: null }];
   });
   const combined = [...official, ...pilot]
     .sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
@@ -1705,10 +1852,9 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   if (!parsed.success) throw fail('REP_P_OPTIONS_INPUT_INVALID', 'Data inválida.');
   const deps = { ...defaults, ...injected };
   const mode = deps.markingEnabled ? 'official' as const : deps.pilotEnabled ? 'pilot' as const : 'disabled' as const;
-  const officialUserAllowed = markingAllowedForOfficialUser(context, deps);
-  const journeyLocationEnabled = mode === 'official' && officialUserAllowed && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
+  const journeyLocationEnabled = mode === 'official' && markingAllowedForProfile(context)
+    && process.env.DP_JOURNEY_LOCATION_ENABLED === 'true';
   if (mode === 'disabled' || !markingAllowedForProfile(context)
-    || mode === 'official' && !officialUserAllowed
     || mode === 'pilot' && !deps.pilotUserIds.has(context.decoded.uid)) {
     return { workDate: parsed.data.workDate, eligible: false as const, markingEnabled: false as const,
       mode, journeyLocationEnabled, executionUnits: [], officialClock: await readInformationalClock(deps) };
@@ -1716,7 +1862,7 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
   const reference = await resolveEmploymentReferenceForSystem({ workspaceId: context.workspace_id,
     userId: context.decoded.uid, date: parsed.data.workDate, database: deps.mainDb });
   if (reference.status !== 'matched') return { workDate: parsed.data.workDate, eligible: false as const,
-    markingEnabled: true as const, mode, journeyLocationEnabled, executionUnits: [],
+    markingEnabled: false as const, mode, journeyLocationEnabled: false, executionUnits: [],
     officialClock: await readInformationalClock(deps) };
   const eligible = reference.period.employmentRelationshipType === 'clt'
     || reference.period.employmentRelationshipType === 'apprenticeship';
@@ -1724,9 +1870,12 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
     ...await externalCoverageUnits(deps.mainDb, context.decoded.uid, parsed.data.workDate, reference.period.unitIds)])].slice(0, 30);
   const units = unitIds.length
     ? await deps.mainDb.getAll(...unitIds.map((id) => deps.mainDb.collection('dp_units').doc(id))) : [];
-  const locationPolicies = mode === 'pilot'
-    ? new Map(unitIds.map((unitId) => [unitId, disabledRepPLocationPolicy(context.workspace_id, unitId)]))
-    : await loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds);
+  const configuredLocation = await safeShiftLocationPolicy(context, parsed.data.workDate, deps);
+  let locationPolicies = new Map(unitIds.map((unitId) => [unitId, disabledRepPLocationPolicy(context.workspace_id, unitId)]));
+  if (mode !== 'pilot' && configuredLocation !== 'disabled') {
+    try { locationPolicies = await loadRepPLocationPolicies(deps.repDb, context.workspace_id, unitIds); }
+    catch { /* Falha da configuração acessória mantém as opções e desliga somente a captura. */ }
+  }
   const executionUnits = units.filter((unit) => unit.exists
     && (reference.period.unitIds.includes(unit.id)
       || isBrazilTimeZone(unit.get('timeZone')) && String(unit.get('address') ?? '').trim()))
@@ -1741,11 +1890,13 @@ export async function listOwnRepPExecutionUnits(context: ServerUserContext, raw:
           privacyNoticeUrl: collectorLocation.privacyNoticeUrl } };
     })
     .sort((left, right) => Number(right.employer) - Number(left.employer) || left.name.localeCompare(right.name, 'pt-BR'));
-  return { workDate: parsed.data.workDate, eligible, markingEnabled: true as const, mode, journeyLocationEnabled,
+  return { workDate: parsed.data.workDate, eligible, markingEnabled: eligible, mode,
+    journeyLocationEnabled: eligible && journeyLocationEnabled,
     executionUnits: eligible ? executionUnits : [],
     officialClock: eligible && executionUnits.length ? (mode === 'pilot'
       ? await readPilotClock(deps, executionUnits.find((unit) => unit.timeZone)?.timeZone ?? null)
-      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj))
+      : await readOfficialClock(deps, context.workspace_id, reference.period.employer.cnpj,
+        units.find((unit) => unit.id === reference.period.employerUnitId)?.get('timeZone')))
       : await readInformationalClock(deps) };
 }
 
@@ -1769,15 +1920,18 @@ async function readPilotClock(deps: Dependencies, timeZone: string | null) {
  * Hora oficial para o relógio exibido no coletor (Anexo IX, item 3): instante verificado contra a
  * Hora Legal e fuso do estabelecimento. Indisponível vira null com o motivo; a batida também falharia.
  */
-async function readOfficialClock(deps: Dependencies, workspaceId: string, employerCnpj: string) {
+async function readOfficialClock(deps: Dependencies, workspaceId: string, employerCnpj: string, fallbackTimeZone?: unknown) {
   const establishment = (await deps.repDb.collection(ESTABLISHMENTS).doc(establishmentKey(workspaceId, employerCnpj)).get()).data();
-  if (!validEstablishment(establishment) || establishment.workspaceId !== workspaceId) {
+  const timeZone = validEstablishment(establishment) && establishment.workspaceId === workspaceId
+    ? establishment.timeZone : !establishment && employerCnpj === CT_SORVETES_CNPJ
+      && deps.referenceResponsibleUid && isBrazilTimeZone(fallbackTimeZone) ? fallbackTimeZone : null;
+  if (!timeZone) {
     return { available: false as const, issue: 'REP_P_ESTABLISHMENT_NOT_READY' };
   }
   try {
     const reading = await deps.clock.read();
     assertTrustedRepPClockReading(reading);
-    return { available: true as const, instant: reading.instant.toISOString(), timeZone: establishment.timeZone };
+    return { available: true as const, instant: reading.instant.toISOString(), timeZone };
   } catch (cause) {
     return { available: false as const, issue: cause instanceof AppError ? cause.code : 'REP_P_TIME_UNAVAILABLE' };
   }

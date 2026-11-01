@@ -9,6 +9,10 @@ interface ApiService {
     @GET("api/app/version?packageName=coalaone.go") suspend fun release(): Release
     @POST("api/auth/forgot-password") suspend fun reset(@Body request: ResetRequest)
     @GET("api/mobile/profile") suspend fun profile(): ProfileResponse
+    @GET("api/mobile/auth/google-migration") suspend fun googleMigrationStatus(): GoogleMigrationStatus
+    @POST("api/mobile/auth/google-migration") suspend fun migrateGoogle(@Body request: GoogleMigrationRequest): GoogleMigrationResult
+    @GET("api/mobile/corporate-device") suspend fun corporateDevice(@Query("installationId") installationId: String): CorporateDeviceStatus
+    @POST("api/mobile/corporate-device") suspend fun requestCorporateDevice(@Body request: CorporateDeviceRequest): CorporateDeviceRequested
     @GET("api/auth/view-as") suspend fun developerViewAs(): DeveloperViewAsDirectory
     @POST("api/auth/view-as") suspend fun startDeveloperViewAs(@Body request: DeveloperViewAsSelection): DeveloperViewAsSelectionResponse
     @HTTP(method = "DELETE", path = "api/auth/view-as") suspend fun stopDeveloperViewAs(): DeveloperViewAsStopped
@@ -42,6 +46,7 @@ interface ApiService {
     @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
     @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
     @POST("api/dp/time-recording/journey-location") suspend fun journeyLocation(@Body request: JourneyLocationBatch): JourneyLocationAccepted
+    @POST("api/dp/time-recording/journey-location/lease") suspend fun journeyLocationLease(@Body request: JourneyLocationLeaseRequest): JourneyLocationLease
     @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody
     @Streaming @GET("api/dp/time-recording/receipts/export") suspend fun receiptArchive(@Query("startDate") startDate: String, @Query("endDate") endDate: String): ResponseBody
     @GET("api/dp/time-recording/adjustments") suspend fun adjustments(@Query("month") month: String): OwnAdjustments

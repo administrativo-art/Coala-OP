@@ -1,4 +1,4 @@
-const DEFAULT_OFFICIAL_START_DATE = '2026-11-01';
+const DEFAULT_OFFICIAL_START_DATE = '2026-10-31';
 const BRAZIL_TIME_ZONE = 'America/Belem';
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
@@ -35,9 +35,4 @@ export function repPOfficialMarkingEnabled(
   environment: RuntimeEnvironment = process.env,
 ): boolean {
   return environment.REP_P_MARKING_ENABLED === 'true' && repPOfficialStartReached(now, environment);
-}
-
-export function repPOfficialUserIds(environment: RuntimeEnvironment = process.env): ReadonlySet<string> {
-  return new Set((environment.REP_P_OFFICIAL_USER_IDS ?? '')
-    .split(',').map((value) => value.trim()).filter(Boolean));
 }

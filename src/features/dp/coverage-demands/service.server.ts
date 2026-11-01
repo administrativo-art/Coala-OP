@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { normalizeDPCoverageDemands, resolveDPCoverageMode } from '@/lib/dp-coverage-demands';
@@ -44,13 +44,6 @@ export async function saveCoverageDemands(params: {
     if (!scheduleSnapshot.exists) {
       throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
     }
-    if (scheduleSnapshot.get('locked') === true) {
-      throw new AppError({
-        code: 'DP_COVERAGE_DEMAND_SCHEDULE_LOCKED',
-        kind: 'CONFLICT',
-        safeMessage: 'A escala está trancada.',
-      });
-    }
     if (!unitSnapshot.exists || unitSnapshot.get('isArchived') === true) {
       throw new AppError({
         code: 'DP_COVERAGE_DEMAND_UNIT_UNAVAILABLE',
@@ -92,15 +85,19 @@ export async function saveCoverageDemands(params: {
       });
     }
 
-    const currentDemands = normalizeDPCoverageDemands(scheduleSnapshot.get('coverageDemands'));
+    const currentDemands = normalizeDPCoverageDemands(scheduleSnapshot.get('draftCoverageDemands') ?? scheduleSnapshot.get('coverageDemands'));
     const nextDemands = { ...currentDemands };
     if (input.windows.length > 0) nextDemands[date] = input.windows;
     else delete nextDemands[date];
 
     const now = Timestamp.now();
     transaction.update(scheduleRef, {
-      coverageDemands: Object.keys(nextDemands).length > 0 ? nextDemands : FieldValue.delete(),
-      updatedAt: now,
+      draftCoverageDemands: nextDemands,
+      publicationStatus: 'draft',
+      publicationVersion: scheduleSnapshot.get('publicationVersion') ?? (scheduleSnapshot.get('publicationStatus') === 'draft' ? 0 : 1),
+      draftVersion: Number(scheduleSnapshot.get('draftVersion') ?? 0) + 1,
+      draftUpdatedAt: now,
+      draftUpdatedBy: context.decoded.uid,
     });
     transaction.set(dbAdmin.collection('actionLogs').doc(), {
       workspace_id: context.workspace_id,

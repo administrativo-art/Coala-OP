@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   FieldValue,
   type DocumentReference,
@@ -5,8 +6,8 @@ import {
   type WriteBatch,
 } from "firebase-admin/firestore";
 import type { Auth } from "firebase-admin/auth";
-import { applyGuardedOccupancyRemovals, OccupancyGuardChanged, occupancyMode, periodDays, shiftDays,
-  type OccupancyRemoval } from "./absence-occupancy-clock.js";
+import { ABSENCE_OPERATIONAL_COVERAGE_HASH, applyGuardedOccupancyRemovals, OccupancyGuardChanged, occupancyClockId, occupancyMode, periodDays, shiftDays,
+  type OccupancyMode, type OccupancyRemoval } from "./absence-occupancy-clock.js";
 
 type UserRecord = Record<string, unknown>;
 type PendingWrite = (batch: WriteBatch) => void;
@@ -31,6 +32,118 @@ const TERMINAL_TASK_STATUSES = new Set(["completed", "rejected", "cancelled", "c
 const TERMINAL_FORM_STATUSES = new Set(["completed", "cancelled", "canceled", "rejected"]);
 const TERMINAL_ASSET_STATUSES = new Set(["fora_de_uso", "vendido", "descartado", "baixado"]);
 const ACCESS_QUERY_LIMIT = 51;
+const REVISION_REMOVAL_CHUNK = 20;
+const REVISION_PERSON_LIMIT = 62;
+
+function shiftFingerprint(value: Record<string, unknown> | null) {
+  if (!value) return "missing";
+  return JSON.stringify([value.scheduleId ?? null, value.unitId ?? null, value.userId ?? null,
+    value.date ?? null, value.startTime ?? null, value.endTime ?? null, value.type ?? null,
+    value.shiftDefinitionId ?? null, value.overnight === true, value.assignmentKind ?? null,
+    value.originUnitId ?? null, value.exceptionReason ?? null, value.dayOffSource ?? null]);
+}
+
+async function removeFutureRevisionShifts(db: Firestore, scheduleRef: DocumentReference, userId: string,
+  effectiveDate: string, workspaceId: string, mode: OccupancyMode) {
+  let removed = 0;
+  for (let chunkIndex = 0; chunkIndex < 8; chunkIndex += 1) {
+    const count = await db.runTransaction(async (tx) => {
+      const schedule = await tx.get(scheduleRef);
+      const revisionId = schedule.get("activeRevisionId");
+      if (!schedule.exists || schedule.get("workspaceId") !== workspaceId || typeof revisionId !== "string" || !revisionId) {
+        throw new Error("Termination revision schedule changed.");
+      }
+      const revisionRef = scheduleRef.collection("revisions").doc(revisionId);
+      const overlayRef = scheduleRef.collection("operationalOverlays").doc(revisionId);
+      const [manifest, person, personOverlay] = await Promise.all([
+        tx.get(revisionRef), tx.get(revisionRef.collection("people").doc(userId)),
+        tx.get(overlayRef.collection("people").doc(userId)),
+      ]);
+      if (!manifest.exists || manifest.get("status") !== "ready" || manifest.get("scheduleId") !== scheduleRef.id) {
+        throw new Error("Termination revision manifest invalid.");
+      }
+      const base = person.exists ? person.get("shifts") : [];
+      const edits = personOverlay.exists ? personOverlay.get("edits") : {};
+      if (!Array.isArray(base) || base.length > REVISION_PERSON_LIMIT || !edits || typeof edits !== "object"
+        || Array.isArray(edits) || Object.keys(edits).length > REVISION_PERSON_LIMIT) {
+        throw new Error("Termination revision person row invalid.");
+      }
+      const effective = new Map<string, Record<string, unknown>>();
+      base.forEach((shift: Record<string, unknown>) => {
+        if (typeof shift.id !== "string") throw new Error("Termination revision shift ID invalid.");
+        effective.set(shift.id, shift);
+      });
+      Object.entries(edits as Record<string, Record<string, unknown> | null>).forEach(([shiftId, value]) => {
+        if (value) effective.set(shiftId, value); else effective.delete(shiftId);
+      });
+      const future = [...effective].filter(([, shift]) => shift.userId === userId
+        && typeof shift.date === "string" && shift.date > effectiveDate).slice(0, REVISION_REMOVAL_CHUNK);
+      if (!future.length) return 0;
+      const competence = String(schedule.get("year")) + "-" + String(schedule.get("month")).padStart(2, "0");
+      if (future.some(([, shift]) => !String(shift.date).startsWith(`${competence}-`)
+        || shift.scheduleId !== scheduleRef.id)) throw new Error("Termination revision shift period invalid.");
+      const indexRef = db.collection("dp_personScheduleIndex").doc(createHash("sha256")
+        .update(`${userId}:${competence}`).digest("hex"));
+      const index = await tx.get(indexRef);
+      if (!index.exists || index.get("userId") !== userId || index.get("competence") !== competence
+        || !Array.isArray(index.get("scheduleIds")) || !index.get("scheduleIds").includes(scheduleRef.id)) {
+        throw new Error("Termination revision person index invalid.");
+      }
+      const currentCount = schedule.get("shiftCount");
+      if (!Number.isSafeInteger(currentCount) || currentCount < future.length) throw new Error("Termination revision shift count invalid.");
+      const currentVersion = schedule.get("operationalVersion") ?? 0;
+      if (!Number.isSafeInteger(currentVersion) || currentVersion < 0) throw new Error("Termination revision operational version invalid.");
+      const baseRefs = future.map(([id]) => revisionRef.collection("entries").doc(id));
+      const overlayRefs = future.map(([id]) => overlayRef.collection("entries").doc(id));
+      const [baseDocs, overlayDocs] = await Promise.all([tx.getAll(...baseRefs), tx.getAll(...overlayRefs)]);
+      future.forEach(([id, shift], index) => {
+        const current = overlayDocs[index].exists ? overlayDocs[index].get("value") as Record<string, unknown> | null
+          : baseDocs[index].exists ? baseDocs[index].data() ?? null : null;
+        if (shiftFingerprint(current) !== shiftFingerprint(shift)) {
+          throw new Error(`Termination revision shift changed: ${id}`);
+        }
+      });
+      const allEdits = { ...edits as Record<string, Record<string, unknown> | null> };
+      future.forEach(([id]) => { allEdits[id] = null; });
+      if (Object.keys(allEdits).length > REVISION_PERSON_LIMIT) throw new Error("Termination revision person overlay limit reached.");
+      const days = [...new Set(future.flatMap(([, shift]) => shift.type === "day_off"
+        ? [String(shift.date)] : shiftDays(String(shift.date), shift.startTime, shift.endTime)))];
+      let clocks: Array<{ date: string; ref: DocumentReference; version: number }> = [];
+      if (mode.kind === "guarded") {
+        const readiness = await tx.get(db.collection("dp_absenceOperationalReadiness").doc(workspaceId));
+        if (!readiness.exists || readiness.get("state") !== "ready" || readiness.get("epoch") !== mode.epoch
+          || readiness.get("coverageHash") !== ABSENCE_OPERATIONAL_COVERAGE_HASH
+          || readiness.get("scopeKind") !== "workspace_all" || readiness.get("bootstrapComplete") !== true
+          || typeof readiness.get("scopeHash") !== "string"
+          || !/^[0-9a-f]{64}$/.test(readiness.get("scopeHash"))) {
+          throw new OccupancyGuardChanged();
+        }
+        clocks = await Promise.all(days.map(async (date) => {
+          const ref = db.collection("dp_absenceOccupancyClocks").doc(occupancyClockId(workspaceId, userId, date));
+          const snapshot = await tx.get(ref);
+          if (snapshot.exists && snapshot.get("epoch") !== mode.epoch) throw new OccupancyGuardChanged();
+          const version = snapshot.exists ? snapshot.get("version") : 0;
+          if (!Number.isSafeInteger(version) || version < 0) throw new OccupancyGuardChanged();
+          return { date, ref, version: version as number };
+        }));
+      }
+      const now = new Date().toISOString();
+      future.forEach(([id]) => tx.set(overlayRef.collection("entries").doc(id), {
+        value: null, affectedUserIds: [userId], reason: "user_termination", actorId: "system:user-termination", updatedAt: now,
+      }));
+      tx.set(overlayRef.collection("people").doc(userId), { edits: allEdits, updatedAt: now });
+      tx.update(scheduleRef, { shiftCount: currentCount - future.length,
+        operationalVersion: currentVersion + 1, goalEligibilityVersion: FieldValue.increment(1),
+        journeyValidationVersion: FieldValue.increment(1) });
+      clocks.forEach(({ date, ref, version }) => tx.set(ref, { workspaceId, beneficiaryUid: userId, date,
+        epoch: mode.kind === "guarded" ? mode.epoch : "", version: version + 1, updatedAt: now }));
+      return future.length;
+    });
+    removed += count;
+    if (!count) return removed;
+  }
+  throw new Error("Termination revision removal chunk limit reached.");
+}
 
 export class TerminationOccupancyGuardPending extends Error {
   constructor() { super("pending_occupancy_guard"); }
@@ -155,6 +268,10 @@ export async function applyUserTerminationEffects(params: {
   const now = params.now ?? new Date();
   const appliedAt = now.toISOString();
   const effectiveDate = effectiveDateFor(params.user, now);
+  const schedules = await params.db.collection("dp_schedules").limit(2001).get();
+  if (schedules.size === 2001) throw new Error("Termination schedule scan limit reached.");
+  const revisionSchedules = schedules.docs.filter((schedule) => typeof schedule.get("activeRevisionId") === "string"
+    && Boolean(schedule.get("activeRevisionId")));
   const userName = stringValue(params.user.username) ?? params.userId;
   const employerCnpj = stringValue(params.user.terminationEmployerCnpj) ?? stringValue(params.user.employerCnpj);
   const employer = employerCnpj ? {
@@ -219,8 +336,8 @@ export async function applyUserTerminationEffects(params: {
 
   // Escalas passadas são histórico. Somente datas posteriores ao último dia são removidas.
   // Cada turno removido é uma remoção de ocupação: no modo guard, vai numa transação com os relógios.
-  const schedules = await params.db.collection("dp_schedules").get();
   for (const schedule of schedules.docs) {
+    if (schedule.get("activeRevisionId")) continue;
     const shifts = await schedule.ref.collection("shifts").where("userId", "==", params.userId).get();
     shifts.docs.forEach((shift) => {
       const date = stringValue(shift.get("date"));
@@ -543,6 +660,17 @@ export async function applyUserTerminationEffects(params: {
     return sum + Math.max(0, Number(assignment.get("quantityInPossession") ?? 0));
   }, 0);
   if (pendingUniformPieces > 0) counts.pendingUniformPieces = pendingUniformPieces;
+
+  // Cada escala apontada é removida em blocos transacionais, incluindo o relógio de ocupação quando ativo.
+  try {
+    for (const schedule of revisionSchedules) {
+      addCount(counts, "futureShiftsRemoved", await removeFutureRevisionShifts(params.db, schedule.ref,
+        params.userId, effectiveDate, workspaceId, mode));
+    }
+  } catch (error) {
+    if (error instanceof OccupancyGuardChanged) throw new TerminationOccupancyGuardPending();
+    throw error;
+  }
 
   // Ocupação primeiro: se o recibo mudar no meio, o desligamento volta a pendente antes dos demais efeitos.
   if (mode.kind === "guarded") {

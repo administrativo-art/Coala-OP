@@ -821,23 +821,20 @@ service cloud.firestore {
       );
       allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.create == true)
         && request.resource.data.keys().hasAll(['name', 'month', 'year'])
-        && !request.resource.data.keys().hasAny(['coverageDemands', 'locked', 'snapshot', 'journeyValidation'])
+        && !request.resource.data.keys().hasAny([
+          'coverageDemands', 'draftCoverageDemands', 'locked', 'snapshot', 'journeyValidation',
+          'activeRevisionId', 'operationalVersion', 'draftGenerationId', 'draftVersion',
+          'draftUpdatedAt', 'draftUpdatedBy', 'publishedAt', 'publishedBy', 'goalEligibilityVersion'
+        ])
         && request.resource.data.get('journeyValidationVersion', 0) == 0
         && request.resource.data.name is string
         && request.resource.data.month is int
         && request.resource.data.year is int
+        && request.resource.data.get('publicationStatus', '') == 'draft'
+        && request.resource.data.get('publicationVersion', -1) == 0
         && canAccessDPUnit(request.resource.data.get('unitId', null));
-      allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-        && request.resource.data.name is string
-        && canAccessDPUnit(resource.data.get('unitId', null))
-        && request.resource.data.get('unitId', '') == resource.data.get('unitId', '')
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'coverageDemands',
-          'locked',
-          'snapshot',
-          'journeyValidation',
-          'journeyValidationVersion'
-        ]);
+      // Toda edição manual passa pela API de rascunho; eventos operacionais usam o servidor.
+      allow update: if false;
       // Exclusão passa pela API para remover filhos e registrar auditoria atomicamente.
       allow delete: if false;
 
@@ -852,7 +849,24 @@ service cloud.firestore {
         allow create, update: if false;
         allow delete: if false;
       }
+      match /draftEdits/{shiftId} {
+        allow read, write: if false;
+      }
+      // Revisões preparadas, linhas por pessoa e alterações operacionais são exclusivas do servidor.
+      match /revisions/{revisionId} {
+        allow read, write: if false;
+        match /entries/{shiftId} { allow read, write: if false; }
+        match /people/{userId} { allow read, write: if false; }
+      }
+      match /operationalOverlays/{revisionId} {
+        allow read, write: if false;
+        match /entries/{shiftId} { allow read, write: if false; }
+        match /people/{userId} { allow read, write: if false; }
+      }
     }
+
+    match /dp_personScheduleIndex/{indexId} { allow read, write: if false; }
+    match /dp_schedulePublicationFences/{fenceId} { allow read, write: if false; }
 
     // Intenções de publicação no Bizneo são manipuladas somente pelo servidor.
     match /dp_bizneo_day_off_operations/{operationId} {
@@ -1023,6 +1037,8 @@ service cloud.firestore {
     // Tokens e instalações push são acessados somente pelo Admin SDK.
     match /mobilePushTokens/{id} { allow read, write: if false; }
     match /mobilePushInstallations/{id} { allow read, write: if false; }
+    match /mobileCorporateDevices/{id} { allow read, write: if false; }
+    match /authIdentityMigrations/{id} { allow read, write: if false; }
     match /userNotifications/{id} { allow read, write: if false; }
     match /systemNotices/{id} { allow read, write: if false; }
     match /dp_absenceOperationalReadiness/{id} { allow read, write: if false; }

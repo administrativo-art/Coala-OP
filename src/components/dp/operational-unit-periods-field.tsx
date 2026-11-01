@@ -37,6 +37,7 @@ export function OperationalUnitPeriodsField({ periods, units, initialUnitIds = [
     setEditing(false); setError(''); onChange(undefined); onValidityChange(true);
   }
   // O título e a ajuda ficam na linha "Escala e operação" do editor; aqui só a vigência e a edição.
+  const historyToggle = periods.length > 0 ? <button type="button" className="text-sm font-semibold underline" aria-expanded={history} onClick={() => setHistory(!history)}>{history ? 'Recolher histórico' : 'Ver histórico'}</button> : null;
   return <div className="space-y-3">
     {current ? <div className="space-y-2 rounded-ds-md border border-ds-border bg-ds-input p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[13px] font-extrabold text-ds-ink">Vigência {periods.indexOf(current) + 1} · {formatCivilDateBR(current.validFrom)} até {current.validTo ? formatCivilDateBR(current.validTo) : 'indeterminado'}</p><StatusPill variant="info">Atual</StatusPill></div>
@@ -44,17 +45,17 @@ export function OperationalUnitPeriodsField({ periods, units, initialUnitIds = [
     </div>
       : <p className="text-sm text-ds-ink-muted">{!periods.length && initialUnitIds.length ? `Unidades do cadastro atual: ${names(initialUnitIds)}. Confira a data inicial para registrar a primeira vigência.` : 'Sem vigência definida para hoje. Colaboradores sem atuação em escala ou ponto podem permanecer assim.'}</p>}
     {periods.filter((period) => period.validFrom > today).map((period) => <p key={period.validFrom} className="text-sm">Agendada · {formatCivilDateBR(period.validFrom)} · {names(period.unitIds)}</p>)}
-    {!editing ? <Button type="button" variant="ds-secondary" size="sm" onClick={() => {
+    {!editing ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2"><Button type="button" variant="ds-secondary" size="sm" onClick={() => {
       setEditing(true);
       const tomorrow = new Date(`${today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
       preview(periods.length ? tomorrow.toISOString().slice(0, 10) : '', periods.at(-1)?.unitIds ?? initialUnitIds);
-    }}>{periods.length ? 'Alterar unidades' : 'Definir primeira vigência'}</Button> : <div className="space-y-3 border-t border-ds-border pt-3">
+    }}>{periods.length ? 'Alterar unidades' : 'Definir primeira vigência'}</Button>{historyToggle}</div> : <div className="space-y-3 border-t border-ds-border pt-3">
       <label className="grid gap-1 text-sm font-semibold">Início da {periods.length ? 'nova vigência' : 'Vigência 1'}<input type="date" value={start} min={periods.length ? today : undefined} onChange={(event) => preview(event.target.value, selected)} className="rounded-ds-sm border border-ds-border bg-ds-input p-2" /></label>
       {!periods.length && <p className="text-xs text-ds-ink-muted">Confira desde quando estas unidades valem. A data inicial não será preenchida automaticamente.</p>}
       <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-semibold">Unidades habituais de trabalho</legend>{units.filter((unit) => !unit.isArchived || selected.includes(unit.id)).map((unit) => <label key={unit.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(unit.id)} onChange={(event) => preview(start, event.target.checked ? [...selected, unit.id] : selected.filter((id) => id !== unit.id))} />{unit.name}</label>)}</fieldset>
       {error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : start && <p role="status" className="text-sm">Nova vigência a partir de {formatCivilDateBR(start)}, sem data final. {periods.at(-1) && !periods.at(-1)?.validTo ? 'A anterior será encerrada no dia precedente.' : ''} Confirme em Salvar alterações.</p>}
       <Button type="button" variant="ds-ghost" size="sm" onClick={cancel}>Descartar nova vigência</Button>
     </div>}
-    {periods.length > 0 && <><button type="button" className="text-sm font-semibold underline" aria-expanded={history} onClick={() => setHistory(!history)}>{history ? 'Recolher histórico' : 'Ver histórico'}</button>{history && <ol className="space-y-2">{periods.map((period, index) => <li key={period.validFrom} className="rounded-ds-sm bg-ds-page p-2 text-sm"><p className="font-semibold">Vigência {index + 1} · {formatCivilDateBR(period.validFrom)} até {period.validTo ? formatCivilDateBR(period.validTo) : 'indeterminado'}</p><p>{names(period.unitIds)}</p></li>)}</ol>}</>}
+    {periods.length > 0 && <>{editing ? historyToggle : null}{history && <ol className="space-y-2">{periods.map((period, index) => <li key={period.validFrom} className="rounded-ds-sm bg-ds-page p-2 text-sm"><p className="font-semibold">Vigência {index + 1} · {formatCivilDateBR(period.validFrom)} até {period.validTo ? formatCivilDateBR(period.validTo) : 'indeterminado'}</p><p>{names(period.unitIds)}</p></li>)}</ol>}</>}
   </div>;
 }

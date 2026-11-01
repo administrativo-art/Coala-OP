@@ -13,26 +13,42 @@ const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
 
+/**
+ * Altura menor que o padrão (`h-10`): a seta em botão de 32px não cabe e invade a borda. Nesses casos o gatilho usa a
+ * seta colada à borda direita (docs/design/campos.md). `flushIcon` explícito continua valendo.
+ */
+const COMPACT_HEIGHT = /(?:^|\s)h-(?:7|8|9|\[(?:2\d|3\d)px\])(?=\s|$)/
+export function isCompactSelectTrigger(className: string | undefined) {
+  return COMPACT_HEIGHT.test(className ?? "")
+}
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { flushIcon?: boolean }
+>(({ className, children, flushIcon: flushIconProp, ...props }, ref) => {
+  const flushIcon = flushIconProp ?? isCompactSelectTrigger(className)
+  return (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
       "group relative flex h-10 w-full items-center rounded-ds-md border border-ds-border-input bg-ds-input py-2 pl-3 pr-12 text-left text-[13px] text-ds-ink [&>span:first-child]:line-clamp-1 placeholder:text-ds-ink-faint focus:border-ds-modal focus:bg-white focus:outline-hidden focus:ring-[3px] focus:ring-ds-modal-soft focus:ring-offset-0 aria-invalid:border-[1.5px] aria-invalid:border-ds-danger disabled:cursor-not-allowed disabled:opacity-50",
+      flushIcon && "overflow-hidden pr-11",
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <span className="pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs group-focus:border-ds-modal group-aria-[invalid=true]:border-ds-danger group-disabled:shadow-none">
+      <span className={cn(
+        "pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs group-focus:border-ds-modal group-aria-[invalid=true]:border-ds-danger group-disabled:shadow-none",
+        flushIcon && "right-0 top-0 h-full w-10 translate-y-0 rounded-none border-y-0 border-r-0 border-l border-ds-border-input shadow-none",
+      )}>
         <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
       </span>
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
-))
+  )
+})
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 
 const SelectScrollUpButton = React.forwardRef<

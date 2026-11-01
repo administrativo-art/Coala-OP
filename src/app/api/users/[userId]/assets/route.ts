@@ -1,0 +1,12 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
+import { dbAdmin } from "@/lib/firebase-admin";
+import { AppError } from "@/lib/observability/app-error";
+import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
+type C={params:Promise<{userId:string}>};type R={id:string;workspaceId:string};
+const contract=defineSecurityContract({schemaVersion:1,id:"users.assets.current",version:1,surface:{method:"GET",path:"/api/users/[userId]/assets"},exposure:"authenticated",identity:{kind:"active-user"},authorization:{kind:"custom",strategy:"self-or-people-assets-read"},resourceScope:{kind:"workspace"},input:{kind:"none"},effects:{mode:"read",audit:"none"},errorExposure:"sanitized"});
+const enforcer=createStandardSecurityEnforcer<NextRequest,C,unknown,ServerUserContext,undefined,R>(contract,{authenticate:({request})=>requireUser(request),async loadResource({actor,routeContext}){return{id:(await routeContext.params).userId,workspaceId:actor.workspace_id}},authorize:({actor,resource})=>{const self=resource.id===actor.decoded.uid||resource.id===actor.userDoc.id||isOwnHrEmployeeId(actor.userDoc,resource.id);const people=(actor.permissions.dp?.collaborators?.ownProfileOnly!==true&&(actor.permissions.dp?.collaborators?.view===true||actor.permissions.dp?.collaborators?.edit===true));if(!self&&!people&&!actor.permissions.assets?.view&&!actor.permissions.settings.manageUsers&&!actor.isDefaultAdmin)throw new AppError({code:"USER_ASSETS_FORBIDDEN",kind:"AUTHORIZATION"})},assertScope:()=>{}});
+export const GET=secureRoute({contract,enforcer},async({security})=>{const snap=await dbAdmin.collection('assets').where('workspaceId','==',security.actor.workspace_id).where('custody.holderType','==','employee').where('custody.holderId','==',security.resource.id).limit(101).get();const items=snap.docs.slice(0,100).map(d=>{const x=d.data();return{id:d.id,code:x.code??null,name:x.name??null,category:x.category??null,subcategory:x.subcategory??null,brand:x.brand??null,model:x.model??null,assetTag:x.assetTag??null,status:x.status??null,custody:x.custody??null,currentLocation:x.currentLocation??null}});return NextResponse.json({items,truncated:snap.size>100},{headers:{'Cache-Control':'private, no-store'}})});

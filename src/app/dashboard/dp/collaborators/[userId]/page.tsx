@@ -20,6 +20,7 @@ import {
   MapPin,
   Menu,
   Pencil,
+  PackageCheck,
   Shirt,
   TimerReset,
   Umbrella,
@@ -33,6 +34,7 @@ import { createAuditLog } from "@/features/audit/client";
 import type { DPUnit, DPVacationRecord, User, UserPdvAccess } from "@/types";
 import { getHrEmployeeId } from "@/lib/hr/person-link";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
+import { CollaboratorAssets } from "@/components/collaborator-assets";
 import {
   useEmployeeProfile,
   type EmployeeProfileState,
@@ -54,6 +56,7 @@ import {
 } from "@/features/rh/lib/profile-field-layout";
 import { callOnFieldUpdate } from "@/features/rh/lib/rh-client";
 import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
+import { canConfigureFieldVisibility } from "@/features/rh/lib/field-visibility";
 import {
   SYSTEM_BLOCK_KEYS,
   SYSTEM_BLOCK_FIELD_KEYS_BY_ID,
@@ -1283,7 +1286,7 @@ function EmployeeProfileFields({
   onFieldMapChanged: () => void;
   children?: React.ReactNode;
 }) {
-  const { firebaseUser, permissions, user: currentUser } = useAuth();
+  const { firebaseUser, permissions, user: currentUser, isDefaultAdmin } = useAuth();
   const employeeId = getHrEmployeeId(user) ?? user.id;
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editComposite, setEditComposite] = useState<CompositeFieldDef | null>(null);
@@ -1375,6 +1378,8 @@ function EmployeeProfileFields({
   const canManageFieldVisibility = Boolean(
     permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true
   );
+  /** Alterar o nível de um campo exige a permissão própria; ver todos os campos continua com `canManageFieldVisibility`. */
+  const canEditFieldVisibility = canConfigureFieldVisibility({ isDefaultAdmin, permissions });
   const visibilityContext = {
     isOwner: firebaseUser?.uid === user.id || employee.auth_uid === firebaseUser?.uid || currentUser?.id === user.id,
     canViewConfidential: permissions.settings?.manageUsers === true,
@@ -1482,37 +1487,18 @@ function EmployeeProfileFields({
   }
 
   async function updateFieldVisibility(key: string, entry: FieldMapEntry, visibility: FieldVisibility) {
-    if (!firebaseUser || visibility === entry.visibility || visibilitySavingKey) return;
+    if (!firebaseUser || !canEditFieldVisibility || visibility === entry.visibility || visibilitySavingKey) return;
     setVisibilitySavingKey(key);
     setVisibilityMessage(null);
     try {
       const token = await firebaseUser.getIdToken();
-      const nextLgpd = defaultFieldLgpd(entry.section, visibility);
-      const nextFields = {
-        ...fieldMap.fields,
-        [key]: {
-          ...entry,
-          visibility,
-          lgpd: {
-            ...nextLgpd,
-            ...(entry.lgpd ?? {}),
-            category: entry.lgpd?.category ?? nextLgpd.category,
-          },
-        },
-      };
-      const response = await fetch("/api/rh/field-map", {
-        method: "PUT",
+      const response = await fetch("/api/rh/field-visibility", {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          version: fieldMap.version ?? "coala-rh-v1.3",
-          fields: nextFields,
-          section_order: fieldMap.section_order ?? {},
-          profile_blocks: fieldMap.profile_blocks ?? DEFAULT_PROFILE_BLOCKS,
-          access_matrix: fieldMap.access_matrix,
-        }),
+        body: JSON.stringify({ changes: { [key]: normalizeFieldVisibility(visibility) } }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1528,36 +1514,19 @@ function EmployeeProfileFields({
   }
 
   async function updateSectionVisibility(section: string, items: Array<{ key: string; entry: FieldMapEntry }>, visibility: FieldVisibility) {
-    if (!firebaseUser || visibilitySavingKey || items.length === 0) return;
+    if (!firebaseUser || !canEditFieldVisibility || visibilitySavingKey || items.length === 0) return;
     setVisibilitySavingKey(`section:${section}`);
     setVisibilityMessage(null);
     try {
       const token = await firebaseUser.getIdToken();
-      const nextFields = { ...fieldMap.fields };
-      items.forEach(({ key, entry }) => {
-        const nextLgpd = defaultFieldLgpd(entry.section, visibility);
-        nextFields[key] = {
-          ...entry,
-          visibility,
-          lgpd: {
-            ...nextLgpd,
-            ...(entry.lgpd ?? {}),
-            category: entry.lgpd?.category ?? nextLgpd.category,
-          },
-        };
-      });
-      const response = await fetch("/api/rh/field-map", {
-        method: "PUT",
+      const response = await fetch("/api/rh/field-visibility", {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          version: fieldMap.version ?? "coala-rh-v1.3",
-          fields: nextFields,
-          section_order: fieldMap.section_order ?? {},
-          profile_blocks: fieldMap.profile_blocks ?? DEFAULT_PROFILE_BLOCKS,
-          access_matrix: fieldMap.access_matrix,
+          changes: Object.fromEntries(items.map(({ key }) => [key, normalizeFieldVisibility(visibility)])),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1818,7 +1787,7 @@ function EmployeeProfileFields({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {canManageFieldVisibility && !fixedVisibility ? (
+            {canEditFieldVisibility && !fixedVisibility ? (
               <FieldVisibilityButton
                 entry={entry}
                 saving={visibilitySavingKey === key}
@@ -1865,7 +1834,7 @@ function EmployeeProfileFields({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {canManageFieldVisibility && rows[0] ? (
+            {canEditFieldVisibility && rows[0] ? (
               <FieldVisibilityButton
                 entry={rows[0].entry}
                 saving={visibilitySavingKey === visibilityKey}
@@ -1999,7 +1968,7 @@ function EmployeeProfileFields({
                     </span>
                     <h3 className="text-xs font-black text-ds-ink">{sectionDisplayLabel(section)}</h3>
                   </div>
-                  {canManageFieldVisibility ? (
+                  {canEditFieldVisibility ? (
                     <CardVisibilityButton
                       visibility={sectionVisibility.visibility}
                       mixed={sectionVisibility.mixed}
@@ -2688,7 +2657,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
   function visibilityControl(key: string) {
     const entry = systemFieldEntry(key);
-    if (!canManageSystemFieldVisibility) return null;
+    if (!canManageSystemFieldVisibility || !canConfigureFieldVisibility({ isDefaultAdmin, permissions })) return null;
     return (
       <FieldVisibilityButton
         entry={entry}
@@ -2751,7 +2720,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   }
 
   function systemBlockVisibilityControl(keys: readonly string[]) {
-    if (!canManageSystemFieldVisibility) return null;
+    if (!canManageSystemFieldVisibility || !canConfigureFieldVisibility({ isDefaultAdmin, permissions })) return null;
     const entries = keys.map((key) => systemFieldEntry(key));
     const summary = getVisibilitySummary(entries);
     const savingKey = `block:${keys.join("|")}`;
@@ -3342,6 +3311,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               {renderSystemBlock("system.uniforms")}
               {renderSystemBlock("system.transport_voucher")}
             </div>
+            <Panel title="Equipamentos sob responsabilidade" icon={PackageCheck}>
+              <CollaboratorAssets userId={user.id} />
+            </Panel>
           </div>
         </EmployeeProfileFields>
         {transportVoucherEditorOpen ? (

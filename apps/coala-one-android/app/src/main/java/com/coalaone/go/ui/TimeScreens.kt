@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -38,6 +38,7 @@ import com.coalaone.go.domain.BreakStatus
 import com.coalaone.go.domain.ClockSource
 import com.coalaone.go.domain.DayPunch
 import com.coalaone.go.domain.TimeRules
+import com.coalaone.go.offline.CapturedOfflineMarking
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -167,7 +168,8 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 }
 
 /** Numbered sequence of a day: the order suggests the kind; struck lines were discarded by the DP, tagged ones included. */
-@Composable private fun PunchList(punches: List<DayPunch>, enabled: Boolean, units: List<ExecutionUnit> = emptyList(), onReceipt: (DayPunch) -> Unit) {
+@Composable private fun PunchList(punches: List<DayPunch>, enabled: Boolean, units: List<ExecutionUnit> = emptyList(),
+    onReceipt: (DayPunch) -> Unit, showLocation: Boolean = false) {
     var position = 0
     punches.forEachIndexed { punchIndex, punch ->
         val index = if (punch.discarded) null else position++
@@ -180,6 +182,11 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
                 Text(punch.time, style = MaterialTheme.typography.titleMedium.copy(textDecoration = if (punch.discarded) TextDecoration.LineThrough else null), color = if (punch.discarded) Tokens.faint else Tokens.ink)
                 val unitName = units.firstOrNull { it.id == punch.unitId }?.name
                 Text(listOfNotNull(when { punch.discarded -> "Desconsiderada pelo DP"; punch.included -> "Incluída por ajuste aprovado pelo DP"; else -> TimeRules.purposeLabel(punch.purpose) }, unitName).joinToString(" · "), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                if (showLocation) punch.location?.let { location -> Text(location.physicalUnitName ?: when (location.evaluation) {
+                    "inside" -> "Na unidade"
+                    "outside" -> "Fora da área" + (location.distanceMeters?.let { " · ~${it.toInt()} m" } ?: "")
+                    else -> "Localização não confirmada"
+                }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted, style = MaterialTheme.typography.bodySmall) }
             }
             when {
                 punch.receiptId == null -> Unit
@@ -254,19 +261,14 @@ private fun breakColors(level: BreakLevel) = when (level) {
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("INTERVALO", color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Bold))
         Text(status.headline, color = ink, style = MaterialTheme.typography.titleMedium)
-        status.countdownSeconds?.let { seconds ->
-            val exceeded = seconds < 0
-            val absolute = kotlin.math.abs(seconds)
-            val clock = String.format(java.util.Locale.ROOT, "%02d:%02d", absolute / 60, absolute % 60)
-            Text("${status.countdownLabel ?: "Cronômetro"} · ${if (exceeded) "+" else ""}$clock",
-                color = ink, style = MaterialTheme.typography.headlineSmall.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
-        }
         status.detail?.let { Text(it, color = ink, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
-@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null, onInformAbsence: (String) -> Unit = {}) {
+@Composable fun TimeScreen(vm: TimeViewModel, onBack: () -> Unit, startConfirming: Boolean = false, startDayDetail: String? = null,
+    onInformAbsence: (String) -> Unit = {}) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val viewAsActive = LocalDeveloperViewAsActive.current
     val context = LocalContext.current
     val online = rememberOnline()
     DisposableEffect(Unit) {
@@ -290,8 +292,9 @@ private fun breakColors(level: BreakLevel) = when (level) {
     }
     var section by rememberSaveable { mutableStateOf(if (startDayDetail == null) "today" else "day") }
     var confirming by rememberSaveable { mutableStateOf(false) }
-    var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming) }
-    var capturingLocation by remember { mutableStateOf(false) }
+    var pendingDirectRecord by rememberSaveable { mutableStateOf(startConfirming && !viewAsActive) }
+    LaunchedEffect(viewAsActive) { if (viewAsActive) { confirming = false; pendingDirectRecord = false } }
+    val submitter = rememberPunchSubmitter(vm)
     var asking by rememberSaveable { mutableStateOf<String?>(null) }
     var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
     var selectedMirror by remember { mutableStateOf(false) }
@@ -304,16 +307,12 @@ private fun breakColors(level: BreakLevel) = when (level) {
     val today = state.today.toString()
     val todayShift = state.shifts.firstOrNull { it.date == today }
     val todayMarkings = state.markings.filter { it.workDate == today }
-    val suggestedPurpose = TimeRules.suggestedPurpose(todayMarkings, todayShift)
-    val suggestionReliable = state.monthDataAvailable && (todayMarkings.isEmpty() || todayMarkings.all { it.classification?.purpose != null })
-    var declaredPurpose by rememberSaveable(today, state.markings.size, suggestionReliable) {
-        mutableStateOf(if (suggestionReliable) suggestedPurpose else null)
-    }
+    val (suggestedPurpose, suggestionReliable) = daySuggestion(state)
     val todayPunches = TimeRules.day(today, state.markings, state.treatments)
     val selectedUnit = units.firstOrNull { it.id == state.unitId }
     val unitName = selectedUnit?.name.orEmpty()
     val locationPolicy = selectedUnit?.locationPolicy ?: LocationPolicy()
-    val screenBusy = feedback.busy || capturingLocation
+    val screenBusy = feedback.busy || submitter.capturing.value
     val pendingAttempt = vm.hasPendingAttempt()
     val canPreserve = !pendingAttempt && TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)
     val canPreserveOffline = !pendingAttempt && TimeRules.canPreserveOffline(state.options, state.unitId, state.offlineReady)
@@ -326,37 +325,14 @@ private fun breakColors(level: BreakLevel) = when (level) {
             delay(1000 - officialNow % 1000)
         }
     }
-    // The screen stays open across midnight: when the official day changes, the day, the shift and the unit are read again
-    // (otherwise yesterday's schedule and unit stay on screen).
-    val officialDay = TimeRules.workDate(officialNow, zone)
-    LaunchedEffect(officialDay) {
-        if (state.clockOffset != null && officialDay != state.today.toString() && !pendingAttempt) vm.load(online)
-    }
-    LaunchedEffect(pendingDirectRecord, state.options, state.unitId) {
-        if (pendingDirectRecord && (if (online) pendingAttempt || TimeRules.canRecord(state.options, state.unitId) || canPreserve
-                else !pendingAttempt && canPreserveOffline)) {
+    val cycleClosed = state.closedJourneyDate == today || TimeRules.autoJourneyCycleClosed(today, todayShift, todayMarkings, officialNow, zone)
+    val breakStatus = if (cycleClosed || !state.monthDataAvailable) null else TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
+    // The direct shortcut waits for today's punches and shift: never a sheet over an unread day.
+    LaunchedEffect(pendingDirectRecord, state.options, state.unitId, state.dayLoad) {
+        if (pendingDirectRecord && state.dayLoad != DayLoad.PENDING && (TimeRules.canRecord(state.options, state.unitId) || canPreserve)) {
             confirming = true
             pendingDirectRecord = false
         }
-    }
-    val confirmationTime = TimeRules.clockText(officialNow, zone)
-    val declaredJourneyEnd = todayMarkings.sortedBy { it.markedAt }.lastOrNull()?.classification?.purpose == "journey_end"
-    val cycleClosed = state.closedJourneyDate == today || TimeRules.autoJourneyCycleClosed(today, todayShift, todayMarkings, officialNow, zone)
-    val breakStatus = if (cycleClosed || !state.monthDataAvailable) null else TimeRules.breakStatus(todayShift, todayMarkings, officialNow, zone)
-    val scope = rememberCoroutineScope()
-    fun captureAndRecord() {
-        val purpose = declaredPurpose ?: return
-        capturingLocation = true
-        scope.launch {
-            val attempt = capturePointLocation(context, locationPolicy.captureTimeoutMs ?: 10_000,
-                locationPolicy.maxAccuracyMeters ?: 100.0)
-            capturingLocation = false
-            vm.record(true, attempt, purpose)
-        }
-    }
-    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true || result[Manifest.permission.ACCESS_COARSE_LOCATION] == true) captureAndRecord()
-        else declaredPurpose?.let { vm.record(true, failedLocationAttempt(status = "denied"), it) }
     }
     val journeyLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     fun markedAtOf(punch: DayPunch) = state.markings.firstOrNull { it.receiptId == punch.receiptId }?.markedAt ?: today
@@ -376,72 +352,17 @@ private fun breakColors(level: BreakLevel) = when (level) {
     }
     LaunchedEffect(section, state.month, detailDate) {
         when (section) {
+            // Back on today from another month of the records: today's punches are read again.
+            "today" -> if (state.month != java.time.YearMonth.from(state.today) && state.options != null) vm.month(java.time.YearMonth.from(state.today))
             "bank" -> if (state.bankDate != (if (state.month == java.time.YearMonth.from(state.today)) state.today else state.month.atEndOfMonth()).toString()) vm.loadBank()
             "day" -> detailDate?.let { if (detailSource != "home" && state.bankDate != it) vm.loadBank(it) }
             "mirror" -> if (state.mirrorYear != state.month.year) vm.loadMirrorYear(state.month.year)
         }
     }
     // One main action: the punch, confirmed in the footer itself; the history has no footer.
-    val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today") null else { {
+    val footer: (@Composable ColumnScope.() -> Unit)? = if (section != "today" || viewAsActive) null else { {
         if (confirming) {
-            val pending = vm.pendingAttempt()
-            val lockedPurpose = pending?.purpose
-            if (pilotMode) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = .8.sp))
-            val (heading, time, origin) = when {
-                // A replay resends the first attempt: its time is shown as such, the server keeps the official one.
-                pending != null -> Triple("REENVIAR A MESMA BATIDA",
-                    pending.firstTriedAt?.let { TimeRules.clockText(it, TimeRules.unitZone(state.options, pending.unitId)) } ?: "—",
-                    listOfNotNull(when (pending.firstTriedSource) {
-                        "OFFICIAL" -> "Primeira tentativa · Hora Legal"
-                        "LOCAL_PERMIT" -> "Primeira tentativa · hora ancorada, informativa"
-                        else -> "Primeira tentativa · hora do aparelho, informativa"
-                    }, units.firstOrNull { it.id == pending.unitId }?.name).joinToString(" · "))
-                preserving -> Triple("HORÁRIO DO REGISTRO", confirmationTime, unitName)
-                else -> Triple("HORÁRIO A REGISTRAR", confirmationTime, unitName)
-            }
-            Text(heading, color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-            Text(time, style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
-            Text(origin, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            if (lockedPurpose != null) {
-                Text("O que este registro representa", style = MaterialTheme.typography.titleMedium)
-                Column(Modifier.fillMaxWidth().background(Tokens.accentSoft, RoundedCornerShape(14.dp)).border(2.dp, Tokens.accent, RoundedCornerShape(14.dp)).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(TimeRules.purposeLabel(lockedPurpose), style = MaterialTheme.typography.titleMedium)
-                    Text("Definida na tentativa original; não pode ser trocada no reenvio.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                }
-            } else {
-                Text("O que este registro representa?", style = MaterialTheme.typography.titleMedium)
-                TimeRules.PUNCH_PURPOSES.forEach { (id, label) ->
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !screenBusy, role = Role.RadioButton) { declaredPurpose = id }, verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(declaredPurpose == id, null, enabled = !screenBusy); Text(label)
-                        if (suggestionReliable && id == suggestedPurpose) Text(" · sugerida", color = Tokens.wine, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-            if (pending != null) Text("O servidor não confirmou a tentativa anterior. O Coala Go reenvia exatamente a mesma batida; se ela já tiver sido gravada, nada é duplicado. Esta hora é apenas informativa: o comprovante terá a hora gravada pelo servidor.",
-                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            else if (preserving) Text(if (pilotMode) "Este é um ensaio. Ele será salvo neste aparelho e enviado automaticamente quando possível."
-                else "Seu ponto será salvo neste aparelho e enviado automaticamente quando possível.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            if (pending == null && !preserving && locationPolicy.mode != "disabled") {
-                Text("Ao confirmar, o Coala Go fará uma leitura pontual de localização apenas para esta batida. O ponto será registrado mesmo se a posição estiver indisponível, imprecisa ou fora da unidade.",
-                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                locationPolicy.privacyNoticeUrl?.let { url ->
-                    TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
-                        enabled = !screenBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Aviso de privacidade", color = Tokens.wine) }
-                }
-            }
-            val purpose = lockedPurpose ?: declaredPurpose
-            FooterPair("Voltar", !screenBusy, { confirming = false }, when {
-                pending != null -> "Reenviar batida"
-                else -> "Confirmar ponto"
-            }, !screenBusy && purpose != null) {
-                confirming = false
-                when {
-                    preserving || pendingAttempt || locationPolicy.mode == "disabled" || vm.hasPendingLocationAttempt() -> purpose?.let { vm.record(online, declaredPurpose = it) }
-                    hasPointLocationPermission(context) -> captureAndRecord()
-                    else -> locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                }
-            }
+            PunchConfirmation(vm, state, online, screenBusy, submitter, onCancel = { confirming = false }, onSubmitted = { confirming = false })
         } else {
             if (state.monthDataAvailable && !pendingAttempt && (TimeRules.canRecord(state.options, state.unitId) || canPreserve))
                 Text("Próxima: " + TimeRules.nextPunchText(todayPunches.count { !it.discarded }, todayShift, if (suggestionReliable) suggestedPurpose else null) +
@@ -467,18 +388,12 @@ private fun breakColors(level: BreakLevel) = when (level) {
             "day" -> detailDate?.let { if (detailSource == "home") vm.loadDay(it) else vm.loadBank(it) }; "mirror" -> vm.loadMirrorYear(state.month.year) }
     }, showConnectivityNotice = false, header = {
         TopBar(screenTitle, busy = screenBusy, onBack = leave)
-        // No unit picker: the unit of the punch is the unit of the shift, and without a shift it is the person's own unit.
+        // A escala escolhe a unidade; há escolha manual sem unidade escalada, com unidade livre ou com escala fora do vínculo.
+        if (section == "today" && TimeRules.unitPickable(state.options, todayShift)) UnitPickerHeader(units.map { it.id to it.name }, state.unitId.orEmpty(), screenBusy || confirming) { vm.unit(it) }
     }) {
         if (section == "today") {
             OfficialClockCard(state, online)
-            if (todayShift?.assignmentKind == "external_coverage" && todayShift.unitId != null && units.any { it.id == todayShift.unitId }) CardBlock {
-                Text("Escala excepcional", style = MaterialTheme.typography.titleMedium)
-                Text("Você foi escalado excepcionalmente para ${todayShift.unitName ?: "esta unidade"} nesta data.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            }
-            // The scheduled unit is not repeated here (the clock card already names the unit of the punch); only the blocker stays.
-            if (todayShift?.unitId != null && todayShift.unitId != state.unitId && units.none { it.id == todayShift.unitId }) CardBlock {
-                Text("A unidade da escala não está liberada para este dia. Peça ao DP para conferir o vínculo ou registrar a cobertura nesta escala.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-            }
+            ScheduledUnitNotice(state.options, todayShift, state.unitId)
             if (todayShift?.executionUnitPolicy == "free" && todayShift.locationTrackingPolicy == "workday") {
                 CardBlock {
                     Text("Entre unidades", style = MaterialTheme.typography.titleMedium)
@@ -487,7 +402,9 @@ private fun breakColors(level: BreakLevel) = when (level) {
                         locationPolicy.mode != "observe" -> Text("Acompanhamento durante a jornada configurado no turno, aguardando a política central desta unidade.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                         !hasPointLocationPermission(context) -> {
                             Text("Se você permitir, a localização será registrada periodicamente durante a jornada entre unidades, pausada no intervalo e encerrada no fim. Isso não bloqueia o ponto.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                            Action("Permitir localização", secondary = true) { journeyLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+                            Action("Permitir localização", secondary = true) {
+                                journeyLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                            }
                         }
                         !deviceLocationEnabled(context) -> {
                             Text("A localização do aparelho está desligada. O ponto continua disponível.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
@@ -506,12 +423,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
                     Action("Encerrar acompanhamento", secondary = true) { vm.stopJourneyLocation() }
                 }
             }
-            breakStatus?.let { status ->
-                when {
-                    status.inPause -> BreakTimerPill(status)
-                    status.level != BreakLevel.OK -> BreakNoticeCard(status)
-                }
-            }
+            breakStatus?.takeIf { it.inPause }?.let { BreakTimerPill(it) }
             // One block for the reason and the contingency issue, instead of two stacked warnings.
             val blocked = if (!online && !state.offlineReady) "Conecte-se à internet para registrar o ponto."
                 else TimeRules.blockedReason(state.options, state.offlineReady)
@@ -528,43 +440,19 @@ private fun breakColors(level: BreakLevel) = when (level) {
                     color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
             }
-            // The decision comes first: the journey card is the highlight, the punch confirmation is one quiet line.
-            if (state.journeyClosurePromptDate == today) CardBlock(selected = true) {
-                Text("Jornada registrada", style = MaterialTheme.typography.titleMedium)
-                Text("Deseja encerrar o acompanhamento deste ciclo? Isso conclui apenas os avisos e o resumo; uma nova batida continua sempre disponível.",
-                    color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                FooterPair("Deixar em aberto", !feedback.busy, { vm.deferJourneyClosure() }, "Encerrar agora", !feedback.busy) { vm.closeJourneyCycle(today) }
-            } else if (declaredJourneyEnd && !cycleClosed) CardBlock(selected = true) {
-                Text("Fim da jornada registrado", style = MaterialTheme.typography.titleMedium)
-                Text("O ciclo continua aberto. Você pode encerrá-lo agora ou registrar outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                Action("Encerrar ciclo", secondary = true, enabled = !feedback.busy) { vm.closeJourneyCycle(today) }
-            } else if (cycleClosed) CardBlock(selected = true) {
-                Text("Ciclo da jornada encerrado", style = MaterialTheme.typography.titleMedium)
-                Text("Os avisos deste ciclo foram concluídos. Se houver nova atividade, registre outra batida normalmente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            state.lastOffline?.let { local -> PunchPreservedCard(local, pilotMode) { vm.dismissOffline() } }
+            state.last?.let { last -> PunchRecordedCard(last, units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName,
+                { receipt = it }) { vm.dismissLast() } }
+            CardBlock {
+                Text(dayTitle(state.today), style = MaterialTheme.typography.titleMedium)
+                Text(TimeRules.shiftText(todayShift) ?: "Sem turno na escala de hoje", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                TimeRules.breakText(todayShift)?.let { Text(it, color = Tokens.info, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)) }
+                HorizontalDivider(color = Tokens.border)
+                if (todayPunches.isEmpty()) Text("Nenhuma batida hoje.", color = Tokens.muted)
+                PunchList(todayPunches, !feedback.busy, units, onReceipt = { receipt = it to markedAtOf(it) })
             }
-            state.lastOffline?.let { local ->
-                CardBlock {
-                    Text("${if (pilotMode) "Ensaio" else "Ponto"} salvo no aparelho · ${TimeRules.secondsOf(local.markedAt)}", style = MaterialTheme.typography.titleMedium)
-                    Text(if (pilotMode) "Aguardando sincronização do ensaio. Ainda não há sequência nem comprovante do ensaio; nada será enviado ao registro fiscal oficial."
-                        else "Aguardando confirmação do servidor. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            state.last?.let { last ->
-                CardBlock {
-                    Text("${if (last.pilot) "Ensaio registrado" else "Ponto registrado"} · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
-                    Text("${if (last.pilot) "Sequência do ensaio" else "Registro oficial"} ${last.marking.nsr} · ${units.firstOrNull { it.id == last.marking.executionUnitId }?.name ?: unitName}${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                    if (last.pilot) Text("Teste sem validade como REP-P e fora do fechamento oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                    last.location?.let { location -> Text(when (location.evaluation) {
-                        "inside" -> "Localização compatível com a unidade."
-                        "outside" -> "Localização indicada fora da área da unidade; o ponto foi registrado normalmente."
-                        "indeterminate" -> "Não foi possível confirmar a localização; o ponto foi registrado normalmente."
-                        else -> "Localização não solicitada para esta unidade."
-                    }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
-                        style = MaterialTheme.typography.bodySmall) }
-                    if (last.receiptStatus != "available") Text("Comprovante em emissão. Ele aparece no detalhe do dia.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            TimeDayOverview(state, todayShift, todayPunches, !feedback.busy) { receipt = it to markedAtOf(it) }
+            if (todayMarkings.any { it.pilot }) Text("Ajustes formais ficam indisponíveis no ensaio; a classificação de cada batida continua editável.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+            else Action("Pedir ajuste de ponto", secondary = true, enabled = !feedback.busy) { asking = today }
             Text("CONSULTAS", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
             listOf(
                 Triple("records", "Registros", "Batidas e detalhes de cada dia"),
@@ -900,7 +788,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
             }
         }
     }
-    if (days.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    // Same inset as the cards' content, so the dots line up with the times above.
+    if (days.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         listOf("journey_start" to "Início", "break_start" to "Intervalo", "journey_end" to "Fim").forEach { (purpose, label) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(Modifier.size(7.dp).background(purposeColor(purpose), RoundedCornerShape(50)))
@@ -1027,7 +916,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         TimeRules.breakStatus(shift, state.markings.filter { it.workDate == workDate }, detailNow, TimeRules.unitZone(state.options, state.unitId))
             ?.takeIf { it.level != BreakLevel.NEUTRAL }?.let { BreakNoticeCard(it) }
         HorizontalDivider(color = Tokens.border)
-        if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt)
+        if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt, showLocation = true)
     }
     CardBlock(selected = focus == "bank") {
         Text("Memória de cálculo", style = MaterialTheme.typography.titleMedium)
@@ -1467,5 +1356,233 @@ private fun swapShift(value: ShiftSwapShift) = "${fullDate(value.date)} · ${val
         }
         Choices("O que você precisa?", TimeRules.VOUCHER_ACTIONS, action, !feedback.busy) { action = it }
         NoteInput("Detalhes (opcional)", details, 1500, "Linhas, trajeto ou o que mudou", !feedback.busy) { details = it }
+    }
+}
+
+/** Today's suggested purpose and whether it can be offered: only over punches read from the server, all classified. */
+private fun daySuggestion(state: TimeState): Pair<String, Boolean> {
+    val today = state.today.toString()
+    val markings = state.markings.filter { it.workDate == today }
+    val shift = state.shifts.firstOrNull { it.date == today }
+    return TimeRules.suggestedPurpose(markings, shift) to
+        (state.dayLoad == DayLoad.READ && markings.all { it.classification?.purpose != null })
+}
+
+/** Sends a punch: the one-time location read the unit asks for, then the record. Held by the screen, so it outlasts the confirmation. */
+internal class PunchSubmitter(val capturing: State<Boolean>, val submit: (online: Boolean, purpose: String) -> Unit)
+
+@Composable internal fun rememberPunchSubmitter(vm: TimeViewModel): PunchSubmitter {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val capturing = remember { mutableStateOf(false) }
+    val waiting = rememberSaveable { mutableStateOf<String?>(null) }
+    fun policy() = vm.state.value.let { state -> state.options?.executionUnits?.firstOrNull { it.id == state.unitId }?.locationPolicy } ?: LocationPolicy()
+    fun captureAndRecord(purpose: String) {
+        val policy = policy()
+        capturing.value = true
+        scope.launch {
+            val attempt = capturePointLocation(context, policy.captureTimeoutMs ?: 10_000, policy.maxAccuracyMeters ?: 100.0)
+            capturing.value = false
+            vm.record(true, attempt, purpose)
+        }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val purpose = waiting.value ?: return@rememberLauncherForActivityResult
+        waiting.value = null
+        if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true || result[Manifest.permission.ACCESS_COARSE_LOCATION] == true) captureAndRecord(purpose)
+        else vm.record(true, failedLocationAttempt(status = "denied"), purpose)
+    }
+    return remember(vm) { PunchSubmitter(capturing) { online, purpose ->
+        val state = vm.state.value
+        val pending = vm.hasPendingAttempt()
+        val preserving = !pending && (!online || TimeRules.canPreserve(state.options, state.unitId, state.offlineReady))
+        when {
+            preserving || pending || policy().mode == "disabled" || vm.hasPendingLocationAttempt() -> vm.record(online, declaredPurpose = purpose)
+            hasPointLocationPermission(context) -> captureAndRecord(purpose)
+            else -> { waiting.value = purpose; permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+        }
+    } }
+}
+
+/** The confirmation of a punch: time, unit, what it represents and the one action. Same content on Ponto and on the home sheet. */
+@Composable internal fun ColumnScope.PunchConfirmation(vm: TimeViewModel, state: TimeState, online: Boolean, busy: Boolean, submitter: PunchSubmitter,
+    onCancel: () -> Unit, onSubmitted: () -> Unit) {
+    val context = LocalContext.current
+    val units = state.options?.executionUnits.orEmpty()
+    val pilotMode = state.options?.mode == "pilot"
+    val selectedUnit = units.firstOrNull { it.id == state.unitId }
+    val unitName = selectedUnit?.name.orEmpty()
+    val locationPolicy = selectedUnit?.locationPolicy ?: LocationPolicy()
+    val pending = vm.pendingAttempt()
+    val preserving = pending == null && (!online || TimeRules.canPreserve(state.options, state.unitId, state.offlineReady))
+    val zone = TimeRules.unitZone(state.options, state.unitId)
+    var officialNow by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)) }
+    LaunchedEffect(state.clockOffset) {
+        while (true) {
+            officialNow = android.os.SystemClock.elapsedRealtime() + (state.clockOffset ?: 0)
+            delay(1000 - officialNow % 1000)
+        }
+    }
+    val (suggestedPurpose, suggestionReliable) = daySuggestion(state)
+    var declaredPurpose by rememberSaveable(state.today.toString(), state.markings.size, suggestionReliable) {
+        mutableStateOf(if (suggestionReliable) suggestedPurpose else null)
+    }
+    val lockedPurpose = pending?.purpose
+    if (pilotMode) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = .8.sp))
+    val (heading, time, origin) = when {
+        // A replay resends the first attempt: its time is shown as such, the server keeps the official one.
+        pending != null -> Triple("REENVIAR A MESMA BATIDA",
+            pending.firstTriedAt?.let { TimeRules.clockText(it, TimeRules.unitZone(state.options, pending.unitId)) } ?: "—",
+            listOfNotNull(when (pending.firstTriedSource) {
+                "OFFICIAL" -> "Primeira tentativa · Hora Legal"
+                "LOCAL_PERMIT" -> "Primeira tentativa · hora ancorada, informativa"
+                else -> "Primeira tentativa · hora do aparelho, informativa"
+            }, units.firstOrNull { it.id == pending.unitId }?.name).joinToString(" · "))
+        preserving -> Triple("HORÁRIO A PRESERVAR", TimeRules.clockText(officialNow, zone), listOf(unitName, "hora ancorada pela autorização local").filter { it.isNotBlank() }.joinToString(" · "))
+        else -> Triple("HORÁRIO A REGISTRAR", TimeRules.clockText(officialNow, zone), unitName)
+    }
+    Text(heading, color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+    Text(time, style = MaterialTheme.typography.headlineLarge.copy(fontFamily = CodeFont, fontWeight = FontWeight.Bold))
+    Text(origin, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+    if (lockedPurpose != null) {
+        Text("O que este registro representa", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.fillMaxWidth().background(Tokens.accentSoft, RoundedCornerShape(14.dp)).border(2.dp, Tokens.accent, RoundedCornerShape(14.dp)).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(TimeRules.purposeLabel(lockedPurpose), style = MaterialTheme.typography.titleMedium)
+            Text("Definida na tentativa original; não pode ser trocada no reenvio.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        }
+    } else {
+        Text("O que este registro representa?", style = MaterialTheme.typography.titleMedium)
+        TimeRules.PUNCH_PURPOSES.forEach { (id, label) ->
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = !busy, role = Role.RadioButton) { declaredPurpose = id }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(declaredPurpose == id, null, enabled = !busy); Text(label)
+                if (suggestionReliable && id == suggestedPurpose) Text(" · sugerida", color = Tokens.wine, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    if (pending != null) Text("O servidor não confirmou a tentativa anterior. O Coala Go reenvia exatamente a mesma batida; se ela já tiver sido gravada, nada é duplicado. Esta hora é apenas informativa: o comprovante terá a hora gravada pelo servidor.",
+        color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    else if (preserving) Text(when {
+        pilotMode && online -> "A Hora Legal não pôde ser confirmada agora. Este ensaio fica preservado neste aparelho e será sincronizado depois, mas continua fora do fechamento oficial e sem comprovante REP-P."
+        pilotMode -> "Sem conexão. Este ensaio fica preservado neste aparelho e será sincronizado depois, mas continua fora do fechamento oficial e sem comprovante REP-P."
+        online -> "A Hora Legal não pôde ser confirmada agora. A marcação ficará preservada neste aparelho até o servidor validá-la."
+        else -> "A marcação ficará preservada neste aparelho até a conexão voltar."
+    }, color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    val purpose = lockedPurpose ?: declaredPurpose
+    FooterPair("Voltar", !busy, onCancel, when {
+        pending != null -> "Reenviar batida"
+        preserving && pilotMode -> "Preservar ensaio no aparelho"
+        preserving -> "Preservar no aparelho"
+        else -> "Confirmar ponto"
+    }, !busy && purpose != null) {
+        onSubmitted()
+        purpose?.let { submitter.submit(online, it) }
+    }
+}
+
+/** The scheduled unit is outside the employment scope: said plainly, and the unit picker is offered. */
+@Composable private fun ScheduledUnitNotice(options: TimeOptions?, shift: OwnShift?, unitId: String?) {
+    if (!TimeRules.scheduledUnitOutside(options, shift)) return
+    val target = options?.executionUnits?.firstOrNull { it.id == unitId }?.name ?: "outra unidade"
+    // The destination is always named; a choice is only promised when there is one.
+    Text("Sua escala de hoje é em ${shift?.unitName ?: "outra unidade"}, que não está entre as unidades do seu vínculo. " +
+        (if (TimeRules.unitPickable(options, shift)) "A batida será registrada em $target; troque a unidade se não for a certa. "
+        else "A batida será registrada em $target, a única unidade do seu vínculo. ") + "Se a escala estiver certa, fale com o DP.",
+        color = Tokens.warning, style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(12.dp))
+}
+
+@Composable private fun PunchPreservedCard(local: CapturedOfflineMarking, pilot: Boolean, onOk: () -> Unit) {
+    CardBlock(selected = true) {
+        Text("Marcação preservada no aparelho · ${TimeRules.secondsOf(local.markedAt)}", style = MaterialTheme.typography.titleMedium)
+        Text(if (pilot) "Aguardando sincronização do ensaio. Ainda não há sequência nem comprovante do ensaio; nada será enviado ao registro fiscal oficial."
+            else "Aguardando confirmação do servidor. Ainda não há NSR nem comprovante oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+        Action("Ok", secondary = true, onClick = onOk)
+    }
+}
+
+@Composable private fun PunchRecordedCard(last: MarkingResponse, unitName: String, onReceipt: (Pair<DayPunch, String>) -> Unit, onOk: () -> Unit) {
+    CardBlock(selected = true) {
+        Text("${if (last.pilot) "Ensaio registrado" else "Ponto registrado"} · ${TimeRules.secondsOf(last.marking.markedAt)}", style = MaterialTheme.typography.titleMedium)
+        Text("${if (last.pilot) "Sequência do ensaio" else "Registro oficial"} ${last.marking.nsr} · $unitName${if (last.status == "replayed") " · a batida já estava gravada" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        if (last.pilot) Text("Teste sem validade como REP-P e fora do fechamento oficial.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+        last.location?.let { location -> Text(when (location.evaluation) {
+            "inside" -> "Localização compatível com a unidade."
+            "outside" -> "Localização indicada fora da área da unidade; o ponto foi registrado normalmente."
+            "indeterminate" -> "Não foi possível confirmar a localização; o ponto foi registrado normalmente."
+            else -> "Localização não solicitada para esta unidade."
+        }, color = if (location.evaluation == "inside") Tokens.info else Tokens.muted,
+            style = MaterialTheme.typography.bodySmall) }
+        if (last.receiptStatus == "available") Action("Abrir comprovante") { onReceipt(DayPunch(TimeRules.minuteOf(last.marking.markedAt), last.marking.nsr, last.receiptId, "available", pilot = last.pilot) to last.marking.markedAt) }
+        else Text("Comprovante em emissão. Ele aparece em Ponto assim que for emitido.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+        Action("Ok", secondary = true, onClick = onOk)
+    }
+}
+
+/**
+ * The punch from the home itself: the same confirmation as Ponto, over today's punches read again on opening.
+ * Shares Ponto's view model, so a pending attempt is resent from either place and never duplicated.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun PunchSheet(vm: TimeViewModel, onOpenTime: () -> Unit, onDismiss: () -> Unit) {
+    val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
+    val viewAsActive = LocalDeveloperViewAsActive.current
+    val context = LocalContext.current
+    val online = rememberOnline()
+    val submitter = rememberPunchSubmitter(vm)
+    var submitted by rememberSaveable { mutableStateOf(false) }
+    var receipt by remember { mutableStateOf<Pair<DayPunch, String>?>(null) }
+    var choosingUnit by remember { mutableStateOf(false) }
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { vm.dismissLast(); vm.dismissOffline(); vm.load(); started = true }
+    DisposableEffect(Unit) { onDispose { File(context.cacheDir, "receipts").deleteRecursively() } }
+    receipt?.let { (punch, markedAt) -> ReceiptSheet(punch, markedAt, vm) { receipt = null } }
+    val busy = feedback.busy || submitter.capturing.value
+    val units = state.options?.executionUnits.orEmpty()
+    val today = state.today.toString()
+    val todayShift = state.shifts.firstOrNull { it.date == today }
+    if (choosingUnit) PickerSheet("Unidade da batida", units.map { it.id to it.name }, state.unitId.orEmpty(), { vm.unit(it) }) { choosingUnit = false }
+    fun close() { vm.dismissLast(); vm.dismissOffline(); onDismiss() }
+    ModalBottomSheet(onDismissRequest = { if (!busy) close() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Tokens.surface) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val last = state.last
+            val local = state.lastOffline
+            val pending = vm.hasPendingAttempt()
+            // Same gate as the Ponto button: a pending attempt is only resent on-line, never replaced by a new one.
+            val canPunch = !viewAsActive && (if (pending) online else TimeRules.canRecord(state.options, state.unitId)
+                || TimeRules.canPreserve(state.options, state.unitId, state.offlineReady)
+            )
+            val loading = !started || state.dayLoad == DayLoad.PENDING
+            when {
+                submitted && last != null -> PunchRecordedCard(last, units.firstOrNull { it.id == last.marking.executionUnitId }?.name.orEmpty(), { receipt = it }) { close() }
+                submitted && local != null -> PunchPreservedCard(local, state.options?.mode == "pilot") { close() }
+                submitted && busy || loading ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 120.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                        CircularProgressIndicator(Modifier.size(24.dp), color = Tokens.accent, strokeWidth = 3.dp)
+                        Text(if (submitted) "Registrando a batida…" else "Conferindo as batidas de hoje…", color = Tokens.muted)
+                    }
+                !canPunch -> {
+                    Text("Registro de ponto", style = MaterialTheme.typography.titleLarge)
+                    Text((if (pending) "Há uma batida anterior aguardando confirmação. Conecte-se para reenviá-la sem duplicar." else null)
+                        ?: TimeRules.blockedReason(state.options, state.offlineReady) ?: "Não foi possível preparar a batida agora.",
+                        color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    Action("Abrir Ponto") { close(); onOpenTime() }
+                }
+                else -> {
+                    ScheduledUnitNotice(state.options, todayShift, state.unitId)
+                    if (TimeRules.unitPickable(state.options, todayShift) && !pending)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = !busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true },
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Unidade da batida", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                                Text(units.firstOrNull { it.id == state.unitId }?.name ?: "Escolha a unidade", style = MaterialTheme.typography.titleMedium)
+                            }
+                            Text("Trocar", color = Tokens.wine, style = MaterialTheme.typography.labelLarge)
+                        }
+                    PunchConfirmation(vm, state, online, busy, submitter, onCancel = { close() }, onSubmitted = { submitted = true })
+                }
+            }
+            feedback.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
     }
 }

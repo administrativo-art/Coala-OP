@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,7 +34,7 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
@@ -492,11 +492,42 @@ const timeRecordingTemplates: SystemDocumentTemplate[] = [{
   updatedAt: "2026-10-20T00:00:00.000Z",
 }];
 
+const assetTemplates: SystemDocumentTemplate[] = [{
+  id: "system-asset-custody-term",
+  name: "Termo de transferência de posse de patrimônio",
+  documentTitle: "TERMO DE ENTREGA E RESPONSABILIDADE DE PATRIMÔNIO",
+  shortName: "Termo de posse patrimonial",
+  category: "Patrimônio",
+  description: "Termo contextual emitido na transferência de posse de um patrimônio da empresa para um colaborador.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "asset_custody_term",
+  generationMode: "contextual",
+  sourceModule: "assets",
+  sourceModulePath: "src/features/assets/custody-term.server.ts",
+  variables: [
+    "asset.code", "asset.name", "asset.brand", "asset.model", "asset.assetTag",
+    "employee.name", "company.legalName", "company.cnpj", "transfer.effectiveAt",
+    "transfer.condition", "transfer.accessories", "document.protocol",
+  ],
+  letterheadVersion: "coala-letterhead-v2",
+  signatureScope: "independent",
+  retentionPolicyId: "employment_plus_5y",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-asset-custody-term/preview",
+  updatedAt: "2026-10-30T00:00:00.000Z",
+}, {
+  id: "system-asset-maintenance-order", name: "Ordem de manutenção patrimonial", documentTitle: "ORDEM DE MANUTENÇÃO PATRIMONIAL", category: "Patrimônio", description: "Ordem contextual de manutenção preventiva, corretiva ou manual, sem assinatura eletrônica.", status: "published", version: 1, templateKind: "system_pdf", renderer: "asset_maintenance_order", generationMode: "contextual", sourceModule: "assets", sourceModulePath: "src/features/assets/maintenance.server.ts", variables: ["asset.code", "asset.name", "maintenance.type", "maintenance.description", "maintenance.checklist", "maintenance.components", "document.protocol"], letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "asset_lifecycle_plus_5y", sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-asset-maintenance-order/preview", updatedAt: "2026-10-30T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
   ...admissionTemplates,
   ...timeRecordingTemplates,
+  ...assetTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {
