@@ -35,6 +35,7 @@ type StatusPresentation = { variant: StatusPillVariant; Icon: LucideIcon };
 
 const STATUS_PRESENTATION: Record<string, StatusPresentation> = {
   paid: { variant: "ok", Icon: CircleCheck },
+  scheduled: { variant: "info", Icon: CalendarClock },
   payment_found_pending_document: { variant: "ok", Icon: ScanSearch },
   overdue: { variant: "danger", Icon: TriangleAlert },
   paid_divergent: { variant: "danger", Icon: TriangleAlert },

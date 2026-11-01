@@ -35,6 +35,12 @@ test("vencimento é data de Belém e mantém auditoria e pagamento reportado sep
   assert.equal(expenseDisplayStatus({ ...pending, originModule: "purchasing", originStatus: "pending_audit" }, now), "pending_audit");
 });
 
+test("agendamento no Inter aparece na despesa sem antecipar a baixa", () => {
+  const scheduled = { status: "pending", totalValue: 101.32, dueDate: "2026-11-10", installments: [{ status: "pending", paymentSchedulingStatus: "scheduled" }] };
+  assert.equal(expenseDisplayStatus(scheduled, new Date("2026-11-01T12:00:00-03:00")), "scheduled");
+  assert.deepEqual(expenseDisplayAmounts(scheduled), { open: 101.32, paid: 0 });
+});
+
 test("saldo vencido independe do rótulo principal usado na linha", () => {
   const partial = {
     status: "partially_paid",

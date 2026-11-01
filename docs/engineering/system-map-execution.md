@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-11-01: rota protegida para adotar agendamento de boleto já existente no Inter, com conferência de identificador, linha, valor, favorecido, vencimento, despesa/provisão e duplicidade. Cria solicitação e débito esperado para o extrato existente; a despesa mostra agendamento sem antecipar liquidação. O pareamento TVN em conjunto exige mesma cardinalidade, valor e ausência de concorrente. Sem novo polling: duas consultas limitadas a 2 documentos na adoção e reuso da observação bancária existente. Testes unitários e contratos passaram; teste integrado no emulador criado, com execução local impedida pela ausência de Java. `payment-requests` permanece Traçado.
+
 2026-10-29: ajuste local dos documentos de férias: descarte motivado, preservação das decisões em correções/reenvios, histórico interno e consulta conjunta dos originais. Guia `flows/vacation-receipts.md`. Sem migração, banco real ou publicação; cobertura integrada do fluxo permanece pendente.
 
 2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
