@@ -73,6 +73,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
+import { buildVisibleSchedulePeople } from '@/lib/dp-schedule-bulk-selection';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
 import {
@@ -118,12 +119,12 @@ const MONTHS = [
 ];
 
 const WEEK_TONES = [
-  { bar: 'border-l-sky-400', bg: 'bg-sky-50', hover: 'hover:bg-sky-100', text: 'text-sky-700' },
-  { bar: 'border-l-violet-400', bg: 'bg-violet-50', hover: 'hover:bg-violet-100', text: 'text-violet-700' },
-  { bar: 'border-l-emerald-400', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', text: 'text-emerald-700' },
-  { bar: 'border-l-amber-400', bg: 'bg-amber-50', hover: 'hover:bg-amber-100', text: 'text-amber-700' },
-  { bar: 'border-l-rose-400', bg: 'bg-rose-50', hover: 'hover:bg-rose-100', text: 'text-rose-700' },
-  { bar: 'border-l-cyan-400', bg: 'bg-cyan-50', hover: 'hover:bg-cyan-100', text: 'text-cyan-700' },
+  { bar: 'border-l-sky-400', chip: 'border-sky-200 bg-sky-50 text-sky-700' },
+  { bar: 'border-l-violet-400', chip: 'border-violet-200 bg-violet-50 text-violet-700' },
+  { bar: 'border-l-emerald-400', chip: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  { bar: 'border-l-amber-400', chip: 'border-amber-200 bg-amber-50 text-amber-700' },
+  { bar: 'border-l-rose-400', chip: 'border-rose-200 bg-rose-50 text-rose-700' },
+  { bar: 'border-l-cyan-400', chip: 'border-cyan-200 bg-cyan-50 text-cyan-700' },
 ] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1330,9 +1331,10 @@ interface DPScheduleEditorProps {
   onBack?: () => void;
   onPreviousMonth?: () => void;
   onNextMonth?: () => void;
+  canGoNextMonth?: boolean;
 }
 
-export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth }: DPScheduleEditorProps) {
+export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth, canGoNextMonth = true }: DPScheduleEditorProps) {
   const { activeUsers, permissions, updateUser, user, isDefaultAdmin, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const {
@@ -1503,9 +1505,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const [deleteTarget, setDeleteTarget] = useState<DPShift | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
-  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set());
+  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set([1, 2, 3, 4, 5, 6]));
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [bulkCreateActive, setBulkCreateActive] = useState(false);
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
   const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
   const [vtDialogOpen, setVtDialogOpen] = useState(false);
@@ -1630,6 +1633,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
   function resetBulkSelection() {
     setBulkSelectionActive(false);
+    setBulkEditDialogOpen(false);
     setSelectedShiftIds([]);
   }
 
@@ -2180,28 +2184,14 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     () => onlyAlerts ? visibleDays.filter(({ date }) => alertDates.has(date)) : visibleDays,
     [alertDates, onlyAlerts, visibleDays],
   );
-  const renderDateSet = useMemo(() => new Set(renderDays.map(({ date }) => date)), [renderDays]);
-
-  const visiblePeople = useMemo(() => {
-    const idsByUser = new Map<string, string[]>();
-    Object.entries(shiftIndex).forEach(([date, byUnit]) => {
-      if (!renderDateSet.has(date)) return;
-      Object.values(byUnit).forEach((items) => {
-        items.forEach((shift) => {
-          const ids = idsByUser.get(shift.userId) ?? [];
-          ids.push(shift.id);
-          idsByUser.set(shift.userId, ids);
-        });
-      });
-    });
-    return Array.from(idsByUser.entries())
-      .map(([id, shiftIds]) => ({
-        id,
-        name: effectiveUserMap.get(id)?.username ?? id,
-        shiftIds: Array.from(new Set(shiftIds)),
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
-  }, [effectiveUserMap, renderDateSet, shiftIndex]);
+  const visiblePeople = useMemo(() => buildVisibleSchedulePeople(
+    renderDays,
+    collapsedWeeks,
+    shiftIndex,
+    effectiveUserMap,
+  ), [collapsedWeeks, effectiveUserMap, renderDays, shiftIndex]);
+  const visibleShiftIds = useMemo(() => Array.from(new Set(visiblePeople.flatMap((person) => person.shiftIds))), [visiblePeople]);
+  const allVisibleShiftsSelected = visibleShiftIds.length > 0 && visibleShiftIds.every((id) => selectedShiftIds.includes(id));
 
   function toggleShiftSelectionGroup(shiftIds: string[]) {
     const groupIds = new Set(shiftIds);
@@ -2381,7 +2371,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
       {/* Header */}
       <div className={cn(
-        'flex flex-wrap items-center gap-3',
+        'grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2',
         embedded && 'shrink-0 border-b border-[#eef1f6] px-[22px] py-[14px]',
       )}>
         {embedded && onBack ? (
@@ -2396,24 +2386,25 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         ) : !embedded && (
           <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         )}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           {embedded ? (
-            <h1 className="dp-schedule-month-title truncate text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
+            <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
               {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
             </h1>
           ) : (
-            <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
+            <h1 className="text-xl font-semibold">{schedule.name}</h1>
           )}
           {!embedded && (
             <p className="text-sm text-muted-foreground">{MONTHS[schedule.month - 1]} {schedule.year}</p>
           )}
         </div>
+        <div className="col-span-full flex flex-wrap items-center justify-end gap-2">
         {embedded && onPreviousMonth && onNextMonth && (
           <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
             <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
+            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -2435,18 +2426,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <div className="flex items-center gap-2">
             {schedule.unitId ? (
-              <Button size="sm" variant="outline" onClick={() => setBulkCreateActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+              <Button size="sm" variant="outline" onClick={() => setBulkCreateActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] bg-white px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc] hover:text-[#334155] focus-visible:text-[#334155] active:text-[#334155]">
                 <Plus className="mr-2 h-4 w-4" />
                 Preencher em lote
               </Button>
             ) : null}
-            <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
+            <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] bg-white px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc] hover:text-[#334155] focus-visible:text-[#334155] active:text-[#334155]">
               <Sparkles className="mr-2 h-4 w-4" />
               Alterar em lote
             </Button>
           </div>
         )}
-        {canEdit && (
+        {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <Button
             size="sm"
             onClick={() => setAddDialog({ date: days[0]?.date ?? '', unitId: activeUnits[0]?.id ?? '' })}
@@ -2456,6 +2447,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             Adicionar turno
           </Button>
         )}
+        </div>
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
       {publicationStatus === 'draft' && (
@@ -2469,12 +2461,6 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       {publicationStatus === 'draft' && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
           As jornadas e conflitos operacionais serão validados ao publicar.
-        </div>
-      )}
-      {publicationStatus === 'published' && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-          Jornadas resolvidas e sequência contínua validada para esta escala.
         </div>
       )}
       {isArchivedUnitSchedule && (
@@ -2526,10 +2512,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       )}
 
-      <div className={cn(
-        'grid items-start',
-        (bulkSelectionActive || bulkCreateActive) && 'min-[1180px]:grid-cols-[minmax(0,1fr)_314px]',
-      )}>
+      <div className="grid items-start">
         <div className={cn('min-w-0 space-y-4', embedded && 'px-[22px] pb-5 pt-[14px]')}>
       {/* Stats boxes */}
       <div className="grid grid-cols-2 gap-[10px] lg:grid-cols-5">
@@ -2622,27 +2605,27 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           </Select>
         )}
         <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="h-[30px] w-[210px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569] [&>span]:whitespace-nowrap"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
+          <SelectTrigger className="h-[34px] w-[250px] max-w-full rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as colaboradoras</SelectItem>
             {operationalUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="h-[30px] w-[120px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
+        <Select value={weekFilter} onValueChange={(value) => {
+          setWeekFilter(value);
+          if (value !== '__all__') setCollapsedWeeks((current) => {
+            const next = new Set(current);
+            next.delete(Number(value));
+            return next;
+          });
+        }}>
+          <SelectTrigger className="h-[34px] w-[155px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Mês inteiro</SelectItem>
             {monthWeeks.map(w => <SelectItem key={w} value={String(w)}>Semana {w}</SelectItem>)}
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          <span
-            className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex"
-            title="Indicador da sequência realizada na escala. A regra aplicável pertence à jornada do colaborador."
-          >
-            Sequência realizada
-            <span className="normal-case tracking-normal">o indicador se adapta ao limite da jornada</span>
-          </span>
           <button
             type="button"
             aria-pressed={onlyAlerts}
@@ -2659,6 +2642,19 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       </div>
 
+      {canEdit && bulkSelectionActive && (
+        <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 shadow-sm">
+          <span className="mr-auto text-xs font-bold text-sky-900">Edição em lote · {selectedShiftIds.length} turno{selectedShiftIds.length === 1 ? '' : 's'} selecionado{selectedShiftIds.length === 1 ? '' : 's'}{selectedShiftIds.length === 0 ? ' · Abra uma semana para selecionar' : ''}</span>
+          {visibleShiftIds.length > 0 && (
+            <Button type="button" size="sm" variant="outline" onClick={() => toggleShiftSelectionGroup(visibleShiftIds)} className="h-8 border-sky-200 bg-white text-sky-800 hover:bg-sky-100 hover:text-sky-900">
+              {allVisibleShiftsSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="outline" onClick={resetBulkSelection} className="h-8 bg-white text-slate-700 hover:text-slate-900">Cancelar</Button>
+          <Button type="button" size="sm" disabled={selectedShiftIds.length === 0} onClick={() => setBulkEditDialogOpen(true)} className="h-8 bg-[#db2777] text-white hover:bg-[#be185d]">Alterar selecionados</Button>
+        </div>
+      )}
+
       {/* Grid */}
       {activeUnits.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
@@ -2666,18 +2662,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       ) : (
         <div className="overflow-auto rounded-[14px] border border-[#e9edf4]">
-          <table className="w-max min-w-full text-sm border-collapse">
+          <table className={cn('min-w-full border-collapse text-sm', isPerUnit ? 'w-full table-fixed' : 'w-max')}>
             <thead>
               <tr className="bg-muted/40">
                 {/* Sticky day column header */}
-                <th className="sticky left-0 z-20 min-w-[88px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
+                <th className="sticky left-0 z-20 w-20 border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
                   Data
                 </th>
                 {isPerUnit ? (
                   <>
-                    <th className="min-w-[600px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
-                    <th className="w-[360px] min-w-[360px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
-                    <th className="w-44 min-w-44 border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
+                    <th className="w-[52%] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
+                    <th className="w-[30%] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
+                    <th className="w-[12%] border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
                   </>
                 ) : activeUnits.map(unit => (
                   <th
@@ -2721,7 +2717,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     const isSunday = dow === 0;
                     const isHoliday = holidaySet.has(date);
                     return (
-                      <tr key={`prev-${date}`} className={`border-b opacity-55 ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/20' : ''}`}>
+                      <tr key={`prev-${date}`} className={`border-b ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/20' : 'bg-slate-50/50'}`}>
                         <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/30' : 'bg-background'}`}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span className={`text-[10px] font-medium uppercase tracking-wider ${isSunday ? 'text-red-400' : 'text-muted-foreground/60'}`}>{dowLabel}</span>
@@ -2737,7 +2733,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           const cellShifts = prevShiftIndexWithCount[date]?.[unit.id] ?? [];
                           return (
                             <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]">
-                              <div className="flex flex-col gap-1">
+                              <div className={cn('grid gap-1', isPerUnit ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1')}>
                                 {cellShifts.map(shift => {
                                   const user = effectiveUserMap.get(shift.userId);
                                   const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
@@ -2786,13 +2782,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                 const weekCollapsed = collapsedWeeks.has(week);
                 const weekTone = WEEK_TONES[(week - 1) % WEEK_TONES.length];
                 const weekLabel = weekDays.length > 0
-                  ? `Semana ${week} · ${weekDays[0].day} a ${weekDays[weekDays.length - 1].day} de ${MONTHS[schedule.month - 1].toLowerCase()}`
-                  : `Semana ${week}`;
+                  ? `${weekDays[0].day} a ${weekDays[weekDays.length - 1].day} de ${MONTHS[schedule.month - 1].toLowerCase()}`
+                  : '';
 
                 const rowBg = isHoliday
                   ? 'bg-orange-50 dark:bg-orange-900/10'
                   : dayIsToday ? 'bg-blue-50 dark:bg-blue-900/10'
-                  : isWeekend ? 'bg-muted/20' : 'hover:bg-muted/10';
+                  : isWeekend ? 'bg-muted/20' : 'bg-background';
 
                 const stickyBg = isHoliday
                   ? 'bg-orange-50 dark:bg-orange-900/10'
@@ -2809,17 +2805,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       >
                         <button
                           type="button"
+                          aria-label={`Semana ${week}, ${weekLabel || 'sem dias'}`}
                           aria-expanded={!weekCollapsed}
                           onClick={() => toggleWeek(week)}
                           className={cn(
-                            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[9.5px] font-extrabold uppercase tracking-[0.12em] transition-colors',
-                            weekTone.bg,
-                            weekTone.hover,
-                            weekTone.text,
+                            'flex w-full items-center gap-2 bg-white px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-700 transition-colors hover:bg-slate-50',
                           )}
                         >
                           <ChevronRight className={cn('h-3 w-3 shrink-0 transition-transform', !weekCollapsed && 'rotate-90')} strokeWidth={2.6} />
-                          <span>{weekLabel}</span>
+                          <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-md border text-[10px] tabular-nums', weekTone.chip)}>{week}</span>
+                          <span>Semana {week} · {weekLabel}</span>
                           <span className="ml-auto text-[9.5px] font-bold normal-case tracking-normal opacity-60">
                             {weekCollapsed ? 'Recolhida' : `${weekDays.length} ${weekDays.length === 1 ? 'dia' : 'dias'}`}
                           </span>
@@ -2828,10 +2823,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     </tr>
                   )}
                   {!weekCollapsed && <tr
-                    className={`border-b transition-colors last:border-b-0 ${rowBg}`}
+                    className={cn('group/day border-b transition-colors last:border-b-0 hover:bg-sky-50/80 hover:shadow-[inset_0_0_0_1px_#7dd3fc]', rowBg)}
                   >
                     {/* Day label cell */}
-                    <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${stickyBg}`}>
+                    <td className={cn('sticky left-0 z-10 border-r px-3 py-2 align-top transition-colors group-hover/day:bg-sky-100 group-hover/day:shadow-[inset_-3px_0_0_#0ea5e9]', stickyBg)}>
                       <div className="flex flex-col items-center gap-0.5">
                         <span className={`text-[10px] font-medium uppercase tracking-wider
                           ${isSunday ? 'text-red-500' : 'text-muted-foreground'}
@@ -2995,11 +2990,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       ) : null;
 
                       return (
-                        <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-[200px] border-r p-0 align-top last:border-r-0">
+                        <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-0 border-r p-0 align-top last:border-r-0">
                           {isPerUnit ? (
-                            <div className="grid min-h-[52px] grid-cols-[minmax(600px,1fr)_360px_176px] divide-x divide-[#eef1f6]">
-                            <div className="p-2">
-                              <div className="grid max-w-[600px] grid-cols-3 gap-1">
+                            <div className="grid min-h-[52px] grid-cols-[55%_32%_13%] divide-x divide-[#eef1f6]">
+                            <div className="min-w-0 p-2">
+                              <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-1">
                                 {workCards}
                                 {addShiftButton}
                               </div>
@@ -3020,11 +3015,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                 </div>
                               )}
                               </div>
-                              <div className="flex flex-col gap-1 p-2">
+                              <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {dayOffCards}
                                 {unassignedCards}
                               </div>
-                              <div className="flex flex-col gap-1 p-2">
+                              <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {coverageAlert ? (
                                   <CoverageStatus
                                     coverage={coverageAlert}
@@ -3088,7 +3083,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
         </div>
 
-        {canEdit && bulkSelectionActive && (
+      </div>
+      </div>
+
+      <Dialog open={canEdit && bulkSelectionActive && bulkEditDialogOpen} onOpenChange={setBulkEditDialogOpen}>
+        <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
+          <DialogTitle className="sr-only">Edição em lote</DialogTitle>
           <DPBulkShiftEditPanel
             selectedShifts={selectedBulkShifts}
             allCurrentShifts={shifts}
@@ -3103,10 +3103,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             onRemoveSelected={removeShiftSelectionGroup}
             applyShiftsBatch={applyShiftsBatch}
             onApplied={resetBulkSelection}
-            onCancel={resetBulkSelection}
+            onCancel={() => setBulkEditDialogOpen(false)}
           />
-        )}
-        {canEdit && bulkCreateActive && schedule.unitId && (
+        </DialogContent>
+      </Dialog>
+      <Dialog open={canEdit && bulkCreateActive && !!schedule.unitId} onOpenChange={(open) => { if (!open) resetBulkCreate(); }}>
+        <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
+          <DialogTitle className="sr-only">Preencher em lote</DialogTitle>
           <DPBulkShiftCreatePanel
             people={bulkPeople.map((person) => ({ id: person.id, name: person.username }))}
             dates={days.map((day) => ({ date: day.date, label: String(day.day), dowLabel: day.dowLabel }))}
@@ -3119,9 +3122,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             onApplied={resetBulkCreate}
             onCancel={resetBulkCreate}
           />
-        )}
-      </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialogs */}
       <Dialog open={bizneoQueueOpen} onOpenChange={setBizneoQueueOpen}>
