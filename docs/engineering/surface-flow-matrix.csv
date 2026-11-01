@@ -238,6 +238,7 @@ api,src/app/api/financial/payment-requests/[id]/proof/route.ts,,docs/engineering
 api,src/app/api/financial/payment-requests/[id]/recover/route.ts,,docs/engineering/flows/payment-requests.md,Recuperacao versionada apos duas recusas; preserva a tentativa anterior e nao envia automaticamente.
 api,src/app/api/financial/payment-requests/[id]/refresh/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/payment-requests/adopt-inter/route.ts,,docs/engineering/flows/payment-requests.md,Vincula agendamento DDA ja existente no Inter a despesa ou provisao com conferencia bancaria e auditoria; nao envia pagamento.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
