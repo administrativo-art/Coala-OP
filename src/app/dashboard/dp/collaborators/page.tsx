@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Segmented } from '@/components/patterns/segmented';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { UserManagement } from '@/components/user-management';
@@ -247,7 +247,7 @@ export default function DPCollaboratorsPage() {
       ].filter(Boolean).some((value) => String(value).toLowerCase().includes(q));
 
       return matchesStatus && matchesUnit && matchesRole && matchesSearch;
-    });
+    }).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR', { sensitivity: 'base' }));
   }, [allUsers, search, statusFilter, unitFilter, roleFilter]);
 
   useEffect(() => {
@@ -282,7 +282,7 @@ export default function DPCollaboratorsPage() {
           <SlidersHorizontal className="h-[15px] w-[15px]" />
           Filtros e visualização
         </div>
-        <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_120px_150px_150px_auto] lg:items-center">
+        <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_130px_170px_170px_auto] lg:items-center">
           <div className="relative min-w-60 flex-1">
             <Search className="absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#9d9da9]" />
             <Input
@@ -314,27 +314,15 @@ export default function DPCollaboratorsPage() {
               {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
             </SelectContent>
           </Select>
-          <ToggleGroup
-            type="single"
+          <Segmented
+            aria-label="Visualização"
             value={viewMode}
-            onValueChange={(value) => value && setViewMode(value as 'table' | 'cards')}
-            className="h-8 justify-start gap-0.5 rounded-md bg-[#eceae4] p-0.5"
-          >
-            <ToggleGroupItem
-              value="cards"
-              aria-label="Cards"
-              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
-            >
-              <Grid2X2 className="h-[17px] w-[17px]" />
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="table"
-              aria-label="Tabela"
-              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
-            >
-              <List className="h-[17px] w-[17px]" />
-            </ToggleGroupItem>
-          </ToggleGroup>
+            onChange={setViewMode}
+            options={[
+              { value: 'cards', label: <span className="inline-flex items-center gap-1.5"><Grid2X2 className="h-4 w-4 shrink-0" aria-hidden />Cards</span> },
+              { value: 'table', label: <span className="inline-flex items-center gap-1.5"><List className="h-4 w-4 shrink-0" aria-hidden />Tabela</span> },
+            ]}
+          />
         </div>
       </div>
 

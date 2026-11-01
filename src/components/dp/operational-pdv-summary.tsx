@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { InlineConfirm } from '@/components/patterns/inline-confirm';
 import { FormControl, FormItem, FormLabel } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
-import { kioskIdsForOperationalUnits } from '@/lib/collaborator-operational-selection';
+import { kioskIdsForOperationalUnits, kioskUnitResolver } from '@/lib/collaborator-operational-selection';
 import { listPdvAccesses } from '@/features/hr/lib/pdv-operational-unit-sync';
 import type { DPUnit, Kiosk, User } from '@/types';
 
@@ -42,15 +42,17 @@ export function OperationalKioskSummary({ hasPeriods, unitIds, legacyKioskIds, k
  * Switch "Acesso ao PDV": com Sim, as unidades da vigência com filial do PDV
  * recebem acesso e acompanham as mudanças; desligar remove os acessos ao salvar.
  */
-export function PdvAccessControl({ enabled, onChange, user, unitIds, units }: {
+export function PdvAccessControl({ enabled, onChange, user, unitIds, units, kiosks }: {
   enabled: boolean;
   onChange: (value: boolean) => void;
   user: User;
   unitIds: string[];
   units: DPUnit[];
+  /** Traduz os acessos antigos (por quiosque) para a unidade certa. */
+  kiosks: Kiosk[];
 }) {
   const [confirmingOff, setConfirmingOff] = useState(false);
-  const active = listPdvAccesses(user as unknown as Record<string, unknown>).filter((access) => access.status === 'active');
+  const active = listPdvAccesses(user as unknown as Record<string, unknown>, kioskUnitResolver(kiosks, units)).filter((access) => access.status === 'active');
   const unitRows = unitIds.map((id) => {
     const unit = units.find((item) => item.id === id);
     const access = active.find((item) => item.unitId === id);

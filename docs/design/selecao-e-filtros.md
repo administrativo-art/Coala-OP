@@ -3,6 +3,7 @@
 ## Segmentado (`Segmented`)
 Trilho #e6e3dc, padding 3px, raio 11. Opção: 32px de altura, padding 0 14px, 13/700, raio 9. Ativa: fundo #fff, texto `--ds-ink`, `0 1px 2px rgba(0,0,0,.08)`. Inativa: transparente, #5f646c.
 Para 2 ou 3 opções exclusivas que mudam a visualização (Cards/Tabela, Lista/Grade, tipo de baixa). Troca imediata.
+Com ícone, a opção mostra ícone de 16px **e** o texto (por exemplo, grade + "Cards", lista + "Tabela"); ícone sozinho fica ambíguo. Não use `ToggleGroup`/`ToggleGroupItem` com largura fixa para isso: o padrão do item reserva `px-3`, e num botão de 28px sobram 4px, o que esmaga o ícone até virar um ponto. Use `Segmented`.
 
 ## Chips de categoria (`FilterChips`, sobre o painel escuro)
 34px, padding 0 14px, raio 999, 13/700. Inativo: borda rgba(255,255,255,.12), texto #c8c7d0. Ativo: fundo e borda #d13670, texto #fff.

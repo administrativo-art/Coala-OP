@@ -1074,7 +1074,7 @@ export type User = {
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
   lastLoginAt?: Timestamp;
-  /** Unidade principal de lotação, usada como referência financeira. */
+  /** Unidade financeira: onde entram os custos da pessoa nos relatórios e que define as regras de ausência. Não é onde ela trabalha (isso vem da vigência de operação). */
   unitId?: string;
   /** Unidades em que a pessoa pode ser escalada e atuar. */
   unitIds?: string[];

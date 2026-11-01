@@ -41,7 +41,10 @@ export function sameOperationalUnits(left: RecordLike, right: RecordLike) {
   return JSON.stringify(leftIds) === JSON.stringify(rightIds);
 }
 
-function storedPdvAccesses(user: RecordLike): UserPdvAccess[] {
+/** Traduz o quiosque de um acesso antigo (`pdvOperatorIds`) para a unidade; sem ele, só vale o vínculo inequívoco. */
+export type KioskUnitResolver = (kioskId: string) => string | null | undefined;
+
+function storedPdvAccesses(user: RecordLike, unitForKiosk?: KioskUnitResolver): UserPdvAccess[] {
   const stored = Array.isArray(user.pdvAccesses) ? user.pdvAccesses.flatMap((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const row = value as RecordLike;
@@ -68,14 +71,11 @@ function storedPdvAccesses(user: RecordLike): UserPdvAccess[] {
     ? Object.entries(user.pdvOperatorIds as Record<string, unknown>).flatMap(([kioskId, value]) => {
         const id = normalizeExternalUserId(value);
         if (!id) return [];
-        const assignedIndex = assignedKioskIds.indexOf(kioskId);
+        // Nunca pela posição nas listas: quiosques e unidades podem estar em ordens diferentes.
         const unitId = operationalUnits.includes(kioskId)
           ? kioskId
-          : operationalUnits.length === 1 && assignedKioskIds.length === 1
-            ? operationalUnits[0]
-            : assignedKioskIds.length === operationalUnits.length && assignedIndex >= 0
-              ? operationalUnits[assignedIndex] ?? null
-              : null;
+          : unitForKiosk?.(kioskId)
+            ?? (operationalUnits.length === 1 && assignedKioskIds.length === 1 ? operationalUnits[0] : null);
         return [{
           externalUserId: id,
           unitId,
@@ -137,6 +137,7 @@ export type PdvOperationalUnitSyncPlan =
     };
 
 export type PdvOperationalUnitSyncOptions = {
+  unitForKiosk?: KioskUnitResolver;
   /** Unidades vinculadas a uma filial do PDV; as demais (ex.: CD) não têm acesso a sincronizar. */
   pdvUnitIds?: ReadonlySet<string>;
 };
@@ -172,7 +173,7 @@ export function planPdvOperationalUnitSyncs(
   const added = nextUnits.filter((unitId) => !currentUnits.includes(unitId));
   if (removed.length === 0 && added.length === 0) return [];
 
-  const accesses = storedPdvAccesses(currentUser).filter((access) => access.status === "active");
+  const accesses = storedPdvAccesses(currentUser, options.unitForKiosk).filter((access) => access.status === "active");
   const legacyExternalUserId = normalizeExternalUserId(currentUser.registrationIdPdv);
   const hasPdvAccess = accesses.length > 0 || Boolean(legacyExternalUserId);
   if (!hasPdvAccess) return [];
@@ -305,8 +306,8 @@ export function planPdvAccessRevocation(currentUser: RecordLike): PdvOperational
 }
 
 /** Marca o acesso removido como inativo (o ID fica no histórico) e reaponta o acesso principal. */
-export function pdvRemovalPatch(params: { currentUser: RecordLike; externalUserId: string; updatedAt: string }) {
-  const currentAccesses = storedPdvAccesses(params.currentUser);
+export function pdvRemovalPatch(params: { currentUser: RecordLike; externalUserId: string; updatedAt: string; unitForKiosk?: KioskUnitResolver }) {
+  const currentAccesses = storedPdvAccesses(params.currentUser, params.unitForKiosk);
   const pdvAccesses = currentAccesses.some((access) => access.externalUserId === params.externalUserId)
     ? currentAccesses.map((access) => access.externalUserId === params.externalUserId
       ? { ...access, status: "inactive" as const, updatedAt: params.updatedAt }
@@ -334,11 +335,12 @@ export function pdvOperationalUnitPatch(params: {
   targetFilialName: string;
   confirmedProfileId: string;
   updatedAt: string;
+  unitForKiosk?: KioskUnitResolver;
 }) {
   const plan = params.plan;
   if (plan.kind === "remove") throw new PdvOperationalUnitSyncError("A remoção de acesso usa pdvRemovalPatch.");
 
-  const currentAccesses = storedPdvAccesses(params.currentUser);
+  const currentAccesses = storedPdvAccesses(params.currentUser, params.unitForKiosk);
   const previous = plan.kind === "move"
     ? currentAccesses.find((access) => access.externalUserId === plan.sourceExternalUserId)
     : currentAccesses.find((access) =>
