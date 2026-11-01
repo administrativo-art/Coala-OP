@@ -56,7 +56,7 @@ test('horários do editor ficam somente leitura quando um turno é selecionado',
   assert.strictEqual((editorSource.match(/aria-readonly=\{hasSelectedShiftDefinition\}/g) ?? []).length, 2);
 });
 
-test('painel em lote oferece seleção visível, por pessoa e bloqueios de ausência', () => {
+test('edição em lote oferece seleção visível, por pessoa e bloqueios de ausência', () => {
   assert.match(bulkSource, /Selecionar visíveis/);
   assert.match(bulkSource, /Selecionar por colaboradora/);
   assert.match(bulkSource, /swapDayOffWarning/);

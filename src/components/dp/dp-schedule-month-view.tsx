@@ -108,6 +108,10 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
+  const nextMonthDate = new Date(year, month, 1);
+  const hasNextMonthSchedule = accessibleSchedules.some((item) => (
+    item.year === nextMonthDate.getFullYear() && item.month === nextMonthDate.getMonth() + 1
+  ));
   const createDependenciesReady =
     !schedulesLoading &&
     !schedulesError &&
@@ -402,6 +406,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
               variant="ghost"
               size="icon"
               aria-label="Próximo mês"
+              disabled={!hasNextMonthSchedule}
               className="h-8 w-8 rounded-none"
               onClick={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, 1)}`)}
             >
@@ -425,6 +430,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
               onBack={() => router.push('/dashboard/dp/schedules')}
               onPreviousMonth={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, -1)}`)}
               onNextMonth={() => router.push(`/dashboard/dp/schedules/month/${adjacentPeriod(year, month, 1)}`)}
+              canGoNextMonth={hasNextMonthSchedule}
             />
           ) : (
             <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed text-muted-foreground">
