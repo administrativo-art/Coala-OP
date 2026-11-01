@@ -92,6 +92,6 @@ try {
   if (mode === '--audit') inspect(path, entries);
   else verifyRemoved(path, options, entries);
 } catch (error) {
-  console.error(`Falha na checagem de encerramento: ${error.message}`);
+  process.stderr.write(`Falha na checagem de encerramento: ${error.message}\n`);
   process.exitCode = 1;
 }
