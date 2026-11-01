@@ -12,6 +12,7 @@
 - O erro aparece quando o usuário tenta confirmar e some ao editar o campo.
 - O limite relevante fica visível antes do erro: "Quantidade (lata) · disponível 42".
 - Unidade junto do número (sufixo dentro do campo ou no rótulo).
+- **Select compacto (altura menor que 40px, como filtros `h-7`, `h-8`, `h-9` ou `h-[34px]`):** a área de 32×32px não cabe e invade a borda do campo. Nesse caso o chevron fica numa faixa de 40px colada à borda direita, separada por uma linha vertical, sem borda própria nem sombra, e o campo reserva 44px. O `SelectTrigger` aplica isso sozinho quando a classe de altura é compacta (`isCompactSelectTrigger`); `flushIcon` explícito força ou desliga o comportamento. Não recrie a seta à mão nem reduza o ícone para caber.
 - Dropdowns não usam a seta nativa de cada sistema operacional. Foco, erro e estado desabilitado afetam o campo e o contêiner do chevron em conjunto; o ícone não cria um segundo alvo de clique.
 - Campos lado a lado reservam a mesma altura para os rótulos. Se um rótulo quebrar em duas linhas, o controle da coluna vizinha não sobe: inputs e selects continuam alinhados pelo topo.
 - Quando um bloco de configuração reunir conceitos ou opções que não sejam autoexplicativos, o cabeçalho recebe um ícone de informação. O clique/toque abre `InfoPopover`; não dependa somente de hover. O conteúdo explica cada campo e cada opção daquele bloco, incluindo alcance, efeito e combinações permitidas. Em abas de regras repetíveis, essa ajuda acompanha cada regra e uma nota inicial informa explicitamente a qual cadastro a regra pertence.
