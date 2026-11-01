@@ -243,15 +243,15 @@ export function EmploymentReferenceCard({ user, units, firebaseUser, canPublish 
 
         <PanelSection title="Unidades">
           <SelectField label="Unidade empregadora" value={draft.employerUnitId} onChange={(employerUnitId) => updateDraft({ employerUnitId })} disabled={saving}>
-            <option value="">Selecione sem usar a lotação</option>
+            <option value="">Selecione (sem copiar a unidade financeira)</option>
             {availableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}{unit.cnpj ? ` · ${formatCnpj(unit.cnpj)}` : ''}</option>)}
           </SelectField>
           <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">O nome exibido é operacional. O servidor confere CNPJ e endereço; esta seleção não atesta razão social nem vínculo jurídico.</p>
           <SelectField label="Referência financeira" value={draft.unitId} onChange={(unitId) => updateDraft({ unitId })} disabled={saving}>
-            <option value="">Selecione a lotação</option>
+            <option value="">Selecione a unidade financeira</option>
             {availableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </SelectField>
-          <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">Lotação e custos. Pode ser diferente das unidades operacionais e não libera escala nem batida de ponto.</p>
+          <p className="text-[11.5px] font-semibold leading-5 text-ds-ink-muted">Unidade que paga os custos da pessoa nos relatórios. Não é onde ela trabalha: pode ser diferente das unidades de operação e não libera escala nem batida de ponto.</p>
           {user.operationalUnitPeriods === undefined ? <fieldset>
             <legend className="text-xs font-bold text-ds-ink">Unidades operacionais legadas</legend>
             <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-ds-btn border border-ds-border bg-ds-page p-3">
