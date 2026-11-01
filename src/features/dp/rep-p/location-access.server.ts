@@ -7,6 +7,7 @@ import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { canAccessUnit } from '@/lib/unit-access';
 import { AppError } from '@/lib/observability/app-error';
+import { enrichJourneyAddresses } from './location-geocoding.server';
 
 export const LOCATION_ACCESS_AUDIT = 'repP_locationAccessAudit';
 const id = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/);
@@ -21,8 +22,8 @@ export const locationAccessSchema = z.object({
   cursor: id.optional(), limit: z.number().int().min(1).max(50).default(20),
 }).strict();
 export type LocationAccessInput = z.infer<typeof locationAccessSchema>;
-type Dependencies = { repDb: Firestore; hrDb: Firestore; now: () => Date };
-const defaults: Dependencies = { repDb: repPDbAdmin, hrDb: hrDbAdmin, now: () => new Date() };
+type Dependencies = { repDb: Firestore; hrDb: Firestore; now: () => Date; enrichAddresses: typeof enrichJourneyAddresses };
+const defaults: Dependencies = { repDb: repPDbAdmin, hrDb: hrDbAdmin, now: () => new Date(), enrichAddresses: enrichJourneyAddresses };
 
 function denied() {
   return new AppError({ code: 'REP_P_LOCATION_ACCESS_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para consultar esta localização.' });
@@ -79,5 +80,8 @@ export async function readLocation(context: ServerUserContext, raw: unknown, inj
     reason: input.reason, role: input.employeeUid === context.decoded.uid ? 'owner' : 'authorized_staff',
     evidenceIds: entries.map((entry) => entry.id), count: entries.length, cursor: input.cursor ?? null,
     viewedAt: Timestamp.fromDate(now), expiresAt: Timestamp.fromMillis(now.getTime() + 1_825 * 86_400_000) });
-  return { entries, nextCursor: snapshot.size > input.limit ? page.at(-1)!.id : null, auditId: audit.id };
+  // External enrichment happens only after the immutable access audit is committed.
+  const addresses = input.source === 'journey' ? await deps.enrichAddresses(entries) : new Map<string, string>();
+  const enrichedEntries = entries.map((entry) => ({ ...entry, formattedAddress: addresses.get(entry.id) ?? null }));
+  return { entries: enrichedEntries, nextCursor: snapshot.size > input.limit ? page.at(-1)!.id : null, auditId: audit.id };
 }

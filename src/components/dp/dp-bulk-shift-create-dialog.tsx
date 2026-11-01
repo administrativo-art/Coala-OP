@@ -136,7 +136,7 @@ export function DPBulkShiftCreatePanel({
   }
 
   return (
-    <aside className="flex flex-col overflow-hidden border-l border-[#e3e9f1] bg-white min-[1180px]:sticky min-[1180px]:top-0 min-[1180px]:h-[calc(100vh-7.25rem)] min-[1180px]:max-h-[780px] max-[1179px]:mt-3 max-[1179px]:rounded-[14px] max-[1179px]:border">
+    <section className="flex max-h-[90vh] min-h-0 flex-col overflow-hidden rounded-lg bg-white">
       <div className="flex shrink-0 items-start gap-2 border-b border-[#eef1f6] px-[14px] py-[13px]">
         <div className="min-w-0">
           <div className="text-[13.5px] font-black leading-4 text-[#0f172a]">Preencher em lote</div>
@@ -206,6 +206,6 @@ export function DPBulkShiftCreatePanel({
         <button type="button" onClick={onCancel} className="h-9 flex-1 rounded-[9px] border border-[#e3e9f1] text-xs font-extrabold text-[#64748b] hover:bg-[#f8fafc]">Cancelar</button>
         <button type="button" onClick={() => void handleApply()} disabled={submitting || preview.creatable === 0 || entries.length > 200} className="h-9 flex-1 rounded-[9px] bg-[#db2777] text-xs font-extrabold text-white hover:bg-[#be185d] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? 'Adicionando…' : 'Adicionar turnos'}</button>
       </div>
-    </aside>
+    </section>
   );
 }

@@ -16,6 +16,7 @@ import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import type { BankLineReason, BankStatement } from "./core";
 import { RESIDUAL_LABELS } from "./cycle";
 
+export type TimeBankStatementResponse = StatementResponse;
 type StatementResponse = { policy: { name: string; enabled: boolean } | null; statement: BankStatement | null;
   closures: Record<string, number>; previewCompetences?: string[]; pilotPreview?: boolean };
 
@@ -58,13 +59,15 @@ const parseHm = (value: string) => {
  * Ao abrir, apura (uma vez por versão do fechamento) os meses fechados do ciclo que ainda não têm apuração.
  * No painel do DP (`employeeUid`), mostra o banco da pessoa na data informada.
  */
-export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false, detailHref }: {
+export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false, detailHref, onLoaded }: {
   firebaseUser: FirebaseUser | null;
   employeeUid?: string;
   date?: string;
   canManage?: boolean;
   detailed?: boolean;
   detailHref?: string;
+  /** Recebe o extrato lido (a trilha do fechamento resume as horas extras do mês). */
+  onLoaded?: (data: TimeBankStatementResponse) => void;
 }) {
   const [data, setData] = useState<StatementResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +100,11 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
         response = await request<StatementResponse>(url, { fallbackError: "Não foi possível ler o banco de horas." });
       }
       setData(response);
+      onLoaded?.(response);
     } catch (cause) {
       setError(errorMessageOf(cause, "Não foi possível ler o banco de horas."));
     }
-  }, [canManage, employeeUid, query, request]);
+  }, [canManage, employeeUid, onLoaded, query, request]);
   useEffect(() => { void load(); }, [load]);
 
   async function settle() {

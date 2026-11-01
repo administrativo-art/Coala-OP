@@ -1,12 +1,14 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
 
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { isBrazilTimeZone } from '@/features/dp/rep-p/time-zones';
+import { readOfficialScheduleShifts, type OfficialShift } from '@/features/dp/schedules/official-revision.server';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 
 import { ADJUSTMENTS, CLOSURES, closureKey } from './service.server';
 import { automaticAbsenceDeadline } from './automatic-absence-core';
@@ -37,10 +39,10 @@ const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:
 const automaticAbsenceId = (workspaceId: string, uid: string, date: string) =>
   createHash('sha256').update(JSON.stringify([workspaceId, uid, date])).digest('hex');
 
-function officialLockedShift(shift: QueryDocumentSnapshot, schedule: FirebaseFirestore.DocumentSnapshot) {
-  return schedule.exists && schedule.get('locked') === true && shift.ref.parent.parent?.id === schedule.id
-    && shift.get('type') === 'work' && typeof shift.get('userId') === 'string'
-    && typeof shift.get('startTime') === 'string' && typeof shift.get('endTime') === 'string';
+function officialPublishedShift(shift: OfficialShift, schedule: FirebaseFirestore.DocumentSnapshot) {
+  return schedule.exists && hasPublishedScheduleVersion(schedule.data() ?? {}) && shift.scheduleId === schedule.id
+    && shift.type === 'work' && typeof shift.userId === 'string'
+    && typeof shift.startTime === 'string' && typeof shift.endTime === 'string';
 }
 
 async function hasMarking(deps: Dependencies, workspaceId: string, uid: string, date: string) {
@@ -72,26 +74,37 @@ export async function registerOverdueAutomaticAbsences(workspaceId: string, opti
   const lookbackDays = Math.min(MAX_LOOKBACK_DAYS, Math.max(2, Math.trunc(options.lookbackDays ?? 10)));
   const end = addDays(civilDate(now), -1);
   const start = addDays(end, -(lookbackDays - 1));
-  const shifts = await deps.mainDb.collectionGroup('shifts').where('date', '>=', start).where('date', '<=', end)
-    .orderBy('date').limit(SHIFT_LIMIT + 1).get();
-  if (shifts.size > SHIFT_LIMIT) throw new Error('AUTOMATIC_ABSENCE_SHIFT_SCAN_TRUNCATED');
+  const months: string[] = [];
+  for (let cursor = new Date(`${start.slice(0, 7)}-01T00:00:00Z`);
+    cursor.toISOString().slice(0, 7) <= end.slice(0, 7); cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+    months.push(cursor.toISOString().slice(0, 7));
+  }
+  const schedules = (await Promise.all(months.map(async (competence) => {
+    const snapshot = await deps.mainDb.collection('dp_schedules')
+      .where('year', '==', Number(competence.slice(0, 4)))
+      .where('month', '==', Number(competence.slice(5, 7))).limit(201).get();
+    if (snapshot.size === 201) throw new Error('AUTOMATIC_ABSENCE_SCHEDULE_SCAN_TRUNCATED');
+    return snapshot.docs;
+  }))).flat();
+  const shifts = (await Promise.all(schedules.map(async (schedule) => ({ schedule,
+    rows: (await readOfficialScheduleShifts({ scheduleId: schedule.id, db: deps.mainDb })).shifts
+      .filter((shift) => typeof shift.date === 'string' && shift.date >= start && shift.date <= end),
+  })))).flatMap(({ schedule, rows }) => rows.map((shift) => ({ schedule, shift })));
+  if (shifts.length > SHIFT_LIMIT) throw new Error('AUTOMATIC_ABSENCE_SHIFT_SCAN_TRUNCATED');
   const stats = { checked: 0, created: 0, notDue: 0, withMarking: 0, withRequest: 0, closed: 0, invalid: 0 };
-  for (const shift of shifts.docs) {
+  for (const { shift, schedule } of shifts) {
     stats.checked += 1;
-    const scheduleRef = shift.ref.parent.parent;
-    if (!scheduleRef) { stats.invalid += 1; continue; }
-    const schedule = await scheduleRef.get();
-    if (!officialLockedShift(shift, schedule)) { stats.invalid += 1; continue; }
-    const uid = String(shift.get('userId'));
-    const date = String(shift.get('date'));
-    const unitId = String(shift.get('unitId') ?? schedule.get('unitId') ?? '');
+    if (!officialPublishedShift(shift, schedule)) { stats.invalid += 1; continue; }
+    const uid = String(shift.userId);
+    const date = String(shift.date);
+    const unitId = String(shift.unitId ?? schedule.get('unitId') ?? '');
     const [user, unit] = await Promise.all([
       deps.mainDb.collection('users').doc(uid).get(),
       unitId ? deps.mainDb.collection('dp_units').doc(unitId).get() : Promise.resolve(null),
     ]);
     if (!user.exists || user.get('isActive') === false || user.get('workspace_id') && user.get('workspace_id') !== workspaceId) { stats.invalid += 1; continue; }
     const timeZone = unit && isBrazilTimeZone(unit.get('timeZone')) ? unit.get('timeZone') as string : DEFAULT_ZONE;
-    const deadline = automaticAbsenceDeadline(date, String(shift.get('startTime')), String(shift.get('endTime')), shift.get('overnight') === true, timeZone);
+    const deadline = automaticAbsenceDeadline(date, String(shift.startTime), String(shift.endTime), shift.overnight === true, timeZone);
     if (Date.parse(deadline.dueAt) > now.getTime()) { stats.notDue += 1; continue; }
     const id = automaticAbsenceId(workspaceId, uid, date);
     const target = deps.hrDb.collection(AUTOMATIC_ABSENCES).doc(id);

@@ -35,3 +35,8 @@ test('modo de conferência não oferece batida nem ações pessoais', () => {
   assert.match(dayPanel, /markingMode === "official" \? "available"/);
   assert.match(dayPanel, /incident === "missing" && !readOnly/);
 });
+
+test('o detalhe do dia não tem consulta avulsa de localização', () => {
+  assert.doesNotMatch(page, /LocationAccessPanel|locationPanel/);
+  assert.doesNotMatch(dayPanel, /locationPanel|Consultar localização/);
+});

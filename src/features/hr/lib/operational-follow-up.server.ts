@@ -9,7 +9,7 @@ import {
   pdvAccessEnabled,
   planPdvOperationalUnitSyncs,
 } from "@/features/hr/lib/pdv-operational-unit-sync";
-import { deriveAssignedKioskIds, executePdvSyncPlans, loadPdvUnitIds } from "@/features/hr/lib/pdv-unit-sync.server";
+import { deriveAssignedKioskIds, executePdvSyncPlans, loadKioskUnitResolver, loadPdvUnitIds } from "@/features/hr/lib/pdv-unit-sync.server";
 
 const BATCH_LIMIT = 20;
 /** Depois de cinco falhas seguidas a pendência fica parada com o erro visível no cadastro. */
@@ -45,11 +45,12 @@ export async function runOperationalFollowUp() {
       const fromUnitIds = stringArray(user.operationalFollowUpFromUnitIds);
       const before = { ...user, unitIds: fromUnitIds, assignedKioskIds: [] };
       const after = { ...user, unitIds, assignedKioskIds: [] };
+      const unitForKiosk = await loadKioskUnitResolver();
       const plans = pdvAccessEnabled(user)
-        ? planPdvOperationalUnitSyncs(before, after, { pdvUnitIds: await loadPdvUnitIds([...fromUnitIds, ...unitIds]) })
+        ? planPdvOperationalUnitSyncs(before, after, { unitForKiosk, pdvUnitIds: await loadPdvUnitIds([...fromUnitIds, ...unitIds]) })
         : [];
       const execution = plans.length
-        ? await executePdvSyncPlans({ userRef: doc.ref, user, plans, actorId: "system", actorName: "Sistema (vigência agendada)" })
+        ? await executePdvSyncPlans({ userRef: doc.ref, user, plans, unitForKiosk, actorId: "system", actorName: "Sistema (vigência agendada)" })
         : null;
       await dbAdmin.runTransaction(async (transaction) => {
         const latest = await transaction.get(doc.ref);

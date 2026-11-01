@@ -198,11 +198,45 @@ export type AssetMovementType =
   | 'CRIACAO'
   | 'EDICAO'
   | 'TRANSFERENCIA'
+  | 'MOVIMENTACAO'
+  | 'TRANSFERENCIA_POSSE'
+  | 'MIGRACAO_BASE'
+  | 'MANUTENCAO_ORDEM'
+  | 'MANUTENCAO_DESATIVADA'
   | 'ALTERACAO_STATUS'
   | 'BAIXA'
   | 'ETIQUETA_REIMPRESSA'
   | 'RETIRADA'
   | 'COMPONENTE';
+
+export type AssetOwner = {
+  type: 'company' | 'external';
+  entityId?: string;
+  nameSnapshot: string;
+};
+
+export type AssetOwnershipRegime = 'owned' | 'leased' | 'loaned' | 'third_party' | 'unknown';
+
+export type AssetCustody = {
+  holderType: 'company' | 'employee' | 'third_party';
+  holderId?: string;
+  holderNameSnapshot: string;
+  since: string;
+  sourceEventId: string;
+  legacyImported?: boolean;
+};
+
+export type AssetLocation = {
+  type: 'unit' | 'company_site' | 'external' | 'in_transit' | 'maintenance';
+  refId?: string;
+  nameSnapshot: string;
+  details?: string;
+  since: string;
+  sourceEventId: string;
+};
+
+export type AssetActorSnapshot = { userId: string; nameSnapshot: string };
+export type AssetPerformedBy = { type: 'user' | 'employee' | 'third_party'; id?: string; nameSnapshot: string };
 
 export type Asset = {
   id: string;
@@ -227,6 +261,11 @@ export type Asset = {
   responsibilityVacatedAt?: string;
   inUse?: boolean;
   possessionStatus?: string;
+  owner?: AssetOwner;
+  ownershipRegime?: AssetOwnershipRegime;
+  custody?: AssetCustody;
+  currentLocation?: AssetLocation;
+  lifecycleVersion?: number;
   status: AssetStatus;
   purchaseDate?: string;
   purchaseValue?: number;
@@ -304,6 +343,51 @@ export type AssetMovement = {
   notes?: string;
   sourceType?: string;
   sourceId?: string;
+  workspaceId?: string;
+  actor?: AssetActorSnapshot;
+  performedBy?: AssetPerformedBy;
+  custodyFrom?: AssetCustody;
+  custodyTo?: AssetCustody;
+  locationFrom?: AssetLocation;
+  locationTo?: AssetLocation;
+  source?: { type: 'audit' | 'maintenance' | 'purchase' | 'custody_transfer' | 'system'; id: string };
+  lifecycleVersion?: number;
+};
+
+export type AssetCustodyTransferStatus =
+  | 'recorded'
+  | 'term_generation_pending'
+  | 'term_generation_in_progress'
+  | 'term_generation_failed'
+  | 'awaiting_signature'
+  | 'signed'
+  | 'archive_failed'
+  | 'rejected'
+  | 'expired'
+  | 'cancelled';
+
+export type AssetCustodyTransfer = {
+  id: string;
+  workspaceId: string;
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  fromHolder: AssetCustody;
+  toHolder: AssetCustody;
+  effectiveAt: string;
+  conditionSnapshot?: string;
+  accessories: string[];
+  notes?: string;
+  actor: AssetActorSnapshot;
+  performedBy: AssetPerformedBy;
+  status: AssetCustodyTransferStatus;
+  generateTerm: boolean;
+  generatedDocumentId?: string;
+  signatureRequestId?: string;
+  providerDocumentId?: string;
+  employeeDocumentId?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type UniformEventType =
@@ -751,7 +835,7 @@ export type PermissionSet = {
   signage: { view: boolean; manage: boolean; };
   dp: {
     view: boolean;
-    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
+    schedules: { view: boolean; create: boolean; edit: boolean; publish: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     requests: { view: boolean; review: boolean; };
     /** Consulta somente leitura do registro e banco de horas de terceiros; ausente em perfis antigos (desligado). */
@@ -760,7 +844,7 @@ export type PermissionSet = {
     timeClosure?: { close: boolean; reopen: boolean; };
     responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
-    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; /** Define quem enxerga cada campo do perfil; ausente em perfis antigos (desligado). */ manageFieldVisibility?: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
     rh?: {
       collaborators: { view: boolean; edit: boolean; };
@@ -925,6 +1009,8 @@ export type User = {
   id: string; // Firebase Auth UID
   username: string;
   email: string;
+  /** Conta Google Workspace autorizada para substituir o login legado sem trocar o UID. */
+  corporateGoogleEmail?: string | null;
   phone?: string;
   phoneVerifiedAt?: Timestamp | string;
   phoneVerificationSource?: 'hr' | 'onboarding' | 'user';
@@ -988,7 +1074,7 @@ export type User = {
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
   lastLoginAt?: Timestamp;
-  /** Unidade principal de lotação, usada como referência financeira. */
+  /** Unidade financeira: onde entram os custos da pessoa nos relatórios e que define as regras de ausência. Não é onde ela trabalha (isso vem da vigência de operação). */
   unitId?: string;
   /** Unidades em que a pessoa pode ser escalada e atuar. */
   unitIds?: string[];
@@ -3006,14 +3092,14 @@ export const defaultGuestPermissions: PermissionSet = {
     signage: { view: false, manage: false },
     dp: {
       view: false,
-      schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
+      schedules: { view: false, create: false, edit: false, publish: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       requests: { view: false, review: false },
       timeRecording: { view: false, readLocation: false },
       timeClosure: { close: false, reopen: false },
       responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
-      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false, manageFieldVisibility: false },
       rh_role: undefined,
       rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
     },
@@ -3122,14 +3208,14 @@ export const defaultAdminPermissions: PermissionSet = {
     signage: { view: true, manage: true },
     dp: {
       view: true,
-      schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
+      schedules: { view: true, create: true, edit: true, publish: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       requests: { view: true, review: true },
       timeRecording: { view: true, readLocation: false },
       timeClosure: { close: true, reopen: true },
       responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
-      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true, manageFieldVisibility: true },
       rh_role: 'admin' as const,
       rh: { collaborators: { view: true, edit: true }, can_view_salary: true },
     },
@@ -3229,7 +3315,8 @@ export type LegacyTaskOriginType =
   | 'stock_count_approval'
   | 'author_board_diary'
   | 'consumption-projection'
-  | 'item_addition_request';
+  | 'item_addition_request'
+  | 'asset_maintenance';
 
 export type TaskOrigin =
   | {
@@ -3985,6 +4072,13 @@ export type DPSchedule = {
   month: number; // 1–12
   year: number;
   shiftCount: number;
+  /** Ausente em escalas legadas, que são consideradas publicadas. */
+  publicationStatus?: 'draft' | 'published';
+  /** Zero em escala nova ainda não publicada; ausente nas escalas legadas publicadas. */
+  publicationVersion?: number;
+  activeRevisionId?: string;
+  publishedAt?: Timestamp;
+  publishedBy?: string;
   unitId?: string;     // per-unit schedule; absent = legacy (all units)
   calendarId?: string; // optional: linked holiday calendar
   locked?: boolean;    // when true, snapshot is frozen
@@ -3999,6 +4093,7 @@ export type DPSchedule = {
     blockingIssueCount: number;
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
+  draftCoverageDemands?: DPCoverageDemands;
   createdAt: Timestamp;
 };
 

@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, type Transaction, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { prepareActiveRevisionOperationalChanges, readActiveRevisionPersonMonth } from '@/features/dp/schedules/operational-overlay.server';
+import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
 
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -27,6 +29,25 @@ export type OperationalIntent = { requestId: string; workspaceId: string; benefi
   expectedVersion: number; revision: number; operationId: string; actionHash: string; actorUid: string;
   fenceId: string; status: 'begun' | 'prepared' | 'abort_requested' | 'committed' | 'active' | 'reversed' | 'aborted';
   blocksSchedule: boolean; segments: OccupancySlice[]; createdAt: string; epoch?: string };
+async function revisionShiftsForAbsence(tx: Transaction, intent: OperationalIntent, prior: string) {
+  const months = [...new Set([prior.slice(0, 7), ...intent.segments.map((segment) => segment.date.slice(0, 7))])];
+  if (months.length > 7) throw fail('ABSENCE_OPERATIONAL_PERIOD_LIMIT');
+  const rows = (await Promise.all(months.map((month) =>
+    readActiveRevisionPersonMonth(tx, intent.beneficiaryUid, month)))).flat();
+  const last = intent.segments.at(-1)?.date ?? prior;
+  return rows.filter((shift) => typeof shift.date === 'string' && shift.date >= prior && shift.date <= last);
+}
+
+async function legacyShiftDocuments(tx: Transaction, documents: QueryDocumentSnapshot[]) {
+  const scheduleRefs = [...new Map(documents.flatMap((document) => {
+    const schedule = document.ref.parent.parent;
+    return schedule?.parent.id === 'dp_schedules' ? [[schedule.path, schedule] as const] : [];
+  })).values()];
+  const schedules = scheduleRefs.length ? await tx.getAll(...scheduleRefs) : [];
+  const active = new Set(schedules.filter((schedule) => schedule.get('activeRevisionId')).map((schedule) => schedule.ref.path));
+  return documents.filter((document) => !active.has(document.ref.parent.parent?.path ?? ''));
+}
+
 export const operationalIntentRef = (requestId: string, expectedVersion: number) =>
   intents.doc(`${requestId}_${expectedVersion + 1}`);
 const coalaFenceRef = (requestId: string) => dbAdmin.collection('dp_absenceOperationalFences').doc(requestId);
@@ -108,6 +129,7 @@ export async function prepareOperationalAbsence(intent: OperationalIntent) {
     .where('endDate', '>=', first).where('startDate', '<=', last)
     .orderBy('endDate').orderBy('startDate').limit(51);
   return dbAdmin.runTransaction(async (tx) => {
+    const revisionShifts = await revisionShiftsForAbsence(tx, intent, prior);
     const readiness = await tx.get(operationalReadinessRef(intent.workspaceId));
     if (!operationalReadinessValid(readiness, intent.workspaceId)) throw fail('ABSENCE_OPERATIONAL_NOT_READY');
     const epoch = readiness.get('epoch') as string;
@@ -135,24 +157,30 @@ export async function prepareOperationalAbsence(intent: OperationalIntent) {
     }
     const [shifts, vacations] = await Promise.all([tx.get(shiftQuery), tx.get(vacationQuery)]);
     if (shifts.size === 201 || vacations.size === 51) throw fail('ABSENCE_OPERATIONAL_QUERY_LIMIT');
+    const legacyShifts = await legacyShiftDocuments(tx, shifts.docs);
     if (vacations.docs.some((doc) => !absenceCivilDateSchema.safeParse(doc.get('startDate')).success
       || !absenceCivilDateSchema.safeParse(doc.get('endDate')).success
       || String(doc.get('startDate')) > String(doc.get('endDate')))) {
       throw fail('ABSENCE_OPERATIONAL_VACATION_INVALID');
     }
     if (vacations.size > 0) throw fail('ABSENCE_OPERATIONAL_VACATION_CONFLICT');
-    for (const shift of shifts.docs) {
-      if (shift.get('type') === 'day_off') continue;
-      if (shift.get('type') !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
+    for (const shift of [...legacyShifts.map((document) => ({
+      type: document.get('type'), date: document.get('date'), startTime: document.get('startTime'),
+      endTime: document.get('endTime'), scheduleId: document.ref.parent.parent?.id,
+    })), ...revisionShifts]) {
+      if (shift.type === 'day_off') continue;
+      if (shift.type !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
       shiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
-        date: String(shift.get('date') ?? ''), startTime: shift.get('startTime') as string,
-        endTime: shift.get('endTime') as string, addsOccupancy: false });
+        date: String(shift.date ?? ''), startTime: shift.startTime as string,
+        endTime: shift.endTime as string, addsOccupancy: false });
     }
     const refs = intent.segments.map((segment) => ({ segment,
       ...operationalDayRefs(intent.workspaceId, intent.beneficiaryUid, segment.date) }));
     const snapshots = await Promise.all(refs.map(async ({ clock, marker }) => ({
       clock: await tx.get(clock), marker: await tx.get(marker),
     })));
+    const publicationFence = await preparePublicationFenceAdvance(tx, intent.workspaceId, [intent.beneficiaryUid]);
+    publicationFence.apply();
     snapshots.forEach(({ clock, marker }, index) => {
       const segment = refs[index].segment;
       if (clock.exists && (clock.get('epoch') !== epoch || clock.get('workspaceId') !== intent.workspaceId
@@ -231,6 +259,7 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
   const shiftQuery = dbAdmin.collectionGroup('shifts').where('userId', '==', intent.beneficiaryUid)
     .where('date', '>=', prior).where('date', '<=', last).orderBy('date').limit(201);
   await dbAdmin.runTransaction(async (tx) => {
+    const revisionShifts = await revisionShiftsForAbsence(tx, intent, prior);
     const readiness = await tx.get(operationalReadinessRef(intent.workspaceId));
     if (!operationalReadinessValid(readiness, intent.workspaceId)) throw fail('ABSENCE_OPERATIONAL_NOT_READY');
     const fenceRef = coalaFenceRef(intent.requestId);
@@ -250,6 +279,7 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
       tx.get(shiftQuery),
     ]);
     if (allShifts.size === 201) throw fail('ABSENCE_OPERATIONAL_QUERY_LIMIT');
+    const legacyShifts = await legacyShiftDocuments(tx, allShifts.docs);
     const prepared = snapshots.map(([snapshot, clock]) => {
       if (!snapshot.exists || snapshot.get('epoch') !== readiness.get('epoch')
         || !clock.exists || clock.get('epoch') !== readiness.get('epoch')
@@ -264,12 +294,19 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
       return { entries, own, clock };
     });
     if (fence.get('state') === 'active' && prepared.every(({ own }) => own.state === 'active')) return;
-    const displaced = intent.blocksSchedule ? allShifts.docs.filter((shift) => {
-      if (shift.get('type') === 'day_off') return false;
-      if (shift.get('type') !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
+    const candidates = [
+      ...legacyShifts.map((shift) => ({ id: shift.id, ref: shift.ref,
+        data: shift.data() ?? {}, revision: false })),
+      ...revisionShifts.map((shift) => ({ id: shift.id,
+        ref: dbAdmin.collection('dp_schedules').doc(shift.scheduleId).collection('shifts').doc(shift.id),
+        data: shift as Record<string, unknown>, revision: true })),
+    ];
+    const displaced = intent.blocksSchedule ? candidates.filter((shift) => {
+      if (shift.data.type === 'day_off') return false;
+      if (shift.data.type !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
       const segments = shiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
-        date: String(shift.get('date') ?? ''), startTime: shift.get('startTime') as string,
-        endTime: shift.get('endTime') as string, addsOccupancy: false });
+        date: String(shift.data.date ?? ''), startTime: shift.data.startTime as string,
+        endTime: shift.data.endTime as string, addsOccupancy: false });
       return segments.some((segment) => intent.segments.some((absence) => segment.date === absence.date
         && overlap(segment, absence)));
     }) : [];
@@ -296,9 +333,17 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
     scheduleDocuments.forEach((schedule) => {
       const removed = countsBySchedule.get(schedule.ref.path) ?? 0;
       const current = Number(schedule.get('shiftCount'));
-      if (!schedule.exists || !Number.isSafeInteger(current) || current < removed) throw fail('ABSENCE_OPERATIONAL_SCHEDULE_INVALID');
+      if (!schedule.exists || schedule.get('workspaceId') !== intent.workspaceId
+        || !Number.isSafeInteger(current) || current < removed) throw fail('ABSENCE_OPERATIONAL_SCHEDULE_INVALID');
     });
+    const overlayPreparations = await Promise.all(scheduleDocuments.filter((schedule) => schedule.get('activeRevisionId'))
+      .map((schedule) => prepareActiveRevisionOperationalChanges({ tx, schedule, workspaceId: intent.workspaceId, actorId: intent.actorUid,
+        reason: 'absence_activated', changes: displaced.filter((shift) => shift.ref.parent.parent?.path === schedule.ref.path)
+          .map((shift) => ({ shiftId: shift.id, previous: shift.data, next: null })) })));
+    const publicationFence = displaced.length && !overlayPreparations.length
+      ? await preparePublicationFenceAdvance(tx, intent.workspaceId, [intent.beneficiaryUid]) : null;
     const now = new Date().toISOString();
+    publicationFence?.apply();
     prepared.forEach(({ entries, own, clock }, index) => {
       tx.update(refs[index].marker, { entries: entries.map((entry) => entry === own ? { ...entry, state: 'active' } : entry),
         updatedAt: now });
@@ -311,11 +356,13 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
         requestId: intent.requestId, workspaceId: intent.workspaceId, beneficiaryUid: intent.beneficiaryUid,
         unitId: intent.unitId, fenceId: intent.fenceId, requestVersion: intent.expectedVersion + 1,
         originalPath: shift.ref.path, scheduleId: shift.ref.parent.parent!.id, shiftId: shift.id,
-        shift: shift.data(), displacedAt: now,
+        ...(shift.revision ? { officialRevisionId: scheduleDocuments.find((schedule) => schedule.id === shift.ref.parent.parent!.id)!.get('activeRevisionId') } : {}),
+        shift: shift.data, displacedAt: now,
       });
-      tx.delete(shift.ref);
+      if (!shift.revision) tx.delete(shift.ref);
     });
-    scheduleDocuments.forEach((schedule) => {
+    overlayPreparations.forEach((preparedOverlay) => preparedOverlay.apply());
+    scheduleDocuments.filter((schedule) => !schedule.get('activeRevisionId')).forEach((schedule) => {
       const removed = countsBySchedule.get(schedule.ref.path) ?? 0;
       tx.update(schedule.ref, { shiftCount: Number(schedule.get('shiftCount')) - removed,
         goalEligibilityVersion: FieldValue.increment(1), journeyValidationVersion: FieldValue.increment(1) });
@@ -405,7 +452,9 @@ export async function reverseOperationalAbsence(intent: OperationalIntent) {
       ? await resolveGapAlertRecipients(tx) : [];
     if (cancellationTask?.exists && (cancellationTask.get('requestId') !== intent.requestId
       || cancellationTask.get('kind') !== 'absence_cancellation_review')) throw fail('ABSENCE_OPERATIONAL_TASK_CHANGED');
+    const publicationFence = await preparePublicationFenceAdvance(tx, intent.workspaceId, [intent.beneficiaryUid]);
     const now = new Date().toISOString();
+    publicationFence.apply();
     prepared.forEach(({ entries, own, clock, segment }, index) => {
       tx.update(refs[index].marker, { entries: entries.filter((entry) => entry !== own), updatedAt: now });
       tx.set(refs[index].clock, { workspaceId: intent.workspaceId, beneficiaryUid: intent.beneficiaryUid,
@@ -494,6 +543,8 @@ export async function abortOperationalIntent(intent: OperationalIntent, actor?: 
     const refs = intent.segments.map((segment) => operationalDayRefs(intent.workspaceId, intent.beneficiaryUid, segment.date));
     const snapshots = await Promise.all(refs.map(({ marker, clock }) =>
       Promise.all([tx.get(marker), tx.get(clock)])));
+    const publicationFence = await preparePublicationFenceAdvance(tx, intent.workspaceId, [intent.beneficiaryUid]);
+    publicationFence.apply();
     snapshots.forEach(([marker, clock], index) => {
       const entries = marker.exists ? marker.get('entries') : [];
       if (!Array.isArray(entries) || entries.length > 20

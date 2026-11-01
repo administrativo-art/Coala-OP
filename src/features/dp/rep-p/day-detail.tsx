@@ -1,15 +1,18 @@
 "use client";
 
-import { Fragment } from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, FileText, Info, Moon, RefreshCw, Share2 } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, FileText, Info, MapPin, Moon, RefreshCw, Share2 } from "lucide-react";
 
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
+import { DayLine, LegendItem } from "@/features/dp/time-adjustments/day-line";
+import { summarizeAdjustmentDay } from "@/features/dp/time-adjustments/day-summary";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "@/features/dp/time-adjustments/types";
 import type { BankIssue, BankStatementLine } from "@/features/dp/time-bank/core";
 import { REASON_LABELS } from "@/features/dp/time-bank/time-bank-card";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 import { absenceStatus, adjustmentStateOf, balanceOf, durationLabel, incidentFact, INCIDENTS, MarkingClassificationEditor,
   type ClassificationActions, type ReceiptActions } from "./day-list";
@@ -49,66 +52,104 @@ const NATURE: Record<BankStatementLine["line"]["nature"], { title: (line: BankSt
   review: { title: () => "Em conferência pelo DP", sign: 0, tone: "bg-ds-caution-bg text-ds-caution", mark: "?" },
 };
 
-/** Barra do dia: previsto tracejado, trabalho cheio, intervalo fino e a faixa noturna (22h–5h). Hoje marca "agora". */
-function DayBar({ day, today }: { day: DayView; today: string }) {
+/** Linha do dia no mesmo modelo do pedido de ajuste: a conta de `summarizeAdjustmentDay`, sem operações. */
+function dayLineOf(day: DayView, isToday: boolean, nowMinutes: number) {
   const work = day.shift?.type === "work" ? day.shift : null;
-  const times = day.markings.map((marking) => minutesOf(fiscalClock(marking.markedAt)));
-  const plannedStart = work?.startTime ? minutesOf(work.startTime) : null;
-  const plannedEnd = work?.endTime ? minutesOf(work.endTime) : null;
-  const overnight = plannedStart !== null && plannedEnd !== null && plannedEnd < plannedStart;
-  if (overnight || (!times.length && plannedStart === null)) return null;
-  const nowMinutes = day.date === today ? (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })() : null;
-  const edges = [...times, plannedStart, plannedEnd, nowMinutes].filter((value): value is number => value !== null);
-  const from = Math.max(0, Math.floor((Math.min(...edges) - 60) / 60) * 60);
-  const to = Math.min(1440, Math.ceil((Math.max(...edges) + 60) / 60) * 60);
-  const x = (minutes: number) => `${((Math.min(Math.max(minutes, from), to) - from) / (to - from)) * 100}%`;
-  const w = (start: number, end: number) => `${((Math.min(end, to) - Math.max(start, from)) / (to - from)) * 100}%`;
-  const ticks = [plannedStart, plannedEnd, 22 * 60 >= from && 22 * 60 <= to ? 22 * 60 : null]
-    .filter((value, index, list): value is number => value !== null && list.indexOf(value) === index);
+  const summary = summarizeAdjustmentDay({
+    adjustmentId: "", workDate: day.date, scope: "official", treatments: [], relationship: null, truncated: false,
+    history: { otherRequestsSameDay: 0, approvedInPrevious30Days: 0 },
+    markings: day.markings.map((marking) => ({ receiptId: marking.receiptId, markedAt: marking.markedAt, nsr: marking.nsr,
+      executionUnitId: marking.executionUnitId, purpose: marking.classification?.purpose ?? null, channel: null })),
+    shifts: work ? [{ startTime: work.startTime, endTime: work.endTime, overnight: Boolean(work.overnight), shiftName: work.shiftName,
+      unitName: work.unitName, breakType: work.breakType, breakStart: work.breakStart, breakEnd: work.breakEnd,
+      breakDurationMinutes: work.breakDurationMinutes, toleranceMinutes: toleranceOf(work), referenceMinutes: null, expectedPunches: work.expectedPunches }] : [],
+  }, []);
+  const axis = isToday ? { ...summary.axis, end: Math.min(48 * 60, Math.max(summary.axis.end, Math.ceil((nowMinutes + 30) / 60) * 60)) } : summary.axis;
+  const night = axis.start < 5 * 60 || axis.end > 22 * 60;
+  return { summary, axis, night };
+}
+
+/** Setas de dia anterior/próximo juntas, à esquerda da data e longe do ×; ← e → do teclado fazem o mesmo. */
+function DayNavigation({ label, previous, following, onNavigate }: {
+  label: string; previous: string | null; following: string | null; onNavigate: (date: string) => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='tablist'], [role='radiogroup']")) return;
+      const date = event.key === "ArrowLeft" ? previous : event.key === "ArrowRight" ? following : null;
+      if (!date) return;
+      event.preventDefault();
+      onNavigate(date);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previous, following, onNavigate]);
+  const arrow = "p-1 text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white/40";
   return (
-    <div className="w-full" aria-hidden>
-      <div className="relative h-11">
-        <div className="absolute inset-x-0 top-3 h-3.5 rounded-full bg-white/[0.06]" />
-        {from < 300 ? <div className="absolute top-[26px] h-0.5 rounded-full bg-ds-info/50" style={{ left: x(from), width: w(from, 300) }} /> : null}
-        {to > 1320 ? <div className="absolute top-[26px] h-0.5 rounded-full bg-ds-info/50" style={{ left: x(1320), width: w(1320, to) }} /> : null}
-        {plannedStart !== null && plannedEnd !== null ? (
-          <div className="absolute top-3 h-3.5 rounded-full border border-dashed border-white/35" style={{ left: x(plannedStart), width: w(plannedStart, plannedEnd) }} />
-        ) : null}
-        {times.map((start, index) => {
-          if (index % 2) return null;
-          const end = times[index + 1] ?? (nowMinutes !== null ? nowMinutes : null);
-          const next = times[index + 2];
-          return (
-            <Fragment key={index}>
-              {end !== null && end > start ? (
-                <div className={cn("absolute top-3.5 h-2.5 rounded-full bg-white", times[index + 1] === undefined && "opacity-50")}
-                  style={{ left: x(start), width: w(start, end) }} />
-              ) : null}
-              {times[index + 1] !== undefined && next !== undefined ? (
-                <div className="absolute top-[17px] h-1 rounded-full bg-ds-caution-tile" style={{ left: x(times[index + 1]), width: w(times[index + 1], next) }} />
-              ) : null}
-            </Fragment>
-          );
-        })}
-        {nowMinutes !== null ? <div className="absolute top-1.5 h-6 w-0.5 rounded-full bg-ds-accent-kicker" style={{ left: x(nowMinutes) }} /> : null}
-        {ticks.map((tick) => (
-          <span key={tick} className="absolute top-7 -translate-x-1/2 font-ds-mono text-[10px] text-ds-on-dark-muted" style={{ left: x(tick) }}>
-            {`${String(Math.floor(tick / 60)).padStart(2, "0")}:${String(tick % 60).padStart(2, "0")}`}
-          </span>
-        ))}
-      </div>
-      <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] font-semibold text-ds-on-dark-muted">
-        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-3.5 rounded-full border border-dashed border-white/50" />Previsto</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-3.5 rounded-full bg-white" />Trabalho</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-1 w-3.5 rounded-full bg-ds-caution-tile" />Intervalo</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-3.5 rounded-full bg-ds-info/60" />Faixa noturna</span>
-        {nowMinutes !== null ? <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-0.5 rounded-full bg-ds-accent-kicker" />Agora</span> : null}
-      </p>
-    </div>
+    <span className="flex items-center gap-2.5">
+      <span className="inline-flex overflow-hidden rounded-ds-sm border border-white/15">
+        <button type="button" disabled={!previous} onClick={() => previous && onNavigate(previous)} aria-label="Dia anterior" title="Dia anterior (←)"
+          className={arrow}><ChevronLeft className="h-3.5 w-3.5" aria-hidden /></button>
+        <span aria-hidden className="w-px bg-white/15" />
+        <button type="button" disabled={!following} onClick={() => following && onNavigate(following)} aria-label="Próximo dia" title="Próximo dia (→)"
+          className={arrow}><ChevronRight className="h-3.5 w-3.5" aria-hidden /></button>
+      </span>
+      <span>{label}</span>
+    </span>
   );
 }
 
-/** Uma batida na linha do tempo, com comprovante e classificação. */
+/** Onde a batida foi feita em relação à área da unidade. Só o resultado: coordenadas não chegam ao navegador. */
+function MarkingLocation({ location }: { location: NonNullable<DayMarking["location"]> }) {
+  const distance = location.distanceMeters === null ? null
+    : location.distanceMeters >= 1000 ? `~${(location.distanceMeters / 1000).toFixed(1).replace(".", ",")} km` : `~${location.distanceMeters} m`;
+  const { label, tone } = location.physicalUnitName ? { label: location.physicalUnitName, tone: "text-ds-ok" }
+    : location.evaluation === "inside" ? { label: "Na unidade", tone: "text-ds-ok" }
+    : location.evaluation === "outside" ? { label: `Fora da área${distance ? ` · ${distance} da unidade` : " da unidade"}`, tone: "text-ds-warn" }
+      : { label: "Localização não confirmada", tone: "text-ds-ink-muted" };
+  return (
+    <p className={cn("flex items-center gap-1 text-xs font-semibold", tone)}>
+      <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden /><span className="sr-only">Localização: </span>{label}
+    </p>
+  );
+}
+
+type JourneyLocationEntry = { id: string; capturedAt: string | null; status: string; formattedAddress: string | null;
+  position: { accuracyMeters: number } | null };
+function JourneyLocationDetails({ day, employeeUid }: { day: DayView; employeeUid: string }) {
+  const { firebaseUser } = useAuth();
+  const [entries, setEntries] = useState<JourneyLocationEntry[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unitId = day.markings[0]?.executionUnitId || day.shift?.unitId || null;
+  if (day.shift?.locationTrackingPolicy !== "workday" || !unitId) return null;
+  async function load() {
+    if (!firebaseUser) return;
+    setLoading(true); setError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch("/api/dp/time-recording/location-access", { method: "POST", cache: "no-store",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeUid, unitId, workDate: day.date, source: "journey",
+          reason: firebaseUser.uid === employeeUid ? "own_data" : "operational_review", limit: 50 }) });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error?.message || "Não foi possível abrir o trajeto.");
+      setEntries((await response.json() as { entries: JourneyLocationEntry[] }).entries);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível abrir o trajeto."); }
+    finally { setLoading(false); }
+  }
+  return <PanelSection title="Localização durante a jornada">
+    {entries === null ? <Button type="button" variant="ds-secondary" size="sm" loading={loading} onClick={() => void load()}>
+      <MapPin className="h-4 w-4" aria-hidden /> Ver registros do dia
+    </Button> : entries.length ? <div className="space-y-2">{entries.map((entry) => <div key={entry.id} className="rounded-ds-sm border border-ds-border bg-ds-surface px-3 py-2">
+      <p className="text-sm font-semibold text-ds-ink">{entry.formattedAddress || (entry.status === "sample" ? "Posição registrada" : ({ start: "Acompanhamento iniciado", pause: "Pausado no intervalo", resume: "Retomado após intervalo", stop: "Acompanhamento encerrado" } as Record<string,string>)[entry.status] || entry.status)}</p>
+      <p className="text-xs text-ds-ink-muted">{entry.capturedAt ? new Date(entry.capturedAt).toLocaleString("pt-BR") : "Horário indisponível"}{entry.position ? ` · precisão aproximada ${Math.round(entry.position.accuracyMeters)} m` : ""}</p>
+    </div>)}</div> : <p className="text-sm text-ds-ink-muted">Nenhum registro de acompanhamento foi guardado para este dia.</p>}
+    {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}
+  </PanelSection>;
+}
+
 function TimelineMarking({ marking, index, expected, unitNames, receipts, classifications }: {
   marking: DayMarking; index: number; expected: number | null; unitNames: Map<string, string>;
   receipts: ReceiptActions | null; classifications: ClassificationActions | null;
@@ -137,6 +178,7 @@ function TimelineMarking({ marking, index, expected, unitNames, receipts, classi
           <p className="text-sm font-bold text-ds-ink">{purpose ? purposeLabel(purpose) : `${suggestedLabel(index, expected)} · classificação pendente`}</p>
           <p className="text-xs text-ds-ink-muted">{index + 1}ª · {marking.pilot ? `ensaio · sequência ${marking.nsr}` : `NSR ${marking.nsr}`} · {unitNames.get(marking.executionUnitId) ?? "unidade do registro"}</p>
           {marking.pilot ? <p className="text-xs font-semibold text-ds-warn">Não entra no fechamento oficial.</p> : null}
+          {marking.location ? <MarkingLocation location={marking.location} /> : null}
         </div>
         {receipts ? (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -187,12 +229,12 @@ function TimelineGap({ kind, minutes, open }: { kind: "work" | "break"; minutes:
  * passam pelo pedido ao DP e a classificação muda só a leitura da jornada.
  */
 export function DayDetailPanel({ day, days, today, unitNames, receipts, classifications, onClose, onNavigate, onRequestAbsence, adjustments,
-  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord }: {
+  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord, employeeUid }: {
   day: DayView | null; days: DayView[]; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null;
   classifications: ClassificationActions | null; onClose: () => void; onNavigate: (date: string) => void;
   onRequestAbsence: (date: string) => void; adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void;
   onOpenAdjustment: (id: string) => void; readOnly?: boolean; markingMode?: "official" | "pilot" | "disabled" | null;
-  bank: DayBank | "unavailable" | null; onRecord?: () => void;
+  bank: DayBank | "unavailable" | null; onRecord?: () => void; employeeUid: string;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -218,6 +260,7 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
   const effective = day.markings;
   const slots = work && !day.absence ? Math.max(expected ?? effective.length, effective.length) : effective.length;
   const next = nextMarkingOf(day);
+  const line = work || effective.length ? dayLineOf(day, isToday, nowMinutes) : null;
 
   // Prévia do resultado e tolerância: a mesma regra da apuração (tolerância única da jornada).
   const difference = past && work && !day.absence && effective.length && effective.length % 2 === 0 && day.plannedWorkMinutes !== null
@@ -226,15 +269,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
 
   return (
     <SidePanel open onOpenChange={(open) => !open && onClose()}
-      kicker={(
-        <span className="flex items-center gap-2 pr-8">
-          <button type="button" disabled={!previous} onClick={() => previous && onNavigate(previous.date)} aria-label="Dia anterior"
-            className="rounded-ds-sm border border-white/15 p-1 text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5" /></button>
-          <span className="flex-1 text-center">{weekday}, {day.date.split("-").reverse().join("/")}</span>
-          <button type="button" disabled={!following} onClick={() => following && onNavigate(following.date)} aria-label="Próximo dia"
-            className="rounded-ds-sm border border-white/15 p-1 text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-30"><ChevronRight className="h-3.5 w-3.5" /></button>
-        </span>
-      )}
+      kicker={<DayNavigation label={`${weekday}, ${day.date.split("-").reverse().join("/")}`} previous={previous?.date ?? null}
+        following={following?.date ?? null} onNavigate={onNavigate} />}
       title={<span className="flex flex-wrap items-center gap-2">{day.absence ? day.absence.typeName : work ? `${work.shiftName ?? "Turno"} · ${work.startTime}–${work.endTime}` : day.shift ? "Folga" : "Sem escala"}
         <StatusPill variant={status.variant}>{status.label}</StatusPill></span>}
       subtitle={work ? `${work.unitName ?? "Unidade da escala"}${plannedBreak ? ` · intervalo de ${durationLabel(plannedBreak)}` : ""}${expected ? ` · ${expected} batidas` : ""}` : "Nenhuma batida esperada"}
@@ -251,9 +287,26 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
               </div>
             ))}
           </div>
-          <DayBar day={day} today={today} />
         </div>
       ) : undefined}>
+
+      {line ? (
+        <PanelSection title="O dia em uma linha" aside={line.summary.shiftText ?? "sem escala neste dia"}>
+          <div className="space-y-1">
+            <DayLine state={line.summary.before} axis={line.axis} band={line.summary.scaleBand} night={line.night}
+              openUntil={isToday ? nowMinutes : null} now={isToday ? nowMinutes : null} />
+            <div className="flex flex-wrap gap-x-3.5 gap-y-1 pt-1">
+              {line.summary.scaleBand ? <LegendItem swatch={<span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ds-info-bg" />}>Escala</LegendItem> : null}
+              <LegendItem swatch={<span aria-hidden="true" className="h-1.5 w-3.5 rounded-[3px] bg-ds-info" />}>Trabalhado</LegendItem>
+              {line.summary.before.outsideMinutes > 0 ? <LegendItem swatch={<span aria-hidden="true" className="h-1.5 w-3.5 rounded-[3px] bg-ds-warn" />}>Fora da escala</LegendItem> : null}
+              <LegendItem swatch={<span aria-hidden="true" className="size-2.5 rounded-full border-2 border-ds-info bg-ds-surface" />}>Batida</LegendItem>
+              {isToday && openPeriod ? <LegendItem swatch={<span aria-hidden="true" className="h-0 w-3.5 border-t-[3px] border-dashed border-ds-info/60" />}>Em aberto</LegendItem> : null}
+              {line.night ? <LegendItem swatch={<span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ds-neutral-bg" />}>Faixa noturna</LegendItem> : null}
+              {isToday ? <LegendItem swatch={<span aria-hidden="true" className="h-2.5 w-0.5 rounded-full bg-ds-accent" />}>Agora</LegendItem> : null}
+            </div>
+          </div>
+        </PanelSection>
+      ) : null}
 
       {day.incidents.length || pending.length || day.absence ? (
         <div className="space-y-2">
@@ -344,6 +397,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> A classificação organiza a jornada e os avisos. Alterá-la não muda o horário nem o registro fiscal da batida.
         </p>
       </PanelSection>
+
+      <JourneyLocationDetails day={day} employeeUid={employeeUid} />
 
       {work || effective.length ? <PolicySection day={day} today={today} bank={bank} difference={difference} toleranceApplied={toleranceApplied} /> : null}
 

@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.coalaone.go.R
 import com.coalaone.go.data.JourneyLocationEvent
+import com.coalaone.go.data.Errors
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint class JourneyLocationService : Service(), LocationListener {
     @Inject lateinit var queue: JourneyLocationQueue
+    @Inject lateinit var leaseStore: JourneyLocationLeaseStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val handler = Handler(Looper.getMainLooper())
     private var manager: LocationManager? = null
@@ -40,6 +42,15 @@ import javax.inject.Inject
     private var unitId = ""
     private var stopAt = 0L
     private var paused = false
+    private var lastAccepted: Location? = null
+    private var lastAcceptedAt = 0L
+    private var movingMinSeconds = 120L
+    private var movingMinMeters = 120f
+    private var stationaryMaxSeconds = 900L
+    private var maxAccuracyMeters = 150f
+    private var pendingLeaseEventType = "resume"
+    private val stopRunnable = Runnable { stopTracking("stop") }
+    private val leaseRetryRunnable = Runnable { beginWithLease(pendingLeaseEventType) }
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager }
@@ -57,11 +68,29 @@ import javax.inject.Inject
             ACTION_ABORT -> { abortTracking(); return START_NOT_STICKY }
             ACTION_STOP -> { stopTracking("stop"); return START_NOT_STICKY }
             ACTION_PAUSE -> { paused = true; removeUpdates(); emit("pause"); persist(); foreground("Acompanhamento pausado durante o intervalo") }
-            ACTION_START -> { paused = false; persist(); foreground("Acompanhamento ativo durante a jornada"); emit("start"); requestUpdates() }
-            else -> { paused = false; persist(); foreground("Acompanhamento ativo durante a jornada"); emit("resume"); requestUpdates() }
+            ACTION_START -> beginWithLease("start")
+            else -> beginWithLease("resume")
         }
         scheduleStop()
         return START_STICKY
+    }
+    private fun beginWithLease(eventType: String) {
+        pendingLeaseEventType = eventType
+        handler.removeCallbacks(leaseRetryRunnable)
+        paused = false; persist(); foreground("Confirmando autorização da jornada…")
+        scope.launch {
+            runCatching { leaseStore.valid(sessionId, workDate, unitId) }.onSuccess { lease ->
+                movingMinSeconds = lease.config.movingMinSeconds; movingMinMeters = lease.config.movingMinMeters
+                stationaryMaxSeconds = lease.config.stationaryMaxSeconds; maxAccuracyMeters = lease.config.maxAccuracyMeters
+                emit(eventType)
+                withContext(Dispatchers.Main.immediate) { foreground("Acompanhamento ativo durante a jornada"); requestUpdates() }
+            }.onFailure { cause -> withContext(Dispatchers.Main.immediate) {
+                if (Errors.classify(cause).retryable) {
+                    foreground("Aguardando conexão para confirmar a jornada…")
+                    handler.postDelayed(leaseRetryRunnable, 60_000L)
+                } else abortTracking()
+            } }
+        }
     }
     private fun persist() = getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(EXTRA_SESSION, sessionId)
         .putString(EXTRA_DATE, workDate).putString(EXTRA_UNIT, unitId).putLong(EXTRA_STOP_AT, stopAt).putBoolean("paused", paused).apply()
@@ -81,13 +110,13 @@ import javax.inject.Inject
             && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         runCatching {
             listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).filter { manager?.isProviderEnabled(it) == true }
-                .forEach { manager?.requestLocationUpdates(it, 300_000L, 100f, this, Looper.getMainLooper()) }
+                .forEach { manager?.requestLocationUpdates(it, 60_000L, 25f, this, Looper.getMainLooper()) }
         }
     }
     private fun removeUpdates() = runCatching { manager?.removeUpdates(this) }.let { Unit }
     private fun scheduleStop() {
-        handler.removeCallbacksAndMessages(null)
-        if (stopAt > 0) handler.postDelayed({ stopTracking("stop") }, (stopAt - System.currentTimeMillis()).coerceAtLeast(0).coerceAtMost(18 * 60 * 60 * 1000L))
+        handler.removeCallbacks(stopRunnable)
+        if (stopAt > 0) handler.postDelayed(stopRunnable, (stopAt - System.currentTimeMillis()).coerceAtLeast(0).coerceAtMost(18 * 60 * 60 * 1000L))
     }
     private fun event(type: String, location: Location? = null) = JourneyLocationEvent(UUID.randomUUID().toString(), sessionId, workDate, unitId, type,
             location?.time?.let { Instant.ofEpochMilli(it).toString() } ?: Instant.now().toString(), location?.latitude,
@@ -110,9 +139,19 @@ import javax.inject.Inject
     private fun abortTracking() {
         removeUpdates(); handler.removeCallbacksAndMessages(null)
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply()
+        leaseStore.clear(sessionId)
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
-    override fun onLocationChanged(location: Location) { if (!paused) emit("sample", location) }
+    override fun onLocationChanged(location: Location) {
+        if (paused || (location.hasAccuracy() && location.accuracy > maxAccuracyMeters)) return
+        val now = location.time.takeIf { it > 0 } ?: System.currentTimeMillis()
+        val elapsedSeconds = if (lastAcceptedAt == 0L) Long.MAX_VALUE else (now - lastAcceptedAt).coerceAtLeast(0) / 1000
+        val distance = lastAccepted?.distanceTo(location) ?: Float.MAX_VALUE
+        val moving = (location.hasSpeed() && location.speed >= 1.2f) || distance >= movingMinMeters
+        if (lastAccepted == null || (moving && elapsedSeconds >= movingMinSeconds) || elapsedSeconds >= stationaryMaxSeconds) {
+            lastAccepted = Location(location); lastAcceptedAt = now; emit("sample", location)
+        }
+    }
     override fun onProviderDisabled(provider: String) = Unit
     override fun onProviderEnabled(provider: String) = Unit
     @Deprecated("Deprecated by Android") override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit

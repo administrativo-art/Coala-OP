@@ -38,6 +38,7 @@ type BankPaymentRequestBase = {
   status: BankPaymentRequestStatus;
   idempotencyKey: string;
   interRequestId?: string;
+  bankInstructionOrigin?: "inter_dda";
   bankStatus?: string;
   bankScheduledFor?: string | null;
   bankNominalAmount?: number | null;

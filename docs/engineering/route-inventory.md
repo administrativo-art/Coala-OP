@@ -286,7 +286,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/settings/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/settings/documents/templates/[id]/page.tsx) | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) |
-| `dashboard/settings` | [page.tsx](../../src/app/dashboard/settings/page.tsx) | [use-hr-bootstrap.ts](../../src/hooks/use-hr-bootstrap.ts), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
+| `dashboard/settings` | [page.tsx](../../src/app/dashboard/settings/page.tsx) | [field-visibility.ts](../../src/features/rh/lib/field-visibility.ts), [use-hr-bootstrap.ts](../../src/hooks/use-hr-bootstrap.ts) |
 | `dashboard/settings/pdv-sync` | [page.tsx](../../src/app/dashboard/settings/pdv-sync/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [pdv-sync-management.tsx](../../src/components/pdv-sync-management.tsx) |
 | `dashboard/settings/units` | [page.tsx](../../src/app/dashboard/settings/units/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [dp-runtime-guard.tsx](../../src/components/dp-runtime-guard.tsx) |
 

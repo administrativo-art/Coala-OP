@@ -41,11 +41,14 @@ import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
 import com.coalaone.go.domain.TimeRules
 import com.coalaone.go.data.Modules
+import com.coalaone.go.auth.GoogleCredentialResult
+import com.coalaone.go.auth.requestGoogleWorkspaceCredential
 import com.coalaone.go.ui.*
 import android.Manifest
 import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
@@ -100,10 +103,17 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             val release by update.release.collectAsStateWithLifecycle()
             val feedback by update.feedback.collectAsStateWithLifecycle()
             val progress by update.progress.collectAsStateWithLifecycle()
+            val googleMigration by session.googleMigration.collectAsStateWithLifecycle()
+            var migrationPoint by rememberSaveable { mutableStateOf(false) }
             CompositionLocalProvider(LocalImages provides images, LocalOwner provides (identity.identity?.uid ?: "anonymous")) {
                 when {
                     Rules.updateRequired(release, BuildConfig.VERSION_CODE) -> Page("Atualização necessária", feedback, footer = { Action("Baixar atualização", feedback.busy) { update.download(::install) } }) { Text("Atualize o Coala Go para continuar."); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) }
                     identity.loading || identity.identity == null || identity.locked -> AuthScreen(session, ::biometric)
+                    !session.mode.simulation && !googleMigration.checked -> GoogleMigrationRequiredScreen(session, googleMigration, checking = true)
+                    migrationPoint -> TimeScreen(hiltViewModel(), { migrationPoint = false }, startConfirming = true,
+                        onInformAbsence = { migrationPoint = false })
+                    !session.mode.simulation && googleMigration.required && !googleMigration.completed ->
+                        GoogleMigrationRequiredScreen(session, googleMigration, checking = false) { migrationPoint = true }
                     else -> AppNavigation(session, update) { biometric(enroll = true) }
                 }
             }
@@ -132,19 +142,58 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         }
     }
 }
+
+@Composable private fun GoogleMigrationRequiredScreen(session: SessionViewModel, state: GoogleMigrationState, checking: Boolean,
+    onRecordPoint: (() -> Unit)? = null) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    Page("Atualização do acesso", Feedback(busy = state.loading || state.busy, error = state.error), showConnectivityNotice = false) {
+        CardBlock(selected = true) {
+            Text(if (checking) "Preparando seu acesso" else "Vincule sua conta empresarial", style = MaterialTheme.typography.titleLarge)
+            Text(when {
+                checking -> "Estamos conferindo seu cadastro. Isso costuma levar poucos segundos."
+                state.busy -> state.step ?: "Concluindo a vinculação…"
+                else -> "Seu cadastro e todo o histórico serão mantidos. Toque em prosseguir e escolha ${state.targetEmail ?: "sua conta Google"}."
+            }, color = Tokens.muted)
+            if (checking || state.busy) {
+                LinearProgressIndicator(progress = { state.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
+                Text("Etapa ${when { state.progress < .3f -> "1 de 3"; state.progress < .7f -> "2 de 3"; else -> "3 de 3" }}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("1. Toque em Prosseguir.\n2. Escolha a conta indicada.\n3. Aguarde a confirmação na tela.", color = Tokens.muted, style = MaterialTheme.typography.bodyMedium)
+                Action("Prosseguir", false, enabled = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                                is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
+                                GoogleCredentialResult.Cancelled -> Unit
+                            }
+                        } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                    }
+                }
+                onRecordPoint?.let { Action("Registrar ponto agora", false, secondary = true, onClick = it) }
+            }
+            state.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit) {
     val nav = rememberNavController()
+    val corporateDevice: CorporateDeviceViewModel = hiltViewModel()
+    LaunchedEffect(corporateDevice) { corporateDevice.load() }
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
     val back: () -> Unit = { nav.popBackStack(); Unit }
     val motion = LocalMotionEnabled.current
-    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName) { NavHost(nav, startDestination = "home",
+    CompositionLocalProvider(LocalDeveloperViewAsName provides developerViewAs.targetName,
+        LocalDeveloperViewAsActive provides (developerViewAs.targetUserId != null)) { NavHost(nav, startDestination = "home",
         enterTransition = { fadeIn(tween(if (motion) 280 else 0)) + slideInVertically(tween(if (motion) 280 else 0)) { if (motion) 6 else 0 } },
         exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
         popExitTransition = { fadeOut(tween(if (motion) 160 else 0)) + slideOutVertically(tween(if (motion) 160 else 0)) { if (motion) 6 else 0 } }) {
-        composable("home") { HomeScreen(hiltViewModel(), session, update) { nav.navigate(it) } }
+        // Ponto's view model lives with the home entry: the home sheet and the Ponto screen share one pending attempt.
+        val homeEntry: (androidx.navigation.NavBackStackEntry) -> androidx.navigation.NavBackStackEntry = { nav.getBackStackEntry("home") }
+        composable("home") { entry -> HomeScreen(hiltViewModel(), hiltViewModel(entry), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
-        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back, onPrepareBiometric) }
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, corporateDevice, back, onPrepareBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -153,10 +202,13 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             onRequestSwap = { date -> nav.navigate("requests/swap/$date") }) }
         composable("goals") { GoalsScreen(hiltViewModel(), back) }
         composable("signage") { SignageScreen(hiltViewModel(), back) }
-        composable("time") { TimeScreen(hiltViewModel(), back, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
-        composable("time/register") { TimeScreen(hiltViewModel(), back, startConfirming = true, onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time") { entry -> TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back,
+            onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
+        composable("time/register") { entry -> TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back, startConfirming = true,
+            onInformAbsence = { date -> nav.navigate("requests/absence/$date") }) }
         composable("time/day/{date}", arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
-            TimeScreen(hiltViewModel(), back, startDayDetail = entry.arguments?.getString("date"), onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
+            TimeScreen(hiltViewModel(remember(entry) { homeEntry(entry) }), back, startDayDetail = entry.arguments?.getString("date"),
+                onInformAbsence = { date -> nav.navigate("requests/absence/$date") })
         }
         composable("requests") { RequestsScreen(hiltViewModel(), back) }
         composable("requests/{tab}/{date}", arguments = listOf(
@@ -169,9 +221,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
 }
-@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: () -> Unit, onDetails: (String) -> Unit) {
+@Composable private fun HomeTimeSummary(today: HomeToday, onRecord: (() -> Unit)?, onDetails: (String) -> Unit) {
     val options = today.timeOptions
-    val unitId = today.timeShift?.unitId ?: options?.executionUnits?.firstOrNull()?.id
+    val unitId = TimeRules.punchUnitId(options, today.timeShift) ?: today.timeShift?.unitId
     val zone = TimeRules.unitZone(options, unitId)
     var official by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime() + (today.timeClockOffset ?: 0)) }
     LaunchedEffect(today.timeClockOffset) {
@@ -203,13 +255,17 @@ private fun installUpdate(context: android.content.Context, file: File) {
         if (showTime) {
             Text(TimeRules.clockText(official, zone), color = Tokens.onDark,
                 style = MaterialTheme.typography.displaySmall.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-            val unitName = today.shiftUnit ?: options?.executionUnits?.firstOrNull { it.id == unitId }?.name
-            // Only the unit and the hours, each in its own pill; the shift name stays in the schedule.
+            val unitName = (options?.executionUnits?.firstOrNull { it.id == unitId }?.name ?: today.shiftUnit)
+                ?.let { if (TimeRules.unitPickable(options, today.timeShift)) "Unidade prevista: $it" else it }
             val hours = TimeRules.shiftHours(today.timeShift)
             if (!unitName.isNullOrBlank() || hours != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 unitName?.takeIf { it.isNotBlank() }?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f), Modifier.weight(1f, fill = false)) }
                 hours?.let { StatusChip(it, Tokens.onDark2, Tokens.onDark.copy(alpha = .10f)) }
             }
+            if (TimeRules.scheduledUnitOutside(options, today.timeShift)) Text("Escala em ${today.timeShift?.unitName ?: "outra unidade"}, fora das unidades do seu vínculo. Confira a unidade ao bater.",
+                color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
+            if (local) Text(if (options?.officialClock?.available == false) "Hora Legal indisponível. Sua batida será preservada neste aparelho."
+                else "Sem internet. Sua batida será preservada neste aparelho.", color = Tokens.pink, style = MaterialTheme.typography.bodySmall)
         } else {
             Text(if (!today.loaded) "Carregando…" else "Indisponível", color = Tokens.onDark2, style = MaterialTheme.typography.titleLarge)
             Text("Puxe para atualizar ou abra Ponto para consultar a situação.", color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
@@ -253,12 +309,12 @@ private fun installUpdate(context: android.content.Context, file: File) {
             (0 until slots).forEach { index ->
                 val done = punches.getOrNull(index)
                 val next = done == null && index == punches.size
-                val label = when { index == 0 -> "Início"; index == slots - 1 && planned.isNotEmpty() -> "Fim"; index % 2 == 1 -> "Intervalo"; else -> "Volta" }
+                val label = TimeRules.slotLabel(index, slots, planned.isNotEmpty(), done?.purpose ?: nextPurpose.takeIf { next && planned.isEmpty() })
                 Column(Modifier.weight(1f).background(if (next) Tokens.pink.copy(alpha = .12f) else Tokens.onDark.copy(alpha = .06f), RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(done?.time ?: planned.getOrNull(index) ?: "—", color = when { done != null -> Tokens.onDark; next -> Tokens.pink; else -> Tokens.onDark4 },
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CodeFont, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-                    Text(if (next) "Próxima" else label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
+                    Text(label, color = if (next) Tokens.pink else Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), maxLines = 1)
                 }
             }
         }
@@ -275,11 +331,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
         }
         }
         Spacer(Modifier.height(5.dp))
-        if (today.timeMarkingsAvailable != false && summary?.state != com.coalaone.go.domain.DaySummaryState.COMPLETE && (showTime || punches.isNotEmpty()))
-            Text("Próxima: " + TimeRules.nextPunchText(punches.size, today.timeShift, nextPurpose), color = Tokens.onDark3,
-                style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
         // Keep the shortcut available: the Ponto screen can recover cached offline options or explain a server block.
-        Action("Registrar ponto", dark = true, onClick = onRecord)
+        onRecord?.let { Action("Registrar ponto", dark = true, onClick = it) }
     }
 }
 @Composable private fun HomeTimeMetric(label: String, value: String, modifier: Modifier = Modifier) {
@@ -288,7 +341,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
-@Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
+@Composable private fun HomeScreen(vm: HomeViewModel, timeVm: TimeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle(); val release by update.release.collectAsStateWithLifecycle()
     val updateFeedback by update.feedback.collectAsStateWithLifecycle()
@@ -328,6 +381,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
+    var punching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val greeting = when (java.time.LocalTime.now().hour) { in 5..11 -> "Bom dia"; in 12..17 -> "Boa tarde"; else -> "Boa noite" }
     Page("Início", feedback.copy(error = feedback.error?.takeUnless { it.startsWith("Sem conexão.") }), onRefresh = { vm.refresh(dataOwner); state?.modules?.let { vm.loadToday(it, goalUnit, dataOwner, force = true) } }, showConnectivityNotice = false, header = {
         // The greeting is the title; the small brand sits above it and the avatar, on the right, opens the profile.
@@ -347,13 +401,20 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Action("Baixar atualização", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         } }
-        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate)
+        HomeModuleContent(visibleModules, visibleToday, visiblePendingCount, navigate,
+            readOnly = developerViewAs.targetUserId != null) { punching = true }
+        state?.modules?.let { modules ->
+            if (punching) PunchSheet(timeVm, onOpenTime = { navigate("time") }) {
+                punching = false
+                vm.loadToday(modules, goalUnit, dataOwner, force = true)
+            }
+        }
     }
 }
 @Composable internal fun HomeModuleContent(modules: Modules?, visibleToday: HomeToday, visiblePendingCount: Int,
-    navigate: (String) -> Unit) {
+    navigate: (String) -> Unit, readOnly: Boolean = false, onRecord: () -> Unit = { navigate("time/register") }) {
     modules ?: return
-    if (modules.timeRecording) HomeTimeSummary(visibleToday, { navigate("time/register") }) { date -> navigate("time/day/$date") }
+    if (modules.timeRecording) HomeTimeSummary(visibleToday, if (readOnly) null else onRecord) { date -> navigate("time/day/$date") }
     val journey = listOf(Triple(modules.timeRecording, "Ponto", "time"), Triple(modules.schedule, "Escala", "schedule")).filter { it.first }
     if (journey.isNotEmpty()) {
         Text("JORNADA DE TRABALHO", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp), modifier = Modifier.padding(top = 4.dp))
@@ -385,7 +446,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
-@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
+@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, corporateDevice: CorporateDeviceViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
@@ -393,13 +454,17 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val push by session.push.state.collectAsStateWithLifecycle()
     val sessionState by session.state.collectAsStateWithLifecycle()
+    val googleMigration by session.googleMigration.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val developerViewAs by session.developerViewAs.collectAsStateWithLifecycle()
+    val corporateDeviceState by corporateDevice.state.collectAsStateWithLifecycle()
     val canDeveloperViewAs = sessionState.identity?.email?.trim()?.lowercase() == com.coalaone.go.data.DEVELOPER_VIEW_AS_EMAIL
     LaunchedEffect(canDeveloperViewAs) { if (canDeveloperViewAs) session.loadDeveloperViewAs() }
     val owner = LocalOwner.current
     val dataOwner = developerViewAs.targetUserId ?: owner
     val state = profileState.visibleFor(dataOwner)
     LaunchedEffect(dataOwner) { vm.refresh(dataOwner) }
+    LaunchedEffect(dataOwner, developerViewAs.targetUserId) { if (developerViewAs.targetUserId == null) session.loadGoogleMigration() }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) session.push.enable(owner)
         else session.push.reflect(owner)
@@ -409,6 +474,10 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
+        if (developerViewAs.targetUserId == null && corporateDeviceState.enrollmentExpected &&
+            (corporateDeviceState.reviewRequired || corporateDeviceState.error != null))
+            Text("A classificação deste aparelho precisa de revisão administrativa. O registro de ponto continua disponível conforme a sua escala.",
+                color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
         if (canDeveloperViewAs) CardBlock(selected = developerViewAs.targetUserId != null) {
             Text("Visualizar como usuário", style = MaterialTheme.typography.titleMedium)
             Text("A navegação usa o perfil escolhido, mas alterações ficam bloqueadas. Seu login real continua registrado para auditoria.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
@@ -441,6 +510,30 @@ private fun installUpdate(context: android.content.Context, file: File) {
                 else "O app oferece a biometria após o login para liberar o acesso sem conexão. Se você pulou essa etapa, pode ativá-la aqui.",
                 color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             if (!sessionState.localUnlockEnabled) Action("Ativar biometria", sessionState.busy, enabled = !sessionState.busy, onClick = onPrepareBiometric)
+        }
+        if (developerViewAs.targetUserId == null && (googleMigration.available || googleMigration.completed)) CardBlock(selected = googleMigration.completed) {
+            Text("Acesso pelo Google", style = MaterialTheme.typography.titleMedium)
+            if (googleMigration.completed) {
+                Text("Acesso Google vinculado a ${googleMigration.targetEmail}.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(if (googleMigration.targetEmail != null) "Vincule ${googleMigration.targetEmail} sem perder seu histórico."
+                    else "Vincule sua conta Google ao cadastro atual sem perder seu histórico.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                if (googleMigration.busy) {
+                    LinearProgressIndicator(progress = { googleMigration.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
+                    Text(googleMigration.step ?: "Concluindo…", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Action("Vincular minha conta Google", googleMigration.busy || googleMigration.loading, enabled = !googleMigration.busy && !googleMigration.loading) {
+                    scope.launch {
+                        try {
+                            when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                                is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
+                                GoogleCredentialResult.Cancelled -> Unit
+                            }
+                        } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                    }
+                }
+            }
+            googleMigration.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
         if (developerViewAs.targetUserId == null) CardBlock {
             Text("Notificações", style = MaterialTheme.typography.titleMedium)

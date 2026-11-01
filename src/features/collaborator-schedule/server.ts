@@ -1,6 +1,8 @@
 import { dbAdmin } from "@/lib/firebase-admin";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { visibleTeamUnitIds } from "./mobile-schedule";
+import { hasPublishedScheduleVersion } from "@/lib/dp-schedule-publication";
+import { readOfficialScheduleShifts } from "@/features/dp/schedules/official-revision.server";
 
 const UNIT_TONES = [
   { color: "#db2777", tint: "#fce7f0", border: "#fbcfe8" },
@@ -93,7 +95,7 @@ export async function buildCollaboratorSchedulePayload(
   // não a mudam retroativamente); não é publicação. A escala do mês vale como está,
   // trancada ou não, porque ela muda ao longo do mês. Se a unidade tiver mais de
   // uma escala no mês, a trancada tem prioridade e, entre iguais, a mais recente.
-  const publishedSchedules = [...schedulesSnap.docs].sort(
+  const publishedSchedules = schedulesSnap.docs.filter((schedule) => hasPublishedScheduleVersion(schedule.data())).sort(
     (left, right) =>
       Number(right.get("locked") === true) - Number(left.get("locked") === true) ||
       timestampMillis(right.get("createdAt")) -
@@ -111,25 +113,15 @@ export async function buildCollaboratorSchedulePayload(
 
   const scheduleShiftGroups = await Promise.all(
     Array.from(latestScheduleByUnit.values()).map(async (scheduleDoc) => {
-      const shiftsSnap = await scheduleDoc.ref.collection("shifts").get();
+      const official = await readOfficialScheduleShifts({ scheduleId: scheduleDoc.id, from: start, through: end });
       const snapshot = scheduleDoc.get("snapshot") as
         | { users?: Record<string, { username?: string }> }
         | undefined;
       return {
         scheduleId: scheduleDoc.id,
         snapshotUsers: snapshot?.users ?? {},
-        shifts: shiftsSnap.docs
-          .map(
-            (doc): Record<string, unknown> => ({
-              id: doc.id,
-              scheduleId: scheduleDoc.id,
-              ...doc.data(),
-            })
-          )
-          .filter((shift) => {
-            const date = String(shift.date ?? "");
-            return date >= start && date <= end;
-          }),
+        shifts: official.shifts,
+
       };
     })
   );

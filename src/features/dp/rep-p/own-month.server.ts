@@ -6,6 +6,8 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
+import { readOfficialPersonMonth, readOfficialScheduleShifts, type OfficialShift } from '@/features/dp/schedules/official-revision.server';
 
 import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
 import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-absence.server';
@@ -74,6 +76,13 @@ function journeyOf(doc: { get(field: string): unknown } | undefined): BankJourne
     ? { days: days as BankJourney['days'], validFrom: String(doc.get('validFrom')), cycleLengthDays: Number(doc.get('cycleLengthDays')), weeklyRest: weeklyRest ?? null }
     : null;
 }
+function revisionShiftView(shift: OfficialShift) {
+  return { get(field: string): unknown {
+    return field.split('.').reduce<unknown>((value, key) =>
+      value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined, shift);
+  } };
+}
+
 function millis(value: unknown) {
   return value && typeof value === 'object' && 'toMillis' in value && typeof value.toMillis === 'function' ? Number(value.toMillis()) : 0;
 }
@@ -101,22 +110,41 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
   const end = `${competence}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
   const ownIds = [...new Set(ids.filter((value): value is string => Boolean(value)))].slice(0, 10);
 
-  const [schedules, shifts, automaticAbsences] = await Promise.all([
-    db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'locked', 'createdAt', 'calendarId').get(),
-    db.collectionGroup('shifts').where('userId', 'in', ownIds).where('date', '>=', start).where('date', '<=', end)
-      .orderBy('date', 'asc').limit(MAX_OWN_SHIFTS).get(),
+  const [schedules, automaticAbsences] = await Promise.all([
+    db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'createdAt', 'calendarId', 'publicationStatus', 'publicationVersion', 'activeRevisionId').get(),
     options.automaticAbsence ? hrDb.collection(AUTOMATIC_ABSENCES)
       .where('workspaceId', '==', options.automaticAbsence.workspaceId).where('employeeUid', '==', options.automaticAbsence.uid)
       .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(32).get() : null,
   ]);
   const latestByUnit = new Map<string, string>();
-  for (const schedule of [...schedules.docs].sort((left, right) =>
-    Number(right.get('locked') === true) - Number(left.get('locked') === true) || millis(right.get('createdAt')) - millis(left.get('createdAt')))) {
+  for (const schedule of schedules.docs.filter((item) => hasPublishedScheduleVersion(item.data())).sort((left, right) =>
+    millis(right.get('createdAt')) - millis(left.get('createdAt')))) {
     const scope = String(schedule.get('unitId') ?? '__legacy__');
     if (!latestByUnit.has(scope)) latestByUnit.set(scope, schedule.id);
   }
   const official = new Set(latestByUnit.values());
-  const ownShifts = shifts.docs.filter((doc) => official.has(doc.ref.parent.parent?.id ?? ''));
+  const legacyScheduleIds = schedules.docs.filter((schedule) => official.has(schedule.id) && typeof schedule.get('activeRevisionId') !== 'string');
+  const shifts = legacyScheduleIds.length ? await db.collectionGroup('shifts')
+    .where('userId', 'in', ownIds).where('date', '>=', start).where('date', '<=', end)
+    .orderBy('date', 'asc').limit(MAX_OWN_SHIFTS).get() : null;
+  const pointerSchedules = schedules.docs.filter((schedule) => official.has(schedule.id) && typeof schedule.get('activeRevisionId') === 'string');
+  const pointerIds = new Set(pointerSchedules.map((schedule) => schedule.id));
+  const revisionRows = await Promise.all(ownIds.map(async (userId) => {
+    const indexed = await readOfficialPersonMonth({ userId, competence, db });
+    if (indexed.indexed) return indexed.shifts;
+    if (pointerSchedules.length > 20) {
+      throw new AppError({ code: 'REP_P_OFFICIAL_SCHEDULE_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há escalas demais para conferir a escala oficial desta pessoa.' });
+    }
+    const direct = await Promise.all(pointerSchedules.map((schedule) =>
+      readOfficialScheduleShifts({ scheduleId: schedule.id, userId, db, from: start, through: end })));
+    return direct.flatMap((result) => result.shifts);
+  }));
+  if (pointerSchedules.length && (shifts?.size ?? 0) >= MAX_OWN_SHIFTS) {
+    throw new AppError({ code: 'REP_P_LEGACY_SHIFT_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há turnos legados demais para conferir a escala oficial com segurança.' });
+  }
+  const legacy = (shifts?.docs ?? []).filter((doc) => official.has(doc.ref.parent.parent?.id ?? '') && !pointerIds.has(doc.ref.parent.parent?.id ?? ''));
+  const revision = revisionRows.flat().filter((shift) => pointerIds.has(shift.scheduleId));
+  const ownShifts = [...legacy, ...revision.map(revisionShiftView)];
 
   const definitionIds = [...new Set(ownShifts.map((doc) => text(doc.get('shiftDefinitionId'))).filter((value): value is string => Boolean(value)))];
   const unitIds = [...new Set(ownShifts.map((doc) => text(doc.get('unitId'))).filter((value): value is string => Boolean(value)))];
@@ -175,7 +203,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakWindowEnd: breakType === 'staggered' ? text(definition?.get('breakWindowEnd')) : null,
       expectedPunches: minutes(definition?.get('expectedPunches')),
       executionUnitPolicy: definition?.get('executionUnitPolicy') === 'free' ? 'free' : 'scheduled',
-      locationTrackingPolicy: (['disabled', 'punch_only', 'workday'] as const).find((value) => value === definition?.get('locationTrackingPolicy')) ?? 'punch_only',
+      locationTrackingPolicy: (['disabled', 'punch_only', 'workday'] as const).find((value) => value === definition?.get('locationTrackingPolicy')) ?? 'disabled',
       breakSegments: segments?.length ? segments : null,
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),
@@ -201,5 +229,5 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
   }
   return { month: competence, shifts: result, holidays,
     automaticAbsences: effectiveAutomaticDates.sort(),
-    truncated: shifts.size >= MAX_OWN_SHIFTS };
+    truncated: (shifts?.size ?? 0) >= MAX_OWN_SHIFTS || ownShifts.length >= MAX_OWN_SHIFTS };
 }

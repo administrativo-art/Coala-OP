@@ -77,7 +77,7 @@ export function seedEmploymentPeriod(user: User): EmploymentPeriodSeed {
   const missingFields: string[] = [];
   if (!user.employmentRelationshipType) missingFields.push('tipo de vínculo');
   if (!user.employerUnitId) missingFields.push('unidade empregadora');
-  if (!user.unitId) missingFields.push('lotação principal');
+  if (!user.unitId) missingFields.push('unidade financeira');
   if (!Array.isArray(user.unitIds)) missingFields.push('unidades operacionais');
   if (!user.jobRoleId) missingFields.push('cargo');
   if (!Array.isArray(user.jobFunctionIds)) missingFields.push('funções');
@@ -104,7 +104,7 @@ export function incompleteDraftFields(draft: EmploymentPeriodDraft, user: User):
   if (!user.jobRoleId) missing.push('cargo no cadastro atual');
   if (!Array.isArray(user.jobFunctionIds)) missing.push('funções no cadastro atual');
   if (!draft.employerUnitId) missing.push('unidade empregadora');
-  if (!draft.unitId) missing.push('lotação principal');
+  if (!draft.unitId) missing.push('unidade financeira');
   if (draft.unitIds.length === 0) missing.push('unidades operacionais');
   if (!draft.validFrom) missing.push('início da vigência');
   else if (!isCivilDate(draft.validFrom)) missing.push('início da vigência válido');

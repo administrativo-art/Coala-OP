@@ -31,6 +31,9 @@ import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import com.coalaone.go.BuildConfig
+import com.coalaone.go.auth.GoogleCredentialResult
+import com.coalaone.go.auth.requestGoogleWorkspaceCredential
+import kotlinx.coroutines.launch
 
 @Composable fun AuthScreen(vm: SessionViewModel, biometricPrompt: () -> Unit) {
     val state by vm.state.collectAsState()
@@ -39,6 +42,8 @@ import com.coalaone.go.BuildConfig
     var reset by rememberSaveable { mutableStateOf(false) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var biometric by rememberSaveable { mutableStateOf(vm.biometricEnabled()) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     Aurora {
     Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
     Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -71,6 +76,16 @@ import com.coalaone.go.BuildConfig
             TextButton({ reset = false }) { Text("Voltar ao login", color = Tokens.onDark2) }
         } else {
             Action("Entrar no Coala Go", state.busy, enabled = email.isNotBlank() && password.isNotBlank(), dark = true) { submit() }
+            if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()) Action("Continuar com Google", state.busy, secondary = true, dark = true) {
+                scope.launch {
+                    try {
+                        when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                            is GoogleCredentialResult.Token -> vm.loginGoogle(result.value)
+                            GoogleCredentialResult.Cancelled -> Unit
+                        }
+                    } catch (cause: Exception) { vm.loginGoogleError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                }
+            }
             TextButton({ reset = true }) { Text("Esqueci minha senha", color = Tokens.pink) }
             if (BuildConfig.DEBUG) TextButton(vm::simulate) { Text("Explorar simulação", color = Tokens.pink) }
         }

@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { canConfigureFieldVisibility } from "@/features/rh/lib/field-visibility";
+import { withoutRetiredFields } from "@/features/rh/lib/retired-field-keys";
 import { DEFAULT_COMPLEMENTARY_FIELDS, DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 import {
   DEFAULT_PROFILE_ACCESS_MATRIX,
@@ -212,22 +214,6 @@ const DEPENDENTS_FAMILY_SECTION_MIGRATIONS: Record<string, string[]> = {
   "employee.family_salary_birth_1": ["Salário-família", "Salario Familia"],
   "employee.family_salary_name_1": ["Salário-família", "Salario Familia"],
 };
-const RETIRED_FIELD_KEYS = new Set([
-  "employee.emergency_medical",
-  "employee.dependent_name",
-  "employee.dependent_relation",
-  "employee.dependent_cpf",
-  "employee.dependent_rg",
-  "employee.family_salary_end_1",
-  "employee.family_salary_birth_1",
-  "employee.family_salary_name_1",
-]);
-
-function withoutRetiredFields(fields: Record<string, FieldMapEntry>) {
-  return Object.fromEntries(
-    Object.entries(fields).filter(([key]) => !RETIRED_FIELD_KEYS.has(key))
-  ) as Record<string, FieldMapEntry>;
-}
 
 async function loadOrCreateFieldMap(actor: Awaited<ReturnType<typeof requireUser>>) {
   const ref = hrDbAdmin.collection("schema").doc("field_map");
@@ -428,6 +414,15 @@ export const PUT = secureRoute({ contract: putContract, enforcer: putEnforcer },
     const nextFields = Object.fromEntries(
       Object.entries(withoutRetiredFields(fields as Record<string, FieldMapEntry>)).map(([key, entry]) => [key, cleanEntry(entry)])
     ) as Record<string, FieldMapEntry>;
+    if (!canConfigureFieldVisibility(actor)) {
+      const changedVisibility = Object.entries(nextFields).some(([key, next]) => {
+        const previous = currentFields[key];
+        return Boolean(previous) && normalizeFieldVisibility(previous.visibility) !== normalizeFieldVisibility(next.visibility);
+      });
+      if (changedVisibility) {
+        return NextResponse.json({ error: "Sem permissão para alterar a visibilidade dos campos." }, { status: 403 });
+      }
+    }
     const currentBlocks = (currentSnap.data()?.profile_blocks ?? DEFAULT_PROFILE_BLOCKS) as Record<string, ProfileBlockConfig>;
     const nextProfileBlocks = profileBlocks && typeof profileBlocks === "object" && !Array.isArray(profileBlocks)
       ? Object.fromEntries(

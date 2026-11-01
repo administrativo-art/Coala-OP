@@ -33,6 +33,11 @@ import javax.inject.Singleton
     private fun unitOf(id: String) = units.firstOrNull { it.id == id } ?: unit
     override suspend fun release() = Release(4, "0.2.0", 0, "/app/CoalaGo.apk")
     override suspend fun reset(request: ResetRequest) = Unit
+    override suspend fun googleMigrationStatus() = GoogleMigrationStatus()
+    override suspend fun migrateGoogle(request: GoogleMigrationRequest): GoogleMigrationResult =
+        error("A migração Google não fica disponível na simulação.")
+    override suspend fun corporateDevice(installationId: String) = CorporateDeviceStatus()
+    override suspend fun requestCorporateDevice(request: CorporateDeviceRequest) = CorporateDeviceRequested("simulation-device", "pending")
     override suspend fun profile(): ProfileResponse {
         val target = simulatedViewAsUsers.firstOrNull { it.id == simulatedViewAsTargetId }
         return ProfileResponse(
@@ -157,6 +162,8 @@ import javax.inject.Singleton
         })
     }
     override suspend fun journeyLocation(request: JourneyLocationBatch) = JourneyLocationAccepted(request.events.map { it.eventId }, false)
+    override suspend fun journeyLocationLease(request: JourneyLocationLeaseRequest) = JourneyLocationLease(
+        "simulation-lease-token-that-is-long-enough-for-the-contract", java.time.Instant.now().plusSeconds(1200).toString(), JourneyLocationLeaseConfig())
     override suspend fun receipt(receiptId: String): ResponseBody = demoPdf(listOf(
         "COMPROVANTE DE REGISTRO DE PONTO",
         "Documento demonstrativo - dados locais",

@@ -19,24 +19,26 @@ const event = {
   longitude: -48.49,
   accuracyMeters: 25,
 };
+const leaseToken = 'test-lease-token-that-is-long-enough-for-validation-1234';
+const batch = (events: unknown[]) => ({ leaseToken, events });
 
 test('trilha entre unidades aceita posição completa e eventos de controle sem coordenadas', () => {
-  const parsed = journeyLocationBatchSchema.safeParse({ events: [event, {
+  const parsed = journeyLocationBatchSchema.safeParse(batch([event, {
     ...event, eventId: '33333333-3333-4333-8333-333333333333', eventType: 'pause',
     latitude: undefined, longitude: undefined, accuracyMeters: undefined,
-  }] });
+  }]));
   assert.equal(parsed.success, true);
 });
 
 test('trilha entre unidades rejeita posição parcial, duplicidade e mistura de jornadas', () => {
-  assert.equal(journeyLocationBatchSchema.safeParse({ events: [{ ...event, longitude: undefined }] }).success, false);
-  assert.equal(journeyLocationBatchSchema.safeParse({ events: [event, event] }).success, false);
-  assert.equal(journeyLocationBatchSchema.safeParse({ events: [event, {
+  assert.equal(journeyLocationBatchSchema.safeParse(batch([{ ...event, longitude: undefined }])).success, false);
+  assert.equal(journeyLocationBatchSchema.safeParse(batch([event, event])).success, false);
+  assert.equal(journeyLocationBatchSchema.safeParse(batch([event, {
     ...event, eventId: '33333333-3333-4333-8333-333333333333', workDate: '2026-10-24',
-  }] }).success, false);
-  assert.equal(journeyLocationBatchSchema.safeParse({ events: [{ ...event, eventType: 'start', capturedAt: '2026-10-23T12:31:00-03:00' }, {
+  }])).success, false);
+  assert.equal(journeyLocationBatchSchema.safeParse(batch([{ ...event, eventType: 'start', capturedAt: '2026-10-23T12:31:00-03:00' }, {
     ...event, eventId: '33333333-3333-4333-8333-333333333333', capturedAt: '2026-10-23T12:30:00-03:00',
-  }] }).success, false);
+  }])).success, false);
 });
 
 test('máquina de estados exige início, pausa e retomada coerentes', () => {
@@ -118,6 +120,7 @@ function dependencies(db: FakeFirestore, policy: typeof activePolicy | (Omit<typ
     repDb: db as unknown as Firestore, enabled: true, now: () => new Date('2026-10-23T20:00:00Z'),
     readMonth: async () => ({ month: '2026-10', shifts: [shift], holidays: [], truncated: false }),
     loadPolicies: async () => new Map([['unit-a', policy]]),
+    validateLease: async () => ({}),
   };
 }
 
@@ -131,8 +134,8 @@ describe('serviço da trilha entre unidades', () => {
       control('10000000-0000-4000-8000-000000000004', 'resume', '2026-10-23T13:00:00-03:00'),
       control('10000000-0000-4000-8000-000000000005', 'stop', '2026-10-23T16:00:00-03:00'),
     ];
-    const first = await recordOwnJourneyLocation(context, { events }, dependencies(db, activePolicy));
-    const replay = await recordOwnJourneyLocation(context, { events }, dependencies(db, activePolicy));
+    const first = await recordOwnJourneyLocation(context, batch(events), dependencies(db, activePolicy));
+    const replay = await recordOwnJourneyLocation(context, batch(events), dependencies(db, activePolicy));
     assert.deepEqual(first.acceptedEventIds, replay.acceptedEventIds);
     assert.equal([...db.rows.keys()].filter((path) => path.startsWith(`${JOURNEY_LOCATION_EVENTS}/`)).length, 5);
     const session = [...db.rows.entries()].find(([path]) => path.startsWith(`${JOURNEY_LOCATION_SESSIONS}/`))?.[1];
@@ -148,23 +151,23 @@ describe('serviço da trilha entre unidades', () => {
       [control('10000000-0000-4000-8000-000000000021', 'start', '2026-10-23T03:00:00-03:00')],
     ]) {
       const db = new FakeFirestore();
-      await assert.rejects(recordOwnJourneyLocation(context, { events }, dependencies(db, activePolicy)));
+      await assert.rejects(recordOwnJourneyLocation(context, batch(events), dependencies(db, activePolicy)));
       assert.equal(db.rows.size, 0);
     }
     const missingZone = { ...shift, unitTimeZone: null };
     const db = new FakeFirestore();
-    await assert.rejects(recordOwnJourneyLocation(context, {
-      events: [control('10000000-0000-4000-8000-000000000022', 'start', '2026-10-23T08:00:00-03:00')],
-    }, { ...dependencies(db, activePolicy), readMonth: async () => ({ month: '2026-10', shifts: [missingZone], holidays: [], truncated: false }) }));
+    await assert.rejects(recordOwnJourneyLocation(context,
+      batch([control('10000000-0000-4000-8000-000000000022', 'start', '2026-10-23T08:00:00-03:00')]),
+      { ...dependencies(db, activePolicy), readMonth: async () => ({ month: '2026-10', shifts: [missingZone], holidays: [], truncated: false }) }));
     assert.equal(db.rows.size, 0);
   });
 
   test('revoga a sessão, descarta o lote atrasado e não persiste nova coordenada', async () => {
     const db = new FakeFirestore();
-    await recordOwnJourneyLocation(context, { events: [control('10000000-0000-4000-8000-000000000031', 'start', '2026-10-23T08:00:00-03:00')] }, dependencies(db, activePolicy));
+    await recordOwnJourneyLocation(context, batch([control('10000000-0000-4000-8000-000000000031', 'start', '2026-10-23T08:00:00-03:00')]), dependencies(db, activePolicy));
     const disabled = { ...activePolicy, mode: 'disabled' as const, participantUserIds: [] };
     const sample = { ...event, eventId: '10000000-0000-4000-8000-000000000032', capturedAt: '2026-10-23T09:00:00-03:00' };
-    const result = await recordOwnJourneyLocation(context, { events: [sample] }, dependencies(db, disabled));
+    const result = await recordOwnJourneyLocation(context, batch([sample]), dependencies(db, disabled));
     assert.deepEqual(result.acceptedEventIds, [sample.eventId]);
     assert.equal(result.stopRequested, true);
     assert.equal([...db.rows.keys()].filter((path) => path.startsWith(`${JOURNEY_LOCATION_EVENTS}/`)).length, 1);
@@ -177,8 +180,28 @@ describe('serviço da trilha entre unidades', () => {
   test('kill switch reconhece o lote como terminal sem tocar no banco', async () => {
     const db = new FakeFirestore();
     const start = control('10000000-0000-4000-8000-000000000041', 'start', '2026-10-23T08:00:00-03:00');
-    const result = await recordOwnJourneyLocation(context, { events: [start] }, { ...dependencies(db, activePolicy), enabled: false });
+    const result = await recordOwnJourneyLocation(context, batch([start]), { ...dependencies(db, activePolicy), enabled: false });
     assert.deepEqual(result, { acceptedEventIds: [start.eventId], stopRequested: true });
     assert.equal(db.rows.size, 0);
+  });
+
+  test('recusa lote que mistura unidade diferente da lease', async () => {
+    const db = new FakeFirestore();
+    const events = [control('10000000-0000-4000-8000-000000000051', 'start', '2026-10-23T08:00:00-03:00'),
+      { ...event, eventId: '10000000-0000-4000-8000-000000000052', executionUnitId: 'unit-b', capturedAt: '2026-10-23T09:00:00-03:00' }];
+    await assert.rejects(recordOwnJourneyLocation(context, batch(events), dependencies(db, activePolicy)),
+      (cause: unknown) => (cause as { code?: string }).code === 'DP_JOURNEY_LOCATION_UNIT_MISMATCH');
+    assert.equal(db.rows.size, 0);
+  });
+
+  test('reconhece e ignora amostra redundante sem encerrar a sessão', async () => {
+    const db = new FakeFirestore();
+    const events = [control('10000000-0000-4000-8000-000000000061', 'start', '2026-10-23T08:00:00-03:00'),
+      { ...event, eventId: '10000000-0000-4000-8000-000000000062', capturedAt: '2026-10-23T09:00:00-03:00' },
+      { ...event, eventId: '10000000-0000-4000-8000-000000000063', capturedAt: '2026-10-23T09:00:10-03:00' }];
+    const result = await recordOwnJourneyLocation(context, batch(events), dependencies(db, activePolicy));
+    assert.equal(result.stopRequested, false);
+    assert.deepEqual(result.acceptedEventIds, events.map((item) => item.eventId));
+    assert.equal([...db.rows.keys()].filter((path) => path.startsWith(`${JOURNEY_LOCATION_EVENTS}/`)).length, 2);
   });
 });

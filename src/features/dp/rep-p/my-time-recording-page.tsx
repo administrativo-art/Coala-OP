@@ -19,15 +19,15 @@ import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-import { buildMonthView, type DayAbsence, type DayMarking, type DayShift, type DayView } from "./day-model";
+import { buildMonthView, INCIDENT_SEVERITY, type DayAbsence, type DayMarking, type DayShift, type DayView } from "./day-model";
 import { DAY_GRID, DayCard, type ClassificationActions, type ReceiptActions } from "./day-list";
 import { DayDetailPanel } from "./day-detail";
+import { ClosureFocusMode, dayNeedsTreatment } from "@/features/dp/time-adjustments/closure-focus-mode";
 import type { BankStatementLine } from "@/features/dp/time-bank/core";
 import { saveFile } from "./marking-ui";
 import { hm, PURPOSE_DOT, RecordStrip, type MarkingPurpose } from "./record-strip";
 import { AdjustmentsHistory, MirrorsGrid } from "./time-recording-views";
 import { useRepPMarking, type RepPReceiptStatus } from "./use-rep-p-marking";
-import { LocationAccessPanel } from "./location-access-panel";
 
 type HistoryItem = DayMarking & { workDate: string; collectorId: string; hash: string; receiptIssue: string | null };
 type HistoryPayload = { markings: HistoryItem[]; truncated: boolean };
@@ -67,9 +67,16 @@ function addDays(date: string, days: number) {
   return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
+export type TimeRecordingMonthSummary = { loaded: boolean; problemDays: number; alertDays: number; missingDays: number; absenceDays: number; okDays: number; toTreat: number; finalized: number };
+
+export function MyTimeRecordingPage({ employeeUid, initialView = "records", embedded = false, month: monthProp, onSummary }: {
   employeeUid?: string;
   initialView?: TimeRecordingView;
+  /** Dentro do fechamento do ponto: sem cabeçalho, avisos, atalhos nem navegação de mês; o mês vem de `month`. */
+  embedded?: boolean;
+  month?: string;
+  /** Resumo do mês para quem embute a tela (trilha do fechamento). */
+  onSummary?: (summary: TimeRecordingMonthSummary) => void;
 } = {}) {
   const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const readOnly = Boolean(employeeUid);
@@ -83,7 +90,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   const { today, request, fetchReceiptFile, options, setLastMarking } = marking;
   const currentMonth = today.slice(0, 7);
 
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useState(monthProp ?? currentMonth);
+  useEffect(() => { if (monthProp) { setMonth(monthProp); setFilter("all"); setOpenDate(null); } }, [monthProp]);
   const [schedule, setSchedule] = useState<MonthPayload | null>(null);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [absences, setAbsences] = useState<DayAbsence[]>([]);
@@ -102,6 +110,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   const [busyReceipt, setBusyReceipt] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
   const [employeeName, setEmployeeName] = useState<string | null>(null);
+  // Modo foco (só na trilha do fechamento): um dia por vez, em tela ampla.
+  const [focus, setFocus] = useState<{ open: boolean; date: string | null }>({ open: false, date: null });
   const [employeeUnitNames, setEmployeeUnitNames] = useState<Record<string, string>>({});
 
   const [recordOpen, setRecordOpen] = useState(false);
@@ -223,6 +233,16 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   const registered = days.reduce((sum, day) => sum + day.workedMinutes, 0);
   const balance = days.reduce((sum, day) => sum + (day.balanceMinutes ?? 0), 0);
   const filterLabel = ({ marks: "Dias com batida", alert: "A conferir", review: "Ajuste em análise", absence: "Com ausência" } as Record<string, string>)[filter] ?? null;
+  const OPEN_ABSENCE = ["submitted", "in_review", "adjustments_requested"];
+  const toTreat = adjustments.filter((item) => item.status === "in_review").length + absences.filter((item) => OPEN_ABSENCE.includes(item.status)).length;
+  const finalized = adjustments.filter((item) => item.status !== "in_review").length + absences.filter((item) => !OPEN_ABSENCE.includes(item.status)).length;
+  const problemDays = past.filter((day) => day.incidents.some((incident) => INCIDENT_SEVERITY[incident] === "danger")).length;
+  const missingDays = past.filter((day) => day.incidents.includes("missing")).length;
+  const okDays = past.filter((day) => day.shift?.type === "work" && !day.incidents.length).length;
+  const summaryLoaded = !loading && Boolean(schedule);
+  useEffect(() => {
+    onSummary?.({ loaded: summaryLoaded, problemDays, alertDays, missingDays, absenceDays, okDays, toTreat, finalized });
+  }, [onSummary, summaryLoaded, problemDays, alertDays, missingDays, absenceDays, okDays, toTreat, finalized]);
   const filtered = days.filter((day) => day.date <= today && matches(day)).length;
 
   const changeMonth = (delta: number) => { setMonth((current) => shiftMonth(current, delta)); setFilter("all"); setOpenDate(null); };
@@ -309,18 +329,18 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
   ];
 
   return (
-    <PageContainer variant="wide" className="space-y-5 pb-8">
-      <ScheduledDarkTheme />
-      <header className="flex items-center gap-3">
+    <PageContainer variant={embedded ? "fluid" : "wide"} className={embedded ? "space-y-4" : "space-y-5 pb-8"}>
+      {embedded ? null : <ScheduledDarkTheme />}
+      {embedded ? null : <header className="flex items-center gap-3">
         <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
           label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="ghost" size="sm" className="-ml-2" />
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">{initialView === "time-bank" ? "Banco de horas" : "Registro de ponto"}</h1>
           {readOnly ? <p className="text-sm font-semibold text-ds-ink-muted">{employeeName ?? "Colaborador"}</p> : null}
         </div>
-      </header>
+      </header>}
 
-      {readOnly ? (
+      {embedded ? null : readOnly ? (
         <div className="flex items-start gap-3 rounded-ds-card border border-ds-info-bg bg-ds-info-bg/45 px-4 py-3 text-sm text-ds-ink-2">
           <Eye className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
           {initialView === "time-bank"
@@ -337,12 +357,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
           dialogOpen={recordOpen} onDialogOpenChange={setRecordOpen} />
       </>}
 
-      {!readOnly || permissions.dp?.timeRecording?.readLocation === true ? (
-        <LocationAccessPanel key={employeeUid ?? firebaseUser?.uid} firebaseUser={firebaseUser} employeeUid={employeeUid} units={unitNames} today={today} />
-      ) : null}
-
       {/* Consultas por cartões, como no Coala Go; cada uma tem endereço próprio (?view=). */}
-      <nav aria-label="Consultas do ponto" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {embedded ? null : <nav aria-label="Consultas do ponto" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {VIEW_CARDS.map((card) => (
           <Link key={card.view} href={viewHref(card.view)} aria-current={initialView === card.view ? "page" : undefined}
             className={cn("flex min-w-0 flex-col gap-1 rounded-ds-card border bg-ds-surface px-4 py-3 transition-colors hover:border-ds-ink-faint",
@@ -355,7 +371,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
             <span className="truncate text-xs text-ds-ink-muted">{card.hint}</span>
           </Link>
         ))}
-      </nav>
+      </nav>}
 
       {initialView === "time-bank" ? (
         <section id="banco-de-horas" className="scroll-mt-28 space-y-3">
@@ -372,6 +388,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
       ) : (
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
+            {embedded ? <h3 className="text-sm font-black text-ds-ink">{monthLabel(month)}</h3> : (
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex h-9 items-center rounded-ds-md border border-ds-border bg-ds-surface">
                 <button type="button" aria-label="Mês anterior" onClick={() => changeMonth(-1)} className="px-2 text-ds-ink-muted hover:text-ds-ink"><ChevronLeft className="h-4 w-4" /></button>
@@ -381,6 +398,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
               </div>
               {month !== currentMonth ? <button type="button" onClick={() => setMonth(currentMonth)} className="text-xs font-bold text-ds-ink-2 underline">Voltar para hoje</button> : null}
             </div>
+            )}
             <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ds-ink-muted">
               <span><strong className="text-sm text-ds-ink">{hm(registered)}</strong> registradas</span>
               <span>Saldo (prévia) <strong className="text-sm text-ds-ink">{hm(balance, true)}</strong></span>
@@ -394,7 +412,16 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
           ) : (
             <>
               {/* Contagens que filtram a lista; clicar de novo limpa. */}
-              <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Filtrar dias">
+              {embedded ? (() => {
+                const pending = days.filter((day) => dayNeedsTreatment(day, adjustments, today)).length;
+                return (
+                  <div className="flex flex-wrap items-center gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-2.5">
+                    <p className="min-w-0 flex-1 text-sm text-ds-ink-2">{pending ? <><strong className="text-ds-ink">{pending} {pending === 1 ? "dia a tratar" : "dias a tratar"}</strong> neste mês. O modo foco abre um dia por vez, com o que precisa de decisão e as evidências.</> : "Nenhum dia a tratar neste mês."}</p>
+                    <Button variant="primary-page" size="sm" disabled={!pending} onClick={() => setFocus({ open: true, date: null })}>Tratar {pending} {pending === 1 ? "dia" : "dias"} em sequência</Button>
+                  </div>
+                );
+              })() : null}
+              <div className={cn("grid gap-2 sm:grid-cols-3", embedded && "lg:grid-cols-5")} role="group" aria-label="Filtrar dias">
                 {([["marks", markedDays, "dias com batida", "text-ds-ink"], ["alert", alertDays, "a conferir", "text-ds-caution"],
                   ["review", reviewDays, "com ajuste em análise", "text-ds-info"]] as const).map(([value, count, label, tone]) => (
                   <button key={value} type="button" aria-pressed={filter === value} onClick={() => { setFilter(filter === value ? "all" : value); setShowFuture(false); }}
@@ -404,6 +431,12 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
                     <span className="text-[12.5px] font-semibold text-ds-ink-muted">{label}</span>
                   </button>
                 ))}
+                {embedded ? ([[toTreat, "solicitações a tratar", "text-ds-caution"], [finalized, "solicitações finalizadas", "text-ds-ok"]] as const).map(([count, label, tone]) => (
+                  <div key={label} className="flex items-center gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-2.5">
+                    <span className={cn("font-ds-mono text-[22px] font-extrabold tabular-nums", tone)}>{count}</span>
+                    <span className="text-[12.5px] font-semibold text-ds-ink-muted">{label}</span>
+                  </div>
+                )) : null}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ds-ink-muted">
@@ -481,7 +514,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
                             {weekAlerts ? <span className="font-bold text-ds-danger">{weekAlerts} {weekAlerts === 1 ? "dia a conferir" : "dias a conferir"}</span> : <span className="text-ds-ink-muted">nada a conferir</span>}
                           </div>
                           {visible.map((day) => <DayCard key={day.date} day={day} today={today} selected={openDate === day.date}
-                            reviewing={adjustmentDates.has(day.date)} onOpen={() => setOpenDate(day.date)} />)}
+                            reviewing={adjustmentDates.has(day.date)} onOpen={() => embedded ? setFocus({ open: true, date: day.date }) : setOpenDate(day.date)} />)}
                         </Fragment>
                       );
                     })}
@@ -497,7 +530,12 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records" }: {
         </div>
       )}
 
+      {embedded ? <ClosureFocusMode open={focus.open} onOpenChange={(open) => setFocus((current) => ({ ...current, open }))} startDate={focus.date}
+        days={days} today={today} adjustments={adjustments} unitNames={unitNames} employeeName={employeeName ?? "Colaborador"} firebaseUser={firebaseUser}
+        bank={bank ? { policyName: bank.policy?.name ?? null, lines: bank.statement?.lines ?? [] } : null}
+        onChanged={() => setReloadKey((current) => current + 1)} /> : null}
       <DayDetailPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
+        employeeUid={employeeUid ?? firebaseUser?.uid ?? ""}
         days={days} today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications}
         onClose={() => setOpenDate(null)} onNavigate={setOpenDate}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}

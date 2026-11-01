@@ -25,6 +25,9 @@ if (releaseRequested && firebaseConfig.isFile) {
     publicFirebase["COALA_FIREBASE_API_KEY"] = ((client["api_key"] as List<*>).first() as Map<*, *>)["current_key"].toString()
     publicFirebase["COALA_FIREBASE_PROJECT_ID"] = project["project_id"].toString()
     publicFirebase["COALA_FIREBASE_SENDER_ID"] = project["project_number"].toString()
+    val oauthClients = (client["oauth_client"] as? List<*>)?.mapNotNull { it as? Map<*, *> }.orEmpty()
+    publicFirebase["COALA_GOOGLE_WEB_CLIENT_ID"] = oauthClients.firstOrNull { it["client_type"].toString() == "3" }
+        ?.get("client_id")?.toString().orEmpty()
 }
 fun configured(name: String, fallback: String = ""): String =
     providers.environmentVariable(name).orElse(providers.gradleProperty(name)).getOrElse(publicFirebase[name] ?: fallback)
@@ -42,14 +45,15 @@ android {
         applicationId = "coalaone.go"
         minSdk = 26
         targetSdk = 36
-        versionCode = configured("COALA_VERSION_CODE", "38").toInt()
-        versionName = configured("COALA_VERSION_NAME", "0.3.33")
+        versionCode = configured("COALA_VERSION_CODE", "41").toInt()
+        versionName = configured("COALA_VERSION_NAME", "0.3.36")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoted(configured("COALA_API_BASE_URL", "https://op.coalashakes.com")))
         buildConfigField("String", "FIREBASE_API_KEY", quoted(configured("COALA_FIREBASE_API_KEY")))
         buildConfigField("String", "FIREBASE_APP_ID", quoted(configured("COALA_FIREBASE_APP_ID")))
         buildConfigField("String", "FIREBASE_PROJECT_ID", quoted(configured("COALA_FIREBASE_PROJECT_ID")))
         buildConfigField("String", "FIREBASE_SENDER_ID", quoted(configured("COALA_FIREBASE_SENDER_ID")))
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(configured("COALA_GOOGLE_WEB_CLIENT_ID")))
         buildConfigField("boolean", "LOCAL_TEST", configured("COALA_LOCAL_TEST", "false"))
         manifestPlaceholders["allowCleartext"] = configured("COALA_LOCAL_TEST", "false")
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
@@ -77,6 +81,7 @@ android {
                 val value = providers.environmentVariable(name).orElse(providers.gradleProperty(name)).getOrElse("")
                 buildConfigField("String", "FIREBASE_$field", quoted(value))
             }
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(providers.environmentVariable("COALA_GOOGLE_WEB_CLIENT_ID").orElse(providers.gradleProperty("COALA_GOOGLE_WEB_CLIENT_ID")).getOrElse("")))
         }
         release {
             isMinifyEnabled = true
@@ -135,6 +140,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-messaging")
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")

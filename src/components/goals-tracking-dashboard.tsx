@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { ControlPanel } from '@/components/patterns/control-panel';
 import { FilterChips } from '@/components/patterns/filter-chips';
 import { PanelStat } from '@/components/goals/goals-ui';
-import { useKioskGroups } from '@/hooks/use-kiosk-groups';
+import { useKioskOrganizations } from '@/hooks/use-kiosk-groups';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db, functions } from '@/lib/firebase';
@@ -2602,7 +2602,7 @@ export function GoalsTrackingDashboard() {
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskGroups();
+  const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskOrganizations();
   const usersById = useMemo(
     () => Object.fromEntries(users.map(collaborator => [collaborator.id, collaborator])),
     [users]
@@ -2955,7 +2955,7 @@ export function GoalsTrackingDashboard() {
 
         {hasMultipleGroups && (
           <div className="mt-5">
-            <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Grupo</p>
+            <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Organização</p>
             <FilterChips
               value={selectedGroupId}
               onChange={value => {
@@ -2963,7 +2963,7 @@ export function GoalsTrackingDashboard() {
                 const group = kioskGroups.find(item => item.id === value);
                 if (group && selectedKioskId !== 'all' && !group.kioskIds.includes(selectedKioskId)) setSelectedKioskId('all');
               }}
-              allLabel="Todos os grupos"
+              allLabel="Todas as organizações"
               chips={kioskGroups.map(group => ({ value: group.id, label: group.name, count: group.kioskIds.length }))}
             />
           </div>
@@ -2975,7 +2975,7 @@ export function GoalsTrackingDashboard() {
             <FilterChips
               value={selectedKioskId === 'all' ? null : selectedKioskId}
               onChange={value => setSelectedKioskId(value ?? 'all')}
-              allLabel={selectedGroupId ? 'Todas do grupo' : 'Todas as unidades'}
+              allLabel={selectedGroupId ? 'Todas da organização' : 'Todas as unidades'}
               chips={availableKiosks
                 .filter(kiosk => selectedGroupId === null || groupOf(kiosk.id).id === selectedGroupId)
                 .map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}

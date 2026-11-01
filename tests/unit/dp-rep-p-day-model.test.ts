@@ -51,6 +51,19 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.equal(month[2].shift?.type, 'work');
   });
 
+  it('preserva a evidência histórica sem reler a configuração mutável do turno', () => {
+    const located = { ...mark('2026-02-03', '10:00', 1), workDate: '2026-02-03',
+      location: { evaluation: 'inside' as const, distanceMeters: 12 } };
+    const enabled = buildMonthView({ month: '2026-02', today: '2026-03-01', absences: [], markings: [located],
+      shifts: [{ ...shift, date: '2026-02-03', locationTrackingPolicy: 'punch_only' }] });
+    assert.deepEqual(enabled[2].markings[0].location, located.location);
+    const disabled = buildMonthView({ month: '2026-02', today: '2026-03-01', absences: [], markings: [located],
+      shifts: [{ ...shift, date: '2026-02-03', locationTrackingPolicy: 'disabled' }] });
+    assert.deepEqual(disabled[2].markings[0].location, located.location);
+    const withoutShift = buildMonthView({ month: '2026-02', today: '2026-03-01', absences: [], markings: [located], shifts: [] });
+    assert.deepEqual(withoutShift[2].markings[0].location, located.location);
+  });
+
   it('ordena por instante e desempata pelo NSR', () => {
     const day = buildDayView({ date: '2026-10-19', today: '2026-10-20', shift, absences: [],
       markings: [mark('2026-10-19', '08:00', 12), mark('2026-10-19', '08:00', 11)] });

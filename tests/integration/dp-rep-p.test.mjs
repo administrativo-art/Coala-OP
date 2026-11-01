@@ -59,6 +59,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
   const anotherUser = dbAdmin.collection('users').doc(`${prefix}-other-user`);
   const employee = hrDbAdmin.collection('employees').doc(`${prefix}-hr`);
   const cpfField = employee.collection('field_values').doc('employee.cpf');
+  const monthSchedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-month-schedule`);
+  const monthShiftDefinition = dbAdmin.collection('dp_shiftDefinitions').doc(`${prefix}-month-shift`);
+  const monthShift = monthSchedule.collection('shifts').doc(`${prefix}-2026-10-18`);
   let clockInstant = '2026-10-18T11:15:42.000Z';
   const clock = { async read() { return { instant: new Date(clockInstant), source: 'synthetic-hlb-test',
     assurance: 'hlb_verified', observedOffsetMs: 12, verifiedAt: new Date(), attestationId: 'a'.repeat(64),
@@ -66,8 +69,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       { server: '200.20.186.75', status: 'accepted', offsetMs: 10, roundTripMs: 20, stratum: 1 },
       { server: '200.20.186.94', status: 'accepted', offsetMs: 14, roundTripMs: 22, stratum: 1 },
     ] }; } };
-  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
-    inpiRegistration: '12345678901234567', developerCnpj: employerCnpj };
+  const profile = { establishmentId, employerCnpj, employerLegalName: 'CT SORVETES LTDA',
+    inpiRegistration: '', developerCnpj: employerCnpj };
   const fiscalObjects = new Map();
   const fiscalStore = {
     async put(path, bytes, contentType, sha256, retainUntilTime) {
@@ -77,7 +80,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     },
   };
   const dependencies = { repDb: repPDbAdmin, pilotDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
-    markingEnabled: true, officialUserIds: new Set([userId]), fiscalStore,
+    markingEnabled: true, fiscalStore, referenceResponsibleUid: userId,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -108,18 +111,24 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       anotherUser.set({ isActive: true, unitId: executionUnitId, unitIds: [executionUnitId] }),
       employee.set({ auth_uid: userId, name: 'Maria Teste', bizneo_employee_id: '99' }),
       cpfField.set({ value_text: cpf }),
+      monthSchedule.set({ year: 2026, month: 10, unitId: executionUnitId, locked: true, createdAt: Timestamp.fromMillis(1_000) }),
+      monthShiftDefinition.set({ name: 'Turno com localização', locationTrackingPolicy: 'punch_only' }),
+      monthShift.set({ userId, unitId: executionUnitId, date: '2026-10-18', type: 'work', startTime: '08:00', endTime: '17:00',
+        shiftDefinitionId: monthShiftDefinition.id }),
     ]);
     await publishEmploymentReference(context, { userId, expectedRevision: 0, requestId: 'employment-1', periods: [{
       validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId, unitId: employerUnitId,
       unitIds: [employerUnitId, executionUnitId], jobFunctionIds: [], sourceDocumentId: 'admission-1',
       sourceReason: 'Admissão conferida para o ensaio',
     }] });
-    const setup = await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies);
-    assert.deepEqual(setup, { establishmentId, replayed: false });
-    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
-      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
-    { establishmentId, replayed: true });
+    const viewed = await listOwnRepPExecutionUnits({ ...context, viewAs: {
+      targetUserId: userId, targetUsername: 'Maria Teste', readOnly: true,
+    } }, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(viewed.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
+    const prepared = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(prepared.officialClock.available, true);
+    assert.equal((await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).exists, false);
     await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, {
       expectedRevision: 0, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
@@ -165,6 +174,9 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(first.marking.markedAt, '2026-10-18T07:15:00-0400');
     assert.equal(second.status, 'recorded');
     assert.deepEqual([first.marking.nsr, second.marking.nsr].sort(), [3, 4]);
+    assert.deepEqual(await provisionRepPReferenceData({ workspaceId, responsibleCpf: cpf, timeZone: 'America/Belem', profile,
+      employee: { userId, cpf, name: 'Maria Teste' }, workLocation: 'Rua fiscal, 1' }, dependencies),
+    { establishmentId, replayed: true });
     assert.ok(first.marking.employerUnitId === employerUnitId && second.marking.employerUnitId === employerUnitId);
     assert.ok(first.marking.executionUnitId === executionUnitId && second.marking.executionUnitId === executionUnitId);
     assert.deepEqual(first.location, { captureStatus: 'captured', evaluation: 'inside' });
@@ -199,6 +211,13 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.deepEqual(history.markings.map((item) => [item.nsr, item.receiptStatus]).sort(),
       [[first.marking.nsr, 'available'], [second.marking.nsr, 'pending']].sort());
     assert.ok(history.markings.every((item) => item.executionUnitId === executionUnitId && !('employeeCpf' in item)));
+    // O titular vê o resultado da localização de cada batida, nunca a coordenada.
+    const ownLocations = Object.fromEntries(history.markings.map((item) => [item.nsr, item.location]));
+    assert.equal(ownLocations[first.marking.nsr].evaluation, 'inside');
+    assert.equal(typeof ownLocations[first.marking.nsr].distanceMeters, 'number');
+    assert.deepEqual(ownLocations[second.marking.nsr], { evaluation: 'indeterminate', distanceMeters: null,
+      physicalUnitId: null, physicalUnitName: null });
+    assert.ok(!JSON.stringify(history).includes(String(mobileLocation.latitude)));
     const viewerContext = { ...context, decoded: { uid: `${prefix}-viewer` }, isDefaultAdmin: false,
       userDoc: { id: `${prefix}-viewer`, unitIds: [employerUnitId] }, permissions: structuredClone(defaultAdminPermissions) };
     viewerContext.permissions.dp.timeClosure = { close: false, reopen: false };
@@ -208,6 +227,27 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       [first.marking.nsr, second.marking.nsr].sort());
     assert.equal(employeeMonth.employee.uid, userId);
     assert.equal(employeeMonth.unitNames[executionUnitId], 'Execução excepcional');
+    // Consultar o ponto não mostra localização: exige a concessão expressa e acesso à unidade da batida.
+    assert.ok(employeeMonth.history.markings.every((item) => item.location === null));
+    const locationViewer = structuredClone(viewerContext);
+    locationViewer.permissions.dp.timeRecording = { view: true, readLocation: true };
+    const withoutUnit = await readEmployeeTimeRecordingMonth(locationViewer, userId, '2026-10');
+    assert.ok(withoutUnit.history.markings.every((item) => item.location === null));
+    locationViewer.userDoc = { id: `${prefix}-viewer`, unitIds: [employerUnitId, executionUnitId] };
+    const withLocation = await readEmployeeTimeRecordingMonth(locationViewer, userId, '2026-10');
+    assert.equal(withLocation.history.markings.find((item) => item.nsr === first.marking.nsr).location.evaluation, 'inside');
+    // Quem viu fica registrado, uma vez por leitura do mês e sem coordenadas nem distâncias.
+    const monthAudits = await repPDbAdmin.collection('repP_locationAccessAudit').where('employeeUid', '==', userId)
+      .where('source', '==', 'month_result').get();
+    assert.equal(monthAudits.size, 1);
+    assert.equal(monthAudits.docs[0].get('actorUid'), `${prefix}-viewer`);
+    assert.equal(monthAudits.docs[0].get('month'), '2026-10');
+    assert.equal(monthAudits.docs[0].get('count'), 2);
+    assert.ok(!JSON.stringify(monthAudits.docs[0].data()).includes('distance'));
+    // Sem o registro, a localização não sai.
+    const brokenAudit = { collection: () => ({ doc: () => ({ async create() { throw new Error('audit offline'); } }) }) };
+    const unaudited = await readEmployeeTimeRecordingMonth(locationViewer, userId, '2026-10', { locationAuditDb: brokenAudit });
+    assert.ok(unaudited.history.markings.every((item) => item.location === null));
     await assert.rejects(readEmployeeTimeRecordingMonth({ ...viewerContext,
       userDoc: { id: `${prefix}-viewer`, unitIds: ['unit-without-access'] } }, userId, '2026-10'),
     { code: 'REP_P_EMPLOYEE_MONTH_NOT_FOUND' });
@@ -271,7 +311,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
 
     const receiptSnapshot = await repPDbAdmin.collection('repP_receipts').doc(first.receiptId).get();
     assert.equal(receiptSnapshot.get('snapshot').workLocation, 'Rua operacional, 2');
-    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT Sorvetes LTDA');
+    assert.equal(receiptSnapshot.get('snapshot').employerLegalName, 'CT SORVETES LTDA');
 
     // Sem endereço da unidade de execução, o comprovante não poderia ser emitido: recusa sem consumir NSR.
     const nsrBefore = (await repPDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr');
@@ -377,7 +417,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       userDoc: { id: userId, unitAccessScope: 'selected', unitAccessUnitIds: ['other-unit'] } };
     await assert.rejects(saveRepPLocationPolicy(restricted, executionUnitId, policyInput, policyDeps),
       { code: 'DP_TIME_LOCATION_POLICY_FORBIDDEN' });
-    for (const invalid of [{ privacyNoticeUrl: null }, { privacyNoticeUrl: 'http://example.test/privacy' },
+    for (const invalid of [{ privacyNoticeUrl: 'http://example.test/privacy' },
       { legalBasisReference: null }, { activationConfirmation: false }, { participantUserIds: [] }]) {
       await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, { ...policyInput, ...invalid }, policyDeps),
         { code: 'DP_TIME_LOCATION_POLICY_INPUT_INVALID' });
@@ -592,7 +632,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       }
     });
     allRefs.push(...eventSnapshot.docs.map((doc) => doc.ref), ...attemptSnapshot.docs.map((doc) => doc.ref),
-      ...exportAudit.docs.map((doc) => doc.ref), ...locationEvidence.docs.map((doc) => doc.ref));
+      ...exportAudit.docs.map((doc) => doc.ref), ...locationEvidence.docs.map((doc) => doc.ref), ...monthAudits.docs.map((doc) => doc.ref));
   } finally {
     const referenceEmployee = repPDbAdmin.collection('repP_employees')
       .doc(repPIdentifiersForTest.employeeKey(establishmentId, userId));
@@ -611,7 +651,8 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     await Promise.all([...allRefs, ...eventsToDelete.docs.map((doc) => doc.ref), ...attemptsToDelete.docs.map((doc) => doc.ref),
       ...exportsToDelete.docs.map((doc) => doc.ref), ...receiptsToDelete.docs.map((doc) => doc.ref), ...evidenceToDelete.docs.map((doc) => doc.ref),
       ...policyRevisions.docs.map((doc) => doc.ref), ...policyAudit.docs.map((doc) => doc.ref), ...accessAudit.docs.map((doc) => doc.ref),
-      referenceEmployee, referenceEstablishment, cpfField, employee, employer, execution, user, anotherUser]
+      referenceEmployee, referenceEstablishment, cpfField, employee, employer, execution, user, anotherUser,
+      monthShift, monthSchedule, monthShiftDefinition]
       .map((ref) => ref.delete().catch(() => undefined)));
     await locationPolicyRef.delete().catch(() => undefined);
     const headId = createHash('sha256').update(JSON.stringify([workspaceId, userId])).digest('hex');
@@ -760,7 +801,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
     assert.equal(synchronized.marking.sequence, 2);
     assert.equal(synchronized.marking.markedAt, '2026-10-22T09:16:00-0300');
     assert.equal((await recordOwnRepPMarking(context, offlineRequest, { ...dependencies, markingEnabled: true,
-      pilotEnabled: false, officialUserIds: new Set() })).status, 'replayed',
+      pilotEnabled: false })).status, 'replayed',
     'uma fila piloto continua no domínio piloto mesmo depois da troca dos gates');
     await assert.rejects(recordOwnRepPMarking(context, { ...offlineRequest, attemptId: 'pilot-rebooted-attempt',
       offline: { ...offlineRequest.offline, bootCount: 8 } }, dependencies),
@@ -803,7 +844,7 @@ test('ensaio nominal usa Hora Legal, mas permanece fora da ARP e do fechamento o
 
     await t.test('corte oficial drena fila piloto no domínio original sem promovê-la a AFD, AEJ ou espelho', async () => {
       clockInstant = '2026-11-01T12:00:00.000Z';
-      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false, officialUserIds: new Set([userId]),
+      const officialDeps = { ...dependencies, markingEnabled: true, pilotEnabled: false,
         officialStartDate: '2026-11-01' };
       const queuedCore = { ...secondCore, attemptId: 'pilot-pending-at-cutover', elapsedRealtimeMs: 181_000,
         sequence: 3, previousLocalHash: secondHash, markedAt: '2026-10-22T09:18:00-0300' };

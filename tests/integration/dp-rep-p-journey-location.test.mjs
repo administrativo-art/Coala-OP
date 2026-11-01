@@ -23,7 +23,8 @@ test('jornada no emulador: início, pausa, retomada, encerramento e revogação 
   const shift = { date: '2026-10-27', type: 'work', startTime: '08:00', endTime: '16:00', overnight: false,
     unitId, unitTimeZone: 'America/Belem', executionUnitPolicy: 'free', locationTrackingPolicy: 'workday' };
   const deps = { repDb: journeyDb, policyDb, enabled: true, now: () => new Date('2026-10-27T20:00:00Z'),
-    readMonth: async () => ({ month: '2026-10', shifts: [shift], holidays: [], truncated: false }) };
+    readMonth: async () => ({ month: '2026-10', shifts: [shift], holidays: [], truncated: false }), validateLease: async () => ({}) };
+  const batch = (events) => ({ leaseToken: 'integration-lease-token-that-is-long-enough-12345', events });
   const sessionId = '20000000-0000-4000-8000-000000000001';
   let sequence = 0;
   const event = (eventType, hour, session = sessionId) => ({
@@ -36,25 +37,25 @@ test('jornada no emulador: início, pausa, retomada, encerramento e revogação 
   try {
     await policyRef.set(policy);
     const start = event('start', '08:00');
-    await recordOwnJourneyLocation(context, { events: [start, event('sample', '09:00'), event('pause', '12:00')] }, deps);
+    await recordOwnJourneyLocation(context, batch([start, event('sample', '09:00'), event('pause', '12:00')]), deps);
     assert.equal((await rows(JOURNEY_LOCATION_EVENTS)).size, 3);
-    await assert.rejects(recordOwnJourneyLocation(context, { events: [event('sample', '12:30')] }, deps));
+    await assert.rejects(recordOwnJourneyLocation(context, batch([event('sample', '12:30')]), deps));
     assert.equal((await rows(JOURNEY_LOCATION_EVENTS)).size, 3);
     const finish = [event('resume', '13:00'), event('sample', '14:00'), event('stop', '16:00')];
-    await recordOwnJourneyLocation(context, { events: finish }, deps);
-    await recordOwnJourneyLocation(context, { events: finish }, deps);
+    await recordOwnJourneyLocation(context, batch(finish), deps);
+    await recordOwnJourneyLocation(context, batch(finish), deps);
     assert.equal((await rows(JOURNEY_LOCATION_EVENTS)).size, 6);
-    await assert.rejects(recordOwnJourneyLocation(context, { events: [event('sample', '16:01')] }, deps));
+    await assert.rejects(recordOwnJourneyLocation(context, batch([event('sample', '16:01')]), deps));
     const session = (await rows(JOURNEY_LOCATION_SESSIONS)).docs[0];
     assert.equal(session.get('state'), 'stopped');
     const session2 = '20000000-0000-4000-8000-000000000002';
-    await recordOwnJourneyLocation(context, { events: [event('start', '08:00', session2)] }, deps);
+    await recordOwnJourneyLocation(context, batch([event('start', '08:00', session2)]), deps);
     await policyRef.update({ mode: 'disabled', participantUserIds: [] });
     const late = event('sample', '09:00', session2);
-    const revoked = await recordOwnJourneyLocation(context, { events: [late] }, deps);
+    const revoked = await recordOwnJourneyLocation(context, batch([late]), deps);
     assert.equal(revoked.stopRequested, true);
     assert.equal((await rows(JOURNEY_LOCATION_EVENTS)).size, 7);
-    const disabled = await recordOwnJourneyLocation(context, { events: [late] }, { ...deps, enabled: false });
+    const disabled = await recordOwnJourneyLocation(context, batch([late]), { ...deps, enabled: false });
     assert.equal(disabled.stopRequested, true);
     assert.equal((await rows(JOURNEY_LOCATION_EVENTS)).size, 7);
     for (const row of (await rows(JOURNEY_LOCATION_EVENTS)).docs) assert.ok(row.get('expiresAt'));

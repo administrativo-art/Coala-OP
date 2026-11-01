@@ -1,6 +1,10 @@
 kind,source,symbol,guide,note
+function,functions/src/asset-maintenance-jobs.ts,assetMaintenanceDailyMaterialize,docs/engineering/flows/assets.md,Agenda diaria limitada que chama a rota interna com segredo proprio e materializa planos pela antecedencia configurada; deploy nao confirmado.
 api,src/app/api/dp/time-recording/location-access/route.ts,,docs/engineering/flows/dp-time-recording.md,Consulta de coordenadas por titular ou permissao expressa com unidade dia paginacao e auditoria antes da resposta.
 api,src/app/api/mobile/push/devices/route.ts,,docs/engineering/coala-go-parity.md,Registro e revogacao propria de push com sessao e atestacao mobile; sem rota publica de envio.
+api,src/app/api/mobile/auth/google-migration/route.ts,,docs/engineering/access-and-privacy.md,Migracao nominal do proprio login legado para Google Workspace; exige sessao recente app oficial conta preautorizada e preserva o UID.
+api,src/app/api/mobile/corporate-device/route.ts,,docs/engineering/access-and-privacy.md,Solicitacao e consulta do proprio vinculo empresarial pelo Coala Go autenticado e atestado; chave da instalacao nao inicia rastreio.
+api,src/app/api/users/[userId]/corporate-devices/route.ts,,docs/engineering/access-and-privacy.md,Listagem e decisao administrativa de aparelhos empresariais com gestao de usuarios escopo do colaborador e auditoria.
 api,src/app/api/collaborator/absence-requests/options/route.ts,,docs/engineering/flows/dp-absences.md,Opcoes proprias limitadas e capacidade operacional condicionada ao cutover RH.
 api,src/app/api/collaborator/absence-requests/preview/route.ts,,docs/engineering/flows/dp-absences.md,Previa autenticada sem persistencia ou aceitacao de pedido.
 api,src/app/api/collaborator/documents/route.ts,,docs/engineering/flows/employee-documents.md,GET lista so os documentos do proprio titular publicados para ele (macro 02); consulta filtrada pelo titular; sem escrita.
@@ -25,6 +29,15 @@ api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/[assetId]/movements/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/assets/[assetId]/custody-transfers/route.ts,,docs/engineering/flows/assets.md,Transferencia transacional de posse com versao esperada e processo documental separado.
+api,src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/route.ts,,docs/engineering/flows/assets.md,Gera envia ou reconcilia termo patrimonial idempotente sob permissao assets.transfer.
+api,src/app/api/assets/[assetId]/custody-transfers/list/route.ts,,docs/engineering/flows/assets.md,Trilha paginada de transferencias e estados do termo com allowlist e permissao de historico.
+api,src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts,,docs/engineering/flows/assets.md,Download privado do PDF do termo validando transferencia documento patrimonio workspace e permissao.
+api,src/app/api/assets/[assetId]/audits/route.ts,,docs/engineering/flows/assets.md,Fecha auditoria com fotos e pode abrir manutencao corretiva.
+api,src/app/api/assets/[assetId]/audits/upload/route.ts,,docs/engineering/flows/assets.md,Recebe evidencia fotografica em prefixo isolado e registra hash e metadados para verificacao no fechamento.
+api,src/app/api/assets/[assetId]/maintenance-plans/route.ts,,docs/engineering/flows/assets.md,Cadastra plano preventivo explicito com cadencia e snapshots.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/route.ts,,docs/engineering/flows/assets.md,Abre manutencao manual idempotente e integra Tarefas.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts,,docs/engineering/flows/assets.md,Conclui ocorrencia com versao esperada e calcula a proxima preventiva.
 api,src/app/api/assets/[assetId]/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/barcode-labels/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/assets/categories/route.ts,,docs/engineering/flows/assets.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -81,7 +94,9 @@ api,src/app/api/dp/natasha/journeys/route.ts,,docs/engineering/flows/dp-schedule
 api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Disponibilidade candidata v2 cruza férias e ausências operacionais ativas com ack RH e readiness; leitura autenticada limitada sem folgas ou indisponibilidades externas.
 api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp-schedules.md,Definicoes minimas de horario para unidades autorizadas; leitura limitada sem classificar posicoes nem escrever escala.
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual; trancamento com validacao autoritativa de jornada; destrancamento; ou exclusao transacional e auditada; todos revalidam permissao e unidade.
+api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual ou exclusao transacional e auditada; ambos revalidam permissao e unidade.
+api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura do rascunho e descarte explicito de conflitos para editores com acesso a unidade.
+api,src/app/api/dp/schedules/[scheduleId]/publish/route.ts,,docs/engineering/flows/dp-schedules.md,Publicacao do rascunho com permissao propria e ativacao atomica da revisao oficial.
 api,src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts,,docs/engineering/flows/dp-schedules.md,Busca prefixada e limitada de pessoas externas; exige permissao especifica e acesso a unidade da escala; retorna projecao minima.
 api,src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts,,docs/engineering/flows/dp-schedules.md,Resolve a jornada por colaborador e valida sequencia entre competencias e unidades; leitura limitada sob permissao e escopo da escala.
@@ -102,6 +117,7 @@ api,src/app/api/dp/time-recording/aej/route.ts,,docs/engineering/flows/dp-time-r
 api,src/app/api/dp/time-recording/fiscal-options/route.ts,,docs/engineering/flows/dp-time-recording.md,GET lista estabelecimentos fiscais do workspace para gestor global de Tempo selecionar na tela de exportacao AFD e AEJ.
 api,src/app/api/dp/time-recording/options/route.ts,,docs/engineering/flows/dp-time-recording.md,Unidades de execucao do proprio usuario na data pela abrangencia do vinculo historico; somente leitura sem ARP.
 api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno e politica nominal ativos grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
+api,src/app/api/dp/time-recording/journey-location/lease/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e atestado emite lease curta apenas para usuario autenticado com jornada workday e politica nominal ativa; classificacao empresarial nao participa da autorizacao.
 api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da politica central de geolocalizacao por unidade para gestor de Tempo com escopo; lista nominal do piloto revisao e auditoria autoritativas; nunca le evidencias.
 api,src/app/api/dp/time-recording/offline-permits/route.ts,,docs/engineering/flows/dp-time-recording.md,POST prepara protocolo v2 de 24h para iniciar ciclo e 24h desde a primeira batida com aparelho unico; v1 preservado para filas antigas; exclusivo Coala Go atestado sem criar NSR.
 api,src/app/api/dp/time-recording/offline-cycles/route.ts,,docs/engineering/flows/dp-time-recording.md,POST encerra ciclo proprio assinado e drenado com Hora Legal e auditoria sem criar NSR; nao inicia nem prolonga ciclo.
@@ -222,6 +238,7 @@ api,src/app/api/financial/payment-requests/[id]/proof/route.ts,,docs/engineering
 api,src/app/api/financial/payment-requests/[id]/recover/route.ts,,docs/engineering/flows/payment-requests.md,Recuperacao versionada apos duas recusas; preserva a tentativa anterior e nao envia automaticamente.
 api,src/app/api/financial/payment-requests/[id]/refresh/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/payment-requests/adopt-inter/route.ts,,docs/engineering/flows/payment-requests.md,Vincula agendamento DDA ja existente no Inter a despesa ou provisao com conferencia bancaria e auditoria; nao envia pagamento.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -407,6 +424,7 @@ api,src/app/api/registry/cnpj/[cnpj]/route.ts,,docs/engineering/flows/registry.m
 api,src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/rh/employee-profile/[employeeId]/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/rh/field-map/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/rh/field-visibility/route.ts,,docs/engineering/flows/people-access.md,GET lista campos configuraveis; PATCH grava niveis de visibilidade com a permissao dp.settings.manageFieldVisibility.
 api,src/app/api/settings/ai-management/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/media/[id]/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/media/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -461,6 +479,7 @@ api,src/app/api/uploads/operations/route.ts,,docs/engineering/access-and-privacy
 api,src/app/api/users/[userId]/route.ts,,docs/engineering/flows/people-access.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/users/route.ts,,docs/engineering/flows/people-access.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/autentique/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/jobs/assets/maintenance-materialize/route.ts,,docs/engineering/flows/assets.md,Job diario autenticado materializa preventivas na janela com limite 100.
 api,src/app/api/webhooks/inter/banking/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/inter/cobranca/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/webhooks/resend/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -519,6 +538,7 @@ function,functions/src/rh/sync.ts,syncRhAccessCache,docs/engineering/runtime-sur
 function,functions/src/rh/termination.ts,lgpdScheduledCleanup,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/termination.ts,onTermination,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stock-min-recalc-schedule.ts,recalculateMinimumStock,docs/engineering/runtime-surfaces.md,onSchedule; legado mais preview com flag false; nova politica com true; deploy nao confirmado.
+function,functions/src/schedule-goals.ts,onScheduleGoalEligibilityChange,docs/engineering/flows/goals.md,onDocumentWritten em escala; relê revisão oficial e recalcula metas ativas após publicação ou mutação operacional; deploy não confirmado.
 function,functions/src/stone-portfolio-job.ts,stonePortfolioDailySync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stone-pix-job.ts,stonePixDailyRequest,docs/engineering/flows/stone-sales-review.md,onSchedule; solicita datas Pix ausentes e aguarda webhook; deploy nao confirmado.
 function,functions/src/stone-sales-review-job.ts,stoneSalesReviewScheduler,docs/engineering/flows/stone-sales-review.md,onSchedule; revalida dias recentes e completa historico anual em lotes; deploy nao confirmado.
@@ -567,6 +587,7 @@ api,src/app/api/stock/mobile-reposition/receive/route.ts,,docs/engineering/flows
 api,src/app/api/stock/mobile-reposition/photo/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Foto privada de lote despachado; permissao app.reposition.receive e unidade de destino; GET sem escrita.
 api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio e resumo de todas as unidades (scope=all); GET sem escrita.
 api,src/app/api/goals/employee-goals/route.ts,,docs/engineering/flows/goals.md,Cria participante de meta com permissao e escopo da unidade; recusa cobertura externa no periodo e audita no servidor.
+api,src/app/api/goals/schedule-shifts/route.ts,,docs/engineering/flows/goals.md,Leitura autenticada da escala oficial para distribuicao de metas por unidade e pessoas permitidas.
 api,src/app/api/goals/periods/[periodId]/status/route.ts,,docs/engineering/flows/goals.md,Encerra cancela ou reabre meta no servidor; relê escala e exclui cobertura externa antes de congelar prêmio.
 api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.
 api,src/app/api/mobile/profile/route.ts,,docs/engineering/access-and-privacy.md,Cartao do proprio usuario (nome cargo foto) e modulos do aplicativo liberados pelo perfil; GET sem escrita.
@@ -596,3 +617,10 @@ api,src/app/api/users/[userId]/contract-changes/route.ts,,docs/engineering/flows
 function,functions/src/index.ts,activateCollaboratorPeriods,docs/engineering/flows/people-access.md,Ativacao contratual e projecoes operacionais por data; experiencia automatica vinculada ao ciclo atual; lotes limitados.
 api,src/app/api/jobs/users/operational-follow-up/route.ts,,docs/engineering/flows/people-access.md,POST interno a cada 15 minutos; conclui vigencias operacionais que entraram em vigor recalculando quiosques atribuidos e movendo criando ou removendo acessos do PDV Legal das unidades alteradas; lote limitado a 20 cadastros marcados.
 function,functions/src/system-notice-jobs.ts,operationalFollowUpJob,docs/engineering/flows/people-access.md,Agendada a cada 15 minutos; chama POST /api/jobs/users/operational-follow-up com SYSTEM_NOTICES_JOB_SECRET para concluir quiosques e PDV das vigencias ativadas.
+api,src/app/api/assets/[assetId]/acquisition/route.ts,,docs/engineering/flows/assets.md,Aquisição canônica vinculada a compra somente leitura e com allowlist.
+api,src/app/api/assets/[assetId]/audits/list/route.ts,,docs/engineering/flows/assets.md,Auditorias do ativo paginadas e limitadas.
+api,src/app/api/assets/[assetId]/history/route.ts,,docs/engineering/flows/assets.md,Histórico consolidado paginado com exportação CSV e PDF limitada.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts,,docs/engineering/flows/assets.md,Download privado e autorizado da ordem MNT.
+api,src/app/api/assets/[assetId]/maintenance-occurrences/list/route.ts,,docs/engineering/flows/assets.md,Ocorrências de manutenção paginadas e limitadas.
+api,src/app/api/assets/[assetId]/maintenance-plans/list/route.ts,,docs/engineering/flows/assets.md,Planos preventivos paginados e limitados.
+api,src/app/api/users/[userId]/assets/route.ts,,docs/engineering/flows/assets.md,Equipamentos em posse atual com self-access e acesso RH ou Patrimônio.
