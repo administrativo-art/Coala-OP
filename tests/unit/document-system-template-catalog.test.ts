@@ -272,7 +272,7 @@ test("consentimento de imagem integra o pacote inicial sem perder a alteração 
 
 test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinhado à esquerda", async () => {
   const lgpd = systemDocumentTemplateById("system-admission-lgpd-awareness-term");
-  assert.equal(lgpd?.version, 5);
+  assert.equal(lgpd?.version, 6);
   assert.equal(lgpd?.fieldMapping?.term_effective_date, undefined);
   assert.equal(lgpd?.variables.includes("term_effective_date"), false);
 
@@ -280,21 +280,32 @@ test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinh
   const lgpdXml = new PizZip(lgpdSource).file("word/document.xml")?.asText() ?? "";
   assert.equal(lgpdXml.includes("Vigência:"), false);
   assert.equal(lgpdXml.includes("Versão 1.0"), false);
-  assert.ok(lgpdXml.includes("3-A. Localização no registro de ponto e durante a jornada"));
-  assert.ok(lgpdXml.indexOf("3. Finalidades do tratamento") < lgpdXml.indexOf("3-A. Localização"));
-  assert.ok(lgpdXml.indexOf("3-A. Localização") < lgpdXml.indexOf("4. Dados de saúde"));
-  // A revisão acrescenta somente a seção 3-A: modelos históricos e demais partes ficam preservados.
-  const previous = new PizZip(await readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/03-termo-lgpd-v4.docx")));
+  const sections = [
+    "3. Finalidades do tratamento",
+    "3-A. Localização no registro de ponto e durante a jornada",
+    "3-B. Acompanhamento da localização durante a jornada e aparelhos empresariais",
+    "3-C. Metas, desempenho e premiação",
+    "4. Dados de saúde",
+  ].map((title) => lgpdXml.indexOf(title));
+  assert.ok(sections.every((index, i) => index > 0 && (i === 0 || index > sections[i - 1]!)), JSON.stringify(sections));
+  // Frequência e dados do acompanhamento descrevem o app atual (lease: 2 min em movimento, 15 min parado, sem sensores).
+  assert.ok(lgpdXml.includes("no máximo uma posição a cada 2 minutos; com o aparelho parado, uma posição a cada 15 minutos"));
+  assert.ok(lgpdXml.includes("As coordenadas não integram o registro de ponto, o comprovante nem os arquivos fiscais."));
+  assert.equal(lgpdXml.includes("orientação, bateria, rede"), false);
+  // A v6 parte da v5: componentes do DOCX idênticos e somente os parágrafos revisados (preâmbulo, 2-XVII/XVIII,
+  // 3-XXII, 3-A-III/IV, 7-II/XII, 10-X e 15-IX) alterados; os demais acréscimos são parágrafos novos.
+  const previous = new PizZip(await readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/03-termo-lgpd-v5.docx")));
   const current = new PizZip(lgpdSource);
   assert.deepEqual(Object.keys(current.files).sort(), Object.keys(previous.files).sort());
   for (const name of Object.keys(previous.files).filter((name) => name !== "word/document.xml" && !previous.files[name].dir)) {
     assert.deepEqual(current.file(name)?.asUint8Array(), previous.file(name)?.asUint8Array(), name);
   }
-  const paragraphs = lgpdXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) ?? [];
-  const clauseStart = paragraphs.findIndex((p) => p.includes("3-A. Localização"));
-  const clauseEnd = paragraphs.findIndex((p) => p.includes("4. Dados de saúde"));
-  assert.equal(clauseEnd - clauseStart, 10);
-  assert.equal(lgpdXml.replace(paragraphs.slice(clauseStart, clauseEnd).join(""), ""), previous.file("word/document.xml")?.asText());
+  const paragraphPattern = /<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
+  const previousParagraphs = previous.file("word/document.xml")?.asText().match(paragraphPattern) ?? [];
+  const paragraphs = lgpdXml.match(paragraphPattern) ?? [];
+  const kept = new Set(paragraphs);
+  assert.equal(previousParagraphs.filter((p) => !kept.has(p)).length, 10);
+  assert.equal(paragraphs.length - previousParagraphs.length, 29);
 
   const closing = systemDocumentTemplateById("system-admission-bundle-closing-term");
   assert.equal(closing?.version, 4);
