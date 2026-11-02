@@ -2,7 +2,7 @@
 const COMPANY_FOLDER_ORDER = [
   "Societário", "Fiscal e contábil", "Trabalhista e RH", "Sistemas e conformidade",
   "Licenças e autorizações", "Contratos", "Financeiro", "Jurídico",
-  "Marca e propriedade intelectual", "Modelos", "A classificar",
+  "Marca e propriedade intelectual", "Modelos", "A classificar", "Colaboradores",
 ] as const;
 
 export function companyArchiveFolderLabel(name: string): string {

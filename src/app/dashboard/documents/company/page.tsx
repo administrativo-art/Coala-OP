@@ -417,7 +417,7 @@ export default function CompanyDocumentsPage() {
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  if (!canView && !access.financial && !access.models) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
+  if (!canView && !access.financial && !access.models && !access.people) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
   const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
@@ -451,6 +451,7 @@ export default function CompanyDocumentsPage() {
     const unclassified = folders.findIndex((folder) => folder.id === "A classificar");
     folders.splice(unclassified < 0 ? folders.length : unclassified, 0, { id: "models", name: companyArchiveFolderLabel("Modelos"), open: () => router.push("/dashboard/documents/models") });
   }
+  if (access.people) folders.push({ id: "people", name: companyArchiveFolderLabel("Colaboradores"), open: () => router.push("/dashboard/documents/collaborators") });
   const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({
     id: document.id, name: document.title, kind: "file", description: document.standardizedName || document.originalName,
     size: formatSize(document.size), modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
@@ -478,6 +479,7 @@ export default function CompanyDocumentsPage() {
   ];
   else entries = fileEntries(filtered);
   if (categoryFilter === "all" && access.models && (!search.trim() || "modelos".includes(search.trim().toLocaleLowerCase("pt-BR")))) entries.push({ id: "models", name: companyArchiveFolderLabel("Modelos"), kind: "folder", description: "Biblioteca de modelos por categoria", open: () => router.push("/dashboard/documents/models") });
+  if (categoryFilter === "all" && access.people && (!search.trim() || "colaboradores".includes(search.trim().toLocaleLowerCase("pt-BR")))) entries.push({ id: "people", name: companyArchiveFolderLabel("Colaboradores"), kind: "folder", description: "Pastas internas por pessoa; acesso conforme as regras do DP", open: () => router.push("/dashboard/documents/collaborators") });
   const breadcrumbs = [
     ...(categoryFilter !== "all" ? [{ name: companyArchiveFolderLabel(categoryFilter), open: () => selectCategory(categoryFilter) }] : []),
     ...(folderFilter ? [{ name: TIME_RECORDING_COMPLIANCE_LABEL, open: () => selectTimeRecordingFolder() }] : []),

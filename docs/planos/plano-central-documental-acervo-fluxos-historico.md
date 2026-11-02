@@ -1,5 +1,7 @@
 # Plano — Documentos: Acervo, Fluxos e pendências e Histórico
 
+Decisão posterior de 02/11/2026: pastas internas dos colaboradores ficam em Empresa → 12 - Colaboradores, sem numeração individual e sem mudar a publicação no portal. Implementação e E2E locais concluídos para essa árvore. Arquivamento de novos kits admissionais será único por solicitação; classificação dos sete registros legados depende de pré-voo exato, auditoria e preservação de acesso/bytes. As notas anteriores registram a evolução, não substituem esta decisão.
+
 Decisão de 02/11/2026 após uso da interface: raiz do Acervo com Empresa e Colaboradores; Financeiro/Modelos dentro de Empresa, categoria Jurídico e numeração apenas nas pastas principais da empresa. Dossiês combinam árvore persistida, IDs vinculados e documentos gerados/admissionais autorizados. Gerador ganha entrada própria e hospeda a manutenção de modelos existente. Criação livre timbrada/IA e referências de produto estão separadas no [plano do Gerador](plano-gerador-documentos.md).
 
 ## 1. Objetivo e contrato de entrega

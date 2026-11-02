@@ -1,5 +1,7 @@
 # Plano — Pastas e nomenclatura do arquivo documental
 
+02/11/2026 — correção pontual: componentes admissionais legados com o mesmo SHA-256 representam o kit completo assinado, não documentos individuais. Usar o tipo existente ADMISSION_PACKAGE e o título do pacote da solicitação; preservar nomes originais, arquivos, assinatura e regras de visualização. Para novos kits, uma identidade por solicitação evita sete cópias com títulos incompatíveis com o conteúdo.
+
 ## Avanço e decisão — 02/11/2026
 
 Decisão posterior: títulos de novos envios ao Autentique seguem `Coala Shakes - Setor | Tipo - Nome`, com RH, FN (Financeiro) e OP (Operações). Função comum aplicada ao kit, individuais admissionais, avulsos, PJ, férias e desligamentos. Recibo padrão: `Coala Shakes - FN | Recibo - João Meloriano`. Patrimônio/uniformes OP; aviso de férias RH e recibo FN. Filename troca `|` por hífen e conserva extensão compatível com o conteúdo. Pedidos já enviados/assinados mantêm o nome; protocolo continua nos metadados/PDF. Esse título de apresentação é separado da chave canônica de arquivamento/versionamento descrita abaixo.

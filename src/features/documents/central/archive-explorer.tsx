@@ -4,7 +4,7 @@ import Link from "next/link";
 import { DocumentNavigation } from "./document-navigation";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowUp, Building2, ChevronDown, ChevronRight, FileStack, FileText, Folder, Grid2X2, HardDrive, List, Loader2, MoreHorizontal, RefreshCw, Search, Users } from "lucide-react";
+import { ArrowLeft, ArrowUp, Building2, ChevronDown, ChevronRight, FileStack, FileText, Folder, Grid2X2, HardDrive, List, Loader2, MoreHorizontal, RefreshCw, Search } from "lucide-react";
 import { SortHeader } from "@/components/patterns/sort-header";
 import { sortByTitle } from "@/lib/sort-by-title";
 import { PageContainer } from "@/components/layout/page-container";
@@ -20,8 +20,7 @@ export type ArchiveAction = { label: string; run: () => void; destructive?: bool
 export type ArchiveEntry = { id: string; name: string; kind: "folder" | "file" | "model"; description?: string; modified?: string; size?: string; open: () => void; actions?: ArchiveAction[] };
 export type ArchiveFolder = { id: string; name: string; active?: boolean; depth?: number; open: () => void };
 export const ARCHIVE_AREAS = [
-  { id: "company" as const, name: "Empresa", description: "Documentos institucionais", icon: Building2 },
-  { id: "collaborators" as const, name: "Colaboradores", description: "Pastas individuais da equipe", icon: Users },
+  { id: "company" as const, name: "Empresa", description: "Arquivos internos e pastas dos colaboradores", icon: Building2 },
 ];
 
 export function useCompanyArchiveAccess() {
@@ -30,14 +29,13 @@ export function useCompanyArchiveAccess() {
     documents: hasFormalizationPermission(permissions, "companyDocuments.view", isDefaultAdmin),
     financial: isDefaultAdmin || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view),
     models: hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin),
+    people: isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly),
   };
 }
 
 export function useArchiveAreas() {
-  const { permissions, isDefaultAdmin } = useAuth();
   const access = useCompanyArchiveAccess();
-  return ARCHIVE_AREAS.filter((area) => area.id === "company" ? access.documents || access.financial || access.models
-    : hasFormalizationPermission(permissions, "documents.view", isDefaultAdmin));
+  return ARCHIVE_AREAS.filter(() => access.documents || access.financial || access.models || access.people);
 }
 export function archiveAreaHref(area: ArchiveArea) { return `/dashboard/documents/${area}`; }
 
@@ -57,8 +55,8 @@ export function ArchiveExplorer({ area = null, entries, folders = [], breadcrumb
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
   const select = (entry: ArchiveEntry) => { setSelectedId(entry.id); if (selectedId !== entry.id) onSelect?.(entry); };
   const open = (entry: ArchiveEntry) => { if (entry.kind === "folder") { setSelectedId(null); onSelect?.(null); } else select(entry); entry.open(); };
-  const nestedInCompany = area === "financial" || area === "models";
-  const areaName = nestedInCompany ? companyArchiveFolderLabel(area === "financial" ? "Financeiro" : "Modelos") : ARCHIVE_AREAS.find((entry) => entry.id === area)?.name;
+  const nestedInCompany = area === "financial" || area === "models" || area === "collaborators";
+  const areaName = nestedInCompany ? companyArchiveFolderLabel(area === "financial" ? "Financeiro" : area === "models" ? "Modelos" : "Colaboradores") : ARCHIVE_AREAS.find((entry) => entry.id === area)?.name;
   return <PageContainer variant="wide">
     <div className="overflow-hidden rounded-xl border bg-white shadow-xs">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
