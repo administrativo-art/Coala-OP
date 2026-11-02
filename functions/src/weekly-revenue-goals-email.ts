@@ -24,13 +24,13 @@ const MAX_EMPLOYEE_GOALS = 300;
 /** O Gmail corta mensagens com mais de ~102 KB de HTML; acima disso a qualidade dos dados some do e-mail. */
 const MAX_HTML_BYTES = 95_000;
 
-const resendApiKey = defineSecret("RESEND_API_KEY");
-const sender = defineString("REVENUE_GOALS_EMAIL_FROM", { default: "Margaret Hamilton · Coala One <relatorios@coalashakes.com>" });
+export const resendApiKey = defineSecret("RESEND_API_KEY");
+export const sender = defineString("REVENUE_GOALS_EMAIL_FROM", { default: "Margaret Hamilton · Coala One <relatorios@coalashakes.com>" });
 /** Lista separada por vírgula. */
 const recipient = defineString("REVENUE_GOALS_EMAIL_TO", { default: "administrativo@coalashakes.com,cesar@cesarthimotheo.com" });
-const recipients = () => recipient.value().split(",").map(address => address.trim()).filter(Boolean);
+export const recipients = () => recipient.value().split(",").map(address => address.trim()).filter(Boolean);
 const appUrl = defineString("REVENUE_GOALS_APP_URL", { default: "https://op.coalashakes.com" });
-const minWeekCoverage = defineString("REVENUE_GOALS_MIN_WEEK_COVERAGE", { default: "0.8" });
+export const minWeekCoverage = defineString("REVENUE_GOALS_MIN_WEEK_COVERAGE", { default: "0.8" });
 const onTrackPercent = defineString("REVENUE_GOALS_ON_TRACK_PERCENT", { default: "100" });
 const attentionPercent = defineString("REVENUE_GOALS_ATTENTION_PERCENT", { default: "95" });
 
@@ -96,8 +96,7 @@ async function scheduledDates(db: Firestore, periodId: string, dpUnitId: string,
   return [...new Set(inPeriod.filter(shift => shift.countsTowardGoals !== false && !external.has(String(shift.userId))).map(shift => String(shift.date)))].sort();
 }
 
-export async function loadReportInput(db: Firestore, now: Date) {
-  const window = reportWindow(now);
+export async function loadReportInput(db: Firestore, now: Date, window = reportWindow(now)) {
   const currentMonth = window.monthEnd.slice(0, 7);
   const kioskSnapshot = await db.collection("kiosks").limit(50).get();
   const units: Unit[] = kioskSnapshot.docs
@@ -153,12 +152,12 @@ export async function loadReportInput(db: Firestore, now: Date) {
   };
 }
 
-async function claimRun(db: Firestore, runId: string) {
+export async function claimRun(db: Firestore, runId: string, kind = "weekly-revenue-goals") {
   const reference = db.collection("scheduledEmailRuns").doc(runId);
   return db.runTransaction(async transaction => {
     const snapshot = await transaction.get(reference);
     if (["sent", "blocked"].includes(snapshot.data()?.status)) return false;
-    transaction.set(reference, { kind: "weekly-revenue-goals", status: "sending", startedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(reference, { kind, status: "sending", startedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return true;
   });
 }

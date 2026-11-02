@@ -2,6 +2,7 @@ package com.coalaone.go
 
 import com.coalaone.go.ui.profileInitials
 import com.coalaone.go.ui.personDisplayName
+import com.coalaone.go.ui.personFirstName
 import com.coalaone.go.ui.scheduleShiftDisplayName
 import com.coalaone.go.ui.unitInitials
 import com.coalaone.go.ui.personColor
@@ -29,6 +30,8 @@ class PresentationTest {
         assertEquals("Heucilene Ribeiro", personDisplayName("Heucilene Oliveira Ribeiro"))
         assertEquals("Heucilene", personDisplayName(" Heucilene "))
         assertEquals("", personDisplayName("   "))
+        assertEquals("Heucilene", personFirstName(" Heucilene Oliveira Ribeiro "))
+        assertEquals("", personFirstName("   "))
     }
     @Test fun scheduleShiftNameKeepsOnlyUsefulContext() {
         assertEquals("CS · Líder", scheduleShiftDisplayName("CS | Turno - Líder - ADM/CD/QUIOSQUES"))

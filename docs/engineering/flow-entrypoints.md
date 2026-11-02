@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **58**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -332,14 +332,21 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx).
 
-Arquivos locais percorridos: 4.
+Arquivos locais percorridos: 5.
 
 Chamadas candidatas encontradas:
 
 - `/api/documents/company` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/route.ts`](../../src/app/api/documents/company/route.ts)
 - `/api/documents/company/access` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/access/route.ts`](../../src/app/api/documents/company/access/route.ts)
 - `/api/documents/company/analyze` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/analyze/route.ts`](../../src/app/api/documents/company/analyze/route.ts)
+- `/api/documents/company/folder` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/folder/route.ts`](../../src/app/api/documents/company/folder/route.ts)
+- `/api/documents/company/intake` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/intake/route.ts`](../../src/app/api/documents/company/intake/route.ts)
 - `/api/documents/company/units` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/units/route.ts`](../../src/app/api/documents/company/units/route.ts)
+
+Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
+
+- `financial.inbox.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
+- `financial.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
 
 ## `consents`
 
@@ -359,17 +366,35 @@ Arquivos locais percorridos: 13.
 
 Nenhuma string de API encontrada no percurso estático; investigar chamadas indiretas, ações de servidor e SDKs.
 
-## `document-generation`
+## `document-central`
 
-Páginas: [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
+Páginas: [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx).
 
 Arquivos locais percorridos: 14.
 
 Chamadas candidatas encontradas:
 
+- `/api/documents/history` — interface [`src/features/documents/central/history-workspace.tsx`](../../src/features/documents/central/history-workspace.tsx); rota candidata [`src/app/api/documents/history/route.ts`](../../src/app/api/documents/history/route.ts)
+- `/api/documents/work-items` — interface [`src/features/documents/central/central-workspace.tsx`](../../src/features/documents/central/central-workspace.tsx); rota candidata [`src/app/api/documents/work-items/route.ts`](../../src/app/api/documents/work-items/route.ts)
+- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
+
+Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
+
+- `financial.inbox.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
+- `financial.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
+
+## `document-generation`
+
+Páginas: [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
+
+Arquivos locais percorridos: 16.
+
+Chamadas candidatas encontradas:
+
 - `/api/documents/generate` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
-- `/api/documents/generated` — interface [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
-- `/api/documents/generated/` — interface [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
+- `/api/documents/generated` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
+- `/api/documents/generated/` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
 - `/api/documents/generator/parties` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generator/parties/route.ts`](../../src/app/api/documents/generator/parties/route.ts)
 - `/api/documents/generator/templates` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generator/templates/route.ts`](../../src/app/api/documents/generator/templates/route.ts)
 
@@ -555,7 +580,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
 
-Arquivos locais percorridos: 38.
+Arquivos locais percorridos: 39.
 
 Chamadas candidatas encontradas:
 
@@ -575,6 +600,8 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.edit` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
 - `dp.collaborators.ownProfileOnly` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
+- `financial.inbox.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
+- `financial.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
 - `settings.manageUsers` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
 
 ## `expenses`
@@ -666,14 +693,15 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `financial-inbox`
 
-Páginas: [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
+Páginas: [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
 
-Arquivos locais percorridos: 40.
+Arquivos locais percorridos: 45.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/inbox` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
-- `/api/financial/inbox/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
+- `/api/financial/document-counterparties` — interface [`src/features/financial/inbox/document-naming-editor.tsx`](../../src/features/financial/inbox/document-naming-editor.tsx); rota candidata [`src/app/api/financial/document-counterparties/route.ts`](../../src/app/api/financial/document-counterparties/route.ts)
+- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/inbox/bulk-review` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/bulk-review/route.ts`](../../src/app/api/financial/inbox/bulk-review/route.ts)
 - `/api/financial/inbox/settings` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/settings/route.ts`](../../src/app/api/financial/inbox/settings/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
@@ -685,9 +713,10 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.inbox.analyze` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.discard` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.link` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
-- `financial.inbox.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `financial.inbox.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
 - `financial.paymentRequests.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `financial.view` — [`src/features/documents/central/acervo-navigation.tsx`](../../src/features/documents/central/acervo-navigation.tsx)
 
 ## `financial-overview`
 

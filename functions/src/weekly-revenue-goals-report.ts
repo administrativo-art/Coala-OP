@@ -44,7 +44,7 @@ export type ReportInput = {
   thresholds: { onTrack: number; attention: number };
 };
 
-type Aggregate = {
+export type Aggregate = {
   cents: number; coupons: number; couponCents: number; items: number;
   have: number; expected: number; legacy: number; ticket: number | null; perDay: number;
   daily: Record<string, number>; products: Record<string, { name: string; qty: number; cents: number }>;
@@ -53,9 +53,9 @@ type Aggregate = {
 /** Nome do relatório no assunto e no cabeçalho do e-mail. */
 export const REPORT_NAME = "Placar Coala";
 
-const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const C = {
+export const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+export const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+export const C = {
   ink: "#1a1b1f", muted: "#5f646c", div: "#f1eee8", border: "#e3dfd6", page: "#efece6", warm: "#f7f5f0",
   accent: "#d13670", kicker: "#f08bb1", ok: "#147337", okBg: "#e8f5ee", bad: "#a6325b", badBg: "#fbe7ef",
   warn: "#6b4500", warnBg: "#fff7e6", info: "#1d4ed8", track: "#eceae5",
@@ -84,28 +84,28 @@ export function dateRange(start: string, end: string) {
   return out;
 }
 
-const weekday = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
-const shortDate = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
-const lastDayOfMonth = (month: string) => {
+export const weekday = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+export const shortDate = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+export const lastDayOfMonth = (month: string) => {
   const [year, m] = month.split("-").map(Number);
   return `${month}-${String(new Date(Date.UTC(year, m, 0)).getUTCDate()).padStart(2, "0")}`;
 };
-const monthOf = (date: string) => date.slice(0, 7);
-const previousMonth = (month: string, back: number) => {
+export const monthOf = (date: string) => date.slice(0, 7);
+export const previousMonth = (month: string, back: number) => {
   const [year, m] = month.split("-").map(Number);
   const value = new Date(Date.UTC(year, m - 1 - back, 1));
   return value.toISOString().slice(0, 7);
 };
 
-function escapeHtml(value: unknown) {
+export function escapeHtml(value: unknown) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 }
-const num = (value: number, digits = 0) => value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const pct = (value: number, digits = 1) => `${num(value, digits)}%`;
-const brl = (cents: number, digits = 0) => `R$ ${num(cents / 100, digits)}`;
-const compactBrl = (cents: number) => cents >= 100_000 ? `R$ ${num(cents / 100_000, 1)} mil` : brl(cents);
-const delta = (value: number, base: number | null | undefined) => base ? (value / base - 1) * 100 : null;
-const productName = (value: string) => value.toLocaleLowerCase("pt-BR")
+export const num = (value: number, digits = 0) => value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+export const pct = (value: number, digits = 1) => `${num(value, digits)}%`;
+export const brl = (cents: number, digits = 0) => `R$ ${num(cents / 100, digits)}`;
+export const compactBrl = (cents: number) => cents >= 100_000 ? `R$ ${num(cents / 100_000, 1)} mil` : brl(cents);
+export const delta = (value: number, base: number | null | undefined) => base ? (value / base - 1) * 100 : null;
+export const productName = (value: string) => value.toLocaleLowerCase("pt-BR")
   .replace(/(^|\s)(\p{L})/gu, (_match, space: string, letter: string) => space + letter.toLocaleUpperCase("pt-BR"))
   .replace(/(\d)\s*ml\b/gi, "$1 ml");
 
@@ -308,23 +308,23 @@ export function renderPreheader(report: Report) {
 }
 
 // ── HTML ────────────────────────────────────────────────────────────
-const arrow = (value: number | null, digits = 1) => value == null || !Number.isFinite(value)
+export const arrow = (value: number | null, digits = 1) => value == null || !Number.isFinite(value)
   ? `<span style="color:${C.muted}">—</span>`
   : Math.abs(value) < 1 ? `<span style="color:${C.muted}">= ${pct(Math.abs(value), digits)}</span>`
     : `<span style="color:${value > 0 ? C.ok : C.bad};font-weight:700">${value > 0 ? "▲" : "▼"} ${pct(Math.abs(value), digits)}</span>`;
-const pill = (text: string, background: string, color: string) => `<span style="display:inline-block;background:${background};color:${color};font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">${escapeHtml(text)}</span>`;
+export const pill = (text: string, background: string, color: string) => `<span style="display:inline-block;background:${background};color:${color};font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">${escapeHtml(text)}</span>`;
 const statusPill = (report: Report, pace: number) => {
   const label = statusOf(report, pace);
   return label === "No ritmo" ? pill(label, C.okBg, C.ok) : label === "Atenção" ? pill(label, C.warnBg, C.warn) : pill(label, C.badBg, C.bad);
 };
-const cell = (content: string, style = "") => `<td style="padding:8px 0;border-top:1px solid ${C.div};${style}">${content}</td>`;
-const cellRight = (content: string, style = "") => `<td style="padding:8px 6px;border-top:1px solid ${C.div};text-align:right;white-space:nowrap;${style}">${content}</td>`;
-const header = (labels: string[]) => `<tr style="color:${C.muted};font-size:10.5px;text-transform:uppercase;letter-spacing:.06em">${labels.map((label, index) => `<td style="padding:6px ${index ? "6px" : "0"};font-weight:700;text-align:${index ? "right" : "left"}">${label}</td>`).join("")}</tr>`;
-const section = (id: string, title: string, subtitle: string) => `<tr><td id="${id}" style="padding:30px 28px 0"><div style="font-size:17px;font-weight:800">${escapeHtml(title)}</div><div style="font-size:12.5px;color:${C.muted};margin-top:2px">${escapeHtml(subtitle)}</div></td></tr>`;
-const backToTop = `<tr><td style="padding:10px 28px 0;font-size:12px"><a href="#topo" style="color:${C.muted}">↑ voltar ao topo</a></td></tr>`;
-const blank = (width: string, background: string, height: number, extra = "") => `<td width="${width}" style="background:${background};height:${height}px;font-size:0;line-height:0;${extra}">&nbsp;</td>`;
+export const cell = (content: string, style = "") => `<td style="padding:8px 0;border-top:1px solid ${C.div};${style}">${content}</td>`;
+export const cellRight = (content: string, style = "") => `<td style="padding:8px 6px;border-top:1px solid ${C.div};text-align:right;white-space:nowrap;${style}">${content}</td>`;
+export const header = (labels: string[]) => `<tr style="color:${C.muted};font-size:10.5px;text-transform:uppercase;letter-spacing:.06em">${labels.map((label, index) => `<td style="padding:6px ${index ? "6px" : "0"};font-weight:700;text-align:${index ? "right" : "left"}">${label}</td>`).join("")}</tr>`;
+export const section = (id: string, title: string, subtitle: string) => `<tr><td id="${id}" style="padding:30px 28px 0"><div style="font-size:17px;font-weight:800">${escapeHtml(title)}</div><div style="font-size:12.5px;color:${C.muted};margin-top:2px">${escapeHtml(subtitle)}</div></td></tr>`;
+export const backToTop = `<tr><td style="padding:10px 28px 0;font-size:12px"><a href="#topo" style="color:${C.muted}">↑ voltar ao topo</a></td></tr>`;
+export const blank = (width: string, background: string, height: number, extra = "") => `<td width="${width}" style="background:${background};height:${height}px;font-size:0;line-height:0;${extra}">&nbsp;</td>`;
 
-function progressBar(realizedPct: number, expectedPct: number, height = 12) {
+export function progressBar(realizedPct: number, expectedPct: number, height = 12) {
   const realized = Math.min(Math.max(realizedPct, 0), 100), expected = Math.min(Math.max(expectedPct, 0), 100);
   const marker = `<td width="2" style="background:${C.ink};height:${height + 6}px;font-size:0;line-height:0">&nbsp;</td>`;
   const cells = realized >= expected

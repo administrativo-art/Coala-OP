@@ -1,4 +1,5 @@
 import 'server-only';
+import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
 
 import { createHash } from 'node:crypto';
 import { getStorage } from 'firebase-admin/storage';
@@ -184,6 +185,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
       data: { signatureRequestId: requestId, receiptDocumentId: workflow.receipt.originalDocumentId },
     });
   });
+  const signatureDocumentName = buildSignatureDocumentName({ department: 'FN', documentType: 'Recibo de Férias', holderName: employeeName });
   await requestRef.set({
     type: 'vacation_receipt_signature',
     purpose: 'vacation_receipt',
@@ -194,7 +196,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
     documentId: workflow.receipt.originalDocumentId,
     documentStoragePath: workflow.receipt.originalStoragePath,
     documentHash: actualHash,
-    documentName: `Coala Shakes - RH | Recibo de Férias - ${employeeName}`,
+    documentName: signatureDocumentName,
     signers: [{ party: 'employee', name: employeeName, email: employeeEmail, avatarUrl: userSnapshot.get('avatarUrl') ?? null }],
     requestedAt,
     requestedBy: 'system:bank-reconciliation',
@@ -205,8 +207,8 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
   try {
     const created = await createAutentiqueDocument({
       buffer,
-      fileName: workflow.receipt.originalFileName || `recibo-de-ferias-${vacationId}.pdf`,
-      documentName: `Coala Shakes - RH | Recibo de Férias - ${employeeName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, 'pdf'),
+      documentName: signatureDocumentName,
       message: vacationReceiptSignatureMessage({
         employeeName,
         vacationStartDate: String(vacation.startDate ?? ''),

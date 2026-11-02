@@ -9,6 +9,22 @@ import {
   resolveDuplicateAndVersion,
 } from "../../../src/lib/hr/employee-document-distribution";
 import { resolveEmployeeDocumentFolderPath } from "../../../src/lib/hr/employee-document-options";
+import { employeeDocumentDownloadName } from "../../../src/lib/hr/employee-document-planning";
+
+describe("employeeDocumentDownloadName", () => {
+  test("usa o nome canônico e preserva a extensão real", () => {
+    assert.equal(employeeDocumentDownloadName({
+      storedName: "COL-00124__CONTRACHEQUE__2026-07__v01",
+      originalName: "holerite julho.pdf",
+      mimeType: "application/pdf",
+    }), "COL-00124__CONTRACHEQUE__2026-07__v01.pdf");
+    assert.equal(employeeDocumentDownloadName({
+      storedName: "espelho-e-contracheque-2026-07.pdf",
+      originalName: "arquivo.pdf",
+      mimeType: "application/pdf",
+    }), "espelho-e-contracheque-2026-07.pdf");
+  });
+});
 
 describe("resolveDocumentProcess", () => {
   test("férias: período aquisitivo + parcela", () => {

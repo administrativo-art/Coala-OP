@@ -2,6 +2,7 @@ export const COMPANY_DOCUMENT_CATEGORIES = [
   "Societário",
   "Fiscal e contábil",
   "Trabalhista e RH",
+  "Sistemas e conformidade",
   "Licenças e autorizações",
   "Contratos",
   "Financeiro",

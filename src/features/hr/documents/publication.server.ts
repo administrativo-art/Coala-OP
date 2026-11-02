@@ -17,6 +17,7 @@ import { getDocumentTypeConfig, activeDocumentTypeCodes } from '@/lib/hr/employe
 import { EMPLOYEE_DOCUMENT_TYPE_CATALOG } from '@/lib/hr/employee-document-options';
 import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
 import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
+import { employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
 
 const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
@@ -82,7 +83,16 @@ export async function openOwnPublishedDocument(context: ServerUserContext, id: s
   if (!path) throw notFound();
   const bytes = await deps.storage.download(path);
   await ref.collection('audit').add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
-  return { bytes, mimeType: text(data.mimeType) ?? 'application/pdf', fileName: text(data.originalName) ?? text(data.storedName) ?? `${id}.pdf` };
+  const mimeType = text(data.mimeType) ?? 'application/pdf';
+  return {
+    bytes,
+    mimeType,
+    fileName: employeeDocumentDownloadName({
+      storedName: text(data.storedName),
+      originalName: text(data.originalName) ?? `${id}.pdf`,
+      mimeType,
+    }),
+  };
 }
 
 export function assertDocumentsDp(context: ServerUserContext) {
