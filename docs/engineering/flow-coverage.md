@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+02/11/2026: árvore interna Empresa → Colaboradores exercitada em E2E demo; promoção de kit admissional único coberta por planejador puro (manifesto, hash, legado e repetição). Auditoria de registros gerados confirmou vínculos, sem homologar todos os binários/provedor. Guias document-central, employee-documents, document-generation e onboarding-signatures atualizados; não promove cobertura global de assinatura externa.
+
 2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
 
 2026-10-27: [LGPD v5 integrada](../rep-p/homologacao/lgpd-v5-validacao-integrada.md) passou com emuladores, conversor oficial e pacote de oito modelos/24 páginas. Golden dirigido atualizado; a consulta posterior não encontrou modelo LGPD armazenado nem override no destino (`coala`), dispensando migração. Sem publicação ou promoção do grupo inteiro a Verificado.

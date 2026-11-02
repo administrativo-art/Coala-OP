@@ -230,7 +230,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             show: hasFormalizationPermission(permissions, "companyDocuments.view")
               || hasFormalizationPermission(permissions, "templates.view")
               || hasFormalizationPermission(permissions, "documents.view")
-              || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view),
+              || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view)
+              || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly),
           },
           {
             label: "Gerador de documentos",

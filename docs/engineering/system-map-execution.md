@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+02/11/2026: chamado de classificação de pacote assinado usou mapa → central documental → guias de pessoa/geração/assinatura e conferiu fontes atuais. Sete referências legadas eram cópias do mesmo pacote, não sete componentes separados; promoção futura passa a uma identidade. Navegação interna movida para Empresa sem ampliar acesso. Testes dirigidos e E2E demo registrados no chamado; leitura real confirma contexto dos gerados, não homologação externa. Telemetria atribuível indisponível.
+
 2026-11-02: classificação posterior da empresa e confirmação de nomenclatura financeira por fornecedor cadastrado implementadas localmente. Prévia sem escrita, fingerprint, versões e auditoria transacionais; bytes/originais preservados. Ensaio em Auth/Firestore/Storage aprovado. Nenhum pagamento/vínculo foi criado ou alterado pela nomenclatura. GUI/provedor e legados sem ID permanecem pendentes; grupos continuam Traçados.
 
 2026-11-02: ensaio autenticado da Central documental aprovado em Auth/Firestore emulados, com handlers reais, paginação e revogação de acesso. Corrigidas garantias customizadas ausentes que impediam a inicialização das duas rotas. Runner dirigido `node scripts/test-integration.mjs --document-central`; JDK Homebrew localizado. Não promove o grupo completo: UI, Storage e assinatura externa não foram exercitados.
