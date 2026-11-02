@@ -130,6 +130,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/documents/history": "Histórico",
   "/dashboard/documents/company": "Documentos da empresa",
   "/dashboard/documents/financial": "Acervo financeiro",
+  "/dashboard/documents/models": "Modelos do acervo",
   "/dashboard/documents/generated": "Fluxos e pendências",
   "/dashboard/documents/generated/manage": "Gestão de documentos gerados",
   "/dashboard/documents/templates": "Modelos",

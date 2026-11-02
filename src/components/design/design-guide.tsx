@@ -8,6 +8,8 @@ import { FilterChips } from "@/components/patterns/filter-chips";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { LiftRow } from "@/components/patterns/lift-row";
 import { Segmented } from "@/components/patterns/segmented";
+import { SortHeader } from "@/components/patterns/sort-header";
+import { sortByTitle, type TitleSortDirection } from "@/lib/sort-by-title";
 import { PanelField, SidePanel } from "@/components/patterns/side-panel";
 import { WizardModal } from "@/components/patterns/wizard-modal";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ export function DesignGuide() {
   const [chip, setChip] = React.useState<string | null>(null);
   const [indicator, setIndicator] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<string | null>(null);
+  const [titleOrder, setTitleOrder] = React.useState<TitleSortDirection>("asc");
   const [confirming, setConfirming] = React.useState(false);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [modalKind, setModalKind] = React.useState<"base" | "derived" | "record">("base");
@@ -126,6 +129,14 @@ export function DesignGuide() {
             </div>
             <FilterChips className="mt-4" value={chip} onChange={setChip} allCount={42} chips={[{ value: "a", label: "Laticínios", count: 12 }, { value: "b", label: "Frutas", count: 9 }]} />
           </ControlPanel>
+        </Section>
+
+        <Section title="Ordenação padrão de listas">
+          <p className="text-sm text-ds-ink-muted">Listas novas ou ajustadas começam pelo título/nome crescente. Clique no cabeçalho para alternar A–Z e Z–A.</p>
+          <div className="rounded-ds-card border border-ds-border p-4">
+            <SortHeader label="Título" active direction={titleOrder} onClick={() => setTitleOrder(titleOrder === "asc" ? "desc" : "asc")} />
+            <ul className="mt-3 divide-y divide-ds-border">{sortByTitle(["Recibo 10", "Contrato", "Recibo 2", "Admissão"], (title) => title, titleOrder).map((title) => <li key={title} className="py-2 text-sm text-ds-ink">{title}</li>)}</ul>
+          </div>
         </Section>
 
         <Section title="Linhas e painel lateral">

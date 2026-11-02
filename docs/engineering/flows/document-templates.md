@@ -1,5 +1,7 @@
 # Modelos documentais: cadastro, mapeamento e publicação
 
+Em 02/11/2026, a mesma biblioteca passou a ser consultada também em [Acervo → Modelos](../../../src/app/dashboard/documents/models/page.tsx), pelo componente `archive-models.tsx` e GET existente. Categorias viram pastas; seleção mostra versão, estado e prévia. Gerenciar biblioteca/modelo e Gerar documento apontam para as ações já existentes, conforme suas permissões. Referências/contextuais não ganham geração avulsa por aparecerem no Acervo. Nenhum catálogo ou armazenamento paralelo.
+
 27/10/2026 — [validação integrada LGPD v5](../../rep-p/homologacao/lgpd-v5-validacao-integrada.md): gerador com cadastros/emuladores, PDF no conversor oficial e pacote completo de 24 páginas aprovados. Confirmada precedência de modelo armazenado publicado sobre o catálogo estático; a consulta posterior dos dois registros LGPD no banco `coala` real retornou inexistência, sem necessidade de migração e sem alteração de históricos. Nenhum envio à Autentique ou publicação foi executado.
 
 27/10/2026 — candidata local: `system-admission-lgpd-awareness-term` passa à versão 5, com a seção 3-A aprovada para localização. A [matriz e seu hash](../../modelos-documentos/admissionais/README.md) preservam a v4; documentos já gerados/assinados não são reescritos. Ainda sem publicação. A mudança não ativa localização nem implementa a permissão de consulta.

@@ -1,14 +1,17 @@
 "use client";
 
+import { ArchivePreview } from "@/features/documents/central/archive-preview";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { AcervoNavigation } from "@/features/documents/central/acervo-navigation";
-import { Building2, ChevronDown, ChevronRight, Download, Eye, FileText, Folder, Loader2, Plus, Search, Sparkles, Trash2, Upload, Users, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArchiveExplorer, type ArchiveEntry, type ArchiveFolder } from "@/features/documents/central/archive-explorer";
+import { Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-categories";
 import { COMPANY_DOCUMENT_TYPES, companyIntakeName } from "@/lib/documents/company-document-intake";
 import { TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, TIME_RECORDING_COMPLIANCE_LABEL, TIME_RECORDING_EVIDENCE_SECTIONS, companyDocumentEvidenceSection, companyDocumentFolderCode, companyDocumentNavigationCategory, type CompanyDocumentFolderCode, type TimeRecordingEvidenceSection } from "@/lib/documents/company-document-folders";
@@ -85,6 +88,7 @@ function nextPendingItemId() {
 }
 
 export default function CompanyDocumentsPage() {
+  const router = useRouter();
   const { firebaseUser, permissions } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
@@ -96,7 +100,9 @@ export default function CompanyDocumentsPage() {
   const [unitFilter, setUnitFilter] = useState("all");
   const [folderFilter, setFolderFilter] = useState<CompanyDocumentFolderCode>(null);
   const [sectionFilter, setSectionFilter] = useState<TimeRecordingEvidenceSection | null>(null);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ id: string; url: string; mime: string } | null>(null);
+  const previewSequence = useRef(0);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [knownUnits, setKnownUnits] = useState<string[]>([]);
@@ -111,6 +117,8 @@ export default function CompanyDocumentsPage() {
   const [moveReason, setMoveReason] = useState("");
   const [moveSaving, setMoveSaving] = useState(false);
   const [moveError, setMoveError] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<CompanyDocument | null>(null);
+  const [removing, setRemoving] = useState(false);
   const canView = hasFormalizationPermission(permissions, "companyDocuments.view");
   const canManage = hasFormalizationPermission(permissions, "companyDocuments.manage");
 
@@ -299,6 +307,7 @@ export default function CompanyDocumentsPage() {
 
   async function accessDocument(document: CompanyDocument, action: "view" | "download") {
     if (!firebaseUser) return;
+    const sequence = action === "view" ? ++previewSequence.current : null;
     setMessage("");
     try {
       const token = await firebaseUser.getIdToken();
@@ -311,33 +320,34 @@ export default function CompanyDocumentsPage() {
         const payload = await response.json();
         throw new Error(payload.error || "Falha ao acessar documento.");
       }
-      const url = URL.createObjectURL(await response.blob());
-      if (action === "view") window.open(url, "_blank", "noopener,noreferrer");
+      const blob = await response.blob();
+      if (action === "view" && sequence !== previewSequence.current) return;
+      const url = URL.createObjectURL(blob);
+      if (action === "view") setPreview({ id: document.id, url, mime: document.mimeType });
       else {
         const link = window.document.createElement("a");
         link.href = url;
         link.download = document.standardizedName || document.originalName;
         link.click();
       }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (action === "download") window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao acessar documento.");
     }
   }
 
   async function removeDocument(document: CompanyDocument) {
-    if (!firebaseUser || !window.confirm(`Excluir “${document.title}”?`)) return;
-    const token = await firebaseUser.getIdToken();
-    const response = await fetch(`/api/documents/company?id=${encodeURIComponent(document.id)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      setMessage(payload.error || "Falha ao excluir documento.");
-      return;
-    }
-    setDocuments((current) => current.filter((item) => item.id !== document.id));
+    if (!firebaseUser || removing) return;
+    setRemoving(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/documents/company?id=${encodeURIComponent(document.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao excluir documento.");
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      setRemoveTarget(null); setPreview(null);
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Falha ao excluir documento."); }
+    finally { setRemoving(false); }
   }
 
   function openMove(document: CompanyDocument) {
@@ -391,200 +401,99 @@ export default function CompanyDocumentsPage() {
     }
   }
 
+  useEffect(() => {
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search);
+      const category = params.get("category");
+      setCategoryFilter(CATEGORIES.find((item) => item === category) ?? "all");
+      setFolderFilter(params.get("folder") === TIME_RECORDING_COMPLIANCE_FOLDER ? TIME_RECORDING_COMPLIANCE_FOLDER : null);
+      setSectionFilter(TIME_RECORDING_EVIDENCE_SECTIONS.find((item) => item.code === params.get("section"))?.code ?? null);
+      setUnitFilter(params.get("unit") || "all");
+      setSearch(""); previewSequence.current++; setPreview(null);
+    };
+    restore(); window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
   const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
-  function selectAllDocuments() {
-    setCategoryFilter("all");
-    setUnitFilter("all");
-    setFolderFilter(null);
-    setSectionFilter(null);
-    setExpandedCategory(null);
+  function navigateFolder(category = "all", folder: CompanyDocumentFolderCode = null, section: TimeRecordingEvidenceSection | null = null, unit = "all") {
+    setCategoryFilter(category); setFolderFilter(folder); setSectionFilter(section); setUnitFilter(unit); setSearch("");
+    previewSequence.current++; setPreview(null);
+    const url = new URL(window.location.href);
+    for (const key of ["category", "folder", "section", "unit", "document"]) url.searchParams.delete(key);
+    if (category !== "all") url.searchParams.set("category", category);
+    if (folder) url.searchParams.set("folder", folder);
+    if (section) url.searchParams.set("section", section);
+    if (unit !== "all") url.searchParams.set("unit", unit);
+    window.history.pushState(null, "", url);
   }
+  function selectAllDocuments() { navigateFolder(); }
+  function selectCategory(category: string) { navigateFolder(category); }
+  function selectUnitWithinCategory(category: string, unit: string) { navigateFolder(category, null, null, unit); }
+  function selectTimeRecordingFolder(section: TimeRecordingEvidenceSection | null = null) { navigateFolder(TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, section); }
 
-  function selectCategory(item: string) {
-    setCategoryFilter(item);
-    setUnitFilter("all");
-    setFolderFilter(null);
-    setSectionFilter(null);
-    setExpandedCategory(item);
-  }
-
-  function selectUnitWithinCategory(item: string, unitValue: string) {
-    setCategoryFilter(item);
-    setUnitFilter(unitValue);
-    setFolderFilter(null);
-    setSectionFilter(null);
-  }
-
-  function selectTimeRecordingFolder(section: TimeRecordingEvidenceSection | null = null) {
-    setCategoryFilter(TIME_RECORDING_COMPLIANCE_CATEGORY);
-    setUnitFilter("all");
-    setFolderFilter(TIME_RECORDING_COMPLIANCE_FOLDER);
-    setSectionFilter(section);
-    setExpandedCategory(TIME_RECORDING_COMPLIANCE_CATEGORY);
-  }
+  const unitFolders = categoryFilter === "all" ? [] : knownUnits.filter((unit) => documents.some((document) => companyDocumentNavigationCategory(document) === categoryFilter && document.unit === unit));
+  const folders: ArchiveFolder[] = CATEGORIES.flatMap((category) => [
+    { id: category, name: category, active: categoryFilter === category && !folderFilter && unitFilter === "all", open: () => selectCategory(category) },
+    ...(categoryFilter === category ? [
+      ...(category === TIME_RECORDING_COMPLIANCE_CATEGORY ? [{ id: TIME_RECORDING_COMPLIANCE_FOLDER, name: TIME_RECORDING_COMPLIANCE_LABEL, depth: 1, active: folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter, open: () => selectTimeRecordingFolder() },
+        ...(folderFilter ? TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => ({ id: section.code, name: section.label, depth: 2, active: sectionFilter === section.code, open: () => selectTimeRecordingFolder(section.code) })) : [])] : []),
+      ...unitFolders.map((unit) => ({ id: category + unit, name: unit, depth: 1, active: unitFilter === unit, open: () => selectUnitWithinCategory(category, unit) })),
+    ] : []),
+  ]);
+  const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({
+    id: document.id, name: document.title, kind: "file", description: document.standardizedName || document.originalName,
+    size: formatSize(document.size), modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
+    open: () => void accessDocument(document, "view"),
+    actions: [
+      { label: "Baixar", run: () => void accessDocument(document, "download") },
+      { label: "Ver histórico", run: () => router.push(`/dashboard/documents/history?source=company&documentId=${encodeURIComponent(document.id)}`) },
+      ...(canManage && (document.status === "pending_classification" || document.category === "A classificar") ? [{ label: "Classificar documento", run: () => openClassification(document) }] : []),
+      ...(canManage && (document.category === TIME_RECORDING_COMPLIANCE_CATEGORY || companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER) ? [{ label: "Mover para…", run: () => openMove(document) }] : []),
+      ...(canManage ? [{ label: "Excluir", destructive: true, run: () => setRemoveTarget(document) }] : []),
+    ],
+  }));
+  let entries: ArchiveEntry[];
+  if (search.trim()) entries = fileEntries(filtered);
+  else if (categoryFilter === "all") entries = CATEGORIES.map((category) => ({ id: "category:" + category, name: category, kind: "folder", description: `${documents.filter((document) => companyDocumentNavigationCategory(document) === category).length} documentos`, open: () => selectCategory(category) }));
+  else if (folderFilter && !sectionFilter) entries = [
+    ...TIME_RECORDING_EVIDENCE_SECTIONS.map((section): ArchiveEntry => ({ id: "section:" + section.code, name: section.label, kind: "folder", open: () => selectTimeRecordingFolder(section.code) })),
+    ...fileEntries(filtered.filter((document) => !companyDocumentEvidenceSection(document))),
+  ];
+  else if (!folderFilter && unitFilter === "all") entries = [
+    ...(categoryFilter === TIME_RECORDING_COMPLIANCE_CATEGORY ? [{ id: "compliance", name: TIME_RECORDING_COMPLIANCE_LABEL, kind: "folder" as const, open: () => selectTimeRecordingFolder() }] : []),
+    ...unitFolders.map((unit): ArchiveEntry => ({ id: "unit:" + unit, name: unit, kind: "folder", open: () => selectUnitWithinCategory(categoryFilter, unit) })),
+    ...fileEntries(filtered.filter((document) => !document.unit && companyDocumentFolderCode(document) !== TIME_RECORDING_COMPLIANCE_FOLDER)),
+  ];
+  else entries = fileEntries(filtered);
+  const breadcrumbs = [
+    ...(categoryFilter !== "all" ? [{ name: categoryFilter, open: () => selectCategory(categoryFilter) }] : []),
+    ...(folderFilter ? [{ name: TIME_RECORDING_COMPLIANCE_LABEL, open: () => selectTimeRecordingFolder() }] : []),
+    ...(sectionFilter ? [{ name: TIME_RECORDING_EVIDENCE_SECTIONS.find((section) => section.code === sectionFilter)?.label ?? sectionFilter }] : []),
+    ...(unitFilter !== "all" ? [{ name: unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter }] : []),
+  ];
+  const goUp = () => { if (sectionFilter) selectTimeRecordingFolder(); else if (folderFilter || unitFilter !== "all") selectCategory(categoryFilter); else if (categoryFilter !== "all") selectAllDocuments(); else router.push("/dashboard/documents"); };
 
   return (
-    <div className="space-y-3">
-      <AcervoNavigation />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">01 · Documentos da empresa</p>
-          <h1 className="text-xl font-black text-slate-950">Documentos da empresa</h1>
-        </div>
-        {canManage ? <Button size="sm" className="h-9 gap-2 rounded-lg" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4" /> Anexar documento
-        </Button> : null}
-      </div>
-
-      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
-
-      <Link href="/dashboard/documents/collaborators" className="group flex items-center gap-3 rounded-xl border bg-white p-4 shadow-xs transition hover:border-pink-200 hover:shadow-md">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-pink-50 text-[#df2f78]"><Users className="h-5 w-5" /></span>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Colaboradores</span>
-          <span className="block text-xs font-semibold text-slate-500">Pastas internas completas de cada pessoa, visíveis somente ao DP autorizado.</span></span>
-        <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#df2f78]" />
-      </Link>
-
-      <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
-          <button
-            type="button"
-            onClick={selectAllDocuments}
-            aria-current={categoryFilter === "all" && !folderFilter ? "page" : undefined}
-            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-black ${categoryFilter === "all" && !folderFilter ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}
-          >
-            <Folder className={`h-4 w-4 shrink-0 ${categoryFilter === "all" ? "" : "text-slate-400"}`} />
-            <span className="min-w-0 flex-1">Todos os documentos</span>
-            <span className="text-[10px] font-bold text-slate-400">{documents.length}</span>
-          </button>
-          {CATEGORIES.map((item) => {
-            const active = categoryFilter === item && unitFilter === "all" && !folderFilter;
-            const count = documents.filter((document) => companyDocumentNavigationCategory(document) === item).length;
-            const expanded = categoryFilter === item && expandedCategory === item;
-            const noUnitCount = documents.filter((document) => companyDocumentNavigationCategory(document) === item && !document.unit).length;
-            return (
-              <div key={item}>
-                <div className={`flex items-center gap-1 rounded-lg ${categoryFilter === item ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
-                  <button
-                    type="button"
-                    onClick={() => selectCategory(item)}
-                    aria-current={active ? "page" : undefined}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs font-black"
-                  >
-                    <Folder className={`h-4 w-4 shrink-0 ${categoryFilter === item ? "" : "text-slate-400"}`} />
-                    <span className="min-w-0 flex-1 truncate">{item}</span>
-                    <span className="text-[10px] font-bold text-slate-400">{count}</span>
-                  </button>
-                  {categoryFilter === item ? (
-                    <button
-                      type="button"
-                      onClick={() => setExpandedCategory((current) => current === item ? null : item)}
-                      className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/70"
-                      aria-label={expanded ? `Recolher ${item}` : `Expandir ${item}`}
-                    >
-                      <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
-                    </button>
-                  ) : null}
-                </div>
-                {expanded ? (
-                  <div className="ml-4 border-l border-slate-100 py-1 pl-1.5">
-                    {item === TIME_RECORDING_COMPLIANCE_CATEGORY ? <button type="button" onClick={() => selectTimeRecordingFolder()}
-                      aria-current={folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter ? "page" : undefined}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}>
-                      <Folder className="h-3.5 w-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{TIME_RECORDING_COMPLIANCE_LABEL}</span>
-                      <span className="text-[10px] font-bold text-slate-400">{documents.filter((document) => companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER).length}</span>
-                    </button> : null}
-                    {item === TIME_RECORDING_COMPLIANCE_CATEGORY && folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER ? TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => (
-                      <button key={section.code} type="button" onClick={() => selectTimeRecordingFolder(section.code)}
-                        aria-current={sectionFilter === section.code ? "page" : undefined}
-                        className={`ml-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold ${sectionFilter === section.code ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}>
-                        <Folder className="h-3.5 w-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                        <span className="text-[10px] font-bold text-slate-400">{documents.filter((document) => companyDocumentEvidenceSection(document) === section.code).length}</span>
-                      </button>
-                    )) : null}
-                    {knownUnits.map((unitName) => {
-                      const unitActive = unitFilter === unitName;
-                      const unitCount = documents.filter((document) => companyDocumentNavigationCategory(document) === item && document.unit === unitName).length;
-                      return (
-                        <button
-                          key={unitName}
-                          type="button"
-                          onClick={() => selectUnitWithinCategory(item, unitName)}
-                          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitActive ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}
-                        >
-                          <Folder className={`h-3.5 w-3.5 shrink-0 ${unitActive ? "" : "text-slate-300"}`} />
-                          <span className="min-w-0 flex-1 truncate">{unitName}</span>
-                          <span className="text-[10px] font-bold text-slate-400">{unitCount}</span>
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => selectUnitWithinCategory(item, NO_UNIT_FILTER)}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitFilter === NO_UNIT_FILTER ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}
-                    >
-                      <Folder className={`h-3.5 w-3.5 shrink-0 ${unitFilter === NO_UNIT_FILTER ? "" : "text-slate-300"}`} />
-                      <span className="min-w-0 flex-1 truncate">Sem unidade específica</span>
-                      <span className="text-[10px] font-bold text-slate-400">{noUnitCount}</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </aside>
-
-        <main className="min-w-0 space-y-3">
-          <p className="flex items-center gap-1.5 text-xs font-black text-slate-500">
-            <Folder className="h-3.5 w-3.5 text-slate-400" />
-            {categoryFilter === "all" ? "Todos os documentos" : categoryFilter}
-            {folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER ? ` › ${TIME_RECORDING_COMPLIANCE_LABEL}` : ""}
-            {sectionFilter ? ` › ${TIME_RECORDING_EVIDENCE_SECTIONS.find((section) => section.code === sectionFilter)?.label ?? sectionFilter}` : ""}
-            {unitFilter !== "all" ? ` › ${unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter}` : ""}
-          </p>
-          <div className="rounded-lg border bg-white p-2 shadow-xs">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input className="h-9 pl-9 text-sm" placeholder="Buscar documento, categoria ou unidade..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div>
-          ) : filtered.length === 0 ? (
-            <div className="grid min-h-52 place-items-center rounded-lg border border-dashed bg-white p-8 text-center">
-              <div><Building2 className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum documento encontrado</p></div>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border bg-white shadow-xs">
-              {filtered.map((document) => (
-                <div key={document.id} className="flex flex-col gap-3 border-b p-3 last:border-b-0 sm:flex-row sm:items-center">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileText className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-black text-slate-900">{document.title}</p>
-                    <p className="truncate text-xs text-slate-500">{document.category}{document.unit ? ` · ${document.unit}` : ""} · {formatSize(document.size)} · {document.uploadedByName || "Sistema"}</p>
-                    {document.standardizedName ? <p className="truncate font-mono text-[10px] text-slate-400">{document.standardizedName}</p> : null}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold">{formatDate(document.expiresAt)}</span>
-                    <Button size="icon" variant="outline" className="h-8 w-8" title="Visualizar" onClick={() => void accessDocument(document, "view")}><Eye className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="outline" className="h-8 w-8" title="Baixar" onClick={() => void accessDocument(document, "download")}><Download className="h-4 w-4" /></Button>
-                    <Button asChild size="sm" variant="ds-secondary" className="h-8"><Link href={`/dashboard/documents/history?source=company&documentId=${encodeURIComponent(document.id)}`}>Ver trilha</Link></Button>
-                    {canManage && (document.status === "pending_classification" || document.category === "A classificar") ? <Button size="sm" variant="ds-secondary" onClick={() => openClassification(document)}>Classificar documento</Button> : null}
-                    {canManage && (document.category === TIME_RECORDING_COMPLIANCE_CATEGORY || companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER) ? <Button size="sm" variant="outline" className="h-8" onClick={() => openMove(document)}>Mover para…</Button> : null}
-                    {canManage ? <Button size="icon" variant="outline" className="h-8 w-8 text-rose-600" title="Excluir" onClick={() => void removeDocument(document)}><Trash2 className="h-4 w-4" /></Button> : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </main>
-      </div>
+    <>
+      <ArchiveExplorer area="company" folders={folders} entries={entries} breadcrumbs={breadcrumbs} search={search} onSearch={setSearch} loading={loading} error={message} onRefresh={() => void loadDocuments()} onUp={goUp} onRoot={selectAllDocuments}
+        onSelect={() => { previewSequence.current++; setPreview(null); setRemoveTarget(null); }}
+        footer={canManage && removeTarget ? <InlineConfirm className="m-3" message={`Excluir “${removeTarget.title}”?`} confirmLabel="Excluir documento" loading={removing} onCancel={() => setRemoveTarget(null)} onConfirm={() => void removeDocument(removeTarget)} /> : null}
+        toolbar={canManage ? <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-1 h-4 w-4" />Anexar</Button> : null}
+        preview={(entry) => {
+          const document = documents.find((item) => item.id === entry.id);
+          if (!document) return <p className="text-xs text-slate-500">{entry.description || "Abra a pasta para consultar os arquivos."}</p>;
+          return <div className="space-y-3 text-xs text-slate-600">
+            {preview?.id === document.id && <ArchivePreview url={preview.url} mime={preview.mime} title={document.title} />}
+            <p className="break-all"><strong>Nome do arquivo</strong><br />{document.standardizedName || document.originalName}</p>
+            <p className="break-all"><strong>Nome original</strong><br />{document.originalName}</p>
+            <p>{formatSize(document.size)} · {document.mimeType}</p><p>Vencimento: {formatDate(document.expiresAt)}</p>
+            <p>Adicionado por {document.uploadedByName || "Sistema"}</p>
+          </div>;
+        }} />
 
       <datalist id={UNITS_DATALIST_ID}>
         {knownUnits.map((unitName) => <option key={unitName} value={unitName} />)}
@@ -706,6 +615,6 @@ export default function CompanyDocumentsPage() {
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={moveSaving} onClick={() => setMovingDocument(null)}>Cancelar</Button><Button disabled={moveSaving || moveReason.trim().length < 3 || (moveFolderCode !== null && moveSection === null) || (companyDocumentFolderCode(movingDocument ?? {}) === moveFolderCode && companyDocumentEvidenceSection(movingDocument ?? {}) === moveSection)} onClick={() => void confirmMove()}>{moveSaving ? "Movendo…" : "Confirmar movimentação"}</Button></div>
         </DialogContent>
       </Dialog> : null}
-    </div>
+    </>
   );
 }

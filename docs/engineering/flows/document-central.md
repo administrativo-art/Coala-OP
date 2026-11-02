@@ -6,9 +6,15 @@
 
 ## Entradas e responsabilidade
 
+Correção de interface em 02/11/2026: `ArchiveExplorer` fornece o mesmo ambiente em Empresa, Colaboradores, Financeiro e Modelos. A raiz mostra pastas reais de navegação; duplo clique, Enter ou toque abre o conteúdo sem trocar para a listagem administrativa antiga. Barra de busca, caminho clicável com voltar/subir, grade/lista, seleção, menu contextual e prévia compartilham comportamento. `sortByTitle` aplica A–Z como padrão, com Z–A pelo cabeçalho/seletor. O padrão também está no guia de listas e no guia vivo de design.
+
+Empresa conserva upload, classificação, mover com motivo/auditoria e exclusão com InlineConfirm nas mesmas APIs. Pastas e seções REP-P permanecem virtuais. Colaboradores filtra as pessoas pelo acesso atual de unidade e consulta documentos somente ao abrir o titular; pastas usam a função canônica e a API original continua autorizando cada arquivo/tipo. Financeiro mantém paginação da inbox: pastas, busca e ordenação abrangem o conteúdo carregado, com continuação explícita. `/dashboard/documents/models` consulta `/api/documents/templates` sob templates.view e reutiliza o catálogo oficial/personalizado; gestão e geração encaminham às ações existentes. Nenhuma coleção ou backend novo.
+
+`ArchivePreview` renderiza PDF com o PDF.js já usado no projeto, somente após a origem entregar um blob autorizado; não faz OCR/IA nem grava os arquivos. A prévia anterior é descartada ao mudar de item e object URLs são revogados no fechamento/troca. Downloads mantêm o nome canônico da origem. O E2E `tests/e2e/documents/archive.spec.ts` usa emuladores e respostas sintéticas para verificar navegação, busca, ordenação, caminho, contexto, prévia e modelos; não certifica dados/provedor reais.
+
 O menu **Documentos** possui três entradas:
 
-- [`/dashboard/documents`](../../../src/app/dashboard/documents/page.tsx): raiz do Acervo, com pastas Empresa, Colaboradores e Financeiro conforme as permissões de cada origem.
+- [`/dashboard/documents`](../../../src/app/dashboard/documents/page.tsx): raiz do Acervo, com pastas Empresa, Colaboradores, Financeiro e Modelos conforme as permissões de cada origem.
 - [`/dashboard/documents/generated`](../../../src/app/dashboard/documents/generated/page.tsx): Fluxos e pendências, com abas A classificar, Em preparação, Fluxos e Assinaturas.
 - [`/dashboard/documents/history`](../../../src/app/dashboard/documents/history/page.tsx): histórico agregado de eventos disponíveis e estados atuais legados.
 
