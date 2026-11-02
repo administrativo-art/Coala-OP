@@ -43,6 +43,7 @@ export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
 export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';
+export { monthlyRevenueClosingEmail } from './monthly-revenue-closing-email.js';
 export { onScheduleGoalEligibilityChange } from './schedule-goals.js';
 export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
