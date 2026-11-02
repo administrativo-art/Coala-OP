@@ -330,13 +330,13 @@ test("fontes admissionais preservam os hashes catalogados", async () => {
   }
 });
 
-test("contrato de experiência v4 usa somente a razão social e preserva o layout", async () => {
+test("contrato de experiência v5 usa somente a razão social, preserva o layout e cita os documentos do pacote", async () => {
   const template = systemDocumentTemplateById(
     "system-admission-employment-probation-contract",
   );
-  assert.equal(template?.version, 4);
+  assert.equal(template?.version, 5);
   assert.equal(template?.status, "published");
-  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v4.docx"), true);
+  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v5.docx"), true);
   const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
   assert.equal(salaryBinding?.kind, "system");
   if (salaryBinding?.kind === "system") {
@@ -363,7 +363,7 @@ test("contrato de experiência v4 usa somente a razão social e preserva o layou
   assert.equal(template?.variables.length, 16);
 
   const prepared = await readFile(
-    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx"),
+    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v5.docx"),
   );
   const preparedZip = new PizZip(prepared);
   const documentXml = preparedZip.file("word/document.xml")?.asText() ?? "";
@@ -381,6 +381,9 @@ test("contrato de experiência v4 usa somente a razão social e preserva o layou
   assert.ok(documentXml.includes("CONFIDENCIALIDADE E PROPRIEDADE INTELECTUAL"));
   assert.ok(documentXml.includes("Termo de Confidencialidade que"));
   assert.ok(documentXml.includes("artigos 88 a 93 da Lei nº 9.279/1996"));
+  assert.ok(documentXml.includes("na forma do Termo de Ciência sobre o Tratamento de Dados Pessoais, que integra"));
+  assert.ok(documentXml.includes("Regulamento de Metas e Prêmios por Desempenho vigente para o período"));
+  assert.equal(documentXml.includes("Regulamento de Bonificação"), false);
   assert.ok(documentXml.includes('<w:jc w:val="right"/>'));
   assert.equal((documentXml.match(/<w:spacing w:before="1000"\/>/g) ?? []).length, 2);
   for (const token of [
@@ -426,4 +429,13 @@ test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas"
     return !before || !after || Buffer.compare(Buffer.from(before), Buffer.from(after)) !== 0;
   }).sort();
   assert.deepEqual(changed, ["word/document.xml", "word/footer1.xml"]);
+});
+
+test("regulamento de metas v4 informa apuração pelo sistema e pedido de revisão", async () => {
+  const template = systemDocumentTemplateById("system-admission-goals-awards-policy");
+  assert.equal(template?.version, 4);
+  assert.equal(template?.sourcePath?.endsWith("05-metas-premios-v4.docx"), true);
+  const xml = new PizZip(await readFile(path.join(process.cwd(), template!.sourcePath!))).file("word/document.xml")?.asText() ?? "";
+  assert.ok(xml.includes("A apuração será feita pelos sistemas internos da EMPREGADORA"));
+  assert.ok(xml.includes("a demonstração e a revisão do resultado apurado."));
 });

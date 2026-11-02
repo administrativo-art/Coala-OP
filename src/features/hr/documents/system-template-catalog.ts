@@ -1,9 +1,9 @@
 import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
 import {
-  PROBATION_CONTRACT_V4_FIELD_MAPPING,
-  PROBATION_CONTRACT_V4_HASH,
-  PROBATION_CONTRACT_V4_SOURCE,
-  PROBATION_CONTRACT_V4_VARIABLES,
+  PROBATION_CONTRACT_V5_FIELD_MAPPING,
+  PROBATION_CONTRACT_V5_HASH,
+  PROBATION_CONTRACT_V5_SOURCE,
+  PROBATION_CONTRACT_V5_VARIABLES,
 } from "@/features/hr/documents/probation-contract-template";
 import {
   HOURS_BANK_V2_HASH,
@@ -159,12 +159,12 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     shortName: "Contrato de experiência",
     slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Versão 4 no padrão documental CT Sorvetes, com qualificação destacada e área ampliada para assinatura.",
-    sourcePath: PROBATION_CONTRACT_V4_SOURCE,
-    contentHash: PROBATION_CONTRACT_V4_HASH,
-    version: 4,
-    variables: [...PROBATION_CONTRACT_V4_VARIABLES],
-    fieldMapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
+    description: "Versão 5 no padrão documental CT Sorvetes, com qualificação destacada, área ampliada para assinatura e referências alinhadas ao Termo LGPD e ao Regulamento de Metas e Prêmios.",
+    sourcePath: PROBATION_CONTRACT_V5_SOURCE,
+    contentHash: PROBATION_CONTRACT_V5_HASH,
+    version: 5,
+    variables: [...PROBATION_CONTRACT_V5_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V5_FIELD_MAPPING,
   },
   {
     id: "system-admission-hours-bank-agreement",
@@ -215,9 +215,9 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     name: "Regulamento de Metas e Prêmios por Desempenho",
     category: "Admissão",
     description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
-    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
-    contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
-    version: 2,
+    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v4.docx`,
+    contentHash: "bb6c2c80561cbd2aa76d5dc62ffb29945b0bdf2751b561b5fcfcb7588a09857f",
+    version: 4,
     variables: [
       "employee.ctps_number",
       "employee.ctps_series",
