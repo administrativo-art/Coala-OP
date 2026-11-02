@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **538 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **544 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -100,6 +100,8 @@ Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/company` | GET, POST, DELETE | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/access` | POST | [src/app/api/documents/company/access/route.ts](../../src/app/api/documents/company/access/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/analyze` | POST | [src/app/api/documents/company/analyze/route.ts](../../src/app/api/documents/company/analyze/route.ts) | [company-documents](flows/company-documents.md) |
+| `/api/documents/company/folder` | POST | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) | [company-documents](flows/company-documents.md) |
+| `/api/documents/company/intake` | POST, PATCH | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/units` | GET | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/generate` | POST | [src/app/api/documents/generate/route.ts](../../src/app/api/documents/generate/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated` | GET | [src/app/api/documents/generated/route.ts](../../src/app/api/documents/generated/route.ts) | [document-generation](flows/document-generation.md) |
@@ -109,6 +111,7 @@ Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/generated/[id]/signature` | GET, POST | [src/app/api/documents/generated/[id]/signature/route.ts](../../src/app/api/documents/generated/%5Bid%5D/signature/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/parties` | GET | [src/app/api/documents/generator/parties/route.ts](../../src/app/api/documents/generator/parties/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/templates` | GET | [src/app/api/documents/generator/templates/route.ts](../../src/app/api/documents/generator/templates/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/history` | GET | [src/app/api/documents/history/route.ts](../../src/app/api/documents/history/route.ts) | [document-central](flows/document-central.md) |
 | `/api/documents/templates` | GET, POST | [src/app/api/documents/templates/route.ts](../../src/app/api/documents/templates/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]` | GET, PATCH | [src/app/api/documents/templates/[id]/route.ts](../../src/app/api/documents/templates/%5Bid%5D/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/ai-plan` | GET, POST, PATCH | [src/app/api/documents/templates/[id]/ai-plan/route.ts](../../src/app/api/documents/templates/%5Bid%5D/ai-plan/route.ts) | [document-templates](flows/document-templates.md) |
@@ -120,6 +123,7 @@ Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/templates/[id]/source` | GET | [src/app/api/documents/templates/[id]/source/route.ts](../../src/app/api/documents/templates/%5Bid%5D/source/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/text` | GET | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/%5Bid%5D/text/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/workflow` | PATCH | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/%5Bid%5D/workflow/route.ts) | [document-templates](flows/document-templates.md) |
+| `/api/documents/work-items` | GET | [src/app/api/documents/work-items/route.ts](../../src/app/api/documents/work-items/route.ts) | [document-central](flows/document-central.md) |
 | `/api/dp/absence-availability/[requestId]/reconcile` | POST | [src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts](../../src/app/api/dp/absence-availability/%5BrequestId%5D/reconcile/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-coverage/[requestId]` | GET, POST | [src/app/api/dp/absence-coverage/[requestId]/route.ts](../../src/app/api/dp/absence-coverage/%5BrequestId%5D/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-coverage/[requestId]/candidates` | GET | [src/app/api/dp/absence-coverage/[requestId]/candidates/route.ts](../../src/app/api/dp/absence-coverage/%5BrequestId%5D/candidates/route.ts) | [dp-absences](flows/dp-absences.md) |
@@ -259,6 +263,7 @@ Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/cash-deposits/reports` | GET | [src/app/api/financial/cash-deposits/reports/route.ts](../../src/app/api/financial/cash-deposits/reports/route.ts) | [cash-deposits](flows/cash-deposits.md) |
 | `/api/financial/cash-deposits/reports/export` | GET | [src/app/api/financial/cash-deposits/reports/export/route.ts](../../src/app/api/financial/cash-deposits/reports/export/route.ts) | [cash-deposits](flows/cash-deposits.md) |
 | `/api/financial/data` | GET | [src/app/api/financial/data/route.ts](../../src/app/api/financial/data/route.ts) | [cash-flow](flows/cash-flow.md) |
+| `/api/financial/document-counterparties` | GET | [src/app/api/financial/document-counterparties/route.ts](../../src/app/api/financial/document-counterparties/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/dre/cmv-closure` | POST | [src/app/api/financial/dre/cmv-closure/route.ts](../../src/app/api/financial/dre/cmv-closure/route.ts) | [dre](flows/dre.md) |
 | `/api/financial/dre/source-data` | GET | [src/app/api/financial/dre/source-data/route.ts](../../src/app/api/financial/dre/source-data/route.ts) | [dre](flows/dre.md) |
 | `/api/financial/dre/stock-cmv` | GET | [src/app/api/financial/dre/stock-cmv/route.ts](../../src/app/api/financial/dre/stock-cmv/route.ts) | [dre](flows/dre.md) |
@@ -274,6 +279,7 @@ Inclui **65 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/inbox/[id]/analyze` | POST | [src/app/api/financial/inbox/[id]/analyze/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/analyze/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/case` | GET, PATCH | [src/app/api/financial/inbox/[id]/case/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/case/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/files/[fileId]` | GET | [src/app/api/financial/inbox/[id]/files/[fileId]/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/files/%5BfileId%5D/route.ts) | [financial-inbox](flows/financial-inbox.md) |
+| `/api/financial/inbox/[id]/files/[fileId]/naming` | POST | [src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/files/%5BfileId%5D/naming/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/link` | POST | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/link/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/payment` | POST | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/payment/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/restore` | POST | [src/app/api/financial/inbox/[id]/restore/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/restore/route.ts) | [financial-inbox](flows/financial-inbox.md) |

@@ -37,6 +37,7 @@ import {
   buildAdmissionSignatureDocumentName,
   buildSignatureDocumentName,
   buildSignatureFileName,
+  signatureDepartmentForTemplate,
 } from "@/features/hr/documents/signature-document-name";
 import {
   isSelectableAdmissionSignatureTemplate,
@@ -1240,7 +1241,8 @@ export async function sendSignatureDocuments(params: {
     if (!generatedStoragePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
     const [buffer] = await bucket.file(generatedStoragePath).download();
     const preSignatureHash = hashBuffer(buffer);
-    const documentName = text(target.get("documentName")) ?? buildSignatureDocumentName({
+    const documentName = buildSignatureDocumentName({
+      department: "RH",
       documentType: target.get("templateName"),
       holderName: process.data.candidateName,
     });
@@ -2057,7 +2059,16 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     }),
   ]);
   const now = new Date().toISOString();
-  const documentName = `${text(generated.get("templateName")) ?? "Documento"} ${protocol}`;
+  const templateId = text(generated.get("templateId"));
+  const catalogTemplate = SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === templateId);
+  const customTemplate = !catalogTemplate && templateId ? await dbAdmin.collection("companyDocumentTemplates").doc(templateId).get() : null;
+  const department = signatureDepartmentForTemplate(catalogTemplate ?? customTemplate?.data());
+  const recipientParty = generatedParties.find((party) => party.role === "recipient" && party.partyType !== "company");
+  const documentName = buildSignatureDocumentName({
+    department,
+    documentType: templateId === "system-receipt-standard" ? "Recibo" : generated.get("templateName"),
+    holderName: recipientParty?.name ?? text(generated.get("employeeName")) ?? text(employee?.get("username")) ?? generatedParties.find((party) => !["company", "external_company"].includes(party.partyType))?.name,
+  });
   await requestRef.set({
     type: "generated_document_standalone_signature",
     status: "sending",

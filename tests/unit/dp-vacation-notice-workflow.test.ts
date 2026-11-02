@@ -42,7 +42,7 @@ test('envio reconfere o hash e solicita somente a assinatura da colaboradora', (
   assert.match(server, /x: '39\.0', y: '56\.0', z: 1, element: 'SIGNATURE'/);
   assert.doesNotMatch(server, /party: 'company'/);
   assert.doesNotMatch(server, /resolveCompanyDocumentSignatory/);
-  assert.match(server, /Coala Shakes - RH \| Férias/);
+  assert.match(server, /department: 'RH', documentType: 'Férias'/);
 });
 
 test('webhook projeta participantes e arquiva o PDF assinado na trilha', () => {

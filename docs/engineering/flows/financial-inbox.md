@@ -1,5 +1,13 @@
 # Caixa financeira: recebimento, análise e vínculo
 
+## Nomenclatura confirmada — 02/11/2026
+
+Cada anexo arquivado oferece Padronizar nome a quem possui `financial.view + inbox.view + inbox.link`. `POST /api/financial/inbox/[id]/files/[fileId]/naming` tem contrato seguro e dois modos: preview (sem gravação) e confirm. O servidor exige despesa vinculada no mesmo workspace. Usa `supplierId` resolvido para `entities`; no legado sem ID permite confirmar uma contraparte ativa somente com `registration.view`. `GET /api/financial/document-counterparties` oferece páginas de até 50 IDs/nomes ativos, sem dados bancários. Nome livre não vira identidade. A seleção vale apenas para o documento: não altera a despesa e registra `scopeSource=document_confirmation`. Usuário escolhe nota fiscal, boleto, recibo de quitação ou comprovante de pagamento, com referência obrigatória.
+
+Prévia contém nome/destino e fingerprint de nome, vínculo e hash do arquivo; confirmação revalida tudo. Índices privados `financialDocumentNamingKeys/Contents` controlam versões por workspace/tipo/ID de contraparte/referência/hash. O metadado `attachments[].documentNaming` e o evento `DOCUMENT_NAMING_CONFIRMED` são gravados transacionalmente, sem alterar despesa, pagamento, bytes, `filename` original ou caminho físico. Repetição da mesma decisão não duplica evento. A pasta financeira é referência de navegação, não cópia de arquivo. Sem polling ou IA nesta operação.
+
+O acesso ao anexo foi migrado para secureRoute com escopo atual de workspace e usa o nome confirmado; e-mail raw e formatos ainda não suportados preservam nome original. O Histórico da central mostra nome/destino confirmados e eventos reais de nomenclatura. O editor não cadastra nem vincula fornecedores por nome; a escolha documental não regulariza automaticamente o cadastro financeiro. Ensaio Auth/Firestore/Storage cobre prévia sem escrita, confirmação idempotente, bytes preservados, vínculo alterado e contraparte legada autorizada. Acervo financeiro permite consultar arquivos por contraparte, abrir/baixar e seguir para revisão/histórico. Validação visual dispensada pelo programador.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.

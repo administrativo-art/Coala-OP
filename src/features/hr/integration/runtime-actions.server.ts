@@ -2,9 +2,11 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
+import { SYSTEM_DOCUMENT_TEMPLATES } from "@/features/hr/documents/system-template-catalog";
 import {
   buildSignatureDocumentName,
   buildSignatureFileName,
+  signatureDepartmentForTemplate,
 } from "@/features/hr/documents/signature-document-name";
 import { getDocumentVariable } from "@/features/hr/integration/document-variables";
 import type {
@@ -484,14 +486,18 @@ export function createIntegrationActionAdapter(params: {
       const provider = text(data.provider) ?? "internal";
       const signers = signatureSigners(data.signers ?? data.signer, params.processData);
       let templateName: string | null = null;
+      let signatureTemplate: { id?: unknown; category?: unknown; sourceModule?: unknown } | null = null;
       if (templateId) {
         const templateSnapshot = await dbAdmin
           .collection("companyDocumentTemplates")
           .doc(templateId)
           .get();
-        templateName = templateSnapshot.exists ? text(templateSnapshot.get("name")) : null;
+        const systemTemplate = SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === templateId);
+        templateName = templateSnapshot.exists ? text(templateSnapshot.get("name")) : systemTemplate?.name ?? null;
+        signatureTemplate = templateSnapshot.exists ? { ...templateSnapshot.data(), id: templateId } : systemTemplate ?? { id: templateId };
       }
       const documentName = buildSignatureDocumentName({
+        department: signatureDepartmentForTemplate(signatureTemplate),
         documentType:
           text(data.documentTypeName) ??
           text(data.documentType) ??

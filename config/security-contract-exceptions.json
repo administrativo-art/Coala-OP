@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "exceptions": [
     {
+      "source": "src/app/api/hr/onboarding/[id]/pj-workflow/route.ts",
+      "methods": ["GET", "PATCH"],
+      "owner": "plataforma-seguranca",
+      "reason": "Padronização restrita ao título e filename enviados ao Autentique. Autorização e transições legadas preservadas; migração integral do fluxo PJ para secureRoute exige caracterização dedicada, fora desta alteração de nomenclatura.",
+      "expiresAt": "2026-11-16"
+    },
+    {
       "source": "src/app/api/client/bootstrap/route.ts",
       "methods": ["GET"],
       "owner": "plataforma-seguranca",

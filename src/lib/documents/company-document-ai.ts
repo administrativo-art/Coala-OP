@@ -117,6 +117,7 @@ const CATEGORY_KEYWORDS: Record<CompanyDocumentCategory, string[]> = {
   "Societário": ["contrato social", "estatuto", "ata", "alteracao contratual", "junta comercial"],
   "Fiscal e contábil": ["nota fiscal", "balanco", "darf", "imposto", "contabil", "sped", "receita federal"],
   "Trabalhista e RH": ["ponto", "sindicato", "convencao coletiva", "esocial", "trabalhista"],
+  "Sistemas e conformidade": ["rep-p", "regularidade do sistema", "atestado tecnico do sistema", "afd", "aej", "ptrp"],
   "Licenças e autorizações": ["alvara", "licenca", "autorizacao", "vigilancia sanitaria", "bombeiro", "funcionamento", "inscricao estadual"],
   "Contratos": ["contrato", "acordo", "aditivo", "prestacao de servico", "locacao", "aluguel"],
   "Financeiro": ["extrato", "boleto", "financiamento", "banco", "emprestimo"],

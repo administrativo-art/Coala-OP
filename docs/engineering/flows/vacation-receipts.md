@@ -1,5 +1,7 @@
 # Férias: recebimento e revisão do recibo
 
+Novos envios do recibo ao Autentique usam `Coala Shakes - FN | Recibo de Férias - Nome`; o filename deriva desse título. Conteúdo, posição de assinatura e originais preservados. Ver [nomenclatura de assinatura](document-standalone-signature.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado deste guia:** levantamento do comportamento implementado na base `main` (`3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe`) em 2026-09-25. As afirmações abaixo apontam para código ou teste; elas não aprovam novas regras de negócio. Consulte [registro de regras](../business-rules.md) quando a pergunta for sobre o comportamento desejado.

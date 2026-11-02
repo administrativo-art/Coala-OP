@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { DocumentNamingEditor } from "./document-naming-editor";
 import { BulkBar } from "@/components/patterns/bulk-bar";
 import { ControlSearch } from "@/components/patterns/control-panel";
 import { FilterChips } from "@/components/patterns/filter-chips";
@@ -1245,6 +1246,7 @@ export function FinancialInboxPage() {
           className="sm:w-[560px]"
         >
           <div className="space-y-3">
+            {canIdentify ? selected.attachments.filter((attachment) => attachment.storagePath).map((attachment) => <DocumentNamingEditor key={`${selected.id}:${attachment.id}`} messageId={selected.id} attachment={attachment} api={api} onApplied={(naming) => setMessages((current) => current.map((message) => message.id === selected.id ? { ...message, attachments: message.attachments.map((item) => item.id === attachment.id ? { ...item, documentNaming: naming } : item) } : message))} />) : null}
             <div className="flex flex-wrap items-center gap-2"><StatusChip status={selected.status} bankState={selected.bankState} /><ResolutionChips message={selected} /><StatusPill variant="neutral">{TYPE_LABEL[selected.classification.documentType]}</StatusPill></div>
             <p className="break-all text-sm text-ds-ink-muted"><span className="font-semibold text-ds-ink">Remetente do e-mail:</span> {selected.from}</p>
             <div className="grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência da cobrança</p><p className="font-semibold">{formatCompetence(selectedCompetence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento da cobrança</p><p className="font-semibold">{formatDate(selectedDueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebido no e-mail</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
