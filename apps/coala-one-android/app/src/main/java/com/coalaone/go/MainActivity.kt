@@ -388,7 +388,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Brand(compact = true, small = true)
-                val greetingName = state?.profile?.name?.let(::personDisplayName)?.takeIf(String::isNotBlank)
+                val greetingName = state?.profile?.name?.let(::personFirstName)?.takeIf(String::isNotBlank)
                 Text("$greeting, ${greetingName ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Text(homeRoleSubtitle(state?.profile?.role), color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
