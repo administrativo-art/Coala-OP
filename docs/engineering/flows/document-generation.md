@@ -1,5 +1,7 @@
 # Geração de documento a partir de modelo publicado
 
+02/11/2026: Gerador de documentos ganha entrada própria no menu e navegação compartilhada. A geração atual permanece baseada em modelos publicados e a manutenção existente passa a `/dashboard/documents/generator/models`, com editor individual. Configurações conserva as políticas e encaminha a manutenção para esse local. Criação livre timbrada e auxílio de redação por IA são propostas no [plano do Gerador](../../planos/plano-gerador-documentos.md), não funcionalidades do mapeador IA atual.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** geração inicial traçada no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Revisão, assinatura, arquivamento e descarte estão nos [guias complementares](../flow-coverage.md). Consulte [regras aprovadas](../business-rules.md) para política desejada.

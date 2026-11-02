@@ -17,6 +17,7 @@ import {
   Send,
 } from "lucide-react";
 
+import { DocumentNavigation } from "./document-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
@@ -140,6 +141,7 @@ export function CentralDocumentWorkspace() {
   return (
     <div className="overflow-hidden rounded-xl border bg-white shadow-xs">
       <header className="border-b px-5 py-4">
+        <div className="mb-3"><DocumentNavigation active="work" /></div>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">Gestão documental</p>

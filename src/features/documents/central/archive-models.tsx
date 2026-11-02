@@ -4,6 +4,7 @@ import { ArchivePreview } from "./archive-preview";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { companyArchiveHref } from "@/lib/documents/company-archive-navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
@@ -51,7 +52,7 @@ export function ArchiveModels() {
   async function access(model: Model, download = false) {
     if (!firebaseUser) return;
     const path = download ? model.downloadUrl : model.previewUrl;
-    if (!path) { router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(model.id)}`); return; }
+    if (!path) { router.push(`/dashboard/documents/generator/models/${encodeURIComponent(model.id)}`); return; }
     const version = ++sequence.current;
     try {
       const target = new URL(path, window.location.origin);
@@ -74,13 +75,13 @@ export function ArchiveModels() {
       id: model.id, name: model.name, kind: "model", description: `Versão ${model.version} · ${documentTemplateDisplayStatus(model)}`,
       modified: model.updatedAt ? new Date(model.updatedAt).toLocaleDateString("pt-BR") : undefined, open: () => void access(model), actions: [
         { label: "Baixar modelo", run: () => void access(model, true) },
-        ...(hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? [{ label: "Gerenciar modelo", run: () => router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(model.id)}`) }] : []),
+        ...(hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? [{ label: "Gerenciar modelo", run: () => router.push(`/dashboard/documents/generator/models/${encodeURIComponent(model.id)}`) }] : []),
         ...(model.status === "published" && !["archived", "superseded"].includes(model.workflowStatus ?? "") && !["contextual", "reference"].includes(model.generationMode ?? "") && hasFormalizationPermission(permissions, "documents.generate", isDefaultAdmin) ? [{ label: "Gerar documento", run: () => router.push(`/dashboard/documents/generator?template=${encodeURIComponent(model.id)}`) }] : []),
       ],
     }));
   return <ArchiveExplorer area="models" search={search} onSearch={setSearch} loading={canView && loading} error={canView ? error : "Sem permissão para consultar modelos."} entries={canView ? entries : []}
     folders={categories.map((name) => ({ id: name, name, active: name === category, open: () => navigate(name) }))} breadcrumbs={category ? [{ name: category }] : []}
-    onRoot={() => navigate(null)} onUp={() => category ? navigate(null) : router.push("/dashboard/documents")} onRefresh={() => void load()} onSelect={() => { sequence.current++; setPreview(null); }}
-    toolbar={hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? <Button size="sm" variant="outline" onClick={() => router.push("/dashboard/settings?department=pessoal&tab=document-templates")}>Gerenciar biblioteca</Button> : null}
+    onRoot={() => navigate(null)} onUp={() => category ? navigate(null) : router.push(companyArchiveHref())} onRefresh={() => void load()} onSelect={() => { sequence.current++; setPreview(null); }}
+    toolbar={hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? <Button size="sm" variant="outline" onClick={() => router.push("/dashboard/documents/generator/models")}>Gerenciar biblioteca</Button> : null}
     preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime="application/pdf" title={entry.name} />}<p>{models.find((model) => model.id === entry.id)?.description || entry.description}</p><p>Biblioteca oficial utilizada na geração de documentos do sistema.</p></div>} />;
 }

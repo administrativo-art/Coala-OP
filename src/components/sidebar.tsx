@@ -233,6 +233,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view),
           },
           {
+            label: "Gerador de documentos",
+            href: "/dashboard/documents/generator",
+            icon: FileStack,
+            show: hasFormalizationPermission(permissions, "documents.generate") || hasFormalizationPermission(permissions, "templates.view"),
+          },
+          {
             label: "Fluxos e pendências",
             href: "/dashboard/documents/generated",
             icon: FileStack,

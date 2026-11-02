@@ -4,7 +4,7 @@ Base `70aaab65`. Inventários regenerados contra o código desta versão; mapas 
 
 | Indicador | Total |
 | --- | --- |
-| Páginas do dashboard | 172 |
+| Páginas do dashboard | 174 |
 | Páginas externas | 22 |
 | APIs por arquivo handler | 544 |
 | Exports de Functions | 66 |

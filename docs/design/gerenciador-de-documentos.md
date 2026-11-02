@@ -4,7 +4,8 @@ O gerenciador pode reproduzir as interações familiares de pastas de um computa
 
 ## Estrutura do módulo
 
-- **Acervo** é um explorador contínuo com Empresa, Colaboradores, Financeiro e Modelos, conforme o acesso da origem. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; não troca para a tela administrativa antiga. A administração detalhada continua em ações explícitas como Gerenciar dossiê ou Gerenciar biblioteca.
+- **Acervo** tem Empresa e Colaboradores na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Colaboradores e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; a organização visual não altera permissões, categoria persistida ou Storage.
+- **Gerador de documentos** reúne geração por modelos e a biblioteca de criação, edição e publicação já existente. Os links antigos redirecionam ao novo local. Acervo → Empresa → Modelos consulta a mesma biblioteca. Criar do zero com editor timbrado e auxílio de redação por IA é uma evolução descrita no [plano do Gerador](../planos/plano-gerador-documentos.md); não se confunde com o mapeamento por IA já existente.
 - **Fluxos e pendências** é a mesa de trabalho. As abas A classificar, Em preparação, Fluxos e Assinaturas representam dimensões independentes; um mesmo documento pode aparecer em mais de uma aba.
 - **Histórico** apresenta fatos persistidos pelas origens e snapshots atuais claramente identificados. A interface não inventa uma linha do tempo quando a fonte legada não registra eventos.
 

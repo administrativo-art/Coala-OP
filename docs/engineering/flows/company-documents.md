@@ -1,5 +1,7 @@
 # Documentos da empresa: análise, arquivo e acesso
 
+02/11/2026: Empresa usa rótulos numerados somente nas pastas principais; valores de categoria nos registros permanecem iguais. Jurídico aceita processos e pareceres, com referência obrigatória nos dois novos tipos de upload. Financeiro reúne arquivos institucionais e acessos Identificados/Arquivados da inbox autorizada; não há outra pasta Financeiro na raiz do Acervo. Modelos fica dentro de Empresa e reutiliza o catálogo oficial. Perfis com apenas inbox/modelos podem abrir Empresa sem consultar/exibir arquivos institucionais quando falta companyDocuments.view. Não há migração, movimentação física ou novo grant.
+
 Em 02/11/2026, a tela passou a montar o explorador compartilhado do Acervo: categorias, unidades e seções técnicas como pastas, busca, caminho clicável, A–Z/Z–A, lista/grade, prévia e ações por item. Upload, acesso, classificação e movimentação mantêm os serviços existentes. Excluir exige InlineConfirm. A troca entre pastas não abre outra listagem administrativa. Ver [central documental](document-central.md).
 
 ## Entrada padronizada — 02/11/2026
