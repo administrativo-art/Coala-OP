@@ -185,6 +185,15 @@ export async function fetchHrBootstrap(firebaseUser: FirebaseUserLike) {
   );
 }
 
+/** Catálogo de cargos e funções, sem unidades e turnos do bootstrap do RH. */
+export async function fetchHrJobCatalog(firebaseUser: FirebaseUserLike) {
+  const [{ roles }, { functions }] = await Promise.all([
+    authorizedJsonRequest<{ roles: JobRole[] }>("/api/hr/roles", firebaseUser, { method: "GET" }, "Falha ao carregar os cargos."),
+    authorizedJsonRequest<{ functions: JobFunction[] }>("/api/hr/functions", firebaseUser, { method: "GET" }, "Falha ao carregar as funções."),
+  ]);
+  return { roles, functions };
+}
+
 export async function createHrDepartment(
   firebaseUser: FirebaseUserLike,
   payload: Record<string, unknown>
