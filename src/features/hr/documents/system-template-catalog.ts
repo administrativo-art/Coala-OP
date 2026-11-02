@@ -500,7 +500,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   category: "Patrimônio",
   description: "Termo contextual emitido na transferência de posse de um patrimônio da empresa para um colaborador.",
   status: "published",
-  version: 1,
+  version: 2,
   templateKind: "system_pdf",
   renderer: "asset_custody_term",
   generationMode: "contextual",
@@ -517,7 +517,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   sourceFormat: "pdf",
   isSystem: true,
   previewUrl: "/api/documents/templates/system-asset-custody-term/preview",
-  updatedAt: "2026-10-30T00:00:00.000Z",
+  updatedAt: "2026-11-02T00:00:00.000Z",
 }, {
   id: "system-asset-maintenance-order", name: "Ordem de manutenção patrimonial", documentTitle: "ORDEM DE MANUTENÇÃO PATRIMONIAL", category: "Patrimônio", description: "Ordem contextual de manutenção preventiva, corretiva ou manual, sem assinatura eletrônica.", status: "published", version: 1, templateKind: "system_pdf", renderer: "asset_maintenance_order", generationMode: "contextual", sourceModule: "assets", sourceModulePath: "src/features/assets/maintenance.server.ts", variables: ["asset.code", "asset.name", "maintenance.type", "maintenance.description", "maintenance.checklist", "maintenance.components", "document.protocol"], letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "asset_lifecycle_plus_5y", sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-asset-maintenance-order/preview", updatedAt: "2026-10-30T00:00:00.000Z",
 }];
