@@ -427,7 +427,7 @@ export async function updateShiftDefinition(params: { context: ServerUserContext
       throw new AppError({
         code: 'DP_SHIFT_BIZNEO_IDENTITY_IMMUTABLE',
         kind: 'CONFLICT',
-        safeMessage: 'Nome, código e ID Bizneo do turno existente devem ser preservados durante a migração.',
+        safeMessage: 'Código e ID Bizneo do turno existente devem ser preservados durante a migração.',
       });
     }
     const merged = { ...pickFields(freshData, SHIFT_FIELDS), ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== null)) };
