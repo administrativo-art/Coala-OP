@@ -1,5 +1,7 @@
 # Geração de documento a partir de modelo publicado
 
+02/11/2026 — auditoria somente de leitura dos registros existentes: 28 gerados, sendo um descartado e 27 ativos com PDF; 26 vinculados à admissão e um ao colaborador, nenhum ativo sem ambos os vínculos. O documento individual assinado também possui referências no arquivo da pessoa. Vínculo com admissão é válido antes da ativação do colaborador; não implica arquivo perdido. Essa conferência não homologa todos os binários ou todos os geradores externos. A falha confirmada estava na promoção do kit assinado: cópias do PDF completo recebiam rótulos de componentes e UNKNOWN_DOCUMENT. Ver [correção de assinatura](onboarding-signatures.md).
+
 02/11/2026: Gerador de documentos ganha entrada própria no menu e navegação compartilhada. A geração atual permanece baseada em modelos publicados e a manutenção existente passa a `/dashboard/documents/generator/models`, com editor individual. Configurações conserva as políticas e encaminha a manutenção para esse local. Criação livre timbrada e auxílio de redação por IA são propostas no [plano do Gerador](../../planos/plano-gerador-documentos.md), não funcionalidades do mapeador IA atual.
 
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).

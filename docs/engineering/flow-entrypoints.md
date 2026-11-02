@@ -345,8 +345,11 @@ Chamadas candidatas encontradas:
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `consents`
 
@@ -434,8 +437,11 @@ Chamadas candidatas encontradas:
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `dp-overview`
 
@@ -737,6 +743,8 @@ Chamadas candidatas encontradas:
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.expenses.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.analyze` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
@@ -746,6 +754,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.paymentRequests.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `financial-overview`
 

@@ -1,10 +1,12 @@
 # Gerenciador de documentos
 
+Decisão posterior de 02/11/2026: a raiz do Acervo contém Empresa. **12 - Colaboradores** fica dentro de Empresa; nomes de pessoas e suas subpastas continuam sem números. Essa organização reúne arquivos internos sem mudar fonte ou acesso e substitui a árvore Empresa/Colaboradores descrita anteriormente. O portal do titular continua dependente de publicação explícita ou da política já configurada.
+
 O gerenciador pode reproduzir as interações familiares de pastas de um computador sem expor a estrutura física do armazenamento. A árvore exibida é uma camada de organização; mover um item altera metadados de organização e auditoria, não o caminho privado do arquivo no Storage, sua política de acesso, categoria legal, retenção ou histórico de versões.
 
 ## Estrutura do módulo
 
-- **Acervo** tem Empresa e Colaboradores na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Colaboradores e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; a organização visual não altera permissões, categoria persistida ou Storage.
+- **Acervo** tem Empresa na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`, incluindo `12 - Colaboradores`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Pessoas e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; a organização visual não altera permissões, categoria persistida ou Storage.
 - **Gerador de documentos** reúne geração por modelos e a biblioteca de criação, edição e publicação já existente. Os links antigos redirecionam ao novo local. Acervo → Empresa → Modelos consulta a mesma biblioteca. Criar do zero com editor timbrado e auxílio de redação por IA é uma evolução descrita no [plano do Gerador](../planos/plano-gerador-documentos.md); não se confunde com o mapeamento por IA já existente.
 - **Fluxos e pendências** é a mesa de trabalho. As abas A classificar, Em preparação, Fluxos e Assinaturas representam dimensões independentes; um mesmo documento pode aparecer em mais de uma aba.
 - **Histórico** apresenta fatos persistidos pelas origens e snapshots atuais claramente identificados. A interface não inventa uma linha do tempo quando a fonte legada não registra eventos.

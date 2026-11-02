@@ -28,6 +28,63 @@ const uid = "central-integration-reader";
 const profileId = `${uid}-profile`;
 const employeeId = `${uid}-employee`;
 
+test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retorno repetido", async (t) => {
+  const { archiveAutentiqueSignedDocument, promoteSignedOnboardingDocuments } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const { PDFDocument } = await import("pdf-lib");
+  const pdf = await PDFDocument.create(); pdf.addPage();
+  const bytes = Buffer.from(await pdf.save());
+  const contentHash = createHash("sha256").update(bytes).digest("hex");
+  const originalFetch = globalThis.fetch;
+  const signedUrl = "https://api.autentique.com.br/synthetic-signed-kit.pdf";
+  globalThis.fetch = async (input, init) => String(input) === signedUrl ? new Response(bytes, { headers: { "Content-Type": "application/pdf" } }) : originalFetch(input, init);
+  const refs = [], paths = [];
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    await Promise.all(refs.map((ref) => hrDbAdmin.recursiveDelete(ref)));
+    await Promise.all(paths.map((path) => bucket.file(path).delete({ ignoreNotFound: true })));
+  });
+  for (const alreadyActive of [false, true]) {
+    const onboardingId = `signed-kit-${alreadyActive ? "active" : "pending"}`;
+    const person = `${onboardingId}-employee`;
+    const requestId = `signature_bundle_${onboardingId}`;
+    const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);
+    const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+    const workflows = ["contract", "privacy"].map((templateId, index) => ({ id: `${onboardingId}-${index}`, templateId }));
+    const workflowRefs = workflows.map((workflow) => hrDbAdmin.collection("hrSignatureDocuments").doc(workflow.id));
+    const archiveId = createHash("sha256").update(`signed-admission-package:${requestId}`).digest("hex").slice(0, 32);
+    const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(archiveId);
+    refs.push(processRef, requestRef, ...workflowRefs, archiveRef);
+    const signedPath = `signed-documents/${onboardingId}/${requestId}/${contentHash}/signed.pdf`;
+    const permanentPath = `hr/employee-documents/${person}/documents/${archiveId}/versions/01/signed.pdf`;
+    paths.push(signedPath, permanentPath);
+    await processRef.set({ candidateName: "Pessoa sintética", expectedAdmissionDate: "2099-01-01", currentStage: "completed", ...(alreadyActive ? { employeeId: person } : {}) });
+    await requestRef.set({ onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
+    await Promise.all(workflowRefs.map((ref, index) => ref.set({ onboardingId, signatureRequestId: requestId, selected: true, status: "sent", documentTypeCode: "ADMISSION_DOCUMENT", templateId: workflows[index].templateId })));
+    const first = await archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl });
+    if (!alreadyActive) {
+      assert.equal(first, null); assert.equal((await archiveRef.get()).exists, false);
+      await processRef.update({ employeeId: person });
+      await bucket.file(signedPath).save(Buffer.from("%PDF-conteúdo divergente"), { resumable: false });
+      await assert.rejects(promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), /hash assinado/);
+      assert.equal((await archiveRef.get()).exists, false);
+      await bucket.file(signedPath).save(bytes, { resumable: false });
+      assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), [archiveId]);
+    } else assert.equal(first, archiveId);
+    assert.equal(await archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl }), archiveId);
+    assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), [archiveId]);
+    const archived = await archiveRef.get();
+    assert.equal(archived.get("documentTypeCode"), "ADMISSION_PACKAGE");
+    assert.equal(archived.get("contentHash"), contentHash);
+    assert.equal(archived.get("employeeId"), person);
+    assert.equal((await hrDbAdmin.collection("employeeDocuments").where("sourceOnboardingId", "==", onboardingId).limit(10).get()).size, 1);
+    for (const ref of workflowRefs) assert.equal((await ref.get()).get("employeeDocumentId"), archiveId);
+    assert.equal((await requestRef.get()).get("archivedDocumentId"), archiveId);
+    assert.equal(createHash("sha256").update((await bucket.file(permanentPath).download())[0]).digest("hex"), contentHash);
+    assert.equal((await archiveRef.collection("audit").where("action", "==", "SIGNED_DOCUMENT_ARCHIVED").get()).size, 1);
+  }
+});
+
 test("central: autorização atual, paginação e proposta preservadas pelas APIs", async (t) => {
   const refs = [];
   const seed = async (db, collection, id, data) => {

@@ -1203,7 +1203,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
                         <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
                         Documento identificado como pertencente a {document.suggestedEmployeeName ?? "outro colaborador"}.
-                        Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar ao dossiê correto.
+                        Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar à pasta correta.
                       </div>
                     ) : null}
 
