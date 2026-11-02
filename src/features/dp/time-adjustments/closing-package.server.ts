@@ -8,6 +8,7 @@ import { PDFDocument } from 'pdf-lib';
 
 import { signPtrpDetached } from '@/features/dp/rep-p/service.server';
 import { autoPublishDocument } from '@/features/hr/documents/publication.server';
+import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
 import { openSystemNotice, resolveSystemNoticeKeys as resolveNoticeKeys, resolveSystemNotices, type SystemNoticeInput } from '@/features/system-notices/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { createAutentiqueDocument } from '@/lib/autentique.server';
@@ -187,6 +188,8 @@ export async function sendClosingPackage(context: ServerUserContext, input: Extr
   if (!expectedHash) throw fail('PTRP_PACKAGE_PAYSLIP_UNVERIFIED', 'O contracheque não tem código de conferência (hash). Reenvie o arquivo pelos documentos da pessoa.', 'DATA_INTEGRITY');
   if (expectedHash !== sha256(payslipBytes)) throw fail('PTRP_PACKAGE_PAYSLIP_INTEGRITY', 'O contracheque falhou na conferência de integridade.', 'DATA_INTEGRITY');
   const documentName = `Coala Shakes - DP | Espelho de ponto e contracheque - ${monthLabel(input.competence)} - ${name}`;
+  // Keep the PDF/manifest title stable; only the external presentation changes.
+  const providerDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: `Espelho de ponto e contracheque - ${monthLabel(input.competence)}`, holderName: name });
   const bundle = await composeClosingPackage({ mirror: mirrorFile.bytes, payslip: payslipBytes, title: documentName, name, month: monthLabel(input.competence) })
     .catch(() => { throw fail('PTRP_PACKAGE_PDF_INVALID', 'Não foi possível juntar o espelho e o contracheque (PDF inválido ou protegido).', 'DATA_INTEGRITY'); });
   const signed = await deps.sign(bundle.bytes);
@@ -218,7 +221,7 @@ export async function sendClosingPackage(context: ServerUserContext, input: Extr
     tx.set(target, record);
     tx.set(deps.hrDb.collection(SIGNATURE_REQUESTS).doc(signatureRequestId), {
       type: PURPOSE, purpose: PURPOSE, status: 'sending', provider: 'autentique', workspaceId: context.workspace_id, competence: input.competence,
-      closureVersion: closure.version, employeeUid: input.employeeUid, employeeId, documentName, documentStoragePath: record.bundle.storagePath,
+      closureVersion: closure.version, employeeUid: input.employeeUid, employeeId, documentName: providerDocumentName, documentStoragePath: record.bundle.storagePath,
       documentHash: bundle.sha256, signers: [{ party: 'employee', name, email }], requestedAt: now, requestedBy: context.decoded.uid, updatedAt: now,
     }, { merge: true });
     return null;
@@ -227,7 +230,7 @@ export async function sendClosingPackage(context: ServerUserContext, input: Extr
   let created: Awaited<ReturnType<typeof deps.createDocument>>;
   try {
     created = await deps.createDocument({
-      buffer: bundle.bytes, fileName: `espelho-e-contracheque-${input.competence}.pdf`, documentName,
+      buffer: bundle.bytes, fileName: buildSignatureFileName(providerDocumentName, 'pdf'), documentName: providerDocumentName,
       message: `Olá, ${name}. Este documento traz o seu espelho de ponto e o contracheque de ${monthLabel(input.competence)}. Confira e assine. Se discordar do espelho, fale com o Departamento Pessoal antes de assinar.`,
       signers: [{ email, name, action: 'SIGN', positions: [{ x: '50.0', y: '60.0', z: bundle.pageCount, element: 'SIGNATURE' }] }],
     });

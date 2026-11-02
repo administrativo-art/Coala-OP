@@ -35,3 +35,11 @@ Use [`tests/unit/hr-documents`](../../../tests/unit/hr-documents) para localizar
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+## Acervo, trabalho e histórico
+
+Novos envios para assinatura usam `Coala Shakes - Setor | Tipo - Nome`, inclusive avulsos, individuais admissionais e pacotes. RH/FN/OP e distinção entre título e filename estão no [fluxo de assinatura](document-standalone-signature.md). A apresentação não altera o PDF, protocolo ou catálogo de geradores.
+
+O menu Documentos apresenta Acervo, Fluxos e pendências e Histórico. A fila transversal está descrita na [central documental](document-central.md). A gestão detalhada de gerados usa `src/app/dashboard/documents/generated/workspace.tsx` em `/dashboard/documents/generated/manage`; auditoria e assinatura mantêm os enforcements existentes. O histórico transversal aponta de volta para essa gestão quando o registro é um documento gerado.
+
+Em 02/11/2026, a consulta de gerados foi migrada para contrato seguro e ganhou filtro opcional `documentId`. A gestão usa esse filtro quando a referência recebida não está na lista inicial de até 300 documentos, incluindo descartados para consulta histórica. O acesso exige `documents.view`; caminhos privados, valores manuais sensíveis e contatos de assinatura mantêm a sanitização conforme permissões. Ensaio dirigido: `node scripts/test-integration.mjs --document-central`.

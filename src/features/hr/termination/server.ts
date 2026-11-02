@@ -1,4 +1,5 @@
 import "server-only";
+import { buildSignatureDocumentName, buildSignatureFileName } from "@/features/hr/documents/signature-document-name";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { renderToBuffer } from "react-pdf-renderer-server";
@@ -1153,10 +1154,11 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
   await bucket.file(storagePath).save(buffer, { resumable: false, metadata: { contentType: "application/pdf", cacheControl: "private, no-store" } });
   let provider;
   try {
+    const signatureDocumentName = buildSignatureDocumentName({ department: "RH", documentType: "Comunicado de dispensa", holderName: process.employeeName });
     provider = await createAutentiqueDocument({
       buffer,
-      fileName: `comunicado-dispensa-${safeFileName(process.request.protocol)}.pdf`,
-      documentName: `Comunicado de dispensa — ${process.employeeName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, "pdf"),
+      documentName: signatureDocumentName,
       message: "Confira e assine o comunicado oficial do seu desligamento.",
       signers: [
         { email: companySignatory.email, name: companySignatory.name, action: "SIGN" },
@@ -1369,13 +1371,14 @@ export async function reviewTerminationLetter(params: {
   });
   const confirmationHash = createHash("sha256").update(confirmation).digest("hex");
   const confirmationStoragePath = `hr/termination/${process.id}/request/confirmation-v${process.request.letterVersion ?? 1}.pdf`;
+  const signatureDocumentName = buildSignatureDocumentName({ department: "RH", documentType: "Pedido de demissão", holderName: process.employeeName });
   await bucket.file(confirmationStoragePath).save(confirmation, { resumable: false, metadata: { contentType: "application/pdf", cacheControl: "private, no-store" } });
   let provider;
   try {
     provider = await createAutentiqueDocument({
       buffer: confirmation,
-      fileName: `comprovante-${safeFileName(process.request.protocol)}.pdf`,
-      documentName: `Pedido de demissão — ${process.employeeName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, "pdf"),
+      documentName: signatureDocumentName,
       message: "Confirme sua identidade por SMS, confira a carta aprovada pelo RH e assine o pedido de demissão.",
       signers: [{ email: process.employeeEmail, name: process.employeeName, action: "SIGN", cpf, requireSmsVerificationPhone: phone }],
     });
@@ -2539,8 +2542,10 @@ export async function sendPjTerminationAgreementForSignature(params: { context: 
   const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(document.storagePath).download();
   const now = new Date().toISOString();
   const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc();
+  const signatureDocumentName = buildSignatureDocumentName({ department: "RH", documentType: "Distrato de prestação de serviços", holderName: contract.provider.legalName });
   await requestRef.set({
     source: "pj_termination_agreement",
+    documentName: signatureDocumentName,
     terminationId: process.id,
     terminationDocumentId: document.id,
     purpose: "termination_final_document",
@@ -2556,8 +2561,8 @@ export async function sendPjTerminationAgreementForSignature(params: { context: 
   try {
     const provider = await createAutentiqueDocument({
       buffer,
-      fileName: document.fileName,
-      documentName: `Distrato de prestação de serviços - ${contract.provider.legalName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, "pdf"),
+      documentName: signatureDocumentName,
       message: "Confira o distrato e realize a assinatura eletrônica.",
       signers: [
         { name: contract.contractor.representative.name, email: contract.contractor.representative.email, cpf: contract.contractor.representative.cpf, action: "SIGN" },
@@ -2612,10 +2617,12 @@ export async function sendTerminationDocumentsForSignature(params: { context: Se
     const signers = [] as Array<{ email: string; name: string; action: "SIGN"; cpf?: string; requireSmsVerificationPhone?: string }>;
     if (signatureMode === "employee" || signatureMode === "both") signers.push({ email: process.employeeEmail, name: process.employeeName, action: "SIGN", cpf: cpf.length === 11 ? cpf : undefined, requireSmsVerificationPhone: phone ?? undefined });
     if ((signatureMode === "company" || signatureMode === "both") && companySignatory) signers.push({ email: companySignatory.email, name: companySignatory.name, action: "SIGN" });
+    const signatureDocumentName = buildSignatureDocumentName({ department: document.type === "payment_proof" ? "FN" : "RH", documentType: document.label, holderName: process.employeeName });
+    const extension = document.fileName.match(/\.([a-z0-9]+)$/i)?.[1] ?? "pdf";
     const provider = await createAutentiqueDocument({
       buffer,
-      fileName: document.fileName,
-      documentName: `${document.label} — ${process.employeeName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, extension),
+      documentName: signatureDocumentName,
       message: "Confira e assine os documentos do seu desligamento.",
       signers,
     });

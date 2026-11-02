@@ -42,17 +42,20 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/design` | [page.tsx](../../src/app/dashboard/design/page.tsx) | [design-guide.tsx](../../src/components/design/design-guide.tsx) |
 
-## documents (9)
+## documents (12)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | Ler a própria página |
-| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | [company-document-categories.ts](../../src/lib/documents/company-document-categories.ts), [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
+| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [acervo-navigation.tsx](../../src/features/documents/central/acervo-navigation.tsx) |
+| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | [acervo-navigation.tsx](../../src/features/documents/central/acervo-navigation.tsx), [company-document-categories.ts](../../src/lib/documents/company-document-categories.ts) |
 | `dashboard/documents/consents/[employeeId]` | [page.tsx](../../src/app/dashboard/documents/consents/[employeeId]/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts), [image-voice-consent.ts](../../src/features/hr/consents/image-voice-consent.ts) |
-| `dashboard/documents/generated` | [page.tsx](../../src/app/dashboard/documents/generated/page.tsx) | [document-generator-workspace.tsx](../../src/components/documents/document-generator-workspace.tsx), [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
+| `dashboard/documents/financial` | [page.tsx](../../src/app/dashboard/documents/financial/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [acervo-navigation.tsx](../../src/features/documents/central/acervo-navigation.tsx) |
+| `dashboard/documents/generated/manage` | [page.tsx](../../src/app/dashboard/documents/generated/manage/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx) |
+| `dashboard/documents/generated` | [page.tsx](../../src/app/dashboard/documents/generated/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [central-workspace.tsx](../../src/features/documents/central/central-workspace.tsx) |
 | `dashboard/documents/generator` | [page.tsx](../../src/app/dashboard/documents/generator/page.tsx) | [document-generator-workspace.tsx](../../src/components/documents/document-generator-workspace.tsx) |
+| `dashboard/documents/history` | [page.tsx](../../src/app/dashboard/documents/history/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [history-workspace.tsx](../../src/features/documents/central/history-workspace.tsx) |
 | `dashboard/documents/management` | [page.tsx](../../src/app/dashboard/documents/management/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
-| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
+| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | [template-variable-wizard.tsx](../../src/components/hr/documents/template-variable-wizard.tsx), [collective-agreements-panel.tsx](../../src/components/hr/documents/collective-agreements-panel.tsx) |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | [document-template-workflow.ts](../../src/features/hr/documents/document-template-workflow.ts), [document-template-display-status.ts](../../src/features/hr/documents/document-template-display-status.ts) |
 
@@ -350,4 +353,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **168 páginas** no checkout usado para a geração.
+Total: **171 páginas** no checkout usado para a geração.

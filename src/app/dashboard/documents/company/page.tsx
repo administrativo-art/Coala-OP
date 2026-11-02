@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { AcervoNavigation } from "@/features/documents/central/acervo-navigation";
 import { Building2, ChevronDown, ChevronRight, Download, Eye, FileText, Folder, Loader2, Plus, Search, Sparkles, Trash2, Upload, Users, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-categories";
+import { COMPANY_DOCUMENT_TYPES, companyIntakeName } from "@/lib/documents/company-document-intake";
+import { TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, TIME_RECORDING_COMPLIANCE_LABEL, TIME_RECORDING_EVIDENCE_SECTIONS, companyDocumentEvidenceSection, companyDocumentFolderCode, companyDocumentNavigationCategory, type CompanyDocumentFolderCode, type TimeRecordingEvidenceSection } from "@/lib/documents/company-document-folders";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 
 const CATEGORIES = COMPANY_DOCUMENT_CATEGORIES;
@@ -25,9 +28,13 @@ type CompanyDocumentAiAnalysis = {
 };
 
 type CompanyDocument = {
+  version?: number;
+  unitId?: string | null;
   id: string;
   title: string;
   category: string;
+  folderCode?: CompanyDocumentFolderCode;
+  evidenceSection?: TimeRecordingEvidenceSection | null;
   unit?: string | null;
   status: string;
   expiresAt?: string | null;
@@ -40,10 +47,15 @@ type CompanyDocument = {
 };
 
 type PendingItem = {
+  unitId: string;
+  documentType: string;
+  reference: string;
   id: string;
   file: File;
   title: string;
   category: string;
+  folderCode: CompanyDocumentFolderCode;
+  evidenceSection: TimeRecordingEvidenceSection | null;
   unit: string;
   analyzing: boolean;
   aiAnalysis: CompanyDocumentAiAnalysis | null;
@@ -82,10 +94,23 @@ export default function CompanyDocumentsPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [unitFilter, setUnitFilter] = useState("all");
+  const [folderFilter, setFolderFilter] = useState<CompanyDocumentFolderCode>(null);
+  const [sectionFilter, setSectionFilter] = useState<TimeRecordingEvidenceSection | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [knownUnits, setKnownUnits] = useState<string[]>([]);
+  const [unitOptions, setUnitOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [classifyingDocument, setClassifyingDocument] = useState<CompanyDocument | null>(null);
+  const [classificationDraft, setClassificationDraft] = useState({ title: "", category: "", unitId: "", documentType: "", reference: "" });
+  const [classificationError, setClassificationError] = useState("");
+  const [classificationSaving, setClassificationSaving] = useState(false);
+  const [movingDocument, setMovingDocument] = useState<CompanyDocument | null>(null);
+  const [moveFolderCode, setMoveFolderCode] = useState<CompanyDocumentFolderCode>(null);
+  const [moveSection, setMoveSection] = useState<TimeRecordingEvidenceSection | null>(null);
+  const [moveReason, setMoveReason] = useState("");
+  const [moveSaving, setMoveSaving] = useState(false);
+  const [moveError, setMoveError] = useState("");
   const canView = hasFormalizationPermission(permissions, "companyDocuments.view");
   const canManage = hasFormalizationPermission(permissions, "companyDocuments.manage");
 
@@ -121,7 +146,7 @@ export default function CompanyDocumentsPage() {
           cache: "no-store",
         });
         const payload = await response.json();
-        if (response.ok) setKnownUnits(payload.units ?? []);
+        if (response.ok) { setKnownUnits(payload.units ?? []); setUnitOptions(payload.options ?? []); }
       } catch {
         // Navegação por unidade e autocomplete são extras; falha aqui não deve travar a tela.
       }
@@ -131,7 +156,9 @@ export default function CompanyDocumentsPage() {
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
     return documents.filter((document) => {
-      if (categoryFilter !== "all" && document.category !== categoryFilter) return false;
+      if (categoryFilter !== "all" && companyDocumentNavigationCategory(document) !== categoryFilter) return false;
+      if (folderFilter && companyDocumentFolderCode(document) !== folderFilter) return false;
+      if (sectionFilter && companyDocumentEvidenceSection(document) !== sectionFilter) return false;
       if (unitFilter === NO_UNIT_FILTER && document.unit) return false;
       if (unitFilter !== "all" && unitFilter !== NO_UNIT_FILTER && document.unit !== unitFilter) return false;
       if (!term) return true;
@@ -139,7 +166,7 @@ export default function CompanyDocumentsPage() {
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase("pt-BR").includes(term));
     });
-  }, [categoryFilter, documents, search, unitFilter]);
+  }, [categoryFilter, documents, folderFilter, sectionFilter, search, unitFilter]);
 
   function resetForm() {
     setPendingItems([]);
@@ -152,6 +179,7 @@ export default function CompanyDocumentsPage() {
 
   async function analyzePendingItem(id: string, file: File) {
     if (!firebaseUser) return;
+    updatePendingItem(id, { analyzing: true, uploadError: null });
     try {
       const token = await firebaseUser.getIdToken();
       const form = new FormData();
@@ -165,33 +193,41 @@ export default function CompanyDocumentsPage() {
       if (!response.ok) throw new Error(payload.error || "Falha ao analisar documento.");
       const analysis = payload.analysis as CompanyDocumentAiAnalysis;
       const suggestedTitle = composeTitle(analysis);
+      const isRepP = [suggestedTitle, file.name].some((value) => /^REP-P\s*[-—–_]/i.test(value));
       setPendingItems((current) => current.map((item) => item.id === id ? {
         ...item,
         analyzing: false,
         aiAnalysis: analysis,
-        category: analysis.category,
+        category: isRepP ? TIME_RECORDING_COMPLIANCE_CATEGORY : analysis.category,
+        folderCode: isRepP ? TIME_RECORDING_COMPLIANCE_FOLDER : null,
+        evidenceSection: isRepP ? companyDocumentEvidenceSection({ category: "Trabalhista e RH", title: item.title || suggestedTitle }) : null,
         title: item.title.trim() ? item.title : (suggestedTitle || item.title),
         unit: item.unit.trim() ? item.unit : (analysis.suggestedUnit || item.unit),
       } : item));
     } catch {
-      updatePendingItem(id, { analyzing: false });
+      updatePendingItem(id, { analyzing: false, uploadError: "Não foi possível obter uma sugestão. Preencha os dados manualmente ou tente novamente." });
     }
   }
 
   function addFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
+    const insideComplianceFolder = folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER;
     const newItems: PendingItem[] = Array.from(fileList).map((file) => ({
       id: nextPendingItemId(),
       file,
-      title: "",
-      category: CATEGORIES[0],
+      title: insideComplianceFolder ? file.name.replace(/\.[^.]+$/, "").slice(0, 180) : "",
+      category: insideComplianceFolder ? TIME_RECORDING_COMPLIANCE_CATEGORY : "A classificar",
+      folderCode: insideComplianceFolder ? TIME_RECORDING_COMPLIANCE_FOLDER : null,
+      evidenceSection: insideComplianceFolder ? sectionFilter : null,
       unit: "",
-      analyzing: true,
+      unitId: "",
+      documentType: "",
+      reference: "",
+      analyzing: false,
       aiAnalysis: null,
       uploadError: null,
     }));
     setPendingItems((current) => [...current, ...newItems]);
-    for (const item of newItems) void analyzePendingItem(item.id, item.file);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -199,30 +235,43 @@ export default function CompanyDocumentsPage() {
     setPendingItems((current) => current.filter((item) => item.id !== id));
   }
 
-  async function uploadOne(item: PendingItem): Promise<{ id: string; document?: CompanyDocument; error?: string }> {
+  async function uploadOne(item: PendingItem): Promise<{ id: string; document?: CompanyDocument; error?: string; warning?: string }> {
     if (!firebaseUser) return { id: item.id, error: "Sessão expirada." };
     try {
       const token = await firebaseUser.getIdToken();
       const form = new FormData();
       form.set("file", item.file);
-      form.set("title", item.title.trim());
-      form.set("category", item.category);
-      form.set("unit", item.unit.trim());
-      const response = await fetch("/api/documents/company", {
+      form.set("metadata", JSON.stringify({ title: item.title.trim(), category: item.category, unitId: item.unitId === "__general__" ? undefined : item.unitId, documentType: item.documentType || undefined, reference: item.reference }));
+      const response = await fetch("/api/documents/company/intake", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form,
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao anexar documento.");
-      return { id: item.id, document: payload.document as CompanyDocument };
+      const document = payload.document as CompanyDocument;
+      if (payload.duplicate) return { id: item.id, document, warning: `“${item.title}” já existe neste escopo. O arquivo existente foi preservado, sem nova versão ou movimentação.` };
+      if (item.folderCode) {
+        try {
+          const folderResponse = await fetch("/api/documents/company/folder", {
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: document.id, folderCode: item.folderCode, evidenceSection: item.evidenceSection, reason: "Classificação no upload", expected: { folderCode: companyDocumentFolderCode(document), evidenceSection: companyDocumentEvidenceSection(document) } }),
+          });
+          if (!folderResponse.ok) throw new Error("A pasta não foi atribuída.");
+          document.folderCode = item.folderCode;
+          document.evidenceSection = item.evidenceSection;
+        } catch {
+          return { id: item.id, document, warning: `“${item.title}” foi anexado, mas a pasta de fiscalização não foi atribuída. Use Mover para… no documento.` };
+        }
+      }
+      return { id: item.id, document };
     } catch (cause) {
       return { id: item.id, error: cause instanceof Error ? cause.message : "Falha ao anexar documento." };
     }
   }
 
   async function uploadAllDocuments() {
-    const readyItems = pendingItems.filter((item) => item.title.trim() && item.category);
+    const readyItems = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection));
     if (readyItems.length === 0) return;
     setSaving(true);
     setMessage("");
@@ -230,16 +279,18 @@ export default function CompanyDocumentsPage() {
       const results = await Promise.all(readyItems.map((item) => uploadOne(item)));
       const uploaded = results.filter((result) => result.document).map((result) => result.document!);
       const failedIds = new Set(results.filter((result) => result.error).map((result) => result.id));
+      const warnings = results.map((result) => result.warning).filter((value): value is string => Boolean(value));
       const errorById = new Map(results.filter((result) => result.error).map((result) => [result.id, result.error!]));
-      if (uploaded.length > 0) setDocuments((current) => [...uploaded, ...current]);
+      if (uploaded.length > 0) setDocuments((current) => [...new Map([...current, ...uploaded].map((document) => [document.id, document])).values()]);
       setPendingItems((current) => current
         .filter((item) => failedIds.has(item.id))
         .map((item) => ({ ...item, uploadError: errorById.get(item.id) ?? null })));
       if (failedIds.size === 0) {
         setDialogOpen(false);
         resetForm();
+        if (warnings.length) setMessage(warnings.join(" "));
       } else {
-        setMessage(`${uploaded.length} documento(s) anexado(s). ${failedIds.size} falharam - revise abaixo.`);
+        setMessage(`${uploaded.length} documento(s) anexado(s). ${failedIds.size} falharam - revise abaixo. ${warnings.join(" ")}`);
       }
     } finally {
       setSaving(false);
@@ -289,29 +340,95 @@ export default function CompanyDocumentsPage() {
     setDocuments((current) => current.filter((item) => item.id !== document.id));
   }
 
+  function openMove(document: CompanyDocument) {
+    setMovingDocument(document);
+    setMoveFolderCode(companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER ? null : TIME_RECORDING_COMPLIANCE_FOLDER);
+    setMoveSection(null);
+    setMoveReason("");
+    setMoveError("");
+  }
+
+  function openClassification(document: CompanyDocument) {
+    setClassifyingDocument(document);
+    setClassificationDraft({ title: document.title, category: document.category === "A classificar" ? "" : document.category, unitId: document.unitId ?? "", documentType: "", reference: "" });
+    setClassificationError("");
+  }
+
+  async function confirmClassification() {
+    if (!firebaseUser || !classifyingDocument) return;
+    setClassificationSaving(true);
+    setClassificationError("");
+    try {
+      const response = await fetch("/api/documents/company/intake", { method: "PATCH", headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: classifyingDocument.id, expectedVersion: classifyingDocument.version ?? 1, metadata: { ...classificationDraft, unitId: classificationDraft.unitId === "__general__" ? undefined : classificationDraft.unitId } }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Não foi possível classificar o documento.");
+      setDocuments((current) => current.map((document) => document.id === classifyingDocument.id ? payload.document : document));
+      setClassifyingDocument(null);
+    } catch (error) { setClassificationError(error instanceof Error ? error.message : "Falha ao classificar documento."); }
+    finally { setClassificationSaving(false); }
+  }
+
+  async function confirmMove() {
+    if (!firebaseUser || !movingDocument) return;
+    setMoveSaving(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch("/api/documents/company/folder", {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: movingDocument.id, folderCode: moveFolderCode, evidenceSection: moveFolderCode ? moveSection : null, reason: moveReason.trim() || undefined, expected: { folderCode: companyDocumentFolderCode(movingDocument), evidenceSection: companyDocumentEvidenceSection(movingDocument) } }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao mover documento.");
+      setDocuments((current) => current.map((item) => item.id === movingDocument.id ? { ...item, folderCode: moveFolderCode, evidenceSection: moveFolderCode ? moveSection : null } : item));
+      setMovingDocument(null);
+      setMessage("");
+      setMoveError("");
+    } catch (cause) {
+      setMoveError(cause instanceof Error ? cause.message : "Falha ao mover documento.");
+    } finally {
+      setMoveSaving(false);
+    }
+  }
+
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
-  const readyToUploadCount = pendingItems.filter((item) => item.title.trim() && item.category).length;
+  const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
   function selectAllDocuments() {
     setCategoryFilter("all");
     setUnitFilter("all");
+    setFolderFilter(null);
+    setSectionFilter(null);
     setExpandedCategory(null);
   }
 
   function selectCategory(item: string) {
     setCategoryFilter(item);
     setUnitFilter("all");
+    setFolderFilter(null);
+    setSectionFilter(null);
     setExpandedCategory(item);
   }
 
   function selectUnitWithinCategory(item: string, unitValue: string) {
     setCategoryFilter(item);
     setUnitFilter(unitValue);
+    setFolderFilter(null);
+    setSectionFilter(null);
+  }
+
+  function selectTimeRecordingFolder(section: TimeRecordingEvidenceSection | null = null) {
+    setCategoryFilter(TIME_RECORDING_COMPLIANCE_CATEGORY);
+    setUnitFilter("all");
+    setFolderFilter(TIME_RECORDING_COMPLIANCE_FOLDER);
+    setSectionFilter(section);
+    setExpandedCategory(TIME_RECORDING_COMPLIANCE_CATEGORY);
   }
 
   return (
     <div className="space-y-3">
+      <AcervoNavigation />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">01 · Documentos da empresa</p>
@@ -336,18 +453,18 @@ export default function CompanyDocumentsPage() {
           <button
             type="button"
             onClick={selectAllDocuments}
-            aria-current={categoryFilter === "all" ? "page" : undefined}
-            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-black ${categoryFilter === "all" ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}
+            aria-current={categoryFilter === "all" && !folderFilter ? "page" : undefined}
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-black ${categoryFilter === "all" && !folderFilter ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}
           >
             <Folder className={`h-4 w-4 shrink-0 ${categoryFilter === "all" ? "" : "text-slate-400"}`} />
             <span className="min-w-0 flex-1">Todos os documentos</span>
             <span className="text-[10px] font-bold text-slate-400">{documents.length}</span>
           </button>
           {CATEGORIES.map((item) => {
-            const active = categoryFilter === item && unitFilter === "all";
-            const count = documents.filter((document) => document.category === item).length;
+            const active = categoryFilter === item && unitFilter === "all" && !folderFilter;
+            const count = documents.filter((document) => companyDocumentNavigationCategory(document) === item).length;
             const expanded = categoryFilter === item && expandedCategory === item;
-            const noUnitCount = documents.filter((document) => document.category === item && !document.unit).length;
+            const noUnitCount = documents.filter((document) => companyDocumentNavigationCategory(document) === item && !document.unit).length;
             return (
               <div key={item}>
                 <div className={`flex items-center gap-1 rounded-lg ${categoryFilter === item ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
@@ -374,9 +491,25 @@ export default function CompanyDocumentsPage() {
                 </div>
                 {expanded ? (
                   <div className="ml-4 border-l border-slate-100 py-1 pl-1.5">
+                    {item === TIME_RECORDING_COMPLIANCE_CATEGORY ? <button type="button" onClick={() => selectTimeRecordingFolder()}
+                      aria-current={folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter ? "page" : undefined}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}>
+                      <Folder className="h-3.5 w-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{TIME_RECORDING_COMPLIANCE_LABEL}</span>
+                      <span className="text-[10px] font-bold text-slate-400">{documents.filter((document) => companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER).length}</span>
+                    </button> : null}
+                    {item === TIME_RECORDING_COMPLIANCE_CATEGORY && folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER ? TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => (
+                      <button key={section.code} type="button" onClick={() => selectTimeRecordingFolder(section.code)}
+                        aria-current={sectionFilter === section.code ? "page" : undefined}
+                        className={`ml-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold ${sectionFilter === section.code ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}>
+                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{documents.filter((document) => companyDocumentEvidenceSection(document) === section.code).length}</span>
+                      </button>
+                    )) : null}
                     {knownUnits.map((unitName) => {
                       const unitActive = unitFilter === unitName;
-                      const unitCount = documents.filter((document) => document.category === item && document.unit === unitName).length;
+                      const unitCount = documents.filter((document) => companyDocumentNavigationCategory(document) === item && document.unit === unitName).length;
                       return (
                         <button
                           key={unitName}
@@ -410,6 +543,8 @@ export default function CompanyDocumentsPage() {
           <p className="flex items-center gap-1.5 text-xs font-black text-slate-500">
             <Folder className="h-3.5 w-3.5 text-slate-400" />
             {categoryFilter === "all" ? "Todos os documentos" : categoryFilter}
+            {folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER ? ` › ${TIME_RECORDING_COMPLIANCE_LABEL}` : ""}
+            {sectionFilter ? ` › ${TIME_RECORDING_EVIDENCE_SECTIONS.find((section) => section.code === sectionFilter)?.label ?? sectionFilter}` : ""}
             {unitFilter !== "all" ? ` › ${unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter}` : ""}
           </p>
           <div className="rounded-lg border bg-white p-2 shadow-xs">
@@ -439,6 +574,9 @@ export default function CompanyDocumentsPage() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold">{formatDate(document.expiresAt)}</span>
                     <Button size="icon" variant="outline" className="h-8 w-8" title="Visualizar" onClick={() => void accessDocument(document, "view")}><Eye className="h-4 w-4" /></Button>
                     <Button size="icon" variant="outline" className="h-8 w-8" title="Baixar" onClick={() => void accessDocument(document, "download")}><Download className="h-4 w-4" /></Button>
+                    <Button asChild size="sm" variant="ds-secondary" className="h-8"><Link href={`/dashboard/documents/history?source=company&documentId=${encodeURIComponent(document.id)}`}>Ver trilha</Link></Button>
+                    {canManage && (document.status === "pending_classification" || document.category === "A classificar") ? <Button size="sm" variant="ds-secondary" onClick={() => openClassification(document)}>Classificar documento</Button> : null}
+                    {canManage && (document.category === TIME_RECORDING_COMPLIANCE_CATEGORY || companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER) ? <Button size="sm" variant="outline" className="h-8" onClick={() => openMove(document)}>Mover para…</Button> : null}
                     {canManage ? <Button size="icon" variant="outline" className="h-8 w-8 text-rose-600" title="Excluir" onClick={() => void removeDocument(document)}><Trash2 className="h-4 w-4" /></Button> : null}
                   </div>
                 </div>
@@ -507,12 +645,19 @@ export default function CompanyDocumentsPage() {
                       </div>
                     ) : null}
 
+                    {!item.analyzing ? <div className="mt-3 flex flex-wrap items-center gap-2"><Button type="button" variant="ds-secondary" size="sm" onClick={() => void analyzePendingItem(item.id, item.file)}>Sugerir com IA</Button><p className="text-xs text-slate-500">Opcional. Você pode preencher a classificação sem usar IA.</p></div> : null}
+
                     {item.uploadError ? <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{item.uploadError}</p> : null}
 
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-black text-slate-700">Título</span><Input value={item.title} onChange={(event) => updatePendingItem(item.id, { title: event.target.value })} placeholder="Ex.: Contrato Social - Quarta alteração" /></label>
-                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Categoria</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.category} onChange={(event) => updatePendingItem(item.id, { category: event.target.value })}>{CATEGORIES.map((option) => <option key={option}>{option}</option>)}</select></label>
-                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Unidade ou contraparte</span><Input list={UNITS_DATALIST_ID} value={item.unit} onChange={(event) => updatePendingItem(item.id, { unit: event.target.value })} placeholder="Opcional" /></label>
+                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Categoria</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.category} onChange={(event) => updatePendingItem(item.id, { category: event.target.value, folderCode: event.target.value === TIME_RECORDING_COMPLIANCE_CATEGORY ? item.folderCode : null, evidenceSection: event.target.value === TIME_RECORDING_COMPLIANCE_CATEGORY ? item.evidenceSection : null })}>{CATEGORIES.map((option) => <option key={option}>{option}</option>)}</select></label>
+                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Escopo do documento</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.unitId} onChange={(event) => updatePendingItem(item.id, { unitId: event.target.value })}><option value="">Selecione o escopo</option><option value="__general__">Empresa inteira</option>{unitOptions.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Tipo documental</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.documentType} onChange={(event) => updatePendingItem(item.id, { documentType: event.target.value })}><option value="">A classificar — preservar nome original</option>{COMPANY_DOCUMENT_TYPES.map((type) => <option key={type.code} value={type.code}>{type.label}</option>)}</select></label>
+                      <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Referência {COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference ? "(obrigatória)" : "(opcional)"}</span><Input value={item.reference} onChange={(event) => updatePendingItem(item.id, { reference: event.target.value })} placeholder="Competência, validade, data ou versão do instrumento" /></label>
+                      <p className="break-all text-xs text-slate-500 sm:col-span-2">{item.documentType && item.unitId ? `Padrão de download: ${companyIntakeName({ documentType: item.documentType, unitId: item.unitId === "__general__" ? undefined : item.unitId, reference: item.reference, version: 1, extension: item.file.type === "application/pdf" ? "pdf" : item.file.type === "image/png" ? "png" : "jpg" }).replace("__v01.", "__vNN.")}. A versão é atribuída ao confirmar.` : "Sem tipo confirmado, o arquivo ficará em A classificar com o nome original."}</p>
+                      {item.category === TIME_RECORDING_COMPLIANCE_CATEGORY ? <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-black text-slate-700">Pasta</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.folderCode ?? ""} onChange={(event) => updatePendingItem(item.id, { folderCode: event.target.value === TIME_RECORDING_COMPLIANCE_FOLDER ? TIME_RECORDING_COMPLIANCE_FOLDER : null, evidenceSection: null })}><option value="">Sistemas e conformidade (geral)</option><option value={TIME_RECORDING_COMPLIANCE_FOLDER}>{TIME_RECORDING_COMPLIANCE_LABEL}</option></select></label> : null}
+                      {item.folderCode ? <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-black text-slate-700">Seção da pasta</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={item.evidenceSection ?? ""} onChange={(event) => updatePendingItem(item.id, { evidenceSection: event.target.value as TimeRecordingEvidenceSection || null })}><option value="">Escolha uma seção</option>{TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => <option key={section.code} value={section.code}>{section.label}</option>)}</select></label> : null}
                     </div>
                   </div>
                 ))}
@@ -526,6 +671,39 @@ export default function CompanyDocumentsPage() {
               Anexar{readyToUploadCount > 0 ? ` (${readyToUploadCount})` : ""}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog> : null}
+
+      {canManage ? <Dialog open={Boolean(classifyingDocument)} onOpenChange={(open) => { if (!open && !classificationSaving) setClassifyingDocument(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Classificar documento</DialogTitle></DialogHeader>
+          <p className="text-xs text-slate-500">Original: {classifyingDocument?.originalName}. O arquivo será mantido; o servidor confirmará nome e versão.</p>
+          <label className="space-y-1"><span className="text-xs font-bold">Título</span><Input value={classificationDraft.title} onChange={(event) => setClassificationDraft((draft) => ({ ...draft, title: event.target.value }))} /></label>
+          <label className="space-y-1"><span className="text-xs font-bold">Categoria</span><select className="h-10 w-full rounded-md border px-3" value={classificationDraft.category} onChange={(event) => setClassificationDraft((draft) => ({ ...draft, category: event.target.value }))}><option value="">Selecione a categoria</option>{CATEGORIES.filter((category) => category !== "A classificar").map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label className="space-y-1"><span className="text-xs font-bold">Escopo</span><select className="h-10 w-full rounded-md border px-3" value={classificationDraft.unitId} onChange={(event) => setClassificationDraft((draft) => ({ ...draft, unitId: event.target.value }))}><option value="">Selecione o escopo</option><option value="__general__">Empresa inteira</option>{unitOptions.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+          <label className="space-y-1"><span className="text-xs font-bold">Tipo documental</span><select className="h-10 w-full rounded-md border px-3" value={classificationDraft.documentType} onChange={(event) => setClassificationDraft((draft) => ({ ...draft, documentType: event.target.value }))}><option value="">Selecione o tipo</option>{COMPANY_DOCUMENT_TYPES.map((type) => <option key={type.code} value={type.code}>{type.label}</option>)}</select></label>
+          <label className="space-y-1"><span className="text-xs font-bold">Referência {COMPANY_DOCUMENT_TYPES.find((type) => type.code === classificationDraft.documentType)?.reference ? "(obrigatória)" : "(opcional)"}</span><Input value={classificationDraft.reference} onChange={(event) => setClassificationDraft((draft) => ({ ...draft, reference: event.target.value }))} /></label>
+          {classificationDraft.documentType && classificationDraft.unitId ? <p className="break-all text-xs text-slate-500">Padrão: {companyIntakeName({ ...classificationDraft, unitId: classificationDraft.unitId === "__general__" ? undefined : classificationDraft.unitId, version: 1, extension: classifyingDocument?.mimeType === "application/pdf" ? "pdf" : classifyingDocument?.mimeType === "image/png" ? "png" : "jpg" }).replace("__v01.", "__vNN.")}</p> : null}
+          {classificationError ? <p role="alert" className="text-sm text-rose-700">{classificationError}</p> : null}
+          <div className="flex justify-end gap-2"><Button variant="ds-ghost" disabled={classificationSaving} onClick={() => setClassifyingDocument(null)}>Cancelar</Button><Button variant="primary-modal" disabled={classificationSaving || !classificationDraft.title.trim() || !classificationDraft.category || !classificationDraft.unitId || !classificationDraft.documentType} onClick={() => void confirmClassification()}>{classificationSaving ? "Salvando…" : "Confirmar classificação"}</Button></div>
+        </DialogContent>
+      </Dialog> : null}
+
+      {canManage ? <Dialog open={Boolean(movingDocument)} onOpenChange={(open) => { if (!open && !moveSaving) setMovingDocument(null); }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader><DialogTitle>Mover documento para outra pasta</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-600">{movingDocument?.title}</p>
+          <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Destino</span>
+            <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={moveFolderCode ?? ""} onChange={(event) => { setMoveFolderCode(event.target.value === TIME_RECORDING_COMPLIANCE_FOLDER ? TIME_RECORDING_COMPLIANCE_FOLDER : null); setMoveSection(null); }}>
+              <option value="">{movingDocument?.category} (geral)</option>
+              <option value={TIME_RECORDING_COMPLIANCE_FOLDER}>{TIME_RECORDING_COMPLIANCE_LABEL}</option>
+            </select>
+          </label>
+          {moveFolderCode ? <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Seção</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={moveSection ?? ""} onChange={(event) => setMoveSection(event.target.value as TimeRecordingEvidenceSection || null)}><option value="">Escolha uma seção</option>{TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => <option key={section.code} value={section.code}>{section.label}</option>)}</select></label> : null}
+          {moveError ? <p role="alert" className="text-sm text-rose-700">{moveError}</p> : null}
+          <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Motivo da movimentação</span><Input value={moveReason} onChange={(event) => setMoveReason(event.target.value)} maxLength={500} placeholder="Ex.: Documento de regularidade do sistema REP-P" /></label>
+          <p className="text-xs text-slate-500">A mudança organiza a pasta exibida. O arquivo original e as permissões de acesso permanecem vinculados ao registro.</p>
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={moveSaving} onClick={() => setMovingDocument(null)}>Cancelar</Button><Button disabled={moveSaving || moveReason.trim().length < 3 || (moveFolderCode !== null && moveSection === null) || (companyDocumentFolderCode(movingDocument ?? {}) === moveFolderCode && companyDocumentEvidenceSection(movingDocument ?? {}) === moveSection)} onClick={() => void confirmMove()}>{moveSaving ? "Movendo…" : "Confirmar movimentação"}</Button></div>
         </DialogContent>
       </Dialog> : null}
     </div>

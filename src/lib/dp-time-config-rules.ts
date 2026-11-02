@@ -73,7 +73,7 @@ export function previousCalendarDate(value: string) {
   return date.toISOString().slice(0, 10);
 }
 
-const BIZNEO_IDENTITY_FIELDS = ['code', 'name', 'bizneoTemplateId'] as const;
+const BIZNEO_IDENTITY_FIELDS = ['code', 'bizneoTemplateId'] as const;
 
 function comparableExternalValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;

@@ -8,6 +8,7 @@ import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/featur
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
 import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { createAutentiqueDocument, getAutentiqueDocumentStatus } from '@/lib/autentique.server';
+import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -318,17 +319,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (!contractorEmail || !providerEmail) throw new Error('Os dois signatários precisam de e-mails válidos.');
       const buffer = await readStorage(workflow.contract.storagePath);
       const requestRef = hrDbAdmin.collection('hrSignatureRequests').doc();
+      const signatureDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: 'Contrato de prestação de serviços', holderName: workflow.provider.legalName });
       await requestRef.set({
         source: 'pj_onboarding_contract', onboardingId: id, status: 'sending',
-        documentName: `Contrato de prestação de serviços · ${workflow.provider.legalName}`,
+        documentName: signatureDocumentName,
         generatedStoragePath: workflow.contract.storagePath, createdAt: now, updatedAt: now,
         createdBy: access.decoded.uid,
       });
       try {
         const created = await createAutentiqueDocument({
           buffer,
-          fileName: `contrato-prestacao-servicos-${workflow.provider.legalName}.pdf`,
-          documentName: `Contrato de prestação de serviços · ${workflow.provider.legalName}`,
+          fileName: buildSignatureFileName(signatureDocumentName, 'pdf'),
+          documentName: signatureDocumentName,
           message: 'Confira o contrato e realize a assinatura eletrônica.',
           signers: [
             { name: text(representative?.name, 180), email: contractorEmail, cpf: digits(representative?.cpf, 11), action: 'SIGN' },

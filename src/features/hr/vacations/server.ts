@@ -1,4 +1,5 @@
 import 'server-only';
+import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
@@ -1699,6 +1700,7 @@ export async function sendVacationNotice(
       },
     ));
   });
+  const signatureDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: 'Férias', holderName: employeeName });
   await signatureRequestRef.set({
     type: 'vacation_notice_signature',
     purpose: 'vacation_notice',
@@ -1709,7 +1711,7 @@ export async function sendVacationNotice(
     documentId: prepared.workflow.notice.documentId,
     documentStoragePath: prepared.workflow.notice.storagePath,
     documentHash: actualHash,
-    documentName: `Coala Shakes - RH | Férias - ${employeeName}`,
+    documentName: signatureDocumentName,
     signers,
     requestedAt,
     requestedBy: context.decoded.uid,
@@ -1721,8 +1723,8 @@ export async function sendVacationNotice(
   try {
     const created = await createAutentiqueDocument({
       buffer,
-      fileName: prepared.workflow.notice.fileName!,
-      documentName: `Coala Shakes - RH | Férias - ${employeeName}`,
+      fileName: buildSignatureFileName(signatureDocumentName, 'pdf'),
+      documentName: signatureDocumentName,
       message: 'Confira o período informado e assine eletronicamente o aviso de férias.',
       signers: [
         {

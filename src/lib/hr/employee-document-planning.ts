@@ -54,6 +54,17 @@ export function fileExtension(originalName: string, mimeType?: string | null) {
   return mimeType ? MIME_EXTENSION[mimeType] ?? "bin" : "bin";
 }
 
+export function employeeDocumentDownloadName(input: {
+  storedName?: string | null;
+  originalName?: string | null;
+  mimeType?: string | null;
+}) {
+  const originalName = input.originalName?.trim() || "documento";
+  const base = input.storedName?.trim() || originalName;
+  if (/\.[a-z0-9]{2,8}$/i.test(base)) return base;
+  return `${base}.${fileExtension(originalName, input.mimeType)}`;
+}
+
 function fileBaseName(originalName: string) {
   const withoutExtension = originalName.replace(/\.[^.]+$/, "");
   return slugForDocumentPath(withoutExtension, "arquivo").slice(0, 60);

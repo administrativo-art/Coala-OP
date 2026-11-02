@@ -302,7 +302,7 @@ export function DPSettingsShifts() {
       const data = {
         ...values,
         code: panel?.mode === 'edit' ? panel.def.code : values.code,
-        name: panel?.mode === 'edit' ? panel.def.name : values.name,
+        name: values.name,
         unitIds: selectedUnitIds,
         unitNames: selectedUnitNames,
         unitId: selectedUnitIds[0],
@@ -625,8 +625,8 @@ export function DPSettingsShifts() {
               <Field label="Código" htmlFor="shift-code" error={errors.code?.message} hint={panel.mode === 'edit' ? 'Preservado no turno existente.' : undefined}>
                 <Input id="shift-code" placeholder="Ex.: T1" readOnly={panel.mode === 'edit'} aria-invalid={!!errors.code} className={cn(fieldInputClass, 'font-ds-mono')} {...register('code')} />
               </Field>
-              <Field label="Nome" htmlFor="shift-name" error={errors.name?.message} className="col-span-2" hint={panel.mode === 'edit' ? 'Preservado para manter a exportação Bizneo.' : undefined}>
-                <Input id="shift-name" placeholder="Ex.: Turno da manhã" readOnly={panel.mode === 'edit'} aria-invalid={!!errors.name} className={fieldInputClass} {...register('name')} />
+              <Field label="Nome" htmlFor="shift-name" error={errors.name?.message} className="col-span-2">
+                <Input id="shift-name" placeholder="Ex.: Turno da manhã" aria-invalid={!!errors.name} className={fieldInputClass} {...register('name')} />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
