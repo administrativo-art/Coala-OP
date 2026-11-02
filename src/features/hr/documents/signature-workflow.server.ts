@@ -2684,7 +2684,7 @@ export async function promoteSignedOnboardingDocuments(params: {
   const bundleMembers = new Set(bundle.workflowIds);
   if (bundle.kind === "existing") promoted.push(...bundle.documentIds);
   if (bundle.kind === "create") {
-    const permanentPath = `hr/employee-documents/${params.employeeId}/documents/${bundle.documentId}/versions/01/signed.pdf`;
+    const permanentPath = `hr/employee-documents/${params.employeeId}/documents/${bundle.documentId}/versions/01/${bundle.signedHash}/signed.pdf`;
     const existing = await hrDbAdmin.collection("employeeDocuments").doc(bundle.documentId).get();
     if (existing.exists) {
       if (existing.get("employeeId") !== params.employeeId || existing.get("documentTypeCode") !== "ADMISSION_PACKAGE" || existing.get("contentHash") !== bundle.signedHash || existing.get("deletedAt")) throw new Error("O pacote arquivado não corresponde à assinatura atual.");

@@ -56,7 +56,7 @@ test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retor
     const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(archiveId);
     refs.push(processRef, requestRef, ...workflowRefs, archiveRef);
     const signedPath = `signed-documents/${onboardingId}/${requestId}/${contentHash}/signed.pdf`;
-    const permanentPath = `hr/employee-documents/${person}/documents/${archiveId}/versions/01/signed.pdf`;
+    const permanentPath = `hr/employee-documents/${person}/documents/${archiveId}/versions/01/${contentHash}/signed.pdf`;
     paths.push(signedPath, permanentPath);
     await processRef.set({ candidateName: "Pessoa sintética", expectedAdmissionDate: "2099-01-01", currentStage: "completed", ...(alreadyActive ? { employeeId: person } : {}) });
     await requestRef.set({ onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
@@ -76,6 +76,7 @@ test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retor
     const archived = await archiveRef.get();
     assert.equal(archived.get("documentTypeCode"), "ADMISSION_PACKAGE");
     assert.equal(archived.get("contentHash"), contentHash);
+    assert.equal(archived.get("storagePath"), permanentPath);
     assert.equal(archived.get("employeeId"), person);
     assert.equal((await hrDbAdmin.collection("employeeDocuments").where("sourceOnboardingId", "==", onboardingId).limit(10).get()).size, 1);
     for (const ref of workflowRefs) assert.equal((await ref.get()).get("employeeDocumentId"), archiveId);
