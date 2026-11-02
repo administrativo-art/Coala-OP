@@ -1,25 +1,28 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyResults, ListHead, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
 import { ControlPanel, ControlSearch } from "@/components/patterns/control-panel";
 import { LiftRow } from "@/components/patterns/lift-row";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import { ProfileLinksPopover, type ProfileLinkGroup, type ProfileLinkItem } from "@/components/access-profile-links";
 import { ProfileManagementModal, logProfileAudit } from "@/components/profile-management-modal";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
-import { Check } from "lucide-react";
+import { BriefcaseBusiness, Check, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
-import type { Profile } from "@/types";
+import { canReadUsersDirectory } from "@/features/auth/users-directory-access";
+import { fetchHrJobCatalog } from "@/features/hr/lib/client";
+import type { JobFunction, JobRole, Profile } from "@/types";
 
 type AccessProfilesSettingsProps = {
   canEdit: boolean;
 };
 
-const ROW_TEMPLATE = "minmax(240px,1.6fr) minmax(200px,1fr)";
+const ROW_TEMPLATE = "minmax(220px,1.6fr) minmax(180px,1fr) minmax(140px,.7fr) minmax(110px,.6fr)";
 
 const AREA_LABELS: Record<string, string> = {
   dashboard: "Painel", registration: "Cadastros", stock: "Estoque", assets: "Patrimônio",
@@ -221,7 +224,49 @@ export function readablePermission(path: string) {
 
 export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps) {
   const { profiles, loading, adminProfileId, deleteProfile } = useProfiles();
-  const { firebaseUser, isDefaultAdmin } = useAuth();
+  const { firebaseUser, isDefaultAdmin, activeUsers, permissions } = useAuth();
+  const [jobCatalog, setJobCatalog] = useState<{ roles: JobRole[]; functions: JobFunction[] } | null>(null);
+  const [jobCatalogError, setJobCatalogError] = useState(false);
+  const canSeeUsers = isDefaultAdmin || canReadUsersDirectory(permissions);
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    let active = true;
+    fetchHrJobCatalog(firebaseUser)
+      .then((catalog) => { if (active) setJobCatalog(catalog); })
+      .catch(() => { if (active) setJobCatalogError(true); });
+    return () => { active = false; };
+  }, [firebaseUser]);
+
+  const linksByProfile = useMemo(() => {
+    const links = new Map<string, { roles: ProfileLinkItem[]; functions: ProfileLinkItem[]; users: ProfileLinkItem[] }>();
+    const entry = (profileId: string) => {
+      const current = links.get(profileId) ?? { roles: [], functions: [], users: [] };
+      links.set(profileId, current);
+      return current;
+    };
+    const byName = (left: ProfileLinkItem, right: ProfileLinkItem) => left.name.localeCompare(right.name, "pt-BR");
+    for (const role of jobCatalog?.roles ?? []) {
+      if (role.isActive === false || !role.defaultProfileId) continue;
+      entry(role.defaultProfileId).roles.push({ id: role.id, name: role.name, detail: role.departmentName });
+    }
+    for (const fn of jobCatalog?.functions ?? []) {
+      if (fn.isActive === false || !fn.defaultProfileId) continue;
+      entry(fn.defaultProfileId).functions.push({ id: fn.id, name: fn.name, detail: fn.departmentName });
+    }
+    if (canSeeUsers) {
+      for (const user of activeUsers) {
+        if (!user.profileId) continue;
+        entry(user.profileId).users.push({ id: user.id, name: user.username, detail: user.jobRoleName || user.email, avatarUrl: user.avatarUrl, color: user.color });
+      }
+    }
+    for (const value of links.values()) {
+      value.roles.sort(byName);
+      value.functions.sort(byName);
+      value.users.sort(byName);
+    }
+    return links;
+  }, [activeUsers, canSeeUsers, jobCatalog]);
   const [managerOpen, setManagerOpen] = useState(false);
   const [managerAction, setManagerAction] = useState<"create" | "edit" | "duplicate">("create");
   const [managerProfile, setManagerProfile] = useState<Profile | null>(null);
@@ -310,14 +355,21 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
         </p>
       ) : null}
 
-      <ListShell minWidth={520}>
+      <ListShell minWidth={760}>
         <ListHead template={ROW_TEMPLATE}>
           <span>Perfil</span>
           <span>Tipo</span>
+          <span>Cargos e funções</span>
+          <span>Usuários</span>
         </ListHead>
         {loading ? <ListSkeleton rows={3} /> : null}
         {visibleProfiles.map((profile) => {
           const isAdministrator = profile.id === adminProfileId || profile.isDefaultAdmin === true;
+          const links = linksByProfile.get(profile.id);
+          const jobGroups: ProfileLinkGroup[] = [
+            { title: "Cargos", items: links?.roles ?? [] },
+            { title: "Funções", items: links?.functions ?? [] },
+          ];
           return (
             <LiftRow key={profile.id} selected={selectedProfileId === profile.id} onClick={() => {
               setSelectedProfileId(profile.id);
@@ -327,6 +379,22 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
               <p className="truncate text-[13.5px] font-bold">{profile.name}</p>
               <div className="flex items-center gap-2">
                 <StatusPill variant={isAdministrator ? "info" : "neutral"}>{isAdministrator ? "Administrador do sistema" : "Personalizado"}</StatusPill>
+              </div>
+              <div>
+                {jobCatalogError ? (
+                  <span className="text-[12.5px] text-ds-ink-muted">Sem acesso</span>
+                ) : !jobCatalog ? (
+                  <span className="text-[12.5px] text-ds-ink-muted">—</span>
+                ) : (
+                  <ProfileLinksPopover icon={<BriefcaseBusiness />} label="Cargos e funções" profileName={profile.name} groups={jobGroups} emptyText="Nenhum" />
+                )}
+              </div>
+              <div>
+                {canSeeUsers ? (
+                  <ProfileLinksPopover icon={<Users />} label="Usuários" profileName={profile.name} groups={[{ title: "Usuários", items: links?.users ?? [] }]} emptyText="Nenhum" withAvatar />
+                ) : (
+                  <span className="text-[12.5px] text-ds-ink-muted">Sem acesso</span>
+                )}
               </div>
             </LiftRow>
           );
