@@ -121,6 +121,7 @@ const CATEGORY_KEYWORDS: Record<CompanyDocumentCategory, string[]> = {
   "Licenças e autorizações": ["alvara", "licenca", "autorizacao", "vigilancia sanitaria", "bombeiro", "funcionamento", "inscricao estadual"],
   "Contratos": ["contrato", "acordo", "aditivo", "prestacao de servico", "locacao", "aluguel"],
   "Financeiro": ["extrato", "boleto", "financiamento", "banco", "emprestimo"],
+  "Jurídico": ["processo judicial", "processo administrativo", "parecer juridico", "peticao", "intimacao", "notificacao judicial"],
   "Marca e propriedade intelectual": ["marca", "inpi", "patente", "registro de marca"],
   "A classificar": [],
 };

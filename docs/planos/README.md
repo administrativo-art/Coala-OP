@@ -4,6 +4,7 @@
 
 | Plano | Área |
 | --- | --- |
+| [Gerador de documentos](plano-gerador-documentos.md) | Documentos, modelos, edição e assistência opcional de IA |
 | [Publicação das escalas do DP](plano-publicacao-escalas.md) | Escalas, ponto, metas e solicitações |
 | [Plano — Ponto, Jornada e Fechamento da Competência](plano-jornada-fechamento-rh.md) | Ponto e DP |
 | [Plano — REP-P, Documentos e Conformidade](plano-rep-p-controle-de-ponto.md) | Ponto e DP |

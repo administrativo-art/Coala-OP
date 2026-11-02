@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, FileClock, Loader2, RefreshCw, Search } from "lucide-react";
 
+import { DocumentNavigation } from "./document-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
@@ -100,6 +101,7 @@ export function DocumentHistoryWorkspace() {
   return (
     <div className="overflow-hidden rounded-xl border bg-white shadow-xs">
       <header className="border-b px-5 py-4">
+        <div className="mb-3"><DocumentNavigation active="history" /></div>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">Gestão documental</p><h1 className="text-xl font-black text-slate-950">Histórico</h1><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">Consulte os eventos efetivamente registrados e os estados atuais legados. Campos ausentes aparecem como não registrados.</p></div>
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button>

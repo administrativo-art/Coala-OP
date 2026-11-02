@@ -1,4 +1,6 @@
 page,kind,flow_id,note
+src/app/dashboard/documents/generator/models/page.tsx,active,document-templates,Biblioteca oficial existente realocada no Gerador.
+src/app/dashboard/documents/generator/models/[id]/page.tsx,active,document-templates,Editor e preparação de modelos no Gerador.
 src/app/dashboard/documents/models/page.tsx,active,document-central;document-templates,Biblioteca oficial no explorador do Acervo; consulta o catálogo existente com templates.view.
 src/app/dashboard/documents/financial/page.tsx,active,document-central;financial-inbox,Acervo financeiro com navegação compartilhada e serviços da caixa financeira.
 src/app/dashboard/assets/page.tsx,active,assets,
@@ -19,8 +21,8 @@ src/app/dashboard/dp/requests/page.tsx,active,collaborator-requests,
 src/app/dashboard/documents/generator/page.tsx,active,document-generation,
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
 src/app/dashboard/documents/page.tsx,navigation,employee-documents;company-documents;document-templates;document-generation;document-central,
-src/app/dashboard/documents/templates/[id]/page.tsx,active,document-templates,
-src/app/dashboard/documents/templates/page.tsx,active,document-templates,
+src/app/dashboard/documents/templates/[id]/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models/[id] preservando query.
+src/app/dashboard/documents/templates/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models.
 src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/page.tsx,active,people-access,
@@ -135,7 +137,7 @@ src/app/dashboard/rh/employees/[bizneo_employee_id]/page.tsx,active,rh-bizneo,
 src/app/dashboard/rh/employees/page.tsx,active,rh-bizneo,
 src/app/dashboard/rh/me/page.tsx,active,rh-bizneo,
 src/app/dashboard/rh/sync/page.tsx,active,rh-bizneo,
-src/app/dashboard/settings/documents/templates/[id]/page.tsx,active,document-templates,
+src/app/dashboard/settings/documents/templates/[id]/page.tsx,redirect,document-templates,Compatibilidade para editor no Gerador.
 src/app/dashboard/settings/page.tsx,active,settings,
 src/app/dashboard/system-notices/page.tsx,active,system-notices,
 src/app/dashboard/settings/pdv-sync/page.tsx,active,pdv-sync,

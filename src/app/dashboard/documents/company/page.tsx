@@ -4,7 +4,7 @@ import { ArchivePreview } from "@/features/documents/central/archive-preview";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArchiveExplorer, type ArchiveEntry, type ArchiveFolder } from "@/features/documents/central/archive-explorer";
+import { ArchiveExplorer, useCompanyArchiveAccess, type ArchiveEntry, type ArchiveFolder } from "@/features/documents/central/archive-explorer";
 import { Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { companyArchiveFolderLabel } from "@/lib/documents/company-archive-navigation";
 import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-categories";
 import { COMPANY_DOCUMENT_TYPES, companyIntakeName } from "@/lib/documents/company-document-intake";
 import { TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, TIME_RECORDING_COMPLIANCE_LABEL, TIME_RECORDING_EVIDENCE_SECTIONS, companyDocumentEvidenceSection, companyDocumentFolderCode, companyDocumentNavigationCategory, type CompanyDocumentFolderCode, type TimeRecordingEvidenceSection } from "@/lib/documents/company-document-folders";
@@ -119,11 +120,12 @@ export default function CompanyDocumentsPage() {
   const [moveError, setMoveError] = useState("");
   const [removeTarget, setRemoveTarget] = useState<CompanyDocument | null>(null);
   const [removing, setRemoving] = useState(false);
-  const canView = hasFormalizationPermission(permissions, "companyDocuments.view");
+  const access = useCompanyArchiveAccess();
+  const canView = access.documents;
   const canManage = hasFormalizationPermission(permissions, "companyDocuments.manage");
 
   const loadDocuments = useCallback(async () => {
-    if (!firebaseUser || !canView) return;
+    if (!firebaseUser || !canView) { setLoading(false); setDocuments([]); return; }
     setLoading(true);
     setMessage("");
     try {
@@ -224,7 +226,7 @@ export default function CompanyDocumentsPage() {
       id: nextPendingItemId(),
       file,
       title: insideComplianceFolder ? file.name.replace(/\.[^.]+$/, "").slice(0, 180) : "",
-      category: insideComplianceFolder ? TIME_RECORDING_COMPLIANCE_CATEGORY : "A classificar",
+      category: insideComplianceFolder ? TIME_RECORDING_COMPLIANCE_CATEGORY : categoryFilter !== "all" ? categoryFilter : "A classificar",
       folderCode: insideComplianceFolder ? TIME_RECORDING_COMPLIANCE_FOLDER : null,
       evidenceSection: insideComplianceFolder ? sectionFilter : null,
       unit: "",
@@ -415,7 +417,7 @@ export default function CompanyDocumentsPage() {
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
+  if (!canView && !access.financial && !access.models) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
   const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
@@ -436,14 +438,19 @@ export default function CompanyDocumentsPage() {
   function selectTimeRecordingFolder(section: TimeRecordingEvidenceSection | null = null) { navigateFolder(TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, section); }
 
   const unitFolders = categoryFilter === "all" ? [] : knownUnits.filter((unit) => documents.some((document) => companyDocumentNavigationCategory(document) === categoryFilter && document.unit === unit));
-  const folders: ArchiveFolder[] = CATEGORIES.flatMap((category) => [
-    { id: category, name: category, active: categoryFilter === category && !folderFilter && unitFilter === "all", open: () => selectCategory(category) },
+  const visibleCategories = CATEGORIES.filter((category) => canView || category === "Financeiro" && access.financial);
+  const folders: ArchiveFolder[] = visibleCategories.flatMap((category) => [
+    { id: category, name: companyArchiveFolderLabel(category), active: categoryFilter === category && !folderFilter && unitFilter === "all", open: () => selectCategory(category) },
     ...(categoryFilter === category ? [
       ...(category === TIME_RECORDING_COMPLIANCE_CATEGORY ? [{ id: TIME_RECORDING_COMPLIANCE_FOLDER, name: TIME_RECORDING_COMPLIANCE_LABEL, depth: 1, active: folderFilter === TIME_RECORDING_COMPLIANCE_FOLDER && !sectionFilter, open: () => selectTimeRecordingFolder() },
         ...(folderFilter ? TIME_RECORDING_EVIDENCE_SECTIONS.map((section) => ({ id: section.code, name: section.label, depth: 2, active: sectionFilter === section.code, open: () => selectTimeRecordingFolder(section.code) })) : [])] : []),
       ...unitFolders.map((unit) => ({ id: category + unit, name: unit, depth: 1, active: unitFilter === unit, open: () => selectUnitWithinCategory(category, unit) })),
     ] : []),
   ]);
+  if (access.models) {
+    const unclassified = folders.findIndex((folder) => folder.id === "A classificar");
+    folders.splice(unclassified < 0 ? folders.length : unclassified, 0, { id: "models", name: companyArchiveFolderLabel("Modelos"), open: () => router.push("/dashboard/documents/models") });
+  }
   const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({
     id: document.id, name: document.title, kind: "file", description: document.standardizedName || document.originalName,
     size: formatSize(document.size), modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
@@ -458,19 +465,21 @@ export default function CompanyDocumentsPage() {
   }));
   let entries: ArchiveEntry[];
   if (search.trim()) entries = fileEntries(filtered);
-  else if (categoryFilter === "all") entries = CATEGORIES.map((category) => ({ id: "category:" + category, name: category, kind: "folder", description: `${documents.filter((document) => companyDocumentNavigationCategory(document) === category).length} documentos`, open: () => selectCategory(category) }));
+  else if (categoryFilter === "all") entries = visibleCategories.map((category) => ({ id: "category:" + category, name: companyArchiveFolderLabel(category), kind: "folder", description: `${documents.filter((document) => companyDocumentNavigationCategory(document) === category).length} documentos`, open: () => selectCategory(category) }));
   else if (folderFilter && !sectionFilter) entries = [
     ...TIME_RECORDING_EVIDENCE_SECTIONS.map((section): ArchiveEntry => ({ id: "section:" + section.code, name: section.label, kind: "folder", open: () => selectTimeRecordingFolder(section.code) })),
     ...fileEntries(filtered.filter((document) => !companyDocumentEvidenceSection(document))),
   ];
   else if (!folderFilter && unitFilter === "all") entries = [
+    ...(categoryFilter === "Financeiro" && access.financial ? (["identified", "archived"] as const).map((scope): ArchiveEntry => ({ id: "inbox:" + scope, name: scope === "identified" ? "Identificados" : "Arquivados", kind: "folder", description: "Documentos da caixa financeira", open: () => router.push(`/dashboard/documents/financial?scope=${scope}`) })) : []),
     ...(categoryFilter === TIME_RECORDING_COMPLIANCE_CATEGORY ? [{ id: "compliance", name: TIME_RECORDING_COMPLIANCE_LABEL, kind: "folder" as const, open: () => selectTimeRecordingFolder() }] : []),
     ...unitFolders.map((unit): ArchiveEntry => ({ id: "unit:" + unit, name: unit, kind: "folder", open: () => selectUnitWithinCategory(categoryFilter, unit) })),
     ...fileEntries(filtered.filter((document) => !document.unit && companyDocumentFolderCode(document) !== TIME_RECORDING_COMPLIANCE_FOLDER)),
   ];
   else entries = fileEntries(filtered);
+  if (categoryFilter === "all" && access.models && (!search.trim() || "modelos".includes(search.trim().toLocaleLowerCase("pt-BR")))) entries.push({ id: "models", name: companyArchiveFolderLabel("Modelos"), kind: "folder", description: "Biblioteca de modelos por categoria", open: () => router.push("/dashboard/documents/models") });
   const breadcrumbs = [
-    ...(categoryFilter !== "all" ? [{ name: categoryFilter, open: () => selectCategory(categoryFilter) }] : []),
+    ...(categoryFilter !== "all" ? [{ name: companyArchiveFolderLabel(categoryFilter), open: () => selectCategory(categoryFilter) }] : []),
     ...(folderFilter ? [{ name: TIME_RECORDING_COMPLIANCE_LABEL, open: () => selectTimeRecordingFolder() }] : []),
     ...(sectionFilter ? [{ name: TIME_RECORDING_EVIDENCE_SECTIONS.find((section) => section.code === sectionFilter)?.label ?? sectionFilter }] : []),
     ...(unitFilter !== "all" ? [{ name: unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter }] : []),
@@ -479,7 +488,7 @@ export default function CompanyDocumentsPage() {
 
   return (
     <>
-      <ArchiveExplorer area="company" folders={folders} entries={entries} breadcrumbs={breadcrumbs} search={search} onSearch={setSearch} loading={loading} error={message} onRefresh={() => void loadDocuments()} onUp={goUp} onRoot={selectAllDocuments}
+      <ArchiveExplorer area="company" folders={folders} entries={entries} breadcrumbs={breadcrumbs} search={search} onSearch={setSearch} loading={canView && loading} error={message} onRefresh={() => void loadDocuments()} onUp={goUp} onRoot={selectAllDocuments}
         onSelect={() => { previewSequence.current++; setPreview(null); setRemoveTarget(null); }}
         footer={canManage && removeTarget ? <InlineConfirm className="m-3" message={`Excluir “${removeTarget.title}”?`} confirmLabel="Excluir documento" loading={removing} onCancel={() => setRemoveTarget(null)} onConfirm={() => void removeDocument(removeTarget)} /> : null}
         toolbar={canManage ? <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-1 h-4 w-4" />Anexar</Button> : null}

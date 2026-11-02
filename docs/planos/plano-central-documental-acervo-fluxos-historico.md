@@ -1,5 +1,7 @@
 # Plano — Documentos: Acervo, Fluxos e pendências e Histórico
 
+Decisão de 02/11/2026 após uso da interface: raiz do Acervo com Empresa e Colaboradores; Financeiro/Modelos dentro de Empresa, categoria Jurídico e numeração apenas nas pastas principais da empresa. Dossiês combinam árvore persistida, IDs vinculados e documentos gerados/admissionais autorizados. Gerador ganha entrada própria e hospeda a manutenção de modelos existente. Criação livre timbrada/IA e referências de produto estão separadas no [plano do Gerador](plano-gerador-documentos.md).
+
 ## 1. Objetivo e contrato de entrega
 
 Data: 01/11/2026. Atualização: 02/11/2026. Status: implementação local concluída para as fontes e formatos suportados, verificações finais aprovadas; homologação externa delimitada abaixo; sem publicação ou migração real.
