@@ -228,6 +228,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             href: "/dashboard/documents",
             icon: Files,
             show: hasFormalizationPermission(permissions, "companyDocuments.view")
+              || hasFormalizationPermission(permissions, "templates.view")
               || hasFormalizationPermission(permissions, "documents.view")
               || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view),
           },

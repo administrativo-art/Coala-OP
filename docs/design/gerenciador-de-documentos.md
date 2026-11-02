@@ -4,7 +4,7 @@ O gerenciador pode reproduzir as interações familiares de pastas de um computa
 
 ## Estrutura do módulo
 
-- **Acervo** é a entrada de consulta e organização. Ele apresenta Empresa, Colaboradores e Financeiro somente quando o perfil possui acesso à fonte correspondente e abre a interface especializada de cada fonte.
+- **Acervo** é um explorador contínuo com Empresa, Colaboradores, Financeiro e Modelos, conforme o acesso da origem. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; não troca para a tela administrativa antiga. A administração detalhada continua em ações explícitas como Gerenciar dossiê ou Gerenciar biblioteca.
 - **Fluxos e pendências** é a mesa de trabalho. As abas A classificar, Em preparação, Fluxos e Assinaturas representam dimensões independentes; um mesmo documento pode aparecer em mais de uma aba.
 - **Histórico** apresenta fatos persistidos pelas origens e snapshots atuais claramente identificados. A interface não inventa uma linha do tempo quando a fonte legada não registra eventos.
 
@@ -34,6 +34,10 @@ Toda ação do menu precisa ter equivalente visível e acessível. O menu de con
 - Soltar arquivo externo continua sendo upload e passa pela análise, deduplicação e classificação existentes; não é uma movimentação interna.
 
 ## Comportamento visual
+
+- Barra de busca atua na pasta atual; o caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
+- A prévia permanece acoplada ao explorador no desktop, com largura estável para não deslocar os alvos entre os cliques; no celular fica abaixo da lista. Esta composição de arquivos usa o comportamento de seleção/abertura deste guia, em vez da abertura imediata de SidePanel/LiftRow das listas administrativas.
+- Modelos reutiliza a biblioteca de geração/publicação existente; não cria outro catálogo. PDF é renderizado no navegador a partir do binário já autorizado, com troca de páginas; ações preservam os serviços e as permissões da origem.
 
 - pastas aceitam grade ou lista e mostram quantidade de documentos;
 - o arraste de arquivo externo para a área de upload segue as validações do formulário; a navegação entre pastas não interpreta arraste como movimentação;

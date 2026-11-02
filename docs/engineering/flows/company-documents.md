@@ -1,5 +1,7 @@
 # Documentos da empresa: análise, arquivo e acesso
 
+Em 02/11/2026, a tela passou a montar o explorador compartilhado do Acervo: categorias, unidades e seções técnicas como pastas, busca, caminho clicável, A–Z/Z–A, lista/grade, prévia e ações por item. Upload, acesso, classificação e movimentação mantêm os serviços existentes. Excluir exige InlineConfirm. A troca entre pastas não abre outra listagem administrativa. Ver [central documental](document-central.md).
+
 ## Entrada padronizada — 02/11/2026
 
 Classificação posterior: arquivos pendentes podem ser confirmados pelo botão Classificar documento, via `PATCH /api/documents/company/intake`, com schema, permissão, escopo atual e versão esperada. A transação aplica tipo/categoria/escopo/referência/nome e índices de versão, grava `DOCUMENT_CLASSIFIED` e preserva original/hash/caminho. Repetir a decisão é idempotente; decisão divergente após confirmação ou arquivo idêntico já arquivado produz 409. O Histórico individual agora inclui esse evento com nome aplicado. Ensaio concorrente aprovado em emuladores.
