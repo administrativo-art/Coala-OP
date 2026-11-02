@@ -32,6 +32,9 @@ fun personDisplayName(name: String): String {
     }
 }
 
+/** Greeting uses only the first name so it never truncates in the compact header. */
+fun personFirstName(name: String): String = name.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+
 /** Remove technical scope from schedule labels while preserving the useful shift and role. */
 fun scheduleShiftDisplayName(name: String): String {
     val parts = name.split('|', limit = 2).map(String::trim).filter(String::isNotBlank)
