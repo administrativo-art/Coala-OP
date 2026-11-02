@@ -17,7 +17,10 @@
 - Catálogos históricos que permitem arquivamento abrem em **Ativos** e separam **Arquivados** por chips mutuamente exclusivos dentro do `ControlPanel`. Não misturar os dois estados na mesma lista nem adicionar uma terceira opção “Todos” quando a finalidade for operacional.
 
 ## Tabela ordenável (`SortHeader`)
-- Título de coluna que ordena ao clique: primeira vez ordena (texto de A a Z, data do mais recente para o mais antigo), cliques seguintes alternam crescente e decrescente. A coluna ativa fica em `--ds-accent-ink` com seta; `aria-sort` anuncia a ordem.
+- Padrão aprovado em 02/11/2026: listas em tabela ou formato semelhante que identificam registros por título/nome abrem nessa coluna em ordem crescente (A–Z). Aplica-se às novas implementações e às listas existentes quando forem ajustadas; não é migração automática de todas as telas atuais.
+- O cabeçalho de título/nome permanece clicável para alternar A–Z/Z–A, com coluna ativa, seta e anúncio acessível. Em visualizações sem cabeçalho, oferecer o seletor equivalente de ordenação.
+- Use `sortByTitle` de `src/lib/sort-by-title.ts` para texto em português, números naturais e desempate estável. Em listas paginadas, a ordem deve ser aplicada na consulta do servidor quando o contrato oferecer essa possibilidade; ordenar só os itens carregados deve ficar explícito e não pode esconder páginas restantes.
+- Título/nome já começa ativo em A–Z; o primeiro clique nele inverte para Z–A. Em outra coluna ainda inativa, o primeiro clique ordena (texto de A a Z, data do mais recente para o mais antigo), e os seguintes alternam. A coluna ativa fica em `--ds-accent-ink` com seta; `aria-sort` anuncia a ordem.
 - A coluna que muda o estado (Situação) não ordena. No celular, os títulos viram uma fileira de botões acima das linhas.
 - Filtros ficam acima da tabela: busca por texto, `Segmented` de tipo e a contagem ("N de M pedidos"). Sem resultado: texto em caixa tracejada.
 - Pessoa na linha: `PersonAvatar` (36px, redondo, foto do cadastro e iniciais de reserva na cor da escala). Exemplo vivo: fila de ajustes de ponto em Solicitações.

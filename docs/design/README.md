@@ -12,6 +12,7 @@ Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, c
 - O painel escuro do topo usa chips compactos e vira uma faixa fina quando a tela rola.
 - Código novo não usa `alert()`, `confirm()` ou `prompt()`: erro fica junto do campo e confirmação é inline.
 - Status é só leitura na lista; a troca acontece no painel ou no modal, com o motivo dos bloqueios.
+- Listas tabulares novas ou ajustadas abrem por título/nome crescente e permitem inverter a ordem; seguir [Listas e linhas](listas.md).
 - Toda data apresentada ao usuário segue o padrão brasileiro `DD/MM/AAAA`. ISO (`AAAA-MM-DD`) é formato interno e fica restrito a armazenamento, APIs e integrações; nunca deve aparecer em textos, trilhas, tabelas, painéis ou documentos visíveis.
 
 ## Índice
