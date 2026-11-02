@@ -12,6 +12,7 @@ import { produce } from 'immer';
 import { ChangePasswordModal } from './change-password-modal';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { applyLegacyFormalizationFallbacks } from '@/lib/hr-formalization-permissions';
+import { canReadUsersDirectory } from '@/features/auth/users-directory-access';
 import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
@@ -251,13 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const canReadUsersDirectory =
-      permissions.settings.manageUsers ||
-      (permissions.dp?.collaborators?.view === true && permissions.dp?.collaborators?.ownProfileOnly !== true) ||
-      permissions.dp?.collaborators?.edit === true ||
-      permissions.dp?.collaborators?.terminate === true;
-
-    if (!canReadUsersDirectory) {
+    if (!canReadUsersDirectory(permissions)) {
       setUsers([appUser]);
       return;
     }

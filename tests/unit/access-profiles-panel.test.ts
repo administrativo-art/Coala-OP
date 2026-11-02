@@ -43,3 +43,15 @@ test('Coala One e Coala Go usam a mesma navegação recolhível por seção', ()
   assert.match(modal, /value="app-signage"/);
   assert.doesNotMatch(modal, /<h3 className="pt-2 text-lg font-semibold">Compra local<\/h3>/);
 });
+
+test('Lista mostra cargos, funções e usuários vinculados sem abrir o detalhe da linha', () => {
+  const links = readFileSync('src/components/access-profile-links.tsx', 'utf8');
+  const authProvider = readFileSync('src/components/auth-provider.tsx', 'utf8');
+  assert.match(settings, /<span>Cargos e funções<\/span>\s*<span>Usuários<\/span>/);
+  assert.match(settings, /role\.isActive === false \|\| !role\.defaultProfileId/);
+  assert.match(settings, /fn\.isActive === false \|\| !fn\.defaultProfileId/);
+  assert.match(settings, /if \(canSeeUsers\) \{\s*for \(const user of activeUsers\)/);
+  assert.match(settings, /canReadUsersDirectory\(permissions\)/);
+  assert.match(authProvider, /if \(!canReadUsersDirectory\(permissions\)\)/);
+  assert.match(links, /onClick=\{\(event\) => event\.stopPropagation\(\)\}[\s\S]*?onKeyDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+});
