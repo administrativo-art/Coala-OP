@@ -1522,7 +1522,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 245.
+Arquivos locais percorridos: 248.
 
 Chamadas candidatas encontradas:
 
