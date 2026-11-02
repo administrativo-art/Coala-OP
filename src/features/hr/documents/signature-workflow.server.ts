@@ -2061,8 +2061,9 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
   const now = new Date().toISOString();
   const templateId = text(generated.get("templateId"));
   const catalogTemplate = SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === templateId);
-  const customTemplate = !catalogTemplate && templateId ? await dbAdmin.collection("companyDocumentTemplates").doc(templateId).get() : null;
-  const department = signatureDepartmentForTemplate(catalogTemplate ?? customTemplate?.data());
+  const storedDepartment = generated.get("signatureDepartment");
+  const department = storedDepartment === "RH" || storedDepartment === "FN" || storedDepartment === "OP"
+    ? storedDepartment : signatureDepartmentForTemplate(catalogTemplate);
   const recipientParty = generatedParties.find((party) => party.role === "recipient" && party.partyType !== "company");
   const documentName = buildSignatureDocumentName({
     department,

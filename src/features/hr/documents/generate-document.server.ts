@@ -22,6 +22,7 @@ import { allocateIdempotentDocumentProtocol } from "@/features/hr/documents/docu
 import { resolveDocumentLegalEntitySnapshot } from "@/features/hr/documents/legal-entity-snapshot.server";
 import { buildGeneratedDocumentAudit } from "@/features/hr/documents/generated-document-audit";
 import { retentionFields } from "@/features/hr/documents/document-retention";
+import { signatureDepartmentForTemplate } from "@/features/hr/documents/signature-document-name";
 import { systemDocumentTemplateById } from "@/features/hr/documents/system-template-catalog";
 import { systemTemplateWorkflowStatus } from "@/features/hr/documents/document-template-workflow.server";
 import { inspectStoredDocumentTemplateIntegrity } from "@/features/hr/documents/document-template-integrity.server";
@@ -400,6 +401,7 @@ export async function generateDocumentFromTemplate(
   batch.set(generatedReference, {
     templateId: params.templateId,
     templateName: templateValue("name") ?? null,
+    signatureDepartment: signatureDepartmentForTemplate({ id: params.templateId, category: templateValue("category"), sourceModule: templateValue("sourceModule") }),
     templateVersion: templateValue("version"),
     signatureScope: templateValue("signatureScope") ?? "none",
     postAdmissionSignatureScope: templateValue("postAdmissionSignatureScope") ?? null,
