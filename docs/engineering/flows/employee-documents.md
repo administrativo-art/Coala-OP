@@ -1,5 +1,7 @@
 # Documentos por colaborador: resumo e configuração de visibilidade
 
+Em 02/11/2026, o Acervo de colaboradores ganhou explorador próprio de pessoas/pastas, reutilizando acesso de unidade, pastas canônicas e as APIs de listagem/acesso. Não busca documentos de todas as pessoas para montar a raiz: só consulta o titular aberto. Gerenciar dossiê é uma ação explícita que abre a tela administrativa existente; prévia/download permanecem no explorador. A tela legada do DP continua responsável por publicação, validação e upload. Ver [central documental](document-central.md).
+
 Em 02/11/2026, o acesso administrativo por `POST /api/hr/employee-documents/access` passou a usar secureRoute, schema estrito de ID/ação, revalidação da unidade e da política documental. O download entrega o nome canônico já persistido pelo catálogo, com extensão e nome UTF-8, preservando `originalName` e os bytes. Ensaio dirigido `node scripts/test-integration.mjs --document-central` inclui Storage emulado, auditoria de download e recusa após revogação de unidade. Nenhuma renomeação em massa foi executada.
 
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).

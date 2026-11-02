@@ -6,6 +6,8 @@ O guia isolado possui contratos de código e deve ser inspecionado visualmente a
 
 ## Referências
 
+02/11/2026 — correção do Acervo: capturas em Chromium com dados sintéticos em `test-results/documents-archive-*/acervo-empresa.png` e `acervo-modelos.png`, preservadas no registro local do chamado antes de encerrar o worktree. Inspecionadas árvore, caminho, barra de busca/ordenação, arquivo selecionado e biblioteca no mesmo ambiente. E2E dirigido cobre as quatro áreas e largura de 390px, além de prévia de PDF, página seguinte/anterior, contexto e retorno. Não é homologação de dados reais, upload ou assinatura externa.
+
 - Protótipos: `referencias/*.dc.html` no pacote de handoff; são referência, não código de produção.
 - Capturas: `screenshots/` do pacote, geradas com a paleta v4.
 - Guia vivo: `/dashboard/design`, somente para administrador.

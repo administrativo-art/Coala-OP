@@ -42,7 +42,7 @@ Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1
 
 A [verificação por grupo](flow-verification.md) registra referências e lacunas na base principal para cada grupo; `Traçado` não significa teste integrado aprovado.
 
-Classificação atual: **171/171 páginas** — 126 ativas, 6 de navegação, 28 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
+Classificação atual: **172/172 páginas** — 127 ativas, 6 de navegação, 28 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
@@ -60,8 +60,8 @@ Classificação atual: **171/171 páginas** — 126 ativas, 6 de navegação, 28
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
-| `document-central` | 4 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — adaptadores e integração dirigida verificados; homologação externa pendente |
-| `document-templates` | 5 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
+| `document-central` | 7 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — explorador compartilhado e biblioteca de modelos; homologação externa pendente |
+| `document-templates` | 6 | Traçado | [Cadastro e publicação](flows/document-templates.md) — biblioteca acessível pelo Acervo; percurso complementado |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |

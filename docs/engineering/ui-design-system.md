@@ -127,6 +127,8 @@ Use sempre o componente `Button` dentro de `PageHeader.actions`.
 
 ## Cards, tabelas e filtros
 
+- Padrão de listas tabulares: título/nome crescente (A–Z) ao abrir, com alternância decrescente (Z–A) pelo cabeçalho ou controle equivalente e indicação da ordem ativa. Vale para novas implementações e listas existentes quando ajustadas, conforme [Listas e linhas](../design/listas.md). Reutilize `SortHeader` e `sortByTitle`; não substitua silenciosamente uma ordenação funcional obrigatória de um fluxo que não tenha título/nome como chave principal.
+
 - Cards de seleção usam borda, fundo e sombra discretos; o selecionado recebe destaque de borda e `aria-pressed`.
 - Tabelas e listas devem manter cabeçalho, valor e estado em colunas previsíveis.
 - Filtros de estado usam os mesmos nomes e cores da tabela.
