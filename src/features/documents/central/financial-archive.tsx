@@ -4,6 +4,7 @@ import { ArchivePreview } from "./archive-preview";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { companyArchiveHref } from "@/lib/documents/company-archive-navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
@@ -76,7 +77,7 @@ export function FinancialDocumentArchive() {
   return <ArchiveExplorer area="financial" entries={entries} search={search} onSearch={setSearch} loading={loading} error={error} onRefresh={() => void load()}
     breadcrumbs={scope === "root" ? [] : [{ name: scope === "identified" ? "Identificados" : "Arquivados", open: () => navigate(scope) }, ...(folder ? [{ name: folder }] : [])]}
     folders={scope === "root" ? [] : folders.map((name) => ({ id: name, name, active: folder === name, open: () => navigate(scope, name) }))}
-    onRoot={() => navigate("root")} onUp={() => folder ? navigate(scope) : scope !== "root" ? navigate("root") : router.push("/dashboard/documents")}
+    onRoot={() => router.push(companyArchiveHref("Financeiro"))} onUp={() => folder ? navigate(scope) : router.push(companyArchiveHref("Financeiro"))}
     onSelect={() => { fileSequence.current++; setPreview(null); }}
     toolbar={<Button size="sm" variant="outline" onClick={() => router.push("/dashboard/financial/inbox")}>Caixa de cobranças</Button>}
     footer={page?.nextCursor ? <div className="space-y-2 p-3"><p className="text-xs text-slate-500">Há mais documentos. Carregue para ampliar a lista e a busca.</p><Button variant="outline" disabled={loading} onClick={() => void load(page.nextCursor!)}>Carregar mais documentos</Button></div> : null}

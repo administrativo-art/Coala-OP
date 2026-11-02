@@ -7,6 +7,8 @@ export const COMPANY_DOCUMENT_TYPES = [
   { code: "ALVARA", label: "Alvará", reference: true },
   { code: "CERTIDAO", label: "Certidão", reference: true },
   { code: "CONTRATO-EMPRESARIAL", label: "Contrato empresarial", reference: true },
+  { code: "PROCESSO-JURIDICO", label: "Processo judicial ou administrativo", reference: true },
+  { code: "PARECER-JURIDICO", label: "Parecer jurídico", reference: true },
   { code: "ATESTADO-TECNICO-REP-P", label: "Atestado técnico REP-P", reference: true },
   { code: "REGISTRO-INPI-REP-P", label: "Registro INPI REP-P", reference: true },
   { code: "RELATORIO-VALIDACAO-REP-P", label: "Relatório de validação REP-P", reference: true },

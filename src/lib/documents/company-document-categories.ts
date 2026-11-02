@@ -6,6 +6,7 @@ export const COMPANY_DOCUMENT_CATEGORIES = [
   "Licenças e autorizações",
   "Contratos",
   "Financeiro",
+  "Jurídico",
   "Marca e propriedade intelectual",
   "A classificar",
 ] as const;

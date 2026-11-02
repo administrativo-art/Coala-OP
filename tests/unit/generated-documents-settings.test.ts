@@ -13,8 +13,8 @@ test("catálogo de configurações lista todo modelo gerável e exclui somente r
   assert.ok(generated.every((template) => template.version > 0 && Boolean(template.retentionPolicyId)));
 });
 
-test("Configurações Pessoal reúne geração, publicação e modelos sem duplicar a implementação", async () => {
-  const [settingsSource, catalogSource, templatesSource, templateDetailSource, settingsDetailRoute, sidebarSource, instructions, registryGuide, harness] = await Promise.all([
+test("Configurações mantém políticas e encaminha a biblioteca única de modelos ao Gerador", async () => {
+  const [settingsSource, catalogSource, templatesSource, templateDetailSource, settingsDetailRoute, sidebarSource, instructions, registryGuide, harness, librarySource, editorSource] = await Promise.all([
     readFile(path.join(process.cwd(), "src/app/dashboard/settings/page.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "src/components/settings/generated-documents-settings.tsx"), "utf8"),
     readFile(path.join(process.cwd(), "src/app/dashboard/documents/templates/page.tsx"), "utf8"),
@@ -24,6 +24,8 @@ test("Configurações Pessoal reúne geração, publicação e modelos sem dupli
     readFile(path.join(process.cwd(), "AGENTS.md"), "utf8"),
     readFile(path.join(process.cwd(), "docs/engineering/generated-documents-registry.md"), "utf8"),
     readFile(path.join(process.cwd(), "docs/engineering/generated-documents-harness.md"), "utf8"),
+    readFile(path.join(process.cwd(), "src/features/hr/documents/template-library-workspace.tsx"), "utf8"),
+    readFile(path.join(process.cwd(), "src/features/hr/documents/template-editor-workspace.tsx"), "utf8"),
   ]);
   assert.match(settingsSource, /value: "generated-documents"/);
   assert.match(settingsSource, /value: "documents"/);
@@ -36,12 +38,13 @@ test("Configurações Pessoal reúne geração, publicação e modelos sem dupli
   assert.match(catalogSource, /name: "Pacote admissional"/);
   assert.match(catalogSource, /Política atual/);
   assert.match(catalogSource, /Não configurada — permanece restrito/);
-  assert.match(templatesSource, /const embedded = pathname\.startsWith\("\/dashboard\/settings"\)/);
-  assert.match(templatesSource, /embedded \? "py-4" : "py-5"/);
-  assert.match(templatesSource, /router\.replace\("\/dashboard\/settings\?department=pessoal&tab=document-templates"\)/);
-  assert.match(templatesSource, /router\.push\(`\/dashboard\/settings\/documents\/templates\/\$\{encodeURIComponent\(template\.id\)\}`\)/);
-  assert.match(templateDetailSource, /\/dashboard\/settings\/documents\/templates/);
-  assert.match(settingsDetailRoute, /dashboard\/documents\/templates\/\[id\]\/page/);
+  assert.match(settingsSource, /href="\/dashboard\/documents\/generator\/models"/);
+  assert.match(templatesSource, /redirect\("\/dashboard\/documents\/generator\/models"\)/);
+  assert.match(templateDetailSource, /redirect\(`\/dashboard\/documents\/generator\/models\//);
+  assert.match(settingsDetailRoute, /redirect\(`\/dashboard\/documents\/generator\/models\//);
+  assert.match(librarySource, /fetch\("\/api\/documents\/templates"/);
+  assert.match(librarySource, /router\.push\(`\/dashboard\/documents\/generator\/models\/\$\{encodeURIComponent\(template\.id\)\}`\)/);
+  assert.match(editorSource, /const templatesBasePath = "\/dashboard\/documents\/generator\/models"/);
   assert.doesNotMatch(sidebarSource, /href: "\/dashboard\/documents\/templates"/);
   assert.match(instructions, /SYSTEM_DOCUMENT_TEMPLATES/);
   assert.match(instructions, /Configurações → Pessoal → Documentos/);

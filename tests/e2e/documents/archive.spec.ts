@@ -19,11 +19,11 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await page.getByRole("button", { name: "Entrar no sistema" }).click();
   await expect(page.getByRole("heading", { name: "Acervo", exact: true })).toBeVisible({ timeout: 180_000 });
   const contents = page.getByRole("main", { name: "Conteúdo da pasta" });
-  await expect(contents.getByRole("button", { name: /^Pasta:/ })).toHaveCount(4);
+  await expect(contents.getByRole("button", { name: /^Pasta:/ })).toHaveCount(2);
   const names = () => contents.getByRole("button", { name: /^Pasta:/ }).evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label")));
-  expect(await names()).toEqual(["Pasta: Colaboradores", "Pasta: Empresa", "Pasta: Financeiro", "Pasta: Modelos"]);
+  expect(await names()).toEqual(["Pasta: Colaboradores", "Pasta: Empresa"]);
   await page.getByRole("combobox", { name: "Ordenar por título" }).selectOption("desc");
-  expect(await names()).toEqual(["Pasta: Modelos", "Pasta: Financeiro", "Pasta: Empresa", "Pasta: Colaboradores"]);
+  expect(await names()).toEqual(["Pasta: Empresa", "Pasta: Colaboradores"]);
   await page.getByRole("button", { name: "Título", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Ordenar por título" })).toHaveValue("asc");
   await page.getByRole("textbox", { name: "Buscar nesta pasta" }).fill("Empresa");
@@ -32,7 +32,7 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await page.getByRole("button", { name: "Pasta: Empresa", exact: true }).dblclick();
   await expect(page).toHaveURL(/\/dashboard\/documents\/company$/, { timeout: 90_000 });
   await expect(page.getByRole("navigation", { name: "Árvore de pastas" })).toBeVisible();
-  await page.getByRole("button", { name: "Pasta: Contratos", exact: true }).dblclick();
+  await page.getByRole("button", { name: "Pasta: 06 - Contratos", exact: true }).dblclick();
   await expect(page).toHaveURL(/category=Contratos/);
   const file = page.getByRole("button", { name: "Arquivo: Contrato da unidade", exact: true });
   await file.dblclick();
@@ -48,10 +48,12 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await page.keyboard.press("Escape");
   await page.screenshot({ path: testInfo.outputPath("acervo-empresa.png"), fullPage: true });
   await page.getByRole("button", { name: "Pasta acima", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Pasta: Contratos", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pasta: 06 - Contratos", exact: true })).toBeVisible();
   await page.goBack();
   await expect(file).toBeVisible();
-  await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Modelos", exact: true }).click();
+  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Empresa", exact: true }).click();
+  await expect(contents.getByRole("button", { name: "Pasta: 08 - Jurídico", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Pasta: 10 - Modelos", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: Financeiro e recibos", exact: true }).dblclick();
   await page.getByRole("button", { name: "Modelo: Recibo de pagamento", exact: true }).dblclick();
   await expect(page.getByRole("img", { name: "Prévia de Recibo de pagamento" })).toHaveAttribute("data-rendered", "true");
@@ -59,6 +61,17 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await page.screenshot({ path: testInfo.outputPath("acervo-modelos.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole("button", { name: "Gerenciar biblioteca", exact: true }).click();
+  await expect(page).toHaveURL(/\/documents\/generator\/models$/);
+  await page.getByRole("button", { name: "Novo modelo", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await page.route("**/api/documents/work-items?*", (route) => route.fulfill({ json: { items: [], warnings: [], pages: [] } }));
+  await page.getByRole("navigation", { name: "Documentos", exact: true }).getByRole("link", { name: "Fluxos e pendências", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Fluxos e pendências", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Documentos", exact: true }).getByRole("link", { name: "Acervo", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Acervo", exact: true })).toBeVisible();
 });
 
 test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async ({ page }) => {
@@ -67,6 +80,11 @@ test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async
   const bytes = Buffer.from(await pdf.save());
   await page.route("**/api/hr/employee-documents?*", (route) => route.fulfill({ json: { documents: [{ id: "employee-file-e2e", category: "personal", documentType: "Documento de identificação", documentTypeCode: "PERSONAL_ID", displayName: "Identidade de teste", storedName: "COL-001__IDENTIFICACAO__v01", originalName: "identidade.pdf", mimeType: "application/pdf", size: bytes.length }] } }));
   await page.route("**/api/hr/employee-documents/access", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
+  await page.route("**/api/hr/employee-document-folder-profile?*", (route) => route.fulfill({ json: { folderProfile: { folders: [{ id: "personal", category: "personal", path: ["Documentos pessoais"], employeeVisible: true }] } } }));
+  await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [{ id: "generated-archive-e2e", templateName: "Contrato gerado", originalName: "contrato.docx", pdfAvailable: true }] } }));
+  await page.route("**/api/documents/generated/generated-archive-e2e/file?format=pdf", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
+  await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [] } }));
+  await page.route("**/api/documents/company/units", (route) => route.fulfill({ json: { units: [] } }));
   await page.route("**/api/financial/inbox?*", (route) => route.fulfill({ json: { messages: [{ id: "message-archive-e2e", subject: "Recibo de teste", receivedAt: "2026-11-02T12:00:00.000Z", attachments: [{ id: "attachment-e2e", filename: "Recibo financeiro.pdf", size: bytes.length, contentType: "application/pdf", storagePath: "demo/test.pdf" }] }], nextCursor: null } }));
   await page.route("**/api/financial/inbox/message-archive-e2e/files/attachment-e2e", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
   await page.route("**/api/audit/log", (route) => route.fulfill({ json: { ok: true } }));
@@ -82,10 +100,17 @@ test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async
   await expect(page.getByRole("img", { name: "Prévia de Identidade de teste" })).toHaveAttribute("data-rendered", "true");
   await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Colaboradores", exact: true }).click();
   await expect(page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true })).toBeVisible();
-  await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Financeiro", exact: true }).click();
+  await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Empresa", exact: true }).click();
+  await page.getByRole("button", { name: "Pasta: 07 - Financeiro", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: Identificados", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: A nomear", exact: true }).dblclick();
   await page.getByRole("button", { name: "Arquivo: Recibo financeiro.pdf", exact: true }).dblclick();
   await expect(page.getByRole("img", { name: "Prévia de Recibo financeiro.pdf" })).toHaveAttribute("data-rendered", "true");
   await expect(page.getByRole("button", { name: "Revisar na origem", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("link", { name: "Empresa", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Colaboradores", exact: true }).click();
+  await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).dblclick();
+  await page.getByRole("button", { name: "Pasta: Documentos gerados", exact: true }).dblclick();
+  await page.getByRole("button", { name: "Arquivo: Contrato gerado", exact: true }).dblclick();
+  await expect(page.getByRole("img", { name: "Prévia de Contrato gerado" })).toHaveAttribute("data-rendered", "true");
 });
