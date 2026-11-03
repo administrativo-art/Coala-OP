@@ -1,4 +1,4 @@
-import { provenPlaceholder, readOnboardingPerson, record } from "./onboarding-person";
+import { onboardingOrigin, provenPlaceholder, readOnboardingPerson, record } from "./onboarding-person";
 /** A person identifier is meaningful only together with its source namespace. */
 export type SubjectRef = { namespace: "main.users" | "hr.employees" | "hr.candidates" | "hr.onboardingPersons"; id: string };
 export type PersonResolution = { refs: SubjectRef[]; conflicts: string[]; gaps?: string[] };
@@ -58,17 +58,18 @@ export async function resolveStrictPersonRefs(ref: SubjectRef, lookup: PersonLoo
   }
   if (ref.namespace === "hr.candidates") {
     if (!await lookup.candidate(ref.id)) return { refs, conflicts: ["candidate_missing"] };
-    const processes = await lookup.processesByCandidate(ref.id);
+    const processes = (await lookup.processesByCandidate(ref.id)).filter((process) => !provenPlaceholder(process, ref.id));
+    if (processes.some((process) => onboardingOrigin(process) !== "recruitment")) return { refs, conflicts: ["candidate_process_origin_unconfirmed"] };
     const uids = [...new Set(processes.map((process) => process.collaboratorUserId).filter((value): value is string => Boolean(value)))];
     if (uids.length > 1) conflicts.push("candidate_user_collision");
     else if (uids.length === 1) {
       const user = await lookup.user(uids[0]);
       if (!user || user.recruitmentCandidateId !== ref.id) conflicts.push("candidate_not_reciprocal");
       else {
-        refs.push({ namespace: "main.users", id: user.id });
         const linked = await resolveStrictPersonRefs({ namespace: "main.users", id: user.id }, lookup);
-        for (const extra of linked.refs) if (!refs.some((current) => subjectKey(current) === subjectKey(extra))) refs.push(extra);
-        conflicts.push(...linked.conflicts);
+        if (linked.conflicts.length || !linked.refs.some((current) => current.namespace === "hr.candidates" && current.id === ref.id)) {
+          conflicts.push("candidate_not_reciprocal", ...linked.conflicts);
+        } else for (const extra of linked.refs) if (!refs.some((current) => subjectKey(current) === subjectKey(extra))) refs.push(extra);
       }
     }
     return { refs, conflicts };
@@ -105,15 +106,17 @@ export async function resolveStrictPersonRefs(ref: SubjectRef, lookup: PersonLoo
       const [candidate, byUserProcess, byCandidateProcess] = await Promise.all([
         lookup.candidate(user.recruitmentCandidateId), lookup.processesByUser(ref.id), lookup.processesByCandidate(user.recruitmentCandidateId),
       ]);
-      const matching = byUserProcess.some((process) => process.candidateId === user.recruitmentCandidateId && process.collaboratorUserId === ref.id);
-      const claimants = [...new Set(byCandidateProcess.map((process) => process.collaboratorUserId).filter(Boolean))];
+      const matching = byUserProcess.some((process) => onboardingOrigin(process) === "recruitment" && process.candidateId === user.recruitmentCandidateId && process.collaboratorUserId === ref.id);
+      const realProcesses = byCandidateProcess.filter((process) => !provenPlaceholder(process, user.recruitmentCandidateId));
+      const unknownOrigin = realProcesses.some((process) => onboardingOrigin(process) !== "recruitment");
+      const claimants = [...new Set(realProcesses.map((process) => process.collaboratorUserId).filter(Boolean))];
       // Legacy native intake stored a process placeholder here. It is a compatibility
       // gap, not a candidate and not a reason to invalidate a proven UID/HR pair.
       const originProcess = user.onboardingId && lookup.processById ? await lookup.processById(user.onboardingId) : null;
-      const placeholder = !candidate && user.source === "recruitment_onboarding" && originProcess && originProcess.collaboratorUserId === ref.id
+      const placeholder = user.source === "recruitment_onboarding" && originProcess && originProcess.collaboratorUserId === ref.id
         && provenPlaceholder(originProcess, user.recruitmentCandidateId);
       if (placeholder) gaps.push("native_intake_placeholder");
-      else if (!candidate || !matching || claimants.length !== 1 || claimants[0] !== ref.id) conflicts.push("candidate_not_reciprocal");
+      else if (!candidate || !matching || unknownOrigin || claimants.length !== 1 || claimants[0] !== ref.id) conflicts.push("candidate_not_reciprocal");
       else refs.push({ namespace: "hr.candidates", id: user.recruitmentCandidateId });
     }
   } else {
