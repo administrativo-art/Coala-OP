@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **547 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **548 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -480,6 +480,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/observability/client-errors` | POST | [src/app/api/observability/client-errors/route.ts](../../src/app/api/observability/client-errors/route.ts) | [observability](observability.md) |
 | `/api/privacy/incidents` | GET, POST | [src/app/api/privacy/incidents/route.ts](../../src/app/api/privacy/incidents/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/privacy/incidents/[id]` | PATCH | [src/app/api/privacy/incidents/[id]/route.ts](../../src/app/api/privacy/incidents/%5Bid%5D/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/privacy/person-inventory` | GET | [src/app/api/privacy/person-inventory/route.ts](../../src/app/api/privacy/person-inventory/route.ts) | [document-person-traceability](document-person-traceability.md) |
 | `/api/privacy/requests` | GET, POST | [src/app/api/privacy/requests/route.ts](../../src/app/api/privacy/requests/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/privacy/requests/[id]` | PATCH | [src/app/api/privacy/requests/[id]/route.ts](../../src/app/api/privacy/requests/%5Bid%5D/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/processes` | GET | [src/app/api/processes/route.ts](../../src/app/api/processes/route.ts) | [termination-process-center](flows/termination-process-center.md) |

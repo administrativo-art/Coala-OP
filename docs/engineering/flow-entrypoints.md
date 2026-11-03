@@ -1590,7 +1590,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 245.
+Arquivos locais percorridos: 250.
 
 Chamadas candidatas encontradas:
 
@@ -1659,6 +1659,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/upload` — interface [`src/components/hr/recruitment/recruitment-onboarding-view.tsx`](../../src/components/hr/recruitment/recruitment-onboarding-view.tsx); rota candidata [`src/app/api/hr/upload/route.ts`](../../src/app/api/hr/upload/route.ts)
 - `/api/privacy/incidents` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/incidents/route.ts`](../../src/app/api/privacy/incidents/route.ts)
 - `/api/privacy/incidents/` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/incidents/[id]/route.ts`](../../src/app/api/privacy/incidents/%5Bid%5D/route.ts)
+- `/api/privacy/person-inventory` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/person-inventory/route.ts`](../../src/app/api/privacy/person-inventory/route.ts)
 - `/api/privacy/requests` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/requests/route.ts`](../../src/app/api/privacy/requests/route.ts)
 - `/api/privacy/requests/` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/requests/[id]/route.ts`](../../src/app/api/privacy/requests/%5Bid%5D/route.ts)
 - `/api/products` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/route.ts`](../../src/app/api/products/route.ts)
