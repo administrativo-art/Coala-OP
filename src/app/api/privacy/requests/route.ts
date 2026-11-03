@@ -2,6 +2,9 @@ import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { privacyRequestCreateSchema, type PrivacyRequestCreateInput } from "@/features/privacy/security";
+import { canViewPersonSource, preparePersonInventory } from "@/features/privacy/person-inventory.server";
+import { sourceById } from "@/features/privacy/person-inventory";
+import { readSubjectRef, subjectKey } from "@/features/privacy/person-subject";
 import { type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { buildActionLogRecord } from "@/lib/log-action";
@@ -19,7 +22,7 @@ type WorkspaceResource = { workspaceId: string };
 
 function serializeRequest(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
   const data = doc.data() ?? {};
-  return { id: doc.id, workspace_id: data.workspace_id ?? "", subjectName: data.subjectName ?? "", subjectEmail: data.subjectEmail ?? "", subjectType: data.subjectType ?? "other", requestType: data.requestType ?? "other", origin: data.origin ?? "other", description: data.description ?? "", status: data.status ?? "open", owner: data.owner ?? null, response: data.response ?? null, dueAt: serializeDate(data.dueAt), completedAt: serializeDate(data.completedAt), createdAt: serializeDate(data.createdAt) ?? "", updatedAt: serializeDate(data.updatedAt) ?? "" };
+  return { id: doc.id, workspace_id: data.workspace_id ?? "", subjectName: data.subjectName ?? "", subjectRef: readSubjectRef(data.subjectRef), subjectEmail: data.subjectEmail ?? "", subjectType: data.subjectType ?? "other", requestType: data.requestType ?? "other", origin: data.origin ?? "other", description: data.description ?? "", status: data.status ?? "open", owner: data.owner ?? null, response: data.response ?? null, dueAt: serializeDate(data.dueAt), completedAt: serializeDate(data.completedAt), createdAt: serializeDate(data.createdAt) ?? "", updatedAt: serializeDate(data.updatedAt) ?? "" };
 }
 
 const listContract = defineSecurityContract({ schemaVersion: 1, id: "privacy.request.list", version: 1, surface: { method: "GET", path: "/api/privacy/requests" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "privacy.request.view" }, resourceScope: { kind: "workspace" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
@@ -48,7 +51,15 @@ export const POST = secureRoute({ contract: createContract, enforcer: createEnfo
   const { actor, input, resource } = security;
   const now = new Date();
   const ref = dbAdmin.collection("privacyRequests").doc();
-  const payload = { workspace_id: resource.workspaceId, subjectName: input.subjectName, subjectEmail: input.subjectEmail?.toLowerCase() ?? "", subjectType: input.subjectType, requestType: input.requestType, origin: input.origin, description: input.description, status: "open", owner: input.owner || null, response: null, dueAt: input.dueAt ? Timestamp.fromDate(new Date(`${input.dueAt}T12:00:00Z`)) : null, completedAt: null, createdAt: Timestamp.fromDate(now), updatedAt: Timestamp.fromDate(now), ttl: ttlFrom(now, 365 * 3), createdBy: { user_id: actor.userDoc.id, username: actor.userDoc.username } };
+  let subjectKeys: string[] = [];
+  if (input.subjectRef) {
+    const source = sourceById(input.subjectRef.namespace === "main.users" ? "accounts" : input.subjectRef.namespace === "hr.employees" ? "employees" : input.subjectRef.namespace === "hr.onboardingPersons" ? "onboarding-persons" : "candidates");
+    if (!source || !canViewPersonSource(actor, source)) throw new AppError({ code: "PRIVACY_SUBJECT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para vincular este cadastro." });
+    const prepared = await preparePersonInventory(actor, input.subjectRef);
+    if (prepared.resolution.conflicts.length) throw new AppError({ code: "PRIVACY_SUBJECT_UNCONFIRMED", kind: "VALIDATION", safeMessage: "Cadastro ausente ou com vínculo conflitante. Revise o identificador antes de vincular." });
+    subjectKeys = prepared.resolution.refs.map(subjectKey);
+  }
+  const payload = { workspace_id: resource.workspaceId, subjectRef: input.subjectRef ?? null, subjectKeys, subjectName: input.subjectName, subjectEmail: input.subjectEmail?.toLowerCase() ?? "", subjectType: input.subjectType, requestType: input.requestType, origin: input.origin, description: input.description, status: "open", owner: input.owner || null, response: null, dueAt: input.dueAt ? Timestamp.fromDate(new Date(`${input.dueAt}T12:00:00Z`)) : null, completedAt: null, createdAt: Timestamp.fromDate(now), updatedAt: Timestamp.fromDate(now), ttl: ttlFrom(now, 365 * 3), createdBy: { user_id: actor.userDoc.id, username: actor.userDoc.username } };
   const auditRef = dbAdmin.collection("actionLogs").doc();
   await dbAdmin.runTransaction(async (transaction) => {
     transaction.set(ref, payload);

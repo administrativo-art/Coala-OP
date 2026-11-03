@@ -3,7 +3,18 @@
 import type { User as FirebaseUser } from "firebase/auth";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
-import type { PrivacyRequest, SecurityIncident } from "./types";
+import type { PersonInventoryCatalog, PersonInventoryPage, PrivacyRequest, SecurityIncident } from "./types";
+import type { SubjectRef } from "./person-subject";
+
+export function fetchPersonInventory(firebaseUser: FirebaseUser, ref: SubjectRef, signal: AbortSignal) {
+  const query = new URLSearchParams(ref);
+  return authenticatedApiRequest<PersonInventoryCatalog>(`/api/privacy/person-inventory?${query}`, { signal, getIdToken: () => firebaseUser.getIdToken(), fallbackError: "Não foi possível consultar o cadastro ou seu escopo de acesso." });
+}
+
+export function fetchPersonInventorySource(firebaseUser: FirebaseUser, ref: SubjectRef, source: string, signal: AbortSignal, cursor?: string) {
+  const query = new URLSearchParams({ ...ref, source, limit: "25", ...(cursor ? { cursor } : {}) });
+  return authenticatedApiRequest<PersonInventoryPage>(`/api/privacy/person-inventory?${query}`, { signal, getIdToken: () => firebaseUser.getIdToken(), fallbackError: "Falha ao consultar esta origem." });
+}
 
 export async function fetchPrivacyRequests(firebaseUser: FirebaseUser) {
   return authenticatedApiRequest<{ requests: PrivacyRequest[] }>("/api/privacy/requests", { getIdToken: () => firebaseUser.getIdToken(), fallbackError: "Falha ao carregar pedidos LGPD." });
