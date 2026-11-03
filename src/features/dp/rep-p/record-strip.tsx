@@ -213,7 +213,9 @@ export function recordActionLabel(marking: Marking, day: DayView) {
 }
 
 /** Faixa escura de registro: hora oficial, estado da jornada, sequência com finalidade e a ação principal. */
-export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialogOpen: controlledOpen, onDialogOpenChange }: {
+export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialogOpen: controlledOpen, onDialogOpenChange, kicker }: {
+  /** Nome da tela, em rosa no topo da barra escura (padrão do cabeçalho das telas). */
+  kicker?: string;
   marking: Marking; day: DayView; today: string; onOpenDay: () => void; onRecorded: () => void;
   /** Controle opcional da janela, para o detalhe do dia abrir a mesma confirmação. */
   dialogOpen?: boolean; onDialogOpenChange?: (open: boolean) => void;
@@ -242,6 +244,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
 
   return (
     <ControlPanel className="mx-auto w-full max-w-[1180px] p-0">
+      {kicker ? <span className="block px-5 pt-4 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</span> : null}
       <div className="flex flex-col gap-3 px-5 py-3 md:flex-row md:items-center md:gap-6">
         <div className="shrink-0">
           {options ? <OfficialClockDisplay clock={unitClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}
