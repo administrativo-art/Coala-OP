@@ -1,4 +1,4 @@
-import { readOnboardingPerson } from "./onboarding-person";
+import { onboardingOrigin, readOnboardingPerson } from "./onboarding-person";
 import { savePersonCursor, readPersonCursor } from "./person-cursor.server";
 import { FieldPath } from "firebase-admin/firestore";
 import type { ServerUserContext } from "@/lib/auth-server";
@@ -46,6 +46,8 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
 }
 /** Source-native scope fields; financial result centers never become operational units. */
 export function canViewPersonRecord(actor: ServerUserContext, source: Source, data: Record<string, unknown> | undefined): boolean {
+  // candidateId also holds manual/PJ routing aliases. Check origin before admin bypass.
+  if (source.id === "onboarding-candidates" && (!data || onboardingOrigin(data) !== "recruitment")) return false;
   if (!canViewPersonSource(actor, source) || !matchesPersonWorkspace(data, actor.workspace_id, source.scopePolicy !== "finance-workspace")) return false;
   const unit = (value: unknown) => typeof value === "string" && value.length > 0 && canAccessUnit(actor.userDoc, value, { isDefaultAdmin: actor.isDefaultAdmin });
   switch (source.scopePolicy) {

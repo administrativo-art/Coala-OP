@@ -107,7 +107,7 @@ test('inventory separates subject, actor and candidate linkage; enforces ACL and
   await hrDbAdmin.collection('candidates').doc(candidateId).set({});
   await hrDbAdmin.collection('candidates').doc('person-inventory-foreign-candidate').set({ workspaceId: 'foreign' });
   await hrDbAdmin.collection('employees').doc('person-inventory-foreign-employee').set({ workspaceId: 'foreign' });
-  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-onboarding').set({ candidateId, collaboratorUserId: uid });
+  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-onboarding').set({ source: 'recruitment', candidateId, collaboratorUserId: uid });
   await hrDbAdmin.collection('hrSignatureRequests').doc('person-inventory-signature').set({ subjectKeys: [`main.users:${uid}`], signerKeys: [`main.users:${uid}`, `main.users:${actors[0].uid}`], actorKeys: [`main.users:${actors[1].uid}`], purpose: 'vacation_notice', documentStoragePath: 'hr/vacations/internal.pdf' });
   await dbAdmin.collection('generatedDocuments').doc('person-inventory-document-1').set({ subjectKeys: [`hr.candidates:${candidateId}`], generatedBy: actors[1].uid, onboardingId: 'person-inventory-onboarding', version: 1, storagePath: 'generated-documents/person-inventory-onboarding/person-inventory-document-1/document.pdf' });
   await dbAdmin.collection('generatedDocuments').doc('person-inventory-document-2').set({ subjectKeys: [`hr.candidates:${candidateId}`], generatedBy: actors[1].uid, onboardingId: 'person-inventory-onboarding', version: 2, storagePath: 'people/subject-name.pdf' });
@@ -206,12 +206,12 @@ test('inventory separates subject, actor and candidate linkage; enforces ACL and
   assert.equal((await get('/api/privacy/person-inventory?namespace=hr.employees&id=person-inventory-foreign-employee', admin)).status, 403);
   await hrDbAdmin.collection('candidates').doc('person-inventory-cross-candidate').set({ workspaceId: 'coala' });
   await dbAdmin.collection('users').doc('person-inventory-cross-user').set({ recruitmentCandidateId: 'person-inventory-cross-candidate', unitIds: ['unit-a'] });
-  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-cross-process').set({ candidateId: 'person-inventory-cross-candidate', collaboratorUserId: 'person-inventory-cross-user', workspaceId: 'foreign' });
+  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-cross-process').set({ source: 'recruitment', candidateId: 'person-inventory-cross-candidate', collaboratorUserId: 'person-inventory-cross-user', workspaceId: 'foreign' });
   assert.equal((await get('/api/privacy/person-inventory?namespace=main.users&id=person-inventory-cross-user', admin)).status, 403);
   const actorContext = await requireUser(request('/api/privacy/person-inventory', admin));
   const failed = await collectPersonSource({ actor: actorContext, sourceId: 'generated-documents', ref: { namespace: 'main.users', id: uid }, limit: 1, sourceDb: { collection() { throw new Error('private token in backend error'); } } });
   assert.equal(failed.status, 'failed'); assert.equal(JSON.stringify(failed).includes('private token'), false);
-  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-collision').set({ candidateId, collaboratorUserId: actors[1].uid });
+  await hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-collision').set({ source: 'recruitment', candidateId, collaboratorUserId: actors[1].uid });
   const collision = await get(`/api/privacy/person-inventory?namespace=hr.candidates&id=${candidateId}`, admin);
   assert.equal(collision.status, 200); assert.deepEqual(collision.body.equivalents, [{ namespace: 'hr.candidates', id: candidateId }]); assert.ok(collision.body.conflicts.includes('candidate_user_collision'));
   assert.equal((await createRequest(admin, { namespace: 'hr.candidates', id: candidateId })).status, 400);
@@ -364,4 +364,34 @@ test('native remaining source shapes use beneficiary domain, execution fields or
   const read = (sourceId) => collectPersonSource({ actor, sourceId, ref: { namespace: 'main.users', id: uid }, limit: 25 });
   assert.equal((await read('rep-p-classifications')).status, 'partial');
   for (const [sourceId, expected] of [['collaborator-requests','residual-native-request'],['uniform-assignments','residual-native-uniform'],['integrations','residual-native-profile'],['rep-p-treatments','residual-native-treatment-A'],['rep-p-classifications','residual-native-classification-A']]) assert.deepEqual((await read(sourceId)).items.map((x) => x.id), [expected], sourceId);
+});
+
+test('candidate inventory ignores native manual/PJ aliases and unknown origin before admin bypass', async (t) => {
+  const { canViewPersonRecord } = await import('../../src/features/privacy/person-inventory.server.ts');
+  const { sourceById } = await import('../../src/features/privacy/person-inventory.ts');
+  const { resolveStrictPersonRefs } = await import('../../src/features/privacy/person-subject.ts');
+  const { firestorePersonLookup } = await import('../../src/features/privacy/person-lookup.server.ts');
+  const actor = { decoded: { uid: 'candidate-alias-admin' }, userDoc: {}, permissions: {}, isDefaultAdmin: true, workspace_id: 'coala' };
+  const refs = []; t.after(async () => { await Promise.all(refs.map((ref) => ref.firestore.recursiveDelete(ref))); });
+  const nativeBase = { source: 'manual', applicationId: null, jobOpeningId: null, employmentRelationshipType: 'clt', jobRoleId: 'role', functionId: 'function', unitId: 'unit', employerUnitId: 'unit', integrationV2: { snapshot: { schemaVersion: 'coala-integration-v1' } } };
+  for (const kind of ['manual', 'pj', 'unknown']) {
+    const pid = `candidate-alias-${kind}`, cid = `${kind === 'pj' ? 'pj' : 'manual'}_${pid}`, uid = `candidate-alias-user-${kind}`, hrId = `candidate-alias-hr-${kind}`;
+    const candidate = hrDbAdmin.collection('candidates').doc(cid), processRef = hrDbAdmin.collection('onboardingProcesses').doc(pid), user = dbAdmin.collection('users').doc(uid), employee = hrDbAdmin.collection('employees').doc(hrId); refs.push(candidate, processRef, user, employee);
+    await candidate.set({ workspaceId: 'coala' }); await user.set({ workspaceId: 'coala', source: 'recruitment_onboarding', onboardingId: pid, recruitmentCandidateId: cid, hrEmployeeId: hrId }); await employee.set({ workspaceId: 'coala', auth_uid: uid });
+    const data = { ...nativeBase, candidateId: cid, collaboratorUserId: uid, employeeId: uid, workspaceId: 'coala', ...(kind === 'pj' ? { employmentRelationshipType: 'pj', providerCnpj: '11444777000161', pjWorkflow: { version: 1, provider: { cnpj: '11444777000161' } } } : {}), ...(kind === 'unknown' ? { source: 'unknown' } : {}) };
+    await processRef.set(data); assert.equal(canViewPersonRecord(actor, sourceById('onboarding-candidates'), { ...data, id: pid }), false);
+    const anchor = { namespace: 'hr.candidates', id: cid };
+    const collected = await collectPersonSource({ actor, sourceId: 'onboarding-candidates', ref: anchor, limit: 25 });
+    assert.equal(collected.items.length, 0); assert.equal(JSON.stringify(collected).includes(pid), false);
+    if (kind !== 'unknown') {
+      assert.deepEqual((await resolveStrictPersonRefs({ namespace: 'main.users', id: uid }, firestorePersonLookup)).refs.map((ref) => ref.namespace).sort(), ['hr.employees', 'main.users']);
+      assert.deepEqual((await resolveStrictPersonRefs(anchor, firestorePersonLookup)).refs, [anchor]);
+    } else assert.ok(collected.conflicts.includes('candidate_process_origin_unconfirmed'));
+  }
+  const cid = 'candidate-real-recruitment', pid = 'candidate-real-process', uid = 'candidate-real-user', hrId = 'candidate-real-hr';
+  const candidate = hrDbAdmin.collection('candidates').doc(cid), processRef = hrDbAdmin.collection('onboardingProcesses').doc(pid), user = dbAdmin.collection('users').doc(uid), employee = hrDbAdmin.collection('employees').doc(hrId); refs.push(candidate, processRef, user, employee);
+  await candidate.set({ workspaceId: 'coala' }); await user.set({ workspaceId: 'coala', hrEmployeeId: hrId, recruitmentCandidateId: cid }); await employee.set({ workspaceId: 'coala', auth_uid: uid }); await processRef.set({ source: 'recruitment', candidateId: cid, collaboratorUserId: uid, workspaceId: 'coala' });
+  const collected = await collectPersonSource({ actor, sourceId: 'onboarding-candidates', ref: { namespace: 'hr.candidates', id: cid }, limit: 25 });
+  assert.deepEqual(collected.items.map((item) => item.id), [pid]);
+  assert.deepEqual(new Set((await resolveStrictPersonRefs({ namespace: 'hr.candidates', id: cid }, firestorePersonLookup)).refs.map((ref) => ref.namespace)), new Set(['main.users', 'hr.employees', 'hr.candidates']));
 });
