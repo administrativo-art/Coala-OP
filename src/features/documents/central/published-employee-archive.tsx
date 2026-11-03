@@ -199,7 +199,7 @@ export function PublishedEmployeeArchive() {
           loadPreview:archivePreviewable(doc.mimeType) ? () => void access(doc) : undefined,
           actions:[{label:"Baixar",run:() => void access(doc,true)}]})),
     ];
-  return <ArchiveExplorer area="published" selectionScope={JSON.stringify([employeeId, path])} entries={entries} search={search} onSearch={setSearch} loading={loading}
+  return <ArchiveExplorer area="published" selectionScope={JSON.stringify([employeeId, path])} hasMorePages={ownLimitReached || cursors.length > 0} entries={entries} search={search} onSearch={setSearch} loading={loading}
     error={employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
     breadcrumbs={employee ? [{name:employee.username,open:() => navigate(employeeId)},...path.map((name,index) => ({name,open:() => navigate(employeeId,path.slice(0,index+1))}))] : []}
     folders={employee ? childFolders.map(name => ({id:name,name,open:() => navigate(employeeId,[...path,name])})) : []}

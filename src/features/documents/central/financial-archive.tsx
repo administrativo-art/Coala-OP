@@ -76,7 +76,7 @@ export function FinancialDocumentArchive() {
       { label: "Revisar na origem", run: () => router.push(`/dashboard/financial/inbox?sourceId=${encodeURIComponent(entry.message.id)}`) },
       { label: "Ver histórico", run: () => router.push(`/dashboard/documents/history?source=financial&documentId=${encodeURIComponent(entry.message.id)}`) },
     ] }));
-  return <ArchiveExplorer area="financial" selectionScope={JSON.stringify([scope, folder])} entries={entries} search={search} onSearch={setSearch} loading={loading} error={error} onRefresh={() => void load()}
+  return <ArchiveExplorer area="financial" selectionScope={JSON.stringify([scope, folder])} hasMorePages={Boolean(page?.nextCursor)} entries={entries} search={search} onSearch={setSearch} loading={loading} error={error} onRefresh={() => void load()}
     breadcrumbs={scope === "root" ? [] : [{ name: scope === "identified" ? "Identificados" : "Arquivados", open: () => navigate(scope) }, ...(folder ? [{ name: folder }] : [])]}
     folders={scope === "root" ? [] : folders.map((name) => ({ id: name, name, active: folder === name, open: () => navigate(scope, name) }))}
     onRoot={() => router.push(companyArchiveHref("Financeiro"))} onUp={() => folder ? navigate(scope) : router.push(companyArchiveHref("Financeiro"))}

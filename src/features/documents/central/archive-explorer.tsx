@@ -42,11 +42,11 @@ export function useArchiveAreas() {
 }
 export function archiveAreaHref(area: ArchiveArea) { return `/dashboard/documents/${area}`; }
 
-export function ArchiveExplorer({ area = null, entries, folders = [], breadcrumbs = [], search, onSearch, loading, error, toolbar, onRefresh, onUp, onRoot, preview, onSelect, footer, selectionScope = "" }: {
+export function ArchiveExplorer({ area = null, entries, folders = [], breadcrumbs = [], search, onSearch, loading, error, toolbar, onRefresh, onUp, onRoot, preview, onSelect, footer, selectionScope = "", hasMorePages = false }: {
   area?: ArchiveArea | null; entries: ArchiveEntry[]; folders?: ArchiveFolder[];
   breadcrumbs?: Array<{ name: string; open?: () => void }>;
   search: string; onSearch: (value: string) => void; loading?: boolean; error?: string | null; toolbar?: ReactNode;
-  onRefresh?: () => void; onUp?: () => void; onRoot?: () => void; preview?: (entry: ArchiveEntry) => ReactNode; onSelect?: (entry: ArchiveEntry | null) => void; footer?: ReactNode; selectionScope?: string;
+  onRefresh?: () => void; onUp?: () => void; onRoot?: () => void; preview?: (entry: ArchiveEntry) => ReactNode; onSelect?: (entry: ArchiveEntry | null) => void; footer?: ReactNode; selectionScope?: string; hasMorePages?: boolean;
 }) {
   const router = useRouter();
   const areas = useArchiveAreas();
@@ -124,7 +124,7 @@ export function ArchiveExplorer({ area = null, entries, folders = [], breadcrumb
                   </div>
                 </DropdownMenu>)}
               </div>
-              {entries.length === 0 && !error && <div className="grid min-h-64 place-items-center p-6 text-center"><div><Folder className="mx-auto h-10 w-10 text-slate-200" /><p className="mt-3 text-sm text-slate-500">{search ? "Nenhum item encontrado nesta pasta." : "Esta pasta está vazia."}</p></div></div>}
+              {entries.length === 0 && !error && <div className="grid min-h-64 place-items-center p-6 text-center"><div><Folder className="mx-auto h-10 w-10 text-slate-200" /><p className="mt-3 text-sm text-slate-500">{hasMorePages ? (search ? "Nenhum item encontrado nas páginas carregadas." : "Nenhum item nas páginas carregadas.") : search ? "Nenhum item encontrado nesta pasta." : "Esta pasta está vazia."}</p></div></div>}
             </>}
             {footer}<p className="px-4 py-3 text-[10px] text-slate-400">{entries.length} {entries.length === 1 ? "item" : "itens"} · Duplo clique ou Enter para abrir</p>
           </main>

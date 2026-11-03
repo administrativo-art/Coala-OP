@@ -248,7 +248,7 @@ test("trocar titular durante Carregar mais libera a paginação da nova pasta", 
   await page.route("**/api/hr/employee-documents?*", async route => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
     if (cursor && !delayed) { delayed = true; await pendingMore; }
-    try { await route.fulfill({json:{documents:[{id:"dp-published-e2e",employeeId:"employee-vacation-e2e",displayName:"Aviso publicado",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:[],mimeType:"application/pdf",publication:{status:"published",at:"2026-11-03",by:"dp",source:"manual"}}],nextCursor:cursor ? null : "dp-cursor-e2e"}}); } catch { /* Request cancelled after changing the selected person. */ }
+    try { await route.fulfill({json:{documents:cursor ? [{id:"dp-published-e2e",employeeId:"employee-vacation-e2e",displayName:"Aviso publicado",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:[],mimeType:"application/pdf",publication:{status:"published",at:"2026-11-03",by:"dp",source:"manual"}}] : [],nextCursor:cursor ? null : "dp-cursor-e2e"}}); } catch { /* Request cancelled after changing the selected person. */ }
   });
   await page.goto("/login?next=%2Fdashboard%2Fdocuments%2Fpublished");
   await page.getByLabel("E-mail").fill(E2E_USER.email);
@@ -257,6 +257,8 @@ test("trocar titular durante Carregar mais libera a paginação da nova pasta", 
   const other = page.getByRole("button",{name:"Pasta: Colaboradora Férias E2E",exact:true});
   await expect(other).toBeVisible({timeout:90_000});
   await other.press("Enter");
+  await expect(page.getByText("Nenhum item nas páginas carregadas.", {exact:true})).toBeVisible();
+  await expect(page.getByText("Esta pasta está vazia.", {exact:true})).toHaveCount(0);
   await page.getByRole("button",{name:"Carregar mais documentos"}).click();
   await expect(page.getByRole("button",{name:"Carregando…"})).toBeVisible();
   await page.getByRole("button",{name:"Pasta acima"}).click();
