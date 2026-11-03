@@ -1555,8 +1555,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   setRemoveTarget(item);
                                 }}
                                 className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600"
-                                title="Excluir"
-                                aria-label={`Excluir ${item.originalName}`}
+                                title={item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"}
+                                aria-label={`${item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"} ${item.originalName}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -1568,7 +1568,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       {removeTarget?.id === item.id ? (
                         <InlineConfirm
                           className="mt-3"
-                          message={`Excluir definitivamente o arquivo “${item.originalName}”? Esta ação não pode ser desfeita.`}
+                          message={item.signatureStatus === "signed" || item.source === "autentique_signature" ? `Remover “${item.originalName}” do Acervo? O PDF assinado será preservado na trilha de assinatura.` : `Excluir definitivamente o arquivo “${item.originalName}”? Esta ação não pode ser desfeita.`}
+                          confirmLabel={item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"}
                           loading={busy}
                           returnFocusRef={removeTriggerRef}
                           onCancel={() => setRemoveTarget(null)}

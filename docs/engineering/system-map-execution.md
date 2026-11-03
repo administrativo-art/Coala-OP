@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+02/11/2026: investigação de duplicação percorreu mapa → central documental → assinatura admissional/avulsa, férias, fechamento e PJ, confrontando código com inventário privado paginado de registros e metadados de objetos. A correção anterior unificava registros, mas ainda copiava o assinado na promoção; agora a promoção compartilha a referência. Migração/limpeza histórica não executada. Sem nova permissão; telemetria atribuível indisponível.
+
 02/11/2026: chamado de classificação de pacote assinado usou mapa → central documental → guias de pessoa/geração/assinatura e conferiu fontes atuais. Sete referências legadas eram cópias do mesmo pacote, não sete componentes separados; promoção futura passa a uma identidade. Navegação interna movida para Empresa sem ampliar acesso. Testes dirigidos e E2E demo registrados no chamado; leitura real confirma contexto dos gerados, não homologação externa. Telemetria atribuível indisponível.
 
 2026-11-02: classificação posterior da empresa e confirmação de nomenclatura financeira por fornecedor cadastrado implementadas localmente. Prévia sem escrita, fingerprint, versões e auditoria transacionais; bytes/originais preservados. Ensaio em Auth/Firestore/Storage aprovado. Nenhum pagamento/vínculo foi criado ou alterado pela nomenclatura. GUI/provedor e legados sem ID permanecem pendentes; grupos continuam Traçados.
