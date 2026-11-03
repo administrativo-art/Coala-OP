@@ -192,9 +192,14 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     const bytes = Buffer.from("%PDF-original-assinado-sintetico");
     await bucket.file(path).save(bytes, { resumable: false });
     t.after(() => bucket.file(path).delete({ ignoreNotFound: true }));
-    const document = await seed(hrDbAdmin, "employeeDocuments", `${uid}-shared-signed`, { employeeId, storagePath: path, source: "autentique_signature", signatureStatus: "signed", deletedAt: null });
+    const document = await seed(hrDbAdmin, "employeeDocuments", `${uid}-shared-signed`, { employeeId, category: "admission", documentTypeCode: "ADMISSION_PACKAGE", storagePath: path, storageSubfolder: "private-source-namespace", signedFileUrl: "https://api.autentique.com.br/private-test.pdf", source: "autentique_signature", signatureStatus: "signed", deletedAt: null });
     const request = await seed(hrDbAdmin, "hrSignatureRequests", `${uid}-shared-signed-request`, { employeeId, signedStoragePath: path, archivedDocumentId: document.id, status: "signed" });
     const remove = (authenticated = true) => employeeDocuments.DELETE(new NextRequest(`http://localhost/api/hr/employee-documents?id=${document.id}`, { method: "DELETE", headers: authenticated ? { Authorization: `Bearer ${idToken}` } : {} }));
+    const listing = await employeeDocuments.GET(new NextRequest(`http://localhost/api/hr/employee-documents?employeeId=${employeeId}`, { headers: { Authorization: `Bearer ${idToken}` } }));
+    assert.equal(listing.status, 200);
+    const listed = (await listing.json()).documents.find((item) => item.id === document.id);
+    assert.ok(listed);
+    for (const field of ["storagePath", "storageSubfolder", "signedFileUrl"]) assert.equal(field in listed, false, "a lista não deve expor caminhos ou links privados");
     assert.equal((await remove(false)).status, 403);
     await person.update({ unitIds: ["central-unit-b"] });
     assert.equal((await remove()).status, 403);
