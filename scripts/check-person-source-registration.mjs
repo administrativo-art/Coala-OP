@@ -136,5 +136,5 @@ for (const { file, now, before } of changed) {
     } else if (!registered.has(name) && !nonPersonal.has(name)) failures.push(`${file}: coleção ${name} sem classificação`);
   }
 }
-if (failures.length) { console.error(failures.join('\n')); process.exitCode = 1; }
+if (failures.length) { process.stderr.write(`${failures.join('\n')}\n`); process.exitCode = 1; }
 else console.log('Novas chamadas de coleção classificadas.');
