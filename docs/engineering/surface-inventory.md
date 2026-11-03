@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **544 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **547 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -50,6 +50,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/assets/[assetId]/custody-transfers/[transferId]/term/file` | GET | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/%5BtransferId%5D/term/file/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/custody-transfers/list` | GET | [src/app/api/assets/[assetId]/custody-transfers/list/route.ts](../../src/app/api/assets/%5BassetId%5D/custody-transfers/list/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/history` | GET | [src/app/api/assets/[assetId]/history/route.ts](../../src/app/api/assets/%5BassetId%5D/history/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]` | GET | [src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts](../../src/app/api/assets/%5BassetId%5D/inbox-invoices/%5BmessageId%5D/%5BfileId%5D/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/maintenance-occurrences` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]` | POST | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/%5BoccurrenceId%5D/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order` | GET | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts](../../src/app/api/assets/%5BassetId%5D/maintenance-occurrences/%5BoccurrenceId%5D/order/route.ts) | [assets](flows/assets.md) |
@@ -59,6 +60,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/assets/[assetId]/movements` | GET, POST | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/%5BassetId%5D/movements/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/barcode-labels` | GET, POST | [src/app/api/assets/barcode-labels/route.ts](../../src/app/api/assets/barcode-labels/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/categories` | GET, POST | [src/app/api/assets/categories/route.ts](../../src/app/api/assets/categories/route.ts) | [assets](flows/assets.md) |
+| `/api/assets/lookup` | GET | [src/app/api/assets/lookup/route.ts](../../src/app/api/assets/lookup/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/upload` | POST | [src/app/api/assets/upload/route.ts](../../src/app/api/assets/upload/route.ts) | [assets](flows/assets.md) |
 | `/api/audit/log` | POST | [src/app/api/audit/log/route.ts](../../src/app/api/audit/log/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/audit/logs` | GET | [src/app/api/audit/logs/route.ts](../../src/app/api/audit/logs/route.ts) | [access-and-privacy](access-and-privacy.md) |
@@ -279,6 +281,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/inbox/[id]/analyze` | POST | [src/app/api/financial/inbox/[id]/analyze/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/analyze/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/case` | GET, PATCH | [src/app/api/financial/inbox/[id]/case/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/case/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/files/[fileId]` | GET | [src/app/api/financial/inbox/[id]/files/[fileId]/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/files/%5BfileId%5D/route.ts) | [financial-inbox](flows/financial-inbox.md) |
+| `/api/financial/inbox/[id]/files/[fileId]/destination` | POST, DELETE | [src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/files/%5BfileId%5D/destination/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/files/[fileId]/naming` | POST | [src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/files/%5BfileId%5D/naming/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/link` | POST | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/link/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/payment` | POST | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/payment/route.ts) | [financial-inbox](flows/financial-inbox.md) |

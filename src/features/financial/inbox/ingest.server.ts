@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { classifyFinancialEmail, extractEmailAddress } from "./parser";
@@ -136,6 +137,7 @@ async function archiveAttachment(params: {
   attachment: ResendAttachment;
   apiKey: string;
   basePath: string;
+  beforeStorageWrite: (path: string, sha256: string) => Promise<void>;
 }): Promise<FinancialInboxAttachment> {
   const id = String(params.attachment.id || "").trim();
   const filename = safeFileName(String(params.attachment.filename || "arquivo"));
@@ -147,12 +149,17 @@ async function archiveAttachment(params: {
   if (!id || !isAllowedAttachment(contentType, filename)) return { ...base, storagePath: null, sha256: null, archiveStatus: "skipped_unsafe" };
   if (size > MAX_ATTACHMENT_BYTES) return { ...base, storagePath: null, sha256: null, archiveStatus: "skipped_size" };
 
+  let buffer: Buffer;
   try {
     const downloadUrl = await retrieveAttachmentDownload(params.emailId, id, params.apiKey);
-    const buffer = await downloadBuffer(downloadUrl, MAX_ATTACHMENT_BYTES);
-    const hash = sha256(buffer);
-    const storagePath = `${params.basePath}/attachments/${safeId(id)}-${filename}`;
-    await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, {
+    buffer = await downloadBuffer(downloadUrl, MAX_ATTACHMENT_BYTES);
+  } catch {
+    return { ...base, storagePath: null, sha256: null, archiveStatus: "failed" };
+  }
+  const hash = sha256(buffer);
+  const storagePath = `${params.basePath}/attachments/${safeId(id)}-${filename}`;
+  await params.beforeStorageWrite(storagePath, hash);
+  await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, {
       resumable: false,
       metadata: {
         contentType,
@@ -160,10 +167,7 @@ async function archiveAttachment(params: {
         metadata: { sha256: hash, providerEmailId: params.emailId },
       },
     });
-    return { ...base, size: buffer.byteLength, storagePath, sha256: hash, archiveStatus: "stored" };
-  } catch {
-    return { ...base, storagePath: null, sha256: null, archiveStatus: "failed" };
-  }
+  return { ...base, size: buffer.byteLength, storagePath, sha256: hash, archiveStatus: "stored" };
 }
 
 function isAlreadyExists(error: unknown) {
@@ -190,6 +194,22 @@ export async function ingestFinancialEmail(params: {
   const senderAuthentication = financialInboxSenderAuthentication(received.headers, senderDomain);
   const subject = String(received.subject || "Sem assunto").trim().slice(0, 500);
   const parsed = classifyFinancialEmail({ subject, text: received.text, html: received.html, senderDomain });
+  // Claim before the first Storage write: a concurrent webhook that read an absent message
+  // cannot recreate a discarded attachment or the original EML later.
+  const claimRef = financialDbAdmin.collection("financialInboxIngestClaims").doc(documentId);
+  try {
+    await claimRef.create({ workspaceId: WORKSPACE_ID, provider: "resend", providerEmailId: params.emailId, eventId: params.eventId, state: "ingesting", claimedAt: new Date().toISOString(), plannedObjects: [] });
+  } catch (error) {
+    if (!isAlreadyExists(error)) throw error;
+    if ((await reference.get()).exists) return { id: documentId, duplicate: true };
+    throw new Error("A recepção do e-mail já foi iniciada e aguarda conclusão ou reconciliação.");
+  }
+  let storageWriteAttempted = false;
+  const planStorageWrite = async (path: string, hash: string) => {
+    await claimRef.update({ plannedObjects: FieldValue.arrayUnion({ path, sha256: hash }) });
+    storageWriteAttempted = true;
+  };
+  try {
   const basePath = `financial-inbox/${WORKSPACE_ID}/${documentId}`;
   const archiveWarnings: string[] = [];
 
@@ -199,6 +219,7 @@ export async function ingestFinancialEmail(params: {
     const rawBuffer = await downloadBuffer(received.raw.download_url, MAX_RAW_BYTES);
     rawSha256 = sha256(rawBuffer);
     rawStoragePath = `${basePath}/original.eml`;
+    await planStorageWrite(rawStoragePath, rawSha256);
     await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(rawStoragePath).save(rawBuffer, {
       resumable: false,
       metadata: {
@@ -222,12 +243,15 @@ export async function ingestFinancialEmail(params: {
     return true;
   });
   if ((received.attachments?.length ?? 0) > eligible.length) archiveWarnings.push("Um ou mais anexos excederam os limites seguros de arquivamento.");
-  const attachments = await Promise.all(eligible.map((attachment) => archiveAttachment({
+  const attachmentResults = await Promise.allSettled(eligible.map((attachment) => archiveAttachment({
     emailId: params.emailId,
     attachment,
     apiKey: params.apiKey,
     basePath,
+    beforeStorageWrite: planStorageWrite,
   })));
+  if (attachmentResults.some((result) => result.status === "rejected")) throw new Error("Uma gravação de anexo no armazenamento teve resultado incerto; a recepção exige reconciliação.");
+  const attachments = attachmentResults.map((result) => (result as PromiseFulfilledResult<FinancialInboxAttachment>).value);
   if (attachments.some((attachment) => attachment.archiveStatus === "failed")) archiveWarnings.push("Um ou mais anexos não puderam ser arquivados.");
 
   const now = new Date().toISOString();
@@ -320,6 +344,7 @@ export async function ingestFinancialEmail(params: {
   try {
     const batch = financialDbAdmin.batch();
     batch.create(reference, message);
+    batch.update(claimRef, { state: "completed", completedAt: now });
     batch.create(reference.collection("events").doc(safeId(params.eventId)), {
       type: "EMAIL_RECEIVED",
       at: params.eventAt,
@@ -337,6 +362,7 @@ export async function ingestFinancialEmail(params: {
     await batch.commit();
   } catch (error) {
     if (!isAlreadyExists(error)) throw error;
+    if ((await reference.get()).exists) await claimRef.update({ state: "completed", completedAt: new Date().toISOString() });
     return { id: documentId, duplicate: true };
   }
   if (triage.kind !== "noise") {
@@ -350,4 +376,13 @@ export async function ingestFinancialEmail(params: {
     });
   }
   return { id: documentId, duplicate: false, status };
+  } catch (error) {
+    // Release only when no Storage write was attempted. An uncertain write needs a
+    // retained claim so a later webhook cannot recreate a discarded attachment.
+    if (!(await reference.get()).exists) {
+      if (storageWriteAttempted) await claimRef.update({ state: "reconciliation_required", failedAt: new Date().toISOString(), reasonCode: "INGEST_INTERRUPTED_AFTER_STORAGE_ATTEMPT" }).catch(() => undefined);
+      else await claimRef.delete().catch(() => undefined);
+    }
+    throw error;
+  }
 }

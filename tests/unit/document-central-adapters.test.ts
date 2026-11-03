@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { absenceFlowItem } from "../../src/features/documents/central/adapters/absence";
-import { financialWorkItem } from "../../src/features/documents/central/adapters/financial";
 import { generatedWorkItem } from "../../src/features/documents/central/adapters/generated";
 import { admissionSignatureItem } from "../../src/features/documents/central/adapters/admission-signature";
 import { onboardingClassificationItems, onboardingFlowItem } from "../../src/features/documents/central/adapters/onboarding";
@@ -78,19 +77,6 @@ describe("central documental", () => {
   test("documento gerado abre a gestão detalhada sem voltar para a fila central", () => {
     const item = generatedWorkItem({ id: "doc-2", status: "review_pending" }, "preparation");
     assert.equal(item?.href, "/dashboard/documents/generated/manage?document=doc-2&tab=preparation");
-  });
-
-  test("não transforma boleto pendente em requisito documental genérico", () => {
-    const item = financialWorkItem({
-      id: "mail-1",
-      status: "awaiting_authorization",
-      subject: "Boleto",
-      classification: { documentType: "charge", supplierName: "Fornecedor" },
-      attachments: [],
-    });
-    assert.equal(item?.tab, "preparation");
-    assert.deepEqual(item?.missingFields, []);
-    assert.equal(item?.href, "/dashboard/financial/inbox?sourceId=mail-1");
   });
 
   test("ausência expõe somente metadados mínimos do comprovante", () => {

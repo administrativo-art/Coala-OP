@@ -1,9 +1,65 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_USER, resetFinancialE2EFixtures } from "../support/global-setup";
+import { E2E_USER, E2E_INVOICE_DESTINATIONS, clearInvoiceDestinationE2EFixtures, resetFinancialE2EFixtures, seedInvoiceDestinationE2EFixtures } from "../support/global-setup";
 
 test.beforeEach(async () => {
   await resetFinancialE2EFixtures();
+});
+test.afterEach(async () => {
+  await clearInvoiceDestinationE2EFixtures();
+});
+
+async function loginForInvoice(page: import("@playwright/test").Page) {
+  await page.goto("/login");
+  await page.getByLabel("E-mail").fill(E2E_USER.email);
+  await page.getByLabel("Senha").fill(E2E_USER.password);
+  await page.getByRole("button", { name: "Entrar no sistema" }).click();
+  await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeHidden();
+}
+
+test("confirma NF sem patrimônio, cancela exclusão e retoma após erro sem falso sucesso", async ({ page }) => {
+  await seedInvoiceDestinationE2EFixtures();
+  let deleteCalls = 0;
+  await page.route(`**/api/financial/inbox/${E2E_INVOICE_DESTINATIONS.nonAsset}/files/nf/destination`, async (route) => {
+    if (route.request().method() !== "DELETE") return route.continue();
+    deleteCalls += 1;
+    if (deleteCalls === 1) return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: { code: "INVOICE_DELETE_CONFLICT", message: "O armazenamento ainda exige revisão. Tente novamente." } }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ destination: { kind: "non_asset_invoice", assetIds: [], version: 1, sha256: "b".repeat(64), confirmedAt: "2026-11-03T00:00:00.000Z", confirmedBy: E2E_USER.uid, deletionState: "deleted" } }) });
+  });
+  await loginForInvoice(page);
+  await page.goto("/dashboard/financial/expenses/inbox");
+  await page.getByRole("button", { name: /Abrir cobrança Nota fiscal sem patrimônio E2E/ }).click();
+  await page.getByRole("button", { name: "Tratar como nota fiscal" }).click();
+  await page.getByRole("button", { name: "Confirmar NF sem patrimônio" }).click();
+  await expect(page.getByText("Destino sem patrimônio confirmado. Conclua a exclusão do arquivo recebido.")).toBeVisible();
+  await page.getByRole("button", { name: "Excluir arquivo recebido" }).click();
+  await page.getByRole("button", { name: "Cancelar" }).last().click();
+  expect(deleteCalls).toBe(0);
+  await expect(page.getByRole("button", { name: "Confirmar exclusão deste arquivo" })).toBeHidden();
+  await page.getByRole("button", { name: "Excluir arquivo recebido" }).click();
+  await page.getByRole("button", { name: "Confirmar exclusão deste arquivo" }).click();
+  await expect(page.getByRole("alert")).toContainText("O armazenamento ainda exige revisão");
+  await expect(page.getByText("Arquivo recebido excluído; histórico preservado.")).toBeHidden();
+  await page.getByRole("button", { name: "Confirmar exclusão deste arquivo" }).click();
+  await expect(page.getByText("Arquivo recebido excluído; histórico preservado.")).toBeVisible();
+  expect(deleteCalls).toBe(2);
+});
+
+test("NF patrimonial confirmada na cobrança aparece no ativo sem copiar arquivo", async ({ page }) => {
+  await seedInvoiceDestinationE2EFixtures();
+  await loginForInvoice(page);
+  await page.goto("/dashboard/financial/expenses/inbox");
+  await page.getByRole("button", { name: /Abrir cobrança Nota fiscal patrimonial E2E/ }).click();
+  await page.getByRole("button", { name: "Tratar como nota fiscal" }).click();
+  await page.getByRole("textbox", { name: "Código do patrimônio" }).fill(E2E_INVOICE_DESTINATIONS.assetCode);
+  await page.getByRole("button", { name: "Adicionar patrimônio" }).click();
+  await expect(page.getByText(`${E2E_INVOICE_DESTINATIONS.assetCode} · Máquina NF E2E`)).toBeVisible();
+  await page.getByRole("button", { name: "Confirmar vínculo ao patrimônio" }).click();
+  await expect(page.getByText("Vinculada a 1 patrimônio(s)." )).toBeVisible();
+  await page.goto("/dashboard/assets");
+  await page.getByRole("button", { name: /Máquina NF E2E/ }).first().click();
+  await page.getByRole("button", { name: "Aquisição" }).click();
+  await expect(page.getByRole("button", { name: "Abrir NF recebida 1" })).toBeVisible();
 });
 
 test("identifica um lembrete sem alterar a despesa e o preserva na auditoria", async ({ page }) => {

@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **544**
-- Totalmente contratados: **212**
+- Arquivos de rota: **547**
+- Totalmente contratados: **215**
 - Legados congelados: **322**
 - Exceções temporárias: **10**
 - Violações: **0**
@@ -27,6 +27,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/assets/[assetId]/custody-transfers/[transferId]/term/file` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/[transferId]/term/file/route.ts) |
 | `/api/assets/[assetId]/custody-transfers/list` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/custody-transfers/list/route.ts](../../src/app/api/assets/[assetId]/custody-transfers/list/route.ts) |
 | `/api/assets/[assetId]/history` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/history/route.ts](../../src/app/api/assets/[assetId]/history/route.ts) |
+| `/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts](../../src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts) |
 | `/api/assets/[assetId]/maintenance-occurrences` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/maintenance-occurrences/route.ts](../../src/app/api/assets/[assetId]/maintenance-occurrences/route.ts) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]` | POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts](../../src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/route.ts) |
 | `/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order` | GET ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts](../../src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/route.ts) |
@@ -36,6 +37,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/assets/[assetId]/movements` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/[assetId]/movements/route.ts) |
 | `/api/assets/barcode-labels` | GET, POST | `LEGACY_BASELINE` | [src/app/api/assets/barcode-labels/route.ts](../../src/app/api/assets/barcode-labels/route.ts) |
 | `/api/assets/categories` | GET, POST | `LEGACY_BASELINE` | [src/app/api/assets/categories/route.ts](../../src/app/api/assets/categories/route.ts) |
+| `/api/assets/lookup` | GET ✓ | `CONTRACTED` | [src/app/api/assets/lookup/route.ts](../../src/app/api/assets/lookup/route.ts) |
 | `/api/assets/upload` | POST ✓ | `CONTRACTED` | [src/app/api/assets/upload/route.ts](../../src/app/api/assets/upload/route.ts) |
 | `/api/audit/log` | POST ✓ | `CONTRACTED` | [src/app/api/audit/log/route.ts](../../src/app/api/audit/log/route.ts) |
 | `/api/audit/logs` | GET ✓ | `CONTRACTED` | [src/app/api/audit/logs/route.ts](../../src/app/api/audit/logs/route.ts) |
@@ -256,6 +258,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/inbox/[id]/analyze` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/analyze/route.ts](../../src/app/api/financial/inbox/[id]/analyze/route.ts) |
 | `/api/financial/inbox/[id]/case` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/case/route.ts](../../src/app/api/financial/inbox/[id]/case/route.ts) |
 | `/api/financial/inbox/[id]/files/[fileId]` | GET ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/route.ts) |
+| `/api/financial/inbox/[id]/files/[fileId]/destination` | DELETE ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts) |
 | `/api/financial/inbox/[id]/files/[fileId]/naming` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts) |
 | `/api/financial/inbox/[id]/link` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/[id]/link/route.ts) |
 | `/api/financial/inbox/[id]/payment` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/[id]/payment/route.ts) |
