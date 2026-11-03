@@ -4,8 +4,8 @@ Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autentic
 
 - Arquivos de rota: **544**
 - Totalmente contratados: **212**
-- Legados congelados: **323**
-- Exceções temporárias: **9**
+- Legados congelados: **322**
+- Exceções temporárias: **10**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -346,7 +346,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/departments` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/departments/route.ts](../../src/app/api/hr/departments/route.ts) |
 | `/api/hr/departments/[departmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/departments/[departmentId]/route.ts](../../src/app/api/hr/departments/[departmentId]/route.ts) |
 | `/api/hr/employee-document-folder-profile` | GET ✓ | `CONTRACTED` | [src/app/api/hr/employee-document-folder-profile/route.ts](../../src/app/api/hr/employee-document-folder-profile/route.ts) |
-| `/api/hr/employee-documents` | DELETE, GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) |
+| `/api/hr/employee-documents` | DELETE, GET, PATCH, POST | `EXCEPTION` | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) |
 | `/api/hr/employee-documents/access` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/access/route.ts](../../src/app/api/hr/employee-documents/access/route.ts) |
 | `/api/hr/employee-documents/analyze-upload` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/analyze-upload/route.ts](../../src/app/api/hr/employee-documents/analyze-upload/route.ts) |
 | `/api/hr/employee-documents/batches` | GET | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/batches/route.ts](../../src/app/api/hr/employee-documents/batches/route.ts) |

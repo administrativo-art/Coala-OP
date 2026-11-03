@@ -17,6 +17,7 @@ const history = await import("../../src/app/api/documents/history/route.ts");
 const generated = await import("../../src/app/api/documents/generated/route.ts");
 const folder = await import("../../src/app/api/documents/company/folder/route.ts");
 const employeeAccess = await import("../../src/app/api/hr/employee-documents/access/route.ts");
+const employeeDocuments = await import("../../src/app/api/hr/employee-documents/route.ts");
 const intake = await import("../../src/app/api/documents/company/intake/route.ts");
 const companyUnits = await import("../../src/app/api/documents/company/units/route.ts");
 const financialNaming = await import("../../src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts");
@@ -56,7 +57,7 @@ test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retor
     const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(archiveId);
     refs.push(processRef, requestRef, ...workflowRefs, archiveRef);
     const signedPath = `signed-documents/${onboardingId}/${requestId}/${contentHash}/signed.pdf`;
-    const permanentPath = `hr/employee-documents/${person}/documents/${archiveId}/versions/01/${contentHash}/signed.pdf`;
+    const permanentPath = signedPath;
     paths.push(signedPath, permanentPath);
     await processRef.set({ candidateName: "Pessoa sintética", expectedAdmissionDate: "2099-01-01", currentStage: "completed", ...(alreadyActive ? { employeeId: person } : {}) });
     await requestRef.set({ onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
@@ -81,8 +82,84 @@ test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retor
     assert.equal((await hrDbAdmin.collection("employeeDocuments").where("sourceOnboardingId", "==", onboardingId).limit(10).get()).size, 1);
     for (const ref of workflowRefs) assert.equal((await ref.get()).get("employeeDocumentId"), archiveId);
     assert.equal((await requestRef.get()).get("archivedDocumentId"), archiveId);
+    assert.equal((await requestRef.get()).get("signedStoragePath"), archived.get("storagePath"));
+    const [copies] = await bucket.getFiles({ prefix: `hr/employee-documents/${person}/documents/${archiveId}/`, autoPaginate: false, maxResults: 10 });
+    assert.equal(copies.length, 0, "arquivar deve reutilizar o PDF assinado, sem criar cópia física");
     assert.equal(createHash("sha256").update((await bucket.file(permanentPath).download())[0]).digest("hex"), contentHash);
     assert.equal((await archiveRef.collection("audit").where("action", "==", "SIGNED_DOCUMENT_ARCHIVED").get()).size, 1);
+  }
+});
+
+test("assinatura individual da admissão também reutiliza o arquivo e valida seu hash", async (t) => {
+  const { promoteSignedOnboardingDocuments } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const onboardingId = "single-storage-independent", employeeId = "single-storage-independent-person", workflowId = "single-storage-independent-workflow";
+  const requestId = "single-storage-independent-request";
+  const workflow = hrDbAdmin.collection("hrSignatureDocuments").doc(workflowId);
+  const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);
+  const request = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+  const documentId = createHash("sha256").update(`signed-signature:${workflowId}`).digest("hex").slice(0, 32);
+  const document = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const path = `signed-documents/${onboardingId}/${requestId}/signed.pdf`;
+  const bytes = Buffer.from("%PDF-assinatura-individual-sintetica"), hash = createHash("sha256").update(bytes).digest("hex");
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => { await Promise.all([workflow, processRef, request, document].map((ref) => hrDbAdmin.recursiveDelete(ref))); await bucket.file(path).delete({ ignoreNotFound: true }); });
+  await processRef.set({ candidateName: "Pessoa sintética", employeeId, expectedAdmissionDate: "2099-01-01" });
+  await request.set({ onboardingId, status: "signed", signedStoragePath: path });
+  await workflow.set({ onboardingId, signatureRequestId: requestId, status: "signed", selected: true, signedStoragePath: path, signedHash: "0".repeat(64), documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-independent" });
+  await bucket.file(path).save(bytes, { resumable: false });
+  await assert.rejects(promoteSignedOnboardingDocuments({ onboardingId, employeeId }), /hash assinado/);
+  assert.equal((await document.get()).exists, false);
+  await workflow.update({ signedHash: hash });
+  assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId }), [documentId]);
+  assert.equal((await document.get()).get("storagePath"), path);
+  assert.equal((await document.get()).get("contentHash"), hash);
+  const [copies] = await bucket.getFiles({ prefix: `hr/employee-documents/${employeeId}/documents/${documentId}/`, autoPaginate: false, maxResults: 10 });
+  assert.equal(copies.length, 0);
+});
+
+test("callbacks concorrentes com conteúdos distintos não sobrescrevem o original arquivado", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const refs = [], files = [];
+  const originalFetch = globalThis.fetch;
+  t.after(async () => { globalThis.fetch = originalFetch; await Promise.all(refs.map(([db, ref]) => db.recursiveDelete(ref))); await Promise.all(files.map((path) => bucket.file(path).delete({ ignoreNotFound: true }))); });
+  for (const mode of ["individual", "generated"]) {
+    const contextId = `single-storage-race-${mode}`, person = `${contextId}-person`, requestId = `${contextId}-request`;
+    const generatedId = `${contextId}-generated`, workflowId = `${contextId}-workflow`;
+    const request = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+    const documentId = createHash("sha256").update(mode === "individual" ? `signed-signature:${workflowId}` : `signed-generated-document:${generatedId}`).digest("hex").slice(0, 32);
+    const document = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+    refs.push([hrDbAdmin, request], [hrDbAdmin, document]);
+    if (mode === "individual") {
+      const processRef = hrDbAdmin.collection("onboardingProcesses").doc(contextId), workflow = hrDbAdmin.collection("hrSignatureDocuments").doc(workflowId);
+      refs.push([hrDbAdmin, processRef], [hrDbAdmin, workflow]);
+      await processRef.set({ candidateName: "Pessoa sintética", employeeId: person, currentStage: "completed" });
+      await workflow.set({ onboardingId: contextId, signatureRequestId: requestId, status: "sent", selected: true, documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-race" });
+      await request.set({ onboardingId: contextId, workflowDocumentIds: [workflowId], status: "sent", providerDocumentId: "synthetic-race" });
+    } else {
+      const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedId); refs.push([dbAdmin, generatedRef]);
+      await generatedRef.set({ employeeId: person, documentTypeCode: "VACATION_RECEIPT", templateName: "Recibo sintético", status: "final" });
+      await request.set({ generatedDocumentId: generatedId, employeeId: person, documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-race" });
+    }
+    const bodies = [Buffer.from(`%PDF-conteudo-A-${mode}`), Buffer.from(`%PDF-conteudo-B-${mode}`)];
+    const urls = bodies.map((_, index) => `https://api.autentique.com.br/${contextId}-${index}.pdf`);
+    let arrivals = 0, release;
+    const ready = new Promise((resolve) => { release = resolve; });
+    globalThis.fetch = async (input, init) => {
+      const index = urls.indexOf(String(input));
+      if (index < 0) return originalFetch(input, init);
+      if (++arrivals === 2) release();
+      await ready; return new Response(bodies[index], { headers: { "Content-Type": "application/pdf" } });
+    };
+    for (const bytes of bodies) { const hash = createHash("sha256").update(bytes).digest("hex"); files.push(mode === "individual" ? `signed-documents/${contextId}/${requestId}/${hash}/signed.pdf` : `signed-documents/generated/${generatedId}/${requestId}/${hash}/signed.pdf`); }
+    const outcomes = await Promise.allSettled(urls.map((signedUrl) => archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl })));
+    assert.equal(outcomes.filter((result) => result.status === "fulfilled").length, 1);
+    assert.match(outcomes.find((result) => result.status === "rejected").reason.message, /diverge/);
+    const stored = await document.get(), signedPath = stored.get("storagePath");
+    assert.ok(signedPath.includes(stored.get("contentHash")));
+    assert.equal(createHash("sha256").update((await bucket.file(signedPath).download())[0]).digest("hex"), stored.get("contentHash"));
+    assert.equal((await request.get()).get("signedStoragePath"), signedPath);
+    if (mode === "generated") assert.equal((await dbAdmin.collection("generatedDocuments").doc(generatedId).get()).get("signedStoragePath"), signedPath);
   }
 });
 
@@ -109,6 +186,35 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
   const signIn = await fetch(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${uid}@example.test`, password: "synthetic-test-password", returnSecureToken: true }) });
   assert.equal(signIn.ok, true);
   const { idToken } = await signIn.json();
+  await t.test("remover assinado do Acervo preserva o original compartilhado e revalida gestão/unidade", async () => {
+    const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    const path = `central-integration/${uid}/shared-signed.pdf`;
+    const bytes = Buffer.from("%PDF-original-assinado-sintetico");
+    await bucket.file(path).save(bytes, { resumable: false });
+    t.after(() => bucket.file(path).delete({ ignoreNotFound: true }));
+    const document = await seed(hrDbAdmin, "employeeDocuments", `${uid}-shared-signed`, { employeeId, storagePath: path, source: "autentique_signature", signatureStatus: "signed", deletedAt: null });
+    const request = await seed(hrDbAdmin, "hrSignatureRequests", `${uid}-shared-signed-request`, { employeeId, signedStoragePath: path, archivedDocumentId: document.id, status: "signed" });
+    const remove = (authenticated = true) => employeeDocuments.DELETE(new NextRequest(`http://localhost/api/hr/employee-documents?id=${document.id}`, { method: "DELETE", headers: authenticated ? { Authorization: `Bearer ${idToken}` } : {} }));
+    assert.equal((await remove(false)).status, 403);
+    await person.update({ unitIds: ["central-unit-b"] });
+    assert.equal((await remove()).status, 403);
+    assert.equal((await document.get()).get("deletedAt"), null);
+    await person.update({ unitIds: ["central-unit-a"] });
+    const result = await remove();
+    assert.equal(result.status, 200); assert.equal((await result.json()).storageRetained, true);
+    assert.ok((await document.get()).get("deletedAt"));
+    assert.equal((await document.get()).get("storagePath"), path);
+    assert.equal((await request.get()).get("signedStoragePath"), path);
+    assert.deepEqual((await bucket.file(path).download())[0], bytes);
+    assert.equal((await remove()).status, 200);
+    assert.equal((await document.collection("audit").where("action", "==", "DOCUMENT_REMOVED_FROM_ARCHIVE").limit(10).get()).size, 1);
+    const plainPath = `central-integration/${uid}/unsigned-upload.pdf`;
+    await bucket.file(plainPath).save(bytes, { resumable: false });
+    t.after(() => bucket.file(plainPath).delete({ ignoreNotFound: true }));
+    const plain = await seed(hrDbAdmin, "employeeDocuments", `${uid}-unsigned-upload`, { employeeId, storagePath: plainPath, source: "upload", signatureStatus: "not_required" });
+    assert.equal((await employeeDocuments.DELETE(new NextRequest(`http://localhost/api/hr/employee-documents?id=${plain.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}` } }))).status, 200);
+    assert.equal((await bucket.file(plainPath).exists())[0], false);
+  });
   const unauthenticated = await work.GET(new NextRequest("http://localhost/api/documents/work-items?tab=classify"), { params: Promise.resolve({}) });
   assert.equal(unauthenticated.status, 401);
   const call = async (route, path, params) => {

@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+02/11/2026: complemento de armazenamento em testes dirigidos demo: kit e assinatura individual reutilizam o objeto assinado, com hash conferido; remoção do Acervo preserva o original compartilhado e continua recusando usuário não autenticado ou fora da unidade. Auditoria real foi somente leitura de metadados. Não certifica provedor externo ou autoriza limpeza física histórica.
+
 02/11/2026: árvore interna Empresa → Colaboradores exercitada em E2E demo; promoção de kit admissional único coberta por planejador puro (manifesto, hash, legado e repetição). Auditoria de registros gerados confirmou vínculos, sem homologar todos os binários/provedor. Guias document-central, employee-documents, document-generation e onboarding-signatures atualizados; não promove cobertura global de assinatura externa.
 
 2026-10-27: [segurança de exportações REP-P](../rep-p/homologacao/seguranca-exportacao-rep-p.md) ampliou a candidata com validação de sessão, perfil atual e identidade real nos downloads pessoais. API/privacidade11/11, contratos/autenticação15/15 e fronteiraAFD/concorrência4/4. Conferência somente de metadados no destino não encontrou perfil canônico ausente. Sem publicação ou promoção integral de cobertura.
