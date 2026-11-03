@@ -332,7 +332,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx).
 
-Arquivos locais percorridos: 12.
+Arquivos locais percorridos: 11.
 
 Chamadas candidatas encontradas:
 
@@ -373,7 +373,7 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx).
 
-Arquivos locais percorridos: 31.
+Arquivos locais percorridos: 30.
 
 Chamadas candidatas encontradas:
 
@@ -411,7 +411,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
 
-Arquivos locais percorridos: 17.
+Arquivos locais percorridos: 18.
 
 Chamadas candidatas encontradas:
 
