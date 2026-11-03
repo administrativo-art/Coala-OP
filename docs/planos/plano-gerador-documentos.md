@@ -22,3 +22,7 @@ Proposta para criação: **origem (do zero/modelo) → contexto (empresa, setor 
 4. Validar geração manual/modelo, dados ausentes, permissões, troca de pessoa, timbre multipágina, revisão e imutabilidade após assinatura. Testar com emuladores e transportes simulados antes de qualquer homologação externa autorizada.
 
 A etapa 1 não implementa as etapas 2/3 e não deve apresentar botões que prometam redação livre ou IA ainda inexistentes. A pesquisa e a proposta não autorizam contratação de outros serviços; Autentique continua como integração de assinatura existente.
+
+## Direção posterior — 03/11/2026
+
+O DEV definiu uma futura entrada única **Criar documento**, com opções **Em branco**, **Usar modelo** e **Criar modelo**. As três devem levar a um editor visual com formatação e campos do sistema para preenchimento automático. A entrada separada **Gerador de documentos** desaparecerá após esse redesenho. O DEV pediu a proposta somente depois dos demais ajustes documentais; a implementação e a escolha técnica do editor ainda não começaram. Até lá, a navegação atual e suas permissões continuam em uso. A assistência opcional por IA permanece como requisito a detalhar.
