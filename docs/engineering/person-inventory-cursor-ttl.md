@@ -6,7 +6,7 @@ A configuração versionada em `firestore.indexes.json` habilita TTL somente em 
 
 ```sh
 gcloud firestore fields ttls update expiresAt --collection-group=privacyPersonCursorStates --database=coala --project=smart-converter-752gf --enable-ttl
-gcloud firestore fields ttls describe expiresAt --collection-group=privacyPersonCursorStates --database=coala --project=smart-converter-752gf
+gcloud firestore fields ttls list --collection-group=privacyPersonCursorStates --database=coala --project=smart-converter-752gf
 ```
 
 Nenhum comando de implantação desta cache foi executado em projeto real. A regra cliente explícita nega leitura/escrita da cache. Somente o protocolo servidor lê um token por ID randômico; cada página cria no máximo um próximo estado. Até 100 leituras de fonte e 5 consultas por página, mais o pré-voo de identidade limitado e uma leitura do token. Consulta de catálogo não cria estado. Permissões e escopo são reavaliados em cada requisição.
