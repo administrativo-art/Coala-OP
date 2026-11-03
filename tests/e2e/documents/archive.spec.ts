@@ -147,19 +147,21 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await expect(page.getByRole("heading", { name: "Acervo", exact: true })).toBeVisible();
 });
 
-test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async ({ page }) => {
+test("Colaboradores e Financeiro institucional mantêm pastas e arquivos no explorador", async ({ page }) => {
   test.setTimeout(300_000);
   const pdf = await PDFDocument.create(); pdf.addPage().drawText("Documento de teste", { x: 40, y: 740 });
   const bytes = Buffer.from(await pdf.save());
+  const companyAccesses: Array<{ id: string; action: string }> = [];
+  let financialInboxCalls = 0;
   await page.route("**/api/hr/employee-documents?*", (route) => route.fulfill({ json: { documents: [{ id: "employee-file-e2e", category: "personal", documentType: "Documento de identificação", documentTypeCode: "PERSONAL_ID", displayName: "Identidade de teste", storedName: "COL-001__IDENTIFICACAO__v01", originalName: "identidade.pdf", mimeType: "application/pdf", size: bytes.length }, ...Array.from({ length: 7 }, (_, index) => ({ id: `package-reference-${index}`, employeeId: "employee", source: "autentique_signature", documentTypeCode: "ADMISSION_PACKAGE", category: "admission", displayName: "Kit admissional assinado", originalName: `Componente ${index}.pdf`, mimeType: "application/pdf", contentHash: "c".repeat(64), signatureRequestId: "bundle", sourceOnboardingId: "onboarding", size: bytes.length }))] } }));
   await page.route("**/api/hr/employee-documents/access", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
   await page.route("**/api/hr/employee-document-folder-profile?*", (route) => route.fulfill({ json: { folderProfile: { folders: [{ id: "personal", category: "personal", path: ["Documentos pessoais"], employeeVisible: true }] } } }));
   await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [{ id: "generated-archive-e2e", templateName: "Contrato gerado", originalName: "contrato.docx", pdfAvailable: true }] } }));
   await page.route("**/api/documents/generated/generated-archive-e2e/file?format=pdf", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
-  await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [] } }));
+  await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [{ id: "institutional-finance-e2e", title: "Relatório financeiro da unidade", category: "Financeiro", status: "active", originalName: "relatorio-financeiro.pdf", mimeType: "application/pdf", size: bytes.length, uploadedAt: "2026-11-02T12:00:00.000Z" }] } }));
   await page.route("**/api/documents/company/units", (route) => route.fulfill({ json: { units: [] } }));
-  await page.route("**/api/financial/inbox?*", (route) => route.fulfill({ json: { messages: [{ id: "message-archive-e2e", subject: "Recibo de teste", receivedAt: "2026-11-02T12:00:00.000Z", attachments: [{ id: "attachment-e2e", filename: "Recibo financeiro.pdf", size: bytes.length, contentType: "application/pdf", storagePath: "demo/test.pdf" }] }], nextCursor: null } }));
-  await page.route("**/api/financial/inbox/message-archive-e2e/files/attachment-e2e", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
+  await page.route("**/api/documents/company/access", async (route) => { companyAccesses.push(route.request().postDataJSON()); await route.fulfill({ contentType: "application/pdf", body: bytes }); });
+  await page.route("**/api/financial/inbox?*", (route) => { financialInboxCalls++; return route.fulfill({ status: 500, json: { error: "A caixa financeira não integra o Acervo." } }); });
   await page.route("**/api/audit/log", (route) => route.fulfill({ json: { ok: true } }));
   await page.goto("/login?next=%2Fdashboard%2Fdocuments%2Fcollaborators");
   await page.getByLabel("E-mail").fill(E2E_USER.email);
@@ -185,15 +187,18 @@ test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async
   await expect(page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Empresa", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: 07 - Financeiro", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Pasta: Identificados", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Pasta: A nomear", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Arquivo: Recibo financeiro.pdf", exact: true }).dblclick();
-  await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Recibo financeiro.pdf" })).toHaveAttribute("data-rendered", "true");
+  await expect(page).toHaveURL(/category=Financeiro/);
+  await expect(page.getByRole("button", { name: "Pasta: Identificados", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Arquivo: Recibo financeiro.pdf", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Arquivo: Relatório financeiro da unidade", exact: true }).dblclick();
+  await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Relatório financeiro da unidade" })).toHaveAttribute("data-rendered", "true");
+  expect(companyAccesses.filter(call => call.id === "institutional-finance-e2e" && call.action === "view")).toHaveLength(1);
   await page.getByRole("dialog").press("Escape");
-  await page.getByRole("button", { name: "Ações de Recibo financeiro.pdf" }).click();
-  await expect(page.getByRole("menuitem", { name: "Revisar na origem", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ações de Relatório financeiro da unidade" }).click();
+  await expect(page.getByRole("menuitem", { name: "Baixar", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("link", { name: "Empresa", exact: true })).toBeVisible();
+  expect(financialInboxCalls).toBe(0);
+  await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Empresa", exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Empresa", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: 12 - Colaboradores", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).dblclick();
