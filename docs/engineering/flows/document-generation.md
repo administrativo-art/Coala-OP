@@ -1,10 +1,16 @@
 # Geração de documento a partir de modelo publicado
 
+02/11/2026 — auditoria somente de leitura dos registros existentes: 28 gerados, sendo um descartado e 27 ativos com PDF; 26 vinculados à admissão e um ao colaborador, nenhum ativo sem ambos os vínculos. O documento individual assinado também possui referências no arquivo da pessoa. Vínculo com admissão é válido antes da ativação do colaborador; não implica arquivo perdido. Essa conferência não homologa todos os binários ou todos os geradores externos. A falha confirmada estava na promoção do kit assinado: cópias do PDF completo recebiam rótulos de componentes e UNKNOWN_DOCUMENT. Ver [correção de assinatura](onboarding-signatures.md).
+
+02/11/2026: Gerador de documentos ganha entrada própria no menu e navegação compartilhada. A geração atual permanece baseada em modelos publicados e a manutenção existente passa a `/dashboard/documents/generator/models`, com editor individual. Configurações conserva as políticas e encaminha a manutenção para esse local. Criação livre timbrada e auxílio de redação por IA são propostas no [plano do Gerador](../../planos/plano-gerador-documentos.md), não funcionalidades do mapeador IA atual.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** geração inicial traçada no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Revisão, assinatura, arquivamento e descarte estão nos [guias complementares](../flow-coverage.md). Consulte [regras aprovadas](../business-rules.md) para política desejada.
 
 ## Entrada e percurso
+
+03/11/2026: retorno e acesso aos modelos usam a variante oficial `ds-secondary`, em faixa flexível com espaçamento. O retorno é quadrado (36px em telas maiores, 44px para toque); a ação de modelos acompanha a altura. O ajuste preserva destinos, permissões e a navegação existente, sem implementar o futuro editor.
 
 [`documents/generator/page.tsx`](../../../src/app/dashboard/documents/generator/page.tsx) monta [`document-generator-workspace.tsx`](../../../src/components/documents/document-generator-workspace.tsx). A tela envia `POST /api/documents/generate` com Bearer token, modelo, colaborador, valores manuais e formulário. A geração pela interface solicita `lifecycle: 'draft'` e `output: 'json'`, depois abre o PDF pela rota de arquivo gerado; outros chamadores, como integração RH, usam a mesma API. [Tela](../../../src/components/documents/document-generator-workspace.tsx), [rota](../../../src/app/api/documents/generate/route.ts).
 
@@ -35,3 +41,11 @@ Use [`tests/unit/hr-documents`](../../../tests/unit/hr-documents) para localizar
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+## Acervo, trabalho e histórico
+
+Novos envios para assinatura usam `Coala Shakes - Setor | Tipo - Nome`, inclusive avulsos, individuais admissionais e pacotes. RH/FN/OP e distinção entre título e filename estão no [fluxo de assinatura](document-standalone-signature.md). A apresentação não altera o PDF, protocolo ou catálogo de geradores.
+
+O menu Documentos apresenta Acervo, Fluxos e pendências e Histórico. A fila transversal está descrita na [central documental](document-central.md). A gestão detalhada de gerados usa `src/app/dashboard/documents/generated/workspace.tsx` em `/dashboard/documents/generated/manage`; auditoria e assinatura mantêm os enforcements existentes. O histórico transversal aponta de volta para essa gestão quando o registro é um documento gerado.
+
+Em 02/11/2026, a consulta de gerados foi migrada para contrato seguro e ganhou filtro opcional `documentId`. A gestão usa esse filtro quando a referência recebida não está na lista inicial de até 300 documentos, incluindo descartados para consulta histórica. O acesso exige `documents.view`; caminhos privados, valores manuais sensíveis e contatos de assinatura mantêm a sanitização conforme permissões. Ensaio dirigido: `node scripts/test-integration.mjs --document-central`.

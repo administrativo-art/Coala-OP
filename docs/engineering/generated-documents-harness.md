@@ -2,6 +2,8 @@
 
 Use este procedimento em qualquer mudança que crie ou altere PDF, DOCX, termo, recibo, declaração, aviso, ordem, relatório, espelho, comprovante ou pacote produzido pelo sistema.
 
+Consulte também o [catálogo de trilhas](document-trails.md) para seguir entrada até arquivo/publicação e o [mapa de pessoa](document-person-traceability.md) para conferir titular, ator, signatários e aliases. Registre cada saída, inclusive produtores persistentes fora do catálogo atual; não assuma cobertura por nome da tela.
+
 ## 1. Classificar a saída
 
 Para cada saída do fluxo, registre no chamado:
@@ -41,6 +43,7 @@ Modelos `direct` e `contextual` devem aparecer automaticamente em **Configuraç�
 - Tornar webhooks e reconciliações idempotentes.
 - Não incluir dados sensíveis que o documento não necessita.
 - Falha de assinatura/publicação deve produzir estado recuperável; não apagar o fato de negócio que originou o documento.
+- Para o PDF completo assinado da mesma solicitação/versão, conferir integridade, origem e ACL e compartilhar a referência física entre Acervo/processo/histórico. Rascunho, original pré-assinatura e assinado são artefatos diferentes. Não fundir pessoas ou eventos por nome/hash e não excluir bytes sem censo de referências, backup, pré-voo, evidência e autorização. Veja o [plano de armazenamento](../planos/plano-armazenamento-documental-unico.md).
 
 ## 4. Evidência mínima
 

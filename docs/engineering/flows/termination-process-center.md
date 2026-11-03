@@ -1,5 +1,7 @@
 # Central de processos e projeção de desligamentos
 
+Novos envios ao Autentique seguem `Coala Shakes - RH | Tipo - Nome`; comprovantes financeiros usam FN. Abrange comunicado de dispensa, pedido de demissão e documentos finais; conserva extensão do arquivo final e os originais. Ver [nomenclatura de assinatura](document-standalone-signature.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** leitura e projeção traçadas no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Outros módulos podem publicar na coleção de projeções; este guia trata da fonte de desligamento.

@@ -142,10 +142,9 @@ const GeneratedDocumentsSettings = dynamic(
   () => import("@/components/settings/generated-documents-settings").then((m) => m.GeneratedDocumentsSettings),
   { ssr: false }
 );
-const DocumentTemplatesSettings = dynamic(
-  () => import("@/app/dashboard/documents/templates/page").then((m) => m.default),
-  { ssr: false }
-);
+function DocumentTemplatesSettings() {
+  return <div className="space-y-3 rounded-xl border bg-white p-5"><p>A criação, edição e publicação de modelos ficam no Gerador de documentos.</p><Button asChild><Link href="/dashboard/documents/generator/models">Abrir biblioteca de modelos</Link></Button></div>;
+}
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (

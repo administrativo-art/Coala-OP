@@ -16,7 +16,9 @@ import { AppError } from '@/lib/observability/app-error';
 import { getDocumentTypeConfig, activeDocumentTypeCodes } from '@/lib/hr/employee-document-catalog';
 import { EMPLOYEE_DOCUMENT_TYPE_CATALOG } from '@/lib/hr/employee-document-options';
 import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
+import { groupPublishedAdmissionReferences } from '@/lib/documents/employee-archive';
 import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
+import { employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
 
 const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
@@ -51,13 +53,19 @@ const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
  * Macro 02, a própria pasta: só os documentos do titular que foram publicados para ele. Qualquer colaborador acessa a
  * sua; a consulta já filtra pelo titular (nunca lê a coleção inteira) e o resto é recusado como "não encontrado".
  */
-export async function listOwnPublishedDocuments(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
+export async function listOwnPublishedDocumentsPage(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   // A consulta já filtra titular e publicação (índice employeeId + publication.status), nunca a coleção inteira.
-  const snapshot = await deps.hrDb.collection(COLLECTION).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT).get();
-  return snapshot.docs.filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
-    .map((doc) => publicView(doc.id, doc.data()))
+  const snapshot = await deps.hrDb.collection(COLLECTION).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
+  const documents = groupPublishedAdmissionReferences(snapshot.docs.slice(0, OWN_LIMIT).filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
+    .map((doc) => ({ ...doc.data(), id: doc.id })))
+    .map((doc) => publicView(doc.id, doc))
     .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
+  return { documents, limitReached: snapshot.docs.length > OWN_LIMIT };
+}
+
+export async function listOwnPublishedDocuments(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
+  return (await listOwnPublishedDocumentsPage(context, injected)).documents;
 }
 
 export async function readOwnDocumentFolderProfile(context: ServerUserContext) {
@@ -82,7 +90,16 @@ export async function openOwnPublishedDocument(context: ServerUserContext, id: s
   if (!path) throw notFound();
   const bytes = await deps.storage.download(path);
   await ref.collection('audit').add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
-  return { bytes, mimeType: text(data.mimeType) ?? 'application/pdf', fileName: text(data.originalName) ?? text(data.storedName) ?? `${id}.pdf` };
+  const mimeType = text(data.mimeType) ?? 'application/pdf';
+  return {
+    bytes,
+    mimeType,
+    fileName: employeeDocumentDownloadName({
+      storedName: text(data.storedName),
+      originalName: text(data.originalName) ?? `${id}.pdf`,
+      mimeType,
+    }),
+  };
 }
 
 export function assertDocumentsDp(context: ServerUserContext) {

@@ -226,7 +226,9 @@ test('turno mantém o contrato Bizneo, exige intervalo e aceita somente metadado
   assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, executionUnitPolicy: 'free', locationTrackingPolicy: 'workday' }).success, true);
   assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, executionUnitPolicy: 'scheduled', locationTrackingPolicy: 'workday' }).success, false);
   assert.deepEqual(changedShiftBizneoIdentity(parsed, { code: '#1234', name: 'Manhã Bizneo', bizneoTemplateId: '9988' }), []);
-  assert.deepEqual(changedShiftBizneoIdentity(parsed, { name: 'Outro nome', bizneoTemplateId: null }), ['name', 'bizneoTemplateId']);
+  assert.deepEqual(changedShiftBizneoIdentity(parsed, { name: 'Outro nome' }), []);
+  assert.deepEqual(changedShiftBizneoIdentity(parsed, { name: 'Outro nome', bizneoTemplateId: null }), ['bizneoTemplateId']);
+  assert.deepEqual(changedShiftBizneoIdentity(parsed, { name: 'Outro nome', code: 'OUTRO' }), ['code']);
 });
 
 test('compatibilidade aplica as restrições opcionais da jornada e do turno em conjunto', () => {

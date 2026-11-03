@@ -1,5 +1,19 @@
 # Acompanhamento do mapa técnico
 
+2026-11-03: linha documental do mapa → `flows/document-central` e `modules/documents-privacy` → ArchiveExplorer, sidebar, APIs de pasta própria/RH, políticas de publicação e acesso. Pasta publicada por pessoa usa somente o titular ou uma pessoa escolhida pelo DP autorizado; nenhum backfill. Testes dirigidos e E2E local registrados no chamado; `document-central` e `employee-documents` permanecem Traçado, sem certificar produção nesta alteração.
+
+02/11/2026: investigação de duplicação percorreu mapa → central documental → assinatura admissional/avulsa, férias, fechamento e PJ, confrontando código com inventário privado paginado de registros e metadados de objetos. A correção anterior unificava registros, mas ainda copiava o assinado na promoção; agora a promoção compartilha a referência. Migração/limpeza histórica não executada. Sem nova permissão; telemetria atribuível indisponível.
+
+02/11/2026: chamado de classificação de pacote assinado usou mapa → central documental → guias de pessoa/geração/assinatura e conferiu fontes atuais. Sete referências legadas eram cópias do mesmo pacote, não sete componentes separados; promoção futura passa a uma identidade. Navegação interna movida para Empresa sem ampliar acesso. Testes dirigidos e E2E demo registrados no chamado; leitura real confirma contexto dos gerados, não homologação externa. Telemetria atribuível indisponível.
+
+2026-11-02: classificação posterior da empresa e confirmação de nomenclatura financeira por fornecedor cadastrado implementadas localmente. Prévia sem escrita, fingerprint, versões e auditoria transacionais; bytes/originais preservados. Ensaio em Auth/Firestore/Storage aprovado. Nenhum pagamento/vínculo foi criado ou alterado pela nomenclatura. GUI/provedor e legados sem ID permanecem pendentes; grupos continuam Traçados.
+
+2026-11-02: ensaio autenticado da Central documental aprovado em Auth/Firestore emulados, com handlers reais, paginação e revogação de acesso. Corrigidas garantias customizadas ausentes que impediam a inicialização das duas rotas. Runner dirigido `node scripts/test-integration.mjs --document-central`; JDK Homebrew localizado. Não promove o grupo completo: UI, Storage e assinatura externa não foram exercitados.
+
+2026-11-02: continuação local da Central documental com paginação independente de filas/histórico por origem, cursor financeiro por etapa, leitura limitada de lote+item e revalidação de pessoa/documento a cada página. União de resultados sem corte global; descarte de respostas obsoletas ao trocar de aba. Testes puros não substituem integração Firestore/navegador, impedida neste ambiente pela ausência de Java e navegador conectado. Grupo permanece Traçado.
+
+2026-11-01: implementação local da [Central documental](flows/document-central.md), separando Acervo, Fluxos e pendências e Histórico. A agregação usa identidade composta por origem, dimensões independentes de classificação/preparação/assinatura/arquivamento/publicação, permissões intersectadas por fonte e consultas limitadas. Adaptadores e contratos de segurança foram verificados localmente; integração autenticada, E2E, migração e publicação permanecem pendentes. `document-central` permanece Traçado.
+
 2026-11-01: rota protegida para adotar agendamento de boleto já existente no Inter, com conferência de identificador, linha, valor, favorecido, vencimento, despesa/provisão e duplicidade. Cria solicitação e débito esperado para o extrato existente; a despesa mostra agendamento sem antecipar liquidação. O pareamento TVN em conjunto exige mesma cardinalidade, valor e ausência de concorrente. Sem novo polling: duas consultas limitadas a 2 documentos na adoção e reuso da observação bancária existente. Testes unitários e contratos passaram; teste integrado no emulador criado, com execução local impedida pela ausência de Java. `payment-requests` permanece Traçado.
 
 2026-10-29: ajuste local dos documentos de férias: descarte motivado, preservação das decisões em correções/reenvios, histórico interno e consulta conjunta dos originais. Guia `flows/vacation-receipts.md`. Sem migração, banco real ou publicação; cobertura integrada do fluxo permanece pendente.
@@ -134,8 +148,8 @@
 | Etapa | Estado |
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
-| 2. Inventários | Atualizados: 162 páginas internas, 22 externas, 433 APIs e 47 exports de Functions. |
-| 3. Guias detalhados | 58/58 grupos traçados integralmente no levantamento estático; 0/58 verificados nesta base. Há 78 guias de subfluxo. |
+| 2. Inventários | Atualizados: 174 páginas internas, 22 externas, 544 APIs e 66 exports de Functions. |
+| 3. Guias detalhados | 59/59 grupos traçados integralmente no levantamento estático; 0/59 verificados nesta base. Há 79 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |

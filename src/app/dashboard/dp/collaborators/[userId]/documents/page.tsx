@@ -1203,7 +1203,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
                         <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
                         Documento identificado como pertencente a {document.suggestedEmployeeName ?? "outro colaborador"}.
-                        Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar ao dossiê correto.
+                        Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar à pasta correta.
                       </div>
                     ) : null}
 
@@ -1555,8 +1555,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   setRemoveTarget(item);
                                 }}
                                 className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600"
-                                title="Excluir"
-                                aria-label={`Excluir ${item.originalName}`}
+                                title={item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"}
+                                aria-label={`${item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"} ${item.originalName}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -1568,7 +1568,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       {removeTarget?.id === item.id ? (
                         <InlineConfirm
                           className="mt-3"
-                          message={`Excluir definitivamente o arquivo “${item.originalName}”? Esta ação não pode ser desfeita.`}
+                          message={item.signatureStatus === "signed" || item.source === "autentique_signature" ? `Remover “${item.originalName}” do Acervo? O PDF assinado será preservado na trilha de assinatura.` : `Excluir definitivamente o arquivo “${item.originalName}”? Esta ação não pode ser desfeita.`}
+                          confirmLabel={item.signatureStatus === "signed" || item.source === "autentique_signature" ? "Remover do Acervo" : "Excluir"}
                           loading={busy}
                           returnFocusRef={removeTriggerRef}
                           onCancel={() => setRemoveTarget(null)}

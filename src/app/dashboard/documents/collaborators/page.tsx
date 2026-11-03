@@ -1,1 +1,4 @@
-export { default } from "../../dp/documents/page";
+import { ArchiveEmployees } from "@/features/documents/central/archive-employees";
+export default function CollaboratorArchivePage() {
+  return <ArchiveEmployees />;
+}

@@ -1,5 +1,15 @@
 # Assinatura avulsa de documento gerado
 
+## Nomenclatura dos novos envios — 02/11/2026
+
+O pacote de fechamento espelho/contracheque também usa RH no título externo, preservando a competência no tipo. O texto interno usado para compor o PDF/manifesto permanece separado e inalterado; bytes e assinatura do empregador não são renomeados/recriados por esta política. Automações de integração usam o setor do catálogo do modelo quando disponível.
+
+O gerador grava `signatureDepartment` a partir do modelo autorizado; o envio avulso consome esse metadado RH/FN/OP, com fallback para o catálogo oficial e RH em legado sem identificação. A assinatura não consulta novamente modelos personalizados para definir o setor, preservando a separação do catálogo admissional.
+
+Padrão aprovado: `Coala Shakes - Setor | Tipo - Nome`, pela função comum `signature-document-name.ts`. RH identifica recursos humanos, FN Financeiro e OP Operações. Setor deriva do catálogo/contexto, não do cargo: recibo padrão e categorias financeiras FN; patrimônio/uniformes OP; demais modelos do fluxo RH. O titular vem da parte destinatária, depois do colaborador ou outra parte identificada. Recibo padrão usa tipo curto `Recibo`; kit usa `RH | Admissão`; individual admissional usa `RH | Tipo do documento`.
+
+O título no Autentique conserva `|`; o filename substitui caracteres incompatíveis, inclusive `|`, por hífen. Protocolo continua nos metadados/PDF e deixa de ser sufixo do título avulso. Férias usam RH no aviso e FN no recibo; contratos/distratos PJ e desligamento usam RH, salvo comprovantes financeiros FN. Originais, bytes, caminhos, IDs e assinaturas existentes são preservados. A política vale para novos envios; pedidos já enviados continuam reutilizados pelo ID, sem renomeação retroativa.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** subfluxo traçado no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Geração, revisão e finalização anteriores são passos distintos. Este guia descreve o comportamento implementado.

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { autoPublishDocument } from "@/features/hr/documents/publication.server";
+import { planSignedAdmissionArchive } from "@/features/hr/documents/signed-admission-archive";
 
 import { createHash } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
@@ -37,6 +38,7 @@ import {
   buildAdmissionSignatureDocumentName,
   buildSignatureDocumentName,
   buildSignatureFileName,
+  signatureDepartmentForTemplate,
 } from "@/features/hr/documents/signature-document-name";
 import {
   isSelectableAdmissionSignatureTemplate,
@@ -1240,7 +1242,8 @@ export async function sendSignatureDocuments(params: {
     if (!generatedStoragePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
     const [buffer] = await bucket.file(generatedStoragePath).download();
     const preSignatureHash = hashBuffer(buffer);
-    const documentName = text(target.get("documentName")) ?? buildSignatureDocumentName({
+    const documentName = buildSignatureDocumentName({
+      department: "RH",
       documentType: target.get("templateName"),
       holderName: process.data.candidateName,
     });
@@ -2057,7 +2060,17 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     }),
   ]);
   const now = new Date().toISOString();
-  const documentName = `${text(generated.get("templateName")) ?? "Documento"} ${protocol}`;
+  const templateId = text(generated.get("templateId"));
+  const catalogTemplate = SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === templateId);
+  const storedDepartment = generated.get("signatureDepartment");
+  const department = storedDepartment === "RH" || storedDepartment === "FN" || storedDepartment === "OP"
+    ? storedDepartment : signatureDepartmentForTemplate(catalogTemplate);
+  const recipientParty = generatedParties.find((party) => party.role === "recipient" && party.partyType !== "company");
+  const documentName = buildSignatureDocumentName({
+    department,
+    documentType: templateId === "system-receipt-standard" ? "Recibo" : generated.get("templateName"),
+    holderName: recipientParty?.name ?? text(generated.get("employeeName")) ?? text(employee?.get("username")) ?? generatedParties.find((party) => !["company", "external_company"].includes(party.partyType))?.name,
+  });
   await requestRef.set({
     type: "generated_document_standalone_signature",
     status: "sending",
@@ -2302,11 +2315,16 @@ async function createEmployeeSignedDocument(params: {
   employeeId: string;
   signedBuffer: Buffer;
   signedStoragePath: string;
+  admissionPackage?: { documentId: string; documentName: string; workflowIds: string[] };
 }) {
-  const documentId = employeeDocumentId(params.workflowDocumentId);
+  const documentId = params.admissionPackage?.documentId ?? employeeDocumentId(params.workflowDocumentId);
   const reference = hrDbAdmin.collection("employeeDocuments").doc(documentId);
-  if ((await reference.get()).exists) return documentId;
-  const config = getDocumentTypeConfig(text(params.workflow.documentTypeCode) ?? "UNKNOWN_DOCUMENT");
+  const existing = await reference.get();
+  if (existing.exists) {
+    if (existing.get("employeeId") !== params.employeeId || existing.get("contentHash") !== hashBuffer(params.signedBuffer) || existing.get("storagePath") !== params.signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+    return documentId;
+  }
+  const config = getDocumentTypeConfig(params.admissionPackage ? "ADMISSION_PACKAGE" : text(params.workflow.documentTypeCode) ?? "UNKNOWN_DOCUMENT");
   const identity = await loadExpectedIdentity(params.employeeId);
   const employeeCode = employeeCodeFrom(identity, params.employeeId);
   const fields = {
@@ -2316,11 +2334,11 @@ async function createEmployeeSignedDocument(params: {
   };
   const destination = resolveDocumentDestination({ config, employeeCode, fields, version: 1 });
   const now = Timestamp.now();
-  await reference.set({
+  const documentData = {
     employeeId: params.employeeId,
     candidateId: text(params.process.candidateId),
     category: config.category,
-    documentType: text(params.workflow.templateName) ?? config.label,
+    documentType: params.admissionPackage ? config.label : text(params.workflow.templateName) ?? config.label,
     documentTypeCode: config.code,
     accessLevel: config.defaultAccessLevel,
     accessPolicyId: config.accessPolicyId,
@@ -2331,19 +2349,20 @@ async function createEmployeeSignedDocument(params: {
     caseId: destination.caseId,
     subcaseId: destination.subcaseId,
     destinationTrail: destination.pathSegments,
-    displayName: text(params.workflow.documentName) ?? destination.displayName,
-    storedName: buildSignatureFileName(text(params.workflow.documentName) ?? "Documento assinado", "pdf"),
-    originalName: buildSignatureFileName(text(params.workflow.documentName) ?? "Documento assinado", "pdf"),
+    displayName: params.admissionPackage?.documentName ?? text(params.workflow.documentName) ?? destination.displayName,
+    storedName: buildSignatureFileName(params.admissionPackage?.documentName ?? text(params.workflow.documentName) ?? "Documento assinado", "pdf"),
+    originalName: buildSignatureFileName(params.admissionPackage?.documentName ?? text(params.workflow.documentName) ?? "Documento assinado", "pdf"),
     mimeType: "application/pdf",
     size: params.signedBuffer.byteLength,
     contentHash: hashBuffer(params.signedBuffer),
     hashAlgorithm: "sha256",
-    logicalKey: `${params.employeeId}:${config.code}:signature:${params.workflowDocumentId}`,
+    logicalKey: `${params.employeeId}:${config.code}:signature:${params.admissionPackage ? params.workflow.signatureRequestId : params.workflowDocumentId}`,
     version: 1,
     versionResolution: "NEW_DOCUMENT",
     storagePath: params.signedStoragePath,
-    storageSubfolder: params.signedStoragePath.split("/versions/")[0],
+    storageSubfolder: params.signedStoragePath.includes("/versions/") ? params.signedStoragePath.split("/versions/")[0] : params.signedStoragePath.slice(0, params.signedStoragePath.lastIndexOf("/")),
     source: "autentique_signature",
+    ...(params.admissionPackage ? { sourceWorkflowDocumentIds: params.admissionPackage.workflowIds } : {}),
     sourceOnboardingId: params.workflow.onboardingId,
     signatureRequestId: params.workflow.signatureRequestId,
     providerDocumentId: params.workflow.providerDocumentId,
@@ -2355,14 +2374,22 @@ async function createEmployeeSignedDocument(params: {
     updatedAt: now,
     accessCount: 0,
     deletedAt: null,
-  });
-  await reference.collection("audit").add({
+  };
+  await hrDbAdmin.runTransaction(async (transaction) => {
+    const current = await transaction.get(reference);
+    if (current.exists) {
+      if (current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+      return;
+    }
+    transaction.set(reference, documentData);
+    transaction.set(reference.collection("audit").doc("signed-document-archived"), {
     action: "SIGNED_DOCUMENT_ARCHIVED",
     actorId: "system:autentique",
     actorName: "Autentique",
     onboardingId: params.workflow.onboardingId,
     workflowDocumentId: params.workflowDocumentId,
     at: now,
+    });
   });
   // Publicação na pasta do colaborador conforme a política do tipo (assinado).
   await autoPublishDocument(documentId, "signed");
@@ -2412,10 +2439,19 @@ export async function archiveAutentiqueSignedDocument(params: {
     const synced = await syncClosingPackageSignature({ signatureRequestId: params.signatureRequestId, eventType: "document.finished", signedUrl: params.signedUrl, at: params.signedAt ?? null });
     return synced?.archivedDocumentId ?? null;
   }
-  if (Array.isArray(request.get("archivedDocumentIds"))) {
+  const bundleOnboardingId = text(request.get("onboardingId"));
+  const isAdmissionBundle = Boolean(bundleOnboardingId && params.signatureRequestId === admissionSignatureRequestId(bundleOnboardingId));
+  if (Array.isArray(request.get("archivedDocumentIds")) && (request.get("archivedDocumentIds").length || !isAdmissionBundle)) {
     return (request.get("archivedDocumentIds") as string[])[0] ?? null;
   }
   if (request.get("archivedDocumentId")) return request.get("archivedDocumentId") as string;
+  if (isAdmissionBundle && request.get("status") === "signed" && request.get("signedStoragePath") && request.get("signedHash")) {
+    const process = await loadProcess(bundleOnboardingId!);
+    const employeeId = processEmployeeId(process.data);
+    const promoted = employeeId ? await promoteSignedOnboardingDocuments({ onboardingId: bundleOnboardingId!, employeeId }) : [];
+    await advanceOnboardingAfterSignatures(bundleOnboardingId!);
+    return promoted[0] ?? null;
+  }
   const workflowDocumentIds: string[] = Array.isArray(request.get("workflowDocumentIds"))
     ? request.get("workflowDocumentIds").filter((value: unknown): value is string => typeof value === "string" && !!value)
     : [];
@@ -2433,7 +2469,7 @@ export async function archiveAutentiqueSignedDocument(params: {
     const signedBuffer = await downloadSignedPdf(params.signedUrl);
     const signedHash = hashBuffer(signedBuffer);
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
-    const signedStoragePath = `signed-documents/generated/${generatedDocumentId}/${params.signatureRequestId}/signed.pdf`;
+    const signedStoragePath = `signed-documents/generated/${generatedDocumentId}/${params.signatureRequestId}/${signedHash}/signed.pdf`;
     await bucket.file(signedStoragePath).save(signedBuffer, {
       resumable: false,
       metadata: {
@@ -2459,9 +2495,14 @@ export async function archiveAutentiqueSignedDocument(params: {
       });
       archivedDocumentId = generatedSignatureEmployeeDocumentId(generatedDocumentId);
       const employeeDocumentRef = hrDbAdmin.collection("employeeDocuments").doc(archivedDocumentId);
-      if (!(await employeeDocumentRef.get()).exists) {
+      await hrDbAdmin.runTransaction(async (transaction) => {
+        const existing = await transaction.get(employeeDocumentRef);
+        if (existing.exists) {
+          if (existing.get("employeeId") !== employeeId || existing.get("contentHash") !== signedHash || existing.get("storagePath") !== signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+          return;
+        }
         const now = Timestamp.now();
-        await employeeDocumentRef.set({
+        transaction.set(employeeDocumentRef, {
           employeeId,
           category: config.category,
           documentType: text(generated.get("templateName")) ?? config.label,
@@ -2502,7 +2543,8 @@ export async function archiveAutentiqueSignedDocument(params: {
           accessCount: 0,
           deletedAt: null,
         });
-      }
+        transaction.set(employeeDocumentRef.collection("audit").doc("signed-document-archived"), { action: "SIGNED_DOCUMENT_ARCHIVED", actorId: "system:autentique", signatureRequestId: params.signatureRequestId, at: now });
+      });
       await autoPublishDocument(archivedDocumentId, "signed");
     }
     const archivedAt = new Date().toISOString();
@@ -2548,7 +2590,7 @@ export async function archiveAutentiqueSignedDocument(params: {
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   // O caminho físico usa apenas identificadores técnicos; o nome legível com o
   // titular fica nos metadados e no download, evitando PII no Storage path.
-  const signedStoragePath = `signed-documents/${onboardingId}/${params.signatureRequestId}/signed.pdf`;
+  const signedStoragePath = `signed-documents/${onboardingId}/${params.signatureRequestId}/${signedHash}/signed.pdf`;
   await bucket.file(signedStoragePath).save(buffer, {
     resumable: false,
     metadata: {
@@ -2563,6 +2605,25 @@ export async function archiveAutentiqueSignedDocument(params: {
   });
   const signedAt = params.signedAt ?? new Date().toISOString();
   const employeeId = processEmployeeId(process.data);
+  if (isAdmissionBundle) {
+    // Webhook before and after activation use the same canonical archive path.
+    const plan = planSignedAdmissionArchive(onboardingId, workflowSnapshots.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...request.data(), status: "signed", signedStoragePath, signedHash });
+    if (plan.kind !== "create") throw new Error("O pacote exige reconciliação antes de arquivar a assinatura.");
+    await hrDbAdmin.runTransaction(async (transaction) => {
+      const currentRequest = await transaction.get(requestRef);
+      const currentWorkflows = await transaction.getAll(...workflowRefs);
+      if (currentRequest.get("archivedDocumentId")) return;
+      if (currentRequest.get("providerDocumentId") !== request.get("providerDocumentId") || currentRequest.get("packageHash") !== request.get("packageHash")) throw new Error("A solicitação mudou durante o retorno da assinatura.");
+      const currentPlan = planSignedAdmissionArchive(onboardingId, currentWorkflows.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...currentRequest.data(), status: "signed", signedStoragePath, signedHash });
+      if (currentPlan.kind !== "create" || currentPlan.documentId !== plan.documentId) throw new Error("Os componentes mudaram durante o retorno da assinatura.");
+      const archivedAt = new Date().toISOString();
+      for (const workflowRef of workflowRefs) transaction.set(workflowRef, { status: "signed_archived_pending_employee", signedAt, signedStoragePath, signedFileUrl: params.signedUrl, preSignatureHash: request.get("preSignatureHash") ?? request.get("packageHash") ?? null, signedHash, signatureReportHash: request.get("signatureReportHash") ?? null, providerDocumentId: request.get("providerDocumentId") ?? null, confirmedByEventId: params.confirmedByEventId ?? null, packageId: request.get("packageId") ?? null, packageProtocol: request.get("protocol") ?? null, archivedAt, updatedAt: archivedAt }, { merge: true });
+      transaction.set(requestRef, { status: "signed", signedAt, signedStoragePath, preSignatureHash: request.get("preSignatureHash") ?? request.get("packageHash") ?? null, signedHash, signatureReportHash: request.get("signatureReportHash") ?? null, confirmedByEventId: params.confirmedByEventId ?? null, archivedAt, updatedAt: archivedAt }, { merge: true });
+    });
+    const promoted = employeeId ? await promoteSignedOnboardingDocuments({ onboardingId, employeeId }) : [];
+    await advanceOnboardingAfterSignatures(onboardingId);
+    return promoted[0] ?? null;
+  }
   const archivedDocumentIds: string[] = [];
   if (employeeId) {
     for (const workflowSnapshot of workflowSnapshots) {
@@ -2625,7 +2686,40 @@ export async function promoteSignedOnboardingDocuments(params: {
     .get();
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const promoted: string[] = [];
+  const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION).doc(admissionSignatureRequestId(params.onboardingId));
+  const bundleRequest = await requestRef.get();
+  const bundle = planSignedAdmissionArchive(params.onboardingId, snapshot.docs.map((document) => ({ id: document.id, ...document.data() })), bundleRequest.exists ? bundleRequest.data() ?? null : null);
+  const bundleMembers = new Set(bundle.workflowIds);
+  if (bundle.kind === "existing") promoted.push(...bundle.documentIds);
+  if (bundle.kind === "create") {
+    const existing = await hrDbAdmin.collection("employeeDocuments").doc(bundle.documentId).get();
+    if (existing.exists) {
+      if (existing.get("employeeId") !== params.employeeId || existing.get("documentTypeCode") !== "ADMISSION_PACKAGE" || existing.get("contentHash") !== bundle.signedHash || existing.get("deletedAt")) throw new Error("O pacote arquivado não corresponde à assinatura atual.");
+      await autoPublishDocument(bundle.documentId, "signed");
+    } else {
+      const source = bucket.file(bundle.signedStoragePath);
+      const [buffer] = await source.download();
+      if (hashBuffer(buffer) !== bundle.signedHash) throw new Error("O conteúdo do pacote não corresponde ao hash assinado.");
+      const first = snapshot.docs.find((document) => document.id === bundle.workflowIds[0])!;
+      await createEmployeeSignedDocument({ workflowDocumentId: first.id, workflow: { id: first.id, ...first.data() }, process: process.data, employeeId: params.employeeId, signedBuffer: buffer, signedStoragePath: bundle.signedStoragePath, admissionPackage: { documentId: bundle.documentId, documentName: text(bundleRequest.get("documentName")) ?? buildAdmissionSignatureDocumentName(process.data.candidateName), workflowIds: bundle.workflowIds } });
+    }
+    await hrDbAdmin.runTransaction(async (transaction) => {
+      const currentRequest = await transaction.get(requestRef);
+      const refs = bundle.workflowIds.map((id) => hrDbAdmin.collection(WORKFLOW_COLLECTION).doc(id));
+      const currentWorkflows = await transaction.getAll(...refs);
+      if (currentRequest.get("signedHash") !== bundle.signedHash || currentRequest.get("signedStoragePath") !== bundle.signedStoragePath || !SIGNED_COMPLETE_STATUSES.has(String(currentRequest.get("status")))) throw new Error("A assinatura mudou durante o arquivamento; confira o pacote atual.");
+      for (const workflow of currentWorkflows) {
+        if (!workflow.exists || workflow.get("signatureRequestId") !== bundle.requestId || workflow.get("selected") === false || !SIGNED_COMPLETE_STATUSES.has(String(workflow.get("status"))) || (workflow.get("employeeDocumentId") && workflow.get("employeeDocumentId") !== bundle.documentId)) throw new Error("Os componentes mudaram durante o arquivamento; confira as referências.");
+      }
+      const now = new Date().toISOString();
+      for (const ref of refs) transaction.set(ref, { status: "archived", employeeId: params.employeeId, employeeDocumentId: bundle.documentId, promotedAt: now, updatedAt: now }, { merge: true });
+      transaction.set(requestRef, { archivedDocumentId: bundle.documentId }, { merge: true });
+    });
+    promoted.push(bundle.documentId);
+  }
   for (const workflowDocument of snapshot.docs) {
+    if (workflowDocument.get("selected") === false) continue;
+    if (bundleMembers.has(workflowDocument.id)) continue;
     if (!SIGNED_COMPLETE_STATUSES.has(String(workflowDocument.get("status")))) continue;
     if (workflowDocument.get("employeeDocumentId")) {
       promoted.push(String(workflowDocument.get("employeeDocumentId")));
@@ -2634,8 +2728,8 @@ export async function promoteSignedOnboardingDocuments(params: {
     const sourcePath = text(workflowDocument.get("signedStoragePath"));
     if (!sourcePath) continue;
     const [buffer] = await bucket.file(sourcePath).download();
-    const permanentPath = `hr/employee-documents/${params.employeeId}/documents/${employeeDocumentId(workflowDocument.id)}/versions/01/signed.pdf`;
-    await bucket.file(sourcePath).copy(bucket.file(permanentPath));
+    const expectedHash = text(workflowDocument.get("signedHash"));
+    if (expectedHash && hashBuffer(buffer) !== expectedHash) throw new Error("O conteúdo do documento não corresponde ao hash assinado.");
     const workflow = { id: workflowDocument.id, ...workflowDocument.data() } as RecordValue;
     const documentId = await createEmployeeSignedDocument({
       workflowDocumentId: workflowDocument.id,
@@ -2643,7 +2737,7 @@ export async function promoteSignedOnboardingDocuments(params: {
       process: process.data,
       employeeId: params.employeeId,
       signedBuffer: buffer,
-      signedStoragePath: permanentPath,
+      signedStoragePath: sourcePath,
     });
     await workflowDocument.ref.set({
       status: "archived",
@@ -2656,5 +2750,5 @@ export async function promoteSignedOnboardingDocuments(params: {
     if (requestId) await hrDbAdmin.collection(REQUEST_COLLECTION).doc(requestId).set({ archivedDocumentId: documentId }, { merge: true });
     promoted.push(documentId);
   }
-  return promoted;
+  return [...new Set(promoted)];
 }

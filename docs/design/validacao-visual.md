@@ -1,10 +1,16 @@
 # Validação visual
 
+02/11/2026 — correção Empresa/Colaboradores: `node scripts/test-e2e.mjs --document-archive` passou em dois cenários no Chromium com Auth/Firestore demo, incluindo 12 - Colaboradores dentro de Empresa, caminho de retorno, ordenação e sete referências sintéticas do mesmo kit apresentadas como um arquivo. Nenhum navegador do usuário ou documento real foi usado; a assinatura externa não foi exercitada.
+
+02/11/2026 — árvore revista do Acervo: E2E local com emuladores demo passou em dois cenários, incluindo categorias principais numeradas só em Empresa, Jurídico, Financeiro/Modelos aninhados, biblioteca realocada no Gerador, retorno das pendências ao Acervo e PDF gerado no dossiê. Capturas `acervo-empresa.png` e `acervo-modelos.png` ficam no registro privado da tarefa acervo-tree-20261102. Não houve navegador do usuário nem acesso a documentos reais; dados de origem são sintéticos.
+
 O guia isolado possui contratos de código e deve ser inspecionado visualmente antes de qualquer adoção operacional. Toda tela real migrada no futuro será comparada com o protótipo pertinente antes do merge.
 
 **Estado do guia isolado:** validação visual aceita pelo solicitante em 07/10/2026. A validação detalhada das telas operacionais permanece segmentada por módulo e só acontece quando cada adoção for solicitada.
 
 ## Referências
+
+02/11/2026 — correção do Acervo: capturas em Chromium com dados sintéticos em `test-results/documents-archive-*/acervo-empresa.png` e `acervo-modelos.png`, preservadas no registro local do chamado antes de encerrar o worktree. Inspecionadas árvore, caminho, barra de busca/ordenação, arquivo selecionado e biblioteca no mesmo ambiente. E2E dirigido cobre as quatro áreas e largura de 390px, além de prévia de PDF, página seguinte/anterior, contexto e retorno. Não é homologação de dados reais, upload ou assinatura externa.
 
 - Protótipos: `referencias/*.dc.html` no pacote de handoff; são referência, não código de produção.
 - Capturas: `screenshots/` do pacote, geradas com a paleta v4.

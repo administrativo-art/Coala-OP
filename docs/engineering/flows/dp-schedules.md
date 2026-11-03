@@ -1,5 +1,7 @@
 # Escalas do DP
 
+Edição do nome do turno (02/11/2026): o cadastro reutilizável permite renomear turnos existentes em `dp-settings-shifts.tsx`. O PATCH de configuração aceita `name` sob a permissão de gestão já existente e registra os campos alterados em `actionLogs`; somente código e ID Bizneo permanecem protegidos pela regra de identidade externa. A alteração atualiza a definição, sem reescrever snapshots de escalas já gravados ou enviar atualização ao Bizneo automaticamente. Horários, jornadas e cálculos seguem suas regras existentes.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.

@@ -9,17 +9,24 @@ function cleanPart(value: unknown, fallback: string) {
 }
 
 export function buildSignatureDocumentName(params: {
+  department?: "RH" | "FN" | "OP";
   documentType: unknown;
   holderName: unknown;
 }) {
   const documentType = cleanPart(params.documentType, "Documento");
   const holderName = cleanPart(params.holderName, "Titular não identificado");
-  return `COALA SHAKES - ${documentType} - ${holderName}`.slice(0, 240);
+  return `Coala Shakes - ${params.department ?? "RH"} | ${documentType} - ${holderName}`.slice(0, 240);
 }
 
 export function buildAdmissionSignatureDocumentName(holderName: unknown) {
-  return `Coala Shakes - RH | Admissão - ${cleanPart(holderName, "Titular não identificado")}`
-    .slice(0, 240);
+  return buildSignatureDocumentName({ department: "RH", documentType: "Admissão", holderName });
+}
+
+/** Department comes from the document's catalog/context, never the signer's job. */
+export function signatureDepartmentForTemplate(template: { id?: unknown; category?: unknown; sourceModule?: unknown } | null | undefined): "RH" | "FN" | "OP" {
+  if (template?.id === "system-receipt-standard" || ["Financeiro", "Financeiro e recibos"].includes(String(template?.category))) return "FN";
+  if (["assets", "uniforms", "operations"].includes(String(template?.sourceModule)) || ["Operações", "Patrimônio", "Uniformes"].includes(String(template?.category))) return "OP";
+  return "RH";
 }
 
 export function buildSignatureFileName(documentName: string, extension = "docx") {

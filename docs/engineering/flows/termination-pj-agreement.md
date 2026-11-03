@@ -1,5 +1,7 @@
 # Desligamento PJ: distrato, assinaturas e fechamento
 
+Novos envios do distrato usam `Coala Shakes - RH | Distrato de prestação de serviços - Razão social`. Filename deriva desse título; conteúdo e hash preservados. Ver [nomenclatura de assinatura](document-standalone-signature.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** distrato e requisitos de fechamento traçados no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. A [abertura](termination-managed-start.md) captura o contrato de origem.

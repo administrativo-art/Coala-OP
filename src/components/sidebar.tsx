@@ -20,7 +20,7 @@ import { BellRing,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
-  Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale, Clock3} from "lucide-react";
+  Files, FileStack, Archive, WandSparkles, GitBranch, History, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale, Clock3} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
 interface NavItem {
@@ -224,22 +224,38 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Files,
         items: [
           {
-            label: "Central de documentos",
+            label: "Acervo",
+            href: "/dashboard/documents",
+            icon: Archive,
+            show: true,
+          },
+          {
+            label: "Gerador de documentos",
+            href: "/dashboard/documents/generator",
+            icon: WandSparkles,
+            show: hasFormalizationPermission(permissions, "documents.generate") || hasFormalizationPermission(permissions, "templates.view"),
+          },
+          {
+            label: "Fluxos e pendências",
             href: "/dashboard/documents/generated",
-            icon: FileStack,
-            show: hasFormalizationPermission(permissions, "documents.view"),
+            icon: GitBranch,
+            show: hasFormalizationPermission(permissions, "documents.view")
+              || hasFormalizationPermission(permissions, "signatures.view")
+              || hasFormalizationPermission(permissions, "companyDocuments.view")
+              || hasFormalizationPermission(permissions, "view")
+              || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view)
+              || Boolean(permissions.dp?.requests?.view || permissions.dp?.requests?.review)
+              || Boolean(permissions.dp?.vacation?.viewAll || permissions.dp?.view || permissions.dp?.collaborators?.terminate || permissions.dp?.collaborators?.view || permissions.dp?.collaborators?.edit || permissions.settings?.manageUsers),
           },
           {
-            label: "Documentos da empresa",
-            href: "/dashboard/documents/company",
-            icon: Building2,
-            show: hasFormalizationPermission(permissions, "companyDocuments.view"),
-          },
-          {
-            label: "Documentos dos colaboradores",
-            href: "/dashboard/documents/collaborators",
-            icon: Users,
-            show: hasFormalizationPermission(permissions, "documents.view"),
+            label: "Histórico",
+            href: "/dashboard/documents/history",
+            icon: History,
+            show: hasFormalizationPermission(permissions, "documents.view")
+              || hasFormalizationPermission(permissions, "companyDocuments.view")
+              || hasFormalizationPermission(permissions, "view")
+              || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view)
+              || Boolean(permissions.dp?.vacation?.viewAll || permissions.dp?.view || permissions.dp?.collaborators?.terminate || permissions.dp?.collaborators?.view || permissions.dp?.collaborators?.edit || permissions.settings?.manageUsers),
           },
         ],
       },

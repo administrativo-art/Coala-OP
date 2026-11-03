@@ -121,6 +121,7 @@ export type FinancialInboxDocumentType =
   | "other";
 
 export type FinancialInboxAttachment = {
+  documentNaming?: { downloadName: string; documentType: string; reference: string; counterpartyId: string; expenseId: string; version: number; destination: string; confirmedAt?: string; confirmedBy?: string };
   id: string;
   filename: string;
   contentType: string;

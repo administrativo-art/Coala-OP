@@ -1,5 +1,7 @@
 # Férias: geração, validação e assinatura do aviso
 
+Título dos novos envios: `Coala Shakes - RH | Férias - Nome`, agora pela função comum; filename deriva desse título. Conteúdo, validação e posição da assinatura preservados. Ver [nomenclatura de assinatura](document-standalone-signature.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** subfluxo traçado no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Registra o comportamento implementado, não uma regra aprovada. Recibos e pagamento têm percursos próprios.

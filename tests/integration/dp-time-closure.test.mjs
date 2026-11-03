@@ -238,6 +238,8 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.deepEqual([pack.status, pack.providerDocumentId, pack.employerSignature.certificateCnpj], ['sent', `${prefix}-autentique`, '14276603000125']);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].signers[0].email, 'maria@exemplo.com');
+    assert.match(sent[0].documentName, /^Coala Shakes - RH \| Espelho de ponto e contracheque - /);
+    assert.equal(sent[0].fileName, `${sent[0].documentName.replace(/\|/g, '-')}.pdf`);
     assert.equal((await PDFDocument.load(sent[0].buffer)).getPageCount(), pack.bundle.pageCount);
     assert.ok(files.has(pack.employerSignature.storagePath));
     // Segundo envio não manda de novo; a situação aparece no espelho.

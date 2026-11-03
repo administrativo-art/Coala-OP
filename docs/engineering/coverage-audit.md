@@ -4,14 +4,14 @@ Base `70aaab65`. Inventários regenerados contra o código desta versão; mapas 
 
 | Indicador | Total |
 | --- | --- |
-| Páginas do dashboard | 156 |
-| Páginas externas | 20 |
-| APIs por arquivo handler | 352 |
-| Exports de Functions | 42 |
-| Grupos com ao menos um guia | 58/58 |
-| Grupos marcados `Traçado` | 58/58 |
-| Grupos marcados `Verificado` | 0/58 |
-| Guias de subfluxo | 78 |
+| Páginas do dashboard | 174 |
+| Páginas externas | 22 |
+| APIs por arquivo handler | 544 |
+| Exports de Functions | 66 |
+| Grupos com ao menos um guia | 59/59 |
+| Grupos marcados `Traçado` | 59/59 |
+| Grupos marcados `Verificado` | 0/59 |
+| Guias de subfluxo | 79 |
 
 A [matriz de páginas](flow-matrix.csv), [matriz de superfícies](surface-flow-matrix.csv) e verificadores exigem caminhos e classificação atuais. Os [limites por grupo](flow-verification.md) não foram resolvidos por documentação. O [relatório de integração](main-map-integration.md) distingue a main das correções locais anteriores.
 
