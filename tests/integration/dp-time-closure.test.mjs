@@ -226,15 +226,21 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     await assert.rejects(sendClosingPackage(reviewer, packageInput, packageDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
     await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_CONTACT_REQUIRED' });
     await dbAdmin.collection('users').doc(userId).set({ username: 'Maria Fiscal', email: 'maria@exemplo.com' }, { merge: true });
+    const hrEmployeeId = `${prefix}-hr-employee`;
+    await dbAdmin.collection('users').doc(userId).set({ hrEmployeeId }, { merge: true });
     await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_PAYSLIP_MISSING' });
     const payslipRef = hrDbAdmin.collection('employeeDocuments').doc(`${prefix}-payslip`);
-    await payslipRef.set({ employeeId: userId, documentTypeCode: 'PAYSLIP', caseId: `month-${competence}`, status: 'validated', storagePath: 'payslips/agosto.pdf',
+    await payslipRef.set({ employeeId: hrEmployeeId, documentTypeCode: 'PAYSLIP', caseId: `month-${competence}`, status: 'validated', storagePath: 'payslips/agosto.pdf',
       version: 1, deletedAt: null, displayName: 'Contracheque — agosto de 2026' });
     // Sem código de conferência, o contracheque não entra no pacote.
     await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_PAYSLIP_UNVERIFIED' });
     await payslipRef.update({ contentHash: createHash('sha256').update(files.get('payslips/agosto.pdf')).digest('hex') });
     assert.deepEqual((await readClosingPackage(closer, { competence, employeeUid: userId }, packageDeps)).payslip, { documentId: payslipRef.id, name: 'Contracheque — agosto de 2026' });
     const pack = await sendClosingPackage(closer, packageInput, packageDeps);
+    const packageRequest = (await hrDbAdmin.collection('hrSignatureRequests').doc(pack.signatureRequestId).get()).data();
+    assert.deepEqual([packageRequest.subjectKeys, packageRequest.signerKeys, packageRequest.actorKeys],
+      [[`main.users:${userId}`], [`main.users:${userId}`], [`main.users:${closer.decoded.uid}`]]);
+    assert.equal(packageRequest.employeeId, hrEmployeeId);
     assert.deepEqual([pack.status, pack.providerDocumentId, pack.employerSignature.certificateCnpj], ['sent', `${prefix}-autentique`, '14276603000125']);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].signers[0].email, 'maria@exemplo.com');
@@ -255,7 +261,8 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const signed = await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'document.finished', signedUrl: 'https://api.autentique.com.br/x.pdf', at: '2026-10-18T09:00:00.000Z' }, packageDeps);
     assert.equal(signed.status, 'signed');
     const archived = (await hrDbAdmin.collection('employeeDocuments').doc(signed.archivedDocumentId).get()).data();
-    assert.deepEqual([archived.documentTypeCode, archived.employeeId, archived.caseId, archived.signatureStatus], ['TIME_CLOSING_PACKAGE', userId, `month-${competence}`, 'signed']);
+    assert.deepEqual([archived.documentTypeCode, archived.employeeId, archived.caseId, archived.signatureStatus], ['TIME_CLOSING_PACKAGE', hrEmployeeId, `month-${competence}`, 'signed']);
+    assert.deepEqual(archived.subjectKeys, [`main.users:${userId}`]);
     // Política do tipo: automática ao assinar; o pacote assinado entra na pasta do colaborador.
     assert.equal(archived.publication?.status, 'published');
     assert.equal((await syncClosingPackageSignature({ signatureRequestId: pack.signatureRequestId, eventType: 'signature.rejected' }, packageDeps)).status, 'signed');

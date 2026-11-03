@@ -1,3 +1,4 @@
+import { newOnboardingPerson } from "@/features/privacy/onboarding-person.server";
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { FieldPath, type Query } from 'firebase-admin/firestore';
@@ -175,7 +176,9 @@ async function createPjOnboarding(params: {
   });
 
   await onboardingRef.set({
-    candidateId: `pj_${onboardingRef.id}`,
+    workspaceId: params.access.workspaceId,
+    candidateId: `pj_${onboardingRef.id}`, // Legacy routing alias; not an hr.candidates reference.
+    personOrigin: { schemaVersion: 1, kind: "pj-company" },
     candidateName: providerLegalName,
     candidateEmail: providerEmail,
     providerCnpj,
@@ -540,7 +543,10 @@ export async function POST(request: NextRequest) {
   const documents = instantiateOnboardingDocuments(documentTemplates);
 
   await onboardingRef.set({
-    candidateId: `manual_${onboardingRef.id}`,
+    workspaceId: access.workspaceId,
+    candidateId: `manual_${onboardingRef.id}`, // Legacy routing alias; the person has an independent UUID.
+    personOrigin: { schemaVersion: 1, kind: "manual-natural" },
+    personIdentity: newOnboardingPerson(onboardingRef.id),
     candidateName,
     candidateEmail,
     applicationId: null,

@@ -12,7 +12,7 @@
       "source": "src/app/api/hr/onboarding/[id]/pj-workflow/route.ts",
       "methods": ["GET", "PATCH"],
       "owner": "plataforma-seguranca",
-      "reason": "Padronização restrita ao título e filename enviados ao Autentique. Autorização e transições legadas preservadas; migração integral do fluxo PJ para secureRoute exige caracterização dedicada, fora desta alteração de nomenclatura.",
+      "reason": "Alteração restrita aos metadados subjectKeys/signerKeys/actorKeys no produtor de contrato PJ, além da nomenclatura já abrangida. GET/PATCH mantêm assertFormalizationAccess e transições existentes; signatários externos sem ID não são inferidos por e-mail/CPF. Migração integral do fluxo PJ para secureRoute exige caracterização dedicada; exceção temporária delimitada à rota e métodos registrados.",
       "expiresAt": "2026-11-16"
     },
     {
@@ -54,7 +54,7 @@
       "source": "src/app/api/hr/onboarding/route.ts",
       "methods": ["GET", "POST"],
       "owner": "plataforma-seguranca",
-      "reason": "A inclusão de Aprendiz e a exclusão explícita de Societário alteram esta rota legada extensa; a migração integral exige caracterização dedicada dos fluxos de integração e convite.",
+      "reason": "Intake legado extenso de admissão: além dos vínculos já abrangidos, cria personIdentity natural embutida com UUID/locator e separa empresa PJ de candidatura. GET permanece somente leitura; POST usa assertFormalizationAccess/onboarding.manage e validações nativas. Migração integral para secureRoute continua dedicada; exceção restrita aos métodos e prazo existentes.",
       "expiresAt": "2026-11-14"
     },
     {
