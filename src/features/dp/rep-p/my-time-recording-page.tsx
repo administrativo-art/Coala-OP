@@ -331,13 +331,17 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   return (
     <PageContainer variant={embedded ? "fluid" : "wide"} className={embedded ? "space-y-4" : "space-y-5 pb-8"}>
       {embedded ? null : <ScheduledDarkTheme />}
-      {embedded ? null : <header className="flex items-center gap-3">
-        <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
-          label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="ghost" size="sm" className="-ml-2" />
+      {embedded ? null : <header className="space-y-1">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">{initialView === "time-bank" ? "Banco de horas" : "Registro de ponto"}</h1>
-          {readOnly ? <p className="text-sm font-semibold text-ds-ink-muted">{employeeName ?? "Colaborador"}</p> : null}
+          <BackButton fallbackHref={employeeUid ? `/dashboard/dp/collaborators/${encodeURIComponent(employeeUid)}` : "/dashboard/collaborator"}
+            label={employeeUid ? "Perfil do colaborador" : "Painel do colaborador"} variant="outline" size="sm" />
         </div>
+        {readOnly ? (
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">{initialView === "time-bank" ? "Banco de horas" : "Registro de ponto"}</h1>
+            <p className="text-sm font-semibold text-ds-ink-muted">{employeeName ?? "Colaborador"}</p>
+          </div>
+        ) : null}
       </header>}
 
       {embedded ? null : readOnly ? (
@@ -353,7 +357,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
             <strong>Ensaio controlado.</strong> As batidas aparecem aqui e na prévia do banco de horas, mas ficam fora do fechamento, do AFD e do AEJ.
           </div>
         ) : null}
-        <RecordStrip marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded}
+        <RecordStrip kicker={initialView === "time-bank" ? "Banco de horas" : "Registro de ponto"} marking={marking} day={todayView} today={today} onOpenDay={() => setOpenDate(today)} onRecorded={onRecorded}
           dialogOpen={recordOpen} onDialogOpenChange={setRecordOpen} />
       </>}
 
