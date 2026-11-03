@@ -206,6 +206,9 @@ export async function GET(request: NextRequest) {
       .map((doc) => ({
         id: doc.id,
         ...serializedObject(doc.data()),
+        storagePath: undefined,
+        storageSubfolder: undefined,
+        signedFileUrl: undefined,
         resolvedVisibility: resolveDocumentVisibility(
           { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category") },
           accessSettings.visibilityConfig,
