@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "exceptions": [
     {
+      "source": "src/app/api/hr/employee-documents/route.ts",
+      "methods": ["GET", "POST", "PATCH", "DELETE"],
+      "owner": "plataforma-seguranca",
+      "reason": "Correção restrita à preservação do original assinado compartilhado na remoção do Acervo. Autorização legada por gestão de RH e unidade permanece; a migração integral de upload, listagem e estado para secureRoute exige caracterização separada.",
+      "expiresAt": "2026-11-16"
+    },
+    {
       "source": "src/app/api/hr/onboarding/[id]/pj-workflow/route.ts",
       "methods": ["GET", "PATCH"],
       "owner": "plataforma-seguranca",

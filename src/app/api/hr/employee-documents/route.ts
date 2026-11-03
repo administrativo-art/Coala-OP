@@ -206,6 +206,9 @@ export async function GET(request: NextRequest) {
       .map((doc) => ({
         id: doc.id,
         ...serializedObject(doc.data()),
+        storagePath: undefined,
+        storageSubfolder: undefined,
+        signedFileUrl: undefined,
         resolvedVisibility: resolveDocumentVisibility(
           { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category") },
           accessSettings.visibilityConfig,
@@ -307,6 +310,20 @@ export async function DELETE(request: NextRequest) {
     if (!snap.exists) return error("Documento não encontrado.", 404);
     await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? ""));
     const storagePath = snap.get("storagePath");
+    // Signed binaries belong to the signature history and may have multiple references.
+    // Removing an archive entry must not destroy that shared original.
+    if (snap.get("signatureStatus") === "signed" || snap.get("source") === "autentique_signature") {
+      const auditRef = ref.collection("audit").doc();
+      await hrDbAdmin.runTransaction(async (transaction) => {
+        const current = await transaction.get(ref);
+        if (current.get("deletedAt")) return;
+        if (current.get("storagePath") !== storagePath) throw new Error("O documento mudou; atualize a lista antes de remover.");
+        const now = Timestamp.now();
+        transaction.update(ref, { deletedAt: now, deletedBy: access.decoded.uid, updatedAt: now });
+        transaction.set(auditRef, { action: "DOCUMENT_REMOVED_FROM_ARCHIVE", actorId: access.decoded.uid, actorName: access.actorName, storageRetained: true, reason: "Original assinado preservado na trilha de assinatura", at: now });
+      });
+      return NextResponse.json({ ok: true, storageRetained: true });
+    }
     if (typeof storagePath === "string") await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).delete({ ignoreNotFound: true });
     await ref.update({ deletedAt: Timestamp.now(), deletedBy: access.decoded.uid, storagePath: FieldValue.delete(), updatedAt: Timestamp.now() });
     await ref.collection("audit").add({ action: "DOCUMENT_DELETED", actorId: access.decoded.uid, actorName: access.actorName, at: Timestamp.now() });
