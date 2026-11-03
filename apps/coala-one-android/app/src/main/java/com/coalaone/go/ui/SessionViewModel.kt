@@ -119,6 +119,9 @@ data class DeveloperViewAsState(val available: Boolean = false, val users: List<
     fun enableBiometricUnlock() {
         auth.current?.uid?.let { uid -> biometric.record(uid, true); mutable.update { it.copy(localUnlockEnabled = true, error = null) } }
     }
+    fun disableBiometricUnlock() {
+        auth.current?.uid?.let { uid -> biometric.record(uid, false); mutable.update { it.copy(localUnlockEnabled = false, error = null) } }
+    }
     fun biometricReady() = auth.current?.uid?.let(biometric::ready) == true
     fun biometricEnabled() = auth.current?.uid?.let(biometric::enabled) == true
     fun unlockBiometric() { auth.current?.uid?.takeIf { biometric.ready(it) }?.let { gate.unlock(it); mutable.update { current -> current.copy(locked = false, error = null, localUnlockEnabled = true) } } }

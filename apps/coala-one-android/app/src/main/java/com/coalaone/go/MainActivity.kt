@@ -114,7 +114,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
                         onInformAbsence = { migrationPoint = false })
                     !session.mode.simulation && googleMigration.required && !googleMigration.completed ->
                         GoogleMigrationRequiredScreen(session, googleMigration, checking = false) { migrationPoint = true }
-                    else -> AppNavigation(session, update) { biometric(enroll = true) }
+                    else -> AppNavigation(session, update, { biometric(enroll = true) }) { confirmDisableBiometric() }
                 }
             }
         } }
@@ -133,6 +133,19 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
             .setNegativeButtonText("Usar senha")
             .build()
         prompt.authenticate(info)
+    }
+    /** Turning the local unlock off asks for the biometric once, so nobody removes it from an unlocked phone. */
+    private fun confirmDisableBiometric() {
+        if (BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) { session.disableBiometricUnlock(); return }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { session.disableBiometricUnlock() }
+        })
+        prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Desligar a biometria")
+            .setSubtitle("Confirme para desligar o acesso sem internet")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("Cancelar")
+            .build())
     }
     private fun install(file: File) {
         runOnUiThread {
@@ -176,7 +189,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         }
     }
 }
-@Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit) {
+@Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel, onPrepareBiometric: () -> Unit, onDisableBiometric: () -> Unit) {
     val nav = rememberNavController()
     val corporateDevice: CorporateDeviceViewModel = hiltViewModel()
     LaunchedEffect(corporateDevice) { corporateDevice.load() }
@@ -193,7 +206,7 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
         val homeEntry: (androidx.navigation.NavBackStackEntry) -> androidx.navigation.NavBackStackEntry = { nav.getBackStackEntry("home") }
         composable("home") { entry -> HomeScreen(hiltViewModel(), hiltViewModel(entry), session, update) { nav.navigate(it) } }
         // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
-        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, corporateDevice, back, onPrepareBiometric) }
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, corporateDevice, back, onPrepareBiometric, onDisableBiometric) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -446,7 +459,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage || modules.timeRecording || modules.requests)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
-@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, corporateDevice: CorporateDeviceViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit) {
+@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, corporateDevice: CorporateDeviceViewModel, onBack: () -> Unit, onPrepareBiometric: () -> Unit, onDisableBiometric: () -> Unit) {
     val profileState by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
@@ -469,19 +482,24 @@ private fun installUpdate(context: android.content.Context, file: File) {
         if (granted) session.push.enable(owner)
         else session.push.reflect(owner)
     }
-    Page("Perfil", feedback, onBack, onRefresh = { vm.refresh(dataOwner) }) {
-        CardBlock {
-            Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
-            Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
-        }
-        if (developerViewAs.targetUserId == null && corporateDeviceState.enrollmentExpected &&
-            (corporateDeviceState.reviewRequired || corporateDeviceState.error != null))
+    var photoSheet by remember { mutableStateOf(false) }
+    var biometricOff by remember { mutableStateOf(false) }
+    val capture = rememberCaptureActions(imagesOnly = true) { photo -> photoSheet = false; framing = photo }
+    val viewing = developerViewAs.targetUserId != null
+    val settingsRequired = com.coalaone.go.push.PushPolicy.requiresSystemSettings(Build.VERSION.SDK_INT, push.permitted, session.push.permissionRequested)
+    val openAndroidSettings = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))) }
+    val profileName = state?.profile?.name.orEmpty()
+    Page("Perfil", feedback, onBack, onRefresh = { vm.refresh(dataOwner) }, header = {
+        TopBar("Perfil", busy = feedback.busy, onBack = onBack)
+        ProfileHero(profileName, state?.profile?.role, state?.profile?.email, state?.profile?.avatarUrl, onEditPhoto = if (viewing || feedback.busy) null else ({ photoSheet = true }))
+    }) {
+        if (!viewing && corporateDeviceState.enrollmentExpected && (corporateDeviceState.reviewRequired || corporateDeviceState.error != null))
             Text("A classificação deste aparelho precisa de revisão administrativa. O registro de ponto continua disponível conforme a sua escala.",
                 color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-        if (canDeveloperViewAs) CardBlock(selected = developerViewAs.targetUserId != null) {
+        if (canDeveloperViewAs) CardBlock(selected = viewing) {
             Text("Visualizar como usuário", style = MaterialTheme.typography.titleMedium)
             Text("A navegação usa o perfil escolhido, mas alterações ficam bloqueadas. Seu login real continua registrado para auditoria.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            if (developerViewAs.targetUserId != null) {
+            if (viewing) {
                 Text("Visualizando como ${developerViewAs.targetName ?: "usuário selecionado"}", color = Tokens.warning, style = MaterialTheme.typography.bodyMedium)
                 Action("Voltar ao meu perfil", developerViewAs.busy, onClick = session::stopDeveloperViewAs)
             } else if (developerViewAs.users.isNotEmpty()) {
@@ -491,68 +509,65 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
             developerViewAs.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
-        if (developerViewAs.targetUserId == null) CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
         // The chosen photo is framed by the person before it is sent; only the framed square leaves the phone.
         framing?.let { photo -> PhotoCropDialog(photo, { framing = null }) { framed -> framing = null; vm.avatar(framed) } }
-        if (developerViewAs.targetUserId == null) CardBlock {
-            Text("Aplicativo", style = MaterialTheme.typography.titleMedium)
-            Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        if (photoSheet && !viewing) PhotoSheet(profileName, state?.profile?.avatarUrl, capture.error, { photoSheet = false }, capture.photograph, capture.pickFile)
+        if (!viewing) {
+            // The app checks for a release every time it comes to the foreground; the banner only exists when there is one.
             val target = release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
-            // The app checks for a release every time it comes to the foreground; the button only exists when there is one.
-            if (target != null) Action("Baixar atualização ${target.versionName}", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
-            else Text("Você está na versão mais recente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            updateFeedback.error?.let { Text(it, color = Tokens.danger) }
-        }
-        if (developerViewAs.targetUserId == null) CardBlock {
-            Text("Acesso sem internet", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (sessionState.localUnlockEnabled) "Use a biometria para abrir o Coala Go mesmo sem conexão."
-                else "O app oferece a biometria após o login para liberar o acesso sem conexão. Se você pulou essa etapa, pode ativá-la aqui.",
-                color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            if (!sessionState.localUnlockEnabled) Action("Ativar biometria", sessionState.busy, enabled = !sessionState.busy, onClick = onPrepareBiometric)
-        }
-        if (developerViewAs.targetUserId == null && (googleMigration.available || googleMigration.completed)) CardBlock(selected = googleMigration.completed) {
-            Text("Acesso pelo Google", style = MaterialTheme.typography.titleMedium)
-            if (googleMigration.completed) {
-                Text("Acesso Google vinculado a ${googleMigration.targetEmail}.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            } else {
-                Text(if (googleMigration.targetEmail != null) "Vincule ${googleMigration.targetEmail} sem perder seu histórico."
-                    else "Vincule sua conta Google ao cadastro atual sem perder seu histórico.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                if (googleMigration.busy) {
-                    LinearProgressIndicator(progress = { googleMigration.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
-                    Text(googleMigration.step ?: "Concluindo…", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (target != null) UpdateBanner(target.versionName, updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
+            updateFeedback.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+            SettingsGroup("Segurança") {
+                SettingsRow(ProfileIcon.Shield, "Biometria", if (sessionState.localUnlockEnabled) "Abrir o app sem internet" else "Desligada · ative para abrir sem internet", divider = false) {
+                    SettingsSwitch(sessionState.localUnlockEnabled, !sessionState.busy, "Biometria") { on -> if (on) onPrepareBiometric() else biometricOff = true }
                 }
-                Action("Vincular minha conta Google", googleMigration.busy || googleMigration.loading, enabled = !googleMigration.busy && !googleMigration.loading) {
-                    scope.launch {
-                        try {
-                            when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
-                                is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
-                                GoogleCredentialResult.Cancelled -> Unit
-                            }
-                        } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
-                    }
-                }
+                if (googleMigration.available || googleMigration.completed) SettingsRow(ProfileIcon.Person, "Conta Google",
+                    if (googleMigration.completed) googleMigration.targetEmail ?: "Vinculada" else "Vincular sem perder o histórico",
+                    onClick = if (googleMigration.completed || googleMigration.busy || googleMigration.loading) null else ({
+                        scope.launch {
+                            try {
+                                when (val result = requestGoogleWorkspaceCredential(context, BuildConfig.GOOGLE_WEB_CLIENT_ID, authorizedOnly = false)) {
+                                    is GoogleCredentialResult.Token -> session.migrateGoogle(result.value, result.email)
+                                    GoogleCredentialResult.Cancelled -> Unit
+                                }
+                            } catch (cause: Exception) { session.googleCredentialError(cause.message ?: "Não foi possível abrir o acesso Google.") }
+                        }
+                    })) { if (googleMigration.completed) SettingsTag("Vinculada") else Text("›", color = Tokens.muted, style = MaterialTheme.typography.titleLarge) }
+            }
+            if (googleMigration.busy) {
+                LinearProgressIndicator(progress = { googleMigration.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
+                Text(googleMigration.step ?: "Concluindo…", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
             googleMigration.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
-        }
-        if (developerViewAs.targetUserId == null) CardBlock {
-            Text("Notificações", style = MaterialTheme.typography.titleMedium)
-            val settingsRequired = com.coalaone.go.push.PushPolicy.requiresSystemSettings(Build.VERSION.SDK_INT, push.permitted, session.push.permissionRequested)
-            Text(if (push.enabled && !push.permitted) "Autorizadas nesta conta, mas bloqueadas no Android." else if (push.enabled) "Ativadas para esta conta." else "Receba avisos gerais do Coala Go neste aparelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-            if (push.enabled) Action("Desativar notificações", push.busy) { session.push.disable(owner) }
-            else Action("Ativar notificações", push.busy, enabled = !session.mode.simulation && !settingsRequired) {
-                if (Build.VERSION.SDK_INT >= 33 && !session.push.permissionGranted()) { session.push.markPermissionRequested(); permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                else session.push.enable(owner)
-            }
-            if (settingsRequired) {
-                TextButton({ context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))) }) { Text("Abrir configurações do Android") }
+            if (biometricOff) InlineConfirmation("Desligar a biometria? Sem ela, se o quiosque ficar sem internet você não consegue abrir o app nem registrar o ponto. Você confirma com a sua biometria.",
+                false, { biometricOff = false }, "Cancelar", "Desligar biometria") { biometricOff = false; onDisableBiometric() }
+            SettingsGroup("Avisos") {
+                val blocked = settingsRequired || (push.enabled && !push.permitted)
+                SettingsRow(ProfileIcon.Bell, "Notificações",
+                    when { blocked -> "Bloqueadas no Android"; push.enabled -> "Ativadas neste aparelho"; else -> "Desligadas neste aparelho" }, divider = false) {
+                    SettingsSwitch(push.enabled && !blocked, !push.busy && !session.mode.simulation && !blocked, "Notificações") { on ->
+                        if (!on) session.push.disable(owner)
+                        else if (Build.VERSION.SDK_INT >= 33 && !session.push.permissionGranted()) { session.push.markPermissionRequested(); permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                        else session.push.enable(owner)
+                    }
+                }
+                if (blocked) SettingsRow(ProfileIcon.Settings, "Abrir configurações do Android", "Permita as notificações do Coala Go", onClick = { openAndroidSettings() }) {
+                    Text("›", color = Tokens.muted, style = MaterialTheme.typography.titleLarge)
+                }
             }
             push.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
+            SettingsGroup("Aplicativo") {
+                SettingsRow(ProfileIcon.Phone, "Coala Go ${BuildConfig.VERSION_NAME}", if (target == null) "Você está na versão mais recente" else "Build ${BuildConfig.VERSION_CODE}", divider = false) {
+                    if (target == null) SettingsTag("Atualizado")
+                }
+            }
         }
         if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta") {
             listOf("receipts", "time-documents").forEach { File(context.cacheDir, it).deleteRecursively() }
             session.signOut()
         }
-        else TextButton({ signOut = true }) { Text("Sair da conta", color = Tokens.danger) }
+        else Box(Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(14.dp)).background(Tokens.dangerBg).clickable(role = androidx.compose.ui.semantics.Role.Button) { signOut = true }.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+            Text("Sair da conta", color = Tokens.danger, style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
