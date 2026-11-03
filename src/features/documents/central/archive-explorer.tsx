@@ -132,6 +132,6 @@ export function ArchiveExplorer({ area = null, entries, folders = [], breadcrumb
         </div>
       </div>
     </div>
-    <Dialog open={expanded && Boolean(selected?.loadPreview)} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selected?.name ?? "Documento"}</DialogTitle></DialogHeader>{error && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{error}</p>}{selected && preview?.(selected)}</DialogContent></Dialog>
+    <Dialog open={expanded && Boolean(selected?.loadPreview)} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selected?.name ?? "Documento"}</DialogTitle></DialogHeader>{error && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{error}</p>}{selected && preview?.(selected)}</DialogContent></Dialog>
   </PageContainer>;
 }

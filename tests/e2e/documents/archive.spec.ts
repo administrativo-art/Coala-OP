@@ -55,6 +55,9 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await publishedFile.dblclick();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
+  const expandedBounds = await page.getByRole("dialog").boundingBox();
+  expect(expandedBounds?.width ?? 0).toBeGreaterThan(Math.min(900, (page.viewportSize()?.width ?? 1280) - 64));
+  await page.screenshot({ path: testInfo.outputPath("acervo-leitura-ampliada.png"), fullPage: true });
   expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await page.getByRole("dialog").press("Escape");
   await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Acervo", exact: true }).click();
