@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -114,13 +114,15 @@ test('missing onboarding context reclassifies only candidate-dependent failure a
 test('proved legacy context links pre-account documents only to reciprocal UID/HR and preserves a frozen null owner', async () => {
   const { projectCensusData } = await import('../../scripts/person-census-core.mjs');
   const { resolve } = await import('node:path');
-  const dir = mkdtempSync(join(resolve('.ai-work/development-technology/person-traceability-20261103/census'), 'preaccount-context-witness-'));
+  const censusRoot = resolve('.ai-work/development-technology/person-traceability-20261103/census');
+  mkdirSync(censusRoot, { recursive: true, mode: 0o700 });
+  const dir = mkdtempSync(join(censusRoot, 'preaccount-context-witness-'));
   try {
     const baseProcess = { source: 'manual', applicationId: null, jobOpeningId: null, employmentRelationshipType: 'clt', jobRoleId: 'role', functionId: 'function', unitId: 'unit', workspaceId: 'w', integrationV2: { snapshot: { schemaVersion: 'coala-integration-v1' } } };
     const processData = { ...baseProcess, candidateId: 'manual_p', collaboratorUserId: 'u', employeeId: 'u' };
     const context = { database: 'hr', collection: 'onboardingProcesses', id: 'p', data: projectCensusData(processData), contextOnly: true, contextReason: 'manual_person_identity_missing' };
     const contextRows = JSON.stringify(context) + '\n';
-    const contextDir = join(dir, 'context'); const { mkdirSync } = await import('node:fs'); mkdirSync(contextDir, { mode: 0o700 });
+    const contextDir = join(dir, 'context'); mkdirSync(contextDir, { mode: 0o700 });
     writeFileSync(join(contextDir, 'census.jsonl'), contextRows, { mode: 0o600 });
     const common = { schema: 1, mode: 'fixture-readonly', projectId: 'demo-person-preaccount', workspace: 'w', sources: [] };
     writeFileSync(join(contextDir, 'manifest.json'), JSON.stringify({ ...common, status: 'incomplete', rows: 1, sha256: createHash('sha256').update(contextRows).digest('hex'), targeted: { rejected: 0, contextOnly: 1 }, gaps: [{ source: 'hr/onboardingProcesses', reason: 'manual_person_identity_missing' }] }), { mode: 0o600 });
