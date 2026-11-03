@@ -8,7 +8,7 @@ Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-en
 
 Páginas: [`src/app/dashboard/assets/page.tsx`](../../src/app/dashboard/assets/page.tsx).
 
-Arquivos locais percorridos: 34.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
@@ -373,7 +373,7 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx).
 
-Arquivos locais percorridos: 30.
+Arquivos locais percorridos: 26.
 
 Chamadas candidatas encontradas:
 
@@ -391,8 +391,6 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates` — interface [`src/features/documents/central/archive-models.tsx`](../../src/features/documents/central/archive-models.tsx); rota candidata [`src/app/api/documents/templates/route.ts`](../../src/app/api/documents/templates/route.ts)
 - `/api/documents/templates/` — interface [`src/features/documents/central/archive-models.tsx`](../../src/features/documents/central/archive-models.tsx); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
 - `/api/documents/work-items` — interface [`src/features/documents/central/central-workspace.tsx`](../../src/features/documents/central/central-workspace.tsx); rota candidata [`src/app/api/documents/work-items/route.ts`](../../src/app/api/documents/work-items/route.ts)
-- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
-- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
 - `/api/hr/employee-documents` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
 - `/api/hr/employee-documents/access` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
@@ -703,7 +701,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
@@ -732,31 +730,31 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
 
-Arquivos locais percorridos: 49.
+Arquivos locais percorridos: 44.
 
 Chamadas candidatas encontradas:
 
+- `/api/assets/lookup` — interface [`src/features/financial/inbox/invoice-destination-editor.tsx`](../../src/features/financial/inbox/invoice-destination-editor.tsx); rota candidata [`src/app/api/assets/lookup/route.ts`](../../src/app/api/assets/lookup/route.ts)
 - `/api/financial/document-counterparties` — interface [`src/features/financial/inbox/document-naming-editor.tsx`](../../src/features/financial/inbox/document-naming-editor.tsx); rota candidata [`src/app/api/financial/document-counterparties/route.ts`](../../src/app/api/financial/document-counterparties/route.ts)
-- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
-- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
+- `/api/financial/inbox` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/financial/inbox/document-naming-editor.tsx`](../../src/features/financial/inbox/document-naming-editor.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/inbox/bulk-review` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/bulk-review/route.ts`](../../src/app/api/financial/inbox/bulk-review/route.ts)
 - `/api/financial/inbox/settings` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/settings/route.ts`](../../src/app/api/financial/inbox/settings/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `assets.edit` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `assets.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.expenses.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.analyze` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `financial.inbox.deleteFiles` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.discard` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.link` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
-- `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `financial.inbox.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
-- `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `financial-overview`
 
@@ -1185,6 +1183,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.pay` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.expenses.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.analyze` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.inbox.deleteFiles` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.discard` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1800,6 +1799,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.pay` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.expenses.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.analyze` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.inbox.deleteFiles` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.discard` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)

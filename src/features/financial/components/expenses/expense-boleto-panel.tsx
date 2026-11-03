@@ -23,6 +23,10 @@ export function ExpenseBoletoPanel({ expense, canEdit }: { expense: any; canEdit
   const [scheduledFor, setScheduledFor] = useState(due);
   const [confirmed, setConfirmed] = useState(false);
   const path = `/api/financial/expenses/${encodeURIComponent(expense.id)}/boleto`;
+  const incomingInstallments = (Array.isArray(expense.installments) ? expense.installments : [])
+    .filter((item: any) => Number.isInteger(Number(item.number)) && item.financialInboxMessageId)
+    .map((item: any) => Number(item.number));
+  const incomingSingle = Boolean(expense.financialInboxMessageId);
   const canPrepare = canEdit && permissions?.financial?.paymentRequests?.create && permissions?.financial?.paymentRequests?.view;
   const eligible = ["pending", "provisioned"].includes(expense.status) && expense.paymentMethod === "single" && !expense.financialInboxMessageId;
   async function action(run: () => Promise<void>) {
@@ -32,11 +36,16 @@ export function ExpenseBoletoPanel({ expense, canEdit }: { expense: any; canEdit
   return <div className="mt-3 space-y-3 rounded-xl border bg-muted/20 p-3">
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm font-semibold">Boleto da despesa</span>
-      {attached && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => action(async () => {
+      {(attached || incomingSingle) && <Button type="button" variant={incomingSingle ? "ds-secondary" : "outline"} size="sm" disabled={busy} onClick={() => action(async () => {
         const blob = await api<Blob>(path, { responseType: "blob" });
         const url = URL.createObjectURL(blob), anchor = document.createElement("a");
         anchor.href = url; anchor.download = "boleto.pdf"; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       })}>Baixar PDF</Button>}
+      {incomingInstallments.map((number: number) => <Button key={number} type="button" variant="ds-secondary" size="sm" disabled={busy} onClick={() => action(async () => {
+        const blob = await api<Blob>(`${path}?installmentNumber=${number}`, { responseType: "blob" });
+        const url = URL.createObjectURL(blob), anchor = document.createElement("a");
+        anchor.href = url; anchor.download = `boleto-parcela-${number}.pdf`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      })}>Boleto da parcela {number}</Button>)}
       {canEdit && eligible && !prepared && <Button type="button" variant="outline" size="sm" onClick={() => setOpen(!open)}>{attached ? "Preparar pagamento" : "Anexar boleto"}</Button>}
       {prepared && <Link className="text-sm underline" href={FINANCIAL_ROUTES.paymentRequests}>Ver solicitação de pagamento</Link>}
     </div>

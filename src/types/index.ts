@@ -276,6 +276,7 @@ export type Asset = {
   costCenter?: string;
   accountingAccount?: string;
   documentUrl?: string;
+  inboxInvoiceRefs?: Array<{ key: string; messageId: string; fileId: string; sha256: string; version: number; confirmedAt: string }>;
   usefulLifeYears?: number;
   residualValue?: number;
   depreciationMethod?: string;
@@ -858,7 +859,7 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
-    inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; };
+    inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; deleteFiles?: boolean; };
     audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
     reconciliation: { view: boolean; confirm: boolean; correct: boolean; classifyAdjustments: boolean; administer: boolean; };
     cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
@@ -3110,7 +3111,7 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
-      inbox: { view: false, analyze: false, link: false, discard: false },
+      inbox: { view: false, analyze: false, link: false, discard: false, deleteFiles: false },
       audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
       reconciliation: { view: false, confirm: false, correct: false, classifyAdjustments: false, administer: false },
       cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
@@ -3226,7 +3227,7 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
-      inbox: { view: true, analyze: true, link: true, discard: true },
+      inbox: { view: true, analyze: true, link: true, discard: true, deleteFiles: true },
       audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
       reconciliation: { view: true, confirm: true, correct: true, classifyAdjustments: true, administer: true },
       cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },

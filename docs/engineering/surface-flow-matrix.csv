@@ -631,3 +631,6 @@ api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/ro
 api,src/app/api/assets/[assetId]/maintenance-occurrences/list/route.ts,,docs/engineering/flows/assets.md,Ocorrências de manutenção paginadas e limitadas.
 api,src/app/api/assets/[assetId]/maintenance-plans/list/route.ts,,docs/engineering/flows/assets.md,Planos preventivos paginados e limitados.
 api,src/app/api/users/[userId]/assets/route.ts,,docs/engineering/flows/assets.md,Equipamentos em posse atual com self-access e acesso RH ou Patrimônio.
+api,src/app/api/assets/lookup/route.ts,,docs/engineering/flows/assets.md,Consulta exata de etiqueta no workspace sob assets.view para confirmar destino patrimonial de NF.
+api,src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts,,docs/engineering/flows/assets.md,Acesso privado a NF da caixa por ativo com dupla referencia hash versao e workspace sem copia de bytes.
+api,src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts,,docs/engineering/flows/financial-inbox.md,Confirmacao por arquivo de NF patrimonial ou nao patrimonial com exclusao fisica dupla confirmacao e recuperacao verificada.

@@ -383,10 +383,18 @@ export async function getFinancialInboxMessage(id: string) {
 }
 
 async function enrichFinancialInboxMessages(messages: FinancialInboxMessage[]) {
+  function publicMessage(message: FinancialInboxMessage): FinancialInboxMessage {
+    const { rawArchiveOperation: _operation, documentAnalysisOperation: _analysis, ...safe } = message;
+    return { ...safe, attachments: message.attachments.map((file) => {
+      if (!file.destination) return file;
+      const { deletedStoragePath: _path, storageGeneration: _generation, ...destination } = file.destination;
+      return { ...file, destination };
+    }) } as FinancialInboxMessage;
+  }
   const paymentIds = [...new Set(messages
     .map((message) => String(message.paymentRequestId ?? "").trim())
     .filter((id) => id && !id.includes("/")))];
-  if (!paymentIds.length) return messages;
+  if (!paymentIds.length) return messages.map(publicMessage);
   const snapshots = await financialDbAdmin.getAll(
     ...paymentIds.map((id) => financialDbAdmin.collection("bankPaymentRequests").doc(id)),
   );
@@ -394,11 +402,11 @@ async function enrichFinancialInboxMessages(messages: FinancialInboxMessage[]) {
   return messages.map((message) => {
     const paymentId = String(message.paymentRequestId ?? "").trim();
     const payment = paymentId ? payments.get(paymentId) : null;
-    if (!payment?.exists || payment.get("workspaceId") !== message.workspaceId) return message;
-    return {
+    if (!payment?.exists || payment.get("workspaceId") !== message.workspaceId) return publicMessage(message);
+    return publicMessage({
       ...message,
       classification: classificationWithPaymentSnapshot(message.classification, payment.data() ?? {}),
-    };
+    });
   });
 }
 

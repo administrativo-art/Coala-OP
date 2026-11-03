@@ -5,7 +5,6 @@ import type { CentralDocumentSource, CentralHistoryEntry, CentralHistoryPage } f
 import { serializeHrValue } from "@/features/hr/lib/server-access";
 import { documentUploadsPage } from "@/features/documents/central/uploads-page.server";
 import { uploadOutcome } from "@/features/documents/central/upload-outcome";
-import { listFinancialInboxMessages } from "@/features/financial/inbox/repository.server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -18,7 +17,6 @@ import { rethrowServerAuthenticationFailure } from "@/lib/server-authentication-
 import { TIME_RECORDING_COMPLIANCE_LABEL, TIME_RECORDING_EVIDENCE_SECTIONS } from "@/lib/documents/company-document-folders";
 import { canViewDocumentProcess, documentProcessHistory, documentProcessPage } from "@/features/documents/central/processes.server";
 import { uploadAccessFilter } from "@/features/documents/central/upload-access.server";
-import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,8 +51,7 @@ function canUseHistory(actor: ServerUserContext) {
     || canViewDocumentProcess(actor, "vacation") || canViewDocumentProcess(actor, "termination")
     || hasFormalizationPermission(actor.permissions, "documents.view", actor.isDefaultAdmin)
     || hasFormalizationPermission(actor.permissions, "companyDocuments.view", actor.isDefaultAdmin)
-    || hasFormalizationPermission(actor.permissions, "view", actor.isDefaultAdmin)
-    || (actor.permissions.financial?.view && actor.permissions.financial?.inbox?.view);
+    || hasFormalizationPermission(actor.permissions, "view", actor.isDefaultAdmin);
 }
 
 const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, Input, Resource>({
@@ -62,9 +59,10 @@ const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUse
   guarantees: ["authenticated-user", "active-user", "permission-checked", "workspace-scoped", "input-validated", "fields-allowlisted", "authorization:source-permission-intersection"],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
-    if (!canUseHistory(actor)) throw new AppError({ code: "DOCUMENT_HISTORY_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para consultar o histórico documental." });
     const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
     if (!parsed.success) throw new AppError({ code: "DOCUMENT_HISTORY_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Filtro de histórico inválido." });
+    if (parsed.data.source === "financial" && !actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.inbox?.view)) throw new AppError({ code: "DOCUMENT_HISTORY_FINANCIAL_FORBIDDEN", kind: "AUTHORIZATION" });
+    if (parsed.data.source !== "financial" && !canUseHistory(actor)) throw new AppError({ code: "DOCUMENT_HISTORY_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para consultar o histórico documental." });
     return { actor, input: parsed.data, resource: { workspaceId: actor.workspace_id } };
   },
 });
@@ -230,55 +228,13 @@ async function onboardingHistory(actor: ServerUserContext, input: Input): Promis
   return { source: "onboarding", entries, partial: snapshot.size > input.limit, nextCursor: continuation(snapshot, input) };
 }
 
-async function financialHistory(actor: ServerUserContext, input: Input): Promise<Result | null> {
-  if (!requested(input, "financial") || (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.inbox?.view))) return null;
-  if (input.documentId) return documentAuditHistory(actor, input, "financial");
-  const result = await listFinancialInboxMessages({
-    workspaceId: actor.workspace_id,
-    view: "identified",
-    status: null,
-    stage: null,
-    resolutionKind: null,
-    financialState: null,
-    search: null,
-    cursor: input.cursor ?? null,
-    limit: input.limit,
-  });
-  const entries = result.messages.map((record): CentralHistoryEntry => {
-    const attachments = Array.isArray(record.attachments) ? record.attachments : [];
-    const first = attachments[0];
-    const extraction = first?.extractionMethod;
-    const extractionStatus = first?.extractionStatus;
-    return {
-      id: `financial:${record.id}`,
-      source: "financial",
-      documentRef: { source: "financial", sourceId: record.id },
-      recordKind: "current_snapshot",
-      occurredAt: record.reviewedAt ?? record.updatedAt ?? record.receivedAt,
-      eventLabel: record.resolution?.status === "identified" ? "Documento financeiro identificado" : "Registro financeiro atualizado",
-      title: record.subject || "Documento financeiro",
-      subject: record.classification?.supplierName ?? record.fromAddress ?? null,
-      originalName: first?.filename ?? null,
-      appliedName: first?.documentNaming?.downloadName ?? null,
-      destination: first?.documentNaming?.destination ?? (record.linkedExpenseId ? `Despesa ${record.linkedExpenseId}` : record.resolution?.targetType ?? null),
-      statusLabel: record.status,
-      actorName: record.reviewedBy ?? null,
-      analysisMethod: extractionStatus === "ocr_extracted" ? "ocr" : extraction === "ai_document" ? "ai" : extraction ? "rule" : "unknown",
-      href: `/dashboard/financial/inbox?sourceId=${encodeURIComponent(record.id)}`,
-      detail: "Registro atual da caixa financeira; o anexo original permanece vinculado à origem.",
-    };
-  });
-  return { source: "financial", entries, partial: Boolean(result.nextCursor), nextCursor: result.nextCursor ?? undefined };
-}
-
-async function documentAuditHistory(actor: ServerUserContext, input: Input, source: "financial" | "employee_upload"): Promise<Result> {
-  const collection = source === "financial" ? financialDbAdmin.collection("financialInboxMessages") : hrDbAdmin.collection("documentUploadItems");
+async function documentAuditHistory(actor: ServerUserContext, input: Input, source: "employee_upload"): Promise<Result> {
+  const collection = hrDbAdmin.collection("documentUploadItems");
   const ref = collection.doc(input.documentId!);
   const doc = await ref.get();
   const missing = () => new AppError({ code: "DOCUMENT_TIMELINE_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Documento indisponível." });
   if (!doc.exists || doc.get("deletedAt") || doc.get("workspaceId") && doc.get("workspaceId") !== actor.workspace_id) throw missing();
   if (source === "employee_upload" && !await (await uploadAccessFilter(actor))(doc.data()!)) throw missing();
-  if (source === "financial" && doc.get("workspaceId") !== actor.workspace_id) throw missing();
   const branches: Array<{ id: "item" | "filed"; ref: FirebaseFirestore.CollectionReference }> = [{ id: "item", ref: ref.collection("audit") }];
   const filedId = doc.get("filedDocumentId");
   if (source === "employee_upload" && typeof filedId === "string" && filedId && !filedId.includes("/")) {
@@ -304,7 +260,7 @@ async function documentAuditHistory(actor: ServerUserContext, input: Input, sour
     title: text(doc.get("originalName")) ?? text(doc.get("subject")) ?? "Documento", subject: null, originalName: text(event.originalName), appliedName: text(event.appliedName) ?? text(event.storedName),
     destination: text(event.destination) ?? (Array.isArray(event.destinationTrail) ? event.destinationTrail.map(String).join(" / ") : null), statusLabel: null, actorName: text(event.actorName) ?? text(event.actorId),
     analysisMethod: event.analysisMethod === "rule" || event.analysisMethod === "ocr" || event.analysisMethod === "ai" ? event.analysisMethod : event.analysisModel === "not-run" ? "rule" : text(event.analysisModel) ? "ai" : null,
-    href: source === "financial" ? `/dashboard/financial/inbox?sourceId=${encodeURIComponent(doc.id)}` : `/dashboard/documents/collaborators?employeeId=${encodeURIComponent(String(doc.get("employeeId") ?? ""))}`,
+    href: `/dashboard/documents/collaborators?employeeId=${encodeURIComponent(String(doc.get("employeeId") ?? ""))}`,
     detail: text(event.documentTypeCode) ? `Tipo registrado: ${text(event.documentTypeCode)}` : null,
   }));
   const partial = next.item !== false || next.filed !== false;
@@ -312,6 +268,7 @@ async function documentAuditHistory(actor: ServerUserContext, input: Input, sour
 }
 
 export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
+  if (security.input.source === "financial") return NextResponse.json({ continuations: [], entries: [], warnings: ["O histórico da caixa financeira está disponível em Cobranças."], pageInfo: { hasMore: false, limit: security.input.limit } } satisfies CentralHistoryPage, { headers: { "Cache-Control": "private, no-store" } });
   const processHistory = async (source: "vacation" | "termination"): Promise<Result | null> => {
     if (!requested(security.input, source)) return null;
     const page = await documentProcessPage(security.actor, source, security.input.limit, security.input.cursor);
@@ -323,7 +280,6 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
     companyHistory(security.actor, security.input),
     employeeUploadHistory(security.actor, security.input),
     onboardingHistory(security.actor, security.input),
-    financialHistory(security.actor, security.input),
     processHistory("vacation"), processHistory("termination"),
   ]);
   const warnings: string[] = [];

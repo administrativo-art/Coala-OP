@@ -121,6 +121,7 @@ export type FinancialInboxDocumentType =
   | "other";
 
 export type FinancialInboxAttachment = {
+  destination?: { kind: "asset_invoice" | "non_asset_invoice"; assetIds: string[]; version: number; sha256: string; confirmedAt: string; confirmedBy: string; deletionState?: "pending" | "deleting" | "blocked" | "deleted"; deletedStoragePath?: string; storageGeneration?: string; recoveryUntil?: string };
   documentNaming?: { downloadName: string; documentType: string; reference: string; counterpartyId: string; expenseId: string; version: number; destination: string; confirmedAt?: string; confirmedBy?: string };
   id: string;
   filename: string;
@@ -365,6 +366,11 @@ export type FinancialInboxMessage = {
   mobileFiscalVerification?: MobileFiscalVerification | null;
   rawStoragePath: string | null;
   rawSha256: string | null;
+  rawArchiveState?: "original" | "redacting" | "redacted";
+  rawCurrentSha256?: string | null;
+  rawArchiveVersion?: number;
+  rawArchiveOperation?: { fileId: string; targetPath: string; targetGeneration: string; sidecars: Array<{ path: string; generation: string; sourceSha256: string | null }>; priorRawPath: string | null; priorRawGeneration: string | null; nextRawPath: string | null; nextRawSha256: string | null; recoveryUntil: string } | null;
+  documentAnalysisOperation?: { id: string; startedAt: string } | null;
   archiveWarnings: string[];
   linkedExpenseId: string | null;
   linkedProvisionId?: string | null;

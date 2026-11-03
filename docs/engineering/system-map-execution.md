@@ -1,3 +1,5 @@
+2026-11-03: fronteira Cobranças/Documentos revalidada em work-items, histórico, Acervo e pasta institucional; boleto na despesa e NF patrimonial ligados por IDs confirmados, sem cópias. O saneamento MIME foi testado localmente com conteúdo sintético; a exclusão integrada em Storage permanece pendente de ensaio em ambiente demo; banco real/provider/rollout não executados. Ver plano `plano-destinacao-documental-cobrancas.md`.
+
 # Acompanhamento do mapa técnico
 
 2026-11-03: linha documental do mapa → `flows/document-central` e `modules/documents-privacy` → ArchiveExplorer, sidebar, APIs de pasta própria/RH, políticas de publicação e acesso. Pasta publicada por pessoa usa somente o titular ou uma pessoa escolhida pelo DP autorizado; nenhum backfill. Testes dirigidos e E2E local registrados no chamado; `document-central` e `employee-documents` permanecem Traçado, sem certificar produção nesta alteração.

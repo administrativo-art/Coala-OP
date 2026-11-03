@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -178,6 +179,18 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     throw new Error("Cobrança recebida não encontrada.");
   }
   if (message.status === "ignored" || message.status === "archived") return message;
+  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
+  const analysisId = randomUUID();
+  const acquired = await financialDbAdmin.runTransaction(async (transaction) => {
+    const current = await transaction.get(messageRef);
+    if (!current.exists || current.get("workspaceId") !== message.workspaceId
+      || current.get("updatedAt") !== message.updatedAt
+      || current.get("rawArchiveOperation") || current.get("documentAnalysisOperation")) return false;
+    transaction.update(messageRef, { documentAnalysisOperation: { id: analysisId, startedAt: new Date().toISOString() } });
+    return true;
+  });
+  if (!acquired) return getFinancialInboxMessage(id);
+  try {
   const checkedAt = new Date().toISOString();
   const preliminaryTriage = triageFinancialInboxMessage({
     classification: message.classification, senderDomain: message.senderDomain,
@@ -416,7 +429,6 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   const persistedStatus = ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
     ? nextStatus
     : message.status;
-  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
   const targetExpense = automaticReminder
     ? expenseCandidates.find((candidate) => candidate.id === automaticReminder.resolution.targetId)
     : null;
@@ -425,7 +437,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     : id;
   const committed = await financialDbAdmin.runTransaction(async (transaction) => {
     const current = await transaction.get(messageRef);
-    if (!current.exists || !canCommitFinancialInboxAnalysis(message, {
+    if (!current.exists || current.get("documentAnalysisOperation")?.id !== analysisId || current.get("rawArchiveOperation") || !canCommitFinancialInboxAnalysis(message, {
       workspaceId: current.get("workspaceId"), status: current.get("status"),
       updatedAt: current.get("updatedAt"), linkedExpenseId: current.get("linkedExpenseId"),
       paymentRequestId: current.get("paymentRequestId"),
@@ -478,6 +490,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       retentionPolicyVersion: FINANCIAL_INBOX_RETENTION_POLICY_VERSION,
     } : {}),
     updatedAt: checkedAt,
+    documentAnalysisOperation: null,
     }, { merge: true });
   if (persistedStatus === "ignored" && message.status !== "ignored" && triage.kind === "noise") {
     transaction.set(messageRef.collection("events").doc("auto-marketing-v1"), {
@@ -619,6 +632,12 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       archivedFromStatus: "identified",
     } : {}),
   } as FinancialInboxMessage;
+  } finally {
+    await financialDbAdmin.runTransaction(async (transaction) => {
+      const current = await transaction.get(messageRef);
+      if (current.exists && current.get("documentAnalysisOperation")?.id === analysisId) transaction.update(messageRef, { documentAnalysisOperation: null });
+    });
+  }
 }
 
 export async function linkSuggestedInboxCharge(

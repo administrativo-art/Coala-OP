@@ -83,6 +83,8 @@ const child = spawn(
     "auth,firestore",
     process.argv.includes('--archive-company')
       ? 'npm run test:e2e:playwright -- tests/e2e/documents/archive.spec.ts --grep "Acervo mantém"'
+      : process.argv.includes('--billing-invoice-destinations')
+      ? 'npm run test:e2e:playwright -- tests/e2e/financial/inbox.spec.ts --grep "confirma NF sem patrimônio|NF patrimonial confirmada"'
       : process.argv.includes('--archive-sources')
       ? 'npm run test:e2e:playwright -- tests/e2e/documents/archive.spec.ts --grep "Colaboradores e Financeiro"'
       : process.argv.includes('--archive-access')
