@@ -20,7 +20,6 @@ const SOURCES: Array<{ value: HistorySource; label: string }> = [
   { value: "company", label: "Empresa" },
   { value: "employee_upload", label: "Uploads do dossiê" },
   { value: "onboarding", label: "Admissão" },
-  { value: "financial", label: "Financeiro" },
   { value: "vacation", label: "Férias" }, { value: "termination", label: "Desligamentos" },
 ];
 
@@ -29,7 +28,6 @@ const SOURCE_LABEL: Partial<Record<CentralDocumentSource, string>> = {
   company: "Empresa",
   employee_upload: "Dossiê do colaborador",
   onboarding: "Admissão",
-  financial: "Financeiro",
   vacation: "Férias", termination: "Desligamentos",
 };
 
@@ -55,7 +53,7 @@ export function DocumentHistoryWorkspace() {
   const { firebaseUser } = useAuth();
   const searchParams = useSearchParams();
   const [source, setSource] = useState<HistorySource>(() => SOURCES.find((entry) => entry.value === searchParams.get("source"))?.value ?? "all");
-  const [timelineDocument, setTimelineDocument] = useState<CentralDocumentRef | null>(() => ["company", "employee_upload", "financial"].includes(searchParams.get("source") ?? "") && searchParams.get("documentId") ? { source: searchParams.get("source") as CentralDocumentSource, sourceId: searchParams.get("documentId")! } : null);
+  const [timelineDocument, setTimelineDocument] = useState<CentralDocumentRef | null>(() => ["company", "employee_upload"].includes(searchParams.get("source") ?? "") && searchParams.get("documentId") ? { source: searchParams.get("source") as CentralDocumentSource, sourceId: searchParams.get("documentId")! } : null);
   const [payload, setPayload] = useState<CentralHistoryPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +127,7 @@ export function DocumentHistoryWorkspace() {
             {selected.recordKind === "current_snapshot" ? <div className="rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-600">Este item representa o estado atual disponível na origem. A central não criou eventos retroativos para ações que não foram registradas.</div> : null}
             <div className="grid gap-2 sm:grid-cols-2"><Value label="Documento ou processo" value={selected.title} /><Value label="Pessoa ou contraparte" value={selected.subject} /><Value label="Nome original" value={selected.originalName} /><Value label="Nome aplicado" value={selected.appliedName} /><Value label="Destino" value={selected.destination} /><Value label="Situação" value={selected.statusLabel} /><Value label="Responsável" value={selected.actorName} /><Value label="Análise" value={selected.analysisMethod ? METHOD_LABEL[selected.analysisMethod] : null} /></div>
             {selected.detail ? <div className="rounded-lg border bg-white p-3 text-[11px] leading-5 text-slate-600">{selected.detail}</div> : null}
-            {!timelineDocument && selected.documentRef && ["company", "employee_upload", "financial"].includes(selected.documentRef.source) ? <Button variant="ds-secondary" className="w-full" onClick={() => { setQuery(""); setTimelineDocument(selected.documentRef!); }}>Ver trilha do documento</Button> : null}
+            {!timelineDocument && selected.documentRef && ["company", "employee_upload"].includes(selected.documentRef.source) ? <Button variant="ds-secondary" className="w-full" onClick={() => { setQuery(""); setTimelineDocument(selected.documentRef!); }}>Ver trilha do documento</Button> : null}
             <Button asChild className="w-full bg-teal-700 hover:bg-teal-800"><Link href={selected.href}>Abrir na origem<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
           </div> : <div className="grid min-h-56 place-items-center text-center"><p className="text-xs text-slate-500">Selecione um registro para conferir os dados preservados.</p></div>}
         </aside>

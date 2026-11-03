@@ -212,6 +212,7 @@ export async function archiveFinancialInboxLinkedDocuments(message: FinancialInb
   ).length;
   for (const link of links) {
     const fingerprint = createHash("sha256").update(link).digest("hex");
+    if (attachments.some((attachment) => attachment.sourceFingerprint === fingerprint && attachment.destination?.kind === "non_asset_invoice")) continue;
     const resolved = await resolveUrl(link, message.senderDomain);
     last = resolved;
     if (resolved.kind !== "document") continue;

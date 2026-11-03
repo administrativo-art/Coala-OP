@@ -421,7 +421,7 @@ export default function CompanyDocumentsPage() {
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  if (!canView && !access.financial && !access.models && !access.people) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
+  if (!canView && !access.models && !access.people) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
   const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
@@ -442,7 +442,7 @@ export default function CompanyDocumentsPage() {
   function selectTimeRecordingFolder(section: TimeRecordingEvidenceSection | null = null) { navigateFolder(TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, section); }
 
   const unitFolders = categoryFilter === "all" ? [] : knownUnits.filter((unit) => documents.some((document) => companyDocumentNavigationCategory(document) === categoryFilter && document.unit === unit));
-  const visibleCategories = CATEGORIES.filter((category) => canView || category === "Financeiro" && access.financial);
+  const visibleCategories = CATEGORIES.filter(() => canView);
   const folders: ArchiveFolder[] = visibleCategories.flatMap((category) => [
     { id: category, name: companyArchiveFolderLabel(category), active: categoryFilter === category && !folderFilter && unitFilter === "all", open: () => selectCategory(category) },
     ...(categoryFilter === category ? [
@@ -478,7 +478,6 @@ export default function CompanyDocumentsPage() {
     ...fileEntries(filtered.filter((document) => !companyDocumentEvidenceSection(document))),
   ];
   else if (!folderFilter && unitFilter === "all") entries = [
-    ...(categoryFilter === "Financeiro" && access.financial ? (["identified", "archived"] as const).map((scope): ArchiveEntry => ({ id: "inbox:" + scope, name: scope === "identified" ? "Identificados" : "Arquivados", kind: "folder", description: "Documentos da caixa financeira", open: () => router.push(`/dashboard/documents/financial?scope=${scope}`) })) : []),
     ...(categoryFilter === TIME_RECORDING_COMPLIANCE_CATEGORY ? [{ id: "compliance", name: TIME_RECORDING_COMPLIANCE_LABEL, kind: "folder" as const, open: () => selectTimeRecordingFolder() }] : []),
     ...unitFolders.map((unit): ArchiveEntry => ({ id: "unit:" + unit, name: unit, kind: "folder", open: () => selectUnitWithinCategory(categoryFilter, unit) })),
     ...fileEntries(filtered.filter((document) => !document.unit && companyDocumentFolderCode(document) !== TIME_RECORDING_COMPLIANCE_FOLDER)),

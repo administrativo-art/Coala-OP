@@ -2,6 +2,10 @@
 
 **Base conferida:** incremento local `asset-lifecycle-2026-10-30`, sobre `413d2f49`. Rastreamento estático; sem homologação integrada nem migração em banco real.
 
+## Nota fiscal recebida por Cobranças — 03/11/2026
+
+Um anexo de NF patrimonial confirmado em Cobranças pode referenciar um ou mais ativos pelo ID imutável. `inboxInvoiceRefs` no ativo guarda somente IDs de mensagem/arquivo, hash, versão e hora; não duplica bytes nem substitui `documentUrl` de NF manual. A rota privada `/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]` exige `assets.view` e confere ativo, mensagem, workspace e destino recíproco antes de ler o Storage. O QR público não expõe esta referência ou o arquivo. Uma falha de projeção entre bancos pode ser reparada repetindo a mesma decisão em Cobranças; o leitor falha fechado até as duas referências existirem. Nenhuma inferência de patrimônio por nome/fornecedor/IA é aceita.
+
 ## Entrada, sequência e dados
 
 A [página principal](../../../src/app/dashboard/assets/page.tsx) e a [entrada financeira](../../../src/app/dashboard/financial/assets/page.tsx) montam [AssetManagement](../../../src/components/asset-management.tsx). O [AssetsProvider](../../../src/components/assets-provider.tsx) consulta APIs e listeners de `assets`/`assetCategories`. A [listagem](../../../src/app/api/assets/route.ts) exige `assets.view`, filtra `workspaceId`, limita a consulta a 500 registros e projeta ativos legados no modelo normalizado.

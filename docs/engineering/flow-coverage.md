@@ -1,3 +1,6 @@
+03/11/2026: destinação de anexos da caixa separa Cobranças de Fluxos/Histórico/Acervo, mantém Empresa → Financeiro institucional, acrescenta referência privada de NF patrimonial e exclusão por arquivo/EML saneado sob confirmação e guarda de soft delete. `document-central`, `assets` e `financial-inbox` permanecem Traçado até ensaio integrado e homologação externa.
+O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência de análise/descarte, sidecars v1/v2, falhas parciais MIME/Storage e permissões; `tests/e2e/financial/inbox.spec.ts` cobre confirmação, cancelamento, erro/retry e visualização do vínculo no patrimônio. O E2E novo segue em observação no CI, e a homologação externa permanece pendente.
+
 # Cobertura dos grupos de fluxo
 
 03/11/2026: Acervo publicado por titular acrescentado à raiz e à cobertura de `employee-documents`/`document-central`, reutilizando APIs próprias e RH sob acesso existente. Projeção de kit assinado exercitada com sete referências e homônimos distintos; E2E local dirigido passou para árvore/pasta própria/abas retiradas e perfil comum com download canônico. Paginação DP com página filtrada vazia, cursor e unidade passou em integração; teto bruto da pasta própria e troca de titular durante Carregar mais também. Permissões e fontes conferidas no código; publicação/ACL e arquivos não mudaram.

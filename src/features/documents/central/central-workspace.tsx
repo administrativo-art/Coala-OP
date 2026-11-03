@@ -26,7 +26,7 @@ import type { CentralDocumentDimensions, CentralWorkItem, CentralWorkPage, Centr
 
 const TABS: Array<{ value: CentralWorkTab; label: string; description: string; icon: typeof FileQuestion }> = [
   { value: "classify", label: "A classificar", description: "Arquivos recebidos que ainda precisam de confirmação.", icon: FileQuestion },
-  { value: "preparation", label: "Em preparação", description: "Documentos em revisão, finalização ou tratamento financeiro.", icon: FileCheck2 },
+  { value: "preparation", label: "Em preparação", description: "Documentos em revisão ou finalização.", icon: FileCheck2 },
   { value: "flows", label: "Fluxos", description: "Processos e requisitos, inclusive documentos ainda não recebidos.", icon: GitBranch },
   { value: "signatures", label: "Assinaturas", description: "Envios, falhas e trilhas que ainda não terminaram.", icon: Send },
 ];
