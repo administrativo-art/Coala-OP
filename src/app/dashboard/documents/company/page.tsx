@@ -10,8 +10,8 @@ import { Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 import { companyArchiveFolderLabel } from "@/lib/documents/company-archive-navigation";
 import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-categories";
 import { COMPANY_DOCUMENT_TYPES, companyIntakeName } from "@/lib/documents/company-document-intake";
@@ -119,6 +119,9 @@ export default function CompanyDocumentsPage() {
   const [moveSaving, setMoveSaving] = useState(false);
   const [moveError, setMoveError] = useState("");
   const [removeTarget, setRemoveTarget] = useState<CompanyDocument | null>(null);
+  const [removeStep, setRemoveStep] = useState<1 | 2>(1);
+  const [removeError, setRemoveError] = useState("");
+  const removeCancelRef = useRef<HTMLButtonElement>(null);
   const [removing, setRemoving] = useState(false);
   const access = useCompanyArchiveAccess();
   const canView = access.documents;
@@ -334,12 +337,13 @@ export default function CompanyDocumentsPage() {
       }
       if (action === "download") window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Falha ao acessar documento.");
+      if (sequence === null || sequence === previewSequence.current) setMessage(cause instanceof Error ? cause.message : "Falha ao acessar documento.");
     }
   }
 
   async function removeDocument(document: CompanyDocument) {
     if (!firebaseUser || removing) return;
+    setRemoveError("");
     setRemoving(true);
     try {
       const token = await firebaseUser.getIdToken();
@@ -347,8 +351,8 @@ export default function CompanyDocumentsPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao excluir documento.");
       setDocuments((current) => current.filter((item) => item.id !== document.id));
-      setRemoveTarget(null); setPreview(null);
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Falha ao excluir documento."); }
+      setRemoveTarget(null); setRemoveStep(1); setPreview(null);
+    } catch (cause) { setRemoveError(cause instanceof Error ? cause.message : "Falha ao excluir documento."); }
     finally { setRemoving(false); }
   }
 
@@ -454,14 +458,16 @@ export default function CompanyDocumentsPage() {
   if (access.people) folders.push({ id: "people", name: companyArchiveFolderLabel("Colaboradores"), open: () => router.push("/dashboard/documents/collaborators") });
   const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({
     id: document.id, name: document.title, kind: "file", description: document.standardizedName || document.originalName,
-    size: formatSize(document.size), modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
-    open: () => void accessDocument(document, "view"),
+    size: formatSize(document.size), sizeBytes: document.size, modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
+    modifiedAt: archiveTimestamp(document.uploadedAt),
+    open: () => void accessDocument(document, archivePreviewable(document.mimeType) ? "view" : "download"),
+    loadPreview: archivePreviewable(document.mimeType) ? () => void accessDocument(document, "view") : undefined,
     actions: [
       { label: "Baixar", run: () => void accessDocument(document, "download") },
       { label: "Ver histórico", run: () => router.push(`/dashboard/documents/history?source=company&documentId=${encodeURIComponent(document.id)}`) },
       ...(canManage && (document.status === "pending_classification" || document.category === "A classificar") ? [{ label: "Classificar documento", run: () => openClassification(document) }] : []),
       ...(canManage && (document.category === TIME_RECORDING_COMPLIANCE_CATEGORY || companyDocumentFolderCode(document) === TIME_RECORDING_COMPLIANCE_FOLDER) ? [{ label: "Mover para…", run: () => openMove(document) }] : []),
-      ...(canManage ? [{ label: "Excluir", destructive: true, run: () => setRemoveTarget(document) }] : []),
+      ...(canManage ? [{ label: "Excluir", destructive: true, run: () => { setRemoveError(""); setRemoveStep(1); setRemoveTarget(document); } }] : []),
     ],
   }));
   let entries: ArchiveEntry[];
@@ -490,21 +496,35 @@ export default function CompanyDocumentsPage() {
 
   return (
     <>
-      <ArchiveExplorer area="company" folders={folders} entries={entries} breadcrumbs={breadcrumbs} search={search} onSearch={setSearch} loading={canView && loading} error={message} onRefresh={() => void loadDocuments()} onUp={goUp} onRoot={selectAllDocuments}
+      <ArchiveExplorer area="company" selectionScope={JSON.stringify([categoryFilter, folderFilter, sectionFilter, unitFilter])} folders={folders} entries={entries} breadcrumbs={breadcrumbs} search={search} onSearch={setSearch} loading={canView && loading} error={message} onRefresh={() => void loadDocuments()} onUp={goUp} onRoot={selectAllDocuments}
         onSelect={() => { previewSequence.current++; setPreview(null); setRemoveTarget(null); }}
-        footer={canManage && removeTarget ? <InlineConfirm className="m-3" message={`Excluir “${removeTarget.title}”?`} confirmLabel="Excluir documento" loading={removing} onCancel={() => setRemoveTarget(null)} onConfirm={() => void removeDocument(removeTarget)} /> : null}
         toolbar={canManage ? <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-1 h-4 w-4" />Anexar</Button> : null}
         preview={(entry) => {
           const document = documents.find((item) => item.id === entry.id);
           if (!document) return <p className="text-xs text-slate-500">{entry.description || "Abra a pasta para consultar os arquivos."}</p>;
           return <div className="space-y-3 text-xs text-slate-600">
             {preview?.id === document.id && <ArchivePreview url={preview.url} mime={preview.mime} title={document.title} />}
-            <p className="break-all"><strong>Nome do arquivo</strong><br />{document.standardizedName || document.originalName}</p>
-            <p className="break-all"><strong>Nome original</strong><br />{document.originalName}</p>
-            <p>{formatSize(document.size)} · {document.mimeType}</p><p>Vencimento: {formatDate(document.expiresAt)}</p>
-            <p>Adicionado por {document.uploadedByName || "Sistema"}</p>
+            <details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2">
+              <p className="break-all"><strong>Nome do arquivo</strong><br />{document.standardizedName || document.originalName}</p>
+              <p className="break-all"><strong>Nome original</strong><br />{document.originalName}</p>
+              <p>{formatSize(document.size)} · {document.mimeType}</p><p>Vencimento: {formatDate(document.expiresAt)}</p>
+              <p>Adicionado por {document.uploadedByName || "Sistema"}</p>
+            </div></details>
           </div>;
         }} />
+
+      <Dialog open={Boolean(removeTarget)} onOpenChange={(open) => { if (!open && !removing) { setRemoveTarget(null); setRemoveStep(1); setRemoveError(""); } }}>
+        <DialogContent onOpenAutoFocus={(event) => { event.preventDefault(); removeCancelRef.current?.focus(); }}>
+          <DialogHeader><DialogTitle>{removeStep === 1 ? "Excluir documento?" : "Confirmar exclusão do arquivo"}</DialogTitle>
+            <DialogDescription>{removeStep === 1 ? <>Confira o arquivo “{removeTarget?.title}”. Esta ação remove o registro da Empresa e o arquivo armazenado.</> : <>Você confirma a exclusão de “{removeTarget?.title}”? O arquivo armazenado será removido.</>}</DialogDescription>
+          </DialogHeader>
+          {removeError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{removeError}</p>}
+          <DialogFooter><Button ref={removeCancelRef} type="button" variant="outline" disabled={removing} onClick={() => { setRemoveTarget(null); setRemoveStep(1); setRemoveError(""); }}>Cancelar</Button>
+            {removeStep === 1 ? <Button type="button" variant="outline" onClick={() => { setRemoveStep(2); requestAnimationFrame(() => removeCancelRef.current?.focus()); }}>Continuar</Button>
+              : <Button type="button" variant="destructive" disabled={removing} onClick={() => { if (removeTarget) void removeDocument(removeTarget); }}>{removing ? "Excluindo…" : "Excluir definitivamente"}</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <datalist id={UNITS_DATALIST_ID}>
         {knownUnits.map((unitName) => <option key={unitName} value={unitName} />)}
