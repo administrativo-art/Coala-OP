@@ -13,7 +13,9 @@ A promoção admissional legada copiava o PDF completo para cada componente. A p
 3. Cobrir assinatura antes/depois da ativação, retomada, hash divergente, ausência de cópia física e remoção autorizada/indevida em emuladores. Não enviar documentos ao provedor real.
 4. Revisão Doc Brown antes do commit, CI e promoção main → production → App Hosting, com confirmação de SHA, rollout e tráfego.
 
-## Limpeza histórica — pendente, operação separada
+## Limpeza histórica — operação separada, concluída em 03/11/2026
+
+Estado posterior verificado por TARS no registro privado da operação: limpeza auditada de 35 objetos duplicados, 41.033.526 bytes e 16 referências; um comprovante de endereço interno foi tratado no mesmo trabalho. Estes números são o resultado comunicado da operação, não reexecução ou conferência de Storage neste checkout documental. O pré-voo, logs e referências exatas pertencem ao registro privado da operação. Não foram unidos eventos distintos por nome/CPF. A cronologia e os critérios abaixo permanecem como registro do procedimento, não como pendência atual.
 
 Autorização posterior do programador em 02/11/2026: organizar os documentos e remover as cópias, concluindo esta frente antes de iniciar documentação global ou outra trilha. A limpeza continua sendo uma operação auditada própria, posterior à validação do código e ao pré-voo de referências, hashes, acesso e recuperação. Não autoriza fundir registros de pessoas diferentes por semelhança ou apagar artefatos distintos.
 
@@ -23,6 +25,6 @@ Uploads da coleta admissional e suas versões exigem análise própria de tokens
 
 ## Contratos legados e pendências
 
-A API legada de employee-documents mantém autenticação de gestão e unidade. A exceção temporária explícita em security-contract-exceptions expira em 16/11/2026; migração integral de GET/POST/PATCH/DELETE para secureRoute continua pendente e não é substituída pela proteção física do assinado. Nenhuma permissão nova foi criada. A limpeza real só será executada após o pré-voo e a revisão próprios, com a autorização posterior registrada acima.
+A API legada de employee-documents mantém autenticação de gestão e unidade. A exceção temporária explícita em security-contract-exceptions expira em 16/11/2026; migração integral de GET/POST/PATCH/DELETE para secureRoute continua pendente e não é substituída pela proteção física do assinado. Nenhuma permissão nova foi criada. A limpeza real foi encerrada em frente separada em 03/11/2026, conforme estado acima.
 
 Estado em 02/11/2026: implementação de armazenamento revisada por Doc Brown, testes dirigidos e integração em emuladores aprovados; publicação e limpeza histórica em andamento. Os ajustes visuais e as instruções/catálogo globais ficam em entregas sequenciais posteriores, sem alterações de patrimônio neste worktree.
