@@ -24,6 +24,7 @@ import {
 import { matchEmployeeAgainstExpected } from "@/lib/hr/employee-document-match";
 import { isPublishedToEmployee } from "@/lib/hr/employee-document-publication";
 import { loadExpectedIdentity, employeeCodeFrom, hashBuffer } from "@/lib/hr/employee-document-identity";
+import { confirmedSubjectKeysForIdentifier } from "@/features/privacy/person-lookup.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,7 @@ async function saveEmployeeDocument(input: {
   file: File;
 }): Promise<SaveResult> {
   const { access, employeeId, candidateId, extractedFields, file } = input;
+  const subjectKeys = await confirmedSubjectKeysForIdentifier(employeeId);
   if (!isAllowedEmployeeDocumentMimeType(file.type) || file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) {
     throw new Error("Envie PDF, DOC, DOCX, JPG ou PNG de até 15 MB.");
   }
@@ -150,6 +152,7 @@ async function saveEmployeeDocument(input: {
   const now = Timestamp.now();
   const payload = {
     employeeId, candidateId,
+    subjectKeys,
     category: config.category,
     documentType: config.label,
     documentTypeCode: config.code,

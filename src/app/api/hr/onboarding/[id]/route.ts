@@ -1,3 +1,6 @@
+import { provisionOnboardingAuth, checkpointOnboardingIdentities } from "@/features/privacy/onboarding-provisioning.server";
+import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
+import { onboardingOrigin, readOnboardingPerson } from "@/features/privacy/onboarding-person";
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -30,6 +33,7 @@ import {
   resolvedPdvOnboardingAlert,
 } from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
+import { confirmedSubjectKeysForDocument } from '@/features/privacy/person-lookup.server';
 import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
@@ -431,23 +435,6 @@ function mergeDocumentStatuses(
   });
 }
 
-async function getOrCreateAuthUser(email: string, displayName: string) {
-  try {
-    return { user: await authAdmin.getUserByEmail(email), created: false };
-  } catch {
-    return {
-      user: await authAdmin.createUser({
-      email,
-      password: makeInternalPassword(),
-      displayName,
-      emailVerified: false,
-      disabled: false,
-      }),
-      created: true,
-    };
-  }
-}
-
 async function mergeOnboardingEmploymentUser(userId: string, patch: Record<string, unknown>) {
   return dbAdmin.runTransaction(async (transaction) => {
     const ref = dbAdmin.collection('users').doc(userId);
@@ -486,13 +473,13 @@ async function createPjUserFromOnboarding(params: {
   if (!profileDocument.exists || profileDocument.get('isDefaultAdmin') === true) throw new Error('Perfil de acesso inválido para a prestadora.');
   if (unitDocuments.some(document => !document.exists || document.get('isArchived') === true)) throw new Error('Uma das unidades de acesso não está disponível.');
 
-  const authResult = await getOrCreateAuthUser(email, name);
+  const authResult = await provisionOnboardingAuth(params, email, name, makeInternalPassword());
   const authUser = authResult.user;
   if (!authResult.created) {
     const existing = await dbAdmin.collection('users').doc(authUser.uid).get();
     const existingSource = asString(existing.get('source'));
     const existingOnboardingId = asString(existing.get('onboardingId'));
-    if (existing.exists && existingSource !== 'recruitment_onboarding' && existingOnboardingId !== params.processId) {
+    if (existing.exists && (existingSource !== 'recruitment_onboarding' || existingOnboardingId !== params.processId)) {
       throw new Error('Já existe um usuário com este e-mail. Revise o cadastro antes de criar o acesso.');
     }
   }
@@ -515,7 +502,9 @@ async function createPjUserFromOnboarding(params: {
     providerCnpj: workflow.provider.cnpj,
     providerLegalName: workflow.provider.legalName,
     source: 'recruitment_onboarding',
-    recruitmentCandidateId: asString(params.process.candidateId),
+    recruitmentCandidateId: onboardingOrigin(params.process) === 'recruitment' ? asString(params.process.candidateId) : null,
+    onboardingProvisioningId: authResult.checkpoint.operationId,
+    onboardingPersonRef: readOnboardingPerson(params.process, params.processId)?.ref ?? null,
     onboardingId: params.processId,
     profileCompliance: {
       status: 'pending', policyVersion: 1, missingFields: [], invalidFields: [],
@@ -528,6 +517,9 @@ async function createPjUserFromOnboarding(params: {
   await hrDbAdmin.collection('employees').doc(authUser.uid).set({
     auth_uid: authUser.uid,
     source_user_id: authUser.uid,
+    onboardingId: params.processId,
+    onboardingProvisioningId: authResult.checkpoint.operationId,
+    onboardingPersonRef: readOnboardingPerson(params.process, params.processId)?.ref ?? null,
     source: 'recruitment_onboarding',
     name,
     email,
@@ -546,6 +538,7 @@ async function createPjUserFromOnboarding(params: {
     created_at: startTimestamp,
     updated_at: startTimestamp,
   }, { merge: true });
+  await checkpointOnboardingIdentities(params.processId, authUser.uid, authUser.uid);
   await ensureEmployeeDocumentFolderProfile({
     employeeId: authUser.uid,
     relationshipType: 'pj',
@@ -585,17 +578,6 @@ async function createCollaboratorFromOnboarding(params: {
   const email = normalizeEmail(params.process.candidateEmail);
   if (!email) throw new Error('Candidato sem e-mail para criação do usuário.');
 
-  const authResult = await getOrCreateAuthUser(email, name);
-  const authUser = authResult.user;
-  if (!authResult.created) {
-    const existingUserDoc = await dbAdmin.collection('users').doc(authUser.uid).get();
-    const existingUser = existingUserDoc.data() ?? {};
-    const existingSource = asString(existingUser.source);
-    const existingOnboardingId = asString(existingUser.onboardingId);
-    if (existingUserDoc.exists && existingSource !== 'recruitment_onboarding' && existingOnboardingId !== params.processId) {
-      throw new Error('Já existe um usuário com este e-mail. Revise o cadastro antes de criar o colaborador.');
-    }
-  }
   const now = new Date().toISOString();
   const admissionTimestamp = timestampFromDateString(params.process.expectedAdmissionDate);
   const unitId = asString(params.process.unitId);
@@ -649,6 +631,17 @@ async function createCollaboratorFromOnboarding(params: {
     throw new Error('O perfil de acesso configurado no cargo ou função não existe.');
   }
 
+  const authResult = await provisionOnboardingAuth(params, email, name, makeInternalPassword());
+  const authUser = authResult.user;
+  if (!authResult.created) {
+    const existingUserDoc = await dbAdmin.collection('users').doc(authUser.uid).get();
+    const existingUser = existingUserDoc.data() ?? {};
+    const existingSource = asString(existingUser.source);
+    const existingOnboardingId = asString(existingUser.onboardingId);
+    if (existingUserDoc.exists && (existingSource !== 'recruitment_onboarding' || existingOnboardingId !== params.processId)) {
+      throw new Error('Já existe um usuário com este e-mail. Revise o cadastro antes de criar o colaborador.');
+    }
+  }
   const employeeId = authUser.uid;
   const relationship = isEmploymentRelationshipType(params.process.employmentRelationshipType)
     ? params.process.employmentRelationshipType
@@ -686,7 +679,9 @@ async function createCollaboratorFromOnboarding(params: {
     admissionDate: admissionTimestamp,
     mustChangePassword: true,
     source: 'recruitment_onboarding',
-    recruitmentCandidateId: asString(params.process.candidateId),
+    recruitmentCandidateId: onboardingOrigin(params.process) === 'recruitment' ? asString(params.process.candidateId) : null,
+    onboardingProvisioningId: authResult.checkpoint.operationId,
+    onboardingPersonRef: readOnboardingPerson(params.process, params.processId)?.ref ?? null,
     onboardingId: params.processId,
     updatedAt: now,
     createdAt: now,
@@ -701,6 +696,9 @@ async function createCollaboratorFromOnboarding(params: {
     bizneo_employee_id: employeeId,
     auth_uid: authUser.uid,
     source_user_id: authUser.uid,
+    onboardingId: params.processId,
+    onboardingProvisioningId: authResult.checkpoint.operationId,
+    onboardingPersonRef: readOnboardingPerson(params.process, params.processId)?.ref ?? null,
     source: 'recruitment_onboarding',
     name,
     email,
@@ -887,6 +885,7 @@ async function createCollaboratorFromOnboarding(params: {
       extractedFields: { employeeName, admissionDate },
     });
   }
+  await checkpointOnboardingIdentities(params.processId, authUser.uid, employeeId);
   const retainedSourceDocumentIds = archivalDocuments.map((document) => document.id);
   const promotedDocuments = await promoteApprovedOnboardingDocuments({
     onboardingId: params.processId,
@@ -949,7 +948,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
   const snap = await ref.get();
   if (!snap.exists) return jsonError('Onboarding não encontrado.', 404);
 
-  const process = snap.data() ?? {};
+  let process = snap.data() ?? {};
   if (process.status === 'cancelled') {
     return jsonError('Esta integração foi encerrada e está disponível somente para consulta.', 409);
   }
@@ -1194,6 +1193,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     update.publicTokenExtendedAt = now;
     update.publicTokenExtendedBy = access.decoded.uid;
   } else if (action === 'create_collaborator') {
+    process = await prepareOnboardingPersonForWrite(id);
     const isPj = process.employmentRelationshipType === 'pj';
     const pjWorkflow = process.pjWorkflow && typeof process.pjWorkflow === 'object' && !Array.isArray(process.pjWorkflow)
       ? process.pjWorkflow as PjOnboardingWorkflow
@@ -1211,7 +1211,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     if (!isPj && (!asRecord(process.finalizationSettings) || Object.keys(asRecord(process.finalizationSettings)).length === 0)) {
       return jsonError('Salve a validação final antes de criar o colaborador.', 400);
     }
-    if (asString(process.collaboratorUserId)) {
+    if (asString(process.collaboratorUserId) && (!asRecord(process.personProvisioning).uid || asRecord(process.personProvisioning).state === 'complete')) {
       return jsonError('O cadastro deste colaborador já foi criado.', 409);
     }
     const accessRecipient = normalizeEmail(process.candidateEmail);
@@ -1230,6 +1230,8 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     if (process.probationV2) update.probationV2 = { ...asRecord(process.probationV2), employmentCycleVersion: Number(employmentCycleSnapshot.get('employmentCycleVersion') ?? 0) };
     update.collaboratorUserId = created.userId;
     update.employeeId = created.employeeId;
+    update.subjectKeys = await confirmedSubjectKeysForDocument(isPj ? null : created.employeeId, id);
+    update.personProvisioning = { ...asRecord((await ref.get()).get('personProvisioning')), state: 'complete' };
     update.documents = created.promotedDocuments.documents;
     update.documentPromotion = {
       status: 'completed',

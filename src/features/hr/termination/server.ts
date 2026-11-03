@@ -1,5 +1,6 @@
 import "server-only";
 import { buildSignatureDocumentName, buildSignatureFileName } from "@/features/hr/documents/signature-document-name";
+import { signaturePersonFields } from "@/features/privacy/signature-person-fields";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { renderToBuffer } from "react-pdf-renderer-server";
@@ -1208,6 +1209,7 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
   });
   await Promise.all([
     signatureRequestRef.set({
+      ...signaturePersonFields({ subject: { namespace: "main.users", id: process.employeeId }, employeeSigns: true, companySignerUserId: companySignatory.userId, actorUserId: params.context.userDoc.id }),
       terminationId: process.id,
       terminationDocumentId: documentId,
       purpose: "employer_dismissal_notice",
@@ -1432,6 +1434,7 @@ export async function reviewTerminationLetter(params: {
   });
   await Promise.all([
     signatureRequestRef.set({
+      ...signaturePersonFields({ subject: { namespace: "main.users", id: process.employeeId }, employeeSigns: true, actorUserId: params.context.userDoc.id }),
       terminationId: process.id,
       purpose: "termination_request_identity",
       employeeId: process.employeeId,
@@ -2544,6 +2547,7 @@ export async function sendPjTerminationAgreementForSignature(params: { context: 
   const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc();
   const signatureDocumentName = buildSignatureDocumentName({ department: "RH", documentType: "Distrato de prestação de serviços", holderName: contract.provider.legalName });
   await requestRef.set({
+    ...signaturePersonFields({ subject: { namespace: "main.users", id: process.employeeId }, actorUserId: params.context.userDoc.id }),
     source: "pj_termination_agreement",
     documentName: signatureDocumentName,
     terminationId: process.id,
@@ -2626,7 +2630,7 @@ export async function sendTerminationDocumentsForSignature(params: { context: Se
       message: "Confira e assine os documentos do seu desligamento.",
       signers,
     });
-    await hrDbAdmin.collection("hrSignatureRequests").add({ terminationId: process.id, terminationDocumentId: document.id, purpose: "termination_final_document", status: "sent", provider: "autentique", providerDocumentId: provider.document.id, documentStoragePath: document.storagePath, signatureMode, employerEntityId: employer.entityId, employerCnpj: employer.cnpj, companySignatoryUserId: companySignatory?.userId ?? null, companySignatoryEmail: companySignatory?.email ?? null, createdAt: now, updatedAt: now });
+    await hrDbAdmin.collection("hrSignatureRequests").add({ ...signaturePersonFields({ subject: { namespace: "main.users", id: process.employeeId }, employeeSigns: signatureMode === "employee" || signatureMode === "both", companySignerUserId: signatureMode === "company" || signatureMode === "both" ? companySignatory?.userId : null, actorUserId: params.context.userDoc.id }), terminationId: process.id, terminationDocumentId: document.id, purpose: "termination_final_document", status: "sent", provider: "autentique", providerDocumentId: provider.document.id, documentStoragePath: document.storagePath, signatureMode, employerEntityId: employer.entityId, employerCnpj: employer.cnpj, companySignatoryUserId: companySignatory?.userId ?? null, companySignatoryEmail: companySignatory?.email ?? null, createdAt: now, updatedAt: now });
   }
   const steps = patchStep(process.steps, "signatures", { status: "waiting_external", startedAt: process.steps.find((step) => step.id === "signatures")?.startedAt ?? now });
   const updated = await saveTermination({ ...process, steps, lastActivityAt: now, updatedAt: now });
