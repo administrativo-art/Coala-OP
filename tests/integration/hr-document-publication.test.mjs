@@ -9,7 +9,7 @@ const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { autoPublishDocument, changeDocumentPublication, changeEmployeeDocumentStatus, classifyLegacyEmployeeDocument,
-  listOwnPublishedDocuments, openOwnPublishedDocument, saveDocumentPublicationPolicies } = await import('../../src/features/hr/documents/publication.server.ts');
+  listOwnPublishedDocuments, listOwnPublishedDocumentsPage, openOwnPublishedDocument, saveDocumentPublicationPolicies } = await import('../../src/features/hr/documents/publication.server.ts');
 
 test('pasta do colaborador: só o titular, só o publicado; só o DP publica e retira', async () => {
   const prefix = `pub-${randomUUID().slice(0, 6)}`;
@@ -90,4 +90,34 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
   assert.equal(policies.find((item) => item.code === 'UNKNOWN_DOCUMENT').policy.mode, 'never');
   await assert.rejects(saveDocumentPublicationPolicies(scopedDp, { PAYSLIP: { mode: 'manual', trigger: 'validated' } }, deps),
     { code: 'EMPLOYEE_DOCUMENT_PUBLICATION_POLICY_GLOBAL_FORBIDDEN' });
+});
+
+test('pasta própria projeta sete referências do mesmo kit em uma entrada sem fundir homônimos', async () => {
+  const prefix = `kit-${randomUUID().slice(0, 8)}`;
+  const owner = {decoded:{uid:`${prefix}-owner`},userDoc:{id:`${prefix}-owner`},permissions:structuredClone(defaultGuestPermissions),isDefaultAdmin:false,workspace_id:'coala-one'};
+  const base = {employeeId:owner.decoded.uid,source:'autentique_signature',documentTypeCode:'ADMISSION_PACKAGE',contentHash:'a'.repeat(64),
+    signatureRequestId:`${prefix}-signature`,sourceOnboardingId:`${prefix}-intake`,mimeType:'application/pdf',size:100,
+    category:'admission',accessLevel:'restricted',accessPolicyId:'HR_RESTRICTED',status:'received',version:1,
+    originalName:'Kit.pdf',displayName:'Kit de admissão',storagePath:`${prefix}/canonical.pdf`,deletedAt:null};
+  const collection = hrDbAdmin.collection('employeeDocuments');
+  await Promise.all([
+    ...Array.from({length:7},(_,index) => collection.doc(`${prefix}-ref-${index}`).set({...base,publication:{status:'published',at:`2026-11-0${index+1}`,by:'dp',source:'manual'}})),
+    collection.doc(`${prefix}-other-content`).set({...base,contentHash:'b'.repeat(64),publication:{status:'published',at:'2026-11-08',by:'dp',source:'manual'}}),
+    collection.doc(`${prefix}-private`).set({...base,publication:{status:'withdrawn',at:'2026-11-09',by:'dp',source:'manual'}}),
+    collection.doc(`${prefix}-other-owner`).set({...base,employeeId:`${prefix}-other`,publication:{status:'published',at:'2026-11-10',by:'dp',source:'manual'}}),
+  ]);
+  const visible = await listOwnPublishedDocuments(owner,{hrDb:hrDbAdmin});
+  assert.deepEqual(visible.map(document => document.id).sort(),[`${prefix}-other-content`,`${prefix}-ref-0`].sort());
+  assert.ok(visible.every(document => !('storagePath' in document) && !('contentHash' in document)));
+});
+
+test('teto da pasta própria é medido nos registros brutos antes de agrupar', async () => {
+  const context = {decoded:{uid:'limit-owner'},userDoc:{id:'limit-owner'},permissions:structuredClone(defaultGuestPermissions),isDefaultAdmin:false,workspace_id:'coala-one'};
+  const rows = Array.from({length:501},(_,index) => ({id:`doc-${index}`,data:() => ({employeeId:'limit-owner',documentTypeCode:'VACATION_NOTICE',displayName:'Aviso',publication:{status:'published',at:'2026-11-03',by:'dp',source:'manual'}})}));
+  let requestedLimit = 0;
+  const query = {where(){return this;},limit(value){requestedLimit=value;return this;},async get(){return {docs:rows.slice(0,requestedLimit)};}};
+  const page = await listOwnPublishedDocumentsPage(context,{hrDb:{collection:() => query}});
+  assert.equal(requestedLimit,501);
+  assert.equal(page.documents.length,500);
+  assert.equal(page.limitReached,true);
 });

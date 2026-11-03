@@ -15,6 +15,7 @@ import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-te
 import type { OnboardingDocument } from "@/types";
 import { EMPLOYEE_DOCUMENT_CATEGORIES, resolveEmployeeDocumentFolderPath } from "@/lib/hr/employee-document-options";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
+import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 
 type Document = { id: string; category: string; documentType?: string; documentTypeCode?: string; originalName: string; storedName?: string; displayName?: string; mimeType?: string; size?: number; uploadedAt?: string; destinationTrail?: string[]; archivePath?: string[]; source?: "generated" | "onboarding" | "autentique_signature"; employeeId?: string; contentHash?: string; signatureRequestId?: string; sourceOnboardingId?: string; accessLevel?: string; accessPolicyId?: string; publication?: unknown; resolvedVisibility?: unknown; archiveReferences?: string[]; archiveSourceNames?: string[]; sourceId?: string; pdfAvailable?: boolean; originHref?: string };
 function downloadName(document: Document) {
@@ -106,6 +107,7 @@ export function ArchiveEmployees() {
     if (!firebaseUser || !employee) return;
     if (document.source === "onboarding") { if (document.originHref) router.push(document.originHref); return; }
     const request = ++fileSequence.current;
+    setError(null);
     try {
       const token = await firebaseUser.getIdToken();
       const response = document.source === "generated"
@@ -117,7 +119,7 @@ export function ArchiveEmployees() {
       const url = URL.createObjectURL(blob);
       if (download) { const link = window.document.createElement("a"); link.href = url; link.download = downloadName(document); link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 60_000); }
       else setPreview({ id: document.id, url, mime: blob.type });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
+    } catch (cause) { if (request === fileSequence.current) setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
   }
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const scoped = documents.filter((document) => path.every((segment, index) => folderPath(document)[index] === segment));
@@ -125,13 +127,13 @@ export function ArchiveEmployees() {
   const entries: ArchiveEntry[] = !employeeId ? people.filter((person) => person.username.toLocaleLowerCase("pt-BR").includes(term)).map((person) => ({ id: person.id, name: person.username, kind: "folder", description: person.isActive === false ? "Desligado" : "Colaborador", open: () => navigate(person.id) }))
     : !employee ? [] : [
       ...(!term ? childFolders.map((name): ArchiveEntry => ({ id: "folder:" + name, name, kind: "folder", open: () => navigate(employeeId, [...path, name]) })) : []),
-      ...scoped.filter((document) => term ? `${document.displayName || document.documentType || ""} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: document.displayName || document.documentType || document.originalName, kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, open: () => void access(document), actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : [])] })),
+      ...scoped.filter((document) => term ? `${document.displayName || document.documentType || ""} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: document.displayName || document.documentType || document.originalName, kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, sizeBytes: document.size, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, modifiedAt: archiveTimestamp(document.uploadedAt), open: () => void access(document, !(document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType))), loadPreview: document.source !== "onboarding" && (document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType)) ? () => void access(document) : undefined, actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : [])] })),
     ];
-  return <ArchiveExplorer area="collaborators" entries={canView ? entries : []} search={search} onSearch={setSearch} loading={loading} error={!canView ? "Sem permissão para consultar as pastas da equipe." : employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
+  return <ArchiveExplorer area="collaborators" selectionScope={JSON.stringify([employeeId, path])} entries={canView ? entries : []} search={search} onSearch={setSearch} loading={loading} error={!canView ? "Sem permissão para consultar as pastas da equipe." : employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
     breadcrumbs={employee ? [{ name: employee.username, open: () => navigate(employeeId) }, ...path.map((name, index) => ({ name, open: () => navigate(employeeId, path.slice(0, index + 1)) }))] : []}
     folders={employee ? childFolders.map((name) => ({ id: name, name, open: () => navigate(employeeId, [...path, name]) })) : []}
     onRoot={() => navigate(null)} onUp={() => path.length ? navigate(employeeId, path.slice(0, -1)) : employeeId ? navigate(null) : router.push(companyArchiveHref())}
     onRefresh={() => void load()} onSelect={() => { fileSequence.current++; setPreview(null); }}
     toolbar={employee && (permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit) ? <Button size="sm" variant="outline" onClick={() => router.push(`/dashboard/dp/collaborators/${encodeURIComponent(employee.id)}/documents`)}>Gerenciar pasta</Button> : null}
-    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<p className="break-all">{entry.description}</p>{(documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length ?? 0) > 1 && <p>O mesmo Kit admissional possui {documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length} referências de origem. Os registros e os arquivos permanecem preservados.</p>}</div>} />;
+    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">{entry.description}</p>{(documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length ?? 0) > 1 && <p>{documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length} referências ao mesmo kit assinado, agrupadas nesta visualização.</p>}</div></details></div>} />;
 }

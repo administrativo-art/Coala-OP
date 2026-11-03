@@ -186,6 +186,25 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
   const signIn = await fetch(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${uid}@example.test`, password: "synthetic-test-password", returnSecureToken: true }) });
   assert.equal(signIn.ok, true);
   const { idToken } = await signIn.json();
+  await t.test("projeção RH publicada pagina mesmo com página filtrada vazia e mantém unidade", async () => {
+    const base = { employeeId, category:"admission", documentTypeCode:"ADMISSION_PACKAGE", storagePath:"private/fixture.pdf",
+      publication:{status:"published",at:"2026-11-03",by:uid,source:"manual"}, deletedAt:null };
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-a`,{...base,deletedAt:"2026-11-03"});
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-b`,base);
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-c`,base);
+    const read = (params) => employeeDocuments.GET(new NextRequest(`http://localhost/api/hr/employee-documents?${new URLSearchParams({employeeId,publishedOnly:"1",limit:"1",...params})}`, {headers:{Authorization:`Bearer ${idToken}`}}));
+    const first = await read({}); assert.equal(first.status,200);
+    const firstPage = await first.json(); assert.equal(firstPage.documents.length,0); assert.ok(firstPage.nextCursor);
+    const second = await read({cursor:firstPage.nextCursor}); assert.equal(second.status,200);
+    const secondPage = await second.json(); assert.deepEqual(secondPage.documents.map(doc => doc.id),[`${uid}-page-b`]); assert.ok(secondPage.nextCursor);
+    const third = await read({cursor:secondPage.nextCursor}); assert.equal(third.status,200);
+    const thirdPage = await third.json(); assert.deepEqual(thirdPage.documents.map(doc => doc.id),[`${uid}-page-c`]); assert.equal(thirdPage.nextCursor,null);
+    assert.equal((await read({limit:"101"})).status,400);
+    assert.equal((await read({cursor:"bad/cursor"})).status,400);
+    await person.update({unitIds:["central-unit-b"]});
+    assert.equal((await read({})).status,403);
+    await person.update({unitIds:["central-unit-a"]});
+  });
   await t.test("remover assinado do Acervo preserva o original compartilhado e revalida gestão/unidade", async () => {
     const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
     const path = `central-integration/${uid}/shared-signed.pdf`;

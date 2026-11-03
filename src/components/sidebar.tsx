@@ -20,7 +20,7 @@ import { BellRing,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
-  Files, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale, Clock3} from "lucide-react";
+  Files, FileStack, Archive, WandSparkles, GitBranch, History, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale, Clock3} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
 interface NavItem {
@@ -226,23 +226,19 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           {
             label: "Acervo",
             href: "/dashboard/documents",
-            icon: Files,
-            show: hasFormalizationPermission(permissions, "companyDocuments.view")
-              || hasFormalizationPermission(permissions, "templates.view")
-              || hasFormalizationPermission(permissions, "documents.view")
-              || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view)
-              || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly),
+            icon: Archive,
+            show: true,
           },
           {
             label: "Gerador de documentos",
             href: "/dashboard/documents/generator",
-            icon: FileStack,
+            icon: WandSparkles,
             show: hasFormalizationPermission(permissions, "documents.generate") || hasFormalizationPermission(permissions, "templates.view"),
           },
           {
             label: "Fluxos e pendências",
             href: "/dashboard/documents/generated",
-            icon: FileStack,
+            icon: GitBranch,
             show: hasFormalizationPermission(permissions, "documents.view")
               || hasFormalizationPermission(permissions, "signatures.view")
               || hasFormalizationPermission(permissions, "companyDocuments.view")
@@ -254,7 +250,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           {
             label: "Histórico",
             href: "/dashboard/documents/history",
-            icon: Clock3,
+            icon: History,
             show: hasFormalizationPermission(permissions, "documents.view")
               || hasFormalizationPermission(permissions, "companyDocuments.view")
               || hasFormalizationPermission(permissions, "view")
