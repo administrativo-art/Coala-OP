@@ -21,8 +21,12 @@ import {
   updateSecurityIncident,
 } from "@/features/privacy/client";
 import type { PrivacyRequest, SecurityIncident } from "@/features/privacy/types";
+import { readSubjectRef, type SubjectRef } from "@/features/privacy/person-subject";
+import { sortByTitle, type TitleSortDirection } from "@/lib/sort-by-title";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { PersonInventoryPanel } from "./person-inventory-panel";
+import { PersonReferenceFields, personNamespaceLabels } from "./person-reference-fields";
 
 const requestTypeLabels: Record<string, string> = {
   access: "Acesso",
@@ -76,6 +80,8 @@ const emptyRequestForm = {
   dueAt: "",
   owner: "",
   description: "",
+  subjectNamespace: "",
+  subjectId: "",
 };
 
 const emptyIncidentForm = {
@@ -105,10 +111,16 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [requestForm, setRequestForm] = useState(emptyRequestForm);
   const [incidentForm, setIncidentForm] = useState(emptyIncidentForm);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [inventoryRef, setInventoryRef] = useState<SubjectRef | null>(null);
+  const [direction, setDirection] = useState<TitleSortDirection>("asc");
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [requestPayload, incidentPayload] = await Promise.all([
         fetchPrivacyRequests(firebaseUser),
@@ -117,15 +129,11 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
       setRequests(requestPayload.requests);
       setIncidents(incidentPayload.incidents);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Falha ao carregar governança",
-        description: error instanceof Error ? error.message : "Tente novamente.",
-      });
+      setLoadError(error instanceof Error ? error.message : "Falha ao carregar governança. Tente novamente.");
     } finally {
       setLoading(false);
     }
-  }, [firebaseUser, toast]);
+  }, [firebaseUser]);
 
   useEffect(() => {
     void load();
@@ -153,7 +161,10 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
     setSubmitting(true);
     try {
       if (kind === "requests") {
-        const payload = await createPrivacyRequest(firebaseUser, requestForm);
+        const { subjectNamespace, subjectId, ...input } = requestForm;
+        const subjectRef = subjectNamespace ? readSubjectRef({ namespace: subjectNamespace, id: subjectId.trim() }) : null;
+        if (subjectNamespace && !subjectRef) throw new Error("Informe um identificador de cadastro válido, sem barras (até 180 caracteres).");
+        const payload = await createPrivacyRequest(firebaseUser, { ...input, ...(subjectRef ? { subjectRef } : {}) });
         setRequests((current) => [payload.request, ...current]);
         setRequestForm(emptyRequestForm);
       } else {
@@ -196,6 +207,8 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
   }
 
   const items = kind === "requests" ? requests : incidents;
+  const sortedRequests = useMemo(() => sortByTitle(requests, (item) => item.subjectName, direction), [requests, direction]);
+  const sortedIncidents = useMemo(() => sortByTitle(incidents, (item) => item.title, direction), [incidents, direction]);
 
   return (
     <div className="space-y-4">
@@ -215,36 +228,47 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
         <Segmented<Kind>
           aria-label="Tipo de registro"
           value={kind}
-          onChange={setKind}
+          onChange={(value) => { setKind(value); setVisibleCount(8); }}
           options={[
             { value: "requests", label: `Pedidos de titulares ${requests.length}` },
             { value: "incidents", label: `Incidentes internos ${incidents.length}` },
           ]}
         />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="ds-secondary" size="md" onClick={() => { setInventoryRef(null); setInventoryOpen(true); }}>Consultar dados por cadastro</Button>
         {canManage ? (
           <Button type="button" variant="primary-page" size="md" onClick={openForm}>
             + {kind === "requests" ? "Registrar pedido" : "Registrar incidente"}
           </Button>
         ) : null}
+        </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ds-ink-muted">
+        <p>Consulta avulsa não cria pedido de titular. O acesso depende da origem e do escopo autorizado.</p>
+        <Button type="button" variant="ds-link" size="sm" aria-label={`Ordenar ${kind === "requests" ? "por nome" : "por título"}: ${direction === "asc" ? "A–Z" : "Z–A"}`} onClick={() => setDirection((current) => current === "asc" ? "desc" : "asc")}>{kind === "requests" ? "Nome" : "Título"}: {direction === "asc" ? "A–Z ↓" : "Z–A ↑"}</Button>
+      </div>
+      {loadError ? <div role="alert" className="space-y-2 text-sm text-ds-confirm-ink"><p>{loadError}</p><Button variant="ds-secondary" size="sm" onClick={() => void load()}>Tentar carregar novamente</Button></div> : null}
 
       <section className="rounded-ds-card-lg border border-ds-border bg-ds-warm">
         {loading && items.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-ds-ink-muted" role="status">Carregando…</p>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !loadError ? (
           <div className="m-4 rounded-ds-card border border-dashed border-ds-border-input px-5 py-10 text-center text-sm text-ds-ink-muted">
             {kind === "requests" ? "Nenhum pedido registrado." : "Nenhum incidente registrado."}
           </div>
         ) : kind === "requests" ? (
-          requests.slice(0, 8).map((item) => (
+          sortedRequests.slice(0, visibleCount).map((item) => (
             <LiftRow key={item.id} interactive={false} className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-bold">{item.subjectName}</p>
                 <p className="text-xs text-ds-ink-muted">{requestTypeLabels[item.requestType]} · prazo {dateOnly(item.dueAt)}</p>
                 <p className="mt-1.5 line-clamp-2 text-xs text-ds-ink-2">{item.description}</p>
+                <p className="mt-1.5 break-all text-xs text-ds-ink-muted">{item.subjectRef ? `${personNamespaceLabels[item.subjectRef.namespace]} · ${item.subjectRef.id}` : "Cadastro não vinculado. O vínculo exige revisão; nome e contato não identificam a origem."}</p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <StatusPill variant={statusVariant(item.status)}>{statusLabels[item.status]}</StatusPill>
+                {item.subjectRef ? <Button type="button" variant="ds-secondary" size="xs" onClick={() => { setInventoryRef(item.subjectRef); setInventoryOpen(true); }}>Consultar dados</Button> : null}
                 {canManage && item.status !== "completed" && item.status !== "rejected" ? (
                   <Button type="button" variant="ds-secondary" size="xs" loading={busyId === item.id} loadingLabel="Concluindo…" onClick={() => void closeRequest(item)}>
                     Concluir pedido
@@ -254,7 +278,7 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
             </LiftRow>
           ))
         ) : (
-          incidents.slice(0, 8).map((item) => (
+          sortedIncidents.slice(0, visibleCount).map((item) => (
             <LiftRow key={item.id} interactive={false} className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-bold">{item.title}</p>
@@ -275,7 +299,7 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
             </LiftRow>
           ))
         )}
-        {items.length > 8 ? <p className="border-t border-ds-divider px-6 py-3 text-xs text-ds-ink-muted">Mostrando os 8 registros mais recentes de {items.length}.</p> : null}
+        {items.length > 8 ? <div className="flex items-center justify-between gap-2 border-t border-ds-divider px-6 py-3 text-xs text-ds-ink-muted"><p>Mostrando {Math.min(visibleCount, items.length)} de {items.length} registros carregados.</p>{visibleCount < items.length ? <Button type="button" variant="ds-link" size="sm" onClick={() => setVisibleCount((count) => count + 8)}>Ver mais registros</Button> : null}</div> : null}
       </section>
 
       <SidePanel
@@ -287,6 +311,7 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
       >
         {kind === "requests" ? (
           <>
+            <PersonReferenceFields prefix="gov-req-ref" optional namespace={requestForm.subjectNamespace} id={requestForm.subjectId} onChange={(subjectNamespace, subjectId) => setRequestForm((current) => ({ ...current, subjectNamespace, subjectId }))} />
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldBlock label="Nome" htmlFor="gov-req-name">
                 <Input id="gov-req-name" className={fieldInputClass} value={requestForm.subjectName} onChange={(e) => setRequestForm((f) => ({ ...f, subjectName: e.target.value }))} />
@@ -398,6 +423,7 @@ export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
           </Button>
         </div>
       </SidePanel>
+      <PersonInventoryPanel open={inventoryOpen} onOpenChange={setInventoryOpen} initialRef={inventoryRef} />
     </div>
   );
 }

@@ -1,3 +1,6 @@
+import type { Source } from "./person-inventory";
+import type { SubjectRef } from "./person-subject";
+
 export type PrivacyRequestStatus = "open" | "in_review" | "completed" | "rejected";
 export type PrivacyRequestType =
   | "access"
@@ -12,6 +15,7 @@ export type PrivacyRequest = {
   id: string;
   workspace_id: string;
   subjectName: string;
+  subjectRef: SubjectRef | null;
   subjectEmail: string;
   subjectType: "candidate" | "employee" | "former_employee" | "internal_user" | "supplier" | "other";
   requestType: PrivacyRequestType;
@@ -24,6 +28,32 @@ export type PrivacyRequest = {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PersonInventorySource = Source | { id: string; coverage: "restricted" };
+export type PersonInventoryCatalog = {
+  ref: SubjectRef;
+  equivalents: SubjectRef[];
+  conflicts: string[];
+  sources: PersonInventorySource[];
+};
+export type PersonInventoryItem = {
+  id: string;
+  recordPath: string;
+  database: Source["database"];
+  collection: string;
+  role: Source["role"];
+  links: Record<string, string>;
+  version: string | number | null;
+  storageReferences: Array<{ field: string; path: string | null; available: boolean }>;
+};
+export type PersonInventoryPage = {
+  source: Source | { id: string };
+  status: "restricted" | "unlinked" | "unavailable" | "partial" | "complete" | "failed";
+  items: PersonInventoryItem[];
+  nextCursor: string | null;
+  reason?: string;
+  conflicts?: string[];
 };
 
 export type SecurityIncidentStatus = "open" | "contained" | "resolved" | "dismissed";

@@ -1,5 +1,7 @@
 {
   "indexes": [
+    {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"snapshot.executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_locationEvidence","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup": "repP_locationEvidence", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "executionUnitId", "order": "ASCENDING"}, {"fieldPath": "recordedDate", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
     {"collectionGroup": "repP_attempts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "cycleCandidate.committedAt", "order": "ASCENDING"}, {"fieldPath": "__name__", "order": "ASCENDING"}]},
 
