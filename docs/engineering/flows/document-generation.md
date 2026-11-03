@@ -10,6 +10,8 @@
 
 ## Entrada e percurso
 
+03/11/2026: retorno e acesso aos modelos usam a variante oficial `ds-secondary`, em faixa flexível com espaçamento. O retorno é quadrado (36px em telas maiores, 44px para toque); a ação de modelos acompanha a altura. O ajuste preserva destinos, permissões e a navegação existente, sem implementar o futuro editor.
+
 [`documents/generator/page.tsx`](../../../src/app/dashboard/documents/generator/page.tsx) monta [`document-generator-workspace.tsx`](../../../src/components/documents/document-generator-workspace.tsx). A tela envia `POST /api/documents/generate` com Bearer token, modelo, colaborador, valores manuais e formulário. A geração pela interface solicita `lifecycle: 'draft'` e `output: 'json'`, depois abre o PDF pela rota de arquivo gerado; outros chamadores, como integração RH, usam a mesma API. [Tela](../../../src/components/documents/document-generator-workspace.tsx), [rota](../../../src/app/api/documents/generate/route.ts).
 
 1. A rota exige `assertFormalizationAccess(request, 'documents.generate')`, `templateId` e avalia separadamente `sensitiveData.view`. Passa ao serviço a identidade do ator e os dados permitidos. [Fonte](../../../src/app/api/documents/generate/route.ts).
