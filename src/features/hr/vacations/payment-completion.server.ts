@@ -1,5 +1,6 @@
 import 'server-only';
 import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
+import { signaturePersonFields } from '@/features/privacy/signature-person-fields';
 
 import { createHash } from 'node:crypto';
 import { getStorage } from 'firebase-admin/storage';
@@ -187,6 +188,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
   });
   const signatureDocumentName = buildSignatureDocumentName({ department: 'FN', documentType: 'Recibo de Férias', holderName: employeeName });
   await requestRef.set({
+    ...signaturePersonFields({ subject: { namespace: 'main.users', id: String(vacation.userId ?? '') }, employeeSigns: true }),
     type: 'vacation_receipt_signature',
     purpose: 'vacation_receipt',
     status: 'sending',

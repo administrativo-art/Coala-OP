@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { confirmedSubjectKeysForIdentifier } from "@/features/privacy/person-lookup.server";
 import { getStorage } from "firebase-admin/storage";
 
 import { applyCoalaLetterheadToPdf } from "@/features/hr/documents/letterhead-pdf.server";
@@ -102,7 +103,7 @@ export async function ensureAssetCustodyTerm(params: { context: ServerUserContex
       await generatedRef.create({
         workspaceId: params.context.workspace_id, templateId: TEMPLATE_ID, templateName: "Termo de transferência de posse de patrimônio", templateVersion: 1,
         status: "approved", signatureScope: "independent", signaturePurpose: PURPOSE, signatureStatus: "pending", documentTypeCode: DOCUMENT_TYPE,
-        employeeId: employee.id, employeeName, sourceModule: "assets", sourceAssetId: params.assetId, sourceCustodyTransferId: params.transferId,
+        employeeId: employee.id, subjectKeys: await confirmedSubjectKeysForIdentifier(employee.id), employeeName, sourceModule: "assets", sourceAssetId: params.assetId, sourceCustodyTransferId: params.transferId,
         protocol, legalEntityId: legalEntity.entityId, legalEntitySnapshot: legalEntity,
         parties: [
           { partyType: "employee", role: "recipient", ref: employee.id, snapshot: { name: employeeName, signatureName: employeeName, signatureEmail: employeeEmail } },

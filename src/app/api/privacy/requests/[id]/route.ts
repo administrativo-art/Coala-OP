@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
+import { readSubjectRef } from "@/features/privacy/person-subject";
 import { privacyRequestUpdateSchema, type PrivacyRequestUpdateInput } from "@/features/privacy/security";
 import { type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
@@ -19,7 +20,7 @@ type RequestResource = { ref: FirebaseFirestore.DocumentReference; snapshot: Fir
 
 function serializeRequest(doc: FirebaseFirestore.DocumentSnapshot) {
   const data = doc.data() ?? {};
-  return { id: doc.id, workspace_id: data.workspace_id ?? "", subjectName: data.subjectName ?? "", subjectEmail: data.subjectEmail ?? "", subjectType: data.subjectType ?? "other", requestType: data.requestType ?? "other", origin: data.origin ?? "other", description: data.description ?? "", status: data.status ?? "open", owner: data.owner ?? null, response: data.response ?? null, dueAt: serializeDate(data.dueAt), completedAt: serializeDate(data.completedAt), createdAt: serializeDate(data.createdAt) ?? "", updatedAt: serializeDate(data.updatedAt) ?? "" };
+  return { id: doc.id, workspace_id: data.workspace_id ?? "", subjectName: data.subjectName ?? "", subjectRef: readSubjectRef(data.subjectRef), subjectEmail: data.subjectEmail ?? "", subjectType: data.subjectType ?? "other", requestType: data.requestType ?? "other", origin: data.origin ?? "other", description: data.description ?? "", status: data.status ?? "open", owner: data.owner ?? null, response: data.response ?? null, dueAt: serializeDate(data.dueAt), completedAt: serializeDate(data.completedAt), createdAt: serializeDate(data.createdAt) ?? "", updatedAt: serializeDate(data.updatedAt) ?? "" };
 }
 
 const contract = defineSecurityContract({ schemaVersion: 1, id: "privacy.request.update", version: 1, surface: { method: "PATCH", path: "/api/privacy/requests/[id]" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "privacy.request.manage" }, resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "privacy.request.update-input", unknownFields: "reject" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });

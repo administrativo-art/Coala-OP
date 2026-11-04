@@ -72,13 +72,13 @@ api,src/app/api/documents/company/units/route.ts,,docs/engineering/flows/company
 api,src/app/api/documents/company/intake/route.ts,,docs/engineering/flows/company-documents.md,Upload com nomenclatura por ID escopo validado e versões transacionais.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts,,docs/engineering/flows/financial-inbox.md,Prévia e confirmação de nomenclatura por contraparte cadastrada na despesa vinculada.
 api,src/app/api/financial/document-counterparties/route.ts,,docs/engineering/flows/financial-inbox.md,Seleção paginada de nomes e IDs para contraparte documental com acesso a cadastros e classificação financeira.
-api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute com schema estrito e autorização pessoal servidor antes de resolução e Storage.
 api,src/app/api/documents/generated/[id]/audit/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/file/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/signature/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/documents/generator/parties/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/generator/parties/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute com helper RH/UID e escopo de unidade antes de detalhes e CPF.
 api,src/app/api/documents/generator/templates/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/ai-plan/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/editable-version/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -409,6 +409,7 @@ api,src/app/api/mercadorias/route.ts,,docs/engineering/flows/registry.md,Destino
 api,src/app/api/observability/client-errors/route.ts,,docs/engineering/observability.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/incidents/[id]/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/incidents/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/privacy/person-inventory/route.ts,,docs/engineering/document-person-traceability.md,Inventario paginado por identificador imutavel com ACL por fonte unidade e workspace sem conteudo ou URL.
 api,src/app/api/privacy/requests/[id]/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/requests/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/processes/route.ts,,docs/engineering/flows/termination-process-center.md,Destino de investigacao; conferir metodo e ramo no handler.

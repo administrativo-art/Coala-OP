@@ -1,3 +1,5 @@
+import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
+import { assertGenerationPersonScopes, type GenerationActor } from "./generation-access.server";
 import { createHash } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -30,6 +32,7 @@ import { loadSystemDocumentTemplateSource } from "@/features/hr/documents/system
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { DOCUMENT_VARIABLES } from "@/features/hr/integration/document-variables";
+import { confirmedSubjectKeys, confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
 
 export type GenerateDocumentFromTemplateParams = {
   templateId: string;
@@ -44,6 +47,8 @@ export type GenerateDocumentFromTemplateParams = {
   lifecycle?: "draft" | "final";
   /** Identificador explícito para uma nova revisão com o mesmo conteúdo. */
   revisionKey?: string | null;
+  /** Authenticated server context; HTTP bodies never supply this value. Internal admission callers own onboardingId. */
+  actorAccess?: GenerationActor;
   actorId: string;
   actorName: string;
 };
@@ -185,13 +190,28 @@ export async function generateDocumentFromTemplate(
   ) {
     throw new Error("Informe o colaborador ou integração.");
   }
-
   const variables = Array.isArray(templateValue("variables"))
     ? (templateValue("variables") as unknown[]).filter((item): item is string => typeof item === "string")
     : [];
   const mapping = normalizeFieldMapping(templateValue("fieldMapping"), variables);
   const manualValues = sanitizeManualValues(params.manualValues);
   const formValues = record(sanitizeFormValue(params.formValues ?? {}));
+
+  let parties: DocumentPartySnapshot[] = [];
+  let missingSchema: string[] = [];
+  let schemaValues: Record<string, unknown> = {};
+  if (formSchema) {
+    const schemaResolved = resolveDocumentFormSchema(formSchema, formValues);
+    schemaValues = schemaResolved.values;
+    parties = schemaResolved.parties;
+    missingSchema = schemaResolved.missing;
+  }
+  await assertGenerationPersonScopes({ actorAccess: params.actorAccess, employeeId: params.employeeId, onboardingId: params.onboardingId,
+    partyHrIds: parties.filter((party) => party.partyType === "employee" && party.ref).map((party) => party.ref!) });
+  if (params.onboardingId) await prepareOnboardingPersonForWrite(params.onboardingId);
+  const subjectKeys = params.employeeId || params.onboardingId
+    ? await confirmedSubjectKeysForDocument(params.employeeId, params.onboardingId)
+    : [];
 
   const resolved = await resolveDocumentData({
     employeeId: params.employeeId,
@@ -216,14 +236,10 @@ export async function generateDocumentFromTemplate(
     mapping,
     manualValues,
   });
-  let parties: DocumentPartySnapshot[] = [];
-  let missingSchema: string[] = [];
-  if (formSchema) {
-    const schemaResolved = resolveDocumentFormSchema(formSchema, formValues);
-    mergeData(mapped.data, schemaResolved.values);
-    parties = schemaResolved.parties;
-    missingSchema = schemaResolved.missing;
-  }
+  mergeData(mapped.data, schemaValues);
+  const partyKeys = [...new Set((await Promise.all(parties.filter((party) => party.partyType === "employee" && party.ref).map((party) =>
+    confirmedSubjectKeys({ namespace: "hr.employees", id: party.ref! })
+  ))).flat())];
   const mappedSystemKeys = mapped.missingSystem.map((placeholder) => {
     const binding = mapping[placeholder];
     return binding?.kind === "system" ? binding.key : placeholder;
@@ -408,6 +424,8 @@ export async function generateDocumentFromTemplate(
     documentTypeCode: templateValue("documentTypeCode")
       ?? (String(params.templateId).includes("transportation-voucher") ? "TRANSPORT_REQUEST" : null),
     employeeId: params.employeeId ?? null,
+    subjectKeys,
+    partyKeys,
     employeeName: typeof resolved.flat["employee.name"] === "string" ? resolved.flat["employee.name"] : null,
     onboardingId: params.onboardingId ?? null,
     legalEntityId: legalEntitySnapshot.entityId,

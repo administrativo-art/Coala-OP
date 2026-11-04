@@ -1,5 +1,6 @@
 import 'server-only';
 import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
+import { signaturePersonFields } from '@/features/privacy/signature-person-fields';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
@@ -1702,6 +1703,7 @@ export async function sendVacationNotice(
   });
   const signatureDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: 'Férias', holderName: employeeName });
   await signatureRequestRef.set({
+    ...signaturePersonFields({ subject: { namespace: 'main.users', id: prepared.user.id }, employeeSigns: true, actorUserId: context.decoded.uid }),
     type: 'vacation_notice_signature',
     purpose: 'vacation_notice',
     status: 'sending',

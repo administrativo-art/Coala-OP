@@ -300,7 +300,7 @@ export function instantiateOnboardingDocuments(
     correctedExtractedFields: existingById.get(template.id)?.correctedExtractedFields ?? [],
     extractedFieldsCorrectedAt: existingById.get(template.id)?.extractedFieldsCorrectedAt ?? null,
     extractedFieldsCorrectedBy: existingById.get(template.id)?.extractedFieldsCorrectedBy ?? null,
-    aiAnalysis: existingById.get(template.id)?.aiAnalysis,
+    ...(existingById.get(template.id)?.aiAnalysis !== undefined ? { aiAnalysis: existingById.get(template.id)!.aiAnalysis } : {}),
     promotedDocumentId: existingById.get(template.id)?.promotedDocumentId ?? null,
     promotedAt: existingById.get(template.id)?.promotedAt ?? null,
     promotedBy: existingById.get(template.id)?.promotedBy ?? null,

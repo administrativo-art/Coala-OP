@@ -1,3 +1,5 @@
+import { confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
+import { subjectKey } from "@/features/privacy/person-subject";
 import { createHash, randomUUID } from 'node:crypto';
 import { renderToBuffer } from 'react-pdf-renderer-server';
 import { getStorage } from 'firebase-admin/storage';
@@ -322,6 +324,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const signatureDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: 'Contrato de prestação de serviços', holderName: workflow.provider.legalName });
       await requestRef.set({
         source: 'pj_onboarding_contract', onboardingId: id, status: 'sending',
+        subjectKeys: await confirmedSubjectKeysForDocument(null, id),
+        signerKeys: [], // Both representatives are external contacts without a registered person ID.
+        actorKeys: [subjectKey({ namespace: 'main.users', id: access.decoded.uid })],
         documentName: signatureDocumentName,
         generatedStoragePath: workflow.contract.storagePath, createdAt: now, updatedAt: now,
         createdBy: access.decoded.uid,

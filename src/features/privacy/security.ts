@@ -7,6 +7,7 @@ const civilDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) 
 }, "Data inválida.");
 
 export const privacyRequestCreateSchema = z.object({
+  subjectRef: z.object({ namespace: z.enum(["main.users", "hr.employees", "hr.candidates", "hr.onboardingPersons"]), id: z.string().trim().min(1).max(180).refine((id) => !id.includes("/")) }).strict().optional(),
   subjectName: z.string().trim().min(1).max(160),
   subjectEmail: optionalText(180),
   subjectType: z.enum(["candidate", "employee", "former_employee", "internal_user", "supplier", "other"]),

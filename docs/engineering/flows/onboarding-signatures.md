@@ -36,3 +36,9 @@ O [teste de contrato do servidor](../../../tests/unit/hr-documents/admission-sig
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+## Referências pessoais congeladas — 03/11/2026
+
+Preparação do pacote persiste titular confirmado do processo, `signerKeys` do titular e UID cadastrado da empresa, e `actorKeys` do preparador. Solicitação independente guarda o solicitante separadamente. O preflight recusa equivalência unilateral ou candidato/conta incompatíveis; uma candidatura sem conta conserva `hr.candidates`. O callback usa as referências congeladas na solicitação com origem/versão/hash/caminho conferidos. Cadastro removido ou aliases atuais colidentes não reatribuem titularidade nem impedem a repetição idempotente de arquivo já validado. Solicitação antiga sem chaves tipadas requer reconciliação explícita. Integração/PJ registra ator e sujeito do processo; representantes externos sem cadastro não recebem IDs por inferência. Testemunhas e limites no [guia de pessoa](../document-person-traceability.md).
+
+Admissão manual pré-conta usa a referência hr.onboardingPersons persistida pelo intake nativo; recrutamento usa candidato real respaldado. Reservas/checkpoints de provisionamento confirmam vínculos antes da promoção documental. PJ não recebe owner humano da empresa ou do usuário de acesso. Callback frozen preserva as referências históricas, inclusive ausência de titular. [Modelo e limites](../document-person-traceability.md#admissão-natural-antes-da-conta-e-provisionamento).
