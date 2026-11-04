@@ -8,6 +8,7 @@ import { contractualDiff } from '@/lib/contractual-data';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
+import { assertPersonIdentityWriteAllowed } from "@/features/privacy/person-identity-maintenance.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
 import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
@@ -270,6 +271,7 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
   try {
     const { actor, input: rawPayload, resource } = security;
     const { userId, existingUser } = resource;
+    await assertPersonIdentityWriteAllowed({ userId });
     const canManageUsers = actor.isDefaultAdmin || actor.permissions.settings.manageUsers;
     const payload = cleanPayload(rawPayload) as Record<string, unknown>;
     const contractReason = payload.contractChangeReason;
