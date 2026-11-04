@@ -31,7 +31,8 @@ test('visão mensal agrupa unidades por estado e cidade sem ação criar por lin
   assert.match(monthSource, /BRAZILIAN_STATE_NAMES/);
   assert.match(monthSource, /DPSchedulesSidebar/);
   assert.match(sidebarSource, /Todos os meses/);
-  assert.match(sidebarSource, /dias preenchidos/);
+  assert.match(sidebarSource, /Não iniciada/);
+  assert.match(sidebarSource, /de \$\{unit\.expectedDays\} dias/);
   assert.doesNotMatch(monthSource, />\s*Criar\s*</);
   assert.doesNotMatch(monthSource, /Adicionar unidade/);
 });
