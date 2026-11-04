@@ -79,7 +79,9 @@ export type DPJourneyValidationResult = {
       distribution: 'weekly' | 'monthly_collective';
       monthRequired: number;
       monthGranted: number;
+      monthRestDates: string[];
       monthAvailable: number;
+      nextRestDueDate?: string;
       weeks: Array<{ start: string; end: string; required: number; granted: number; complete: boolean; workedMinutes: number | null }>;
     };
   }>;
@@ -317,10 +319,15 @@ export function validateDPJourneySchedule(params: {
               message: `${person.name ?? 'Colaborador'}: semana ${displayDate(start)} a ${displayDate(end)} tem ${Math.floor(workedMinutes / 60)}h${String(workedMinutes % 60).padStart(2, '0')} de trabalho; a jornada prevê ${Math.floor(weeklyLimit / 60)}h${String(weeklyLimit % 60).padStart(2, '0')}.` });
           }
           const monthRequired = Math.ceil(daysInMonth * 2 / 7);
-          const monthGranted = [...dayOffDates].filter((date) => date >= params.periodStart && date <= params.periodEnd && !workedDates.has(date)).length;
+          const monthRestDates = [...dayOffDates].filter((date) => date >= params.periodStart && date <= params.periodEnd && !workedDates.has(date)).sort();
+          const monthGranted = monthRestDates.length;
           const monthAvailable = Array.from({ length: daysInMonth }, (_, index) => format(addDays(parseISO(params.periodStart), index), 'yyyy-MM-dd'))
             .filter((date) => !workedDates.has(date) && !dayOffDates.has(date)).length;
-          restSummary = { distribution, monthRequired, monthGranted, monthAvailable, weeks };
+          const lastRest = [...dayOffDates].filter((date) => date <= params.periodEnd && !workedDates.has(date)).sort().at(-1);
+          const nextRestDueDate = distribution === 'monthly_collective' && lastRest
+            ? format(addDays(parseISO(lastRest), 7), 'yyyy-MM-dd') : undefined;
+          restSummary = { distribution, monthRequired, monthGranted, monthRestDates, monthAvailable, weeks,
+            ...(nextRestDueDate ? { nextRestDueDate } : {}) };
           if (distribution === 'monthly_collective') {
             let lastReportedEnd = '';
             for (let cursor = parseISO(params.periodStart); format(cursor, 'yyyy-MM-dd') <= params.periodEnd; cursor = addDays(cursor, 1)) {
