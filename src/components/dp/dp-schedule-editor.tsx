@@ -74,6 +74,7 @@ import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3,
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { buildVisibleSchedulePeople } from '@/lib/dp-schedule-bulk-selection';
+import { buildScheduleRestPreview } from '@/lib/dp-schedule-rest-preview';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
 import {
@@ -1364,6 +1365,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   } = useDPShifts(schedule.id, isDefaultAdmin || permissions.dp?.schedules?.edit === true);
   const {
     validation: journeyValidation,
+    loading: journeyValidationLoading,
+    error: journeyValidationError,
   } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
@@ -2364,12 +2367,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   }
 
   const publishedRestRecord = publication.journeyValidation?.restRecord;
+  const restMonthStart = parseISO(`${schedule.year}-${String(schedule.month).padStart(2, '0')}-01`);
+  const restPeriodStart = format(restMonthStart, 'yyyy-MM-dd');
+  const restPeriodEnd = format(new Date(schedule.year, schedule.month - 1, getDaysInMonth(restMonthStart)), 'yyyy-MM-dd');
+  const restPreview = buildScheduleRestPreview({ shifts, siblingWorkShifts, periodStart: restPeriodStart, periodEnd: restPeriodEnd });
   const restSummaryUserIds = [...new Set([
-    ...Object.entries(journeyValidation?.people ?? {}).flatMap(([id, person]) => person.restSummary ? [id] : []),
+    ...restPreview.userIds,
+    ...Object.keys(journeyValidation?.people ?? {}),
     ...Object.keys(publishedRestRecord?.people ?? {}),
   ])].sort((left, right) => (effectiveUserMap.get(left)?.username ?? left).localeCompare(effectiveUserMap.get(right)?.username ?? right, 'pt-BR'));
-  const restMonthStart = parseISO(`${schedule.year}-${String(schedule.month).padStart(2, '0')}-01`);
-  const restPeriodEnd = format(new Date(schedule.year, schedule.month - 1, getDaysInMonth(restMonthStart)), 'yyyy-MM-dd');
   const restCompetenceLabel = format(restMonthStart, 'MMMM yyyy', { locale: ptBR });
 
   return (
@@ -2663,8 +2669,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
               const person = journeyValidation?.people[userId];
               const current = person?.restSummary;
               const published = publishedRestRecord?.people[userId];
+              const launchedDates = restPreview.datesByUser.get(userId) ?? [];
               return <div key={userId} className="rounded-lg border border-ds-border p-2.5 text-xs">
-                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person?.journey?.name ?? 'Jornada'}</p>
+                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person?.journey?.name ?? 'Jornada não identificada'}</p>
                 {current ? <>
                   <p className="mt-1 text-ds-ink-muted">{current.distribution === 'monthly_collective'
                     ? `Conferência atual: ${current.monthGranted}/${current.monthRequired} repousos no mês · faltam ${Math.max(0, current.monthRequired - current.monthGranted)} · ${current.monthAvailable} dias livres`
@@ -2676,7 +2683,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     {week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}
                     {!week.complete ? ' · continua no próximo mês' : ''}
                   </p>)}
-                </> : null}
+                </> : <>
+                  <p className="mt-1 text-ds-ink-muted">Folgas lançadas nesta escala: {launchedDates.length}</p>
+                  <p className="mt-1 text-ds-ink-muted">Datas deste mês: {launchedDates.length ? launchedDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ') : 'nenhuma lançada'}</p>
+                  <p className="mt-1 text-ds-warn">{journeyValidationLoading
+                    ? 'Conferindo a jornada e as regras de repouso…'
+                    : journeyValidationError
+                      ? 'Conferência automática indisponível. Tente atualizar a escala.'
+                      : 'Jornada sem regra de distribuição resolvida para este mês; meta e prazo não conferidos.'}</p>
+                </>}
                 {published ? <div className="mt-2 rounded-ds-md bg-ds-info-bg p-2 text-ds-info">
                   <p className="font-bold">Registrado na publicação v{publishedRestRecord?.publicationVersion}: {published.monthGranted}{published.monthRequired !== null ? `/${published.monthRequired}` : ''} repousos neste mês</p>
                   <p className="mt-1">Datas: {published.monthRestDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ')}</p>
