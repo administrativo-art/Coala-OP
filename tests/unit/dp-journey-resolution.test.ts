@@ -198,6 +198,24 @@ test('nova modalidade semanal conta os repousos da semana iniciada na versão co
   assert.equal(result.issues.some((issue) => issue.code === 'WEEKLY_REST_MISSING' && issue.date === '2026-12-06'), false);
 });
 
+test('resumo mensal separa datas do mês e prazo de repouso após a virada', () => {
+  const configured = journey('coletiva', { scope: { kind: 'company' } }, {
+    weeklyRest: { placement: 'schedule', maxConsecutiveWorkDays: 6, distribution: 'monthly_collective' },
+  });
+  const dates = ['2026-11-01', '2026-11-04', '2026-11-07', '2026-11-10', '2026-11-13',
+    '2026-11-16', '2026-11-19', '2026-11-22', '2026-11-25', '2026-11-28'];
+  const result = validateDPJourneySchedule({ journeys: [configured], people: { 'person-1': target },
+    shifts: [
+      { id: 'previous', userId: 'person-1', date: '2026-10-29', type: 'day_off', unitId: 'unit-1' },
+      ...dates.map((date, index) => ({ id: `rest-${index}`, userId: 'person-1', date, type: 'day_off' as const, unitId: 'unit-1' })),
+      { id: 'work', userId: 'person-1', date: '2026-11-02', type: 'work', unitId: 'unit-1' },
+    ], periodStart: '2026-11-01', periodEnd: '2026-11-30', historyFrom: '2026-10-01' });
+  assert.equal(result.issues.some((issue) => issue.blocking), false);
+  assert.deepEqual(result.people['person-1'].restSummary?.monthRestDates, dates);
+  assert.equal(result.people['person-1'].restSummary?.monthGranted, 10);
+  assert.equal(result.people['person-1'].restSummary?.nextRestDueDate, '2026-12-05');
+});
+
 test('resolve abrangência organizacional de colaborador multiunidade sem unidade primária', () => {
   const resolution = resolveDPJourney({
     journeys: [journey('multiunit', {

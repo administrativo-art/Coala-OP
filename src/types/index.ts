@@ -4099,10 +4099,24 @@ export type DPSchedule = {
     checkedBy: string;
     version: number;
     blockingIssueCount: number;
+    restRecord?: DPScheduleRestRecord;
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   draftCoverageDemands?: DPCoverageDemands;
   createdAt: Timestamp;
+};
+
+/** Conferência congelada na publicação; datas pertencem somente à competência informada. */
+export type DPScheduleRestRecord = {
+  competence: string;
+  publicationVersion: number;
+  people: Record<string, {
+    distribution: 'weekly' | 'monthly_collective';
+    monthGranted: number;
+    monthRestDates: string[];
+    monthRequired: number | null;
+    nextRestDueDate?: string;
+  }>;
 };
 
 export type DPShift = {

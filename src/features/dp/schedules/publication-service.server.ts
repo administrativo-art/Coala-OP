@@ -13,7 +13,7 @@ import type { SaveWorkShiftInput, BulkWorkShiftInput } from '@/features/dp/shift
 import { validateScheduleJourneys } from '@/features/dp/journey-validation/service.server';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
 import { buildDPShiftReference } from '@/lib/dp-shift-reference';
-import type { DPJourney, DPShiftDefinition } from '@/types';
+import type { DPJourney, DPScheduleRestRecord, DPShiftDefinition } from '@/types';
 import { readOfficialScheduleShifts } from './official-revision.server';
 import { capturePublicationFence, preparePublicationFenceCommit } from './publication-fence.server';
 import { prepareScheduleRevision } from './revision-preparation.server';
@@ -300,6 +300,26 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   const proposed = [...state.merged].map(([id, value]) => ({ ...value, id, scheduleId }));
   const validation = await validateScheduleJourneys({ context, scheduleId, proposedShifts: proposed });
   if (validation.status === 'blocked') fail('DP_SCHEDULE_JOURNEY_BLOCKED', 'VALIDATION', validation.issues[0]?.message ?? 'Revise as jornadas antes de publicar.');
+  const restPeople: DPScheduleRestRecord['people'] = {};
+  for (const [userId, person] of Object.entries(validation.people)) {
+    const summary = person.restSummary;
+    if (!summary) continue;
+    restPeople[userId] = {
+      distribution: summary.distribution,
+      monthGranted: summary.monthGranted,
+      monthRestDates: summary.monthRestDates,
+      monthRequired: summary.distribution === 'monthly_collective' ? summary.monthRequired : null,
+      ...(summary.nextRestDueDate ? { nextRestDueDate: summary.nextRestDueDate } : {}),
+    };
+  }
+  const restRecord: DPScheduleRestRecord | null = Object.keys(restPeople).length ? {
+    competence: `${year}-${String(month).padStart(2, '0')}`,
+    publicationVersion: oldVersion + 1,
+    people: restPeople,
+  } : null;
+  if (restRecord && Buffer.byteLength(JSON.stringify(restRecord)) > 350_000) {
+    fail('DP_SCHEDULE_REST_RECORD_LIMIT', 'DATA_INTEGRITY', 'O registro de repousos excede o limite seguro da escala.');
+  }
   await validatePublicationOccupancy({ scheduleId, workspaceId, year, month, shifts: proposed });
 
   const unitRef = dbAdmin.collection('dp_units').doc(unitId);
@@ -417,6 +437,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
     const now = Timestamp.now();
     fence.apply();
     const version = oldVersion + 1;
+    if (restRecord) tx.update(manifest.ref, { restRecord });
     const draftedCoverage = schedule.get('draftCoverageDemands');
     tx.update(state.ref, { activeRevisionId: revisionId, publicationStatus: 'published', publicationVersion: version,
       ...(draftedCoverage !== undefined ? { coverageDemands: Object.keys(draftedCoverage ?? {}).length ? draftedCoverage : FieldValue.delete() } : {}),
@@ -425,7 +446,8 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
       shiftCount: entries.length, snapshot: { users: snapshotUsers },
       goalEligibilityVersion: FieldValue.increment(1), journeyValidationVersion: FieldValue.increment(1),
       journeyValidation: { status: validation.status, checkedAt: now, checkedBy: context.decoded.uid,
-        version: validation.version, blockingIssueCount: 0 } });
+        version: validation.version, blockingIssueCount: 0,
+        ...(restRecord ? { restRecord } : {}) } });
     tx.create(dbAdmin.collection('dp_scheduleRevisionEvents').doc(`${scheduleId}_${version}`), {
       workspaceId, scheduleId, version, revisionId, unitId, year, month, status: 'pending',
       shiftCount: entries.length, changedShiftIds: changedIds, createdAt: now });
