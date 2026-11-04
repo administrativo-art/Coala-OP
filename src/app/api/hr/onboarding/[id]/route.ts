@@ -48,6 +48,7 @@ import {
   onboardingPublicLinkExtensionUsed,
 } from '@/lib/hr/onboarding-public-link';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import { assertPersonIdentityWriteAllowed } from '@/features/privacy/person-identity-maintenance.server';
 import {
   canUpdateExpectedAdmissionDate,
   normalizeOnboardingCancellationReason,
@@ -941,6 +942,7 @@ export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer },
 });
 
 export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnforcer }, async ({ request, security }) => {
+  await assertPersonIdentityWriteAllowed({ onboardingProcessId: security.input.id });
   const { actor: access, input: { id, body } } = security;
   const action = asString(body.action);
 
