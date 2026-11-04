@@ -1596,6 +1596,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     if (!canPublish || publishing) return;
     setPublishing(true);
     try {
+      if (journeyValidation?.status === 'blocked') {
+        throw new Error(`Revise os repousos e as jornadas antes de publicar: ${journeyValidation.issues.filter((issue) => issue.blocking).slice(0, 3).map((issue) => issue.message).join(' ')}`);
+      }
       const currentDraft = await fetchDraftScheduleShifts(schedule.id);
       if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
       await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
@@ -2643,6 +2646,26 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
 
       {/* Grid */}
+      {journeyValidation && Object.entries(journeyValidation.people).some(([, person]) => person.restSummary) ? (
+        <section className="mb-3 rounded-[14px] border border-ds-border bg-ds-surface p-3" aria-label="Conferência de repousos da escala">
+          <h2 className="mb-2 text-xs font-extrabold text-ds-ink">Repousos por colaborador</h2>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {Object.entries(journeyValidation.people).flatMap(([userId, person]) => person.restSummary ? [
+              <div key={userId} className="rounded-lg border border-ds-border p-2.5 text-xs">
+                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person.journey?.name ?? 'Jornada'}</p>
+                <p className="mt-1 text-ds-ink-muted">{person.restSummary.distribution === 'monthly_collective'
+                  ? `Mês: ${person.restSummary.monthGranted}/${person.restSummary.monthRequired} repousos · faltam ${Math.max(0, person.restSummary.monthRequired - person.restSummary.monthGranted)} · ${person.restSummary.monthAvailable} dias livres`
+                  : 'Dois repousos por semana'}</p>
+                {person.restSummary.weeks.map((week) => <p key={week.start} className={cn('mt-1', week.complete && week.granted < week.required ? 'font-bold text-ds-warn' : 'text-ds-ink-muted')}>
+                  {`Semana ${format(parseISO(week.start), 'dd/MM/yyyy')} a ${format(parseISO(week.end), 'dd/MM/yyyy')}: ${week.granted}/${week.required} repousos`}
+                  {week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}
+                  {!week.complete ? ' · continua no próximo mês' : ''}
+                </p>)}
+              </div>
+            ] : [])}
+          </div>
+        </section>
+      ) : null}
       {activeUnits.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <p className="text-sm">Nenhuma unidade cadastrada. Cadastre unidades em Configurações primeiro.</p>
