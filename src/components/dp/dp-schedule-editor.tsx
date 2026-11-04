@@ -74,6 +74,7 @@ import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3,
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { buildVisibleSchedulePeople } from '@/lib/dp-schedule-bulk-selection';
+import { buildScheduleRestPreview } from '@/lib/dp-schedule-rest-preview';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
 import {
@@ -1364,6 +1365,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   } = useDPShifts(schedule.id, isDefaultAdmin || permissions.dp?.schedules?.edit === true);
   const {
     validation: journeyValidation,
+    loading: journeyValidationLoading,
+    error: journeyValidationError,
   } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
@@ -2363,6 +2366,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return <p className="text-sm text-destructive">Erro ao carregar os turnos da escala: {shiftsError}</p>;
   }
 
+  const publishedRestRecord = publication.journeyValidation?.restRecord;
+  const restMonthStart = parseISO(`${schedule.year}-${String(schedule.month).padStart(2, '0')}-01`);
+  const restPeriodStart = format(restMonthStart, 'yyyy-MM-dd');
+  const restPeriodEnd = format(new Date(schedule.year, schedule.month - 1, getDaysInMonth(restMonthStart)), 'yyyy-MM-dd');
+  const restPreview = buildScheduleRestPreview({ shifts, siblingWorkShifts, periodStart: restPeriodStart, periodEnd: restPeriodEnd });
+  const restSummaryUserIds = [...new Set([
+    ...restPreview.userIds,
+    ...Object.keys(journeyValidation?.people ?? {}),
+    ...Object.keys(publishedRestRecord?.people ?? {}),
+  ])].sort((left, right) => (effectiveUserMap.get(left)?.username ?? left).localeCompare(effectiveUserMap.get(right)?.username ?? right, 'pt-BR'));
+  const restCompetenceLabel = format(restMonthStart, 'MMMM yyyy', { locale: ptBR });
+
   return (
     <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
       {/* Header */}
@@ -2646,23 +2661,44 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
 
       {/* Grid */}
-      {journeyValidation && Object.entries(journeyValidation.people).some(([, person]) => person.restSummary) ? (
+      {restSummaryUserIds.length ? (
         <section className="mb-3 rounded-[14px] border border-ds-border bg-ds-surface p-3" aria-label="Conferência de repousos da escala">
-          <h2 className="mb-2 text-xs font-extrabold text-ds-ink">Repousos por colaborador</h2>
+          <h2 className="mb-2 text-xs font-extrabold text-ds-ink">Repousos de {restCompetenceLabel} por colaborador</h2>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {Object.entries(journeyValidation.people).flatMap(([userId, person]) => person.restSummary ? [
-              <div key={userId} className="rounded-lg border border-ds-border p-2.5 text-xs">
-                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person.journey?.name ?? 'Jornada'}</p>
-                <p className="mt-1 text-ds-ink-muted">{person.restSummary.distribution === 'monthly_collective'
-                  ? `Mês: ${person.restSummary.monthGranted}/${person.restSummary.monthRequired} repousos · faltam ${Math.max(0, person.restSummary.monthRequired - person.restSummary.monthGranted)} · ${person.restSummary.monthAvailable} dias livres`
-                  : 'Dois repousos por semana'}</p>
-                {person.restSummary.weeks.map((week) => <p key={week.start} className={cn('mt-1', week.complete && week.granted < week.required ? 'font-bold text-ds-warn' : 'text-ds-ink-muted')}>
-                  {`Semana ${format(parseISO(week.start), 'dd/MM/yyyy')} a ${format(parseISO(week.end), 'dd/MM/yyyy')}: ${week.granted}/${week.required} repousos`}
-                  {week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}
-                  {!week.complete ? ' · continua no próximo mês' : ''}
-                </p>)}
-              </div>
-            ] : [])}
+            {restSummaryUserIds.map((userId) => {
+              const person = journeyValidation?.people[userId];
+              const current = person?.restSummary;
+              const published = publishedRestRecord?.people[userId];
+              const launchedDates = restPreview.datesByUser.get(userId) ?? [];
+              return <div key={userId} className="rounded-lg border border-ds-border p-2.5 text-xs">
+                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person?.journey?.name ?? 'Jornada não identificada'}</p>
+                {current ? <>
+                  <p className="mt-1 text-ds-ink-muted">{current.distribution === 'monthly_collective'
+                    ? `Conferência atual: ${current.monthGranted}/${current.monthRequired} repousos no mês · faltam ${Math.max(0, current.monthRequired - current.monthGranted)} · ${current.monthAvailable} dias livres`
+                    : `Conferência atual: ${current.monthGranted} repousos no mês · 2 por semana`}</p>
+                  <p className="mt-1 text-ds-ink-muted">Datas deste mês: {current.monthRestDates.length ? current.monthRestDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ') : 'nenhuma registrada'}</p>
+                  {current.nextRestDueDate ? <p className="mt-1 font-semibold text-ds-info">Próximo repouso até {format(parseISO(current.nextRestDueDate), 'dd/MM/yyyy')}{current.nextRestDueDate > restPeriodEnd ? ' · conta no mês seguinte' : ' · neste mês'}</p> : null}
+                  {current.weeks.map((week) => <p key={week.start} className={cn('mt-1', week.complete && week.granted < week.required ? 'font-bold text-ds-warn' : 'text-ds-ink-muted')}>
+                    {`Semana ${format(parseISO(week.start), 'dd/MM/yyyy')} a ${format(parseISO(week.end), 'dd/MM/yyyy')}: ${week.granted}/${week.required} repousos`}
+                    {week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}
+                    {!week.complete ? ' · continua no próximo mês' : ''}
+                  </p>)}
+                </> : <>
+                  <p className="mt-1 text-ds-ink-muted">Folgas lançadas nesta escala: {launchedDates.length}</p>
+                  <p className="mt-1 text-ds-ink-muted">Datas deste mês: {launchedDates.length ? launchedDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ') : 'nenhuma lançada'}</p>
+                  <p className="mt-1 text-ds-warn">{journeyValidationLoading
+                    ? 'Conferindo a jornada e as regras de repouso…'
+                    : journeyValidationError
+                      ? 'Conferência automática indisponível. Tente atualizar a escala.'
+                      : 'Jornada sem regra de distribuição resolvida para este mês; meta e prazo não conferidos.'}</p>
+                </>}
+                {published ? <div className="mt-2 rounded-ds-md bg-ds-info-bg p-2 text-ds-info">
+                  <p className="font-bold">Registrado na publicação v{publishedRestRecord?.publicationVersion}: {published.monthGranted}{published.monthRequired !== null ? `/${published.monthRequired}` : ''} repousos neste mês</p>
+                  <p className="mt-1">Datas: {published.monthRestDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ')}</p>
+                  {published.nextRestDueDate ? <p className="mt-1">Próximo repouso até {format(parseISO(published.nextRestDueDate), 'dd/MM/yyyy')}{published.nextRestDueDate > restPeriodEnd ? ' · será contado no mês seguinte' : ''}</p> : null}
+                </div> : null}
+              </div>;
+            })}
           </div>
         </section>
       ) : null}

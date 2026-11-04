@@ -12,6 +12,8 @@ import { documentTemplateDisplayStatus } from "@/features/hr/documents/document-
 import type { DocumentTemplateWorkflowStatus } from "@/features/hr/documents/document-template-workflow";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
 import { archiveTimestamp } from "@/lib/documents/archive-entry-sort";
+import { ArchiveOriginActionDialog, type ArchiveOriginAction } from "./archive-origin-action-dialog";
+import { canArchiveTemplateVersion } from "./archive-origin-capabilities";
 
 type Model = { id: string; name: string; category: string; status: string; version: number; sourceFormat?: string; previewUrl?: string; downloadUrl?: string; description?: string; generationMode?: string; updatedAt?: string; workflowStatus?: DocumentTemplateWorkflowStatus };
 
@@ -25,6 +27,7 @@ export function ArchiveModels() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; url: string } | null>(null);
+  const [originAction, setOriginAction] = useState<ArchiveOriginAction | null>(null);
   const sequence = useRef(0);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
   const load = useCallback(async () => {
@@ -71,6 +74,26 @@ export function ArchiveModels() {
       }
     } catch (cause) { if (version === sequence.current) setError(cause instanceof Error ? cause.message : "Falha ao abrir modelo."); }
   }
+  function requestArchive(model: Model) {
+    setOriginAction({
+      title: "Arquivar versão do modelo?",
+      description: `A versão ${model.version} de “${model.name}” já está substituída. O arquivamento a retira do uso operacional, mas preserva histórico e auditoria.`,
+      confirmation: `Confirma o arquivamento da versão ${model.version} de “${model.name}”?`,
+      confirmLabel: "Arquivar versão",
+      execute: async () => {
+        if (!firebaseUser) throw new Error("Sessão indisponível.");
+        const response = await fetch(`/api/documents/templates/${encodeURIComponent(model.id)}/workflow`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "archived", decision: "advance", note: "Versão arquivada pelo Acervo após substituição." }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "A origem recusou o arquivamento.");
+        setModels((current) => current.map((item) => item.id === model.id ? { ...item, workflowStatus: "archived" } : item));
+        setPreview(null);
+      },
+    });
+  }
   const categories = [...new Set(models.map((model) => model.category))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const entries: ArchiveEntry[] = !category && !search.trim() ? categories.map((name) => ({ id: "category:" + name, name, kind: "folder", open: () => navigate(name) }))
     : models.filter((model) => (!category || model.category === category) && `${model.name} ${model.description ?? ""}`.toLocaleLowerCase("pt-BR").includes(search.trim().toLocaleLowerCase("pt-BR"))).map((model) => ({
@@ -79,11 +102,12 @@ export function ArchiveModels() {
         { label: "Baixar modelo", run: () => void access(model, true) },
         ...(hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? [{ label: "Gerenciar modelo", run: () => router.push(`/dashboard/documents/generator/models/${encodeURIComponent(model.id)}`) }] : []),
         ...(model.status === "published" && !["archived", "superseded"].includes(model.workflowStatus ?? "") && !["contextual", "reference"].includes(model.generationMode ?? "") && hasFormalizationPermission(permissions, "documents.generate", isDefaultAdmin) ? [{ label: "Gerar documento", run: () => router.push(`/dashboard/documents/generator?template=${encodeURIComponent(model.id)}`) }] : []),
+        ...(canArchiveTemplateVersion(model.workflowStatus, hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin)) ? [{ label: "Arquivar versão", destructive: true, run: () => requestArchive(model) }] : []),
       ],
     }));
-  return <ArchiveExplorer area="models" selectionScope={category ?? ""} search={search} onSearch={setSearch} loading={canView && loading} error={canView ? error : "Sem permissão para consultar modelos."} entries={canView ? entries : []}
+  return <><ArchiveExplorer area="models" selectionScope={category ?? ""} search={search} onSearch={setSearch} loading={canView && loading} error={canView ? error : "Sem permissão para consultar modelos."} entries={canView ? entries : []}
     folders={categories.map((name) => ({ id: name, name, active: name === category, open: () => navigate(name) }))} breadcrumbs={category ? [{ name: category }] : []}
     onRoot={() => navigate(null)} onUp={() => category ? navigate(null) : router.push(companyArchiveHref())} onRefresh={() => void load()} onSelect={() => { sequence.current++; setPreview(null); }}
     toolbar={hasFormalizationPermission(permissions, "templates.manage", isDefaultAdmin) ? <Button size="sm" variant="outline" onClick={() => router.push("/dashboard/documents/generator/models")}>Gerenciar biblioteca</Button> : null}
-    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime="application/pdf" title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do modelo</summary><div className="mt-2 space-y-2"><p>{models.find((model) => model.id === entry.id)?.description || entry.description}</p><p>Biblioteca oficial utilizada na geração de documentos do sistema.</p></div></details></div>} />;
+    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime="application/pdf" title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do modelo</summary><div className="mt-2 space-y-2"><p>{models.find((model) => model.id === entry.id)?.description || entry.description}</p><p>Biblioteca oficial utilizada na geração de documentos do sistema.</p></div></details></div>} /><ArchiveOriginActionDialog action={originAction} onClose={() => setOriginAction(null)} /></>;
 }
