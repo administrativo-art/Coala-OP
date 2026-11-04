@@ -955,16 +955,17 @@ export default function SettingsPage() {
             requestedValue={requestedTab}
             leading={
               <>
-                <Button
-                  onClick={() => router.back()}
-                  variant="ghost"
-                  className="h-9 w-9 shrink-0 rounded-[11px] border border-[#e3dfd6] bg-white p-0 text-[#70757d] transition-colors hover:bg-muted"
-                  aria-label="Voltar"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <h1 className="text-2xl font-extrabold tracking-tight">Configurações</h1>
-                <span className="mx-1 hidden h-6 w-px bg-[#d6d2c8] sm:block" />
+                <div className="flex w-full items-center gap-3.5">
+                  <Button
+                    onClick={() => router.back()}
+                    variant="ghost"
+                    className="h-9 w-9 shrink-0 rounded-[11px] border border-[#e3dfd6] bg-white p-0 text-[#70757d] transition-colors hover:bg-muted"
+                    aria-label="Voltar"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <h1 className="text-2xl font-extrabold tracking-tight">Configurações</h1>
+                </div>
                 <DepartmentMenu
                   tabs={departmentTabs}
                   value={activeDepartmentTab.value}
