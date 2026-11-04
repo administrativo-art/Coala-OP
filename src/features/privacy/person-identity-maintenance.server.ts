@@ -30,7 +30,7 @@ export function personIdentityWriteBlocked(
   if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
   const userId = typeof target.userId === 'string' ? target.userId : '';
   const processId = typeof target.onboardingProcessId === 'string' ? target.onboardingProcessId : '';
-  return (userId !== '' && stringSet(window.userIds).has(userId))
+  return (userId !== '' && stringSet(window.subjectKeys).has(`main.users:${userId}`))
     || (processId !== '' && stringSet(window.onboardingProcessIds).has(processId));
 }
 
