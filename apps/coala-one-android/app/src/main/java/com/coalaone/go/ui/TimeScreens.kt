@@ -880,6 +880,34 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
 }
 
+/** Conta do dia: trabalhado menos a jornada contratual, que é a base do banco de horas, igual ao resultado. */
+@Composable private fun DayEquationBlock(equation: TimeRules.DayEquation) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Text("Trabalhado", color = Tokens.muted, style = MaterialTheme.typography.bodyMedium)
+            Text(TimeRules.durationText(equation.worked), style = MaterialTheme.typography.titleLarge)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text("Jornada contratual", color = Tokens.muted, style = MaterialTheme.typography.bodyMedium)
+                Text("É a base do banco de horas", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("− ${TimeRules.durationText(equation.reference)}", style = MaterialTheme.typography.titleLarge)
+        }
+        HorizontalDivider(color = Tokens.border)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Resultado do dia", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold))
+            Text(TimeRules.durationText(equation.result, true), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+                color = if (equation.result < 0) Tokens.warning else Tokens.ink)
+        }
+        if (equation.planned != null && equation.planned != equation.reference) {
+            Text("Escala de hoje: ${TimeRules.durationText(equation.planned)}. O banco de horas conta sobre a jornada contratual de ${TimeRules.durationText(equation.reference)}, não sobre a escala do dia.",
+                color = Tokens.muted, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tokens.soft).padding(horizontal = 12.dp, vertical = 10.dp))
+        }
+    }
+}
+
 @Composable private fun DayDetail(state: TimeState, workDate: String, busy: Boolean, onReceipt: (DayPunch) -> Unit,
     onAdjust: (String) -> Unit, onAbsence: (String) -> Unit, focus: String) {
     val date = runCatching { LocalDate.parse(workDate) }.getOrNull() ?: return
@@ -896,12 +924,14 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     val worked = TimeRules.workedMinutes(punches)
     val breakMinutes = TimeRules.recordedBreakMinutes(punches)
     val closureVersion = lines.maxOfOrNull { it.closureVersion } ?: 0
-    val balance = lines.sumOf { when (it.line.nature) { "bank_credit", "payroll_overtime" -> it.line.minutes; "bank_debit", "payroll_discount" -> -it.line.minutes; else -> 0 } }
+    val balance = TimeRules.dayBankBalance(lines)
+    val equation = TimeRules.dayEquation(state.bank?.statement?.dayBases?.firstOrNull { it.date == workDate }, lines, worked)
     CardBlock(selected = focus == "bank") {
         Text(dayTitle(date), style = MaterialTheme.typography.titleLarge)
         Text(if (closureVersion > 0) "Resultado fechado · versão $closureVersion" else "Resultado provisório",
             color = if (closureVersion > 0) Tokens.okInk else Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (equation != null) DayEquationBlock(equation)
+        else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) { Text("Previsto", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(planned?.let { TimeRules.durationText(it) } ?: "—", style = MaterialTheme.typography.titleLarge) }
             Column(Modifier.weight(1f)) { Text("Trabalhado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(worked?.let { TimeRules.durationText(it) } ?: "Incompleto", style = MaterialTheme.typography.titleLarge) }
             Column(Modifier.weight(1f)) { Text("Resultado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(if (lines.isEmpty()) "—" else TimeRules.durationText(balance, true), style = MaterialTheme.typography.titleLarge, color = if (balance < 0) Tokens.warning else Tokens.ink) }
@@ -918,21 +948,24 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         HorizontalDivider(color = Tokens.border)
         if (punches.isEmpty()) Text("Nenhuma batida registrada.", color = Tokens.muted) else PunchList(punches, !busy, state.options?.executionUnits.orEmpty(), onReceipt, showLocation = true)
     }
-    CardBlock(selected = focus == "bank") {
-        Text("Memória de cálculo", style = MaterialTheme.typography.titleMedium)
-        if (state.bankDate != workDate && busy) Text("Carregando a apuração do dia…", color = Tokens.muted)
-        else if (lines.isEmpty()) Text("Nenhum crédito ou débito foi lançado para este dia.", color = Tokens.muted)
-        lines.forEach { item ->
-            val signed = when (item.line.nature) { "bank_credit", "payroll_overtime" -> item.line.minutes; "bank_debit", "payroll_discount" -> -item.line.minutes; else -> item.line.minutes }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(TimeRules.bankNatureText(item.line.nature), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
-                    Text(TimeRules.bankReasonText(item.line.reason), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                }
-                Text(TimeRules.durationText(signed, true), color = if (signed < 0) Tokens.warning else Tokens.ink, style = MaterialTheme.typography.titleMedium)
-            }
-        }
-        if (worked == null && punches.isNotEmpty()) Text("Há uma sequência incompleta de batidas; o resultado depende da análise do DP.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+    // A conta do card do dia já explica um débito ou crédito simples; a memória de cálculo fica para os demais casos.
+    if (equation == null || !TimeRules.dayEquationExplainsLines(lines)) {
+      CardBlock(selected = focus == "bank") {
+          Text("Memória de cálculo", style = MaterialTheme.typography.titleMedium)
+          if (state.bankDate != workDate && busy) Text("Carregando a apuração do dia…", color = Tokens.muted)
+          else if (lines.isEmpty()) Text("Nenhum crédito ou débito foi lançado para este dia.", color = Tokens.muted)
+          lines.forEach { item ->
+              val signed = when (item.line.nature) { "bank_credit", "payroll_overtime" -> item.line.minutes; "bank_debit", "payroll_discount" -> -item.line.minutes; else -> item.line.minutes }
+              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Column(Modifier.weight(1f)) {
+                      Text(TimeRules.bankNatureText(item.line.nature), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                      Text(TimeRules.bankReasonText(item.line.reason), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                  }
+                  Text(TimeRules.durationText(signed, true), color = if (signed < 0) Tokens.warning else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+              }
+          }
+          if (worked == null && punches.isNotEmpty()) Text("Há uma sequência incompleta de batidas; o resultado depende da análise do DP.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+      }
     }
     CardBlock(selected = focus == "adjustments") {
         Text("Ajustes e ocorrências", style = MaterialTheme.typography.titleMedium)
