@@ -69,6 +69,8 @@ function shiftFromDocument(document: QueryDocumentSnapshot | DocumentSnapshot): 
     date,
     unitId,
     type,
+    ...(stringValue(document.get('startTime')) ? { startTime: stringValue(document.get('startTime')) } : {}),
+    ...(stringValue(document.get('endTime')) ? { endTime: stringValue(document.get('endTime')) } : {}),
     ...(stringValue(document.get('shiftDefinitionId')) ? { shiftDefinitionId: stringValue(document.get('shiftDefinitionId')) } : {}),
   };
 }
@@ -109,7 +111,9 @@ export async function validateScheduleJourneys(params: {
     const type = shift.type;
     if (!userId || !date || !unitId || (type !== 'work' && type !== 'day_off')) return null;
     const shiftDefinitionId = stringValue(shift.shiftDefinitionId);
-    return { id: shift.id, userId, date, unitId, type, ...(shiftDefinitionId ? { shiftDefinitionId } : {}) };
+    return { id: shift.id, userId, date, unitId, type, ...(shiftDefinitionId ? { shiftDefinitionId } : {}),
+      ...(stringValue(shift.startTime) ? { startTime: stringValue(shift.startTime) } : {}),
+      ...(stringValue(shift.endTime) ? { endTime: stringValue(shift.endTime) } : {}) };
   };
   const currentShifts: DPJourneyValidationShift[] = params.proposedShifts
     ? params.proposedShifts.map(proposedShift).filter((shift): shift is DPJourneyValidationShift => Boolean(shift))
@@ -117,7 +121,7 @@ export async function validateScheduleJourneys(params: {
   if (currentShifts.length > CURRENT_SHIFT_LIMIT) {
     throw new AppError({ code: 'DP_SCHEDULE_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'A escala possui turnos demais para validar com segurança.' });
   }
-  const participantIds = [...new Set(currentShifts.filter((shift) => shift.type === 'work').map((shift) => shift.userId))].sort();
+  const participantIds = [...new Set(currentShifts.map((shift) => shift.userId))].sort();
   if (participantIds.length > PARTICIPANT_LIMIT) {
     throw new AppError({ code: 'DP_JOURNEY_VALIDATION_PARTICIPANT_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'A escala possui colaboradores demais para validar em uma única operação.' });
   }

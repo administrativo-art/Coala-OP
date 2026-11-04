@@ -72,6 +72,7 @@ const journeyRegimeSchema = z.discriminatedUnion('mode', [
 const weeklyRestSchema = z.object({
   placement: z.enum(['fixed_cycle', 'schedule']),
   maxConsecutiveWorkDays: z.number().int().min(1).max(6),
+  distribution: z.enum(['weekly', 'monthly_collective']).optional(),
   sundayCadenceWeeks: z.number().int().min(1).max(12).optional(),
 }).strict();
 
@@ -118,6 +119,10 @@ function refineJourney(value: z.infer<typeof journeyFieldsObjectSchema>, context
   }
   if (!value.days.some((day) => day.isRestDay)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['days'], message: 'O ciclo precisa prever ao menos um descanso semanal.' });
+  }
+  if (value.weeklyRest.distribution && value.scaleValidation.mode !== 'manual_review'
+    && value.cycleLengthDays === 7 && value.days.filter((day) => day.isRestDay).length < 2) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['days'], message: 'A jornada deve prever dois repousos no ciclo de sete dias.' });
   }
   const cycleMinutes = value.days.reduce((sum, day) => sum + day.plannedMinutes, 0);
   if (cycleMinutes * 7 !== value.weeklyMinutes * value.cycleLengthDays) {
