@@ -7,8 +7,8 @@ export const mobileReleaseQuerySchema = z.object({ packageName: mobilePackageSch
 
 // Metadata and APK are prepared together locally. Deployment still requires
 // separate authorization; these values describe the repository artifact.
-export const COALA_GO_RELEASE = { versionCode: 45, versionName: '0.3.40', minVersionCode: 45 } as const;
-export const COALA_GO_APK_SHA256 = '99fa2e84feecc8384d10ff7f85fe6b4057ce9290199420fed0d86a490d8293fe';
+export const COALA_GO_RELEASE = { versionCode: 47, versionName: '0.3.42', minVersionCode: 47 } as const;
+export const COALA_GO_APK_SHA256 = '24c4ba0fbe76b0099c1b6977fb50a0be793f889e082499db6efb980aa9aee728';
 
 export function mobileReleaseForPackage(packageName: unknown = MOBILE_GO_PACKAGE) {
   const selected = mobilePackageSchema.parse(packageName);

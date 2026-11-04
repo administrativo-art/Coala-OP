@@ -288,6 +288,8 @@ export type BankStatement = {
   cycle: { start: string; end: string; index: number } | null;
   openingMinutes: number; balanceMinutes: number; credit: number; debit: number; payroll: number; discount: number; review: number; nightMinutes: number;
   lines: BankStatementLine[]; reviewDays: Array<{ date: string; issues: BankIssue[] }>;
+  /** Base de cada dia de trabalho apurado: jornada contratual (referência do banco) e escala. Permite mostrar a conta do dia. */
+  dayBases: Array<{ date: string; referenceMinutes: number | null; plannedMinutes: number | null; workedMinutes: number; consideredMinutes: number | null }>;
   /** Competências do período sem apuração gravada (mês aberto ou ainda não apurado). */
   missing: string[];
   ended: boolean; residual: null | { minutes: number; destination: 'carry' | 'payroll' | 'review' | 'forfeit' };
@@ -361,6 +363,10 @@ export function buildStatement(input: {
     if (!inPeriod(day.date)) continue;
     if (day.issues.length) reviewDays.push({ date: day.date, issues: day.issues });
   }
+  const dayBases: BankStatement['dayBases'] = input.months.flatMap((month) => month.days)
+    .filter((day) => inPeriod(day.date) && day.kind === 'workday')
+    .map((day) => ({ date: day.date, referenceMinutes: day.referenceMinutes, plannedMinutes: day.plannedMinutes, workedMinutes: day.workedMinutes, consideredMinutes: day.consideredMinutes }))
+    .sort((left, right) => left.date.localeCompare(right.date));
   const expirationDays = input.timeBank.expirationDays;
   if (expirationDays) {
     const lots: Array<{ date: string; expires: string; remaining: number; reported: boolean }> = [];
@@ -417,7 +423,7 @@ export function buildStatement(input: {
   return {
     cycle: input.period, openingMinutes, balanceMinutes: balance, credit, debit, payroll: sum('payroll_overtime'), discount: sum('payroll_discount'), review: sum('review'),
     nightMinutes: input.months.flatMap((month) => month.days).filter((day) => inPeriod(day.date)).reduce((total, day) => total + day.nightMinutes, 0),
-    lines, reviewDays, missing: input.missing, ended, settlement: input.settlement ?? null, movements: input.movements ?? [],
+    lines, reviewDays, dayBases, missing: input.missing, ended, settlement: input.settlement ?? null, movements: input.movements ?? [],
     settlementOutdated: Boolean(input.settlement && (input.settlement.minutes !== balanceBeforeSettlement
       || input.months.some((month) => month.competence in input.settlement!.closureVersions && input.settlement!.closureVersions[month.competence] !== month.closureVersion))),
     // Zerar só perdoa saldo negativo; crédito do empregado nunca é extinto (art. 9º da CLT): vai para revisão do DP.

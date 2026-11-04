@@ -21,15 +21,19 @@ class InMemoryDeveloperViewAsStore : DeveloperViewAsSelectionStore {
     override fun clear() { targetUserId = null }
 }
 
+/**
+ * "Ver como" vale só enquanto o app está aberto: a escolha fica na memória do processo e não é gravada. Ao fechar o app,
+ * a próxima abertura volta ao perfil original sozinha. O valor que versões anteriores gravaram é apagado na criação.
+ */
 @Singleton class DeveloperViewAsStore @Inject constructor(@ApplicationContext context: Context) : DeveloperViewAsSelectionStore {
-    private val preferences = context.getSharedPreferences("developer-view-as", Context.MODE_PRIVATE)
+    @Volatile private var targetUserId: String? = null
 
-    override fun current() = preferences.getString("targetUserId", null)
+    init { context.getSharedPreferences("developer-view-as", Context.MODE_PRIVATE).edit().clear().apply() }
+
+    override fun current() = targetUserId
     override fun select(userId: String) {
         require(userId.isNotBlank() && !userId.contains('/')) { "Usuário inválido." }
-        preferences.edit().putString("targetUserId", userId).apply()
+        targetUserId = userId
     }
-    override fun clear() {
-        preferences.edit().remove("targetUserId").apply()
-    }
+    override fun clear() { targetUserId = null }
 }
