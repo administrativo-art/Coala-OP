@@ -860,6 +860,7 @@ export function DPSchedulesList() {
                   key: unit.id,
                   name: unit.name,
                   draft: schedule ? schedulePublicationStatus(schedule) === 'draft' : false,
+                  published: schedule ? hasPublishedScheduleVersion(schedule) : false,
                   filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
                   expectedDays: countExpectedDPUnitDays({ unit, year: currentYear, month: currentMonth, shiftDefinitions }),
                   onClick: () => router.push(
@@ -882,6 +883,10 @@ export function DPSchedulesList() {
     const hasData = items.length > 0;
     const hasDraft = items.some((s) => schedulePublicationStatus(s) === 'draft');
     const legacyAllUnits = items.some((s) => !s.unitId);
+    const legacyPublished = items.some((s) => !s.unitId && hasPublishedScheduleVersion(s));
+    const publishedCanonical = new Set(items.filter((s) => s.unitId && hasPublishedScheduleVersion(s)).map((s) => canonicalOf(s.unitId!)));
+    const publishedCount = legacyPublished ? totalUnits : accessibleUnits.filter((u) => publishedCanonical.has(canonicalOf(u.id))).length;
+    const allPublished = totalUnits > 0 && publishedCount === totalUnits;
     const startedCanonical = new Set(items.filter((s) => s.unitId).map((s) => canonicalOf(s.unitId!)));
     const startedCount = !hasData
       ? 0
@@ -893,10 +898,10 @@ export function DPSchedulesList() {
     const missing = Math.max(0, totalUnits - startedCount);
     const tone: 'active' | 'draft' | 'empty' = !hasData
       ? 'empty'
-      : hasDraft ? 'draft' : 'active';
+      : allPublished ? 'active' : 'draft';
     const statusLabel = !hasData
       ? 'Não iniciada'
-      : hasDraft ? 'Rascunho' : 'Publicada';
+      : allPublished ? 'Publicada' : publishedCount > 0 ? 'Publicação parcial' : 'Rascunho';
     const alert = isCurrent && missing > 0
         ? `${missing} sem escala`
         : null;
@@ -904,6 +909,7 @@ export function DPSchedulesList() {
       period: formatDPSchedulePeriod(year, month),
       month,
       hasData,
+      hasDraft,
       startedCount,
       missing,
       shiftCount,
@@ -969,7 +975,7 @@ export function DPSchedulesList() {
       for (let offset = 1; offset <= 3; offset += 1) {
         const d = new Date(currentYear, currentMonth - 1 - offset, 1);
         const s = summarize(d.getFullYear(), d.getMonth() + 1);
-        if (s.hasData && s.statusLabel === 'Rascunho') {
+        if (s.hasDraft) {
           out.push({
             key: `open-${s.period}`,
             title: `${MONTHS[d.getMonth()]} tem alterações por publicar`,
