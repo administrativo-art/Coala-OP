@@ -10,12 +10,14 @@ import { useAuth } from "@/hooks/use-auth";
 import type { FinancialInboxMessage } from "@/features/financial/inbox/types";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
+import { ArchiveOriginActionDialog, type ArchiveOriginAction } from "./archive-origin-action-dialog";
+import { canArchiveFinancialMessage } from "./archive-origin-capabilities";
 
 type Page = { messages: FinancialInboxMessage[]; nextCursor: string | null };
 type Scope = "root" | "identified" | "archived";
 export function FinancialDocumentArchive() {
   const router = useRouter();
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const [scope, setScope] = useState<Scope>("root");
   const [folder, setFolder] = useState<string | null>(null);
   const [page, setPage] = useState<Page | null>(null);
@@ -23,6 +25,7 @@ export function FinancialDocumentArchive() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; url: string; mime: string } | null>(null);
+  const [originAction, setOriginAction] = useState<ArchiveOriginAction | null>(null);
   const sequence = useRef(0);
   const fileSequence = useRef(0);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
@@ -67,6 +70,22 @@ export function FinancialDocumentArchive() {
       else setPreview({ id: entry.key, url, mime: blob.type });
     } catch (cause) { if (request === fileSequence.current) setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
   }
+  function requestArchive(entry: (typeof files)[number]) {
+    setOriginAction({
+      title: "Arquivar cobrança na origem?",
+      description: `O arquivo “${entry.file.documentNaming?.downloadName || entry.file.filename}” pertence à cobrança “${entry.message.subject}”. O arquivamento afeta a cobrança inteira e preserva seus vínculos e histórico financeiro.`,
+      confirmation: `Confirma o arquivamento da cobrança “${entry.message.subject}”? Esta ação não apaga a despesa nem o boleto vinculado.`,
+      confirmLabel: "Arquivar cobrança",
+      execute: async () => {
+        if (!firebaseUser) throw new Error("Sessão indisponível.");
+        const response = await fetch("/api/financial/inbox/bulk-review", { method: "POST", headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [entry.message.id], status: "archived" }) });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : payload.error?.message || "A origem recusou o arquivamento.");
+        setPage((current) => current ? { ...current, messages: current.messages.filter((message) => message.id !== entry.message.id) } : current);
+        setPreview(null);
+      },
+    });
+  }
   const folders = [...new Set(files.map((entry) => entry.folder))].sort();
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const entries: ArchiveEntry[] = scope === "root" ? (["identified", "archived"] as const).map((value): ArchiveEntry => ({ id: value, name: value === "identified" ? "Identificados" : "Arquivados", kind: "folder", open: () => navigate(value) })).filter((entry) => entry.name.toLocaleLowerCase("pt-BR").includes(term))
@@ -75,13 +94,14 @@ export function FinancialDocumentArchive() {
       { label: "Baixar", run: () => void access(entry, true) },
       { label: "Revisar na origem", run: () => router.push(`/dashboard/financial/inbox?sourceId=${encodeURIComponent(entry.message.id)}`) },
       { label: "Ver histórico", run: () => router.push(`/dashboard/documents/history?source=financial&documentId=${encodeURIComponent(entry.message.id)}`) },
+      ...(canArchiveFinancialMessage(scope, Boolean(isDefaultAdmin || permissions.financial?.inbox?.discard)) ? [{ label: "Arquivar cobrança", run: () => requestArchive(entry) }] : []),
     ] }));
-  return <ArchiveExplorer area="financial" selectionScope={JSON.stringify([scope, folder])} hasMorePages={Boolean(page?.nextCursor)} entries={entries} search={search} onSearch={setSearch} loading={loading} error={error} onRefresh={() => void load()}
+  return <><ArchiveExplorer area="financial" selectionScope={JSON.stringify([scope, folder])} hasMorePages={Boolean(page?.nextCursor)} entries={entries} search={search} onSearch={setSearch} loading={loading} error={error} onRefresh={() => void load()}
     breadcrumbs={scope === "root" ? [] : [{ name: scope === "identified" ? "Identificados" : "Arquivados", open: () => navigate(scope) }, ...(folder ? [{ name: folder }] : [])]}
     folders={scope === "root" ? [] : folders.map((name) => ({ id: name, name, active: folder === name, open: () => navigate(scope, name) }))}
     onRoot={() => router.push(companyArchiveHref("Financeiro"))} onUp={() => folder ? navigate(scope) : router.push(companyArchiveHref("Financeiro"))}
     onSelect={() => { fileSequence.current++; setPreview(null); }}
     toolbar={<Button size="sm" variant="outline" onClick={() => router.push("/dashboard/financial/inbox")}>Caixa de cobranças</Button>}
     footer={page?.nextCursor ? <div className="space-y-2 p-3"><p className="text-xs text-slate-500">Há mais documentos. Carregue para ampliar a lista e a busca.</p><Button variant="outline" disabled={loading} onClick={() => void load(page.nextCursor!)}>Carregar mais documentos</Button></div> : null}
-    preview={(entry) => { const item = files.find((file) => file.key === entry.id); return <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">Original: {item?.file.filename || entry.name}</p>{item && <p className="break-all">Pasta: {item.file.documentNaming?.destination || "Destino documental não confirmado"}</p>}</div></details></div>; }} />;
+    preview={(entry) => { const item = files.find((file) => file.key === entry.id); return <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">Original: {item?.file.filename || entry.name}</p>{item && <p className="break-all">Pasta: {item.file.documentNaming?.destination || "Destino documental não confirmado"}</p>}</div></details></div>; }} /><ArchiveOriginActionDialog action={originAction} onClose={() => setOriginAction(null)} /></>;
 }
