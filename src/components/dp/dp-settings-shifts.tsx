@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils';
 import type { DPJourney, DPShiftDefinition } from '@/types';
 
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const ROW_TEMPLATE = 'minmax(220px,1.2fr) minmax(225px,1fr) minmax(225px,1fr) minmax(170px,.9fr) minmax(170px,1fr) 16px';
+const ROW_TEMPLATE = 'minmax(240px,1.3fr) minmax(240px,1fr) minmax(190px,.9fr) minmax(220px,1fr) 16px';
 
 function resolveShiftExpectation(definition: DPShiftDefinition, journeys: DPJourney[]) {
   const candidates = journeys
@@ -413,7 +413,6 @@ export function DPSettingsShifts() {
         <ListHead template={ROW_TEMPLATE}>
           <span>Turno</span>
           <span>Expediente definido</span>
-          <span>Expediente esperado</span>
           <span>Dias</span>
           <span>Unidades</span>
           <span />
@@ -421,7 +420,6 @@ export function DPSettingsShifts() {
         {visibleDefinitions.map((item) => {
           const unitLabels = resolveUnitLabels(item);
           const definedDuration = shiftDurationSummary(item);
-          const expectation = resolveShiftExpectation(item, journeys);
           return (
             <ListRow
               key={item.id}
@@ -439,14 +437,6 @@ export function DPSettingsShifts() {
                 <span className="block font-ds-mono text-[13px] font-semibold text-ds-ink">{item.startTime}–{item.endTime} · {formatShiftMinutes(definedDuration.workedMinutes)}</span>
                 <span className="mt-0.5 block">Intervalo {formatShiftMinutes(definedDuration.breakMinutes)}</span>
               </span>
-              {expectation.status === 'resolved' ? (
-                <span className="text-xs text-ds-ink-muted">
-                  <span className="block font-ds-mono text-[13px] font-semibold text-ds-ink">{expectation.comparison.expectedStartTime}–{expectation.comparison.expectedEndTime} · {formatShiftMinutes(expectation.comparison.expectedWorkMinutes)}</span>
-                  <span className="mt-0.5 block">Intervalo {formatShiftMinutes(expectation.comparison.expectedBreakMinutes)}</span>
-                </span>
-              ) : (
-                <span className="text-xs font-semibold text-ds-ink-muted">{expectation.status === 'variable' ? 'Varia conforme a jornada' : 'Sem jornada aplicável'}</span>
-              )}
               <span className="text-xs text-ds-ink-muted">{item.daysOfWeek.map((day) => DOW_LABELS[day]).join(' · ')}</span>
               <span className="truncate text-xs text-ds-ink-muted">{unitLabels.length > 0 ? unitLabels.join(', ') : 'Todas as unidades'}</span>
               <Chevron />
