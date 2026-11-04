@@ -9,7 +9,7 @@ test('maintenance blocks only the explicitly scoped user and process while activ
   const window = {
     enabled: true,
     expiresAt: future,
-    userIds: ['user-a'],
+    subjectKeys: ['main.users:user-a'],
     onboardingProcessIds: ['process-a'],
   };
   assert.equal(personIdentityWriteBlocked(window, { userId: 'user-a' }, 1_000), true);
@@ -20,5 +20,5 @@ test('maintenance blocks only the explicitly scoped user and process while activ
 
 test('maintenance does not block when disabled or expired', () => {
   assert.equal(personIdentityWriteBlocked({ enabled: false }, { userId: 'user-a' }, 1_000), false);
-  assert.equal(personIdentityWriteBlocked({ enabled: true, expiresAt: future, userIds: ['user-a'] }, { userId: 'user-a' }, 2_000), false);
+  assert.equal(personIdentityWriteBlocked({ enabled: true, expiresAt: future, subjectKeys: ['main.users:user-a'] }, { userId: 'user-a' }, 2_000), false);
 });
