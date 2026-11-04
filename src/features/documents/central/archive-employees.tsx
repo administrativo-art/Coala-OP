@@ -16,8 +16,10 @@ import type { OnboardingDocument } from "@/types";
 import { EMPLOYEE_DOCUMENT_CATEGORIES, resolveEmployeeDocumentFolderPath } from "@/lib/hr/employee-document-options";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
+import { ArchiveOriginActionDialog, type ArchiveOriginAction } from "./archive-origin-action-dialog";
+import { canRemoveEmployeeArchiveDocument } from "./archive-origin-capabilities";
 
-type Document = { id: string; category: string; documentType?: string; documentTypeCode?: string; originalName: string; storedName?: string; displayName?: string; mimeType?: string; size?: number; uploadedAt?: string; destinationTrail?: string[]; archivePath?: string[]; source?: "generated" | "onboarding" | "autentique_signature"; employeeId?: string; contentHash?: string; signatureRequestId?: string; sourceOnboardingId?: string; accessLevel?: string; accessPolicyId?: string; publication?: unknown; resolvedVisibility?: unknown; archiveReferences?: string[]; archiveSourceNames?: string[]; sourceId?: string; pdfAvailable?: boolean; originHref?: string };
+type Document = { id: string; category: string; documentType?: string; documentTypeCode?: string; originalName: string; storedName?: string; displayName?: string; mimeType?: string; size?: number; uploadedAt?: string; destinationTrail?: string[]; archivePath?: string[]; source?: "generated" | "onboarding" | "autentique_signature"; status?: string; signatureStatus?: string; employeeId?: string; contentHash?: string; signatureRequestId?: string; sourceOnboardingId?: string; accessLevel?: string; accessPolicyId?: string; publication?: unknown; resolvedVisibility?: unknown; archiveReferences?: string[]; archiveSourceNames?: string[]; sourceId?: string; pdfAvailable?: boolean; originHref?: string };
 function downloadName(document: Document) {
   return document.source === "generated" && document.pdfAvailable ? document.originalName.replace(/\.[^.]+$/, "") + ".pdf" : employeeDocumentDownloadName(document);
 }
@@ -41,6 +43,8 @@ export function ArchiveEmployees() {
   const linkedIds = JSON.stringify(employee ? employeeArchiveIds(employee) : []);
   const onboardingId = employee?.onboardingId;
   const canViewGenerated = hasFormalizationPermission(permissions, "documents.view", isDefaultAdmin);
+  const canReviewGenerated = hasFormalizationPermission(permissions, "documents.review", isDefaultAdmin);
+  const canManageEmployeeDocuments = isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit);
   const [path, setPath] = useState<string[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [templatePaths, setTemplatePaths] = useState<string[][]>([]);
@@ -48,6 +52,7 @@ export function ArchiveEmployees() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; url: string; mime: string } | null>(null);
+  const [originAction, setOriginAction] = useState<ArchiveOriginAction | null>(null);
   const sequence = useRef(0);
   const fileSequence = useRef(0);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
@@ -81,7 +86,7 @@ export function ArchiveEmployees() {
       for (const source of uploads) if (source.status === "fulfilled") for (const document of source.value.documents ?? []) rows.set(document.id, document);
       for (const source of generated) if (source.status === "fulfilled") for (const document of source.value.documents ?? []) {
         const id = `generated:${document.id}`;
-        rows.set(id, { id, source: "generated", sourceId: document.id, category: "generated", displayName: document.templateName || document.originalName || "Documento gerado", originalName: document.originalName || "documento.docx", uploadedAt: document.generatedAt, pdfAvailable: document.pdfAvailable, archivePath: ["Documentos gerados"], originHref: `/dashboard/documents/generated/manage?document=${encodeURIComponent(document.id)}` });
+        rows.set(id, { id, source: "generated", sourceId: document.id, status: document.status, category: "generated", displayName: document.templateName || document.originalName || "Documento gerado", originalName: document.originalName || "documento.docx", uploadedAt: document.generatedAt, pdfAvailable: document.pdfAvailable, archivePath: ["Documentos gerados"], originHref: `/dashboard/documents/generated/manage?document=${encodeURIComponent(document.id)}` });
       }
       for (const source of onboarding) if (source.status === "fulfilled") for (const document of (source.value.process?.documents ?? []) as OnboardingDocument[]) {
         if (document.promotedDocumentId || !(document.fileUrl || document.filePath)) continue;
@@ -121,19 +126,43 @@ export function ArchiveEmployees() {
       else setPreview({ id: document.id, url, mime: blob.type });
     } catch (cause) { if (request === fileSequence.current) setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
   }
+  function requestRemoval(document: Document) {
+    const name = document.displayName || document.documentType || document.originalName;
+    const generated = document.source === "generated";
+    setOriginAction({
+      title: generated ? "Descartar documento em preparação?" : "Remover documento da pasta?",
+      description: generated
+        ? `Confira “${name}”. Somente a prévia em rascunho ou conferência pode ser descartada.`
+        : `Confira “${name}”. Se for um PDF assinado compartilhado, o original será preservado na trilha de assinatura.`,
+      confirmation: generated
+        ? `Confirma o descarte de “${name}” e dos arquivos temporários desta versão?`
+        : `Confirma a remoção de “${name}” desta pasta? A origem decidirá se os bytes podem ser eliminados.`,
+      confirmLabel: generated ? "Descartar definitivamente" : "Remover da pasta",
+      execute: async () => {
+        if (!firebaseUser) throw new Error("Sessão indisponível.");
+        const token = await firebaseUser.getIdToken();
+        const url = generated ? `/api/documents/generated/${encodeURIComponent(document.sourceId!)}` : `/api/hr/employee-documents?id=${encodeURIComponent(document.id)}`;
+        const response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "A origem recusou a remoção.");
+        setDocuments((current) => current.filter((item) => item.id !== document.id));
+        setPreview(null);
+      },
+    });
+  }
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const scoped = documents.filter((document) => path.every((segment, index) => folderPath(document)[index] === segment));
   const childFolders = employeeArchiveChildFolders([...templatePaths, ...documents.map(folderPath)], path).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const entries: ArchiveEntry[] = !employeeId ? people.filter((person) => person.username.toLocaleLowerCase("pt-BR").includes(term)).map((person) => ({ id: person.id, name: person.username, kind: "folder", description: person.isActive === false ? "Desligado" : "Colaborador", open: () => navigate(person.id) }))
     : !employee ? [] : [
       ...(!term ? childFolders.map((name): ArchiveEntry => ({ id: "folder:" + name, name, kind: "folder", open: () => navigate(employeeId, [...path, name]) })) : []),
-      ...scoped.filter((document) => term ? `${document.displayName || document.documentType || ""} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: document.displayName || document.documentType || document.originalName, kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, sizeBytes: document.size, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, modifiedAt: archiveTimestamp(document.uploadedAt), open: () => void access(document, !(document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType))), loadPreview: document.source !== "onboarding" && (document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType)) ? () => void access(document) : undefined, actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : [])] })),
+      ...scoped.filter((document) => term ? `${document.displayName || document.documentType || ""} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: document.displayName || document.documentType || document.originalName, kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, sizeBytes: document.size, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, modifiedAt: archiveTimestamp(document.uploadedAt), open: () => void access(document, !(document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType))), loadPreview: document.source !== "onboarding" && (document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType)) ? () => void access(document) : undefined, actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : []), ...(canRemoveEmployeeArchiveDocument({ source: document.source, status: document.status, canManageEmployeeDocuments, canReviewGenerated }) ? [{ label: document.source === "generated" ? "Descartar preparação" : "Remover da pasta", destructive: true, run: () => requestRemoval(document) }] : [])] })),
     ];
-  return <ArchiveExplorer area="collaborators" selectionScope={JSON.stringify([employeeId, path])} entries={canView ? entries : []} search={search} onSearch={setSearch} loading={loading} error={!canView ? "Sem permissão para consultar as pastas da equipe." : employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
+  return <><ArchiveExplorer area="collaborators" selectionScope={JSON.stringify([employeeId, path])} entries={canView ? entries : []} search={search} onSearch={setSearch} loading={loading} error={!canView ? "Sem permissão para consultar as pastas da equipe." : employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
     breadcrumbs={employee ? [{ name: employee.username, open: () => navigate(employeeId) }, ...path.map((name, index) => ({ name, open: () => navigate(employeeId, path.slice(0, index + 1)) }))] : []}
     folders={employee ? childFolders.map((name) => ({ id: name, name, open: () => navigate(employeeId, [...path, name]) })) : []}
     onRoot={() => navigate(null)} onUp={() => path.length ? navigate(employeeId, path.slice(0, -1)) : employeeId ? navigate(null) : router.push(companyArchiveHref())}
     onRefresh={() => void load()} onSelect={() => { fileSequence.current++; setPreview(null); }}
-    toolbar={employee && (permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit) ? <Button size="sm" variant="outline" onClick={() => router.push(`/dashboard/dp/collaborators/${encodeURIComponent(employee.id)}/documents`)}>Gerenciar pasta</Button> : null}
-    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">{entry.description}</p>{(documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length ?? 0) > 1 && <p>{documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length} referências ao mesmo kit assinado, agrupadas nesta visualização.</p>}</div></details></div>} />;
+    toolbar={employee && canManageEmployeeDocuments ? <Button size="sm" variant="outline" onClick={() => router.push(`/dashboard/dp/collaborators/${encodeURIComponent(employee.id)}/documents`)}>Gerenciar pasta</Button> : null}
+    preview={(entry) => <div className="space-y-3 text-xs text-slate-500">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded border bg-white p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">{entry.description}</p>{(documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length ?? 0) > 1 && <p>{documents.find((doc) => doc.id === entry.id)?.archiveReferences?.length} referências ao mesmo kit assinado, agrupadas nesta visualização.</p>}</div></details></div>} /><ArchiveOriginActionDialog action={originAction} onClose={() => setOriginAction(null)} /></>;
 }

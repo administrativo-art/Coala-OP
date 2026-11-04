@@ -151,11 +151,13 @@ test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async
   test.setTimeout(300_000);
   const pdf = await PDFDocument.create(); pdf.addPage().drawText("Documento de teste", { x: 40, y: 740 });
   const bytes = Buffer.from(await pdf.save());
+  let generatedDeleteCalls = 0;
   await page.route("**/api/hr/employee-documents?*", (route) => route.fulfill({ json: { documents: [{ id: "employee-file-e2e", category: "personal", documentType: "Documento de identificação", documentTypeCode: "PERSONAL_ID", displayName: "Identidade de teste", storedName: "COL-001__IDENTIFICACAO__v01", originalName: "identidade.pdf", mimeType: "application/pdf", size: bytes.length }, ...Array.from({ length: 7 }, (_, index) => ({ id: `package-reference-${index}`, employeeId: "employee", source: "autentique_signature", documentTypeCode: "ADMISSION_PACKAGE", category: "admission", displayName: "Kit admissional assinado", originalName: `Componente ${index}.pdf`, mimeType: "application/pdf", contentHash: "c".repeat(64), signatureRequestId: "bundle", sourceOnboardingId: "onboarding", size: bytes.length }))] } }));
   await page.route("**/api/hr/employee-documents/access", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
   await page.route("**/api/hr/employee-document-folder-profile?*", (route) => route.fulfill({ json: { folderProfile: { folders: [{ id: "personal", category: "personal", path: ["Documentos pessoais"], employeeVisible: true }] } } }));
-  await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [{ id: "generated-archive-e2e", templateName: "Contrato gerado", originalName: "contrato.docx", pdfAvailable: true }] } }));
+  await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [{ id: "generated-archive-e2e", status: "review_pending", templateName: "Contrato gerado", originalName: "contrato.docx", pdfAvailable: true }] } }));
   await page.route("**/api/documents/generated/generated-archive-e2e/file?format=pdf", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
+  await page.route("**/api/documents/generated/generated-archive-e2e", (route) => { generatedDeleteCalls++; return route.fulfill({ json: { ok: true } }); });
   await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [] } }));
   await page.route("**/api/documents/company/units", (route) => route.fulfill({ json: { units: [] } }));
   await page.route("**/api/financial/inbox?*", (route) => route.fulfill({ json: { messages: [{ id: "message-archive-e2e", subject: "Recibo de teste", receivedAt: "2026-11-02T12:00:00.000Z", attachments: [{ id: "attachment-e2e", filename: "Recibo financeiro.pdf", size: bytes.length, contentType: "application/pdf", storagePath: "demo/test.pdf" }] }], nextCursor: null } }));
@@ -200,6 +202,16 @@ test("Colaboradores e Financeiro mantêm pastas e arquivos no explorador", async
   await page.getByRole("button", { name: "Pasta: Documentos gerados", exact: true }).dblclick();
   await page.getByRole("button", { name: "Arquivo: Contrato gerado", exact: true }).dblclick();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Contrato gerado" })).toHaveAttribute("data-rendered", "true");
+  await page.getByRole("dialog").press("Escape");
+  await page.getByRole("button", { name: "Arquivo: Contrato gerado", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Descartar preparação", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(/Somente a prévia em rascunho ou conferência/)).toBeVisible();
+  expect(generatedDeleteCalls).toBe(0);
+  await page.getByRole("dialog").getByRole("button", { name: "Continuar", exact: true }).click();
+  expect(generatedDeleteCalls).toBe(0);
+  await page.getByRole("dialog").getByRole("button", { name: "Descartar definitivamente", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Arquivo: Contrato gerado", exact: true })).toHaveCount(0);
+  expect(generatedDeleteCalls).toBe(1);
 });
 
 test("perfil comum vê só a pasta própria publicada e baixa com o nome da origem", async ({ page }) => {
