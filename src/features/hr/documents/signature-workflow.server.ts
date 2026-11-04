@@ -1,3 +1,4 @@
+import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
 import "server-only";
 
 import { autoPublishDocument } from "@/features/hr/documents/publication.server";
@@ -29,6 +30,9 @@ import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company
 import type { DocumentPackageManifest } from "@/features/hr/documents/document-package-manifest";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
+import { subjectKey } from "@/features/privacy/person-subject";
+import { freezeSignaturePersonBinding, historicalSignaturePersonKeys, assertHistoricalGeneratedSource, historicalSignatureEmployeeId } from "@/features/privacy/signature-person-history";
+import { confirmedStoredSubjectKeys, confirmedSubjectKeys, confirmedSubjectKeysForDocument, confirmedSubjectKeysForIdentifier } from "@/features/privacy/person-lookup.server";
 import {
   allocateDocumentProtocol,
   allocateIdempotentDocumentProtocol,
@@ -65,7 +69,7 @@ import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { getDocumentTypeConfig } from "@/lib/hr/employee-document-catalog";
 import { reportSystemError } from "@/lib/observability";
 import { resolveDocumentDestination } from "@/lib/hr/employee-document-distribution";
-import { employeeCodeFrom, hashBuffer, loadExpectedIdentity } from "@/lib/hr/employee-document-identity";
+import { hashBuffer } from "@/lib/hr/employee-document-identity";
 
 const WORKFLOW_COLLECTION = "hrSignatureDocuments";
 const REQUEST_COLLECTION = "hrSignatureRequests";
@@ -589,6 +593,7 @@ export async function prepareAdmissionSignaturePlacement(params: {
   actorId: string;
   actorName: string;
 }) {
+  await prepareOnboardingPersonForWrite(params.onboardingId);
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
     throw new Error("O posicionamento só pode ser preparado antes do envio do kit.");
@@ -637,6 +642,8 @@ export async function prepareAdmissionSignaturePlacement(params: {
   if (companySignatory.email.toLowerCase() === recipient) {
     throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
   }
+  const subjectKeys = await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId);
+  const companySignerKeys = companySignatory.userId ? await confirmedSubjectKeys({ namespace: "main.users", id: companySignatory.userId }) : [];
   const protocol = await allocateIdempotentDocumentProtocol({
     entity: prepared.legalEntity.legalName ?? prepared.legalEntity.cnpj ?? "CS",
     type: "ADM",
@@ -674,8 +681,11 @@ export async function prepareAdmissionSignaturePlacement(params: {
     },
   ];
   const now = new Date().toISOString();
-  await requestRef.set({
+  await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
     type: "onboarding_document_package_signature",
+    subjectKeys,
+    signerKeys: [...subjectKeys, ...companySignerKeys],
+    actorKeys: [subjectKey({ namespace: "main.users", id: params.actorId })],
     status: "placement_pending",
     provider: "autentique",
     onboardingId: params.onboardingId,
@@ -704,7 +714,7 @@ export async function prepareAdmissionSignaturePlacement(params: {
     preparedBy: params.actorId,
     preparedByName: params.actorName,
     updatedAt: now,
-  });
+  }));
   return listSignatureWorkflow(params.onboardingId);
 }
 
@@ -1193,6 +1203,7 @@ export async function sendSignatureDocuments(params: {
   actorId: string;
   actorName: string;
 }) {
+  await prepareOnboardingPersonForWrite(params.onboardingId);
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
     throw new Error("O envio só pode ser feito após a preparação e revisão dos documentos.");
@@ -1248,8 +1259,11 @@ export async function sendSignatureDocuments(params: {
       holderName: process.data.candidateName,
     });
     const now = new Date().toISOString();
-    await requestRef.set({
+    await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
       type: "onboarding_document_signature",
+      subjectKeys: await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId),
+      signerKeys: await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId),
+      actorKeys: [subjectKey({ namespace: "main.users", id: params.actorId })],
       status: "sending",
       provider: "autentique",
       onboardingId: params.onboardingId,
@@ -1267,7 +1281,7 @@ export async function sendSignatureDocuments(params: {
       requestedBy: params.actorId,
       requestedByName: params.actorName,
       updatedAt: now,
-    });
+    }));
     try {
       const created = await createAutentiqueDocument({
         buffer,
@@ -1431,6 +1445,8 @@ export async function addCompanySignerToAdmissionBundle(params: {
   });
   const batch = hrDbAdmin.batch();
   batch.set(requestRef, {
+    signerKeys: [...new Set([...(Array.isArray(request.get("signerKeys")) ? request.get("signerKeys") as string[] : []), ...(companySignatory.userId ? await confirmedSubjectKeys({ namespace: "main.users", id: companySignatory.userId }) : [])])],
+    actorKeys: [...new Set([...(Array.isArray(request.get("actorKeys")) ? request.get("actorKeys") as string[] : []), subjectKey({ namespace: "main.users", id: params.actorId })])],
     signers,
     providerSignatures: provider.signatures,
     participants,
@@ -1923,6 +1939,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
           })
         : null;
       return {
+        companySignerUserId: companySignatory?.userId ?? null,
         partyType,
         role: String(party.role ?? "recipient"),
         ref: text(party.ref),
@@ -1982,8 +1999,20 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     return { requestId: requestRef.id, status: existing.get("status"), reused: true };
   }
 
+  const subjectKeys = Array.isArray(generated.get("subjectKeys"))
+    ? await confirmedStoredSubjectKeys(generated.get("subjectKeys"))
+    : employeeId ? await confirmedSubjectKeysForIdentifier(employeeId) : [];
+  const signerKeys = new Set<string>();
+  const employeeSignerIds = generatedParties.length
+    ? generatedParties.filter((party) => party.partyType === "employee" && party.ref && signerCandidates.some((candidate) => candidate.email === party.email)).map((party) => party.ref!)
+    : employeeId ? [employeeId] : [];
+  for (const signerId of employeeSignerIds) for (const key of await (generatedParties.length ? confirmedSubjectKeys({ namespace: "hr.employees", id: signerId }) : confirmedSubjectKeysForIdentifier(signerId))) signerKeys.add(key);
+  for (const party of generatedParties) if (party.companySignerUserId && signerCandidates.some((candidate) => candidate.email === party.email)) {
+    for (const key of await confirmedSubjectKeys({ namespace: "main.users", id: party.companySignerUserId })) signerKeys.add(key);
+  }
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const [source] = await bucket.file(sourcePath).download();
+  if (generated.get("pdfContentHash") && hashBuffer(source) !== generated.get("pdfContentHash")) throw new Error("O PDF de origem diverge da versão registrada.");
   const protocol = text(generated.get("protocol")) ?? await allocateIdempotentDocumentProtocol({
     entity: documentProtocolEntityFromSnapshot(
       generated.get("legalEntitySnapshot"),
@@ -2071,11 +2100,18 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     documentType: templateId === "system-receipt-standard" ? "Recibo" : generated.get("templateName"),
     holderName: recipientParty?.name ?? text(generated.get("employeeName")) ?? text(employee?.get("username")) ?? generatedParties.find((party) => !["company", "external_company"].includes(party.partyType))?.name,
   });
-  await requestRef.set({
+  await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
     type: "generated_document_standalone_signature",
+    subjectKeys,
+    signerKeys: [...signerKeys],
+    partyKeys: generated.get("partyKeys") ?? [],
+    actorKeys: [subjectKey({ namespace: "main.users", id: params.actorId })],
     status: "sending",
     provider: "autentique",
     generatedDocumentId: params.generatedDocumentId,
+    sourceGeneratedVersion: generated.get("version") ?? generated.get("templateVersion") ?? null,
+    sourceGeneratedHash: generated.get("pdfContentHash") ?? generated.get("docxContentHash") ?? null,
+    sourceGeneratedStoragePath: generated.get("pdfStoragePath") ?? generated.get("storagePath") ?? null,
     employeeId: employeeId ?? null,
     templateId: generated.get("templateId") ?? null,
     documentTypeCode: generated.get("documentTypeCode") ?? "UNKNOWN_DOCUMENT",
@@ -2096,7 +2132,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     requestedBy: params.actorId,
     requestedByName: params.actorName,
     updatedAt: now,
-  });
+  }));
   try {
     const created = await createAutentiqueDocument({
       buffer: composed.buffer,
@@ -2321,12 +2357,21 @@ async function createEmployeeSignedDocument(params: {
   const reference = hrDbAdmin.collection("employeeDocuments").doc(documentId);
   const existing = await reference.get();
   if (existing.exists) {
-    if (existing.get("employeeId") !== params.employeeId || existing.get("contentHash") !== hashBuffer(params.signedBuffer) || existing.get("storagePath") !== params.signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+    if (existing.get("signatureRequestId") !== params.workflow.signatureRequestId || existing.get("sourceOnboardingId") !== params.workflow.onboardingId || existing.get("employeeId") !== params.employeeId || existing.get("contentHash") !== hashBuffer(params.signedBuffer) || existing.get("storagePath") !== params.signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
     return documentId;
   }
+  const requestId = text(params.workflow.signatureRequestId);
+  if (!requestId) throw new Error("Documento sem solicitação histórica confirmada.");
+  const request = await hrDbAdmin.collection("hrSignatureRequests").doc(requestId).get();
+  const history = request.data() ?? {};
+  const ids = Array.isArray(history.workflowDocumentIds) ? history.workflowDocumentIds : [history.workflowDocumentId];
+  if (!request.exists || history.onboardingId !== params.workflow.onboardingId || !ids.includes(params.workflowDocumentId)
+    || (history.employeeId && history.employeeId !== params.employeeId)
+    || history.signedStoragePath && history.signedStoragePath !== params.signedStoragePath
+    || history.signedHash && history.signedHash !== hashBuffer(params.signedBuffer)) throw new Error("A origem do documento não corresponde à solicitação histórica.");
+  const { subjectKeys, partyKeys } = historicalSignaturePersonKeys(requestId, history);
   const config = getDocumentTypeConfig(params.admissionPackage ? "ADMISSION_PACKAGE" : text(params.workflow.documentTypeCode) ?? "UNKNOWN_DOCUMENT");
-  const identity = await loadExpectedIdentity(params.employeeId);
-  const employeeCode = employeeCodeFrom(identity, params.employeeId);
+  const employeeCode = text(history.employeeCode) ?? params.employeeId;
   const fields = {
     employeeName: text(params.process.candidateName),
     admissionDate: text(params.process.expectedAdmissionDate),
@@ -2336,6 +2381,8 @@ async function createEmployeeSignedDocument(params: {
   const now = Timestamp.now();
   const documentData = {
     employeeId: params.employeeId,
+    subjectKeys,
+    partyKeys,
     candidateId: text(params.process.candidateId),
     category: config.category,
     documentType: params.admissionPackage ? config.label : text(params.workflow.templateName) ?? config.label,
@@ -2378,7 +2425,7 @@ async function createEmployeeSignedDocument(params: {
   await hrDbAdmin.runTransaction(async (transaction) => {
     const current = await transaction.get(reference);
     if (current.exists) {
-      if (current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+      if (current.get("signatureRequestId") !== params.workflow.signatureRequestId || current.get("sourceOnboardingId") !== params.workflow.onboardingId || current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
       return;
     }
     transaction.set(reference, documentData);
@@ -2439,6 +2486,15 @@ export async function archiveAutentiqueSignedDocument(params: {
     const synced = await syncClosingPackageSignature({ signatureRequestId: params.signatureRequestId, eventType: "document.finished", signedUrl: params.signedUrl, at: params.signedAt ?? null });
     return synced?.archivedDocumentId ?? null;
   }
+  const archivedIds = Array.isArray(request.get("archivedDocumentIds")) ? request.get("archivedDocumentIds") as string[] : request.get("archivedDocumentId") ? [String(request.get("archivedDocumentId"))] : [];
+  if (archivedIds.length) {
+    if (request.get("personBinding")) historicalSignaturePersonKeys(params.signatureRequestId, request.data() ?? {});
+    for (const id of archivedIds) {
+      const archived = await hrDbAdmin.collection("employeeDocuments").doc(id).get();
+      if (!archived.exists || archived.get("signatureRequestId") !== params.signatureRequestId || archived.get("storagePath") !== request.get("signedStoragePath")
+        || archived.get("contentHash") !== request.get("signedHash") || archived.get("deletedAt")) throw new Error("O arquivo histórico diverge da solicitação assinada.");
+    }
+  }
   const bundleOnboardingId = text(request.get("onboardingId"));
   const isAdmissionBundle = Boolean(bundleOnboardingId && params.signatureRequestId === admissionSignatureRequestId(bundleOnboardingId));
   if (Array.isArray(request.get("archivedDocumentIds")) && (request.get("archivedDocumentIds").length || !isAdmissionBundle)) {
@@ -2466,6 +2522,8 @@ export async function archiveAutentiqueSignedDocument(params: {
     const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedDocumentId);
     const generated = await generatedRef.get();
     if (!generated.exists) throw new Error("Documento gerado da solicitação não encontrado.");
+    assertHistoricalGeneratedSource(request.data() ?? {}, generatedDocumentId, generated.data() ?? {});
+    const { subjectKeys, partyKeys } = historicalSignaturePersonKeys(params.signatureRequestId, request.data() ?? {});
     const signedBuffer = await downloadSignedPdf(params.signedUrl);
     const signedHash = hashBuffer(signedBuffer);
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -2478,7 +2536,7 @@ export async function archiveAutentiqueSignedDocument(params: {
         metadata: { generatedDocumentId, signatureRequestId: params.signatureRequestId },
       },
     });
-    const employeeId = text(request.get("employeeId")) ?? text(generated.get("employeeId"));
+    const employeeId = historicalSignatureEmployeeId(request.data() ?? {}, generated.data() ?? {});
     let archivedDocumentId: string | null = null;
     if (employeeId) {
       const config = getDocumentTypeConfig(
@@ -2486,24 +2544,27 @@ export async function archiveAutentiqueSignedDocument(params: {
         ?? text(generated.get("documentTypeCode"))
         ?? "UNKNOWN_DOCUMENT",
       );
-      const identity = await loadExpectedIdentity(employeeId);
+
       const destination = resolveDocumentDestination({
         config,
-        employeeCode: employeeCodeFrom(identity, employeeId),
+        employeeCode: text(request.get("employeeCode")) ?? employeeId,
         fields: { employeeName: text(generated.get("employeeName")) },
         version: 1,
       });
       archivedDocumentId = generatedSignatureEmployeeDocumentId(generatedDocumentId);
       const employeeDocumentRef = hrDbAdmin.collection("employeeDocuments").doc(archivedDocumentId);
+
       await hrDbAdmin.runTransaction(async (transaction) => {
         const existing = await transaction.get(employeeDocumentRef);
         if (existing.exists) {
-          if (existing.get("employeeId") !== employeeId || existing.get("contentHash") !== signedHash || existing.get("storagePath") !== signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+          if (existing.get("signatureRequestId") !== params.signatureRequestId || existing.get("sourceGeneratedDocumentId") !== generatedDocumentId || existing.get("employeeId") !== employeeId || existing.get("contentHash") !== signedHash || existing.get("storagePath") !== signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
           return;
         }
         const now = Timestamp.now();
         transaction.set(employeeDocumentRef, {
           employeeId,
+          subjectKeys,
+          partyKeys,
           category: config.category,
           documentType: text(generated.get("templateName")) ?? config.label,
           documentTypeCode: config.code,
@@ -2585,6 +2646,9 @@ export async function archiveAutentiqueSignedDocument(params: {
   if (workflowSnapshots.some((snapshot) => !snapshot.exists)) {
     throw new Error("Documento do fluxo de assinatura não encontrado.");
   }
+  historicalSignaturePersonKeys(params.signatureRequestId, request.data() ?? {});
+  if (workflowSnapshots.some((snapshot) => snapshot.get("onboardingId") !== onboardingId || snapshot.get("signatureRequestId") !== params.signatureRequestId
+    || snapshot.get("providerDocumentId") !== request.get("providerDocumentId"))) throw new Error("Componentes divergentes da solicitação histórica.");
   const buffer = await downloadSignedPdf(params.signedUrl);
   const signedHash = hashBuffer(buffer);
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -2604,7 +2668,7 @@ export async function archiveAutentiqueSignedDocument(params: {
     },
   });
   const signedAt = params.signedAt ?? new Date().toISOString();
-  const employeeId = processEmployeeId(process.data);
+  const employeeId = text(request.get("employeeId")) ?? processEmployeeId(process.data);
   if (isAdmissionBundle) {
     // Webhook before and after activation use the same canonical archive path.
     const plan = planSignedAdmissionArchive(onboardingId, workflowSnapshots.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...request.data(), status: "signed", signedStoragePath, signedHash });

@@ -1,5 +1,12 @@
 {
   "indexes": [
+    {"collectionGroup":"ptrp_treatments","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"terminationProcesses","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_absenceRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"beneficiaryUid","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_pilotMarkings","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_journeyLocationEvents","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"ptrp_automaticAbsences","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"ptrp_markingClassificationRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
     {"collectionGroup": "ptrp_automaticAbsences", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeUid", "order": "ASCENDING"}, {"fieldPath": "workDate", "order": "ASCENDING"}]},
     { "collectionGroup": "onboardingProcesses", "queryScope": "COLLECTION", "fields": [

@@ -2,9 +2,9 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **547**
-- Totalmente contratados: **215**
-- Legados congelados: **322**
+- Arquivos de rota: **548**
+- Totalmente contratados: **218**
+- Legados congelados: **320**
 - Exceções temporárias: **10**
 - Violações: **0**
 
@@ -82,13 +82,13 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/company/folder` | POST ✓ | `CONTRACTED` | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) |
 | `/api/documents/company/intake` | PATCH ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) |
 | `/api/documents/company/units` | GET ✓ | `CONTRACTED` | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) |
-| `/api/documents/generate` | POST | `LEGACY_BASELINE` | [src/app/api/documents/generate/route.ts](../../src/app/api/documents/generate/route.ts) |
+| `/api/documents/generate` | POST ✓ | `CONTRACTED` | [src/app/api/documents/generate/route.ts](../../src/app/api/documents/generate/route.ts) |
 | `/api/documents/generated` | GET ✓ | `CONTRACTED` | [src/app/api/documents/generated/route.ts](../../src/app/api/documents/generated/route.ts) |
 | `/api/documents/generated/[id]` | DELETE, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/documents/generated/[id]/route.ts](../../src/app/api/documents/generated/[id]/route.ts) |
 | `/api/documents/generated/[id]/audit` | GET | `LEGACY_BASELINE` | [src/app/api/documents/generated/[id]/audit/route.ts](../../src/app/api/documents/generated/[id]/audit/route.ts) |
 | `/api/documents/generated/[id]/file` | GET | `LEGACY_BASELINE` | [src/app/api/documents/generated/[id]/file/route.ts](../../src/app/api/documents/generated/[id]/file/route.ts) |
 | `/api/documents/generated/[id]/signature` | GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/generated/[id]/signature/route.ts](../../src/app/api/documents/generated/[id]/signature/route.ts) |
-| `/api/documents/generator/parties` | GET | `LEGACY_BASELINE` | [src/app/api/documents/generator/parties/route.ts](../../src/app/api/documents/generator/parties/route.ts) |
+| `/api/documents/generator/parties` | GET ✓ | `CONTRACTED` | [src/app/api/documents/generator/parties/route.ts](../../src/app/api/documents/generator/parties/route.ts) |
 | `/api/documents/generator/templates` | GET | `LEGACY_BASELINE` | [src/app/api/documents/generator/templates/route.ts](../../src/app/api/documents/generator/templates/route.ts) |
 | `/api/documents/history` | GET ✓ | `CONTRACTED` | [src/app/api/documents/history/route.ts](../../src/app/api/documents/history/route.ts) |
 | `/api/documents/templates` | GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/templates/route.ts](../../src/app/api/documents/templates/route.ts) |
@@ -457,6 +457,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/observability/client-errors` | POST | `LEGACY_BASELINE` | [src/app/api/observability/client-errors/route.ts](../../src/app/api/observability/client-errors/route.ts) |
 | `/api/privacy/incidents` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/privacy/incidents/route.ts](../../src/app/api/privacy/incidents/route.ts) |
 | `/api/privacy/incidents/[id]` | PATCH ✓ | `CONTRACTED` | [src/app/api/privacy/incidents/[id]/route.ts](../../src/app/api/privacy/incidents/[id]/route.ts) |
+| `/api/privacy/person-inventory` | GET ✓ | `CONTRACTED` | [src/app/api/privacy/person-inventory/route.ts](../../src/app/api/privacy/person-inventory/route.ts) |
 | `/api/privacy/requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/privacy/requests/route.ts](../../src/app/api/privacy/requests/route.ts) |
 | `/api/privacy/requests/[id]` | PATCH ✓ | `CONTRACTED` | [src/app/api/privacy/requests/[id]/route.ts](../../src/app/api/privacy/requests/[id]/route.ts) |
 | `/api/processes` | GET | `LEGACY_BASELINE` | [src/app/api/processes/route.ts](../../src/app/api/processes/route.ts) |

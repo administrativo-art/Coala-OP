@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    { "project": "smart-converter-752gf", "database": "coala", "collection": "users", "workspace": "coala", "contract": "src/lib/auth-server.ts:178;src/lib/workspace.ts;src/types/index.ts:1009" },
+    { "project": "smart-converter-752gf", "database": "coala-rh", "collection": "employees", "workspace": "coala", "contract": "src/app/api/hr/onboarding/[id]/route.ts:529,701;src/features/hr/termination/server.ts:408" },
+    { "project": "smart-converter-752gf", "database": "coala-rh", "collection": "candidates", "workspace": "coala", "contract": "src/app/api/hr/candidates/route.ts:153,195;src/app/api/hr/candidates/route.ts:89" },
+    { "project": "demo-coala-repository", "database": "coala", "collection": "users", "workspace": "coala", "contract": "tests/integration/person-inventory.test.mjs:fixture-only" },
+    { "project": "demo-coala-repository", "database": "coala-rh", "collection": "employees", "workspace": "coala", "contract": "tests/integration/person-inventory.test.mjs:fixture-only" },
+    { "project": "demo-coala-repository", "database": "coala-rh", "collection": "candidates", "workspace": "coala", "contract": "tests/integration/person-inventory.test.mjs:fixture-only" }
+  ]
+}

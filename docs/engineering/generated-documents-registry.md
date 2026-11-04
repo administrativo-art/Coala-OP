@@ -31,6 +31,10 @@ Arquivos enviados apenas como instâncias não entram nesse catálogo: pertencem
 
 AFD e AEJ são exceções `reference` deliberadas: não são modelos editáveis nem documentos gerais da pasta do colaborador, mas exportações fiscais de leiautes oficiais, geradas por estabelecimento/período e preservadas junto da assinatura e da auditoria. Permanecem fora da lista **Geração e publicação**; o fluxo e a retenção estão documentados em [Registro de ponto REP-P](flows/dp-time-recording.md). O comprovante individual e o espelho, por serem documentos pessoais apresentados ao colaborador, continuam registrados no catálogo.
 
+## Identidade na admissão
+
+O catálogo de modelos permanece único; a correção de identidade não cria novos modelos. As saídas admissionais existentes preservam namespace/papéis: hr.candidates somente para candidatura real, hr.onboardingPersons para pessoa natural manual antes da conta e contexto empresarial PJ sem titular humano inventado. UID/RH só são equivalentes por vínculo recíproco explícito. Geração, assinatura, retomada e limites readonly estão no [contrato de rastreabilidade](document-person-traceability.md#admissão-natural-antes-da-conta-e-provisionamento) e nas [trilhas](document-trails.md).
+
 ## Patrimônio
 
 `system-asset-custody-term` é o termo contextual de entrega e responsabilidade criado ao transferir a posse de um patrimônio para colaborador. Usa `coala-letterhead-v2`, protocolo patrimonial `PAT`, assinatura independente do colaborador e do signatário institucional, retenção `employment_plus_5y` e publicação automática somente depois da assinatura. A origem preserva `sourceAssetId` e `sourceCustodyTransferId`; o arquivo assinado segue para **Documentos do colaborador → Uniformes e EPIs → Entregas**. Veja o [fluxo patrimonial](flows/assets.md).

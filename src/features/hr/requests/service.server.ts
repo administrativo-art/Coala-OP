@@ -322,6 +322,7 @@ async function generateRequestDocument(access: HrAccess, requestId: string) {
   const generated = await generateDocumentFromTemplate({
     templateId,
     employeeId: loaded.employeeId,
+    actorAccess: { ...access, workspace_id: access.workspaceId },
     includeSensitive: true,
     manualValues: action === "suspend" || action === "reactivate"
       ? scheduledValues

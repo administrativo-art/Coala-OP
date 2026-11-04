@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
-import { loadVisibleEmployeeIds } from "@/features/hr/lib/employee-document-access-server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
+import { assertDocumentGenerationPermission, assertHrPartyGenerationAccess } from "@/features/hr/documents/generation-access.server";
+import { AppError } from "@/lib/observability/app-error";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
@@ -47,15 +51,29 @@ function entityAddress(data: FirebaseFirestore.DocumentData) {
   ].filter(Boolean).join(" · ");
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const access = await assertFormalizationAccess(request, "documents.generate");
-    const visibleEmployeeIds = await loadVisibleEmployeeIds(access);
-    const [entities, employees] = await Promise.all([
+type Context = { params: Promise<Record<string, never>> };
+const contract = defineSecurityContract({ schemaVersion: 1, id: "documents.generator.parties", version: 1, surface: { method: "GET", path: "/api/documents/generator/parties" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "hr.documents.generate" }, resourceScope: { kind: "workspace" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const enforcer = createStandardSecurityEnforcer<NextRequest, Context, unknown, ServerUserContext, undefined, { workspaceId: string }>(contract, {
+  authenticate: ({ request }) => requireUser(request),
+  loadResource: ({ actor }) => ({ workspaceId: actor.workspace_id }),
+  authorize: ({ actor }) => assertDocumentGenerationPermission(actor),
+  assertScope: ({ actor, resource }) => { if (actor.workspace_id !== resource.workspaceId) throw new AppError({ code: "DOCUMENT_PARTIES_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" }); },
+});
+export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
+    const access = security.actor;
+    const [entities, candidates] = await Promise.all([
       dbAdmin.collection("entities").get(),
-      hrDbAdmin.collection("employees").get(),
+      hrDbAdmin.collection("employees").select("status").get(),
     ]);
 
+    const visibleRefs: FirebaseFirestore.DocumentReference[] = [];
+    for (const employee of candidates.docs) {
+      if (String(employee.get("status") ?? "active") === "inactive") continue;
+      try { await assertHrPartyGenerationAccess(access, employee.id); visibleRefs.push(employee.ref); }
+      catch (error) { if (!(error instanceof AppError) || error.kind !== "AUTHORIZATION") throw error; }
+    }
+    // Read personal details/CPF only after namespace-aware authorization.
+    const employees = { docs: visibleRefs.length ? await hrDbAdmin.getAll(...visibleRefs) : [] };
     const employeeCpfDocuments = employees.docs.map((employee) =>
       employee.ref.collection("field_values").doc("employee.cpf")
     );
@@ -68,7 +86,6 @@ export async function GET(request: NextRequest) {
 
     const employeeOptions: PartyOption[] = employees.docs
       .filter((employee) => String(employee.get("status") ?? "active") !== "inactive")
-      .filter((employee) => visibleEmployeeIds.has(employee.id))
       .map((employee) => ({
         id: employee.id,
         partyType: "employee",
@@ -127,10 +144,4 @@ export async function GET(request: NextRequest) {
       left.name.localeCompare(right.name, "pt-BR")
     );
     return NextResponse.json({ parties });
-  } catch (cause) {
-    return NextResponse.json(
-      { error: cause instanceof Error ? cause.message : "Acesso negado." },
-      { status: 403 },
-    );
-  }
-}
+});

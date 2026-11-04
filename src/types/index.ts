@@ -1007,6 +1007,8 @@ export type UnitAccessScope = 'linked' | 'selected' | 'all';
 export type PersonRecordType = 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
 
 export type User = {
+  onboardingPersonRef?: { namespace: "hr.onboardingPersons"; id: string } | null;
+  onboardingProvisioningId?: string | null;
   id: string; // Firebase Auth UID
   username: string;
   email: string;
@@ -1641,6 +1643,9 @@ export type OnboardingPrivacyAcceptance = {
 };
 
 export type OnboardingProcess = {
+  personIdentity?: import("@/features/privacy/onboarding-person").OnboardingPersonIdentity;
+  personOrigin?: { schemaVersion: 1; kind: "manual-natural" | "pj-company" };
+  personProvisioning?: { schemaVersion: 1; operationId: string; uid: string; hrEmployeeId: string; origin: string; subjectRef: import("@/features/privacy/person-subject").SubjectRef | null; state: string };
   id: string;
   candidateId: string;
   candidateName?: string | null;
