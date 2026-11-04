@@ -71,7 +71,7 @@ function scopeMatches(scope: DPTimeApplicability['scope'], target: DPJourneyReso
   return [target.unitOrganizationId, ...(target.unitOrganizationIds ?? [])].includes(scope.id);
 }
 
-function applicabilityMatches(applicability: DPTimeApplicability, target: DPJourneyResolutionTarget) {
+export function journeyApplicabilityMatches(applicability: DPTimeApplicability, target: DPJourneyResolutionTarget) {
   return scopeMatches(applicability.scope, target)
     && dimensionMatches(applicability.jobRoleIds, target.jobRoleId ? [target.jobRoleId] : [])
     && dimensionMatches(applicability.jobFunctionIds, target.jobFunctionIds ?? [])
@@ -99,7 +99,7 @@ export function resolveDPJourney<TJourney extends DPApplicableCandidate = DPJour
   date: string;
 }): DPJourneyResolution<TJourney> {
   const matches = params.journeys
-    .filter((journey) => isEffective(journey, params.date) && applicabilityMatches(journey.applicability, params.target))
+    .filter((journey) => isEffective(journey, params.date) && journeyApplicabilityMatches(journey.applicability, params.target))
     .sort((left, right) => {
       const bySpecificity = applicabilitySpecificity(right.applicability).score
         - applicabilitySpecificity(left.applicability).score;

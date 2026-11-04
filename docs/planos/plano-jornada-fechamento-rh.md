@@ -4,7 +4,7 @@
 
 **Status:** fases técnicas 1–6 publicadas; ensaio nominal segregado em validação; coleta oficial, conformidade formal, lançamento total e saída do Bizneo continuam bloqueados
 
-**Última atualização:** 23/10/2026
+**Última atualização:** 04/11/2026
 
 **Responsável funcional:** RH / Administração
 
@@ -48,6 +48,7 @@ O sistema registra a jornada real, explica cálculos e preserva evidências. INP
 - CT Sorvetes LTDA — CNPJ 14.276.603/0001-25 é a titular e desenvolvedora definida para os dois componentes; seu e-CNPJ assina os documentos da desenvolvedora e a empresa será titular no depósito direto ao INPI. Não usar a marca Coala no lugar da razão social.
 - Tiago Francisco Brasil Batista é o responsável técnico. O responsável legal que assina o atestado deve ser uma pessoa física com poderes para representar a CT Sorvetes; ambos os campos aplicáveis usam certificados pessoais ICP-Brasil.
 - Advogado trabalhista valida enquadramento, regras e instrumentos no início; contador valida eventos, unidades e efeitos de folha. A Fase 7 confirma a implementação final.
+- **Pendência jurídica — repousos mensais (04/11/2026):** a configuração `monthly_collective` usa a meta inteira conservadora `ceil(dias do mês × 2 / 7)` para representar média mínima de dois repousos por semana no mês-calendário. A EC nº 141/2026, art. 7º, § 2º, não especifica expressamente o arredondamento de frações. Advogado trabalhista deve confirmar a interpretação e o instrumento coletivo aplicável antes do uso operacional dessa modalidade. O sistema não cadastra nem comprova o ACT/CCT; a escolha é manual por jornada.
 - Separar obrigação legal, interpretação pendente e controle técnico escolhido. Fonte e evidência acompanham a obrigação; teste de eficácia acompanha o controle.
 - Conferir CNAE/enquadramento com o contador. Uso interno não autoriza comercialização.
 - Verificar titularidade e licenças do código; obter cessões quando necessárias, sem presumir cessão de toda dependência de terceiros.

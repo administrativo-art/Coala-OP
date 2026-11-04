@@ -193,8 +193,6 @@ export function HrRequestsPage() {
     }
   };
 
-  const analyzeTotal = [counts.pending, canReview ? absenceReviewCount?.value ?? 0 : 0, canReview ? adjustmentCount ?? 0 : 0,
-    canViewResponsibilityTasks ? coverageCount ?? 0 : 0].reduce((sum, value) => sum + value, 0);
   const transportList = (emptyText: string) => <section className="space-y-3">
     <div>
       <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Benefícios</p>
@@ -222,11 +220,10 @@ export function HrRequestsPage() {
           {canReview ? <Button variant="primary-page" size="xl" onClick={() => setAbsencePickerOpen(true)}><Plus className="h-4 w-4" />Nova ausência</Button> : null}
         </>}
         chips={tab === "analyze" ? <>
-          <HeroChip value={analyzeTotal} label="todos" tone="warning" active={analyzeFilter === "all"} onClick={() => setAnalyzeFilter("all")} />
-          <HeroChip value={counts.pending} label="vale-transporte" tone="warning" active={analyzeFilter === "transport"} onClick={() => setAnalyzeFilter("transport")} />
-          {canReview ? <HeroChip value={countLabel(absenceReviewCount)} label="ausências" tone="warning" active={analyzeFilter === "absences"} onClick={() => setAnalyzeFilter("absences")} /> : null}
-          {canReview ? <HeroChip value={countLabel(adjustmentCount)} label="ajustes de ponto" tone="warning" active={analyzeFilter === "adjustments"} onClick={() => setAnalyzeFilter("adjustments")} /> : null}
-          {canViewResponsibilityTasks ? <HeroChip value={countLabel(coverageCount)} label="turnos sem cobertura" tone="danger" active={analyzeFilter === "coverage"} onClick={() => setAnalyzeFilter("coverage")} /> : null}
+          <HeroChip value={counts.pending} label="vale-transporte" tone="warning" active={analyzeFilter === "transport"} onClick={() => setAnalyzeFilter((current) => current === "transport" ? "all" : "transport")} />
+          {canReview ? <HeroChip value={countLabel(absenceReviewCount)} label="ausências" tone="warning" active={analyzeFilter === "absences"} onClick={() => setAnalyzeFilter((current) => current === "absences" ? "all" : "absences")} /> : null}
+          {canReview ? <HeroChip value={countLabel(adjustmentCount)} label="ajustes de ponto" tone="warning" active={analyzeFilter === "adjustments"} onClick={() => setAnalyzeFilter((current) => current === "adjustments" ? "all" : "adjustments")} /> : null}
+          {canViewResponsibilityTasks ? <HeroChip value={countLabel(coverageCount)} label="turnos sem cobertura" tone="danger" active={analyzeFilter === "coverage"} onClick={() => setAnalyzeFilter((current) => current === "coverage" ? "all" : "coverage")} /> : null}
         </> : tab === "follow" ? <>
           <HeroChip value={items.length + (canViewAbsences ? absenceTeamCount?.value ?? 0 : 0)} label="todas" active={followFilter === "all"} onClick={() => setFollowFilter("all")} />
           <HeroChip value={items.length} label="vale-transporte" tone="info" active={followFilter === "transport"} onClick={() => setFollowFilter("transport")} />

@@ -3819,6 +3819,8 @@ export type DPWeeklyRestRule = {
   placement: 'fixed_cycle' | 'schedule';
   /** Proteção aplicada sobre datas corridas, inclusive entre competências e unidades. */
   maxConsecutiveWorkDays: number;
+  /** Ausente em versões legadas; novas jornadas distinguem repouso semanal e compensação mensal coletiva. */
+  distribution?: 'weekly' | 'monthly_collective';
   /** Regra opcional de CCT para coincidência do descanso com domingo. */
   sundayCadenceWeeks?: number;
 };
