@@ -3,6 +3,7 @@ import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { onboardingOrigin, processSubjectRef, readOnboardingPerson, record } from './onboarding-person';
 import { prepareOnboardingPersonForWrite } from './onboarding-person.server';
+import { assertPersonIdentityWriteAllowed } from './person-identity-maintenance.server';
 
 /** Auth/main/RH are not atomic. Reserve an immutable UID before creating Auth and checkpoint each boundary. */
 export async function provisionOnboardingAuth(input: { processId: string }, email: string, displayName: string, password: string) {
@@ -39,6 +40,7 @@ export async function provisionOnboardingAuth(input: { processId: string }, emai
 }
 
 export async function checkpointOnboardingIdentities(processId: string, uid: string, employeeId: string) {
+  await assertPersonIdentityWriteAllowed({ onboardingProcessId: processId });
   const [processRow, user, employee] = await Promise.all([
     hrDbAdmin.collection('onboardingProcesses').doc(processId).get(), dbAdmin.collection('users').doc(uid).get(), hrDbAdmin.collection('employees').doc(employeeId).get(),
   ]);

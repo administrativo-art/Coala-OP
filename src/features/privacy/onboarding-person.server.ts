@@ -3,11 +3,13 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { record } from './onboarding-person';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { matchesLegacyProcessEmployeeId, onboardingOrigin, provenPlaceholder, readOnboardingPerson, type OnboardingPersonIdentity } from './onboarding-person';
+import { assertPersonIdentityWriteAllowed } from './person-identity-maintenance.server';
 export function newOnboardingPerson(onboardingId: string): OnboardingPersonIdentity {
   return { schemaVersion: 1, kind: 'natural-person', ref: { namespace: 'hr.onboardingPersons', id: randomUUID() }, sourceLocator: { onboardingId, slot: 'applicant' } };
 }
 /** Call only from an authorized mutating intake/generation/provisioning operation. */
 export async function prepareOnboardingPersonForWrite(onboardingId: string) {
+  await assertPersonIdentityWriteAllowed({ onboardingProcessId: onboardingId });
   const proposed = newOnboardingPerson(onboardingId);
   const prepared: Record<string, unknown> & { id: string } = await hrDbAdmin.runTransaction(async (transaction) => {
     const reference = hrDbAdmin.collection('onboardingProcesses').doc(onboardingId);
