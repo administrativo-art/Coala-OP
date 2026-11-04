@@ -158,6 +158,16 @@ describe('Banco de horas: ciclo e extrato', () => {
     assert.equal(cycleLabel({ unit: 'day', length: 20, anchorDate: '2026-10-01', residualDestination: 'carry' }), '20 dias a partir de 01/10/2026');
   });
 
+  it('extrato informa a jornada contratual e a escala de cada dia de trabalho, sem os dias fora do ciclo ou sem turno', () => {
+    const worked = computeBankDay(day({ date: '2026-10-14', markings: punches('2026-10-14', '10:00', '13:00', '13:15', '16:15') }));
+    const rest = computeBankDay(day({ date: '2026-10-15', shift: { ...shift, type: 'day_off' } }));
+    const outside = computeBankDay(day({ date: '2026-09-30' }));
+    const months = [{ competence: '2026-10', closureVersion: 2, days: [rest, worked], totals: monthTotals([rest, worked]) }, { competence: '2026-09', closureVersion: 1, days: [outside], totals: monthTotals([outside]) }];
+    const statement = buildStatement({ period: { start: '2026-10-01', end: '2026-10-31', index: 9 }, today: '2026-10-20', months, missing: [], openingMinutes: 0,
+      timeBank: { allowNegativeBalance: true } });
+    assert.deepEqual(statement.dayBases, [{ date: '2026-10-14', referenceMinutes: 440, plannedMinutes: 360, workedMinutes: 360, consideredMinutes: 360 }]);
+  });
+
   it('extrato soma o ciclo, transporta a abertura e mostra o residual quando o ciclo terminou', () => {
     const debit = computeBankDay(day({ date: '2026-10-14', markings: punches('2026-10-14', '10:00', '13:00', '13:15', '16:15') }));
     const outside = computeBankDay(day({ date: '2026-09-30' }));
