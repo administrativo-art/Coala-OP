@@ -8,6 +8,7 @@ export type DPSchedulesSidebarUnit = {
   key: string;
   name: string;
   draft?: boolean;
+  published?: boolean;
   selected?: boolean;
   disabled?: boolean;
   filledDays: number;
@@ -146,7 +147,8 @@ export function DPSchedulesSidebar({
                           )}>
                             {unit.name}
                           </span>
-                          {unit.draft && <span title="Rascunho" className="shrink-0 rounded bg-amber-500 px-1 text-[9px] font-bold text-white">R</span>}
+                          {unit.published && <span title="Versão publicada" aria-label="Versão publicada" className="shrink-0 rounded bg-emerald-600 px-1 text-[9px] font-bold text-white">P</span>}
+                          {unit.draft && <span title="Rascunho em edição" aria-label="Rascunho em edição" className="shrink-0 rounded bg-amber-500 px-1 text-[9px] font-bold text-white">R</span>}
                           <span className={cn(
                             'shrink-0 text-[10px] font-extrabold tabular-nums',
                             unit.filledDays > 0 ? 'text-[#90a0b8]' : 'text-[#f472a5]',
