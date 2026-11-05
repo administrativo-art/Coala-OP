@@ -110,6 +110,8 @@ export type EditorTemplateView = {
   contentHash: string;
   contentBytes: number;
   fieldKeys: string[];
+  /** ISO da última alteração (sem uid de ator). */
+  updatedAt: string | null;
 };
 export function toEditorTemplateView(record: EditorTemplateRecord): EditorTemplateView {
   return {
@@ -122,6 +124,7 @@ export function toEditorTemplateView(record: EditorTemplateRecord): EditorTempla
     contentHash: record.contentHash,
     contentBytes: record.contentBytes,
     fieldKeys: record.fieldKeys,
+    updatedAt: record.updatedAt,
   };
 }
 
@@ -179,7 +182,7 @@ export async function createTemplate(
 }
 
 export async function saveTemplateContent(
-  input: { templateId: string; clientRequestId: string; expectedVersion: number; content: unknown; name?: string },
+  input: { templateId: string; clientRequestId: string; expectedVersion: number; content: unknown; name?: string; description?: string },
   actor: EditorActor,
   deps: TemplateApiDeps,
 ): Promise<{ kind: "saved"; template: EditorTemplateView } | TemplateVersionConflict> {

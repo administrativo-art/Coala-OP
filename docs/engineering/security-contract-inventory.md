@@ -82,7 +82,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/company/folder` | POST ✓ | `CONTRACTED` | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) |
 | `/api/documents/company/intake` | PATCH ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) |
 | `/api/documents/company/units` | GET ✓ | `CONTRACTED` | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) |
-| `/api/documents/editor` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) |
+| `/api/documents/editor` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) |
 | `/api/documents/editor/[id]` | GET ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/route.ts](../../src/app/api/documents/editor/[id]/route.ts) |
 | `/api/documents/editor/[id]/content` | PUT ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/content/route.ts](../../src/app/api/documents/editor/[id]/content/route.ts) |
 | `/api/documents/editor/[id]/file` | GET ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/file/route.ts](../../src/app/api/documents/editor/[id]/file/route.ts) |

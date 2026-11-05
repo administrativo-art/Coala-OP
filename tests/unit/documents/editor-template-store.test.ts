@@ -454,3 +454,53 @@ test('usar: título vem do nome registrado na versão publicada; renomear sem re
   const d3 = await useEditorTemplate({ workspaceId: 'w1', actorId: 'u', templateId: p.id, clientRequestId: 'u3' }, deps);
   assert.equal(store.get(`editorDocuments/${d3.id}`)!.title, 'Renomeado');
 });
+
+test('descrição editável: salvar com conteúdo novo grava descrição; replay com descrição diferente => idempotency_mismatch', async () => {
+  const { deps, writes } = setup();
+  const t = await mk(deps, { description: 'inicial' });
+  const args = { templateId: t.id, workspaceId: 'w1', actorId: 'a', clientRequestId: 's1', expectedVersion: 1, content: doc('v2') };
+  const s = await saveEditorTemplateContent({ ...args, description: ' nova ' }, deps);
+  assert.deepEqual([s.currentVersion, s.description], [2, 'nova']);
+  const n = writes.length;
+  assert.equal((await saveEditorTemplateContent({ ...args, description: 'nova' }, deps)).currentVersion, 2);
+  assert.equal((await saveEditorTemplateContent(args, deps)).currentVersion, 2, 'sem descrição mantém o replay');
+  assert.equal(await code(saveEditorTemplateContent({ ...args, description: 'outra' }, deps)), 'idempotency_mismatch');
+  assert.equal(writes.length, n);
+  // omitida mantém; vazia limpa; acima de 1000 é inválida
+  const keep = await saveEditorTemplateContent({ ...args, clientRequestId: 's2', expectedVersion: 2, content: doc('v3') }, deps);
+  assert.equal(keep.description, 'nova');
+  const clear = await saveEditorTemplateContent({ ...args, clientRequestId: 's3', expectedVersion: 3, content: doc('v4'), description: '' }, deps);
+  assert.equal(clear.description, '');
+  assert.equal(await code(saveEditorTemplateContent({ ...args, clientRequestId: 's4', expectedVersion: 4, content: doc('v5'), description: 'x'.repeat(1001) }, deps)), 'invalid_input');
+});
+
+test('só nome/descrição (conteúdo idêntico): sem nova versão, atualiza o registro, audita e NÃO muda publishedName', async () => {
+  const { deps, store } = setup();
+  const p = await published(deps);
+  const meta = { templateId: p.id, workspaceId: 'w1', actorId: 'revisor', clientRequestId: 'm1', expectedVersion: 1, content: doc('Texto') };
+  const before = store.get(`editorTemplates/${p.id}`)!.updatedAt;
+  const r = await saveEditorTemplateContent({ ...meta, name: 'Renomeado', description: 'Nova descrição' }, deps);
+  assert.deepEqual([r.currentVersion, r.name, r.description, r.publishedName, r.publishedVersion, r.status, r.updatedBy], [1, 'Renomeado', 'Nova descrição', 'Carta modelo', 1, 'published', 'revisor']);
+  assert.notEqual(r.updatedAt, new Date(before as Date).toISOString());
+  assert.equal([...store.keys()].filter((k) => k.startsWith(`editorTemplates/${p.id}/versions/`)).length, 1, 'nenhuma versão nova');
+  assert.equal([...store.keys()].filter((k) => k.startsWith(`editorTemplates/${p.id}/audit/template-saved-v1-meta-`)).length, 1);
+  // replay idempotente: mesmos valores não escreve; valores diferentes com a mesma chave => mismatch
+  const snapshot = JSON.stringify([...store.entries()]);
+  assert.equal((await saveEditorTemplateContent({ ...meta, name: 'Renomeado', description: 'Nova descrição' }, deps)).currentVersion, 1);
+  assert.equal(await code(saveEditorTemplateContent({ ...meta, name: 'Outro' }, deps)), 'idempotency_mismatch');
+  assert.equal(await code(saveEditorTemplateContent({ ...meta, description: 'Outra' }, deps)), 'idempotency_mismatch');
+  assert.equal(JSON.stringify([...store.entries()]), snapshot);
+  // nada diferente com outra chave: no-op sem escrita
+  const noop = await saveEditorTemplateContent({ ...meta, clientRequestId: 'm2', name: 'Renomeado' }, deps);
+  assert.equal(noop.currentVersion, 1);
+  assert.equal(JSON.stringify([...store.entries()]), snapshot);
+  // publicar depois grava o novo publishedName
+  const again = await publishEditorTemplate({ templateId: p.id, workspaceId: 'w1', actorId: 'revisor', clientRequestId: 'p9', expectedVersion: 1 }, deps);
+  assert.equal(again.publishedName, 'Carta modelo', 'versão já publicada é idempotente; publishedName muda só em nova publicação');
+});
+
+test('registro do modelo expõe updatedAt ISO', async () => {
+  const { deps } = setup();
+  const t = await mk(deps);
+  assert.match(t.updatedAt ?? '', /^2026-11-05T10:00:0\d\.000Z$/);
+});

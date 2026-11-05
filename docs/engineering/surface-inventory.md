@@ -105,7 +105,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/company/folder` | POST | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/intake` | POST, PATCH | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/units` | GET | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) | [company-documents](flows/company-documents.md) |
-| `/api/documents/editor` | POST | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor` | GET, POST | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/editor/[id]` | GET | [src/app/api/documents/editor/[id]/route.ts](../../src/app/api/documents/editor/%5Bid%5D/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/editor/[id]/content` | PUT | [src/app/api/documents/editor/[id]/content/route.ts](../../src/app/api/documents/editor/%5Bid%5D/content/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/editor/[id]/file` | GET | [src/app/api/documents/editor/[id]/file/route.ts](../../src/app/api/documents/editor/%5Bid%5D/file/route.ts) | [document-generation](flows/document-generation.md) |

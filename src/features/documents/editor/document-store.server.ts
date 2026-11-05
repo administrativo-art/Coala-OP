@@ -20,6 +20,12 @@ import {
   type EditorAuditEventType,
   type EditorContentVersionRecord,
   type EditorDocumentRecord,
+  type EditorDocumentListPage,
+  type EditorDocumentListStatus,
+  type EditorDocumentListStoreDeps,
+  EDITOR_DOCUMENT_LIST_STATUSES,
+  EDITOR_DOCUMENT_RECORD_ID_PATTERN,
+  type StoreQuery,
   parseEditorOrigin,
   type EditorDocumentOrigin,
   type EditorStoreDeps,
@@ -479,4 +485,99 @@ export async function recordEditorPdfDownloaded(input: RecordPdfDownloadedInput,
       auditDoc("pdf_downloaded", input.version, contentHash, actorId, null, now, { pdfContentHash }),
     );
   });
+}
+
+// ---------------------------------------------------------------- listagem (somente leitura)
+
+export const EDITOR_DOCUMENT_LIST_MAX = 25;
+
+export async function defaultEditorDocumentListDeps(): Promise<EditorDocumentListStoreDeps> {
+  const { dbAdmin } = await import("@/lib/firebase-admin");
+  return { db: dbAdmin as unknown as EditorDocumentListStoreDeps["db"] };
+}
+
+export type ListEditorDocumentsInput = {
+  workspaceId: string;
+  /** Quando informado, restringe a documentos cujo autor (`generatedBy`, ATOR) é este uid. */
+  authorId?: string;
+  status?: EditorDocumentListStatus;
+  /** 1..25 (acima de 25 é reduzido a 25). Padrão 25. */
+  limit?: number;
+  cursor?: string;
+};
+
+function encodeListCursor(ms: number, id: string): string {
+  return Buffer.from(JSON.stringify([ms, id]), "utf8").toString("base64url");
+}
+function decodeListCursor(cursor: string): { ms: number; id: string } {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (
+      Array.isArray(parsed) && parsed.length === 2 && Number.isInteger(parsed[0]) && Math.abs(parsed[0] as number) <= 8.64e15 &&
+      typeof parsed[1] === "string" && EDITOR_DOCUMENT_RECORD_ID_PATTERN.test(parsed[1])
+    ) {
+      return { ms: parsed[0] as number, id: parsed[1] };
+    }
+  } catch {
+    // cai no erro fixo abaixo
+  }
+  throw new EditorStoreError("invalid_input", "Cursor inválido.");
+}
+function millisOrNull(value: unknown): number | null {
+  try {
+    const ms = value instanceof Date ? value.getTime() : value && typeof (value as { toMillis?: unknown }).toMillis === "function" ? (value as { toMillis(): number }).toMillis() : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  } catch {
+    return null;
+  }
+}
+function isoOrNull(value: unknown): string | null {
+  const ms = millisOrNull(value);
+  return ms === null ? null : new Date(ms).toISOString();
+}
+
+/**
+ * Lista documentos do editor do workspace (opcionalmente só de um autor e/ou status), mais recentes
+ * primeiro, com cursor. Somente leitura: no máximo limit+1 (<= 26) leituras por chamada, sempre por
+ * índice (workspaceId[, generatedBy][, status], updatedAt desc); nunca varre a coleção. Não devolve
+ * titular, chaves de titular nem caminhos de Storage (o item só carrega o necessário à visão pública).
+ */
+export async function listEditorDocuments(input: ListEditorDocumentsInput, deps: EditorDocumentListStoreDeps): Promise<EditorDocumentListPage> {
+  const workspaceId = requireText(input.workspaceId, "workspaceId");
+  const authorId = input.authorId === undefined ? undefined : requireText(input.authorId, "authorId");
+  if (input.status !== undefined && !(EDITOR_DOCUMENT_LIST_STATUSES as readonly string[]).includes(input.status)) {
+    throw new EditorStoreError("invalid_input", "Campo inválido: status.");
+  }
+  const requested = input.limit === undefined ? EDITOR_DOCUMENT_LIST_MAX : input.limit;
+  if (typeof requested !== "number" || !Number.isInteger(requested) || requested < 1) throw new EditorStoreError("invalid_input", "Campo inválido: limit.");
+  const limit = Math.min(requested, EDITOR_DOCUMENT_LIST_MAX);
+  // Literal exigido por scripts/check-person-source-registration.mjs (igual a EDITOR_DOCUMENTS_COLLECTION).
+  let query: StoreQuery = deps.db.collection("editorDocuments").where("workspaceId", "==", workspaceId);
+  if (authorId !== undefined) query = query.where("generatedBy", "==", authorId);
+  if (input.status !== undefined) query = query.where("status", "==", input.status);
+  query = query.orderBy("updatedAt", "desc").orderBy("__name__", "desc");
+  if (input.cursor !== undefined) {
+    const c = decodeListCursor(input.cursor);
+    query = query.startAfter(new Date(c.ms), c.id);
+  }
+  const snap = await query.limit(limit + 1).get();
+  const page = snap.docs.slice(0, limit);
+  const items = page.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      title: String(data.title ?? ""),
+      status: String(data.status),
+      contentVersion: Number(data.contentVersion),
+      updatedAt: isoOrNull(data.updatedAt),
+      finalizedAt: isoOrNull(data.finalizedAt),
+      origin: parseEditorOrigin(data.origin),
+      generatedBy: String(data.generatedBy),
+    };
+  });
+  const last = page[page.length - 1];
+  const lastMs = last ? millisOrNull(last.data().updatedAt) : null;
+  // Sem data legível não há cursor confiável: encerra a paginação em vez de repetir ou pular itens.
+  const nextCursor = snap.docs.length > limit && last && lastMs !== null ? encodeListCursor(lastMs, last.id) : null;
+  return { items, nextCursor };
 }

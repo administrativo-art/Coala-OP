@@ -40,8 +40,16 @@ export const listEditorTemplatesQuerySchema = z
   })
   .strict();
 
+export const listEditorDocumentsQuerySchema = z
+  .object({
+    status: z.enum(["draft", "final"]).optional(),
+    limit: z.coerce.number().int().min(1).max(25).optional(),
+    cursor: z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  })
+  .strict();
+
 export const saveEditorTemplateBodySchema = z
-  .object({ expectedVersion: templateVersion, clientRequestId, content: contentObject, name: templateName.optional() })
+  .object({ expectedVersion: templateVersion, clientRequestId, content: contentObject, name: templateName.optional(), description: z.string().trim().max(1000).optional() })
   .strict();
 
 export const publishEditorTemplateBodySchema = z.object({ clientRequestId, expectedVersion: templateVersion }).strict();
@@ -78,6 +86,7 @@ export const finalizeEditorBodySchema = z
   })
   .strict();
 
+export type ListEditorDocumentsQuery = z.infer<typeof listEditorDocumentsQuerySchema>;
 export type CreateEditorBody = z.infer<typeof createEditorBodySchema>;
 export type SaveEditorBody = z.infer<typeof saveEditorBodySchema>;
 export type PreviewEditorBody = z.infer<typeof previewEditorBodySchema>;

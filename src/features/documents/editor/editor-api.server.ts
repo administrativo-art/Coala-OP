@@ -15,9 +15,13 @@ import {
   getEditorContentVersion,
   getEditorDocument,
   getEditorFinalPdfRef,
+  listEditorDocuments,
   recordEditorPdfDownloaded,
   recordEditorPreviewResolved,
   saveEditorContent,
+  type EditorDocumentListStoreDeps,
+  type EditorDocumentListStatus,
+  type EditorDocumentOrigin,
   type EditorDocumentRecord,
   type EditorStoreDeps,
   type EditorSubjectRef,
@@ -44,7 +48,7 @@ import { PROVISIONAL_PAGE_LAYOUT, renderEditorHtml } from "./render-html";
  */
 
 export type EditorActor = Pick<ServerUserContext, "decoded" | "userDoc" | "isDefaultAdmin" | "workspace_id" | "permissions">;
-export type EditorAction = "create" | "view" | "download" | "edit" | "preview" | "finalize";
+export type EditorAction = "create" | "list" | "view" | "download" | "edit" | "preview" | "finalize";
 
 export type EditorApiDeps = {
   store: EditorStoreDeps;
@@ -163,7 +167,7 @@ const forbidden = () =>
 export function assertEditorAccess(actor: EditorActor, document: EditorDocumentRecord | null, action: EditorAction) {
   const can = (key: "documents.generate" | "documents.review") => hasFormalizationPermission(actor.permissions, key, actor.isDefaultAdmin);
   if (!can("documents.generate")) throw forbidden();
-  if (action === "create") return;
+  if (action === "create" || action === "list") return;
   if (!document) throw forbidden();
   if (document.workspaceId !== actor.workspace_id) throw forbidden();
   if (action === "finalize") {
@@ -248,6 +252,61 @@ export function toEditorDocumentView(record: EditorDocumentRecord): EditorDocume
     contentHash: record.contentHash,
     subject: record.subject,
     pdfAvailable: record.pdfAvailable,
+  };
+}
+
+/**
+ * Visão pública mínima de um item da listagem. Sem uid de ator, titular, chaves de titular, ids de
+ * funcionário ou caminho de Storage. `hasFields` é omitido: o registro do documento não guarda
+ * `fieldKeys` (só a versão de conteúdo guarda, e ler cada versão violaria o custo da listagem).
+ */
+export type EditorDocumentListItemView = {
+  id: string;
+  title: string;
+  status: string;
+  contentVersion: number;
+  updatedAt: string | null;
+  finalizedAt?: string;
+  origin: { kind: "editor" } | { kind: "editor_template"; templateId: string; templateVersion: number } | null;
+  isOwn: boolean;
+};
+function toListOrigin(origin: EditorDocumentOrigin | null): EditorDocumentListItemView["origin"] {
+  if (!origin) return null;
+  return origin.kind === "editor_template"
+    ? { kind: "editor_template", templateId: origin.templateId, templateVersion: origin.templateVersion }
+    : { kind: "editor" };
+}
+
+export type ListDocumentsDeps = { store: EditorDocumentListStoreDeps };
+
+/**
+ * Listagem do workspace do ator. `documents.generate` é pré-requisito; sem `documents.review` só os
+ * documentos do próprio ator (filtro `generatedBy` NA CONSULTA, não em memória). Somente leitura:
+ * <= 26 leituras por chamada (limit <= 25 + 1), sem escrita, auditoria, listener ou polling.
+ */
+export async function listDocuments(
+  input: { status?: EditorDocumentListStatus; limit?: number; cursor?: string },
+  actor: EditorActor,
+  deps: ListDocumentsDeps,
+): Promise<{ items: EditorDocumentListItemView[]; nextCursor: string | null }> {
+  assertEditorAccess(actor, null, "list");
+  const uid = actor.decoded.uid;
+  const seeAll = hasFormalizationPermission(actor.permissions, "documents.review", actor.isDefaultAdmin);
+  const page = await guarded(() =>
+    listEditorDocuments({ workspaceId: actor.workspace_id, ...(seeAll ? {} : { authorId: uid }), ...input }, deps.store),
+  );
+  return {
+    items: page.items.map((item): EditorDocumentListItemView => ({
+      id: item.id,
+      title: item.title,
+      status: item.status,
+      contentVersion: item.contentVersion,
+      updatedAt: item.updatedAt,
+      ...(item.finalizedAt ? { finalizedAt: item.finalizedAt } : {}),
+      origin: toListOrigin(item.origin),
+      isOwn: item.generatedBy === uid,
+    })),
+    nextCursor: page.nextCursor,
   };
 }
 

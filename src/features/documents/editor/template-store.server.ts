@@ -133,7 +133,17 @@ function readRecord(id: string, data: Record<string, unknown>): EditorTemplateRe
     fieldKeys: Array.isArray(data.fieldKeys) ? (data.fieldKeys as string[]) : [],
     createdBy: String(data.createdBy),
     updatedBy: String(data.updatedBy),
+    updatedAt: isoOrNull(data.updatedAt),
   };
+}
+
+function isoOrNull(value: unknown): string | null {
+  try {
+    const ms = value instanceof Date ? value.getTime() : value && typeof (value as { toMillis?: unknown }).toMillis === "function" ? (value as { toMillis(): number }).toMillis() : NaN;
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function ownedTemplate(snap: StoreSnap, workspaceId: string, id: string): Record<string, unknown> {
@@ -274,8 +284,20 @@ export type SaveEditorTemplateContentInput = {
   expectedVersion: number;
   content: unknown;
   name?: string;
+  /** Opcional; vazio ("") limpa a descrição. Omitido = mantém a gravada. */
+  description?: string;
 };
 
+/**
+ * Salva conteúdo e/ou metadados (nome, descrição). Regra de versionamento (decisão de 2026-11-05):
+ *  - conteúdo diferente do corrente => nova versão imutável (+ nome/descrição, se informados);
+ *  - conteúdo idêntico ao corrente => NUNCA cria versão: se nome/descrição informados diferem, só o
+ *    registro é atualizado (updatedAt/updatedBy, mesma `currentVersion`); se nada difere, é no-op.
+ *  - renomear NÃO muda `publishedName`; ele só é regravado ao publicar (M-c).
+ * Idempotência: replay de salvamento que gerou versão (current === expected + 1) compara hash, nome e
+ * descrição; replay de atualização só de metadados (mesma versão, `lastClientRequestId` igual) exige
+ * nome/descrição iguais aos gravados. Divergência => idempotency_mismatch.
+ */
 export async function saveEditorTemplateContent(input: SaveEditorTemplateContentInput, deps: EditorTemplateStoreDeps): Promise<EditorTemplateRecord> {
   const workspaceId = requireText(input.workspaceId, "workspaceId");
   const templateId = requireTemplateId(input.templateId);
@@ -283,6 +305,7 @@ export async function saveEditorTemplateContent(input: SaveEditorTemplateContent
   const clientRequestId = requireText(input.clientRequestId, "clientRequestId");
   const expectedVersion = requireVersion(input.expectedVersion, "expectedVersion");
   const name = input.name === undefined ? undefined : requireText(input.name, "name", MAX_NAME);
+  const description = input.description === undefined ? undefined : optionalDescription(input.description);
   const parsed = validateContent(input.content);
   const contentHash = hashEditorContent(parsed.content);
   const now = (deps.now ?? (() => new Date()))();
@@ -295,10 +318,36 @@ export async function saveEditorTemplateContent(input: SaveEditorTemplateContent
     if (current !== expectedVersion) {
       // Retry do último salvamento já aplicado (a resposta se perdeu): devolve o resultado sem nova versão.
       if (data.lastClientRequestId === clientRequestId && current === expectedVersion + 1) {
-        if (data.contentHash !== contentHash || (name !== undefined && data.name !== name)) throw new EditorTemplateError("idempotency_mismatch", "clientRequestId já usado com outro conteúdo.");
+        if (
+          data.contentHash !== contentHash ||
+          (name !== undefined && data.name !== name) ||
+          (description !== undefined && String(data.description ?? "") !== description)
+        ) throw new EditorTemplateError("idempotency_mismatch", "clientRequestId já usado com outro conteúdo.");
         return readRecord(templateId, data);
       }
       throw new EditorTemplateError("version_conflict", "O modelo foi alterado por outra sessão.", { currentVersion: current });
+    }
+    if (data.contentHash === contentHash) {
+      // Conteúdo inalterado: sem nova versão. Atualiza só metadados que de fato mudam.
+      const nameChanged = name !== undefined && data.name !== name;
+      const descriptionChanged = description !== undefined && String(data.description ?? "") !== description;
+      if (data.lastClientRequestId === clientRequestId) {
+        // Replay de uma atualização de metadados já aplicada (ou do próprio create): valores devem coincidir.
+        if (nameChanged || descriptionChanged) throw new EditorTemplateError("idempotency_mismatch", "clientRequestId já usado com outro conteúdo.");
+        return readRecord(templateId, data);
+      }
+      if (!nameChanged && !descriptionChanged) return readRecord(templateId, data);
+      const metaUpdate: Record<string, unknown> = {
+        lastClientRequestId: clientRequestId,
+        updatedAt: now,
+        updatedBy: actorId,
+        ...(nameChanged ? { name } : {}),
+        ...(descriptionChanged ? { description } : {}),
+      };
+      tx.update(ref, metaUpdate);
+      const suffix = `-meta-${createHash("sha256").update(clientRequestId).digest("hex").slice(0, 16)}`;
+      tx.create(auditRef(deps, templateId, "saved", current, suffix), auditDoc("saved", current, contentHash, actorId, clientRequestId, now, { metadataOnly: true }));
+      return readRecord(templateId, { ...data, ...metaUpdate });
     }
     const next = current + 1;
     const update: Record<string, unknown> = {
@@ -311,6 +360,7 @@ export async function saveEditorTemplateContent(input: SaveEditorTemplateContent
       updatedAt: now,
       updatedBy: actorId,
       ...(name === undefined ? {} : { name }),
+      ...(description === undefined ? {} : { description }),
     };
     tx.create(versionRef(deps, templateId, next), versionDoc(templateId, next, parsed.content, contentHash, actorId, clientRequestId, now));
     tx.update(ref, update);

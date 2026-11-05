@@ -468,3 +468,19 @@ test('segmento estático templates não colide com [id]: id de documento exige e
   assert.match(docRoute, /export const GET = secureRoute/);
   assert.match(docRoute, /path: "\/api\/documents\/editor\/\[id\]"/);
 });
+
+test('visão do modelo expõe updatedAt (ISO) e nenhum uid de ator; PUT aceita description (strict, 0-1000)', async () => {
+  const s = setup();
+  const t = await mk(s, actor('author-uid-secreto', GEN));
+  assert.equal(t.updatedAt, '2026-11-05T10:00:00.000Z');
+  assert.ok(!JSON.stringify(t).includes('author-uid-secreto'));
+  const { saveEditorTemplateBodySchema } = await import('../../../src/features/documents/editor/editor-api-schemas');
+  const base = { expectedVersion: 1, clientRequestId: uuid(1), content: text('x') };
+  assert.ok(saveEditorTemplateBodySchema.safeParse({ ...base, description: '' }).success);
+  assert.ok(saveEditorTemplateBodySchema.safeParse({ ...base, name: 'n', description: 'd'.repeat(1000) }).success);
+  assert.ok(!saveEditorTemplateBodySchema.safeParse({ ...base, description: 'd'.repeat(1001) }).success);
+  assert.ok(!saveEditorTemplateBodySchema.safeParse({ ...base, descricao: 'x' }).success);
+  const saved: any = await saveTemplateContent({ templateId: t.id, clientRequestId: uuid(2), expectedVersion: 1, content: text('Olá'), description: 'Desc' }, actor('x', GEN), s.deps);
+  assert.deepEqual([saved.template.currentVersion, saved.template.description], [1, 'Desc']);
+  assert.equal(await publicError(saveTemplateContent({ templateId: t.id, clientRequestId: uuid(2), expectedVersion: 1, content: text('Olá'), description: 'Outra' }, actor('x', GEN), s.deps)).then((e) => e?.code), 'EDITOR_TEMPLATE_REQUEST_ID_REUSED');
+});

@@ -230,6 +230,8 @@ export type EditorTemplateRecord = {
   fieldKeys: string[];
   createdBy: string;
   updatedBy: string;
+  /** ISO da última alteração; null se o registro legado não tiver data legível. */
+  updatedAt: string | null;
 };
 
 export type EditorTemplateVersionRecord = {
@@ -267,3 +269,23 @@ export type EditorTemplateStoreDb = Omit<StoreDb, "collection"> & {
 export type EditorTemplateStoreDeps = { db: EditorTemplateStoreDb; now?: () => Date };
 
 export type EditorTemplateListPage = { items: EditorTemplateRecord[]; nextCursor: string | null };
+
+// ---------------------------------------------------------------- listagem de documentos do editor
+export type EditorDocumentListItem = {
+  id: string;
+  title: string;
+  status: string;
+  contentVersion: number;
+  /** ISO; null se o registro não tiver data legível. */
+  updatedAt: string | null;
+  finalizedAt: string | null;
+  origin: EditorDocumentOrigin | null;
+  /** Autor (ATOR) do documento: uso interno do serviço para calcular `isOwn`; nunca vai ao cliente. */
+  generatedBy: string;
+};
+export type EditorDocumentListPage = { items: EditorDocumentListItem[]; nextCursor: string | null };
+export const EDITOR_DOCUMENT_LIST_STATUSES = ["draft", "final"] as const;
+export type EditorDocumentListStatus = (typeof EDITOR_DOCUMENT_LIST_STATUSES)[number];
+export const EDITOR_DOCUMENT_RECORD_ID_PATTERN = /^ed_[0-9a-f]{32}$/;
+/** Deps da listagem: mesmo `db` do store de documentos com consulta (where/orderBy/startAfter/limit). */
+export type EditorDocumentListStoreDeps = { db: EditorTemplateStoreDb; now?: () => Date };

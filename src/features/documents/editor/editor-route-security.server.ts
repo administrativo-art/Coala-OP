@@ -59,6 +59,8 @@ export function createEditorEnforcer<Schema extends z.ZodTypeAny | null>(
   options: {
     action: EditorAction;
     bodySchema: Schema;
+    /** Onde a entrada é lida (padrão corpo JSON); `query` rejeita parâmetro repetido. */
+    source?: "body" | "query";
     getDeps?: () => Promise<EditorApiDeps>;
     authenticate?: (request: NextRequest) => Promise<EditorActor>;
   },
@@ -70,19 +72,32 @@ export function createEditorEnforcer<Schema extends z.ZodTypeAny | null>(
     authenticate: ({ request }) => authenticate(request),
     async parseInput({ request, routeContext }) {
       let documentId = "";
-      if (options.action !== "create") {
+      if (options.action !== "create" && options.action !== "list") {
         const parsedId = editorDocumentIdSchema.safeParse((await routeContext.params).id);
         if (!parsedId.success) throw invalid();
         documentId = parsedId.data;
       }
       if (!options.bodySchema) return { documentId, body: undefined as Body };
-      const parsed = options.bodySchema.safeParse(await readJsonBody(request));
+      let raw: unknown;
+      if (options.source === "query") {
+        const query: Record<string, string> = {};
+        const params = new URL(request.url).searchParams;
+        for (const key of new Set(params.keys())) {
+          const values = params.getAll(key);
+          if (values.length !== 1) throw invalid();
+          query[key] = values[0];
+        }
+        raw = query;
+      } else {
+        raw = await readJsonBody(request);
+      }
+      const parsed = options.bodySchema.safeParse(raw);
       if (!parsed.success) throw invalid();
       return { documentId, body: parsed.data as Body };
     },
     async loadResource({ actor, input }) {
       const workspaceId = actor.workspace_id;
-      if (options.action === "create") return { workspaceId, document: null };
+      if (options.action === "create" || options.action === "list") return { workspaceId, document: null };
       try {
         // Pré-condição barata: sem generate não há leitura (a autorização seguinte nega).
         assertEditorAccess(actor, null, "create");

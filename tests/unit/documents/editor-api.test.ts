@@ -445,6 +445,7 @@ test('finalizar: falha ao apagar o órfão não substitui a falha original; obje
 test('rotas do editor: cada método via secureRoute, sem exceção registrada nem rota legada tocada', () => {
   const routes: Array<[string, string]> = [
     ['src/app/api/documents/editor/route.ts', 'POST'],
+    ['src/app/api/documents/editor/route.ts', 'GET'],
     ['src/app/api/documents/editor/[id]/route.ts', 'GET'],
     ['src/app/api/documents/editor/[id]/content/route.ts', 'PUT'],
     ['src/app/api/documents/editor/[id]/preview/route.ts', 'POST'],
