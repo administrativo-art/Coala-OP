@@ -5,6 +5,7 @@ import { finalizeEditorBodySchema } from "@/features/documents/editor/editor-api
 import { createEditorEnforcer } from "@/features/documents/editor/editor-route-security.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { editorErrorResponse } from "@/features/documents/editor/editor-error-response.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,16 +34,10 @@ export const POST = secureRoute({ contract, enforcer }, async ({ security }) => 
   );
   const headers = { "Cache-Control": "no-store" };
   if (result.kind === "conflict") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_VERSION_CONFLICT", message: "O documento foi alterado por outra sessão." }, currentVersion: result.currentVersion },
-      { status: 409, headers },
-    );
+    return editorErrorResponse(409, "EDITOR_VERSION_CONFLICT", "O documento foi alterado por outra sessão.", { currentVersion: result.currentVersion }, headers);
   }
   if (result.kind === "missing_fields") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_MISSING_FIELDS", message: "Há campos sem valor no cadastro do titular." }, missingKeys: result.missingKeys },
-      { status: 422, headers },
-    );
+    return editorErrorResponse(422, "EDITOR_MISSING_FIELDS", "Há campos sem valor no cadastro do titular.", { missingKeys: result.missingKeys }, headers);
   }
   return NextResponse.json({ document: result.document, replayed: result.replayed }, { headers });
 });

@@ -5,6 +5,7 @@ import { defaultTemplateApiDeps, archiveTemplate } from "@/features/documents/ed
 import { createTemplateEnforcer } from "@/features/documents/editor/template-route-security.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { editorErrorResponse } from "@/features/documents/editor/editor-error-response.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,10 +29,7 @@ const enforcer = createTemplateEnforcer(contract, { action: "archive", schema: a
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
   const result = await archiveTemplate({ templateId: security.input.templateId, ...security.input.body }, security.actor, await defaultTemplateApiDeps());
   if (result.kind === "conflict") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_TEMPLATE_VERSION_CONFLICT", message: "O modelo foi alterado por outra sessão." }, currentVersion: result.currentVersion },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
-    );
+    return editorErrorResponse(409, "EDITOR_TEMPLATE_VERSION_CONFLICT", "O modelo foi alterado por outra sessão.", { currentVersion: result.currentVersion });
   }
   return NextResponse.json({ template: result.template }, { headers: { "Cache-Control": "no-store" } });
 });

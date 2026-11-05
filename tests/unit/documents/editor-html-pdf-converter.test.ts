@@ -108,7 +108,8 @@ test("500 do upstream é upstream_error sem vazar corpo, URL ou token", async ()
   });
   assert.deepEqual(r, { ok: false, reason: "upstream_error" });
   const text = JSON.stringify(r);
-  assert.ok(!text.includes(SECRET) && !text.includes(BASE) && !text.includes("stack"));
+  // Regex pelo nome do host (e não includes da URL inteira): é checagem de vazamento, não validação de URL.
+  assert.ok(!text.includes(SECRET) && !/gotenberg\.internal\.example/.test(text) && !text.includes("stack"));
 });
 
 test("erro de rede com mensagem sensível vira upstream_error genérico", async () => {

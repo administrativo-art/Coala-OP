@@ -5,6 +5,7 @@ import { defaultTemplateApiDeps, useTemplate } from "@/features/documents/editor
 import { createTemplateEnforcer } from "@/features/documents/editor/template-route-security.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { editorErrorResponse } from "@/features/documents/editor/editor-error-response.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,10 +29,7 @@ const enforcer = createTemplateEnforcer(contract, { action: "use", schema: useEd
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
   const result = await useTemplate({ templateId: security.input.templateId, ...security.input.body }, security.actor, await defaultTemplateApiDeps());
   if (result.kind === "published_version_changed") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_TEMPLATE_PUBLISHED_VERSION_CHANGED", message: "A versão publicada do modelo mudou." }, publishedVersion: result.publishedVersion },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
-    );
+    return editorErrorResponse(409, "EDITOR_TEMPLATE_PUBLISHED_VERSION_CHANGED", "A versão publicada do modelo mudou.", { publishedVersion: result.publishedVersion });
   }
   return NextResponse.json({ document: result.document }, { status: 201, headers: { "Cache-Control": "no-store" } });
 });

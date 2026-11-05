@@ -5,6 +5,7 @@ import { previewEditorBodySchema } from "@/features/documents/editor/editor-api-
 import { createEditorEnforcer } from "@/features/documents/editor/editor-route-security.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { editorErrorResponse } from "@/features/documents/editor/editor-error-response.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,10 +31,7 @@ export const POST = secureRoute({ contract, enforcer }, async ({ security }) => 
   const { documentId, body } = security.input;
   const result = await renderPreview({ documentId, mode: body.mode, employeeId: body.subject?.employeeId }, security.actor, await defaultEditorApiDeps());
   if (result.kind === "missing_fields") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_MISSING_FIELDS", message: "Há campos sem valor no cadastro do titular." }, missingKeys: result.missingKeys },
-      { status: 422, headers: { "Cache-Control": "no-store" } },
-    );
+    return editorErrorResponse(422, "EDITOR_MISSING_FIELDS", "Há campos sem valor no cadastro do titular.", { missingKeys: result.missingKeys });
   }
   return new NextResponse(new Uint8Array(result.pdf), {
     headers: {

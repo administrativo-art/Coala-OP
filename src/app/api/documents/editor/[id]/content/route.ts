@@ -5,6 +5,7 @@ import { saveEditorBodySchema } from "@/features/documents/editor/editor-api-sch
 import { createEditorEnforcer } from "@/features/documents/editor/editor-route-security.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { editorErrorResponse } from "@/features/documents/editor/editor-error-response.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,10 +28,7 @@ const enforcer = createEditorEnforcer(contract, { action: "edit", bodySchema: sa
 export const PUT = secureRoute({ contract, enforcer }, async ({ security }) => {
   const result = await saveContent({ documentId: security.input.documentId, ...security.input.body }, security.actor, await defaultEditorApiDeps());
   if (result.kind === "conflict") {
-    return NextResponse.json(
-      { error: { code: "EDITOR_VERSION_CONFLICT", message: "O documento foi alterado por outra sessão." }, currentVersion: result.currentVersion },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
-    );
+    return editorErrorResponse(409, "EDITOR_VERSION_CONFLICT", "O documento foi alterado por outra sessão.", { currentVersion: result.currentVersion });
   }
   return NextResponse.json({ document: result.document }, { headers: { "Cache-Control": "no-store" } });
 });
