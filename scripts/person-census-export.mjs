@@ -36,7 +36,7 @@ if (policy.schemaVersion !== 1 || !Array.isArray(policy.entries)) throw new Erro
 const policyEntry = (source) => policy.entries.find((item) => item.project === projectId && item.database === dbIds[source.database]
   && item.collection === source.collection && item.workspace === workspace);
 const requested = value('--sources')?.split(',').filter(Boolean) ?? null;
-const sources = [...new Map(PERSON_SOURCES.filter((source) => source.field !== '__parent__' && source.permissionPolicy !== 'cursor-private')
+const sources = [...new Map(PERSON_SOURCES.filter((source) => source.field !== '__parent__' && !source.parentCollection && source.permissionPolicy !== 'cursor-private')
   .map((source) => [`${source.database}/${source.collection}`, { database: source.database, collection: source.collection }])).values()];
 if (requested?.some((item) => !sources.some((source) => `${source.database}/${source.collection}` === item))) throw new Error('Fonte não cadastrada.');
 const selected = requested ? sources.filter((source) => requested.includes(`${source.database}/${source.collection}`)) : sources;

@@ -408,12 +408,13 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `document-generation`
 
-Páginas: [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
+Páginas: [`src/app/dashboard/documents/editor/[id]/page.tsx`](../../src/app/dashboard/documents/editor/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/editor/documents/page.tsx`](../../src/app/dashboard/documents/editor/documents/page.tsx), [`src/app/dashboard/documents/editor/page.tsx`](../../src/app/dashboard/documents/editor/page.tsx), [`src/app/dashboard/documents/editor/templates/[tid]/page.tsx`](../../src/app/dashboard/documents/editor/templates/%5Btid%5D/page.tsx), [`src/app/dashboard/documents/editor/templates/page.tsx`](../../src/app/dashboard/documents/editor/templates/page.tsx), [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
 
-Arquivos locais percorridos: 18.
+Arquivos locais percorridos: 50.
 
 Chamadas candidatas encontradas:
 
+- `/api/documents/editor` — interface [`src/features/documents/editor/ui/editor-client.ts`](../../src/features/documents/editor/ui/editor-client.ts); rota candidata [`src/app/api/documents/editor/route.ts`](../../src/app/api/documents/editor/route.ts)
 - `/api/documents/generate` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
 - `/api/documents/generated` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
 - `/api/documents/generated/` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
@@ -1610,6 +1611,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
 - `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-editor-document/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
