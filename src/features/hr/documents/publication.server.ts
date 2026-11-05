@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -21,7 +21,6 @@ import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-fo
 import { documentCategoryLabel, employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
 import { ownDocumentFolderPath } from '@/features/hr/documents/own-document-folders';
 
-const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
 const OWN_LIMIT = 500;
 
@@ -34,6 +33,10 @@ async function storedOverrides(): Promise<Record<string, DocumentPublicationPoli
   return value && typeof value === 'object' ? value as Record<string, DocumentPublicationPolicy> : null;
 }
 const defaults: Dependencies = { hrDb: hrDbAdmin, mainDb: dbAdmin, storage: bucketStorage, now: () => new Date(), overrides: storedOverrides };
+
+const employeeDocuments = (firestore: Firestore) => firestore.collection('employeeDocuments');
+const employeeDocument = (firestore: Firestore, id: string) => employeeDocuments(firestore).doc(id);
+const auditTrail = (ref: DocumentReference) => ref.collection('audit');
 
 const notFound = () => new AppError({ code: 'EMPLOYEE_DOCUMENT_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Documento não encontrado.' });
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -59,7 +62,7 @@ const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
 export async function listOwnPublishedDocumentsPage(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   // A consulta já filtra titular e publicação (índice employeeId + publication.status), nunca a coleção inteira.
-  const snapshot = await deps.hrDb.collection(COLLECTION).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
+  const snapshot = await employeeDocuments(deps.hrDb).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
   const documents = groupPublishedAdmissionReferences(snapshot.docs.slice(0, OWN_LIMIT).filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
     .map((doc) => ({ ...doc.data(), id: doc.id })))
     .map((doc) => publicView(doc.id, doc))
@@ -85,14 +88,14 @@ export async function readOwnDocumentFolderProfile(context: ServerUserContext) {
 /** Abre um documento da própria pasta: titular e publicado, senão "não encontrado" (sem revelar que existe). */
 export async function openOwnPublishedDocument(context: ServerUserContext, id: string, action: 'view' | 'download', injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(id);
+  const ref = employeeDocument(deps.hrDb, id);
   const snapshot = await ref.get();
   const data = snapshot.data();
   if (!data || !ownEmployeeIds(context).includes(String(data.employeeId ?? '')) || !isPublishedToEmployee(data as Parameters<typeof isPublishedToEmployee>[0])) throw notFound();
   const path = text(data.storagePath);
   if (!path) throw notFound();
   const bytes = await deps.storage.download(path);
-  await ref.collection('audit').add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
+  await auditTrail(ref).add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
   const mimeType = text(data.mimeType) ?? 'application/pdf';
   return {
     bytes,
@@ -136,7 +139,7 @@ async function assertDocumentUnitScope(context: ServerUserContext, employeeId: s
 }
 
 async function documentForDp(context: ServerUserContext, id: string, deps: Dependencies) {
-  const snapshot = await deps.hrDb.collection(COLLECTION).doc(id).get();
+  const snapshot = await employeeDocument(deps.hrDb, id).get();
   const data = snapshot.data();
   if (!data || data.deletedAt) throw notFound();
   await assertDocumentUnitScope(context, text(data.employeeId), deps);
@@ -151,7 +154,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
   injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertDocumentsDp(context);
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const scoped = await documentForDp(context, input.id, deps);
   const overrides = await deps.overrides();
   return deps.hrDb.runTransaction(async (tx) => {
@@ -167,7 +170,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
       }
       const publication: DocumentPublication = { status: 'published', at, by: context.decoded.uid, source: 'manual', reason: null };
       tx.update(ref, { publication, updatedAt: Timestamp.fromDate(deps.now()) });
-      tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLISHED', actorId: context.decoded.uid, source: 'manual', at: Timestamp.fromDate(deps.now()) });
+      tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLISHED', actorId: context.decoded.uid, source: 'manual', at: Timestamp.fromDate(deps.now()) });
       return publication;
     }
     if (current?.status !== 'published') return current ?? null;
@@ -175,7 +178,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
     if (!reason || reason.length < 10) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_WITHDRAW_REASON', kind: 'VALIDATION', safeMessage: 'Informe o motivo da retirada (mínimo de 10 caracteres).' });
     const publication: DocumentPublication = { status: 'withdrawn', at, by: context.decoded.uid, source: 'manual', reason };
     tx.update(ref, { publication, updatedAt: Timestamp.fromDate(deps.now()) });
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_WITHDRAWN', actorId: context.decoded.uid, reason, at: Timestamp.fromDate(deps.now()) });
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_WITHDRAWN', actorId: context.decoded.uid, reason, at: Timestamp.fromDate(deps.now()) });
     return publication;
   });
 }
@@ -186,7 +189,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
  */
 export async function autoPublishDocument(documentId: string, event: DocumentPublicationTrigger, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(documentId);
+  const ref = employeeDocument(deps.hrDb, documentId);
   const overrides = await deps.overrides();
   return deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -195,7 +198,7 @@ export async function autoPublishDocument(documentId: string, event: DocumentPub
     if (!shouldAutoPublish(resolvePublicationPolicy(text(data.documentTypeCode), overrides), event, data)) return null;
     const publication: DocumentPublication = { status: 'published', at: deps.now().toISOString(), by: 'system:publication-policy', source: 'policy', reason: null };
     tx.update(ref, { publication });
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLISHED', actorId: 'system:publication-policy', source: 'policy', event, at: Timestamp.fromDate(deps.now()) });
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLISHED', actorId: 'system:publication-policy', source: 'policy', event, at: Timestamp.fromDate(deps.now()) });
     return publication;
   });
 }
@@ -242,7 +245,7 @@ export async function saveDocumentPublicationPolicies(context: ServerUserContext
   const ref = deps.hrDb.collection('schema').doc('document_publication');
   const batch = deps.hrDb.batch();
   batch.set(ref, { schemaVersion: 1, policies: normalized, updatedAt: now, updatedBy: context.decoded.uid }, { merge: true });
-  batch.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLICATION_POLICY_UPDATED', actorId: context.decoded.uid, policies: normalized, at: now });
+  batch.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLICATION_POLICY_UPDATED', actorId: context.decoded.uid, policies: normalized, at: now });
   await batch.commit();
   return readDocumentPublicationPolicies(context, { ...injected, overrides: async () => normalized });
 }
@@ -255,7 +258,7 @@ export async function classifyLegacyEmployeeDocument(context: ServerUserContext,
   if (!allowed.has(input.documentTypeCode) || input.documentTypeCode === 'UNKNOWN_DOCUMENT') {
     throw new AppError({ code: 'EMPLOYEE_DOCUMENT_CLASSIFICATION_INVALID', kind: 'VALIDATION', safeMessage: 'Escolha um tipo documental identificado.' });
   }
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const config = getDocumentTypeConfig(input.documentTypeCode);
   const scoped = await documentForDp(context, input.id, deps);
   const result = await deps.hrDb.runTransaction(async (tx) => {
@@ -274,7 +277,7 @@ export async function classifyLegacyEmployeeDocument(context: ServerUserContext,
       updatedAt: Timestamp.fromDate(at),
     };
     tx.update(ref, update);
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_CLASSIFIED', actorId: context.decoded.uid,
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_CLASSIFIED', actorId: context.decoded.uid,
       previousDocumentTypeCode: currentCode, documentTypeCode: config.code, at: Timestamp.fromDate(at) });
     return { id: snapshot.id, ...update };
   });
@@ -319,7 +322,7 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
   const deps = { ...defaults, ...injected };
   let ids = [...new Set(input.ids)];
   if (!ids.length || ids.length > 50) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_IDS_INVALID', kind: 'VALIDATION', safeMessage: 'Documento inválido.' });
-  let refs = ids.map((id) => deps.hrDb.collection(COLLECTION).doc(id));
+  let refs = ids.map((id) => employeeDocument(deps.hrDb, id));
   let snapshots = await Promise.all(refs.map((ref) => ref.get()));
   let rows = snapshots.map((snapshot) => {
     const data = snapshot.data();
@@ -329,7 +332,7 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
   const submittedGroupKey = organizationGroupKey(rows[0].data, rows[0].id);
   if (submittedGroupKey) {
     const signatureRequestId = text(rows[0].data.signatureRequestId);
-    const groupSnapshot = await deps.hrDb.collection(COLLECTION).where('signatureRequestId', '==', signatureRequestId).limit(51).get();
+    const groupSnapshot = await employeeDocuments(deps.hrDb).where('signatureRequestId', '==', signatureRequestId).limit(51).get();
     if (groupSnapshot.size > 50) {
       throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_LIMIT', kind: 'CONFLICT', safeMessage: 'Este grupo é grande demais para organizar por esta tela.' });
     }
@@ -343,7 +346,7 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
     }
     ids = [rows[0].id, ...members.map((member) => member.id).filter((id) => id !== rows[0].id)].filter((id, index, all) => all.indexOf(id) === index);
     if ([...submitted].some((id) => !ids.includes(id))) throw notFound();
-    refs = ids.map((id) => deps.hrDb.collection(COLLECTION).doc(id));
+    refs = ids.map((id) => employeeDocument(deps.hrDb, id));
     snapshots = await Promise.all(refs.map((ref) => ref.get()));
     rows = snapshots.map((snapshot) => {
       const data = snapshot.data();
@@ -400,11 +403,12 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
       }
       for (const row of currentRows) {
         const canonicalName = text(row.data.displayName) ?? text(row.data.documentType) ?? 'Documento';
-        tx.update(deps.hrDb.collection(COLLECTION).doc(row.id), {
+        const ref = employeeDocument(deps.hrDb, row.id);
+        tx.update(ref, {
           archiveName: nextName === canonicalName ? FieldValue.delete() : nextName,
           updatedAt: Timestamp.fromDate(now),
         });
-        tx.create(deps.hrDb.collection(COLLECTION).doc(row.id).collection('audit').doc(), {
+        tx.create(auditTrail(ref).doc(), {
           action: 'DOCUMENT_ARCHIVE_RENAMED', actorId: context.decoded.uid, from: archiveDocumentName(row.data), to: nextName, at: Timestamp.fromDate(now),
         });
       }
@@ -416,11 +420,12 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
     }
     for (const row of currentRows) {
       const defaultPath = archiveDocumentPath(row.id, row.data, false);
-      tx.update(deps.hrDb.collection(COLLECTION).doc(row.id), {
+      const ref = employeeDocument(deps.hrDb, row.id);
+      tx.update(ref, {
         archivePath: samePath(nextPath!, defaultPath) ? FieldValue.delete() : nextPath,
         updatedAt: Timestamp.fromDate(now),
       });
-      tx.create(deps.hrDb.collection(COLLECTION).doc(row.id).collection('audit').doc(), {
+      tx.create(auditTrail(ref).doc(), {
         action: 'DOCUMENT_ARCHIVE_MOVED', actorId: context.decoded.uid, from: archiveDocumentPath(row.id, row.data), to: nextPath, at: Timestamp.fromDate(now),
       });
     }
@@ -434,7 +439,7 @@ export async function organizeEmployeeArchiveDocument(context: ServerUserContext
 export async function changeEmployeeDocumentStatus(context: ServerUserContext, input: { id: string; status: 'pending' | 'received' | 'validated' | 'rejected' }, injected: Partial<Dependencies> = {}) {
   assertDocumentsDp(context);
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const scoped = await documentForDp(context, input.id, deps);
   await deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -443,7 +448,7 @@ export async function changeEmployeeDocumentStatus(context: ServerUserContext, i
     const at = deps.now();
     tx.update(ref, { status: input.status, updatedAt: Timestamp.fromDate(at),
       ...(input.status === 'validated' ? { validatedBy: context.decoded.uid, validatedAt: Timestamp.fromDate(at) } : {}) });
-    tx.create(ref.collection('audit').doc(), { action: `status_${input.status}`, actorId: context.decoded.uid, at: Timestamp.fromDate(at) });
+    tx.create(auditTrail(ref).doc(), { action: `status_${input.status}`, actorId: context.decoded.uid, at: Timestamp.fromDate(at) });
   });
   const publication = input.status === 'validated' ? await autoPublishDocument(input.id, 'validated', deps) : null;
   return { status: input.status, publication };
