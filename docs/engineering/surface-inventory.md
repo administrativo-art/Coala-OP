@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **548 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **549 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -380,6 +380,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/hr/employee-documents/cleanup` | POST | [src/app/api/hr/employee-documents/cleanup/route.ts](../../src/app/api/hr/employee-documents/cleanup/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/confirm` | POST | [src/app/api/hr/employee-documents/confirm/route.ts](../../src/app/api/hr/employee-documents/confirm/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/item` | PATCH | [src/app/api/hr/employee-documents/item/route.ts](../../src/app/api/hr/employee-documents/item/route.ts) | [employee-documents](flows/employee-documents.md) |
+| `/api/hr/employee-documents/organization` | POST | [src/app/api/hr/employee-documents/organization/route.ts](../../src/app/api/hr/employee-documents/organization/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/publication` | POST | [src/app/api/hr/employee-documents/publication/route.ts](../../src/app/api/hr/employee-documents/publication/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/publication-policy` | GET, PUT | [src/app/api/hr/employee-documents/publication-policy/route.ts](../../src/app/api/hr/employee-documents/publication-policy/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/reanalyze` | POST | [src/app/api/hr/employee-documents/reanalyze/route.ts](../../src/app/api/hr/employee-documents/reanalyze/route.ts) | [employee-documents](flows/employee-documents.md) |
