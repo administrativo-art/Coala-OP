@@ -4,6 +4,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
+05/11/2026: ajuste local do Acervo publicado acrescenta organização visual auditada para DP, simplifica férias até a parcela, estabiliza carregamento e remove metadados decorativos de pastas. Testes dirigidos cobrem projeção, permissão, concorrência e preservação do canônico; E2E local e publicação permanecem gates. `document-central` e `employee-documents` continuam Traçado.
+
 03/11/2026: Acervo publicado por titular acrescentado à raiz e à cobertura de `employee-documents`/`document-central`, reutilizando APIs próprias e RH sob acesso existente. Projeção de kit assinado exercitada com sete referências e homônimos distintos; E2E local dirigido passou para árvore/pasta própria/abas retiradas e perfil comum com download canônico. Paginação DP com página filtrada vazia, cursor e unidade passou em integração; teto bruto da pasta própria e troca de titular durante Carregar mais também. Permissões e fontes conferidas no código; publicação/ACL e arquivos não mudaram.
 
 02/11/2026: complemento de armazenamento em testes dirigidos demo: kit e assinatura individual reutilizam o objeto assinado, com hash conferido; remoção do Acervo preserva o original compartilhado e continua recusando usuário não autenticado ou fora da unidade. Auditoria real foi somente leitura de metadados. Não certifica provedor externo ou autoriza limpeza física histórica.

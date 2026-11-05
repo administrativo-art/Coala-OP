@@ -5,6 +5,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { employeeDossierTemplate } from "@/lib/hr/employee-document-folder-templates";
 import type { EmployeeDossierFolder, EmployeeDossierTemplateId } from "@/lib/hr/employee-document-folder-templates";
+import { normalizeEmployeeDocumentCategory } from "@/lib/hr/employee-document-options";
 
 const COLLECTION = "employeeDocumentFolderProfiles";
 
@@ -17,6 +18,22 @@ export type EmployeeDocumentFolderProfile = {
   folders: EmployeeDossierFolder[];
   sourceRelationshipType?: unknown;
 };
+
+function currentFolderProjection(folders: EmployeeDossierFolder[]): EmployeeDossierFolder[] {
+  const projected: EmployeeDossierFolder[] = [];
+  const rootOnly = new Set(["personal", "admission", "work_schedule", "benefits", "vacations", "leaves", "uniforms", "training", "warnings", "termination"]);
+  for (const folder of folders) {
+    const category = normalizeEmployeeDocumentCategory(folder.category);
+    if (!rootOnly.has(category)) {
+      projected.push({ ...folder, category });
+      continue;
+    }
+    if (!projected.some((entry) => entry.category === category)) {
+      projected.push({ id: `clt-${category}`, category, path: [], employeeVisible: folder.employeeVisible });
+    }
+  }
+  return projected;
+}
 
 export async function ensureEmployeeDocumentFolderProfile(input: {
   employeeId: string;
@@ -87,5 +104,5 @@ export async function readEmployeeDocumentFolderProfile(employeeIds: string[]): 
   const snapshot = snapshots.find((entry) => entry.exists);
   if (!snapshot) return null;
   const data = snapshot.data() as Omit<EmployeeDocumentFolderProfile, "id">;
-  return { id: snapshot.id, ...data };
+  return { id: snapshot.id, ...data, folders: currentFolderProjection(Array.isArray(data.folders) ? data.folders : []) };
 }

@@ -53,6 +53,7 @@ import {
 import { employeeDocumentSignatureIndicator } from "@/lib/hr/employee-document-signature";
 import type { DocumentVisibilityConfig, NormalizedFieldVisibility } from "@/types/rh";
 import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-templates";
+import { employeeArchiveDocumentName } from "@/lib/documents/employee-archive";
 
 const STATUS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_STATUSES.map((status) => [status.id, status.label]));
 const ACCESS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_ACCESS_LEVELS.map((level) => [level.id, level.label]));
@@ -131,7 +132,7 @@ function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents
     }
   };
 
-  const categoryTemplateFolders = templateFolders.filter((folder) => folder.category === category);
+  const categoryTemplateFolders = templateFolders.filter((folder) => folder.category === category && category !== "admission");
   for (const folder of categoryTemplateFolders) addPath(folder.path);
   const resolvedPaths = documents.map((document) => resolveEmployeeDocumentFolderPath({
     category,
@@ -563,7 +564,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         destinationTrail: current.destinationTrail,
       });
       return { key: groupKey, folderKey: folderPath.join("/") || category, folderPath, current, older };
-    }).sort((a, b) => a.folderKey.localeCompare(b.folderKey, "pt-BR") || a.current.documentType.localeCompare(b.current.documentType, "pt-BR"));
+    }).sort((a, b) => a.folderKey.localeCompare(b.folderKey, "pt-BR") || employeeArchiveDocumentName(a.current).localeCompare(employeeArchiveDocumentName(b.current), "pt-BR"));
   }, [visible, category]);
   const openFolderTrail = ["Documentos do colaborador", categoryLabel(category), ...activeFolderPath];
   const selectedFileCount = uploadFiles.length;
@@ -1438,7 +1439,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       ) : null}
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="min-w-0">
-                          <p className="font-black text-slate-900">{item.documentType}</p>
+                          <p className="font-black text-slate-900">{employeeArchiveDocumentName(item)}</p>
                           <p className="truncate text-xs text-slate-500">
                             {formatBytes(item.size)} · enviado por {uploaderName(item)}
                             {typeof item.version === "number" ? ` · v${item.version}` : ""}

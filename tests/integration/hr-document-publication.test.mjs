@@ -9,7 +9,8 @@ const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { autoPublishDocument, changeDocumentPublication, changeEmployeeDocumentStatus, classifyLegacyEmployeeDocument,
-  listOwnPublishedDocuments, listOwnPublishedDocumentsPage, openOwnPublishedDocument, saveDocumentPublicationPolicies } = await import('../../src/features/hr/documents/publication.server.ts');
+  listOwnPublishedDocuments, listOwnPublishedDocumentsPage, openOwnPublishedDocument, organizeEmployeeArchiveDocument,
+  saveDocumentPublicationPolicies } = await import('../../src/features/hr/documents/publication.server.ts');
 
 test('pasta do colaborador: só o titular, só o publicado; só o DP publica e retira', async () => {
   const prefix = `pub-${randomUUID().slice(0, 6)}`;
@@ -29,7 +30,8 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
     dbAdmin.collection('users').doc(maria.decoded.uid).set({ id: maria.decoded.uid, hrEmployeeId: `${prefix}-hr-maria`, unitIds: [`${prefix}-unit`] }),
     dbAdmin.collection('users').doc(joao.decoded.uid).set({ id: joao.decoded.uid, unitIds: [`${prefix}-unit`] }),
     // Da Maria pelo cadastro do RH: recibo de férias assinado (publicável) e atestado (restrito).
-    docRef('receipt').set({ employeeId: `${prefix}-hr-maria`, documentTypeCode: 'VACATION_RECEIPT', displayName: 'Recibo de férias', storagePath: 'docs/a.pdf',
+    docRef('receipt').set({ employeeId: `${prefix}-hr-maria`, documentTypeCode: 'VACATION_RECEIPT', documentType: 'Recibo de férias', category: 'vacations',
+      displayName: 'Recibo de férias', destinationTrail: ['Férias', 'Período aquisitivo 2025-2026', 'Parcela 01', 'Recibo de férias'], storagePath: 'docs/a.pdf',
       signatureRequired: true, signatureStatus: 'signed', status: 'validated', deletedAt: null }),
     docRef('certificate').set({ employeeId: maria.decoded.uid, documentTypeCode: 'MEDICAL_CERTIFICATE', storagePath: 'docs/b.pdf', status: 'validated', deletedAt: null }),
     docRef('orphan').set({ documentTypeCode: 'UNKNOWN_DOCUMENT', storagePath: 'docs/b.pdf', status: 'received', deletedAt: null }),
@@ -58,6 +60,28 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
   await assert.rejects(openOwnPublishedDocument(joao, docRef('receipt').id, 'view', deps), { code: 'EMPLOYEE_DOCUMENT_NOT_FOUND' });
   assert.deepEqual((await listOwnPublishedDocuments(joao, deps)).map((item) => item.id), [docRef('joao').id]);
 
+  // Organização visual exige DP com edição, preserva classificação, publicação, nome de download e bytes.
+  await assert.rejects(organizeEmployeeArchiveDocument(viewer, {
+    ids: [docRef('receipt').id], action: 'rename', name: 'Recibo conferido', expectedName: 'Recibo de férias',
+  }, deps), { code: 'EMPLOYEE_DOCUMENT_PUBLICATION_FORBIDDEN' });
+  await organizeEmployeeArchiveDocument(dp, {
+    ids: [docRef('receipt').id], action: 'rename', name: 'Recibo conferido', expectedName: 'Recibo de férias',
+  }, deps);
+  await assert.rejects(organizeEmployeeArchiveDocument(dp, {
+    ids: [docRef('receipt').id], action: 'rename', name: 'Nome vencido', expectedName: 'Recibo de férias',
+  }, deps), { code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_NAME_CHANGED' });
+  await organizeEmployeeArchiveDocument(dp, {
+    ids: [docRef('receipt').id], action: 'move', path: ['Férias', 'Documentos conferidos'],
+    expectedPath: ['Férias', 'Período aquisitivo 2025-2026', 'Parcela 01'],
+  }, deps);
+  const organized = (await listOwnPublishedDocuments(maria, deps))[0];
+  assert.equal(organized.displayName, 'Recibo conferido');
+  assert.deepEqual(organized.archivePath, ['Férias', 'Documentos conferidos']);
+  const organizedSource = await docRef('receipt').get();
+  assert.equal(organizedSource.get('displayName'), 'Recibo de férias');
+  assert.equal(organizedSource.get('storagePath'), 'docs/a.pdf');
+  assert.equal((await openOwnPublishedDocument(maria, docRef('receipt').id, 'download', deps)).bytes.toString(), '%PDF-a');
+
   // Retirar exige motivo, mantém o arquivo e some da pasta; a automática não republica o retirado.
   await assert.rejects(changeDocumentPublication(dp, { id: docRef('receipt').id, action: 'withdraw', reason: 'curto' }, deps), { code: 'EMPLOYEE_DOCUMENT_WITHDRAW_REASON' });
   const withdrawn = await changeDocumentPublication(dp, { id: docRef('receipt').id, action: 'withdraw', reason: 'Documento enviado com valor errado.' }, deps);
@@ -66,7 +90,7 @@ test('pasta do colaborador: só o titular, só o publicado; só o DP publica e r
   assert.equal(await autoPublishDocument(docRef('receipt').id, 'signed', deps), null);
   assert.equal((await docRef('receipt').get()).get('storagePath'), 'docs/a.pdf');
   const audit = (await docRef('receipt').collection('audit').get()).docs.map((doc) => doc.get('action')).sort();
-  assert.deepEqual(audit, ['DOCUMENT_PUBLISHED', 'DOCUMENT_WITHDRAWN', 'downloaded']);
+  assert.deepEqual(audit, ['DOCUMENT_ARCHIVE_MOVED', 'DOCUMENT_ARCHIVE_RENAMED', 'DOCUMENT_PUBLISHED', 'DOCUMENT_WITHDRAWN', 'downloaded', 'downloaded']);
 
   // Publicação automática pela política: ASO periódico validado publica; atestado não.
   await docRef('aso').set({ employeeId: maria.decoded.uid, documentTypeCode: 'ASO_PERIODIC', storagePath: 'docs/a.pdf', status: 'validated', deletedAt: null });
@@ -109,6 +133,14 @@ test('pasta própria projeta sete referências do mesmo kit em uma entrada sem f
   const visible = await listOwnPublishedDocuments(owner,{hrDb:hrDbAdmin});
   assert.deepEqual(visible.map(document => document.id).sort(),[`${prefix}-other-content`,`${prefix}-ref-0`].sort());
   assert.ok(visible.every(document => !('storagePath' in document) && !('contentHash' in document)));
+  const dp = {decoded:{uid:`${prefix}-dp`},userDoc:{id:`${prefix}-dp`,unitAccessScope:'all'},permissions:structuredClone(defaultAdminPermissions),isDefaultAdmin:true,workspace_id:'coala-one'};
+  const renamedGroup = await organizeEmployeeArchiveDocument(dp, {
+    ids: [`${prefix}-ref-0`], action: 'rename', name: 'Kit admissional conferido', expectedName: 'Kit de admissão',
+  }, {hrDb:hrDbAdmin});
+  assert.equal(renamedGroup.ids.length, 7);
+  const renamedSnapshots = await Promise.all(Array.from({length:7},(_,index) => collection.doc(`${prefix}-ref-${index}`).get()));
+  assert.ok(renamedSnapshots.every(snapshot => snapshot.get('archiveName') === 'Kit admissional conferido'));
+  assert.equal((await collection.doc(`${prefix}-other-content`).get()).get('archiveName'), undefined);
 });
 
 test('teto da pasta própria é medido nos registros brutos antes de agrupar', async () => {
