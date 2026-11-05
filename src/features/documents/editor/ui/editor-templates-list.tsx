@@ -32,6 +32,7 @@ import {
   appendTemplatePage,
   applyTemplateUpdate,
   createAttemptRegistry,
+  formatEditorDateTime,
   getArchiveBlockReason,
   getPublishListBlockReason,
   getUseTemplateBlockReason,
@@ -326,6 +327,8 @@ function TemplateRow({
             {template.fieldKeys.length > 0
               ? ` · ${template.fieldKeys.length} ${template.fieldKeys.length === 1 ? "campo do sistema" : "campos do sistema"}`
               : ""}
+            {" · "}
+            <span data-testid="editor-template-updated-at">Atualizado em {formatEditorDateTime(template.updatedAt)}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -29,10 +29,29 @@ export type EditorTemplateView = {
   contentHash: string;
   contentBytes: number;
   fieldKeys: string[];
+  /** ISO da última alteração; `null` em registro legado sem data legível. */
+  updatedAt: string | null;
 };
 
 export type OpenedEditorTemplate = { template: EditorTemplateView; content: unknown; version: number };
 export type EditorTemplatePage = { items: EditorTemplateView[]; nextCursor: string | null };
+
+export type EditorDocumentListStatus = "draft" | "final";
+export type EditorDocumentOriginView = { kind: "editor" } | { kind: "editor_template"; templateId: string; templateVersion: number };
+
+/** Item da listagem de documentos do editor (espelha `EditorDocumentListItemView`). Sem titular nem autor. */
+export type EditorDocumentListItem = {
+  id: string;
+  title: string;
+  status: string;
+  contentVersion: number;
+  updatedAt: string | null;
+  finalizedAt?: string;
+  origin: EditorDocumentOriginView | null;
+  /** O documento é do usuário atual (revisores veem os de todos). */
+  isOwn: boolean;
+};
+export type EditorDocumentPage = { items: EditorDocumentListItem[]; nextCursor: string | null };
 
 const BASE = "/api/documents/editor";
 const TEMPLATES = `${BASE}/templates`;
@@ -44,6 +63,22 @@ export function createBlankEditorDocument(request: EditorRequest, input: { clien
     method: "POST",
     json: input,
     fallbackError: "Falha ao criar o documento.",
+  });
+}
+
+/** Uma página de documentos do editor (<= 25 por chamada, cursor opaco). Sem polling nem listener. */
+export function listEditorDocuments(
+  request: EditorRequest,
+  query: { status?: EditorDocumentListStatus; limit?: number; cursor?: string | null } = {},
+) {
+  const params = new URLSearchParams();
+  if (query.status) params.set("status", query.status);
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  const qs = params.toString();
+  return request<EditorDocumentPage>(qs ? `${BASE}?${qs}` : BASE, {
+    method: "GET",
+    fallbackError: "Falha ao listar os documentos.",
   });
 }
 
@@ -144,7 +179,7 @@ export function openEditorTemplate(request: EditorRequest, id: string) {
 export function saveEditorTemplate(
   request: EditorRequest,
   id: string,
-  input: { expectedVersion: number; clientRequestId: string; content: unknown; name?: string },
+  input: { expectedVersion: number; clientRequestId: string; content: unknown; name?: string; description?: string },
 ) {
   return request<{ template: EditorTemplateView }>(`${templatePath(id)}/content`, {
     method: "PUT",

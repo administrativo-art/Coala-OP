@@ -46,6 +46,7 @@ const view = (overrides: Partial<EditorTemplateView> = {}): EditorTemplateView =
   contentHash: 'h',
   contentBytes: 10,
   fieldKeys: [],
+  updatedAt: null,
   ...overrides,
 });
 

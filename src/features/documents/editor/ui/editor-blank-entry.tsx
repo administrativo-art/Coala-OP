@@ -86,6 +86,12 @@ export function EditorBlankEntry() {
   }
 
   return (
+    <div className="space-y-4">
+    <div className="flex justify-end">
+      <Button asChild type="button" variant="ds-secondary" size="md">
+        <Link href="/dashboard/documents/editor/documents">Ver documentos do editor</Link>
+      </Button>
+    </div>
     <div className="grid gap-4 lg:grid-cols-3">
       <EntryCard
         id="editor-blank-title"
@@ -149,6 +155,7 @@ export function EditorBlankEntry() {
         Crie um texto para ser reutilizado por todas as unidades. O modelo não tem titular e não deve conter nomes, CPFs ou
         outros dados de pessoas; use os campos do sistema no lugar. Só a versão publicada pode ser usada.
       </EntryCard>
+    </div>
     </div>
   );
 }

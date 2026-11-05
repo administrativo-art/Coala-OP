@@ -57,15 +57,22 @@ import { EditorSaveAsTemplatePanel } from "./editor-save-as-template-panel";
 import styles from "./editor-surface.module.css";
 import { EditorToolbar } from "./editor-toolbar";
 import {
+  TEMPLATE_DESCRIPTION_MAX,
   TEMPLATE_STATUS_LABEL,
   TEMPLATE_STATUS_VARIANT,
+  buildTemplateSaveBody,
   createAttemptRegistry,
+  describeDescriptionCounter,
   editableStatusFor,
   getPublishBlockReason,
+  getTemplateMetaBlockReason,
   hasUnpublishedChanges,
+  isTemplateMetaEditable,
   isVersionConflictCode,
   templateCreateAttemptKey,
   templatePublishAttemptKey,
+  templateSaveFingerprint,
+  versionAfterTemplateSave,
 } from "./template-logic";
 
 /**
@@ -188,6 +195,8 @@ function EditorSession({
   const [status, setStatus] = useState(opened.kind === "template" ? opened.template.status : opened.document.status);
   const [title, setTitle] = useState(opened.kind === "template" ? opened.template.name : opened.document.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [description, setDescription] = useState(opened.kind === "template" ? opened.template.description : "");
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState<{ currentVersion: number | null } | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
@@ -229,6 +238,7 @@ function EditorSession({
   const persistRef = useRef<() => Promise<PersistResult>>(async () => "error");
   const guardRef = useRef({ status: editableStatus, conflict: false, saveState: "saved" as SaveState });
   const titleRef = useRef(title);
+  const descriptionRef = useRef(description);
   const extensions = useMemo(() => createEditorExtensions(), []);
   const editorRef = useRef<Editor | null>(null);
 
@@ -294,26 +304,41 @@ function EditorSession({
       setSaveState("error");
       return Promise.resolve("invalid");
     }
+    const metaBlock = isTemplate ? getTemplateMetaBlockReason({ name: titleRef.current, description: descriptionRef.current }) : null;
+    if (metaBlock) {
+      setDescriptionError(metaBlock);
+      setSaveState("error");
+      return Promise.resolve("invalid");
+    }
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     const content = current.getJSON();
     const revision = revisionRef.current;
-    const fingerprint = JSON.stringify({ content, title: trimmed, version: versionRef.current });
+    const fingerprint = isTemplate
+      ? templateSaveFingerprint({ content, name: trimmed, description: descriptionRef.current, version: versionRef.current })
+      : JSON.stringify({ content, title: trimmed, version: versionRef.current });
     // Repetir a mesma tentativa reaproveita o identificador (a rota é idempotente por clientRequestId).
     const attempt = attemptRef.current?.fingerprint === fingerprint ? attemptRef.current : { id: crypto.randomUUID(), fingerprint };
     attemptRef.current = attempt;
     setSaveState("saving");
     setActionError(null);
     setTitleError(null);
+    setDescriptionError(null);
     const run = (async (): Promise<PersistResult> => {
       try {
         if (kind === "template") {
-          const { template } = await saveEditorTemplate(request, sourceId, {
-            expectedVersion: versionRef.current,
-            clientRequestId: attempt.id,
-            content,
-            name: trimmed,
-          });
-          versionRef.current = template.currentVersion;
+          const { template } = await saveEditorTemplate(
+            request,
+            sourceId,
+            buildTemplateSaveBody({
+              expectedVersion: versionRef.current,
+              clientRequestId: attempt.id,
+              content,
+              name: trimmed,
+              description: descriptionRef.current,
+            }),
+          );
+          // Salvar só nome/descrição com o mesmo conteúdo não avança a versão: vale a que o servidor devolveu.
+          versionRef.current = versionAfterTemplateSave(versionRef.current, template).version;
           setTemplateView(template);
           setStatus(template.status);
           // Uma nova versão salva não é a publicada: o aviso de publicação anterior deixa de valer.
@@ -356,6 +381,7 @@ function EditorSession({
   useEffect(() => {
     guardRef.current = { status: editableStatus, conflict: conflict !== null, saveState };
     titleRef.current = title;
+    descriptionRef.current = description;
     editorRef.current = editor;
     persistRef.current = persist;
   });
@@ -629,6 +655,8 @@ function EditorSession({
     conflict: conflict !== null,
     alreadyPublished,
   });
+  const metaEditable = isTemplateMetaEditable({ status: editableStatus, locked: readOnly });
+  const descriptionCounter = describeDescriptionCounter(description);
   const subjectNoun = isTemplate ? "modelo" : "documento";
 
   if (contentError) {
@@ -683,6 +711,38 @@ function EditorSession({
           ) : null}
         </div>
       </div>
+
+      {isTemplate ? (
+        <Field
+          label="Descrição do modelo"
+          requirement="opcional"
+          htmlFor="editor-template-description"
+          error={descriptionError}
+          hint={
+            <>
+              Explica quando usar o modelo; aparece na lista. Não coloque dados de pessoas.{" "}
+              <span data-testid="editor-description-counter" className={descriptionCounter.over ? "font-bold text-ds-danger" : undefined}>
+                {descriptionCounter.text}
+              </span>
+            </>
+          }
+        >
+          <textarea
+            id="editor-template-description"
+            value={description}
+            maxLength={TEMPLATE_DESCRIPTION_MAX}
+            rows={2}
+            readOnly={!metaEditable}
+            aria-invalid={descriptionError ? true : undefined}
+            onChange={(event) => {
+              setDescription(event.target.value);
+              setDescriptionError(null);
+              markDirty(false);
+            }}
+            className={cn(fieldInputClass, "h-auto py-2")}
+          />
+        </Field>
+      ) : null}
 
       {conflict ? (
         <div role="alert" className="space-y-2 rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-ds-alert-ink">

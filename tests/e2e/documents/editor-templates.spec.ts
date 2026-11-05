@@ -26,6 +26,7 @@ function templateView(overrides: Json = {}) {
     contentHash: "h",
     contentBytes: 10,
     fieldKeys: [],
+    updatedAt: "2026-11-05T15:30:00.000Z",
     ...overrides,
   };
 }
@@ -223,4 +224,91 @@ test("documento: Salvar como modelo exige a ciência do aviso e leva ao modelo c
   expect(createCall.body).not.toHaveProperty("subject");
   // O documento original não é alterado: nenhuma escrita nele.
   expect(calls.filter((call) => call.path.startsWith(`/api/documents/editor/${DOCUMENT_ID}`) && call.method !== "GET")).toHaveLength(0);
+});
+
+test("modelos: a lista mostra a data de atualização e a descrição é editada e salva junto, sem exigir nova versão", async ({ page }) => {
+  test.setTimeout(300_000);
+  const calls: Call[] = [];
+  let template = templateView({ name: "Declaração de vínculo", description: "Uso geral", status: "published", currentVersion: 2, publishedVersion: 2 });
+  const content: Json = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: BODY_TEXT }] }] };
+  await page.route(/\/api\/documents\/editor(\/.*|\?.*)?$/, async (route: Route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+    const body = method === "GET" ? null : (request.postDataJSON() as Json | null);
+    calls.push({ method, path: url.pathname, search: url.search, body });
+    if (method === "GET" && url.pathname === "/api/documents/editor/templates") return route.fulfill({ json: { items: [template], nextCursor: null } });
+    if (method === "GET" && url.pathname === `/api/documents/editor/templates/${TEMPLATE_ID}`) {
+      return route.fulfill({ json: { template, content, version: template.currentVersion } });
+    }
+    if (method === "PUT" && url.pathname === `/api/documents/editor/templates/${TEMPLATE_ID}/content`) {
+      // Só metadados mudaram (conteúdo igual): o servidor não avança a versão.
+      template = templateView({ ...template, name: String(body!.name), description: String(body!.description), updatedAt: "2026-11-06T10:00:00.000Z" });
+      return route.fulfill({ json: { template } });
+    }
+    return route.fulfill({ status: 404, json: { error: { code: "EDITOR_TEMPLATE_NOT_FOUND", message: "texto interno do servidor" } } });
+  });
+  await page.route("**/api/audit/log", (route) => route.fulfill({ json: { ok: true } }));
+
+  await login(page, "/dashboard/documents/editor/templates");
+  const row = page.getByTestId("editor-template-row").filter({ hasText: "Declaração de vínculo" });
+  await expect(row).toBeVisible({ timeout: 180_000 });
+  await expect(row.getByTestId("editor-template-updated-at")).toContainText(/Atualizado em \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
+
+  await row.getByRole("link", { name: "Editar modelo Declaração de vínculo" }).click();
+  await expect(page.getByRole("textbox", { name: "Conteúdo do modelo" })).toBeVisible({ timeout: 180_000 });
+  const description = page.getByLabel("Descrição do modelo");
+  await expect(description).toHaveValue("Uso geral");
+  await expect(page.getByTestId("editor-description-counter")).toHaveText("9/1000");
+  await description.fill("Uso geral e declarações de vínculo");
+  await page.getByRole("button", { name: "Salvar modelo" }).click();
+  await expect(page.getByTestId("editor-save-state")).toHaveText("Salvo");
+  const save = calls.find((call) => call.method === "PUT")!;
+  expect(save.body).toMatchObject({ expectedVersion: 2, name: "Declaração de vínculo", description: "Uso geral e declarações de vínculo" });
+  // A versão não avançou: a tela mostra a que o servidor devolveu, não "versão + 1".
+  await expect(page.getByTestId("editor-template-versions")).toHaveText("Versão 2 · publicada: versão 2");
+});
+
+test("documentos do editor: lista por filtro, mostra data, origem e marca de autoria, e abre o documento", async ({ page }) => {
+  test.setTimeout(300_000);
+  const calls: Call[] = [];
+  const mine = { id: DOCUMENT_ID, title: "Declaração de Ana", status: "draft", contentVersion: 3, updatedAt: "2026-11-05T15:30:00.000Z", origin: { kind: "editor_template", templateId: TEMPLATE_ID, templateVersion: 2 }, isOwn: true };
+  const other = { id: `ed_${"d4".repeat(16)}`, title: "Aviso interno", status: "final", contentVersion: 1, updatedAt: null, finalizedAt: "2026-11-04T12:00:00.000Z", origin: { kind: "editor" }, isOwn: false };
+  await page.route(/\/api\/documents\/editor(\/.*|\?.*)?$/, async (route: Route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    calls.push({ method: request.method(), path: url.pathname, search: url.search, body: null });
+    if (request.method() === "GET" && url.pathname === "/api/documents/editor") {
+      const status = url.searchParams.get("status");
+      const items = [mine, other].filter((item) => status === null || item.status === status);
+      return route.fulfill({ json: { items, nextCursor: null } });
+    }
+    if (request.method() === "GET" && url.pathname === `/api/documents/editor/${DOCUMENT_ID}`) {
+      return route.fulfill({ json: { document: documentView({ title: mine.title }), content: { type: "doc", content: [{ type: "paragraph" }] }, version: 3 } });
+    }
+    return route.fulfill({ status: 404, json: { error: { code: "EDITOR_DOCUMENT_NOT_FOUND", message: "texto interno do servidor" } } });
+  });
+  await page.route("**/api/audit/log", (route) => route.fulfill({ json: { ok: true } }));
+
+  await login(page, "/dashboard/documents/editor/documents");
+  const rows = page.getByTestId("editor-document-row");
+  await expect(rows).toHaveCount(2, { timeout: 180_000 });
+  const first = rows.filter({ hasText: "Declaração de Ana" });
+  await expect(first).toContainText("Do modelo");
+  await expect(first).toContainText("Meu");
+  await expect(first.getByTestId("editor-document-updated-at")).toContainText(/Atualizado em \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
+  const second = rows.filter({ hasText: "Aviso interno" });
+  await expect(second).toContainText("Em branco");
+  await expect(second).not.toContainText("Meu");
+  await expect(second.getByTestId("editor-document-updated-at")).toContainText("Atualizado em —");
+
+  await page.getByRole("radio", { name: "Finalizados" }).click();
+  await expect(rows).toHaveCount(1);
+  expect(calls.some((call) => call.search.includes("status=final"))).toBe(true);
+  await page.getByRole("radio", { name: "Todos" }).click();
+  await expect(rows).toHaveCount(2);
+
+  await first.getByRole("link", { name: "Abrir documento Declaração de Ana" }).click();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/documents/editor/${DOCUMENT_ID}$`), { timeout: 120_000 });
+  await expect(page.getByLabel("Título do documento")).toHaveValue("Declaração de Ana", { timeout: 120_000 });
 });

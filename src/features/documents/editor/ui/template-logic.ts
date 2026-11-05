@@ -171,3 +171,82 @@ const RELOAD_CODES = new Set([
 export function shouldReloadTemplateList(failure: Pick<EditorFailure, "code">): boolean {
   return failure.code !== null && RELOAD_CODES.has(failure.code);
 }
+
+/** Limite da descrição do modelo (o servidor valida 0-1000 e a UI espelha para orientar). */
+export const TEMPLATE_DESCRIPTION_MAX = 1000;
+
+export type DescriptionCounter = { text: string; over: boolean; nearLimit: boolean };
+
+/** Contador "N/1000" da descrição; `over` quando excede o limite (o salvamento é bloqueado). */
+export function describeDescriptionCounter(value: string, max = TEMPLATE_DESCRIPTION_MAX): DescriptionCounter {
+  const length = value.length;
+  return { text: `${length}/${max}`, over: length > max, nearLimit: length >= Math.floor(max * 0.9) };
+}
+
+/** Motivo que impede salvar nome/descrição do modelo, ou `null`. O servidor reaplica as regras. */
+export function getTemplateMetaBlockReason(input: { name: string; description: string }): string | null {
+  if (input.name.trim().length === 0) return "Informe o nome do modelo.";
+  if (input.description.trim().length > TEMPLATE_DESCRIPTION_MAX) {
+    return `A descrição deve ter no máximo ${TEMPLATE_DESCRIPTION_MAX} caracteres.`;
+  }
+  return null;
+}
+
+/** Nome e descrição só mudam em modelo não arquivado e fora de operação em andamento. */
+export function isTemplateMetaEditable(input: { status: string; locked: boolean }): boolean {
+  return input.status !== "archived" && !input.locked;
+}
+
+/**
+ * Corpo do PUT /content do modelo. A descrição vai sempre (aparada): vazio limpa, e a UI nunca
+ * depende de "omitido mantém". O nome é aparado como no servidor.
+ */
+export function buildTemplateSaveBody(input: {
+  expectedVersion: number;
+  clientRequestId: string;
+  content: unknown;
+  name: string;
+  description: string;
+}) {
+  return {
+    expectedVersion: input.expectedVersion,
+    clientRequestId: input.clientRequestId,
+    content: input.content,
+    name: input.name.trim(),
+    description: input.description.trim(),
+  };
+}
+
+/** Chave de reaproveitamento da tentativa: muda com conteúdo, nome, descrição e versão esperada. */
+export function templateSaveFingerprint(input: { content: unknown; name: string; description: string; version: number }): string {
+  return JSON.stringify({ content: input.content, name: input.name.trim(), description: input.description.trim(), version: input.version });
+}
+
+/**
+ * A versão que vale depois de salvar é a devolvida pelo servidor: salvar só nome/descrição com o
+ * mesmo conteúdo não a incrementa. Nunca some 1 por conta própria.
+ */
+export function versionAfterTemplateSave(previous: number, saved: Pick<EditorTemplateView, "currentVersion">): { version: number; advanced: boolean } {
+  return { version: saved.currentVersion, advanced: saved.currentVersion !== previous };
+}
+
+/**
+ * Data (e hora) ISO no padrão brasileiro `DD/MM/AAAA, HH:mm`, no fuso local (ou `timeZone`, para
+ * teste). `null`, vazio ou inválido viram "—". ISO nunca é exibido.
+ */
+export function formatEditorDateTime(iso: string | null | undefined, timeZone?: string): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    ...(timeZone ? { timeZone } : {}),
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("day")}/${get("month")}/${get("year")}, ${get("hour")}:${get("minute")}`;
+}
