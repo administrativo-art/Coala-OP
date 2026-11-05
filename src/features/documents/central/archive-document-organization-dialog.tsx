@@ -75,7 +75,7 @@ export function ArchiveDocumentOrganizationDialog({
       </label> : <label className="space-y-1.5">
         <span className="text-xs font-bold text-ds-ink-muted">Pasta de destino</span>
         <span className="relative block">
-          <select aria-label="Pasta de destino" value={destination} onChange={(event) => { setDestination(event.target.value); setError(""); }} className="h-10 w-full appearance-none rounded-ds-sm border border-ds-border bg-ds-surface-input pl-3 pr-12 text-sm">
+          <select aria-label="Pasta de destino" value={destination} onChange={(event) => { setDestination(event.target.value); setError(""); }} className="h-10 w-full appearance-none rounded-ds-sm border border-ds-border bg-ds-input pl-3 pr-12 text-sm">
             {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
           <span className="pointer-events-none absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-ds-sm border border-ds-border bg-ds-surface shadow-xs"><ChevronDown className="h-4 w-4" strokeWidth={2.25} /></span>
