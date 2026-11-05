@@ -70,6 +70,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DPScheduleRestSummary, type DPScheduleRestSummaryRow } from '@/components/dp/dp-schedule-rest-summary';
 import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
@@ -2377,6 +2378,42 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     ...Object.keys(publishedRestRecord?.people ?? {}),
   ])].sort((left, right) => (effectiveUserMap.get(left)?.username ?? left).localeCompare(effectiveUserMap.get(right)?.username ?? right, 'pt-BR'));
   const restCompetenceLabel = format(restMonthStart, 'MMMM yyyy', { locale: ptBR });
+  const fmtRestDate = (date: string) => format(parseISO(date), 'dd/MM');
+  const restSummaryRows: DPScheduleRestSummaryRow[] = restSummaryUserIds.map((userId) => {
+    const person = journeyValidation?.people[userId];
+    const current = person?.restSummary;
+    const published = publishedRestRecord?.people[userId];
+    const launchedDates = restPreview.datesByUser.get(userId) ?? [];
+    const notes: DPScheduleRestSummaryRow['notes'] = [];
+    if (current?.nextRestDueDate) {
+      notes.push({
+        tone: 'info',
+        text: `Próximo repouso até ${format(parseISO(current.nextRestDueDate), 'dd/MM/yyyy')}${current.nextRestDueDate > restPeriodEnd ? ' · conta no mês seguinte' : ' · neste mês'}`,
+      });
+    }
+    for (const week of current?.weeks ?? []) {
+      notes.push({
+        tone: week.complete && week.granted < week.required ? 'warn' : 'muted',
+        text: `Semana ${format(parseISO(week.start), 'dd/MM')} a ${format(parseISO(week.end), 'dd/MM')}: ${week.granted}/${week.required}${week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}${!week.complete ? ' · continua no mês seguinte' : ''}`,
+      });
+    }
+    return {
+      userId,
+      name: effectiveUserMap.get(userId)?.username ?? userId,
+      journeyName: person?.journey?.name ?? 'Jornada não identificada',
+      resolved: !!current,
+      granted: current ? current.monthGranted : launchedDates.length,
+      required: current && current.distribution === 'monthly_collective' ? current.monthRequired : null,
+      dates: (current ? current.monthRestDates : launchedDates).map(fmtRestDate),
+      notes,
+      published: published ? {
+        version: publishedRestRecord?.publicationVersion,
+        text: `${published.monthGranted}${published.monthRequired !== null ? `/${published.monthRequired}` : ''} repousos`
+          + (published.nextRestDueDate ? ` · próximo até ${format(parseISO(published.nextRestDueDate), 'dd/MM/yyyy')}${published.nextRestDueDate > restPeriodEnd ? ' (mês seguinte)' : ''}` : ''),
+        dates: published.monthRestDates.map(fmtRestDate),
+      } : null,
+    };
+  });
 
   return (
     <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
@@ -2661,46 +2698,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
 
       {/* Grid */}
-      {restSummaryUserIds.length ? (
-        <section className="mb-3 rounded-[14px] border border-ds-border bg-ds-surface p-3" aria-label="Conferência de repousos da escala">
-          <h2 className="mb-2 text-xs font-extrabold text-ds-ink">Repousos de {restCompetenceLabel} por colaborador</h2>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {restSummaryUserIds.map((userId) => {
-              const person = journeyValidation?.people[userId];
-              const current = person?.restSummary;
-              const published = publishedRestRecord?.people[userId];
-              const launchedDates = restPreview.datesByUser.get(userId) ?? [];
-              return <div key={userId} className="rounded-lg border border-ds-border p-2.5 text-xs">
-                <p className="font-bold text-ds-ink">{effectiveUserMap.get(userId)?.username ?? userId} · {person?.journey?.name ?? 'Jornada não identificada'}</p>
-                {current ? <>
-                  <p className="mt-1 text-ds-ink-muted">{current.distribution === 'monthly_collective'
-                    ? `Conferência atual: ${current.monthGranted}/${current.monthRequired} repousos no mês · faltam ${Math.max(0, current.monthRequired - current.monthGranted)} · ${current.monthAvailable} dias livres`
-                    : `Conferência atual: ${current.monthGranted} repousos no mês · 2 por semana`}</p>
-                  <p className="mt-1 text-ds-ink-muted">Datas deste mês: {current.monthRestDates.length ? current.monthRestDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ') : 'nenhuma registrada'}</p>
-                  {current.nextRestDueDate ? <p className="mt-1 font-semibold text-ds-info">Próximo repouso até {format(parseISO(current.nextRestDueDate), 'dd/MM/yyyy')}{current.nextRestDueDate > restPeriodEnd ? ' · conta no mês seguinte' : ' · neste mês'}</p> : null}
-                  {current.weeks.map((week) => <p key={week.start} className={cn('mt-1', week.complete && week.granted < week.required ? 'font-bold text-ds-warn' : 'text-ds-ink-muted')}>
-                    {`Semana ${format(parseISO(week.start), 'dd/MM/yyyy')} a ${format(parseISO(week.end), 'dd/MM/yyyy')}: ${week.granted}/${week.required} repousos`}
-                    {week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}
-                    {!week.complete ? ' · continua no próximo mês' : ''}
-                  </p>)}
-                </> : <>
-                  <p className="mt-1 text-ds-ink-muted">Folgas lançadas nesta escala: {launchedDates.length}</p>
-                  <p className="mt-1 text-ds-ink-muted">Datas deste mês: {launchedDates.length ? launchedDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ') : 'nenhuma lançada'}</p>
-                  <p className="mt-1 text-ds-warn">{journeyValidationLoading
-                    ? 'Conferindo a jornada e as regras de repouso…'
-                    : journeyValidationError
-                      ? 'Conferência automática indisponível. Tente atualizar a escala.'
-                      : 'Jornada sem regra de distribuição resolvida para este mês; meta e prazo não conferidos.'}</p>
-                </>}
-                {published ? <div className="mt-2 rounded-ds-md bg-ds-info-bg p-2 text-ds-info">
-                  <p className="font-bold">Registrado na publicação v{publishedRestRecord?.publicationVersion}: {published.monthGranted}{published.monthRequired !== null ? `/${published.monthRequired}` : ''} repousos neste mês</p>
-                  <p className="mt-1">Datas: {published.monthRestDates.map((date) => format(parseISO(date), 'dd/MM')).join(', ')}</p>
-                  {published.nextRestDueDate ? <p className="mt-1">Próximo repouso até {format(parseISO(published.nextRestDueDate), 'dd/MM/yyyy')}{published.nextRestDueDate > restPeriodEnd ? ' · será contado no mês seguinte' : ''}</p> : null}
-                </div> : null}
-              </div>;
-            })}
-          </div>
-        </section>
+      {restSummaryRows.length ? (
+        <DPScheduleRestSummary
+          competenceLabel={restCompetenceLabel}
+          rows={restSummaryRows}
+          unresolvedMessage={journeyValidationLoading
+            ? 'Conferindo a jornada e as regras de repouso…'
+            : journeyValidationError
+              ? 'Conferência automática indisponível. Tente atualizar a escala.'
+              : 'Jornada sem regra de distribuição resolvida para este mês; meta e prazo não conferidos.'}
+        />
       ) : null}
       {activeUnits.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">

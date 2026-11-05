@@ -5,7 +5,7 @@ import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
-import { canAccessUnit } from '@/lib/unit-access';
+import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
 import { readOfficialScheduleShifts } from './official-revision.server';
 
 const SHIFT_LIST_LIMIT = 2_000;
@@ -25,6 +25,22 @@ function serializeValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Escalas antigas de "todas as unidades" não têm `unitId`: só quem enxerga todas as unidades
+ * pode lê-las. Escalas por unidade seguem exigindo acesso à unidade (ou ao `externalId`).
+ */
+export function canReadScheduleUnit(
+  context: ServerUserContext,
+  unitId: unknown,
+  externalUnitId: string,
+) {
+  if (typeof unitId !== 'string') {
+    return resolveUnitAccess(context.userDoc, { isDefaultAdmin: context.isDefaultAdmin }).allUnits;
+  }
+  return canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin })
+    || (!!externalUnitId && canAccessUnit(context.userDoc, externalUnitId, { isDefaultAdmin: context.isDefaultAdmin }));
+}
+
 function serializeDocument(document: DocumentSnapshot): { id: string } & Record<string, unknown> {
   return { id: document.id, ...(serializeValue(document.data()) as Record<string, unknown>) };
 }
@@ -38,11 +54,7 @@ export async function getSchedule(context: ServerUserContext, scheduleId: string
   const unitId = schedule.get('unitId');
   const unit = typeof unitId === 'string' ? await dbAdmin.collection('dp_units').doc(unitId).get() : null;
   const externalUnitId = unit?.exists ? String(unit.get('externalId') ?? '') : '';
-  const canAccess = typeof unitId === 'string' && (
-    canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin })
-    || (externalUnitId && canAccessUnit(context.userDoc, externalUnitId, { isDefaultAdmin: context.isDefaultAdmin }))
-  );
-  if (!canAccess) {
+  if (!canReadScheduleUnit(context, unitId, externalUnitId)) {
     throw new AppError({ code: 'DP_SCHEDULE_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta escala.' });
   }
   return serializeDocument(schedule);
@@ -67,11 +79,7 @@ export async function listScheduleShifts(context: ServerUserContext, scheduleId:
   const unitId = schedule.get('unitId');
   const unit = typeof unitId === 'string' ? await dbAdmin.collection('dp_units').doc(unitId).get() : null;
   const externalUnitId = unit?.exists ? String(unit.get('externalId') ?? '') : '';
-  const canAccess = typeof unitId === 'string' && (
-    canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin })
-    || (externalUnitId && canAccessUnit(context.userDoc, externalUnitId, { isDefaultAdmin: context.isDefaultAdmin }))
-  );
-  if (!canAccess) {
+  if (!canReadScheduleUnit(context, unitId, externalUnitId)) {
     throw new AppError({ code: 'DP_SCHEDULE_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta escala.' });
   }
 
