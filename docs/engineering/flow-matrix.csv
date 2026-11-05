@@ -19,6 +19,10 @@ src/app/dashboard/documents/consents/[employeeId]/page.tsx,active,consents,
 src/app/dashboard/documents/generated/page.tsx,active,document-central,
 src/app/dashboard/dp/requests/page.tsx,active,collaborator-requests,
 src/app/dashboard/documents/generator/page.tsx,active,document-generation,
+src/app/dashboard/documents/editor/page.tsx,active,document-generation,Entrada do editor interno com três caminhos: documento em branco, usar um modelo e criar modelo.
+src/app/dashboard/documents/editor/[id]/page.tsx,active,document-generation,Editor interno Tiptap de documento livre (rascunho; prévia timbrada e finalização pelo servidor; Salvar como modelo).
+src/app/dashboard/documents/editor/templates/page.tsx,active,document-generation,Lista de modelos do editor (filtro por situação; usar; publicar e arquivar para revisores).
+src/app/dashboard/documents/editor/templates/[tid]/page.tsx,active,document-generation,Editor interno em modo modelo (salvar versão; prévia de exemplo; publicar para revisores).
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
 src/app/dashboard/documents/page.tsx,navigation,employee-documents;company-documents;document-templates;document-generation;document-central,
 src/app/dashboard/documents/published/page.tsx,active,employee-documents;document-central,Pasta publicada por titular com consulta própria ou DP por pessoa e acesso revalidado na origem.
