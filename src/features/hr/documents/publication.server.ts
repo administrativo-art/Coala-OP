@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -14,13 +14,13 @@ import {
 } from '@/lib/hr/employee-document-publication';
 import { AppError } from '@/lib/observability/app-error';
 import { getDocumentTypeConfig, activeDocumentTypeCodes } from '@/lib/hr/employee-document-catalog';
-import { EMPLOYEE_DOCUMENT_TYPE_CATALOG } from '@/lib/hr/employee-document-options';
+import { EMPLOYEE_DOCUMENT_TYPE_CATALOG, isEmployeeDocumentCategory, normalizeEmployeeDocumentCategory } from '@/lib/hr/employee-document-options';
 import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
-import { groupPublishedAdmissionReferences } from '@/lib/documents/employee-archive';
+import { groupPublishedAdmissionReferences, signedAdmissionArchiveGroupKey } from '@/lib/documents/employee-archive';
 import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
-import { employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
+import { documentCategoryLabel, employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
+import { ownDocumentFolderPath } from '@/features/hr/documents/own-document-folders';
 
-const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
 const OWN_LIMIT = 500;
 
@@ -34,6 +34,10 @@ async function storedOverrides(): Promise<Record<string, DocumentPublicationPoli
 }
 const defaults: Dependencies = { hrDb: hrDbAdmin, mainDb: dbAdmin, storage: bucketStorage, now: () => new Date(), overrides: storedOverrides };
 
+const employeeDocuments = (firestore: Firestore) => firestore.collection('employeeDocuments');
+const employeeDocument = (firestore: Firestore, id: string) => employeeDocuments(firestore).doc(id);
+const auditTrail = (ref: DocumentReference) => ref.collection('audit');
+
 const notFound = () => new AppError({ code: 'EMPLOYEE_DOCUMENT_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Documento não encontrado.' });
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
 
@@ -43,9 +47,11 @@ function ownEmployeeIds(context: ServerUserContext) {
   return [...new Set([context.decoded.uid, user.id, user.hrEmployeeId, user.registrationIdBizneo].map(text).filter((value): value is string => Boolean(value)))].slice(0, 10);
 }
 const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
-  id, displayName: text(data.displayName) ?? text(data.documentType) ?? 'Documento', documentType: text(data.documentType), documentTypeCode: text(data.documentTypeCode),
+  id, displayName: text(data.archiveName) ?? text(data.displayName) ?? text(data.documentType) ?? 'Documento',
+  archiveName: text(data.archiveName), documentType: text(data.documentType), documentTypeCode: text(data.documentTypeCode),
   category: text(data.category), mimeType: text(data.mimeType), size: typeof data.size === 'number' ? data.size : null,
   destinationTrail: Array.isArray(data.destinationTrail) ? data.destinationTrail.filter((entry: unknown): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : [],
+  archivePath: Array.isArray(data.archivePath) ? data.archivePath.filter((entry: unknown): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : null,
   publishedAt: (data.publication as DocumentPublication | undefined)?.at ?? null,
 });
 
@@ -56,7 +62,7 @@ const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
 export async function listOwnPublishedDocumentsPage(context: ServerUserContext, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   // A consulta já filtra titular e publicação (índice employeeId + publication.status), nunca a coleção inteira.
-  const snapshot = await deps.hrDb.collection(COLLECTION).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
+  const snapshot = await employeeDocuments(deps.hrDb).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
   const documents = groupPublishedAdmissionReferences(snapshot.docs.slice(0, OWN_LIMIT).filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
     .map((doc) => ({ ...doc.data(), id: doc.id })))
     .map((doc) => publicView(doc.id, doc))
@@ -82,14 +88,14 @@ export async function readOwnDocumentFolderProfile(context: ServerUserContext) {
 /** Abre um documento da própria pasta: titular e publicado, senão "não encontrado" (sem revelar que existe). */
 export async function openOwnPublishedDocument(context: ServerUserContext, id: string, action: 'view' | 'download', injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(id);
+  const ref = employeeDocument(deps.hrDb, id);
   const snapshot = await ref.get();
   const data = snapshot.data();
   if (!data || !ownEmployeeIds(context).includes(String(data.employeeId ?? '')) || !isPublishedToEmployee(data as Parameters<typeof isPublishedToEmployee>[0])) throw notFound();
   const path = text(data.storagePath);
   if (!path) throw notFound();
   const bytes = await deps.storage.download(path);
-  await ref.collection('audit').add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
+  await auditTrail(ref).add({ action: action === 'download' ? 'downloaded' : 'viewed', actorId: context.decoded.uid, channel: 'own_folder', at: Timestamp.fromDate(deps.now()) });
   const mimeType = text(data.mimeType) ?? 'application/pdf';
   return {
     bytes,
@@ -133,7 +139,7 @@ async function assertDocumentUnitScope(context: ServerUserContext, employeeId: s
 }
 
 async function documentForDp(context: ServerUserContext, id: string, deps: Dependencies) {
-  const snapshot = await deps.hrDb.collection(COLLECTION).doc(id).get();
+  const snapshot = await employeeDocument(deps.hrDb, id).get();
   const data = snapshot.data();
   if (!data || data.deletedAt) throw notFound();
   await assertDocumentUnitScope(context, text(data.employeeId), deps);
@@ -148,7 +154,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
   injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertDocumentsDp(context);
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const scoped = await documentForDp(context, input.id, deps);
   const overrides = await deps.overrides();
   return deps.hrDb.runTransaction(async (tx) => {
@@ -164,7 +170,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
       }
       const publication: DocumentPublication = { status: 'published', at, by: context.decoded.uid, source: 'manual', reason: null };
       tx.update(ref, { publication, updatedAt: Timestamp.fromDate(deps.now()) });
-      tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLISHED', actorId: context.decoded.uid, source: 'manual', at: Timestamp.fromDate(deps.now()) });
+      tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLISHED', actorId: context.decoded.uid, source: 'manual', at: Timestamp.fromDate(deps.now()) });
       return publication;
     }
     if (current?.status !== 'published') return current ?? null;
@@ -172,7 +178,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
     if (!reason || reason.length < 10) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_WITHDRAW_REASON', kind: 'VALIDATION', safeMessage: 'Informe o motivo da retirada (mínimo de 10 caracteres).' });
     const publication: DocumentPublication = { status: 'withdrawn', at, by: context.decoded.uid, source: 'manual', reason };
     tx.update(ref, { publication, updatedAt: Timestamp.fromDate(deps.now()) });
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_WITHDRAWN', actorId: context.decoded.uid, reason, at: Timestamp.fromDate(deps.now()) });
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_WITHDRAWN', actorId: context.decoded.uid, reason, at: Timestamp.fromDate(deps.now()) });
     return publication;
   });
 }
@@ -183,7 +189,7 @@ export async function changeDocumentPublication(context: ServerUserContext, inpu
  */
 export async function autoPublishDocument(documentId: string, event: DocumentPublicationTrigger, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(documentId);
+  const ref = employeeDocument(deps.hrDb, documentId);
   const overrides = await deps.overrides();
   return deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -192,7 +198,7 @@ export async function autoPublishDocument(documentId: string, event: DocumentPub
     if (!shouldAutoPublish(resolvePublicationPolicy(text(data.documentTypeCode), overrides), event, data)) return null;
     const publication: DocumentPublication = { status: 'published', at: deps.now().toISOString(), by: 'system:publication-policy', source: 'policy', reason: null };
     tx.update(ref, { publication });
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLISHED', actorId: 'system:publication-policy', source: 'policy', event, at: Timestamp.fromDate(deps.now()) });
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLISHED', actorId: 'system:publication-policy', source: 'policy', event, at: Timestamp.fromDate(deps.now()) });
     return publication;
   });
 }
@@ -239,7 +245,7 @@ export async function saveDocumentPublicationPolicies(context: ServerUserContext
   const ref = deps.hrDb.collection('schema').doc('document_publication');
   const batch = deps.hrDb.batch();
   batch.set(ref, { schemaVersion: 1, policies: normalized, updatedAt: now, updatedBy: context.decoded.uid }, { merge: true });
-  batch.create(ref.collection('audit').doc(), { action: 'DOCUMENT_PUBLICATION_POLICY_UPDATED', actorId: context.decoded.uid, policies: normalized, at: now });
+  batch.create(auditTrail(ref).doc(), { action: 'DOCUMENT_PUBLICATION_POLICY_UPDATED', actorId: context.decoded.uid, policies: normalized, at: now });
   await batch.commit();
   return readDocumentPublicationPolicies(context, { ...injected, overrides: async () => normalized });
 }
@@ -252,7 +258,7 @@ export async function classifyLegacyEmployeeDocument(context: ServerUserContext,
   if (!allowed.has(input.documentTypeCode) || input.documentTypeCode === 'UNKNOWN_DOCUMENT') {
     throw new AppError({ code: 'EMPLOYEE_DOCUMENT_CLASSIFICATION_INVALID', kind: 'VALIDATION', safeMessage: 'Escolha um tipo documental identificado.' });
   }
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const config = getDocumentTypeConfig(input.documentTypeCode);
   const scoped = await documentForDp(context, input.id, deps);
   const result = await deps.hrDb.runTransaction(async (tx) => {
@@ -271,18 +277,169 @@ export async function classifyLegacyEmployeeDocument(context: ServerUserContext,
       updatedAt: Timestamp.fromDate(at),
     };
     tx.update(ref, update);
-    tx.create(ref.collection('audit').doc(), { action: 'DOCUMENT_CLASSIFIED', actorId: context.decoded.uid,
+    tx.create(auditTrail(ref).doc(), { action: 'DOCUMENT_CLASSIFIED', actorId: context.decoded.uid,
       previousDocumentTypeCode: currentCode, documentTypeCode: config.code, at: Timestamp.fromDate(at) });
     return { id: snapshot.id, ...update };
   });
   return result;
 }
 
+export type EmployeeArchiveOrganizationInput =
+  | { ids: string[]; action: 'rename'; name: string; expectedName: string }
+  | { ids: string[]; action: 'move'; path: string[]; expectedPath: string[] };
+
+function archiveDocumentPath(id: string, data: FirebaseFirestore.DocumentData, useOverride = true) {
+  return ownDocumentFolderPath({
+    id,
+    category: text(data.category),
+    documentType: text(data.documentType),
+    documentTypeCode: text(data.documentTypeCode),
+    destinationTrail: Array.isArray(data.destinationTrail) ? data.destinationTrail.filter((part: unknown): part is string => typeof part === 'string') : [],
+    publishedAt: null,
+    archivePath: useOverride && Array.isArray(data.archivePath) ? data.archivePath : null,
+  });
+}
+
+function archiveDocumentName(data: FirebaseFirestore.DocumentData) {
+  return text(data.archiveName) ?? text(data.displayName) ?? text(data.documentType) ?? 'Documento';
+}
+
+function organizationGroupKey(data: FirebaseFirestore.DocumentData, id: string) {
+  const publication = data.publication && typeof data.publication === 'object'
+    ? { status: (data.publication as { status?: unknown }).status ?? null }
+    : null;
+  return signedAdmissionArchiveGroupKey({ ...data, id, publication });
+}
+
+function samePath(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((part, index) => part === right[index]);
+}
+
+/** Changes only the archive projection. Canonical metadata, publication and stored bytes remain untouched. */
+export async function organizeEmployeeArchiveDocument(context: ServerUserContext, input: EmployeeArchiveOrganizationInput,
+  injected: Partial<Dependencies> = {}) {
+  assertDocumentsDp(context);
+  const deps = { ...defaults, ...injected };
+  let ids = [...new Set(input.ids)];
+  if (!ids.length || ids.length > 50) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_IDS_INVALID', kind: 'VALIDATION', safeMessage: 'Documento inválido.' });
+  let refs = ids.map((id) => employeeDocument(deps.hrDb, id));
+  let snapshots = await Promise.all(refs.map((ref) => ref.get()));
+  let rows = snapshots.map((snapshot) => {
+    const data = snapshot.data();
+    if (!data || data.deletedAt) throw notFound();
+    return { id: snapshot.id, data };
+  });
+  const submittedGroupKey = organizationGroupKey(rows[0].data, rows[0].id);
+  if (submittedGroupKey) {
+    const signatureRequestId = text(rows[0].data.signatureRequestId);
+    const groupSnapshot = await employeeDocuments(deps.hrDb).where('signatureRequestId', '==', signatureRequestId).limit(51).get();
+    if (groupSnapshot.size > 50) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_LIMIT', kind: 'CONFLICT', safeMessage: 'Este grupo é grande demais para organizar por esta tela.' });
+    }
+    const members = groupSnapshot.docs.filter((snapshot) => {
+      const data = snapshot.data();
+      return !data.deletedAt && organizationGroupKey(data, snapshot.id) === submittedGroupKey;
+    });
+    const submitted = new Set(ids);
+    if (rows.some((row) => organizationGroupKey(row.data, row.id) !== submittedGroupKey)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_INVALID', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+    }
+    ids = [rows[0].id, ...members.map((member) => member.id).filter((id) => id !== rows[0].id)].filter((id, index, all) => all.indexOf(id) === index);
+    if ([...submitted].some((id) => !ids.includes(id))) throw notFound();
+    refs = ids.map((id) => employeeDocument(deps.hrDb, id));
+    snapshots = await Promise.all(refs.map((ref) => ref.get()));
+    rows = snapshots.map((snapshot) => {
+      const data = snapshot.data();
+      if (!data || data.deletedAt) throw notFound();
+      return { id: snapshot.id, data };
+    });
+  }
+  const employeeId = text(rows[0].data.employeeId);
+  if (!employeeId || rows.some((row) => text(row.data.employeeId) !== employeeId)) throw notFound();
+  await assertDocumentUnitScope(context, employeeId, deps);
+  if (rows.length > 1) {
+    const groupKey = organizationGroupKey(rows[0].data, rows[0].id);
+    if (!groupKey || rows.some((row) => organizationGroupKey(row.data, row.id) !== groupKey)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_INVALID', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+    }
+  }
+  const representative = rows[0];
+  let nextName: string | null = null;
+  let nextPath: string[] | null = null;
+  if (input.action === 'rename') {
+    nextName = input.name.trim().replace(/\s+/g, ' ');
+    if (nextName.length < 2 || nextName.length > 160 || /[\u0000-\u001f\u007f]/.test(nextName)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_NAME_INVALID', kind: 'VALIDATION', safeMessage: 'Informe um nome de 2 a 160 caracteres.' });
+    }
+  } else {
+    nextPath = input.path.map((part) => part.trim().replace(/\s+/g, ' '));
+    const category = text(representative.data.category);
+    const archiveCategory = category && isEmployeeDocumentCategory(category) ? normalizeEmployeeDocumentCategory(category) : null;
+    if (!category || !isEmployeeDocumentCategory(category) || category === 'pending_classification'
+      || !archiveCategory || nextPath.length < 1 || nextPath.length > 8 || nextPath[0] !== documentCategoryLabel(archiveCategory)
+      || (["personal", "admission", "benefits", "uniforms", "training", "warnings", "termination"].includes(archiveCategory) && nextPath.length !== 1)
+      || nextPath.some((part) => !part || part.length > 120 || /[\u0000-\u001f\u007f]/.test(part) || part === '.' || part === '..')) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_PATH_INVALID', kind: 'VALIDATION', safeMessage: 'Escolha uma pasta válida dentro da categoria do documento.' });
+    }
+  }
+  const now = deps.now();
+  await deps.hrDb.runTransaction(async (tx) => {
+    const currentSnapshots = await Promise.all(refs.map((ref) => tx.get(ref)));
+    const currentRows = currentSnapshots.map((snapshot) => {
+      const data = snapshot.data();
+      if (!data || data.deletedAt || text(data.employeeId) !== employeeId) throw notFound();
+      return { id: snapshot.id, data };
+    });
+    if (currentRows.length > 1) {
+      const currentGroupKey = organizationGroupKey(currentRows[0].data, currentRows[0].id);
+      if (!currentGroupKey || currentRows.some((row) => organizationGroupKey(row.data, row.id) !== currentGroupKey)) {
+        throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_CHANGED', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+      }
+    }
+    const currentRepresentative = currentRows[0];
+    if (input.action === 'rename') {
+      if (archiveDocumentName(currentRepresentative.data) !== input.expectedName) {
+        throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_NAME_CHANGED', kind: 'CONFLICT', safeMessage: 'O nome mudou; atualize a pasta antes de renomear.' });
+      }
+      for (const row of currentRows) {
+        const canonicalName = text(row.data.displayName) ?? text(row.data.documentType) ?? 'Documento';
+        const ref = employeeDocument(deps.hrDb, row.id);
+        tx.update(ref, {
+          archiveName: nextName === canonicalName ? FieldValue.delete() : nextName,
+          updatedAt: Timestamp.fromDate(now),
+        });
+        tx.create(auditTrail(ref).doc(), {
+          action: 'DOCUMENT_ARCHIVE_RENAMED', actorId: context.decoded.uid, from: archiveDocumentName(row.data), to: nextName, at: Timestamp.fromDate(now),
+        });
+      }
+      return;
+    }
+    const currentPath = archiveDocumentPath(currentRepresentative.id, currentRepresentative.data);
+    if (!samePath(currentPath, input.expectedPath)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_PATH_CHANGED', kind: 'CONFLICT', safeMessage: 'A pasta mudou; atualize antes de mover.' });
+    }
+    for (const row of currentRows) {
+      const defaultPath = archiveDocumentPath(row.id, row.data, false);
+      const ref = employeeDocument(deps.hrDb, row.id);
+      tx.update(ref, {
+        archivePath: samePath(nextPath!, defaultPath) ? FieldValue.delete() : nextPath,
+        updatedAt: Timestamp.fromDate(now),
+      });
+      tx.create(auditTrail(ref).doc(), {
+        action: 'DOCUMENT_ARCHIVE_MOVED', actorId: context.decoded.uid, from: archiveDocumentPath(row.id, row.data), to: nextPath, at: Timestamp.fromDate(now),
+      });
+    }
+  });
+  return input.action === 'rename'
+    ? { ids, archiveName: nextName, archivePath: archiveDocumentPath(representative.id, representative.data) }
+    : { ids, archiveName: archiveDocumentName(representative.data), archivePath: nextPath };
+}
+
 /** Validação manual passa pelo mesmo gatilho de publicação automática configurado para o tipo. */
 export async function changeEmployeeDocumentStatus(context: ServerUserContext, input: { id: string; status: 'pending' | 'received' | 'validated' | 'rejected' }, injected: Partial<Dependencies> = {}) {
   assertDocumentsDp(context);
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(COLLECTION).doc(input.id);
+  const ref = employeeDocument(deps.hrDb, input.id);
   const scoped = await documentForDp(context, input.id, deps);
   await deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -291,7 +448,7 @@ export async function changeEmployeeDocumentStatus(context: ServerUserContext, i
     const at = deps.now();
     tx.update(ref, { status: input.status, updatedAt: Timestamp.fromDate(at),
       ...(input.status === 'validated' ? { validatedBy: context.decoded.uid, validatedAt: Timestamp.fromDate(at) } : {}) });
-    tx.create(ref.collection('audit').doc(), { action: `status_${input.status}`, actorId: context.decoded.uid, at: Timestamp.fromDate(at) });
+    tx.create(auditTrail(ref).doc(), { action: `status_${input.status}`, actorId: context.decoded.uid, at: Timestamp.fromDate(at) });
   });
   const publication = input.status === 'validated' ? await autoPublishDocument(input.id, 'validated', deps) : null;
   return { status: input.status, publication };

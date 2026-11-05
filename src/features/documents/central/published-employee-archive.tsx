@@ -6,16 +6,24 @@ import { Button } from "@/components/ui/button";
 
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessUserByUnit } from "@/lib/unit-access";
-import { employeeArchiveIds, employeeArchiveChildFolders, groupPublishedAdmissionReferences } from "@/lib/documents/employee-archive";
+import { employeeArchiveIds, employeeArchiveChildFolders, employeeArchiveDocumentName, groupPublishedAdmissionReferences } from "@/lib/documents/employee-archive";
 import { isPublishedToEmployee, type DocumentPublication } from "@/lib/hr/employee-document-publication";
 import { ownDocumentFolderPath } from "@/features/hr/documents/own-document-folders";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
 import { ArchivePreview } from "./archive-preview";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
+import {
+  ArchiveDocumentOrganizationDialog,
+  type ArchiveOrganizationRequest,
+  type ArchiveOrganizationTarget,
+} from "./archive-document-organization-dialog";
 
 type PublishedDocument = {
   id: string;
   displayName: string;
+  archiveName?: string | null;
+  archivePath?: string[] | null;
+  archiveReferences?: string[];
   documentType: string | null;
   documentTypeCode: string | null;
   category: string | null;
@@ -47,7 +55,7 @@ async function readDpPage(id: string, after: string | null, headers: { Authoriza
   if (!response.ok) throw Error("Não foi possível consultar esta pasta com seu acesso atual.");
   const payload = await response.json();
   if (!Array.isArray(payload.documents) || !(payload.nextCursor === null || typeof payload.nextCursor === "string")) throw Error("Resposta documental incompleta.");
-  return {documents:payload.documents.filter(isPublishedToEmployee).map((doc:PublishedDocument) => ({...doc,displayName:doc.displayName || doc.documentType || doc.originalName || "Documento",publishedAt:doc.publication?.at ?? null})),nextCursor:payload.nextCursor};
+  return {documents:payload.documents.filter(isPublishedToEmployee).map((doc:PublishedDocument) => ({...doc,displayName:employeeArchiveDocumentName(doc),publishedAt:doc.publication?.at ?? null})),nextCursor:payload.nextCursor};
 }
 
 function downloadName(response: Response, document: PublishedDocument): string {
@@ -69,11 +77,26 @@ function readPath(value: string | null): string[] {
   } catch { return []; }
 }
 
+function organizationDestinations(document: PublishedDocument, documents: PublishedDocument[]): string[][] {
+  const current = ownDocumentFolderPath(document);
+  const defaultPath = ownDocumentFolderPath({ ...document, archivePath: null });
+  const category = defaultPath[0];
+  const candidates = new Map<string, string[]>();
+  for (const candidate of [defaultPath, ...documents.filter((item) => ownDocumentFolderPath({ ...item, archivePath: null })[0] === category).map(ownDocumentFolderPath)]) {
+    for (let length = 1; length <= candidate.length; length++) {
+      const path = candidate.slice(0, length);
+      if (path[0] === category && JSON.stringify(path) !== JSON.stringify(current)) candidates.set(JSON.stringify(path), path);
+    }
+  }
+  return [...candidates.values()].sort((left, right) => left.join("/").localeCompare(right.join("/"), "pt-BR"));
+}
+
 export function PublishedEmployeeArchive() {
   const router = useRouter();
   const { firebaseUser, user, activeUsers, terminatedUsers, permissions, isDefaultAdmin } = useAuth();
   const canViewTeam = isDefaultAdmin || Boolean(permissions.settings?.manageUsers ||
     permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly);
+  const canOrganize = isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit);
   const people = useMemo(() => {
     if (!user) return [];
     const permitted = canViewTeam
@@ -90,15 +113,23 @@ export function PublishedEmployeeArchive() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [ownLimitReached, setOwnLimitReached] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{id: string; url: string; mime: string} | null>(null);
+  const [organizationMode, setOrganizationMode] = useState<"rename" | "move" | null>(null);
+  const [organizationTarget, setOrganizationTarget] = useState<ArchiveOrganizationTarget | null>(null);
   const requestSequence = useRef(0);
   const fileSequence = useRef(0);
   const employee = people.find(person => person.id === employeeId);
+  const selectedEmployeeId = employee?.id ?? "";
   const own = Boolean(employee && user && employee.id === user.id);
   const aliases = employee ? employeeArchiveIds(employee) : [];
   const aliasKey = aliases.join("\u0000");
+  const firebaseUserRef = useRef(firebaseUser);
+  const loadKey = JSON.stringify([selectedEmployeeId, firebaseUser?.uid ?? "", own, canViewTeam, aliasKey]);
+  const loadedKey = useRef("");
 
+  useEffect(() => { firebaseUserRef.current = firebaseUser; }, [firebaseUser]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
   useEffect(() => {
     const restore = () => {
@@ -110,13 +141,16 @@ export function PublishedEmployeeArchive() {
     return () => { requestSequence.current++; fileSequence.current++; window.removeEventListener("popstate", restore); };
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveVisible = false) => {
     const sequence = ++requestSequence.current;
-    setDocuments([]); setCursors([]); setLoadingMore(false); setOwnLimitReached(false); setError(null);
-    if (!employee || !firebaseUser || (!own && !canViewTeam)) { setLoading(false); return; }
-    setLoading(true);
+    const currentFirebaseUser = firebaseUserRef.current;
+    const keepContent = preserveVisible && loadedKey.current === loadKey;
+    if (!keepContent) { setDocuments([]); setCursors([]); setOwnLimitReached(false); }
+    setLoadingMore(false); setError(null);
+    if (!selectedEmployeeId || !currentFirebaseUser || (!own && !canViewTeam)) { setLoading(false); setRefreshing(false); loadedKey.current = ""; return; }
+    if (keepContent) setRefreshing(true); else setLoading(true);
     try {
-      const headers = {Authorization: `Bearer ${await firebaseUser.getIdToken()}`};
+      const headers = {Authorization: `Bearer ${await currentFirebaseUser.getIdToken()}`};
       let visible: PublishedDocument[];
       if (own) {
         const response = await fetch("/api/collaborator/documents", {headers, cache:"no-store"});
@@ -131,12 +165,12 @@ export function PublishedEmployeeArchive() {
         visible = [...new Map(pages.flatMap(page => page.documents).map(doc => [doc.id,doc])).values()];
         if (requestSequence.current === sequence) setCursors(pages.flatMap((page,index) => page.nextCursor ? [{id:ids[index],after:page.nextCursor}] : []));
       }
-      if (requestSequence.current === sequence) setDocuments(visible);
+      if (requestSequence.current === sequence) { setDocuments(visible); loadedKey.current = loadKey; }
     } catch (cause) {
       if (requestSequence.current === sequence) setError(cause instanceof Error ? cause.message : "Não foi possível consultar esta pasta.");
-    } finally { if (requestSequence.current === sequence) setLoading(false); }
-  }, [employee, firebaseUser, own, canViewTeam, aliasKey]);
-  useEffect(() => { void load(); return () => { requestSequence.current++; }; }, [load]);
+    } finally { if (requestSequence.current === sequence) { setLoading(false); setRefreshing(false); } }
+  }, [selectedEmployeeId, own, canViewTeam, aliasKey, loadKey]);
+  useEffect(() => { void load(false); return () => { requestSequence.current++; }; }, [load]);
 
   async function loadMore() {
     if (!firebaseUser || !cursors.length || loadingMore) return;
@@ -180,6 +214,34 @@ export function PublishedEmployeeArchive() {
     } catch (cause) { if (fileSequence.current === sequence) setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
   }
 
+  function requestOrganization(mode: "rename" | "move", document: PublishedDocument) {
+    setOrganizationMode(mode);
+    setOrganizationTarget({
+      ids: document.archiveReferences?.length ? document.archiveReferences : [document.id],
+      name: employeeArchiveDocumentName(document),
+      path: ownDocumentFolderPath(document),
+      destinations: organizationDestinations(document, visibleDocuments),
+    });
+  }
+
+  async function saveOrganization(request: ArchiveOrganizationRequest) {
+    if (!firebaseUser) throw new Error("Sessão indisponível.");
+    const response = await fetch("/api/hr/employee-documents/organization", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "A organização do documento foi recusada.");
+    const changed = new Set(request.ids);
+    setDocuments((current) => current.map((document) => !changed.has(document.id) ? document : request.action === "rename"
+      ? { ...document, archiveName: request.name, displayName: request.name }
+      : { ...document, archivePath: request.path }));
+    setPreview(null);
+    if (request.action === "move" && employeeId) navigate(employeeId, request.path);
+  }
+
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const visibleDocuments = own ? documents : groupPublishedAdmissionReferences(documents);
   const paths = visibleDocuments.map(ownDocumentFolderPath);
@@ -190,25 +252,29 @@ export function PublishedEmployeeArchive() {
     : !employee ? [] : [
       ...(!term ? childFolders.map((name):ArchiveEntry => ({id:`folder:${name}`,name,kind:"folder",open:() => navigate(employeeId,[...path,name])})) : []),
       ...visibleDocuments.filter(doc => path.every((part,index) => ownDocumentFolderPath(doc)[index] === part))
-        .filter(doc => term ? `${doc.displayName} ${doc.documentType ?? ""}`.toLocaleLowerCase("pt-BR").includes(term) : ownDocumentFolderPath(doc).length === path.length)
-        .map((doc):ArchiveEntry => ({id:doc.id,name:doc.displayName,kind:"file",description:doc.documentType ?? undefined,
+        .filter(doc => term ? `${employeeArchiveDocumentName(doc)} ${doc.documentType ?? ""}`.toLocaleLowerCase("pt-BR").includes(term) : ownDocumentFolderPath(doc).length === path.length)
+        .map((doc):ArchiveEntry => ({id:doc.id,name:employeeArchiveDocumentName(doc),kind:"file",description:doc.documentType ?? undefined,
           modified:doc.publishedAt ? new Date(doc.publishedAt).toLocaleDateString("pt-BR") : undefined,
           modifiedAt:archiveTimestamp(doc.publishedAt),
           size:doc.size ? `${Math.ceil(doc.size / 1024)} KB` : undefined, sizeBytes:doc.size,
           open:() => void access(doc,!archivePreviewable(doc.mimeType)),
           loadPreview:archivePreviewable(doc.mimeType) ? () => void access(doc) : undefined,
-          actions:[{label:"Baixar",run:() => void access(doc,true)}]})),
+          actions:[{label:"Baixar",run:() => void access(doc,true)},
+            ...(canOrganize ? [{label:"Renomear",run:() => requestOrganization("rename",doc)}] : []),
+            ...(canOrganize && organizationDestinations(doc, visibleDocuments).length ? [{label:"Mover",run:() => requestOrganization("move",doc)}] : [])]})),
     ];
-  return <ArchiveExplorer area="published" selectionScope={JSON.stringify([employeeId, path])} hasMorePages={ownLimitReached || cursors.length > 0} entries={entries} search={search} onSearch={setSearch} loading={loading}
+  return <><ArchiveExplorer area="published" selectionScope={JSON.stringify([employeeId, path])} hasMorePages={ownLimitReached || cursors.length > 0} entries={entries} search={search} onSearch={setSearch} loading={loading} refreshing={refreshing}
     error={employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
     breadcrumbs={employee ? [{name:employee.username,open:() => navigate(employeeId)},...path.map((name,index) => ({name,open:() => navigate(employeeId,path.slice(0,index+1))}))] : []}
     folders={employee ? childFolders.map(name => ({id:name,name,open:() => navigate(employeeId,[...path,name])})) : []}
     onRoot={() => navigate(null)} onUp={() => path.length ? navigate(employeeId,path.slice(0,-1)) : employeeId ? navigate(null) : router.push("/dashboard/documents")}
-    onRefresh={() => void load()} onSelect={() => {fileSequence.current++;setPreview(null);}}
+    onRefresh={() => void load(true)} onSelect={() => {fileSequence.current++;setPreview(null);}}
     footer={employee ? <div className="px-4 pt-3 text-xs text-slate-600">
       {ownLimitReached && <p role="status">Há mais documentos publicados do que esta consulta exibe. Peça ao DP a conferência dos demais.</p>}
       {(ownLimitReached || cursors.length > 0) && <p>Busca e ordenação consideram somente as páginas carregadas.</p>}
       {cursors.length > 0 && <Button type="button" variant="outline" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Carregando…" : "Carregar mais documentos"}</Button>}
     </div> : null}
-    preview={entry => preview?.id === entry.id ? <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} /> : <p className="text-xs text-slate-500">{entry.description}</p>} />;
+    preview={entry => preview?.id === entry.id ? <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} /> : <p className="text-xs text-slate-500">{entry.description}</p>} />
+    <ArchiveDocumentOrganizationDialog mode={organizationMode} target={organizationTarget} onClose={() => { setOrganizationMode(null); setOrganizationTarget(null); }} onSave={saveOrganization} />
+  </>;
 }

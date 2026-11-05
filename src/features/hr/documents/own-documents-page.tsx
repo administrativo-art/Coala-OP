@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { groupOwnDocumentsByFolder } from "@/features/hr/documents/own-document-folders";
 import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-templates";
+import { employeeArchiveDocumentName } from "@/lib/documents/employee-archive";
 
 type OwnDocument = {
   id: string;
@@ -89,7 +90,7 @@ export function OwnDocumentsPage() {
                   <span className="flex min-w-0 items-center gap-3">
                     <FileText className="h-4 w-4 shrink-0 text-ds-ink-muted" />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-ds-ink">{document.displayName}</span>
+                      <span className="block truncate text-sm font-bold text-ds-ink">{employeeArchiveDocumentName(document)}</span>
                       <span className="block text-xs text-ds-ink-muted">{document.documentType ?? "Documento"}{document.publishedAt ? ` · liberado em ${dateBR(document.publishedAt)}` : ""}</span>
                     </span>
                   </span>
