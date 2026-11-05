@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
 import type { ServerUserContext } from '@/lib/auth-server';
@@ -14,11 +14,12 @@ import {
 } from '@/lib/hr/employee-document-publication';
 import { AppError } from '@/lib/observability/app-error';
 import { getDocumentTypeConfig, activeDocumentTypeCodes } from '@/lib/hr/employee-document-catalog';
-import { EMPLOYEE_DOCUMENT_TYPE_CATALOG } from '@/lib/hr/employee-document-options';
+import { EMPLOYEE_DOCUMENT_TYPE_CATALOG, isEmployeeDocumentCategory, normalizeEmployeeDocumentCategory } from '@/lib/hr/employee-document-options';
 import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
-import { groupPublishedAdmissionReferences } from '@/lib/documents/employee-archive';
+import { groupPublishedAdmissionReferences, signedAdmissionArchiveGroupKey } from '@/lib/documents/employee-archive';
 import { readEmployeeDocumentFolderProfile } from '@/lib/hr/employee-document-folder-profile.server';
-import { employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
+import { documentCategoryLabel, employeeDocumentDownloadName } from '@/lib/hr/employee-document-planning';
+import { ownDocumentFolderPath } from '@/features/hr/documents/own-document-folders';
 
 const COLLECTION = 'employeeDocuments';
 // Só os publicados da pessoa; o teto protege a leitura sem cortar o uso normal.
@@ -43,9 +44,11 @@ function ownEmployeeIds(context: ServerUserContext) {
   return [...new Set([context.decoded.uid, user.id, user.hrEmployeeId, user.registrationIdBizneo].map(text).filter((value): value is string => Boolean(value)))].slice(0, 10);
 }
 const publicView = (id: string, data: FirebaseFirestore.DocumentData) => ({
-  id, displayName: text(data.displayName) ?? text(data.documentType) ?? 'Documento', documentType: text(data.documentType), documentTypeCode: text(data.documentTypeCode),
+  id, displayName: text(data.archiveName) ?? text(data.displayName) ?? text(data.documentType) ?? 'Documento',
+  archiveName: text(data.archiveName), documentType: text(data.documentType), documentTypeCode: text(data.documentTypeCode),
   category: text(data.category), mimeType: text(data.mimeType), size: typeof data.size === 'number' ? data.size : null,
   destinationTrail: Array.isArray(data.destinationTrail) ? data.destinationTrail.filter((entry: unknown): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : [],
+  archivePath: Array.isArray(data.archivePath) ? data.archivePath.filter((entry: unknown): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : null,
   publishedAt: (data.publication as DocumentPublication | undefined)?.at ?? null,
 });
 
@@ -276,6 +279,155 @@ export async function classifyLegacyEmployeeDocument(context: ServerUserContext,
     return { id: snapshot.id, ...update };
   });
   return result;
+}
+
+export type EmployeeArchiveOrganizationInput =
+  | { ids: string[]; action: 'rename'; name: string; expectedName: string }
+  | { ids: string[]; action: 'move'; path: string[]; expectedPath: string[] };
+
+function archiveDocumentPath(id: string, data: FirebaseFirestore.DocumentData, useOverride = true) {
+  return ownDocumentFolderPath({
+    id,
+    category: text(data.category),
+    documentType: text(data.documentType),
+    documentTypeCode: text(data.documentTypeCode),
+    destinationTrail: Array.isArray(data.destinationTrail) ? data.destinationTrail.filter((part: unknown): part is string => typeof part === 'string') : [],
+    publishedAt: null,
+    archivePath: useOverride && Array.isArray(data.archivePath) ? data.archivePath : null,
+  });
+}
+
+function archiveDocumentName(data: FirebaseFirestore.DocumentData) {
+  return text(data.archiveName) ?? text(data.displayName) ?? text(data.documentType) ?? 'Documento';
+}
+
+function organizationGroupKey(data: FirebaseFirestore.DocumentData, id: string) {
+  const publication = data.publication && typeof data.publication === 'object'
+    ? { status: (data.publication as { status?: unknown }).status ?? null }
+    : null;
+  return signedAdmissionArchiveGroupKey({ ...data, id, publication });
+}
+
+function samePath(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((part, index) => part === right[index]);
+}
+
+/** Changes only the archive projection. Canonical metadata, publication and stored bytes remain untouched. */
+export async function organizeEmployeeArchiveDocument(context: ServerUserContext, input: EmployeeArchiveOrganizationInput,
+  injected: Partial<Dependencies> = {}) {
+  assertDocumentsDp(context);
+  const deps = { ...defaults, ...injected };
+  let ids = [...new Set(input.ids)];
+  if (!ids.length || ids.length > 50) throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_IDS_INVALID', kind: 'VALIDATION', safeMessage: 'Documento inválido.' });
+  let refs = ids.map((id) => deps.hrDb.collection(COLLECTION).doc(id));
+  let snapshots = await Promise.all(refs.map((ref) => ref.get()));
+  let rows = snapshots.map((snapshot) => {
+    const data = snapshot.data();
+    if (!data || data.deletedAt) throw notFound();
+    return { id: snapshot.id, data };
+  });
+  const submittedGroupKey = organizationGroupKey(rows[0].data, rows[0].id);
+  if (submittedGroupKey) {
+    const signatureRequestId = text(rows[0].data.signatureRequestId);
+    const groupSnapshot = await deps.hrDb.collection(COLLECTION).where('signatureRequestId', '==', signatureRequestId).limit(51).get();
+    if (groupSnapshot.size > 50) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_LIMIT', kind: 'CONFLICT', safeMessage: 'Este grupo é grande demais para organizar por esta tela.' });
+    }
+    const members = groupSnapshot.docs.filter((snapshot) => {
+      const data = snapshot.data();
+      return !data.deletedAt && organizationGroupKey(data, snapshot.id) === submittedGroupKey;
+    });
+    const submitted = new Set(ids);
+    if (rows.some((row) => organizationGroupKey(row.data, row.id) !== submittedGroupKey)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_INVALID', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+    }
+    ids = [rows[0].id, ...members.map((member) => member.id).filter((id) => id !== rows[0].id)].filter((id, index, all) => all.indexOf(id) === index);
+    if ([...submitted].some((id) => !ids.includes(id))) throw notFound();
+    refs = ids.map((id) => deps.hrDb.collection(COLLECTION).doc(id));
+    snapshots = await Promise.all(refs.map((ref) => ref.get()));
+    rows = snapshots.map((snapshot) => {
+      const data = snapshot.data();
+      if (!data || data.deletedAt) throw notFound();
+      return { id: snapshot.id, data };
+    });
+  }
+  const employeeId = text(rows[0].data.employeeId);
+  if (!employeeId || rows.some((row) => text(row.data.employeeId) !== employeeId)) throw notFound();
+  await assertDocumentUnitScope(context, employeeId, deps);
+  if (rows.length > 1) {
+    const groupKey = organizationGroupKey(rows[0].data, rows[0].id);
+    if (!groupKey || rows.some((row) => organizationGroupKey(row.data, row.id) !== groupKey)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_INVALID', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+    }
+  }
+  const representative = rows[0];
+  let nextName: string | null = null;
+  let nextPath: string[] | null = null;
+  if (input.action === 'rename') {
+    nextName = input.name.trim().replace(/\s+/g, ' ');
+    if (nextName.length < 2 || nextName.length > 160 || /[\u0000-\u001f\u007f]/.test(nextName)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_NAME_INVALID', kind: 'VALIDATION', safeMessage: 'Informe um nome de 2 a 160 caracteres.' });
+    }
+  } else {
+    nextPath = input.path.map((part) => part.trim().replace(/\s+/g, ' '));
+    const category = text(representative.data.category);
+    const archiveCategory = category && isEmployeeDocumentCategory(category) ? normalizeEmployeeDocumentCategory(category) : null;
+    if (!category || !isEmployeeDocumentCategory(category) || category === 'pending_classification'
+      || !archiveCategory || nextPath.length < 1 || nextPath.length > 8 || nextPath[0] !== documentCategoryLabel(archiveCategory)
+      || (["personal", "admission", "benefits", "uniforms", "training", "warnings", "termination"].includes(archiveCategory) && nextPath.length !== 1)
+      || nextPath.some((part) => !part || part.length > 120 || /[\u0000-\u001f\u007f]/.test(part) || part === '.' || part === '..')) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_PATH_INVALID', kind: 'VALIDATION', safeMessage: 'Escolha uma pasta válida dentro da categoria do documento.' });
+    }
+  }
+  const now = deps.now();
+  await deps.hrDb.runTransaction(async (tx) => {
+    const currentSnapshots = await Promise.all(refs.map((ref) => tx.get(ref)));
+    const currentRows = currentSnapshots.map((snapshot) => {
+      const data = snapshot.data();
+      if (!data || data.deletedAt || text(data.employeeId) !== employeeId) throw notFound();
+      return { id: snapshot.id, data };
+    });
+    if (currentRows.length > 1) {
+      const currentGroupKey = organizationGroupKey(currentRows[0].data, currentRows[0].id);
+      if (!currentGroupKey || currentRows.some((row) => organizationGroupKey(row.data, row.id) !== currentGroupKey)) {
+        throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_GROUP_CHANGED', kind: 'CONFLICT', safeMessage: 'O grupo do documento mudou; atualize a pasta.' });
+      }
+    }
+    const currentRepresentative = currentRows[0];
+    if (input.action === 'rename') {
+      if (archiveDocumentName(currentRepresentative.data) !== input.expectedName) {
+        throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_NAME_CHANGED', kind: 'CONFLICT', safeMessage: 'O nome mudou; atualize a pasta antes de renomear.' });
+      }
+      for (const row of currentRows) {
+        const canonicalName = text(row.data.displayName) ?? text(row.data.documentType) ?? 'Documento';
+        tx.update(deps.hrDb.collection(COLLECTION).doc(row.id), {
+          archiveName: nextName === canonicalName ? FieldValue.delete() : nextName,
+          updatedAt: Timestamp.fromDate(now),
+        });
+        tx.create(deps.hrDb.collection(COLLECTION).doc(row.id).collection('audit').doc(), {
+          action: 'DOCUMENT_ARCHIVE_RENAMED', actorId: context.decoded.uid, from: archiveDocumentName(row.data), to: nextName, at: Timestamp.fromDate(now),
+        });
+      }
+      return;
+    }
+    const currentPath = archiveDocumentPath(currentRepresentative.id, currentRepresentative.data);
+    if (!samePath(currentPath, input.expectedPath)) {
+      throw new AppError({ code: 'EMPLOYEE_DOCUMENT_ORGANIZATION_PATH_CHANGED', kind: 'CONFLICT', safeMessage: 'A pasta mudou; atualize antes de mover.' });
+    }
+    for (const row of currentRows) {
+      const defaultPath = archiveDocumentPath(row.id, row.data, false);
+      tx.update(deps.hrDb.collection(COLLECTION).doc(row.id), {
+        archivePath: samePath(nextPath!, defaultPath) ? FieldValue.delete() : nextPath,
+        updatedAt: Timestamp.fromDate(now),
+      });
+      tx.create(deps.hrDb.collection(COLLECTION).doc(row.id).collection('audit').doc(), {
+        action: 'DOCUMENT_ARCHIVE_MOVED', actorId: context.decoded.uid, from: archiveDocumentPath(row.id, row.data), to: nextPath, at: Timestamp.fromDate(now),
+      });
+    }
+  });
+  return input.action === 'rename'
+    ? { ids, archiveName: nextName, archivePath: archiveDocumentPath(representative.id, representative.data) }
+    : { ids, archiveName: archiveDocumentName(representative.data), archivePath: nextPath };
 }
 
 /** Validação manual passa pelo mesmo gatilho de publicação automática configurado para o tipo. */

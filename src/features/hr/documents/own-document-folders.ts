@@ -1,6 +1,7 @@
 import {
   EMPLOYEE_DOCUMENT_CATEGORIES,
   isEmployeeDocumentCategory,
+  normalizeEmployeeDocumentCategory,
   resolveEmployeeDocumentFolderPath,
   type EmployeeDocumentCategoryId,
 } from "@/lib/hr/employee-document-options";
@@ -14,6 +15,7 @@ export type OwnFolderDocument = {
   documentTypeCode: string | null;
   destinationTrail: string[];
   publishedAt: string | null;
+  archivePath?: string[] | null;
 };
 
 export type OwnDocumentFolder<T extends OwnFolderDocument = OwnFolderDocument> = {
@@ -23,13 +25,20 @@ export type OwnDocumentFolder<T extends OwnFolderDocument = OwnFolderDocument> =
 };
 
 function categoryOf(document: OwnFolderDocument): EmployeeDocumentCategoryId {
-  return document.category && isEmployeeDocumentCategory(document.category)
+  const category = document.category && isEmployeeDocumentCategory(document.category)
     ? document.category
     : "pending_classification";
+  return normalizeEmployeeDocumentCategory(category);
 }
 
 export function ownDocumentFolderPath(document: OwnFolderDocument): string[] {
   const category = categoryOf(document);
+  if (["personal", "admission", "benefits", "uniforms", "training", "warnings", "termination"].includes(category)) {
+    return [documentCategoryLabel(category)];
+  }
+  if (Array.isArray(document.archivePath) && document.archivePath.length > 0) {
+    return document.archivePath;
+  }
   return [
     documentCategoryLabel(category),
     ...resolveEmployeeDocumentFolderPath({
@@ -44,7 +53,9 @@ export function ownDocumentFolderPath(document: OwnFolderDocument): string[] {
 export function groupOwnDocumentsByFolder<T extends OwnFolderDocument>(documents: T[], templateFolders: EmployeeDossierFolder[] = []): OwnDocumentFolder<T>[] {
   const groups = new Map<string, OwnDocumentFolder<T>>();
   for (const folder of templateFolders.filter((entry) => entry.employeeVisible)) {
-    const path = [documentCategoryLabel(folder.category), ...folder.path];
+    const category = normalizeEmployeeDocumentCategory(folder.category);
+    const rootOnly = ["personal", "admission", "work_schedule", "benefits", "vacations", "leaves", "uniforms", "training", "warnings", "termination"].includes(category);
+    const path = rootOnly ? [documentCategoryLabel(category)] : [documentCategoryLabel(category), ...folder.path];
     const key = path.join("/");
     if (!groups.has(key)) groups.set(key, { key, path, documents: [] });
   }

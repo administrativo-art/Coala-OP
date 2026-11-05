@@ -9,24 +9,36 @@ import { useAuth } from "@/hooks/use-auth";
 import { canAccessUserByUnit } from "@/lib/unit-access";
 import { employeeDocumentDownloadName } from "@/lib/hr/employee-document-planning";
 import { companyArchiveHref } from "@/lib/documents/company-archive-navigation";
-import { employeeArchiveIds, employeeArchiveChildFolders, groupSignedAdmissionReferences } from "@/lib/documents/employee-archive";
+import { employeeArchiveIds, employeeArchiveChildFolders, employeeArchiveDocumentName, groupSignedAdmissionReferences } from "@/lib/documents/employee-archive";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-templates";
 import type { OnboardingDocument } from "@/types";
-import { EMPLOYEE_DOCUMENT_CATEGORIES, resolveEmployeeDocumentFolderPath } from "@/lib/hr/employee-document-options";
+import { EMPLOYEE_DOCUMENT_CATEGORIES, normalizeEmployeeDocumentCategory, resolveEmployeeDocumentFolderPath, type EmployeeDocumentCategoryId } from "@/lib/hr/employee-document-options";
 import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 import { ArchiveOriginActionDialog, type ArchiveOriginAction } from "./archive-origin-action-dialog";
 import { canRemoveEmployeeArchiveDocument } from "./archive-origin-capabilities";
 
-type Document = { id: string; category: string; documentType?: string; documentTypeCode?: string; originalName: string; storedName?: string; displayName?: string; mimeType?: string; size?: number; uploadedAt?: string; destinationTrail?: string[]; archivePath?: string[]; source?: "generated" | "onboarding" | "autentique_signature"; status?: string; signatureStatus?: string; employeeId?: string; contentHash?: string; signatureRequestId?: string; sourceOnboardingId?: string; accessLevel?: string; accessPolicyId?: string; publication?: unknown; resolvedVisibility?: unknown; archiveReferences?: string[]; archiveSourceNames?: string[]; sourceId?: string; pdfAvailable?: boolean; originHref?: string };
+type Document = { id: string; category: string; documentType?: string; documentTypeCode?: string; originalName: string; storedName?: string; displayName?: string; archiveName?: string; mimeType?: string; size?: number; uploadedAt?: string; destinationTrail?: string[]; archivePath?: string[]; source?: "generated" | "onboarding" | "autentique_signature"; status?: string; signatureStatus?: string; employeeId?: string; contentHash?: string; signatureRequestId?: string; sourceOnboardingId?: string; accessLevel?: string; accessPolicyId?: string; publication?: unknown; resolvedVisibility?: unknown; archiveReferences?: string[]; archiveSourceNames?: string[]; sourceId?: string; pdfAvailable?: boolean; originHref?: string };
 function downloadName(document: Document) {
   return document.source === "generated" && document.pdfAvailable ? document.originalName.replace(/\.[^.]+$/, "") + ".pdf" : employeeDocumentDownloadName(document);
 }
 function folderPath(document: Document) {
+  const storedCategory = EMPLOYEE_DOCUMENT_CATEGORIES.some((entry) => entry.id === document.category)
+    ? document.category as EmployeeDocumentCategoryId
+    : "pending_classification";
+  const categoryId = normalizeEmployeeDocumentCategory(storedCategory);
+  const category = EMPLOYEE_DOCUMENT_CATEGORIES.find((entry) => entry.id === categoryId)!;
+  if (["personal", "admission", "benefits", "uniforms", "training", "warnings", "termination"].includes(categoryId)) return [category.label];
   if (document.archivePath) return document.archivePath;
-  const category = EMPLOYEE_DOCUMENT_CATEGORIES.find((entry) => entry.id === document.category) ?? EMPLOYEE_DOCUMENT_CATEGORIES[EMPLOYEE_DOCUMENT_CATEGORIES.length - 1];
-  return [category.label, ...resolveEmployeeDocumentFolderPath({ category: category.id, documentTypeCode: document.documentTypeCode, documentTypeLabel: document.documentType, destinationTrail: document.destinationTrail })];
+  return [category.label, ...resolveEmployeeDocumentFolderPath({ category: categoryId, documentTypeCode: document.documentTypeCode, documentTypeLabel: document.documentType, destinationTrail: document.destinationTrail })];
+}
+function templateFolderPath(folder: EmployeeDossierFolder) {
+  const categoryId = normalizeEmployeeDocumentCategory(folder.category);
+  const label = EMPLOYEE_DOCUMENT_CATEGORIES.find((category) => category.id === categoryId)?.label ?? categoryId;
+  return ["personal", "admission", "work_schedule", "benefits", "vacations", "leaves", "uniforms", "training", "warnings", "termination"].includes(categoryId)
+    ? [label]
+    : [label, ...folder.path];
 }
 function readPath(value: string | null): string[] {
   try { const result = JSON.parse(value ?? "[]"); return Array.isArray(result) && result.length <= 20 && result.every((part) => typeof part === "string" && part.length <= 200) ? result : []; } catch { return []; }
@@ -94,7 +106,7 @@ export function ArchiveEmployees() {
         rows.set(id, { id, source: "onboarding", sourceId: document.id, category: "admission", displayName: document.label, originalName: document.label, uploadedAt: document.receivedAt ?? undefined, archivePath: ["Admissão em andamento"], originHref: `/dashboard/hr/recruitment/integration?process=${encodeURIComponent(onboardingId!)}&document=${encodeURIComponent(document.id)}` });
       }
       setDocuments(groupSignedAdmissionReferences([...rows.values()]));
-      setTemplatePaths(profiles.flatMap((source) => source.status === "fulfilled" ? (source.value.folderProfile?.folders ?? []).map((folder: EmployeeDossierFolder) => [EMPLOYEE_DOCUMENT_CATEGORIES.find((category) => category.id === folder.category)?.label ?? folder.category, ...folder.path]) : []));
+      setTemplatePaths(profiles.flatMap((source) => source.status === "fulfilled" ? (source.value.folderProfile?.folders ?? []).map(templateFolderPath) : []));
       if ([...uploads, ...profiles, ...generated, ...onboarding].some((result) => result.status === "rejected")) setError("Uma ou mais origens não puderam ser consultadas. Os documentos exibidos podem estar incompletos; tente Atualizar ou Gerenciar pasta.");
       else if (generated.some((result) => result.status === "fulfilled" && result.value.documents?.length >= 300)) setError("A origem de documentos gerados atingiu o limite da consulta. Consulte a gestão documental para ver os demais.");
     } catch (cause) { if (sequence.current === request) setError(cause instanceof Error ? cause.message : "Falha ao consultar os documentos."); }
@@ -127,7 +139,7 @@ export function ArchiveEmployees() {
     } catch (cause) { if (request === fileSequence.current) setError(cause instanceof Error ? cause.message : "Falha ao abrir arquivo."); }
   }
   function requestRemoval(document: Document) {
-    const name = document.displayName || document.documentType || document.originalName;
+    const name = employeeArchiveDocumentName(document);
     const generated = document.source === "generated";
     setOriginAction({
       title: generated ? "Descartar documento em preparação?" : "Remover documento da pasta?",
@@ -156,7 +168,7 @@ export function ArchiveEmployees() {
   const entries: ArchiveEntry[] = !employeeId ? people.filter((person) => person.username.toLocaleLowerCase("pt-BR").includes(term)).map((person) => ({ id: person.id, name: person.username, kind: "folder", description: person.isActive === false ? "Desligado" : "Colaborador", open: () => navigate(person.id) }))
     : !employee ? [] : [
       ...(!term ? childFolders.map((name): ArchiveEntry => ({ id: "folder:" + name, name, kind: "folder", open: () => navigate(employeeId, [...path, name]) })) : []),
-      ...scoped.filter((document) => term ? `${document.displayName || document.documentType || ""} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: document.displayName || document.documentType || document.originalName, kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, sizeBytes: document.size, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, modifiedAt: archiveTimestamp(document.uploadedAt), open: () => void access(document, !(document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType))), loadPreview: document.source !== "onboarding" && (document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType)) ? () => void access(document) : undefined, actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : []), ...(canRemoveEmployeeArchiveDocument({ source: document.source, status: document.status, canManageEmployeeDocuments, canReviewGenerated }) ? [{ label: document.source === "generated" ? "Descartar preparação" : "Remover da pasta", destructive: true, run: () => requestRemoval(document) }] : [])] })),
+      ...scoped.filter((document) => term ? `${employeeArchiveDocumentName(document)} ${document.originalName} ${(document.archiveSourceNames ?? []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term) : folderPath(document).length === path.length).map((document): ArchiveEntry => ({ id: document.id, name: employeeArchiveDocumentName(document), kind: "file", description: `${document.source === "generated" ? "Versão gerada · " : document.source === "onboarding" ? "Admissão · " : ""}${downloadName(document)}`, size: document.size ? `${Math.ceil(document.size / 1024)} KB` : undefined, sizeBytes: document.size, modified: document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString("pt-BR") : undefined, modifiedAt: archiveTimestamp(document.uploadedAt), open: () => void access(document, !(document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType))), loadPreview: document.source !== "onboarding" && (document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType)) ? () => void access(document) : undefined, actions: [...(document.source !== "onboarding" ? [{ label: "Baixar", run: () => void access(document, true) }] : []), ...(document.originHref ? [{ label: document.source === "onboarding" ? "Abrir na admissão" : "Ver origem e assinatura", run: () => router.push(document.originHref!) }] : []), ...(canRemoveEmployeeArchiveDocument({ source: document.source, status: document.status, canManageEmployeeDocuments, canReviewGenerated }) ? [{ label: document.source === "generated" ? "Descartar preparação" : "Remover da pasta", destructive: true, run: () => requestRemoval(document) }] : [])] })),
     ];
   return <><ArchiveExplorer area="collaborators" selectionScope={JSON.stringify([employeeId, path])} entries={canView ? entries : []} search={search} onSearch={setSearch} loading={loading} error={!canView ? "Sem permissão para consultar as pastas da equipe." : employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
     breadcrumbs={employee ? [{ name: employee.username, open: () => navigate(employeeId) }, ...path.map((name, index) => ({ name, open: () => navigate(employeeId, path.slice(0, index + 1)) }))] : []}
