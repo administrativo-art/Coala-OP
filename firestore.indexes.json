@@ -773,6 +773,16 @@
       "fields": [{ "fieldPath": "sourceAssetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
     },
     {
+      "collectionGroup": "editorTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
       "collectionGroup": "assets",
       "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "custody.holderType", "order": "ASCENDING" }, { "fieldPath": "custody.holderId", "order": "ASCENDING" }]
@@ -811,6 +821,41 @@
           "order": "ASCENDING",
           "queryScope": "COLLECTION_GROUP"
         }
+      ]
+    },
+    {
+      "collectionGroup": "audit",
+      "fieldPath": "actorId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "audit",
+      "fieldPath": "subjectKeys",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "contentVersions",
+      "fieldPath": "savedBy",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "savedBy",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
     }
   ]
