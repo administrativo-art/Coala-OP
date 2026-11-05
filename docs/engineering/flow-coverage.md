@@ -71,7 +71,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
-| `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
+| `document-generation` | 9 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
 | `document-central` | 8 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — explorador compartilhado, pasta publicada e biblioteca de modelos; homologação externa pendente |
 | `document-templates` | 8 | Traçado | [Cadastro e publicação](flows/document-templates.md) — biblioteca acessível pelo Acervo; percurso complementado |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |

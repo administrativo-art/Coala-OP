@@ -42,13 +42,18 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/design` | [page.tsx](../../src/app/dashboard/design/page.tsx) | [design-guide.tsx](../../src/components/design/design-guide.tsx) |
 
-## documents (16)
+## documents (21)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [archive-employees.tsx](../../src/features/documents/central/archive-employees.tsx) |
 | `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | [archive-preview.tsx](../../src/features/documents/central/archive-preview.tsx), [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx) |
 | `dashboard/documents/consents/[employeeId]` | [page.tsx](../../src/app/dashboard/documents/consents/[employeeId]/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts), [image-voice-consent.ts](../../src/features/hr/consents/image-voice-consent.ts) |
+| `dashboard/documents/editor/[id]` | [page.tsx](../../src/app/dashboard/documents/editor/[id]/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-loader.tsx](../../src/features/documents/editor/ui/editor-loader.tsx) |
+| `dashboard/documents/editor/documents` | [page.tsx](../../src/app/dashboard/documents/editor/documents/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-documents-list.tsx](../../src/features/documents/editor/ui/editor-documents-list.tsx) |
+| `dashboard/documents/editor` | [page.tsx](../../src/app/dashboard/documents/editor/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-blank-entry.tsx](../../src/features/documents/editor/ui/editor-blank-entry.tsx) |
+| `dashboard/documents/editor/templates/[tid]` | [page.tsx](../../src/app/dashboard/documents/editor/templates/[tid]/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-loader.tsx](../../src/features/documents/editor/ui/editor-loader.tsx) |
+| `dashboard/documents/editor/templates` | [page.tsx](../../src/app/dashboard/documents/editor/templates/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-templates-list.tsx](../../src/features/documents/editor/ui/editor-templates-list.tsx) |
 | `dashboard/documents/financial` | [page.tsx](../../src/app/dashboard/documents/financial/page.tsx) | Redireciona para `/dashboard/financial/inbox` |
 | `dashboard/documents/generated/manage` | [page.tsx](../../src/app/dashboard/documents/generated/manage/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx) |
 | `dashboard/documents/generated` | [page.tsx](../../src/app/dashboard/documents/generated/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [central-workspace.tsx](../../src/features/documents/central/central-workspace.tsx) |
@@ -357,4 +362,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **175 páginas** no checkout usado para a geração.
+Total: **180 páginas** no checkout usado para a geração.
