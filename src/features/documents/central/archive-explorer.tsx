@@ -29,6 +29,8 @@ import { companyArchiveFolderLabel, companyArchiveHref } from "@/lib/documents/c
 import { DocumentCreateLink } from "./document-create-link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { warmPdfjs } from "@/lib/pdf/pdfjs-client";
+import { ArchivePreviewVariantContext } from "./archive-preview";
 
 export type ArchiveArea = "company" | "collaborators" | "financial" | "models" | "published";
 export type ArchiveAction = { label: string; run: () => void; destructive?: boolean };
@@ -150,6 +152,9 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
   onRefresh?: () => void; onUp?: () => void; onRoot?: () => void; preview?: (entry: ArchiveEntry) => ReactNode; onSelect?: (entry: ArchiveEntry | null) => void; footer?: ReactNode; selectionScope?: string; hasMorePages?: boolean;
 }) {
   const [mode, setMode] = useArchiveViewMode();
+  const hasPreviewable = entries.some((entry) => entry.loadPreview);
+  // Baixa e inicia o leitor de PDF enquanto a pessoa escolhe o arquivo; não lê documento algum.
+  useEffect(() => { if (hasPreviewable) warmPdfjs(); }, [hasPreviewable]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedScope, setSelectedScope] = useState(selectionScope);
   const previousScope = useRef(selectionScope);
@@ -332,6 +337,6 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
         {detailsBlock(selected, "panel")}
       </>}
     </SidePanel>
-    <Dialog open={expanded && Boolean(selected?.loadPreview)} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selected?.name ?? "Documento"}</DialogTitle></DialogHeader>{error && <p role="alert" className="rounded-ds-sm border border-ds-confirm-border bg-ds-confirm-bg p-2 text-sm text-ds-confirm-ink">{error}</p>}{selected && preview?.(selected)}</DialogContent></Dialog>
+    <Dialog open={expanded && Boolean(selected?.loadPreview)} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selected?.name ?? "Documento"}</DialogTitle></DialogHeader>{error && <p role="alert" className="rounded-ds-sm border border-ds-confirm-border bg-ds-confirm-bg p-2 text-sm text-ds-confirm-ink">{error}</p>}{selected && <ArchivePreviewVariantContext.Provider value="expanded">{preview?.(selected)}</ArchivePreviewVariantContext.Provider>}</DialogContent></Dialog>
   </ArchiveShell>;
 }
