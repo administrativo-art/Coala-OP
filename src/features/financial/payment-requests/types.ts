@@ -7,7 +7,7 @@ export type BankPaymentRequestStatus =
 
 export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "financial_inbox" | "expense_boleto";
 export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto">;
-export type BankPaymentRail = "pix" | "barcode";
+export type BankPaymentRail = "pix" | "barcode" | "pix_copy_paste";
 
 export type BarcodePaymentSnapshot = {
   type: "barcode";
@@ -17,6 +17,23 @@ export type BarcodePaymentSnapshot = {
   dueDate: string;
   scheduledFor: string;
   beneficiaryDocument?: string | null;
+};
+
+/**
+ * Pix copia e cola dinâmico de guia recebida na caixa (hoje só FGTS Digital).
+ * O payload não é segredo: é o mesmo impresso na guia arquivada.
+ */
+export type PixCopyPastePaymentSnapshot = {
+  type: "pix_copy_paste";
+  payload: string;
+  payloadHash: string;
+  maskedPayload: string;
+  receiver: "fgts_digital";
+  merchantName: string;
+  merchantCity: string;
+  locationUrl: string;
+  dueDate: string;
+  scheduledFor: string;
 };
 
 export type PaymentLegalEntitySnapshot = {
@@ -128,6 +145,7 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
   beneficiaryReference: PaymentBeneficiaryReference;
   beneficiarySnapshot: BeneficiarySnapshot;
   barcodeSnapshot?: never;
+  pixCopyPasteSnapshot?: never;
   status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 
@@ -137,9 +155,20 @@ export type BarcodeBankPaymentRequest = BankPaymentRequestBase & {
   beneficiaryReference?: never;
   beneficiarySnapshot?: never;
   barcodeSnapshot: BarcodePaymentSnapshot;
+  pixCopyPasteSnapshot?: never;
   status: BankPaymentRequestStatus;
 };
 
-export type BankPaymentRequest = PixBankPaymentRequest | BarcodeBankPaymentRequest;
+export type PixCopyPasteBankPaymentRequest = BankPaymentRequestBase & {
+  sourceType: "financial_inbox";
+  paymentRail: "pix_copy_paste";
+  beneficiaryReference?: never;
+  beneficiarySnapshot?: never;
+  barcodeSnapshot?: never;
+  pixCopyPasteSnapshot: PixCopyPastePaymentSnapshot;
+  status: BankPaymentRequestStatus;
+};
+
+export type BankPaymentRequest = PixBankPaymentRequest | BarcodeBankPaymentRequest | PixCopyPasteBankPaymentRequest;
 
 export type PaymentActor = { uid: string; email?: string | null; name?: string | null };

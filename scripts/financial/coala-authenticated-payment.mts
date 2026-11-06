@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "./payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
 import { mainPaymentLookupQuery, summarizeMainPaymentLookup } from "./payment-cli-main-query-contract";
@@ -78,6 +78,9 @@ function help() {
 O login pede a senha diretamente no terminal e guarda somente o refresh token no Chaves do macOS.
 Adicione --temporary-session aos demais comandos para pedir a senha no terminal e usar uma sessão apenas em memória, sem ler ou gravar o Chaves.
 Use --memory-session NOME para reutilizar, sem novo prompt, uma sessão iniciada pelo comando session.
+  npx tsx scripts/financial/coala-authenticated-payment.mts prepare-pix --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --expense-id EXPENSE_ID --pix-file ARQUIVO
+  npx tsx scripts/financial/coala-authenticated-payment.mts authorize|send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --expense-id EXPENSE_ID --pix-payload-sha256 SHA256
+prepare-pix aceita somente a guia do FGTS Digital (QR dinâmico da Caixa); o SHA-256 devolvido identifica a ordem em authorize e send.
 --beneficiary-document só pode ser omitido em guia de arrecadação de órgão público (DARF, DAS), cujo valor é conferido pelo próprio código.
 Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação final no Inter continua separada.
 `);
@@ -650,7 +653,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -841,6 +844,34 @@ async function main() {
   const id = requireOption("id");
   if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da solicitação inválido.");
   const token = await commandToken(email);
+  if (command === "prepare-pix") {
+    const amountCents = Number(requireOption("amount-cents"));
+    const scheduledFor = requireOption("scheduled-for");
+    const expenseId = requireOption("expense-id");
+    const pixPayload = (await readFile(resolve(requireOption("pix-file")), "utf8")).trim();
+    const body = await coalaRead(token, paymentReadPath({ command: "inspect", id }));
+    const message = body.message;
+    if (!message || typeof message !== "object" || Array.isArray(message)) throw new PaymentCliError("O Coala não retornou a cobrança esperada. Nenhuma ação foi feita.");
+    const parsed = validatePaymentCliPixPreparation({ message: message as Record<string, unknown>, inboxMessageId: id,
+      amountCents, scheduledFor, expenseId, pixPayload });
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/pix-payment`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ scheduledFor, pixCopyPaste: parsed.payload }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a preparação (HTTP ${response.status}). O resultado pode ser incerto; consulte a cobrança antes de tentar novamente.`);
+    const current = (await paymentCliJson<{ request?: Record<string, unknown> }>(response)).request ?? {};
+    try {
+      if (current.sourceId !== id) throw new Error("source");
+      validatePaymentCliPixAction({ request: current, action: "authorize", amountCents, scheduledFor, expenseId, pixPayloadSha256: parsed.payloadHash });
+    } catch {
+      throw new PaymentCliError("O Coala não confirmou os dados esperados após preparar. Consulte a solicitação; não repita o comando automaticamente.");
+    }
+    printStatus(current);
+    stdout.write(`${JSON.stringify({ pixPayloadSha256: parsed.payloadHash })}\n`);
+    return;
+  }
   if (command === "prepare") {
     const amountCents = Number(requireOption("amount-cents"));
     const scheduledFor = requireOption("scheduled-for");
@@ -885,6 +916,18 @@ async function main() {
     return printStatus(replacement);
   }
 
+  const pixPayloadSha256 = option("pix-payload-sha256")?.toLowerCase();
+  if (pixPayloadSha256) {
+    if (command !== "authorize" && command !== "send") throw new PaymentCliError("Pix copia e cola aceita somente authorize e send.");
+    const amountCents = Number(requireOption("amount-cents"));
+    const scheduledFor = requireOption("scheduled-for");
+    const expenseId = requireOption("expense-id");
+    validatePaymentCliPixAction({ request, action: command, amountCents, scheduledFor, expenseId, pixPayloadSha256 });
+    const current = await coalaPost(token, id, command === "authorize" ? "authorize" : "submit");
+    printStatus(current);
+    if (command === "send" && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
+    return;
+  }
   const amountCents = Number(requireOption("amount-cents"));
   const scheduledFor = requireOption("scheduled-for");
   const beneficiaryDocument = (option("beneficiary-document") ?? "").replace(/\D/g, "");
