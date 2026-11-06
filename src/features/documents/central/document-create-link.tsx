@@ -18,7 +18,7 @@ export function DocumentCreateLink() {
   const canUseGenerator = canGenerate && hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin);
   if (!canGenerate) return null;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {canUseGenerator && <Button asChild variant="ds-secondary" size="sm"><Link href="/dashboard/documents/generator"><Wand2 aria-hidden="true" className="mr-1.5 h-4 w-4" />Gerar documento</Link></Button>}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

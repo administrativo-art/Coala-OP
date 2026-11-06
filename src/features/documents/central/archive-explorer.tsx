@@ -117,7 +117,7 @@ export function ArchiveShell({ tab, children }: { tab: ArchiveTab; children: Rea
             <Link href={COLLABORATOR_ARCHIVE_HREF} aria-current={tab === "collaborator" ? "page" : undefined} className={tabClass(tab === "collaborator")}>Colaborador</Link>
           </nav>
         </div>
-        <div className="pb-2"><DocumentCreateLink /></div>
+        <div className="min-w-0 max-w-full pb-2"><DocumentCreateLink /></div>
       </header>
       {children}
     </div>
