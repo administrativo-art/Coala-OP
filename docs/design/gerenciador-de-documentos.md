@@ -19,7 +19,7 @@ Acervo não copia arquivos para uma coleção central. As telas centrais usam re
 
 ## Interações de desktop
 
-Atualizado em 05/11/2026 pela [decisão 0007](decisoes/0007-modos-do-acervo.md): o Acervo tem três modos de visualização e a aba Ficha do colaborador.
+Atualizado em 05/11/2026 pela [decisão 0007](decisoes/0007-modos-do-acervo.md) (três modos de visualização) e em 06/11/2026 pela [decisão 0008](decisoes/0008-acervo-empresa-e-colaborador.md): abas **Empresa** e **Colaborador**, busca por termos em toda a aba e botões **Gerar documento** e **Criar documento**.
 
 - **Painel lateral** (padrão): clique numa pasta entra nela; clique num arquivo abre o `SidePanel` com prévia, dados e ações. Clique direito e `Shift+F10` abrem o mesmo painel.
 - **Clássico**: clique no nome abre (pasta entra; arquivo abre a prévia ampliada); o botão `⋯` de cada linha e o clique direito abrem o menu com Abrir/Visualizar e as ações permitidas.
@@ -46,12 +46,12 @@ Toda ação do menu precisa ter equivalente visível e acessível. O menu de con
 
 ## Comportamento visual
 
-- Barra de busca atua na pasta atual; o caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
+- A barra de busca procura em toda a aba (Empresa ou a pessoa aberta), por termos, enquanto se digita; cada resultado mostra onde está. O caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
 - No modo Painel lateral a prévia abre no `SidePanel`, como nas listas administrativas; no Clássico, em prévia ampliada; na Cascata, na última coluna. O caminho em pílula é a forma de voltar a qualquer pasta anterior; não há botões Voltar/Pasta acima nem árvore lateral.
 - A prévia no painel, na Cascata e no celular é desenhada pelo PDF.js. A prévia ampliada, no computador, usa o visualizador de PDF do próprio navegador (zoom, busca, impressão e todas as páginas); em aparelho de toque ou sem visualizador nativo, continua o PDF.js.
 - Modelos reutiliza a biblioteca de geração/publicação existente; não cria outro catálogo. PDF é renderizado no navegador a partir do binário já autorizado, com troca de páginas; ações preservam os serviços e as permissões da origem.
 
-- pastas aparecem nos três modos de visualização; a Ficha do colaborador mostra a quantidade de documentos por aba e subpasta;
+- pastas aparecem nos três modos de visualização; na aba Colaborador, quem gerencia vê todas as pastas padrão com a quantidade de documentos (vazias apagadas) e a marca Publicado nos documentos que a pessoa vê no portal;
 - o arraste de arquivo externo para a área de upload segue as validações do formulário; a navegação entre pastas não interpreta arraste como movimentação;
 - o breadcrumb representa a pasta virtual atual e aceita navegação;
 - ações destrutivas usam `InlineConfirm`; o menu nunca executa exclusão imediatamente;

@@ -46,8 +46,8 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [archive-employees.tsx](../../src/features/documents/central/archive-employees.tsx) |
-| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | [archive-preview.tsx](../../src/features/documents/central/archive-preview.tsx), [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx) |
+| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [collaborator-archive.tsx](../../src/features/documents/central/collaborator-archive.tsx) |
+| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | Ler a própria página |
 | `dashboard/documents/consents/[employeeId]` | [page.tsx](../../src/app/dashboard/documents/consents/[employeeId]/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts), [image-voice-consent.ts](../../src/features/hr/consents/image-voice-consent.ts) |
 | `dashboard/documents/editor/[id]` | [page.tsx](../../src/app/dashboard/documents/editor/[id]/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-loader.tsx](../../src/features/documents/editor/ui/editor-loader.tsx) |
 | `dashboard/documents/editor/documents` | [page.tsx](../../src/app/dashboard/documents/editor/documents/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-documents-list.tsx](../../src/features/documents/editor/ui/editor-documents-list.tsx) |
@@ -63,8 +63,8 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/documents/history` | [page.tsx](../../src/app/dashboard/documents/history/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [history-workspace.tsx](../../src/features/documents/central/history-workspace.tsx) |
 | `dashboard/documents/management` | [page.tsx](../../src/app/dashboard/documents/management/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
 | `dashboard/documents/models` | [page.tsx](../../src/app/dashboard/documents/models/page.tsx) | [archive-models.tsx](../../src/features/documents/central/archive-models.tsx) |
-| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx) |
-| `dashboard/documents/published` | [page.tsx](../../src/app/dashboard/documents/published/page.tsx) | [published-employee-archive.tsx](../../src/features/documents/central/published-employee-archive.tsx) |
+| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx), [company-archive.tsx](../../src/features/documents/central/company-archive.tsx) |
+| `dashboard/documents/published` | [page.tsx](../../src/app/dashboard/documents/published/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | Redireciona para `/dashboard/documents/generator/models` |
 

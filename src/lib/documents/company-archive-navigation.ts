@@ -2,7 +2,7 @@
 const COMPANY_FOLDER_ORDER = [
   "Societário", "Fiscal e contábil", "Trabalhista e RH", "Sistemas e conformidade",
   "Licenças e autorizações", "Contratos", "Financeiro", "Jurídico",
-  "Marca e propriedade intelectual", "Modelos", "A classificar", "Colaboradores",
+  "Marca e propriedade intelectual", "Modelos", "A classificar",
 ] as const;
 
 export function companyArchiveFolderLabel(name: string): string {
@@ -11,5 +11,5 @@ export function companyArchiveFolderLabel(name: string): string {
 }
 
 export function companyArchiveHref(category?: string): string {
-  return `/dashboard/documents/company${category ? `?category=${encodeURIComponent(category)}` : ""}`;
+  return `/dashboard/documents${category ? `?category=${encodeURIComponent(category)}` : ""}`;
 }
