@@ -13,8 +13,8 @@ src/app/dashboard/collaborator/time-recording/page.tsx,active,dp-time-recording,
 src/app/dashboard/commercial/page.tsx,active,catalog,
 src/app/dashboard/conversions/page.tsx,active,measure-conversion,
 src/app/dashboard/design/page.tsx,active,design-guide,
-src/app/dashboard/documents/collaborators/page.tsx,active,employee-documents;document-central,Explorador de pessoas e pastas canônicas; acesso a arquivos permanece na origem.
-src/app/dashboard/documents/company/page.tsx,active,company-documents;document-central,Explorador de categorias e documentos com prévia e ações explícitas.
+src/app/dashboard/documents/collaborators/page.tsx,active,employee-documents;document-central,Aba Colaborador do Acervo: escolha da pessoa (Ativos/Desligados) e pasta completa para quem gerencia ou só a publicada para o titular.
+src/app/dashboard/documents/company/page.tsx,redirect,company-documents;document-central,/dashboard/documents
 src/app/dashboard/documents/consents/[employeeId]/page.tsx,active,consents,
 src/app/dashboard/documents/generated/page.tsx,active,document-central,
 src/app/dashboard/dp/requests/page.tsx,active,collaborator-requests,
@@ -26,15 +26,15 @@ src/app/dashboard/documents/editor/templates/page.tsx,active,document-generation
 src/app/dashboard/documents/editor/templates/[tid]/page.tsx,active,document-generation,Editor interno em modo modelo (salvar versão; prévia de exemplo; publicar para revisores).
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
 src/app/dashboard/documents/page.tsx,navigation,employee-documents;company-documents;document-templates;document-generation;document-central,
-src/app/dashboard/documents/published/page.tsx,active,employee-documents;document-central,Ficha do colaborador: documentos publicados por titular com consulta própria ou DP por pessoa e acesso revalidado na origem.
+src/app/dashboard/documents/published/page.tsx,redirect,employee-documents;document-central,/dashboard/documents/collaborators
 src/app/dashboard/documents/templates/[id]/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models/[id] preservando query.
 src/app/dashboard/documents/templates/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models.
-src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx,active,people-access,
+src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx,redirect,employee-documents;people-access,/dashboard/documents/collaborators?employee={userId}
 src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/page.tsx,active,people-access,
 src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx,active,dp-time-recording,Conferência somente leitura do ponto e banco de horas de uma pessoa autorizada por unidade.
 src/app/dashboard/dp/collaborators/page.tsx,active,people-access,
-src/app/dashboard/dp/documents/page.tsx,active,employee-documents,
+src/app/dashboard/dp/documents/page.tsx,redirect,employee-documents,/dashboard/documents/collaborators (mantém ?configureVisibility=1)
 src/app/dashboard/dp/ferias/[userId]/page.tsx,active,vacations,
 src/app/dashboard/dp/fechamento/page.tsx,active,dp-time-recording,Fechamento mensal do ponto em página própria; saiu de Solicitações.
 src/app/dashboard/dp/ferias/page.tsx,active,vacations,
