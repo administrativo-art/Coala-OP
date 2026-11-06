@@ -249,11 +249,6 @@ export function DPSettingsUnits() {
 
   const selectedUnit = selectedUnitKey ? mergedUnits.find((unit) => unit.key === selectedUnitKey) ?? null : null;
   const selectedDpUnitId = selectedUnit?.dpUnit?.id;
-  const selectedExternalUnitId = selectedUnit?.dpUnit?.externalId ?? selectedUnit?.kiosk?.id;
-  const locationParticipants = selectedDpUnitId ? directory.users.filter((user) =>
-    user.unitId === selectedDpUnitId || user.unitIds?.includes(selectedDpUnitId)
-    || Boolean(selectedExternalUnitId && user.assignedKioskIds?.includes(selectedExternalUnitId)))
-    .map((user) => ({ id: user.id, name: user.name })) : [];
 
   /* ───────── gravações (mesma regra de antes; só a apresentação mudou) ───────── */
 
@@ -676,7 +671,6 @@ export function DPSettingsUnits() {
         canManage={canManageUnits}
         canManageTime={canManageTime}
         firebaseUser={firebaseUser}
-        locationParticipants={locationParticipants}
         busy={saving === "unit" || saving === "delete"}
         onClose={() => setSelectedUnitKey(null)}
         onEdit={(unit) => { setSelectedUnitKey(null); setUnitDialog({ mode: "edit", unit }); }}
