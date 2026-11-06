@@ -2,6 +2,7 @@ import { PaymentCliError } from "./payment-cli-transport";
 import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "../../src/features/financial/payment-requests/submission-retry";
 import { overdueBarcodeSettlementRevisionSchema } from "../../src/features/financial/payment-requests/overdue-settlement";
+import { governmentCollectionBarcode } from "../../src/features/financial/payment-requests/inbox-barcode";
 
 export type PaymentCliAction = "authorize" | "send" | "retry-send" | "send-adjusted";
 
@@ -9,6 +10,11 @@ function validIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T12:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/** Documento vazio só é aceito para guia de arrecadação de órgão público íntegra. */
+function documentOmittedForGovernmentGuide(document: string, barcode: string) {
+  return document === "" && Boolean(governmentCollectionBarcode(barcode));
 }
 
 function record(value: unknown) {
@@ -41,7 +47,8 @@ export function validatePaymentCliPreparation(input: {
     || Number(classification?.amountCents) !== input.amountCents
     || !validIsoDate(input.scheduledFor)
     || !validIsoDate(String(classification?.dueDate ?? ""))
-    || !CnpjValidator.validate(input.beneficiaryDocument).valid
+    || !(CnpjValidator.validate(input.beneficiaryDocument).valid
+      || documentOmittedForGovernmentGuide(input.beneficiaryDocument, input.barcode))
     || !/^(\d{44}|\d{46}|\d{47}|\d{48})$/.test(input.barcode)
     || (storedBarcode && storedBarcode !== input.barcode)) {
     throw new PaymentCliError("Os dados da cobrança divergem da preparação específica. Nenhuma ação foi feita.");
@@ -71,7 +78,9 @@ export function validatePaymentCliAction(input: {
     || !Number.isSafeInteger(input.amountCents) || input.amountCents <= 0
     || !Number.isFinite(storedAmount) || Math.round(storedAmount * 100) !== input.amountCents
     || !validIsoDate(input.scheduledFor)
-    || !/^\d{11}(\d{3})?$/.test(input.beneficiaryDocument)
+    || !(/^\d{11}(\d{3})?$/.test(input.beneficiaryDocument)
+      || (request.sourceType === "financial_inbox"
+        && documentOmittedForGovernmentGuide(input.beneficiaryDocument, input.barcode)))
     || !/^(\d{44}|\d{46}|\d{47}|\d{48})$/.test(input.barcode)
     || !["financial_inbox", "expense_boleto"].includes(String(request.sourceType)) || request.paymentRail !== "barcode"
     || (request.sourceType === "expense_boleto" && request.sourceId !== input.expenseId)
@@ -79,7 +88,7 @@ export function validatePaymentCliAction(input: {
     || request.expenseId !== input.expenseId || !input.expenseId
     || typeof barcode?.code !== "string" || barcode.code !== input.barcode
     || barcode.scheduledFor !== input.scheduledFor
-    || barcode.beneficiaryDocument !== input.beneficiaryDocument) {
+    || (barcode.beneficiaryDocument ?? "") !== input.beneficiaryDocument) {
     throw new PaymentCliError("Os dados da solicitação divergem da ordem específica. Nenhuma ação foi feita.");
   }
   const validRetry = input.action === "retry-send" && canRetryDefinitivelyRejectedPayment(request);
