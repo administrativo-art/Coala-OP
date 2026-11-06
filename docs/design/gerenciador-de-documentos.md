@@ -10,7 +10,7 @@ O gerenciador pode reproduzir as interações familiares de pastas de um computa
 
 ## Estrutura do módulo
 
-- **Acervo** tem Empresa na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`, incluindo `12 - Colaboradores`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Pessoas e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; a organização visual não altera permissões, categoria persistida ou Storage.
+- **Acervo** tem Empresa na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`, incluindo `12 - Colaboradores`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Pessoas e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, caminho em pílula e o modo de visualização escolhido (Painel lateral, Clássico ou Cascata, [decisão 0007](decisoes/0007-modos-do-acervo.md)); a organização visual não altera permissões, categoria persistida ou Storage.
 - **Gerador de documentos** reúne geração por modelos e a biblioteca de criação, edição e publicação já existente. Os links antigos redirecionam ao novo local. Acervo → Empresa → Modelos consulta a mesma biblioteca. Criar do zero com editor timbrado e auxílio de redação por IA é uma evolução descrita no [plano do Gerador](../planos/plano-gerador-documentos.md); não se confunde com o mapeamento por IA já existente.
 - **Fluxos e pendências** é a mesa de trabalho. As abas A classificar, Em preparação, Fluxos e Assinaturas representam dimensões independentes; um mesmo documento pode aparecer em mais de uma aba.
 - **Histórico** apresenta fatos persistidos pelas origens e snapshots atuais claramente identificados. A interface não inventa uma linha do tempo quando a fonte legada não registra eventos.
@@ -19,13 +19,14 @@ Acervo não copia arquivos para uma coleção central. As telas centrais usam re
 
 ## Interações de desktop
 
-- clique simples seleciona um arquivo ou pasta; duplo clique abre;
-- `Ctrl`/`Cmd` adiciona ou remove itens da seleção e `Shift` seleciona um intervalo;
+Atualizado em 05/11/2026 pela [decisão 0007](decisoes/0007-modos-do-acervo.md): o Acervo tem três modos de visualização e a aba Ficha do colaborador.
+
+- **Painel lateral** (padrão): clique numa pasta entra nela; clique num arquivo abre o `SidePanel` com prévia, dados e ações. Clique direito e `Shift+F10` abrem o mesmo painel.
+- **Clássico**: clique no nome abre (pasta entra; arquivo abre a prévia ampliada); o botão `⋯` de cada linha e o clique direito abrem o menu com Abrir/Visualizar e as ações permitidas.
+- **Cascata**: clique numa pasta abre a coluna seguinte; clique num arquivo mostra a prévia e as ações na última coluna; duplo clique ou `Enter` amplia a prévia.
 - a movimentação entre pastas ocorre por **Mover para…**, com escolha explícita de destino; arrastar entre pastas não movimenta documentos;
-- botão direito abre um menu contextual com as ações permitidas para o item: Abrir, Visualizar, Baixar, Renomear, Mover, Ver versões e Excluir;
-- `Shift+F10` ou a tecla de menu abre o mesmo menu para navegação por teclado;
-- `Enter` abre, `F2` renomeia quando permitido, `Esc` cancela e as setas percorrem os itens;
-- em telas touch, toque abre e pressão longa mostra o menu contextual; não se exige duplo toque.
+- `Enter` abre, `F2` renomeia quando permitido, `Esc` cancela, as setas percorrem os itens e `Alt+↑` sobe uma pasta;
+- em telas touch, toque abre; não se exige duplo toque.
 
 Toda ação do menu precisa ter equivalente visível e acessível. O menu de contexto é atalho, nunca o único caminho para uma operação.
 
@@ -46,10 +47,10 @@ Toda ação do menu precisa ter equivalente visível e acessível. O menu de con
 ## Comportamento visual
 
 - Barra de busca atua na pasta atual; o caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
-- A prévia permanece acoplada ao explorador no desktop, com largura estável para não deslocar os alvos entre os cliques; no celular fica abaixo da lista. Esta composição de arquivos usa o comportamento de seleção/abertura deste guia, em vez da abertura imediata de SidePanel/LiftRow das listas administrativas.
+- No modo Painel lateral a prévia abre no `SidePanel`, como nas listas administrativas; no Clássico, em prévia ampliada; na Cascata, na última coluna. O caminho em pílula é a forma de voltar a qualquer pasta anterior; não há botões Voltar/Pasta acima nem árvore lateral.
 - Modelos reutiliza a biblioteca de geração/publicação existente; não cria outro catálogo. PDF é renderizado no navegador a partir do binário já autorizado, com troca de páginas; ações preservam os serviços e as permissões da origem.
 
-- pastas aceitam grade ou lista e mostram quantidade de documentos;
+- pastas aparecem nos três modos de visualização; a Ficha do colaborador mostra a quantidade de documentos por aba e subpasta;
 - o arraste de arquivo externo para a área de upload segue as validações do formulário; a navegação entre pastas não interpreta arraste como movimentação;
 - o breadcrumb representa a pasta virtual atual e aceita navegação;
 - ações destrutivas usam `InlineConfirm`; o menu nunca executa exclusão imediatamente;
