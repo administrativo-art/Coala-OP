@@ -41,7 +41,7 @@ assert.match(codex, /\[agents\]\s*enabled\s*=\s*true/m);
 
 const claude = JSON.parse(read('.claude/settings.json'));
 assert.equal(claude.model, 'sonnet');
-assert.deepEqual([...claude.availableModels].sort(), ['haiku', 'sonnet']);
+assert.deepEqual([...claude.availableModels].sort(), ['haiku', 'opus', 'sonnet']);
 assert.equal(claude.enforceAvailableModels, true);
 assert.equal(claude.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, '1');
 assert.equal(claude.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, '1');
