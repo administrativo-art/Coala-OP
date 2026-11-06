@@ -55,9 +55,12 @@ test("resultado bancário atualiza a caixa e separa falha de handoff confirmado"
   assert.match(statementSync, /message: inboxMessage,/);
 });
 
-test("preparação exige e preserva a identidade confirmada do favorecido", () => {
+test("preparação exige o favorecido, salvo guia pública íntegra com valor conferido", () => {
   assert.match(inboxPaymentRoute, /inboxBarcodePaymentPreparationSchema\.parse/);
-  assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument/);
+  assert.match(paymentService, /const governmentCollection = governmentCollectionBarcode\(code\)/);
+  assert.match(paymentService, /governmentCollection\?\.amountCents != null && governmentCollection\.amountCents !== amountCents/);
+  assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument \?\? null/);
+  assert.match(paymentService, /if \(!beneficiaryDocument && !governmentCollection\)/);
   assert.match(paymentService, /barcodeSnapshot: \{[\s\S]{0,300}beneficiaryDocument,/);
   assert.match(paymentService, /assertMatchingInboxBarcodeRequest/);
   assert.doesNotMatch(paymentService, /beneficiaryDocument: null/);

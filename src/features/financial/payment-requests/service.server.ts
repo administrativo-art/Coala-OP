@@ -12,7 +12,7 @@ import { listInterStatementEntries } from "@/lib/integrations/inter/statements.s
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoAttachmentId, expenseBoletoSchema } from "./expense-boleto";
-import { inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
+import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
 import { assertSalaryPaymentTarget } from "./salary-payment";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { WORKSPACE_ID } from "@/lib/workspace";
@@ -206,7 +206,7 @@ export async function createInboxBarcodePaymentRequest(input: {
   workspaceId: string;
   scheduledFor: string;
   barcode?: string;
-  beneficiaryDocument: string;
+  beneficiaryDocument?: string;
 }, actor: PaymentActor) {
   const preparation = inboxBarcodePaymentPreparationSchema.parse({
     scheduledFor: input.scheduledFor,
@@ -243,7 +243,14 @@ export async function createInboxBarcodePaymentRequest(input: {
   }
   const amountCents = Number(message.classification?.amountCents);
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("Confirme o valor antes de preparar o pagamento.");
-  const beneficiaryDocument = preparation.beneficiaryDocument;
+  const governmentCollection = governmentCollectionBarcode(code);
+  if (governmentCollection?.amountCents != null && governmentCollection.amountCents !== amountCents) {
+    throw new Error("O valor da guia de arrecadação diverge do valor confirmado da cobrança.");
+  }
+  const beneficiaryDocument = preparation.beneficiaryDocument ?? null;
+  if (!beneficiaryDocument && !governmentCollection) {
+    throw new Error("Informe o CNPJ do favorecido. Só guias de arrecadação de órgão público dispensam esse dado.");
+  }
   const existing = await findPaymentRequestBySource("financial_inbox", input.inboxMessageId, input.workspaceId);
   if (existing) {
     return assertMatchingInboxBarcodeRequest(existing, {
@@ -361,7 +368,7 @@ function assertMatchingInboxBarcodeRequest(existing: BankPaymentRequest, expecte
   code: string;
   dueDate: string;
   scheduledFor: string;
-  beneficiaryDocument: string;
+  beneficiaryDocument: string | null;
   amountCents: number;
 }) {
   if (existing.workspaceId !== expected.workspaceId
@@ -372,7 +379,7 @@ function assertMatchingInboxBarcodeRequest(existing: BankPaymentRequest, expecte
     || existing.barcodeSnapshot.code !== expected.code
     || existing.barcodeSnapshot.dueDate !== expected.dueDate
     || existing.barcodeSnapshot.scheduledFor !== expected.scheduledFor
-    || existing.barcodeSnapshot.beneficiaryDocument !== expected.beneficiaryDocument
+    || (existing.barcodeSnapshot.beneficiaryDocument ?? null) !== expected.beneficiaryDocument
     || Math.round(existing.amount * 100) !== expected.amountCents) {
     throw new Error("A solicitação bancária existente diverge dos dados confirmados. Faça a conferência antes de continuar.");
   }

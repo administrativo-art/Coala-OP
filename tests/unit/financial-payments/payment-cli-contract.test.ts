@@ -145,3 +145,26 @@ test("prepara somente a cobrança vinculada sem ordem ou pagamento anterior", ()
   assert.throws(() => validatePaymentCliPreparation({ ...input, beneficiaryDocument: "00000000000000" }));
   assert.throws(() => validatePaymentCliPreparation({ ...input, barcode: `9${expected.barcode.slice(1)}` }));
 });
+
+test("guia pública íntegra dispensa o CNPJ; outros códigos continuam exigindo", () => {
+  const darf = "858900000107499903852637230716263100518788193907";
+  const message = {
+    id: "inbox_darf", status: "linked", linkedExpenseId: "expense_darf", paymentRequestId: null,
+    classification: { amountCents: 104999, dueDate: "2026-11-19", barcode: darf },
+    existingBankPayment: null, existingSettlement: null,
+  };
+  const preparation = { message, inboxMessageId: "inbox_darf", amountCents: 104999, scheduledFor: "2026-11-19",
+    beneficiaryDocument: "", expenseId: "expense_darf", barcode: darf };
+  assert.doesNotThrow(() => validatePaymentCliPreparation(preparation));
+  const notGovernment = `84${darf.slice(2)}`;
+  assert.throws(() => validatePaymentCliPreparation({ ...preparation, barcode: notGovernment,
+    message: { ...message, classification: { ...message.classification, barcode: notGovernment } } }));
+
+  const request = { sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_darf", expenseId: "expense_darf",
+    amount: 1049.99, status: "awaiting_financial_authorization",
+    barcodeSnapshot: { code: darf, scheduledFor: "2026-11-19", beneficiaryDocument: null } };
+  const action = { amountCents: 104999, scheduledFor: "2026-11-19", beneficiaryDocument: "", expenseId: "expense_darf", barcode: darf };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request, action: "authorize", ...action }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...request, sourceType: "expense_boleto", sourceId: "expense_darf" }, action: "authorize", ...action }));
+  assert.throws(() => validatePaymentCliAction({ request, action: "authorize", ...action, beneficiaryDocument: "12345678000195" }));
+});
