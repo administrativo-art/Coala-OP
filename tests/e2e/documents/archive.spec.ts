@@ -15,20 +15,28 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "pdfViewerEnabled", { configurable: true, get: () => false }));
 });
 
-test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do colaborador", async ({ page }, testInfo) => {
+test("Acervo abre na Empresa, busca por termos e mostra a pasta do colaborador nos três modos", async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const pdf = await PDFDocument.create(); pdf.addPage().drawText("Contrato de teste", { x: 40, y: 740, size: 18 }); pdf.addPage().drawText("Segunda página", { x: 40, y: 740, size: 18 });
   const bytes = Buffer.from(await pdf.save());
   const accesses: Array<{ id: string; action: string }> = [];
-  const ownAccesses: Array<{ id: string; action: string }> = [];
+  const hrAccesses: Array<{ id: string; action: string }> = [];
   const organizationCalls: Array<Record<string, unknown>> = [];
-  let ownListCalls = 0;
+  let hrListCalls = 0;
   let deleteCalls = 0;
-  await page.route("**/api/collaborator/documents", (route) => { ownListCalls++; return route.fulfill({ json: { documents: [
-    {id:"published-kit-e2e",displayName:"Kit publicado de teste",documentType:"Kit admissional",documentTypeCode:"ADMISSION_PACKAGE",category:"admission",destinationTrail:[],mimeType:"application/pdf",publishedAt:"2026-11-03T12:00:00.000Z"},
-    {id:"published-vacation-e2e",displayName:"Aviso publicado",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:["Férias","Período aquisitivo 2025-2026","Parcela 01","Aviso de férias"],archivePath:["Férias","Conferência"],mimeType:"application/pdf",publishedAt:"2026-11-04T12:00:00.000Z"},
-  ],folderProfile:{folders:[]} } }); });
-  await page.route("**/api/collaborator/documents/access", async (route) => { ownAccesses.push(route.request().postDataJSON()); await route.fulfill({ contentType:"application/pdf", body:bytes }); });
+  const published = { status: "published", at: "2026-11-03T12:00:00.000Z" };
+  // Quem gerencia a equipe vê tudo da pessoa: publicados (com a marca) e não publicados.
+  await page.route("**/api/hr/employee-documents?*", (route) => { hrListCalls++; return route.fulfill({ json: { documents: [
+    {id:"published-kit-e2e",displayName:"Kit publicado de teste",originalName:"kit.pdf",documentType:"Kit admissional",documentTypeCode:"ADMISSION_PACKAGE",category:"admission",destinationTrail:[],mimeType:"application/pdf",uploadedAt:"2026-11-03T12:00:00.000Z",publication:published},
+    {id:"published-vacation-e2e",displayName:"Aviso publicado",originalName:"aviso.pdf",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:["Férias","Período aquisitivo 2025-2026","Parcela 01","Aviso de férias"],archivePath:["Férias","Conferência"],mimeType:"application/pdf",uploadedAt:"2026-11-04T12:00:00.000Z",publication:published},
+    {id:"internal-leave-e2e",archiveName:"Atestado de agosto",originalName:"atestado.pdf",documentType:"Atestado médico",documentTypeCode:"MEDICAL_CERTIFICATE",category:"leaves",archivePath:["Afastamentos","2026","Agosto"],mimeType:"application/pdf",uploadedAt:"2026-08-14T12:00:00.000Z"},
+  ] } }); });
+  await page.route("**/api/hr/employee-documents/access", async (route) => { hrAccesses.push(route.request().postDataJSON()); await route.fulfill({ contentType:"application/pdf", body:bytes }); });
+  await page.route("**/api/hr/employee-document-folder-profile?*", (route) => route.fulfill({ json: { folderProfile: { folders: [] } } }));
+  await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [] } }));
+  await page.route("**/api/hr/employee-documents/batches?*", (route) => route.fulfill({ json: { batches: [] } }));
+  await page.route("**/api/hr/employee-documents/summary", (route) => route.fulfill({ json: { summaries: [{ employeeId: E2E_USER.uid, total: 3, pendingReviewFiles: 1 }] } }));
+  await page.route("**/api/hr/employee-documents/visibility", (route) => route.fulfill({ json: { documentVisibility: { categories: {}, document_types: {} } } }));
   await page.route("**/api/hr/employee-documents/organization", async (route) => { organizationCalls.push(route.request().postDataJSON()); await route.fulfill({ json: { document: { ok: true } } }); });
   await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [
     { id: "archive-company-e2e", title: "Contrato da unidade", category: "Contratos", status: "active", originalName: "original.pdf", standardizedName: "CONTRATO__UNIDADE-001__v01.pdf", mimeType: "application/pdf", size: bytes.length, uploadedAt: "2026-11-02T12:00:00.000Z" },
@@ -48,46 +56,77 @@ test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do
   const contents = page.getByRole("main", { name: "Conteúdo da pasta" });
   const sections = page.getByRole("navigation", { name: "Seções do Acervo" });
   await expect(page.getByRole("navigation", { name: "Documentos", exact: true })).toHaveCount(0);
-  // Painel lateral é o modo padrão; "Colaboradores" saiu da raiz e virou a aba Ficha do colaborador.
+  // O Acervo abre direto na aba Empresa, já nas pastas da empresa; as pastas de pessoas ficam na aba Colaborador.
+  await expect(sections.getByRole("link", { name: "Empresa", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("radiogroup", { name: "Modo de visualização" }).getByRole("radio", { name: "Painel lateral" })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("navigation", { name: "Árvore de pastas" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Pasta acima" })).toHaveCount(0);
-  const names = () => contents.getByRole("button", { name: /^Pasta:/ }).evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label")));
-  expect(await names()).toEqual(["Pasta: Empresa"]);
+  await expect(contents.getByRole("button", { name: /^Pasta:/ }).first()).toHaveAttribute("aria-label", "Pasta: 01 - Societário");
+  await expect(contents.getByRole("button", { name: /Colaboradores/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Modificado", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Tamanho", exact: true })).toHaveCount(0);
-  await page.getByRole("textbox", { name: "Buscar nesta pasta" }).fill("Inexistente");
-  await expect(contents.getByRole("button", { name: /^Pasta:/ })).toHaveCount(0);
-  await page.getByRole("textbox", { name: "Buscar nesta pasta" }).clear();
+  // Gerar (gerador) e Criar (editor) são funcionalidades diferentes; Criar oferece modelo ou documento novo.
+  await expect(page.getByRole("link", { name: "Gerar documento", exact: true })).toHaveAttribute("href", "/dashboard/documents/generator");
+  await page.getByRole("button", { name: "Criar documento", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: /Usar modelo/ })).toHaveAttribute("href", "/dashboard/documents/editor/templates");
+  await expect(page.getByRole("menuitem", { name: /Novo documento/ })).toHaveAttribute("href", "/dashboard/documents/editor");
+  await page.keyboard.press("Escape");
+  // A busca da aba Empresa procura em todas as pastas da empresa, por termos e enquanto se digita.
+  const companySearch = page.getByRole("searchbox", { name: "Buscar nos documentos da empresa" });
+  await companySearch.fill("unidade aditivo");
+  await expect(contents.getByRole("button", { name: "Arquivo: Aditivo da unidade", exact: true })).toBeVisible();
+  await expect(contents.getByRole("button", { name: "Arquivo: Contrato da unidade", exact: true })).toHaveCount(0);
+  await expect(contents.getByRole("button", { name: "Arquivo: Aditivo da unidade", exact: true }).getByText(/06 - Contratos/)).toBeVisible();
+  await companySearch.fill("contratos");
+  await expect(contents.getByRole("button", { name: "Pasta: 06 - Contratos", exact: true })).toBeVisible();
+  await companySearch.fill("Inexistente");
+  await expect(contents.getByRole("button", { name: /^(Pasta|Arquivo):/ })).toHaveCount(0);
+  await companySearch.clear();
 
-  // Ficha do colaborador: escolher a pessoa e ver o que foi publicado para ela.
-  await sections.getByRole("link", { name: "Ficha do colaborador", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard\/documents\/published$/, {timeout:90_000});
-  await page.getByRole("button", { name: "Abrir ficha de Administrador E2E", exact: true }).click();
-  const fichaTabs = page.getByRole("navigation", { name: "Pastas da ficha" });
-  await expect(fichaTabs.getByRole("button", { name: /^Admissão/ })).toHaveAttribute("aria-current", "page");
+  // Aba Colaborador: escolher a pessoa (filtro Ativos/Desligados) e abrir a pasta dela.
+  await sections.getByRole("link", { name: "Colaborador", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/documents\/collaborators$/, {timeout:90_000});
+  const situation = page.getByRole("radiogroup", { name: "Situação do colaborador" });
+  await expect(situation.getByRole("radio", { name: /^Ativos/ })).toHaveAttribute("aria-checked", "true");
+  await situation.getByRole("radio", { name: /^Desligados/ }).click();
+  await expect(page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true })).toHaveCount(0);
+  await situation.getByRole("radio", { name: /^Ativos/ }).click();
+  // A configuração de Visibilidade (antiga DP › Documentos) abre aqui mesmo.
+  await page.getByRole("button", { name: "Visibilidade", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Visibilidade por pasta e documento", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true }).click();
+  // Anexar documentos (antiga página do DP) abre na própria pasta da pessoa.
+  await page.getByRole("button", { name: "Anexar documentos", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Anexar documentos", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  // Quem gerencia vê as pastas padrão, inclusive vazias, e todos os documentos da pessoa.
+  await expect(contents.getByRole("button", { name: "Pasta: Identificação", exact: true })).toBeVisible();
+  await expect(contents.getByRole("button", { name: "Pasta: Identificação", exact: true }).getByText("Vazia", { exact: true })).toBeVisible();
+  await contents.getByRole("button", { name: "Pasta: Admissão", exact: true }).click();
   const publishedFile = page.getByRole("button", { name: "Arquivo: Kit publicado de teste", exact: true });
+  await expect(publishedFile.getByText("Publicado", { exact: true })).toBeVisible();
   await publishedFile.click();
   const panel = page.getByRole("dialog", { name: "Kit publicado de teste" });
   await expect(panel.getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
-  const settledOwnListCalls = ownListCalls;
-  expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
+  await expect(panel.getByRole("combobox", { name: "Status do documento" })).toBeVisible();
+  const settledHrListCalls = hrListCalls;
+  expect(hrAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await panel.getByRole("button", { name: "Ampliar prévia", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
   const expandedBounds = await page.getByRole("dialog").boundingBox();
   expect(expandedBounds?.width ?? 0).toBeGreaterThan(Math.min(900, (page.viewportSize()?.width ?? 1280) - 64));
   await page.screenshot({ path: testInfo.outputPath("acervo-leitura-ampliada.png"), fullPage: true });
-  expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
+  expect(hrAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await page.getByRole("dialog").press("Escape");
-  expect(ownListCalls).toBe(settledOwnListCalls);
-  expect(settledOwnListCalls).toBeLessThanOrEqual(2); // React Strict Mode pode repetir somente a montagem inicial.
-  await publishedFile.click();
-  expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1); // reabrir reaproveita a prévia
+  expect(hrListCalls).toBe(settledHrListCalls);
+  expect(settledHrListCalls).toBeLessThanOrEqual(2); // React Strict Mode pode repetir somente a montagem inicial.
   // No computador, a prévia ampliada usa o visualizador de PDF do navegador com o mesmo arquivo já autorizado.
   await setNativePdfViewer(page, true);
+  await publishedFile.click();
   await panel.getByRole("button", { name: "Ampliar prévia", exact: true }).click();
   await expect(page.getByRole("dialog").locator('iframe[data-viewer="native"][title="Prévia de Kit publicado de teste"]')).toHaveAttribute("src", /^blob:/);
-  expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
+  expect(hrAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await page.getByRole("dialog").press("Escape");
   await setNativePdfViewer(page, false);
   await publishedFile.click();
@@ -96,28 +135,39 @@ test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do
   await page.getByRole("button", { name: "Salvar nome", exact: true }).click();
   const renamedPublishedFile = page.getByRole("button", { name: "Arquivo: Kit publicado conferido", exact: true });
   await expect(renamedPublishedFile).toBeVisible();
-  await fichaTabs.getByRole("button", { name: /^Férias/ }).click();
-  await expect(page.getByRole("group", { name: "Subpastas" }).getByRole("button", { name: /^Conferência/ })).toBeVisible();
+  // A busca da pasta do colaborador procura em todas as pastas dele, por termos em qualquer ordem.
+  const personSearch = page.getByRole("searchbox", { name: "Buscar nos documentos de Administrador E2E" });
+  await personSearch.fill("agosto atestado");
+  const leaveFile = contents.getByRole("button", { name: "Arquivo: Atestado de agosto", exact: true });
+  await expect(leaveFile).toBeVisible();
+  await expect(leaveFile.getByText(/Afastamentos › 2026 › Agosto/)).toBeVisible();
+  await expect(leaveFile.getByText("Publicado", { exact: true })).toHaveCount(0);
+  await expect(renamedPublishedFile).toHaveCount(0);
+  await personSearch.fill("ferias");
+  await expect(contents.getByRole("button", { name: "Pasta: Férias", exact: true })).toBeVisible();
+  await personSearch.clear();
+  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Administrador E2E", exact: true }).click();
+  await contents.getByRole("button", { name: "Pasta: Férias", exact: true }).click();
+  await contents.getByRole("button", { name: "Pasta: Conferência", exact: true }).click();
   const vacationFile = page.getByRole("button", { name: "Arquivo: Aviso publicado", exact: true });
   await vacationFile.click();
   await page.getByRole("dialog", { name: "Aviso publicado" }).getByRole("button", { name: "Mover", exact: true }).click();
   await page.getByLabel("Pasta de destino").selectOption(JSON.stringify(["Férias", "Período aquisitivo 2025-2026", "Parcela 01"]));
   await page.getByRole("button", { name: "Mover documento", exact: true }).click();
   await expect(vacationFile).toBeVisible();
-  await expect(page.getByRole("group", { name: "Subpastas" }).getByRole("button", { name: /^Período aquisitivo 2025-2026/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByText("Parcela 01", { exact: true })).toBeVisible();
   expect(organizationCalls).toEqual([
     { ids: ["published-kit-e2e"], action: "rename", name: "Kit publicado conferido", expectedName: "Kit publicado de teste" },
     { ids: ["published-vacation-e2e"], action: "move", path: ["Férias", "Período aquisitivo 2025-2026", "Parcela 01"], expectedPath: ["Férias", "Conferência"] },
   ]);
-  await page.screenshot({ path: testInfo.outputPath("acervo-ficha.png"), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("acervo-colaborador.png"), fullPage: true });
 
   // Pastas da empresa no modo Painel lateral.
-  await sections.getByRole("link", { name: "Pastas", exact: true }).click();
-  await page.getByRole("button", { name: "Pasta: Empresa", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard\/documents\/company$/, { timeout: 90_000 });
+  await sections.getByRole("link", { name: "Empresa", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/documents$/, { timeout: 90_000 });
   await expect(contents.getByRole("button", { name: /^Pasta:/ }).first()).toHaveAttribute("aria-label", "Pasta: 01 - Societário");
   await page.getByRole("combobox", { name: "Ordenar documentos" }).selectOption("title-desc");
-  await expect(contents.getByRole("button", { name: /^Pasta:/ }).first()).toHaveAttribute("aria-label", "Pasta: 12 - Colaboradores");
+  await expect(contents.getByRole("button", { name: /^Pasta:/ }).first()).toHaveAttribute("aria-label", "Pasta: 11 - A classificar");
   await page.getByRole("button", { name: "Título", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Ordenar documentos" })).toHaveValue("title-asc");
   await page.getByRole("button", { name: "Pasta: 06 - Contratos", exact: true }).click();
@@ -215,7 +265,7 @@ test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do
   await expect(page.getByRole("heading", { name: "Acervo", exact: true })).toBeVisible();
 });
 
-test("Colaboradores e Financeiro institucional abrem pastas e arquivos no painel lateral", async ({ page }) => {
+test("Colaborador e Financeiro institucional abrem pastas e arquivos no painel lateral", async ({ page }) => {
   test.setTimeout(300_000);
   const pdf = await PDFDocument.create(); pdf.addPage().drawText("Documento de teste", { x: 40, y: 740 });
   const bytes = Buffer.from(await pdf.save());
@@ -237,8 +287,8 @@ test("Colaboradores e Financeiro institucional abrem pastas e arquivos no painel
   await page.getByLabel("E-mail").fill(E2E_USER.email);
   await page.getByLabel("Senha").fill(E2E_USER.password);
   await page.getByRole("button", { name: "Entrar no sistema" }).click();
-  await expect(page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true })).toBeVisible({ timeout: 180_000 });
-  await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true })).toBeVisible({ timeout: 180_000 });
+  await page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: Identificação", exact: true }).click();
   await page.getByRole("button", { name: "Arquivo: Identidade de teste", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Identidade de teste" })).toHaveAttribute("data-rendered", "true");
@@ -253,9 +303,9 @@ test("Colaboradores e Financeiro institucional abrem pastas e arquivos no painel
   await page.getByRole("dialog").getByRole("region", {name:"Prévia e detalhes"}).getByText("Detalhes do arquivo", {exact:true}).click();
   await expect(page.getByText(/7 referências ao mesmo kit assinado/)).toBeVisible();
   await page.getByRole("dialog").press("Escape");
-  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "12 - Colaboradores", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true })).toBeVisible();
-  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("link", { name: "Empresa", exact: true }).click();
+  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Colaborador", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Seções do Acervo" }).getByRole("link", { name: "Empresa", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: 07 - Financeiro", exact: true }).click();
   await expect(page).toHaveURL(/category=Financeiro/);
   await expect(page.getByRole("button", { name: "Pasta: Identificados", exact: true })).toHaveCount(0);
@@ -270,8 +320,8 @@ test("Colaboradores e Financeiro institucional abrem pastas e arquivos no painel
   expect(financialInboxCalls).toBe(0);
   await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Empresa", exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Empresa", exact: true }).click();
-  await page.getByRole("button", { name: "Pasta: 12 - Colaboradores", exact: true }).click();
-  await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).click();
+  await page.getByRole("navigation", { name: "Seções do Acervo" }).getByRole("link", { name: "Colaborador", exact: true }).click();
+  await page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: Documentos gerados", exact: true }).click();
   await page.getByRole("button", { name: "Arquivo: Contrato gerado", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Contrato gerado" })).toHaveAttribute("data-rendered", "true");
@@ -287,7 +337,7 @@ test("Colaboradores e Financeiro institucional abrem pastas e arquivos no painel
   expect(generatedDeleteCalls).toBe(1);
 });
 
-test("perfil comum abre só a própria ficha publicada e baixa com o nome da origem", async ({ page }) => {
+test("perfil comum abre só a própria pasta publicada e baixa com o nome da origem", async ({ page }) => {
   test.setTimeout(180_000);
   const app = getApps().find(item => item.name === "published-common-e2e") ?? initializeApp({projectId:"demo-coala-e2e"},"published-common-e2e");
   const auth = getAuth(app), db = getFirestore(app,"coala");
@@ -308,10 +358,14 @@ test("perfil comum abre só a própria ficha publicada e baixa com o nome da ori
     await page.getByLabel("E-mail").fill(email);
     await page.getByLabel("Senha").fill(password);
     await page.getByRole("button",{name:"Entrar no sistema"}).click();
-    // Sem acesso à equipe: a ficha abre direto na própria pessoa, sem seletor e sem a aba Pastas.
+    // Sem acesso à equipe: abre direto na própria pasta (endereço antigo redireciona), sem seletor e sem a aba Empresa.
     await expect(page.getByRole("heading",{name:"Colaboradora Comum E2E",exact:true})).toBeVisible({timeout:90_000});
-    await expect(page.getByRole("navigation",{name:"Seções do Acervo"}).getByRole("link",{name:"Pastas",exact:true})).toHaveCount(0);
+    await expect(page).toHaveURL(/\/dashboard\/documents\/collaborators$/);
+    await expect(page.getByRole("navigation",{name:"Seções do Acervo"}).getByRole("link",{name:"Empresa",exact:true})).toHaveCount(0);
     await expect(page.getByRole("combobox",{name:"Trocar colaborador"})).toHaveCount(0);
+    await expect(page.getByRole("button",{name:"Pasta: Identificação",exact:true})).toHaveCount(0); // só pastas com documento publicado
+    await page.getByRole("button",{name:"Pasta: Admissão",exact:true}).click();
+    await expect(page.getByRole("button",{name:"Arquivo: Kit comum",exact:true}).getByText("Publicado",{exact:true})).toHaveCount(0);
     await page.getByRole("button",{name:"Arquivo: Kit comum",exact:true}).press("Enter");
     const ownPanel = page.getByRole("dialog",{name:"Kit comum"});
     await expect(ownPanel.getByRole("button",{name:"Renomear",exact:true})).toHaveCount(0);
@@ -327,34 +381,4 @@ test("perfil comum abre só a própria ficha publicada e baixa com o nome da ori
     await auth.deleteUser(uid).catch(() => undefined);
     await deleteApp(app);
   }
-});
-
-test("trocar titular durante Carregar mais libera a paginação da nova pasta", async ({page}) => {
-  test.setTimeout(180_000);
-  let releaseMore: (() => void) | undefined;
-  const pendingMore = new Promise<void>(resolve => {releaseMore = resolve;});
-  let delayed = false;
-  await page.route("**/api/collaborator/documents", route => route.fulfill({json:{documents:[],folderProfile:{folders:[]},limitReached:false}}));
-  await page.route("**/api/hr/employee-documents?*", async route => {
-    const cursor = new URL(route.request().url()).searchParams.get("cursor");
-    if (cursor && !delayed) { delayed = true; await pendingMore; }
-    try { await route.fulfill({json:{documents:cursor ? [{id:"dp-published-e2e",employeeId:"employee-vacation-e2e",displayName:"Aviso publicado",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:[],mimeType:"application/pdf",publication:{status:"published",at:"2026-11-03",by:"dp",source:"manual"}}] : [],nextCursor:cursor ? null : "dp-cursor-e2e"}}); } catch { /* Request cancelled after changing the selected person. */ }
-  });
-  await page.goto("/login?next=%2Fdashboard%2Fdocuments%2Fpublished");
-  await page.getByLabel("E-mail").fill(E2E_USER.email);
-  await page.getByLabel("Senha").fill(E2E_USER.password);
-  await page.getByRole("button",{name:"Entrar no sistema"}).click();
-  const other = page.getByRole("button",{name:"Abrir ficha de Colaboradora Férias E2E",exact:true});
-  await expect(other).toBeVisible({timeout:90_000});
-  await other.press("Enter");
-  await expect(page.getByText("Nenhum documento nas páginas carregadas.", {exact:true})).toBeVisible();
-  await expect(page.getByText("Nenhum documento publicado para este colaborador.", {exact:true})).toHaveCount(0);
-  await page.getByRole("button",{name:"Carregar mais documentos"}).click();
-  await expect(page.getByRole("button",{name:"Carregando…"})).toBeVisible();
-  const picker = page.getByRole("combobox",{name:"Trocar colaborador"});
-  await picker.selectOption({label:"Administrador E2E"});
-  await expect(page.getByRole("heading",{name:"Administrador E2E",exact:true})).toBeVisible();
-  await picker.selectOption({label:"Colaboradora Férias E2E"});
-  await expect(page.getByRole("button",{name:"Carregar mais documentos"})).toBeEnabled();
-  releaseMore?.();
 });

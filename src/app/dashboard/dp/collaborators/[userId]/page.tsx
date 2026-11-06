@@ -3222,7 +3222,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   Editar dados
                 </button>
               ) : null}
-              <HeaderIconLink href={`/dashboard/dp/collaborators/${user.id}/documents`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
+              <HeaderIconLink href={`/dashboard/documents/collaborators?employee=${encodeURIComponent(user.id)}`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
               {canReadTimeRecording ? (
                 <>
                   <HeaderIconLink href={timeRecordingHref} label="Registro de ponto" icon={<Clock className="h-[18px] w-[18px]" />} />

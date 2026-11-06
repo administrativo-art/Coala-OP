@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
-import { Building2, ChevronDown, ChevronRight, File, FileImage, FileSpreadsheet, FileStack, FileText, Folder, FolderOpen, HardDrive, Loader2, MoreHorizontal, RefreshCw, Search } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, File, FileImage, FileSpreadsheet, FileStack, FileText, Folder, FolderOpen, HardDrive, Loader2, MoreHorizontal, RefreshCw } from "lucide-react";
 import { SortHeader } from "@/components/patterns/sort-header";
 import { Segmented } from "@/components/patterns/segmented";
 import { LiftRow } from "@/components/patterns/lift-row";
@@ -21,25 +21,34 @@ import {
 } from "@/lib/documents/archive-view-mode";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
-import { companyArchiveFolderLabel, companyArchiveHref } from "@/lib/documents/company-archive-navigation";
+import { companyArchiveFolderLabel } from "@/lib/documents/company-archive-navigation";
 import { DocumentCreateLink } from "./document-create-link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { warmPdfjs } from "@/lib/pdf/pdfjs-client";
+import { ArchiveSearchInput } from "./archive-search-input";
 import { ArchivePreviewVariantContext } from "./archive-preview";
 
 export type ArchiveArea = "company" | "collaborators" | "financial" | "models" | "published";
 export type ArchiveAction = { label: string; run: () => void; destructive?: boolean };
-export type ArchiveEntry = { id: string; name: string; kind: "folder" | "file" | "model"; description?: string; modified?: string; size?: string; modifiedAt?: number | null; sizeBytes?: number | null; mimeType?: string | null; open: () => void; loadPreview?: () => void; actions?: ArchiveAction[] };
+/**
+ * `badge`: marca curta ao lado do nome (ex.: "Publicado"); `muted`: pasta padrão ainda vazia;
+ * `location`: onde o item está, mostrado nos resultados da busca.
+ */
+export type ArchiveEntry = { id: string; name: string; kind: "folder" | "file" | "model"; description?: string; modified?: string; size?: string; modifiedAt?: number | null; sizeBytes?: number | null; mimeType?: string | null; badge?: string; muted?: boolean; location?: string; open: () => void; loadPreview?: () => void; actions?: ArchiveAction[] };
 export type ArchiveFolder = { id: string; name: string; active?: boolean; depth?: number; open: () => void };
+export type ArchiveTab = "company" | "collaborator";
 export const ARCHIVE_AREAS = [
-  { id: "company" as const, name: "Empresa", description: "Arquivos internos e pastas dos colaboradores", icon: Building2 },
-  { id: "published" as const, name: "Colaboradores", description: "Documentos publicados por titular", icon: FolderOpen },
+  { id: "company" as const, name: "Empresa", description: "Arquivos internos da empresa", icon: Building2 },
+  { id: "collaborators" as const, name: "Colaborador", description: "Pastas de cada colaborador", icon: FolderOpen },
 ];
+/** Busca com exemplos digitados no campo; cada aba só procura no que mostra. */
+export const COMPANY_SEARCH_EXAMPLES = ["contrato social", "alvará 2026", "certificado digital", "nota fiscal"] as const;
+export const COLLABORATOR_SEARCH_EXAMPLES = ["atestado agosto", "férias 2025", "contrato de experiência", "ASO admissional"] as const;
+export const PEOPLE_SEARCH_EXAMPLES = ["nome do colaborador", "sobrenome"] as const;
 
 export function useCompanyArchiveAccess() {
   const { permissions, isDefaultAdmin } = useAuth();
@@ -51,11 +60,15 @@ export function useCompanyArchiveAccess() {
   };
 }
 
-export function useArchiveAreas() {
-  const access = useCompanyArchiveAccess();
-  return ARCHIVE_AREAS.filter((area) => area.id === "published" || access.documents || access.financial || access.models || access.people);
+/** A aba Empresa existe para quem vê alguma pasta da empresa; a aba Colaborador, para todos. */
+export function hasCompanyArchiveTab(access: ReturnType<typeof useCompanyArchiveAccess>) {
+  return access.documents || access.financial || access.models;
 }
-export function archiveAreaHref(area: ArchiveArea) { return `/dashboard/documents/${area}`; }
+export function archiveAreaHref(area: ArchiveArea) {
+  if (area === "company") return "/dashboard/documents";
+  if (area === "collaborators" || area === "published") return COLLABORATOR_ARCHIVE_HREF;
+  return `/dashboard/documents/${area}`;
+}
 
 /* ---------- Modo de visualização (salvo neste navegador) ---------- */
 
@@ -82,11 +95,13 @@ export function useArchiveViewMode(): [ArchiveViewMode, (mode: ArchiveViewMode) 
   return [mode, writeMode];
 }
 
-/* ---------- Moldura comum: título e abas Pastas | Ficha do colaborador ---------- */
+/* ---------- Moldura comum: título e abas Empresa | Colaborador ---------- */
 
-export function ArchiveShell({ tab, children }: { tab: "folders" | "ficha"; children: ReactNode }) {
+export const COLLABORATOR_ARCHIVE_HREF = "/dashboard/documents/collaborators";
+
+export function ArchiveShell({ tab, children }: { tab: ArchiveTab; children: ReactNode }) {
   const access = useCompanyArchiveAccess();
-  const showFolders = access.documents || access.financial || access.models || access.people;
+  const showCompany = hasCompanyArchiveTab(access);
   const tabClass = (active: boolean) => cn(
     "inline-flex h-10 items-center border-b-2 px-3 text-[13px] font-bold transition-colors",
     active ? "border-ds-accent text-ds-ink" : "border-transparent text-ds-ink-muted hover:text-ds-ink",
@@ -98,11 +113,11 @@ export function ArchiveShell({ tab, children }: { tab: "folders" | "ficha"; chil
         <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
           <h1 className="flex h-10 items-center gap-2 text-xl font-extrabold tracking-tight text-ds-ink"><HardDrive aria-hidden="true" className="h-5 w-5 text-ds-ink-muted" />Acervo</h1>
           <nav aria-label="Seções do Acervo" className="flex gap-1">
-            {showFolders && <Link href="/dashboard/documents" aria-current={tab === "folders" ? "page" : undefined} className={tabClass(tab === "folders")}>Pastas</Link>}
-            <Link href="/dashboard/documents/published" aria-current={tab === "ficha" ? "page" : undefined} className={tabClass(tab === "ficha")}>Ficha do colaborador</Link>
+            {showCompany && <Link href="/dashboard/documents" aria-current={tab === "company" ? "page" : undefined} className={tabClass(tab === "company")}>Empresa</Link>}
+            <Link href={COLLABORATOR_ARCHIVE_HREF} aria-current={tab === "collaborator" ? "page" : undefined} className={tabClass(tab === "collaborator")}>Colaborador</Link>
           </nav>
         </div>
-        <div className="pb-2"><DocumentCreateLink /></div>
+        <div className="min-w-0 max-w-full pb-2"><DocumentCreateLink /></div>
       </header>
       {children}
     </div>
@@ -143,13 +158,17 @@ export function ArchiveCrumbs({ crumbs }: { crumbs: Crumb[] }) {
 const entryLabel = (entry: ArchiveEntry) => `${entry.kind === "folder" ? "Pasta" : entry.kind === "model" ? "Modelo" : "Arquivo"}: ${entry.name}`;
 const entryDomId = (entry: ArchiveEntry) => "archive-entry-" + encodeURIComponent(entry.id);
 
-export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search, onSearch, loading, refreshing, error, toolbar, onRefresh, onUp, onRoot, preview, onSelect, footer, selectionScope = "", hasMorePages = false }: {
+export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search, onSearch, loading, refreshing, error, toolbar, onRefresh, onUp, onRoot, preview, onSelect, footer, selectionScope = "", hasMorePages = false, header, searchLabel, searchPrefix, searchExamples }: {
   area?: ArchiveArea | null; entries: ArchiveEntry[];
   /** Mantido por compatibilidade; a árvore lateral saiu com os modos de visualização (decisão 0007). */
   folders?: ArchiveFolder[];
   breadcrumbs?: Array<{ name: string; open?: () => void }>;
   search: string; onSearch: (value: string) => void; loading?: boolean; refreshing?: boolean; error?: string | null; toolbar?: ReactNode;
   onRefresh?: () => void; onUp?: () => void; onRoot?: () => void; preview?: (entry: ArchiveEntry) => ReactNode; onSelect?: (entry: ArchiveEntry | null) => void; footer?: ReactNode; selectionScope?: string; hasMorePages?: boolean;
+  /** Conteúdo entre as abas e a barra de ferramentas (ex.: a pessoa aberta). */
+  header?: ReactNode;
+  /** Busca da aba: rótulo acessível, início do texto de exemplo e exemplos digitados no campo. */
+  searchLabel?: string; searchPrefix?: string; searchExamples?: readonly string[];
 }) {
   const [mode, setMode] = useArchiveViewMode();
   const hasPreviewable = entries.some((entry) => entry.loadPreview);
@@ -217,12 +236,14 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
   };
   const runAction = (action: ArchiveAction) => { setPanelOpen(false); action.run(); };
 
-  const nestedInCompany = area === "financial" || area === "models" || area === "collaborators";
-  const areaName = nestedInCompany ? companyArchiveFolderLabel(area === "financial" ? "Financeiro" : area === "models" ? "Modelos" : "Colaboradores") : ARCHIVE_AREAS.find((entry) => entry.id === area)?.name;
+  const tab: ArchiveTab = area === "collaborators" || area === "published" ? "collaborator" : "company";
+  const nestedInCompany = area === "financial" || area === "models";
+  // A trilha começa pela aba: Empresa › pasta… ou Colaborador › pessoa › pasta…
   const crumbs: Crumb[] = [
-    { name: "Acervo", href: "/dashboard/documents" },
-    ...(nestedInCompany ? [{ name: "Empresa", href: companyArchiveHref() }] : []),
-    ...(areaName ? [{ name: areaName, open: onRoot, href: onRoot ? undefined : archiveAreaHref(area!) }] : []),
+    tab === "collaborator"
+      ? { name: "Colaborador", open: onRoot, href: onRoot ? undefined : COLLABORATOR_ARCHIVE_HREF }
+      : { name: "Empresa", open: nestedInCompany ? undefined : onRoot, href: nestedInCompany || !onRoot ? "/dashboard/documents" : undefined },
+    ...(nestedInCompany ? [{ name: companyArchiveFolderLabel(area === "financial" ? "Financeiro" : "Modelos"), open: onRoot, href: onRoot ? undefined : archiveAreaHref(area!) }] : []),
     ...breadcrumbs,
   ];
   const currentFolderName = crumbs.at(-1)?.name ?? "Acervo";
@@ -246,7 +267,7 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
 
   const nameCell = (entry: ArchiveEntry) => <span className="flex min-w-0 items-center gap-3">
     <ArchiveEntryIcon entry={entry} className={entry.kind === "folder" ? "h-6 w-6" : "h-5 w-5"} />
-    <span className="min-w-0"><span className={cn("block break-words text-[13px] text-ds-ink", entry.kind === "folder" ? "font-extrabold" : "font-semibold")}>{entry.name}</span>{entry.description && <span className="mt-0.5 block truncate text-[11.5px] text-ds-ink-faint">{entry.description}</span>}</span>
+    <span className="min-w-0"><span className={cn("flex flex-wrap items-center gap-x-2 break-words text-[13px]", entry.muted ? "text-ds-ink-faint" : "text-ds-ink", entry.kind === "folder" ? "font-extrabold" : "font-semibold")}>{entry.name}{entry.badge && <span className="rounded-ds-pill bg-ds-accent-soft px-1.5 py-px text-[10.5px] font-bold text-ds-accent-ink">{entry.badge}</span>}</span>{(entry.location || entry.description) && <span className="mt-0.5 block truncate text-[11.5px] text-ds-ink-faint">{entry.location ? <>{entry.location}{entry.description ? ` · ${entry.description}` : ""}</> : entry.description}</span>}</span>
   </span>;
   const metaCells = (entry: ArchiveEntry) => showMetadataColumns ? <><span className="hidden text-[12px] tabular-nums text-ds-ink-muted md:block">{entry.kind === "folder" ? "" : entry.modified || ""}</span><span className="hidden text-[12px] tabular-nums text-ds-ink-muted md:block">{entry.kind === "folder" ? "" : entry.size || ""}</span></> : null;
 
@@ -313,11 +334,12 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
 
   const hint = mode === "panel" ? "Clique para abrir · Alt+↑ sobe uma pasta" : mode === "classic" ? "Clique no nome para abrir · ⋯ mostra as ações" : "Clique numa pasta para abrir a próxima coluna · Enter amplia a prévia";
 
-  return <ArchiveShell tab="folders">
+  return <ArchiveShell tab={tab}>
+    {header}
     <div className="flex flex-wrap items-center gap-2 border-b border-ds-border px-4 py-3">
       <ArchiveCrumbs crumbs={crumbs} />
       <span className="hidden flex-1 lg:block" />
-      <div className="relative w-full sm:w-60"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" /><Input aria-label="Buscar nesta pasta" placeholder="Buscar nesta pasta…" value={search} onChange={(event) => onSearch(event.target.value)} className="h-9 bg-ds-surface pl-8 text-xs" /></div>
+      <ArchiveSearchInput label={searchLabel ?? (tab === "collaborator" ? "Buscar nos documentos do colaborador" : "Buscar nos documentos da empresa")} prefix={searchPrefix ?? "Buscar"} examples={searchExamples ?? (tab === "collaborator" ? COLLABORATOR_SEARCH_EXAMPLES : COMPANY_SEARCH_EXAMPLES)} value={search} onChange={onSearch} />
       <div className="relative"><select aria-label="Ordenar documentos" value={sort} onChange={(event) => setSort(event.target.value as ArchiveSort)} className="h-9 appearance-none rounded-ds-sm border border-ds-border-input bg-ds-surface pl-2 pr-10 text-xs"><option value="title-asc">Título: A–Z</option><option value="title-desc">Título: Z–A</option>{showMetadataColumns && <><option value="modified-asc">Modificado: mais antigo</option><option value="modified-desc">Modificado: mais recente</option><option value="size-asc">Tamanho: menor</option><option value="size-desc">Tamanho: maior</option></>}</select><span className="pointer-events-none absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-ds-sm border border-ds-border bg-ds-surface"><ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} /></span></div>
       <Segmented aria-label="Modo de visualização" value={mode} onChange={setMode} options={ARCHIVE_VIEW_MODES.map((value) => ({ value, label: ARCHIVE_VIEW_MODE_LABELS[value] }))} />
       {onRefresh && <Button size="icon" variant="ds-ghost" aria-label="Atualizar pasta" disabled={loading || refreshing} onClick={onRefresh}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /></Button>}{toolbar}
@@ -326,7 +348,7 @@ export function ArchiveExplorer({ area = null, entries, breadcrumbs = [], search
       {error && <p role="alert" className="m-3 rounded-ds-md border border-ds-confirm-border bg-ds-confirm-bg p-3 text-sm text-ds-confirm-ink">{error}</p>}
       {loading ? <div role="status" className="grid min-h-64 place-items-center"><Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-ds-ink-muted" /><span className="sr-only">Carregando pasta</span></div> : <>
         {mode === "panel" ? panelView : mode === "classic" ? classicView : cascadeView}
-        {entries.length === 0 && !error && mode !== "cascade" && <div className="grid min-h-64 place-items-center p-6 text-center"><div><Folder aria-hidden="true" className="mx-auto h-10 w-10 text-ds-disabled" /><p className="mt-3 text-sm text-ds-ink-muted">{hasMorePages ? (search ? "Nenhum item encontrado nas páginas carregadas." : "Nenhum item nas páginas carregadas.") : search ? "Nenhum item encontrado nesta pasta." : "Esta pasta está vazia."}</p></div></div>}
+        {entries.length === 0 && !error && mode !== "cascade" && <div className="grid min-h-64 place-items-center p-6 text-center"><div><Folder aria-hidden="true" className="mx-auto h-10 w-10 text-ds-disabled" /><p className="mt-3 text-sm text-ds-ink-muted">{hasMorePages ? (search ? "Nenhum item encontrado nas páginas carregadas." : "Nenhum item nas páginas carregadas.") : search ? "Nenhum resultado para esta busca." : "Esta pasta está vazia."}</p></div></div>}
       </>}
       {footer}<p className="px-4 py-3 text-[11px] text-ds-ink-faint">{entries.length} {entries.length === 1 ? "item" : "itens"} · {hint}</p>
     </main>
