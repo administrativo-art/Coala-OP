@@ -49,47 +49,6 @@ export function nextCascadeStack<E>(
   return index >= 0 ? stack.slice(0, index) : stack;
 }
 
-/** Pasta de primeiro nível (aba) e subpasta (chip) de um documento na ficha do colaborador. */
-export type FichaPlacement = { tab: string; group: string | null; rest: string[] };
-
-export function fichaPlacement(path: readonly string[]): FichaPlacement {
-  const [tab = "Outros documentos", group = null, ...rest] = path;
-  return { tab, group, rest };
-}
-
-export type FichaTab = { name: string; count: number };
-
-/** Abas da ficha em ordem alfabética (pt-BR, números naturais), com a quantidade de documentos de cada uma. */
-export function fichaTabs(paths: readonly (readonly string[])[]): FichaTab[] {
-  const counts = new Map<string, number>();
-  for (const path of paths) {
-    const { tab } = fichaPlacement(path);
-    counts.set(tab, (counts.get(tab) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base", numeric: true }));
-}
-
-/** Subpastas (chips) de uma aba, em ordem decrescente: anos e períodos mais recentes primeiro. */
-export function fichaGroups(paths: readonly (readonly string[])[], tab: string): FichaTab[] {
-  const counts = new Map<string, number>();
-  for (const path of paths) {
-    const placement = fichaPlacement(path);
-    if (placement.tab !== tab || !placement.group) continue;
-    counts.set(placement.group, (counts.get(placement.group) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((left, right) => right.name.localeCompare(left.name, "pt-BR", { sensitivity: "base", numeric: true }));
-}
-
-/** Escolhe a aba aberta: a pedida (se existir) ou a primeira. */
-export function resolveFichaTab(tabs: readonly FichaTab[], requested: string | null | undefined): string | null {
-  if (requested && tabs.some((tab) => tab.name === requested)) return requested;
-  return tabs[0]?.name ?? null;
-}
-
 /** Ícone neutro pelo tipo, deduzido do MIME ou da extensão do nome. */
 export type ArchiveFileKind = "pdf" | "image" | "sheet" | "text" | "other";
 
