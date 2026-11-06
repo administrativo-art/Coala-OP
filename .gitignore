@@ -92,3 +92,6 @@ backups/
 /output/render/
 /output/rendered/
 /tmp/pdfs/
+
+# Recursos do PDF.js copiados por scripts/copy-pdfjs-assets.mjs
+/public/pdfjs/
