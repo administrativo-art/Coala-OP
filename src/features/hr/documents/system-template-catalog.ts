@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -522,12 +522,42 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   id: "system-asset-maintenance-order", name: "Ordem de manutenção patrimonial", documentTitle: "ORDEM DE MANUTENÇÃO PATRIMONIAL", category: "Patrimônio", description: "Ordem contextual de manutenção preventiva, corretiva ou manual, sem assinatura eletrônica.", status: "published", version: 1, templateKind: "system_pdf", renderer: "asset_maintenance_order", generationMode: "contextual", sourceModule: "assets", sourceModulePath: "src/features/assets/maintenance.server.ts", variables: ["asset.code", "asset.name", "maintenance.type", "maintenance.description", "maintenance.checklist", "maintenance.components", "document.protocol"], letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "asset_lifecycle_plus_5y", sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-asset-maintenance-order/preview", updatedAt: "2026-10-30T00:00:00.000Z",
 }];
 
+/** Documento livre do editor (HTML -> PDF). A finalização grava o PDF resultante e o backend aceita titular; sem assinatura eletrônica. */
+const editorTemplates: SystemDocumentTemplate[] = [{
+  id: "system-editor-document",
+  name: "Documento livre (editor)",
+  documentTitle: "Documento",
+  category: "Documentos",
+  description: "Documento em branco redigido no editor, com campos do catálogo de variáveis, sobre o timbre institucional. Pode ser avulso ou vinculado a um titular, sem assinatura eletrônica; a publicação ao colaborador permanece restrita.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "editor_html",
+  // `direct` o listaria no gerador DOCX legado, onde não funciona; o fluxo próprio nasce no editor.
+  generationMode: "contextual",
+  sourceModule: "documents",
+  sourceModulePath: "src/features/documents/editor/render-html.ts",
+  // Conjunto dinâmico: o autor escolhe campos do catálogo de variáveis; não há lista fixa.
+  variables: [],
+  letterheadVersion: "coala-letterhead-v2",
+  signatureScope: "none",
+  // PROVISÓRIO, pendente de validação jurídica pelo DEV. `employment_plus_5y` ancora no fim do vínculo,
+  // inexistente em documento sem titular; escolhido o mais conservador disponível (sem prazo de descarte
+  // automático, ancorado na geração). Não declara conformidade legal.
+  retentionPolicyId: "fiscal_generation_date_pending",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-editor-document/preview",
+  updatedAt: "2026-11-05T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
   ...admissionTemplates,
   ...timeRecordingTemplates,
   ...assetTemplates,
+  ...editorTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

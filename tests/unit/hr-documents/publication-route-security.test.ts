@@ -7,6 +7,7 @@ const routes = [
   "src/app/api/hr/employee-documents/publication-policy/route.ts",
   "src/app/api/hr/employee-documents/classification/route.ts",
   "src/app/api/hr/employee-documents/status/route.ts",
+  "src/app/api/hr/employee-documents/organization/route.ts",
   "src/app/api/hr/employee-documents/confirm/route.ts",
 ];
 

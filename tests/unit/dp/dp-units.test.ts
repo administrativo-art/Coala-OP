@@ -7,6 +7,7 @@ import {
   findOperationalUnitRecord,
   isActiveOperationalUnit,
   operationalUnitIdsMatch,
+  operationalUnitsExistingInPeriod,
 } from "../../../src/lib/dp-units";
 
 test("unidades arquivadas permanecem resolvíveis, mas não entram em seleções ativas", () => {
@@ -58,4 +59,28 @@ test("a continuidade encontra o registro histórico da unidade incorporada e pri
     { id: "july-current", unitId: "matrix" },
   ];
   assert.equal(findOperationalUnitRecord(withExactTarget, "matrix", units)?.id, "july-current");
+});
+
+test("unidade só conta a partir do mês de criação, herdando a história das unidades incorporadas", () => {
+  const ts = (iso: string) => ({ _seconds: Math.floor(Date.parse(iso) / 1000) });
+  const units = [
+    { id: "cta", isArchived: true, mergedIntoUnitId: "matrix", createdAt: ts("2025-12-09T12:00:00Z") },
+    { id: "matrix", createdAt: ts("2026-07-04T16:08:29Z") },
+    { id: "tirirical", createdAt: ts("2025-12-04T16:22:53Z") },
+    { id: "automovel", createdAt: ts("2026-07-04T16:03:51Z") },
+    { id: "sem-data" },
+  ];
+  const active = activeOperationalUnits(units);
+  const ids = (year: number, month: number) => operationalUnitsExistingInPeriod(active, units, year, month).map((unit) => unit.id);
+
+  assert.deepEqual(ids(2026, 6), ["matrix", "tirirical", "sem-data"]);
+  assert.deepEqual(ids(2026, 7), ["matrix", "tirirical", "automovel", "sem-data"]);
+  assert.deepEqual(ids(2025, 11), ["sem-data"]);
+});
+
+test("a data de criação usa o fuso de Fortaleza na virada do mês", () => {
+  const units = [{ id: "a", createdAt: "2026-08-01T01:00:00Z" }];
+  // 01/08 01:00 UTC ainda é 31/07 em Fortaleza.
+  assert.equal(operationalUnitsExistingInPeriod(units, units, 2026, 6).length, 0);
+  assert.equal(operationalUnitsExistingInPeriod(units, units, 2026, 7).length, 1);
 });

@@ -2,20 +2,27 @@
   "schemaVersion": 1,
   "nonPersonalCollections": [],
   "approvedLegacyGaps": [
-    "audit-targets"
+    "audit-targets",
+    "editor-content-versions"
   ],
   "dynamicCollectionReaders": [
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(source.collection)",
-      "functionSha256": "de107db47f0c72d9a76a452357b9db53b26ebb8bef0a8bc12208fdaa729479b6"
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
-      "functionSha256": "de107db47f0c72d9a76a452357b9db53b26ebb8bef0a8bc12208fdaa729479b6"
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+    },
+    {
+      "file": "src/features/privacy/person-inventory.server.ts",
+      "function": "collectPersonSource",
+      "call": "db.collectionGroup(source.collection)",
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
     }
   ]
 }

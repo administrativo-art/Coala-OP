@@ -1,0 +1,75 @@
+/* Superfície do editor: só tokens --ds-*. Os seletores :global alcançam o conteúdo do ProseMirror. */
+.surface {
+  min-height: 420px;
+  padding: 28px 32px;
+  background: var(--ds-surface);
+  color: var(--ds-ink);
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.surface :global(.ProseMirror) {
+  outline: none;
+  min-height: 380px;
+}
+
+.surface :global(.ProseMirror p) { margin: 0 0 8px; }
+.surface :global(.ProseMirror h1) { margin: 18px 0 8px; font-size: 22px; font-weight: 800; line-height: 1.25; }
+.surface :global(.ProseMirror h2) { margin: 16px 0 8px; font-size: 18px; font-weight: 800; line-height: 1.3; }
+.surface :global(.ProseMirror h3) { margin: 14px 0 6px; font-size: 15px; font-weight: 800; line-height: 1.35; }
+.surface :global(.ProseMirror ul) { margin: 0 0 8px; padding-left: 24px; list-style: disc; }
+.surface :global(.ProseMirror ol) { margin: 0 0 8px; padding-left: 24px; list-style: decimal; }
+.surface :global(.ProseMirror li > p) { margin: 0 0 4px; }
+
+.surface :global(.ProseMirror table) {
+  width: 100%;
+  margin: 8px 0 12px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.surface :global(.ProseMirror th),
+.surface :global(.ProseMirror td) {
+  position: relative;
+  min-width: 48px;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-border-input);
+  vertical-align: top;
+}
+.surface :global(.ProseMirror th) { background: var(--ds-surface-muted); font-weight: 800; text-align: left; }
+.surface :global(.ProseMirror .selectedCell) { background: var(--ds-modal-accent-soft); }
+
+/* Campo do sistema: rótulo do catálogo, sem quebra de linha, distinto do texto digitado. */
+.surface :global(.ProseMirror .ds-document-field) {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1px solid var(--ds-border-input);
+  border-radius: var(--ds-r-pill);
+  background: var(--ds-info-bg);
+  color: var(--ds-info);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.7;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.surface :global(.ProseMirror .ds-document-field[data-sensitive="true"]) {
+  background: var(--ds-alert-bg);
+  border-color: var(--ds-alert-border);
+  color: var(--ds-alert-ink);
+}
+.surface :global(.ProseMirror .ds-document-field[data-sensitive="true"])::after {
+  content: " \00b7  sens\00edvel";
+  font-weight: 600;
+}
+.surface :global(.ProseMirror .ds-document-field.ProseMirror-selectednode) {
+  outline: 2px solid var(--ds-modal-accent);
+  outline-offset: 1px;
+}
+
+.surface[aria-readonly="true"] { background: var(--ds-surface-muted); }
+
+@media (max-width: 640px) {
+  .surface { padding: 18px 16px; }
+}

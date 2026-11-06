@@ -1,10 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { employeeArchiveChildFolders, employeeArchiveIds, groupPublishedAdmissionReferences, groupSignedAdmissionReferences } from "../../src/lib/documents/employee-archive";
+import { employeeArchiveChildFolders, employeeArchiveDocumentName, employeeArchiveIds, groupPublishedAdmissionReferences, groupSignedAdmissionReferences } from "../../src/lib/documents/employee-archive";
 
 test("consulta apenas os identificadores explicitamente vinculados e elimina duplicados", () => {
   assert.deepEqual(employeeArchiveIds({ id: "auth-1", hrEmployeeId: "rh-2", registrationIdBizneo: "rh-2" }), ["auth-1", "rh-2"]);
   assert.deepEqual(employeeArchiveIds({ id: "auth-1", hrEmployeeId: "  ", registrationIdBizneo: null }), ["auth-1"]);
+});
+
+test("Acervo chama contrato de experiência de Contrato de trabalho sem alterar nome explícito", () => {
+  assert.equal(employeeArchiveDocumentName({
+    documentTypeCode: "PROBATION_CONTRACT",
+    displayName: "Contrato de experiência — 12/05/2022 — Heucilene Oliveira Ribeiro",
+  }), "Contrato de trabalho — 12/05/2022 — Heucilene Oliveira Ribeiro");
+  assert.equal(employeeArchiveDocumentName({
+    displayName: "Contrato de experiência — 12/05/2022 — Heucilene Oliveira Ribeiro",
+  }), "Contrato de trabalho — 12/05/2022 — Heucilene Oliveira Ribeiro");
+  assert.equal(employeeArchiveDocumentName({
+    documentTypeCode: "PROBATION_CONTRACT",
+    archiveName: "Contrato especial",
+    displayName: "Contrato de experiência",
+  }), "Contrato especial");
+});
+
+test("Acervo nomeia afastamento pela data e tipo e ASO pela finalidade", () => {
+  assert.equal(employeeArchiveDocumentName({
+    category: "leaves",
+    documentTypeCode: "MEDICAL_CERTIFICATE",
+    documentType: "Atestado médico",
+    destinationTrail: ["Afastamentos", "Afastamento 13/08/2026 a 15/08/2026", "Atestado"],
+  }), "13/08/2026 a 15/08/2026 — Atestado");
+  assert.equal(employeeArchiveDocumentName({
+    category: "occupational_health",
+    documentTypeCode: "ASO_ADMISSION",
+    documentType: "Exame ocupacional 10/05/2026",
+  }), "ASO admissional — 10/05/2026");
+  assert.equal(employeeArchiveDocumentName({
+    category: "warnings",
+    documentTypeCode: "DISCIPLINARY_WARNING",
+    documentType: "Advertência 20/09/2026",
+  }), "20/09/2026 — Advertência");
 });
 
 test("agrupar cópias do mesmo Kit preserva referências e busca por nomes originais", () => {

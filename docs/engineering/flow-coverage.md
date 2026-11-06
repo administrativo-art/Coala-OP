@@ -4,6 +4,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
+05/11/2026: ajuste local do Acervo publicado acrescenta organização visual auditada para DP, simplifica férias até a parcela, estabiliza carregamento e remove metadados decorativos de pastas. Testes dirigidos cobrem projeção, permissão, concorrência e preservação do canônico; E2E local e publicação permanecem gates. `document-central` e `employee-documents` continuam Traçado.
+
 03/11/2026: Acervo publicado por titular acrescentado à raiz e à cobertura de `employee-documents`/`document-central`, reutilizando APIs próprias e RH sob acesso existente. Projeção de kit assinado exercitada com sete referências e homônimos distintos; E2E local dirigido passou para árvore/pasta própria/abas retiradas e perfil comum com download canônico. Paginação DP com página filtrada vazia, cursor e unidade passou em integração; teto bruto da pasta própria e troca de titular durante Carregar mais também. Permissões e fontes conferidas no código; publicação/ACL e arquivos não mudaram.
 
 02/11/2026: complemento de armazenamento em testes dirigidos demo: kit e assinatura individual reutilizam o objeto assinado, com hash conferido; remoção do Acervo preserva o original compartilhado e continua recusando usuário não autenticado ou fora da unidade. Auditoria real foi somente leitura de metadados. Não certifica provedor externo ou autoriza limpeza física histórica.
@@ -69,7 +71,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
-| `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
+| `document-generation` | 9 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
 | `document-central` | 8 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — explorador compartilhado, pasta publicada e biblioteca de modelos; homologação externa pendente |
 | `document-templates` | 8 | Traçado | [Cadastro e publicação](flows/document-templates.md) — biblioteca acessível pelo Acervo; percurso complementado |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |

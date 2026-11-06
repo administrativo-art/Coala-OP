@@ -7,9 +7,15 @@ import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 
 export function DocumentCreateLink() {
   const {permissions, isDefaultAdmin} = useAuth();
-  if (!hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin) ||
-      !hasFormalizationPermission(permissions, "documents.generate", isDefaultAdmin)) return null;
-  return <Link href="/dashboard/documents/generator" className="rounded-md px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50">Criar documento</Link>;
+  const canGenerate = hasFormalizationPermission(permissions, "documents.generate", isDefaultAdmin);
+  const canFromModel = canGenerate && hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin);
+  if (!canGenerate) return null;
+  return (
+    <>
+      {canFromModel ? <Link href="/dashboard/documents/generator" className="rounded-md px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50">Criar documento</Link> : null}
+      <Link href="/dashboard/documents/editor" className="rounded-md px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50">Criar documento em branco</Link>
+    </>
+  );
 }
 
 export function DocumentModelsLink() {

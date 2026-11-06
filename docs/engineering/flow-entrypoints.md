@@ -373,7 +373,7 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx).
 
-Arquivos locais percorridos: 28.
+Arquivos locais percorridos: 29.
 
 Chamadas candidatas encontradas:
 
@@ -394,6 +394,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
 - `/api/hr/employee-documents` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
 - `/api/hr/employee-documents/access` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
+- `/api/hr/employee-documents/organization` — interface [`src/features/documents/central/published-employee-archive.tsx`](../../src/features/documents/central/published-employee-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/organization/route.ts`](../../src/app/api/hr/employee-documents/organization/route.ts)
 - `/api/hr/onboarding/` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
@@ -407,12 +408,13 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `document-generation`
 
-Páginas: [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
+Páginas: [`src/app/dashboard/documents/editor/[id]/page.tsx`](../../src/app/dashboard/documents/editor/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/editor/documents/page.tsx`](../../src/app/dashboard/documents/editor/documents/page.tsx), [`src/app/dashboard/documents/editor/page.tsx`](../../src/app/dashboard/documents/editor/page.tsx), [`src/app/dashboard/documents/editor/templates/[tid]/page.tsx`](../../src/app/dashboard/documents/editor/templates/%5Btid%5D/page.tsx), [`src/app/dashboard/documents/editor/templates/page.tsx`](../../src/app/dashboard/documents/editor/templates/page.tsx), [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
 
-Arquivos locais percorridos: 18.
+Arquivos locais percorridos: 50.
 
 Chamadas candidatas encontradas:
 
+- `/api/documents/editor` — interface [`src/features/documents/editor/ui/editor-client.ts`](../../src/features/documents/editor/ui/editor-client.ts); rota candidata [`src/app/api/documents/editor/route.ts`](../../src/app/api/documents/editor/route.ts)
 - `/api/documents/generate` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
 - `/api/documents/generated` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
 - `/api/documents/generated/` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
@@ -462,7 +464,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx), [`src/app/dashboard/dp/schedules/month/[period]/page.tsx`](../../src/app/dashboard/dp/schedules/month/%5Bperiod%5D/page.tsx), [`src/app/dashboard/dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx).
 
-Arquivos locais percorridos: 59.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
@@ -609,7 +611,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
 
-Arquivos locais percorridos: 47.
+Arquivos locais percorridos: 48.
 
 Chamadas candidatas encontradas:
 
@@ -623,6 +625,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
 - `/api/hr/employee-documents` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
 - `/api/hr/employee-documents/access` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
+- `/api/hr/employee-documents/organization` — interface [`src/features/documents/central/published-employee-archive.tsx`](../../src/features/documents/central/published-employee-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/organization/route.ts`](../../src/app/api/hr/employee-documents/organization/route.ts)
 - `/api/hr/employee-documents/publication-policy` — interface [`src/features/hr/documents/publication-policy-control.tsx`](../../src/features/hr/documents/publication-policy-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication-policy/route.ts`](../../src/app/api/hr/employee-documents/publication-policy/route.ts)
 - `/api/hr/employee-documents/summary` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
 - `/api/hr/employee-documents/visibility` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
@@ -1608,6 +1611,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
 - `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-editor-document/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)

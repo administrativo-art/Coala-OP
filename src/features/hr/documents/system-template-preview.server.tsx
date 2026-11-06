@@ -17,6 +17,9 @@ import { REP_P_RECEIPT_PREVIEW_SNAPSHOT, renderRepPReceiptPdf } from "@/features
 import { REP_P_PILOT_RECEIPT_PREVIEW_SNAPSHOT, renderRepPPilotReceipt } from "@/features/dp/rep-p/pilot-receipt";
 import { MIRROR_PREVIEW_SNAPSHOT } from "@/features/dp/time-adjustments/mirror-core";
 import { renderMirrorPdf } from "@/features/dp/time-adjustments/mirror-pdf";
+import type { EditorContent } from "@/features/documents/editor/content-schema";
+import { convertHtmlToPdf } from "@/features/documents/editor/html-pdf-converter.server";
+import { PROVISIONAL_PAGE_LAYOUT, renderEditorHtml } from "@/features/documents/editor/render-html";
 import { uniformSystemTemplateById } from "@/features/uniforms/template-catalog";
 import { loadUniformSystemTemplatePreview } from "@/features/uniforms/template-preview.server";
 
@@ -76,7 +79,42 @@ async function renderBlankLetterhead() {
   );
 }
 
+const EDITOR_PREVIEW_CONTENT: EditorContent = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Documento de exemplo" }] },
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Este texto demonstra o documento livre. Campo do catálogo: " },
+        { type: "documentField", attrs: { key: "employee.name" } },
+        { type: "text", text: "." },
+      ],
+    },
+  ],
+};
+
+async function renderEditorPreview() {
+  const { html } = renderEditorHtml(EDITOR_PREVIEW_CONTENT, { mode: "sample" });
+  const result = await convertHtmlToPdf(html, {
+    paper: { widthPx: PROVISIONAL_PAGE_LAYOUT.widthPx, heightPx: PROVISIONAL_PAGE_LAYOUT.heightPx },
+    margins: {
+      topPx: PROVISIONAL_PAGE_LAYOUT.marginTopPx,
+      bottomPx: PROVISIONAL_PAGE_LAYOUT.marginBottomPx,
+      leftPx: PROVISIONAL_PAGE_LAYOUT.marginLeftPx,
+      rightPx: PROVISIONAL_PAGE_LAYOUT.marginRightPx,
+    },
+  });
+  if (!result.ok) {
+    throw new SystemTemplatePreviewUnavailableError("A prévia em PDF não está disponível neste ambiente.");
+  }
+  return finalizeSystemDocumentTemplateDemoPdf(result.pdf);
+}
+
 export async function renderSystemDocumentTemplatePreview(template: SystemDocumentTemplate) {
+  if (template.renderer === "editor_html") {
+    return renderEditorPreview();
+  }
   if (template.renderer === "letterhead") {
     return Buffer.from(await renderBlankLetterhead());
   }

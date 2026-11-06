@@ -27,10 +27,10 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 20);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 21);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
-    ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Financeiro e recibos", "Patrimônio", "Uniformes"].sort(),
+    ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Documentos", "Financeiro e recibos", "Patrimônio", "Uniformes"].sort(),
   );
   const repPReceipt = systemDocumentTemplateById("system-rep-p-marking-receipt");
   assert.equal(repPReceipt?.renderer, "rep_p_receipt");
@@ -58,6 +58,20 @@ test("catálogo reúne base institucional, uniformes, kit admissional e comprova
   );
   assert.equal(admissionTemplates.length, 9);
   assert.ok(admissionTemplates.every((template) => template.status === "published"));
+});
+
+test("documento livre do editor é contextual, avulso, sem assinatura e com retenção provisória", () => {
+  const editor = systemDocumentTemplateById("system-editor-document");
+  assert.equal(editor?.renderer, "editor_html");
+  assert.equal(editor?.templateKind, "system_pdf");
+  assert.equal(editor?.sourceFormat, "pdf");
+  assert.equal(editor?.generationMode, "contextual");
+  assert.equal(editor?.sourceModule, "documents");
+  assert.equal(editor?.signatureScope, "none");
+  assert.equal(editor?.letterheadVersion, "coala-letterhead-v2");
+  assert.deepEqual(editor?.variables, []);
+  assert.equal(editor?.retentionPolicyId, "fiscal_generation_date_pending");
+  assert.equal(editor?.status, "published");
 });
 
 test("termo de ponto eletrônico não integra o catálogo operacional", () => {
