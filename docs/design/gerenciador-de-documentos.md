@@ -48,6 +48,7 @@ Toda ação do menu precisa ter equivalente visível e acessível. O menu de con
 
 - Barra de busca atua na pasta atual; o caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
 - No modo Painel lateral a prévia abre no `SidePanel`, como nas listas administrativas; no Clássico, em prévia ampliada; na Cascata, na última coluna. O caminho em pílula é a forma de voltar a qualquer pasta anterior; não há botões Voltar/Pasta acima nem árvore lateral.
+- A prévia no painel, na Cascata e no celular é desenhada pelo PDF.js. A prévia ampliada, no computador, usa o visualizador de PDF do próprio navegador (zoom, busca, impressão e todas as páginas); em aparelho de toque ou sem visualizador nativo, continua o PDF.js.
 - Modelos reutiliza a biblioteca de geração/publicação existente; não cria outro catálogo. PDF é renderizado no navegador a partir do binário já autorizado, com troca de páginas; ações preservam os serviços e as permissões da origem.
 
 - pastas aparecem nos três modos de visualização; a Ficha do colaborador mostra a quantidade de documentos por aba e subpasta;
