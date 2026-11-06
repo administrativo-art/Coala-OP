@@ -68,7 +68,8 @@ export function assertFinancialInboxPaymentTarget(params: {
   today: string;
 }) {
   const { request, message, expense } = params;
-  if (request.sourceType !== "financial_inbox" || request.paymentRail !== "barcode") return;
+  if (request.sourceType !== "financial_inbox"
+    || (request.paymentRail !== "barcode" && request.paymentRail !== "pix_copy_paste")) return;
   const principalAmountCents = Math.round(request.amount * 100);
   const installments = installmentRecords(expense.installments);
   const installment = request.installmentNumber == null
@@ -104,6 +105,8 @@ export function assertFinancialInboxPaymentTarget(params: {
     throw new Error("A despesa vinculada mudou ou não está disponível para pagamento.");
   }
   if (request.requestedSettlementAmount == null) return;
+  // Revisão de boleto vencido só existe no trilho de código de barras.
+  if (request.paymentRail !== "barcode") throw new Error("A revisão de valor vencido só se aplica a código de barras.");
   const revision = request.settlementRevision;
   const attachment = message.attachments?.find((item) => item.id === revision?.sourceAttachmentId);
   if (!revision

@@ -3,6 +3,7 @@ import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "../../src/features/financial/payment-requests/submission-retry";
 import { overdueBarcodeSettlementRevisionSchema } from "../../src/features/financial/payment-requests/overdue-settlement";
 import { governmentCollectionBarcode } from "../../src/features/financial/payment-requests/inbox-barcode";
+import { parseAllowedPixCopyPaste } from "../../src/features/financial/payment-requests/pix-copy-paste";
 
 export type PaymentCliAction = "authorize" | "send" | "retry-send" | "send-adjusted";
 
@@ -194,4 +195,65 @@ export function validateOverdueSettlementCliRevision(input: {
     throw new PaymentCliError("A solicitação não aceita revisão documental do valor vencido. Nenhuma ação foi feita.");
   }
   return parsed.data;
+}
+
+/** Preparação do Pix copia e cola da guia FGTS: confere a cobrança antes de escrever. */
+export function validatePaymentCliPixPreparation(input: {
+  message: Record<string, unknown>;
+  inboxMessageId: string;
+  amountCents: number;
+  scheduledFor: string;
+  expenseId: string;
+  pixPayload: string;
+}) {
+  const classification = record(input.message.classification);
+  const fiscal = record(classification?.fiscalIdentity);
+  const existingBankPayment = record(input.message.existingBankPayment);
+  const existingSettlement = record(input.message.existingSettlement);
+  const parsed = parseAllowedPixCopyPaste(input.pixPayload);
+  if (input.message.id !== input.inboxMessageId
+    || input.message.status !== "linked"
+    || input.message.linkedExpenseId !== input.expenseId
+    || !input.expenseId
+    || input.message.paymentRequestId
+    || existingBankPayment?.transactionId
+    || existingSettlement?.transactionId
+    || classification?.documentType !== "fgts"
+    || fiscal?.documentKind !== "fgts"
+    || !Number.isSafeInteger(input.amountCents) || input.amountCents <= 0
+    || Number(classification?.amountCents) !== input.amountCents
+    || !validIsoDate(input.scheduledFor)
+    || !validIsoDate(String(classification?.dueDate ?? ""))
+    || input.scheduledFor > String(classification?.dueDate)
+    || !parsed
+    || (parsed.amountCents != null && parsed.amountCents !== input.amountCents)) {
+    throw new PaymentCliError("Os dados da guia divergem da preparação do Pix copia e cola. Nenhuma ação foi feita.");
+  }
+  return parsed;
+}
+
+/** Autorização e envio do Pix copia e cola: só a ordem exata, na primeira tentativa. */
+export function validatePaymentCliPixAction(input: {
+  request: Record<string, unknown>;
+  action: "authorize" | "send";
+  amountCents: number;
+  scheduledFor: string;
+  expenseId: string;
+  pixPayloadSha256: string;
+}) {
+  const { request } = input;
+  const snapshot = record(request.pixCopyPasteSnapshot);
+  const expectedStatus = input.action === "authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
+  if (request.sourceType !== "financial_inbox" || request.paymentRail !== "pix_copy_paste"
+    || !Number.isSafeInteger(input.amountCents) || input.amountCents <= 0
+    || Math.round(Number(request.amount) * 100) !== input.amountCents
+    || request.expenseId !== input.expenseId || !input.expenseId
+    || !/^[0-9a-f]{64}$/.test(input.pixPayloadSha256)
+    || snapshot?.payloadHash !== input.pixPayloadSha256
+    || snapshot?.scheduledFor !== input.scheduledFor
+    || !validIsoDate(input.scheduledFor)
+    || request.status !== expectedStatus
+    || request.interRequestId || request.submissionStartedAt) {
+    throw new PaymentCliError("Os dados da solicitação divergem da ordem Pix específica ou ela não está em primeira tentativa. Nenhuma ação foi feita.");
+  }
 }
