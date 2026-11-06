@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/patterns/person-avatar";
 import { LiftRow } from "@/components/patterns/lift-row";
 import { Segmented } from "@/components/patterns/segmented";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Settings2, Upload } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { canAccessUserByUnit } from "@/lib/unit-access";
+import { canAccessUserByUnit, resolveUnitAccess } from "@/lib/unit-access";
 import { employeeDocumentDownloadName } from "@/lib/hr/employee-document-planning";
 import { employeeArchiveIds, employeeArchiveChildFolders, employeeArchiveDocumentName, groupPublishedAdmissionReferences, groupSignedAdmissionReferences } from "@/lib/documents/employee-archive";
 import { archiveLocationLabel, matchesArchiveSearch, matchingArchiveFolders, parseArchiveSearch } from "@/lib/documents/archive-search";
@@ -17,8 +16,13 @@ import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import { isPublishedToEmployee, type DocumentPublication } from "@/lib/hr/employee-document-publication";
 import type { EmployeeDossierFolder } from "@/lib/hr/employee-document-folder-templates";
 import type { OnboardingDocument } from "@/types";
-import { EMPLOYEE_DOCUMENT_CATEGORIES, EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES, normalizeEmployeeDocumentCategory, resolveEmployeeDocumentFolderPath, type EmployeeDocumentCategoryId } from "@/lib/hr/employee-document-options";
+import { EMPLOYEE_DOCUMENT_CATEGORIES, EMPLOYEE_DOCUMENT_STATUSES, EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES, normalizeEmployeeDocumentCategory, resolveEmployeeDocumentFolderPath, type EmployeeDocumentCategoryId } from "@/lib/hr/employee-document-options";
 import { ownDocumentFolderPath } from "@/features/hr/documents/own-document-folders";
+import { EmployeeDocumentIntake } from "@/features/hr/documents/employee-document-intake";
+import { EmployeeDocumentVisibilityDialog } from "@/features/hr/documents/employee-document-visibility-dialog";
+import { PublicationControl } from "@/features/hr/documents/publication-control";
+import { PublicationPolicyControl } from "@/features/hr/documents/publication-policy-control";
+import { LegacyDocumentClassification } from "@/features/hr/documents/legacy-document-classification";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 import { ArchiveExplorer, ArchiveShell, COLLABORATOR_SEARCH_EXAMPLES, PEOPLE_SEARCH_EXAMPLES, type ArchiveAction, type ArchiveEntry } from "./archive-explorer";
 import { ArchiveSearchInput } from "./archive-search-input";
@@ -105,6 +109,10 @@ export function CollaboratorArchive() {
   const [search, setSearch] = useState("");
   /** Filtro rápido da escolha do colaborador. */
   const [status, setStatus] = useState<"active" | "terminated">("active");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const [statusSaving, setStatusSaving] = useState<string | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, { total: number; pendingReviewFiles: number }>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +132,23 @@ export function CollaboratorArchive() {
     return () => { sequence.current++; fileSequence.current++; window.removeEventListener("popstate", restore); };
   }, []);
 
+  const canManageGlobalPolicy = canManage && Boolean(user) && resolveUnitAccess(user ?? {}, { isDefaultAdmin }).allUnits;
+  useEffect(() => {
+    if (canManage && new URLSearchParams(window.location.search).get("configureVisibility") === "1") setVisibilityOpen(true);
+  }, [canManage]);
+  useEffect(() => {
+    if (!firebaseUser || !canViewTeam) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/hr/employee-documents/summary", { headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` }, cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || cancelled) return;
+        setSummaries(Object.fromEntries((payload.summaries ?? []).map((summary: { employeeId: string; total: number; pendingReviewFiles: number }) => [summary.employeeId, summary])));
+      } catch { /* o resumo é complementar; a lista continua sem ele */ }
+    })();
+    return () => { cancelled = true; };
+  }, [firebaseUser, canViewTeam]);
   const employeeKey = employee?.id ?? "";
   const load = useCallback(async (keepVisible = false) => {
     const request = ++sequence.current;
@@ -261,6 +286,20 @@ export function CollaboratorArchive() {
     if (request.action === "move" && employee) navigate(employee.id, request.path);
   }
 
+  async function changeStatus(document: ArchiveDocument, next: string) {
+    if (!firebaseUser || next === document.status) return;
+    setStatusSaving(document.id); setError(null);
+    try {
+      const response = await fetch("/api/hr/employee-documents/status", { method: "POST", headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: document.id, status: next }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao atualizar o status.");
+      setDocuments((current) => current.map((item) => item.id === document.id ? { ...item, status: next } : item));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao atualizar o status."); }
+    finally { setStatusSaving(null); }
+  }
+  /** Documento enviado ao DP (não gerado nem da admissão): pode ser publicado, ter status e ser classificado. */
+  const managedUpload = (document: ArchiveDocument) => full && canManage && document.source !== "generated" && document.source !== "onboarding";
+  const visibilityDialog = <EmployeeDocumentVisibilityDialog open={visibilityOpen} onClose={() => { setVisibilityOpen(false); const url = new URL(window.location.href); if (url.searchParams.has("configureVisibility")) { url.searchParams.delete("configureVisibility"); window.history.replaceState(null, "", url); } }} />;
   const terms = useMemo(() => parseArchiveSearch(search), [search]);
   const fileEntry = (document: ArchiveDocument, withLocation: boolean): ArchiveEntry => {
     const previewable = document.source === "generated" ? Boolean(document.pdfAvailable) : archivePreviewable(document.mimeType ?? undefined);
@@ -292,9 +331,15 @@ export function CollaboratorArchive() {
     const listed = people.filter((person) => (status === "terminated") === (person.isActive === false) && matchesArchiveSearch(terms, [person.username]));
     return <ArchiveShell tab="collaborator">
       <div className="flex flex-col gap-4 p-4 sm:p-6">
-        <div>
-          <h2 className="text-lg font-extrabold text-ds-ink">Selecione o colaborador</h2>
-          <p className="mt-1 max-w-[68ch] text-[13px] text-ds-ink-muted">Abra a pasta de uma pessoa para ver os documentos dela. Os que levam a marca Publicado são os que ela vê no portal do colaborador.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-extrabold text-ds-ink">Selecione o colaborador</h2>
+            <p className="mt-1 max-w-[68ch] text-[13px] text-ds-ink-muted">Abra a pasta de uma pessoa para ver os documentos dela. Os que levam a marca Publicado são os que ela vê no portal do colaborador.</p>
+          </div>
+          {canManage && <div className="flex flex-wrap items-center gap-2">
+            {canManageGlobalPolicy && <PublicationPolicyControl firebaseUser={firebaseUser} />}
+            <Button size="sm" variant="ds-secondary" onClick={() => setVisibilityOpen(true)}><Settings2 aria-hidden="true" className="mr-1.5 h-4 w-4" />Visibilidade</Button>
+          </div>}
         </div>
         {employeeId && <p role="alert" className="rounded-ds-md border border-ds-confirm-border bg-ds-confirm-bg p-3 text-sm text-ds-confirm-ink">Pasta indisponível para seu acesso atual.</p>}
         <div className="flex flex-wrap items-center gap-3">
@@ -304,12 +349,14 @@ export function CollaboratorArchive() {
         <div role="group" aria-label="Colaboradores" className="rounded-ds-card border border-ds-border">
           {listed.map((person) => <LiftRow key={person.id} aria-label={`Abrir pasta de ${person.username}`} onClick={() => navigate(person.id)} className="flex items-center gap-3">
             <PersonAvatar name={person.username} avatarUrl={person.avatarUrl} color={person.color} size={36} />
-            <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-bold text-ds-ink">{person.username}</span><span className="block text-[11.5px] text-ds-ink-faint">{person.id === user?.id ? "Minha pasta" : person.isActive === false ? "Desligado" : "Colaborador ativo"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-bold text-ds-ink">{person.username}</span><span className="block text-[11.5px] text-ds-ink-faint">{[person.id === user?.id ? "Minha pasta" : person.isActive === false ? "Desligado" : "Colaborador ativo", summaries[person.id] ? plural(summaries[person.id].total, "documento", "documentos") : null].filter(Boolean).join(" · ")}</span></span>
+            {(summaries[person.id]?.pendingReviewFiles ?? 0) > 0 && <span className="rounded-ds-pill bg-ds-warn-bg px-2 py-0.5 text-[11px] font-bold text-ds-warn">{plural(summaries[person.id].pendingReviewFiles, "em revisão", "em revisão")}</span>}
             <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />
           </LiftRow>)}
           {listed.length === 0 && <p className="m-3 rounded-ds-md border border-dashed border-ds-border p-4 text-center text-[13px] text-ds-ink-muted">{terms.length ? "Nenhum colaborador encontrado." : status === "terminated" ? "Nenhum colaborador desligado." : "Nenhum colaborador ativo."}</p>}
         </div>
       </div>
+      {visibilityDialog}
     </ArchiveShell>;
   }
 
@@ -342,7 +389,13 @@ export function CollaboratorArchive() {
         {people.map((person) => <option key={person.id} value={person.id}>{person.username}{person.isActive === false ? " (desligado)" : ""}</option>)}
       </select>
     </label>}
-    {full && canManage && <Button asChild size="sm" variant="ds-secondary"><Link href={`/dashboard/dp/collaborators/${encodeURIComponent(employee.id)}/documents`}>Gerenciar pasta</Link></Button>}
+    {full && canManage && <>
+      <Button size="sm" variant="ds-secondary" onClick={() => setVisibilityOpen(true)}><Settings2 aria-hidden="true" className="mr-1.5 h-4 w-4" />Visibilidade</Button>
+      <Button size="sm" variant="primary-page" onClick={() => setUploadOpen(true)}><Upload aria-hidden="true" className="mr-1.5 h-4 w-4" />Anexar documentos</Button>
+    </>}
+    {full && canManage && <div className="flex w-full flex-col gap-3 empty:hidden">
+      <EmployeeDocumentIntake key={employee.id} employeeId={employee.id} employeeName={employee.username} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} onArchived={() => void load(true)} />
+    </div>}
   </div> : null;
 
   const unavailable = employeeId && !employee ? "Pasta indisponível para seu acesso atual." : null;
@@ -354,8 +407,18 @@ export function CollaboratorArchive() {
     onUp={() => path.length ? navigate(employee!.id, path.slice(0, -1)) : canViewTeam && employee ? navigate(null) : undefined}
     onRefresh={employee ? () => void load(true) : undefined} onSelect={() => { fileSequence.current++; setPreview(null); }}
     footer={limitReached ? <p role="status" className="px-4 pt-3 text-xs text-ds-ink-muted">Há mais documentos publicados do que esta consulta exibe. Peça ao DP a conferência dos demais.</p> : null}
-    preview={(entry) => { const document = visible.find((item) => item.id === entry.id); return <div className="space-y-3 text-xs text-ds-ink-muted">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded-ds-sm border border-ds-border bg-ds-surface p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">Pasta: {document ? archiveLocationLabel(pathOf(document)) || "—" : "—"}</p><p className="break-all">{entry.description}</p>{full && <p>{entry.badge ? "Publicado: a pessoa vê este documento no portal." : "Não publicado: a pessoa não vê este documento."}</p>}{(document?.archiveReferences?.length ?? 0) > 1 && <p>{document?.archiveReferences?.length} referências ao mesmo kit assinado, agrupadas nesta visualização.</p>}</div></details></div>; }} />
+    preview={(entry) => { const document = visible.find((item) => item.id === entry.id); return <div className="space-y-3 text-xs text-ds-ink-muted">{preview?.id === entry.id && <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} />}<details className="rounded-ds-sm border border-ds-border bg-ds-surface p-2"><summary className="cursor-pointer font-semibold">Detalhes do arquivo</summary><div className="mt-2 space-y-2"><p className="break-all">Pasta: {document ? archiveLocationLabel(pathOf(document)) || "—" : "—"}</p><p className="break-all">{entry.description}</p>{full && <p>{entry.badge ? "Publicado: a pessoa vê este documento no portal." : "Não publicado: a pessoa não vê este documento."}</p>}{document?.version ? <p>Versão {document.version}</p> : null}{(document?.archiveReferences?.length ?? 0) > 1 && <p>{document?.archiveReferences?.length} referências ao mesmo kit assinado, agrupadas nesta visualização.</p>}</div></details>{document && managedUpload(document) && <div className="flex flex-col gap-3 rounded-ds-sm border border-ds-border bg-ds-surface p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[12px] font-bold text-ds-ink-2">Publicação para a pessoa</span><PublicationControl firebaseUser={firebaseUser} documentId={document.id} publication={document.publication} onChanged={() => void load(true)} /></div>
+      <label className="flex flex-wrap items-center justify-between gap-2 text-[12px] font-bold text-ds-ink-2">Status
+        <select aria-label="Status do documento" value={document.status ?? ""} disabled={statusSaving === document.id} onChange={(event) => void changeStatus(document, event.target.value)} className="h-9 rounded-ds-sm border border-ds-border-input bg-ds-surface px-2 text-xs font-semibold text-ds-ink">
+          {!document.status && <option value="">Sem status</option>}
+          {EMPLOYEE_DOCUMENT_STATUSES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+        </select>
+      </label>
+      {(!document.documentTypeCode || document.documentTypeCode === "UNKNOWN_DOCUMENT") && <LegacyDocumentClassification firebaseUser={firebaseUser} documentId={document.id} onChanged={() => void load(true)} />}
+    </div>}</div>; }} />
     <ArchiveOriginActionDialog action={originAction} onClose={() => setOriginAction(null)} />
+    {visibilityDialog}
     <ArchiveDocumentOrganizationDialog mode={organizationMode} target={organizationTarget} onClose={() => { setOrganizationMode(null); setOrganizationTarget(null); }} onSave={saveOrganization} />
   </>;
 }

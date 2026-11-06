@@ -17,4 +17,4 @@
 
 **Substitui:** na decisão 0007, as abas "Pastas | Ficha do colaborador", as abas por pasta e os chips de subpasta da Ficha e a busca "nesta pasta". Os três modos de visualização continuam.
 
-**Pendente:** a página antiga de documentos do DP (`/dashboard/dp/collaborators/[userId]/documents`), com Anexar documentos, revisão por IA, status e versões, e a configuração de Visibilidade em `/dashboard/dp/documents` ainda existem; o botão **Gerenciar pasta** leva a ela. A mudança das funções para a aba Colaborador e o redirecionamento dos caminhos antigos são a etapa seguinte.
+**Um caminho só:** a página de documentos do DP (`/dashboard/dp/collaborators/[userId]/documents`), a lista DP › Documentos (`/dashboard/dp/documents`) e o botão Documentos do Painel do colaborador levam à aba Colaborador. Quem gerencia tem ali **Anexar documentos** (envio com análise por IA e revisão do lote), **Visibilidade** por pasta e documento, a política de publicação e, em cada documento, publicação, status e classificação. Ficaram de fora o agrupamento visual de versões, o status em lote e o detalhe da extração por IA de documentos já arquivados.

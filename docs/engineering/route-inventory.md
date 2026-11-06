@@ -72,12 +72,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [publication-control.tsx](../../src/features/hr/documents/publication-control.tsx), [legacy-document-classification.tsx](../../src/features/hr/documents/legacy-document-classification.tsx) |
+| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators/[userId]/time-recording` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx) | [my-time-recording-page.tsx](../../src/features/dp/rep-p/my-time-recording-page.tsx) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
-| `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [index.ts](../../src/types/index.ts) |
+| `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | Ler a própria página |
 | `dashboard/dp/fechamento` | [page.tsx](../../src/app/dashboard/dp/fechamento/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [closure-section.tsx](../../src/features/dp/time-adjustments/closure-section.tsx) |
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx) |

@@ -34,6 +34,9 @@ test("Acervo abre na Empresa, busca por termos e mostra a pasta do colaborador n
   await page.route("**/api/hr/employee-documents/access", async (route) => { hrAccesses.push(route.request().postDataJSON()); await route.fulfill({ contentType:"application/pdf", body:bytes }); });
   await page.route("**/api/hr/employee-document-folder-profile?*", (route) => route.fulfill({ json: { folderProfile: { folders: [] } } }));
   await page.route("**/api/documents/generated?*", (route) => route.fulfill({ json: { documents: [] } }));
+  await page.route("**/api/hr/employee-documents/batches?*", (route) => route.fulfill({ json: { batches: [] } }));
+  await page.route("**/api/hr/employee-documents/summary", (route) => route.fulfill({ json: { summaries: [{ employeeId: E2E_USER.uid, total: 3, pendingReviewFiles: 1 }] } }));
+  await page.route("**/api/hr/employee-documents/visibility", (route) => route.fulfill({ json: { documentVisibility: { categories: {}, document_types: {} } } }));
   await page.route("**/api/hr/employee-documents/organization", async (route) => { organizationCalls.push(route.request().postDataJSON()); await route.fulfill({ json: { document: { ok: true } } }); });
   await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [
     { id: "archive-company-e2e", title: "Contrato da unidade", category: "Contratos", status: "active", originalName: "original.pdf", standardizedName: "CONTRATO__UNIDADE-001__v01.pdf", mimeType: "application/pdf", size: bytes.length, uploadedAt: "2026-11-02T12:00:00.000Z" },
@@ -88,7 +91,15 @@ test("Acervo abre na Empresa, busca por termos e mostra a pasta do colaborador n
   await situation.getByRole("radio", { name: /^Desligados/ }).click();
   await expect(page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true })).toHaveCount(0);
   await situation.getByRole("radio", { name: /^Ativos/ }).click();
+  // A configuração de Visibilidade (antiga DP › Documentos) abre aqui mesmo.
+  await page.getByRole("button", { name: "Visibilidade", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Visibilidade por pasta e documento", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
   await page.getByRole("button", { name: "Abrir pasta de Administrador E2E", exact: true }).click();
+  // Anexar documentos (antiga página do DP) abre na própria pasta da pessoa.
+  await page.getByRole("button", { name: "Anexar documentos", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Anexar documentos", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
   // Quem gerencia vê as pastas padrão, inclusive vazias, e todos os documentos da pessoa.
   await expect(contents.getByRole("button", { name: "Pasta: Identificação", exact: true })).toBeVisible();
   await expect(contents.getByRole("button", { name: "Pasta: Identificação", exact: true }).getByText("Vazia", { exact: true })).toBeVisible();
@@ -98,6 +109,7 @@ test("Acervo abre na Empresa, busca por termos e mostra a pasta do colaborador n
   await publishedFile.click();
   const panel = page.getByRole("dialog", { name: "Kit publicado de teste" });
   await expect(panel.getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
+  await expect(panel.getByRole("combobox", { name: "Status do documento" })).toBeVisible();
   const settledHrListCalls = hrListCalls;
   expect(hrAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await panel.getByRole("button", { name: "Ampliar prévia", exact: true }).click();
