@@ -332,7 +332,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx).
 
-Arquivos locais percorridos: 11.
+Arquivos locais percorridos: 14.
 
 Chamadas candidatas encontradas:
 
@@ -373,7 +373,7 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx).
 
-Arquivos locais percorridos: 29.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
@@ -425,7 +425,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/documents/generator/models/[id]/page.tsx`](../../src/app/dashboard/documents/generator/models/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/generator/models/page.tsx`](../../src/app/dashboard/documents/generator/models/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx).
 
-Arquivos locais percorridos: 30.
+Arquivos locais percorridos: 34.
 
 Chamadas candidatas encontradas:
 
@@ -611,7 +611,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/published/page.tsx`](../../src/app/dashboard/documents/published/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
 
-Arquivos locais percorridos: 48.
+Arquivos locais percorridos: 49.
 
 Chamadas candidatas encontradas:
 
