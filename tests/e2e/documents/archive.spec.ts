@@ -1,10 +1,19 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import assert from "node:assert/strict";
 import { PDFDocument } from "pdf-lib";
 import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { E2E_USER } from "../support/global-setup";
+
+/** Sem visualizador nativo, a prévia ampliada usa o PDF.js e o teste confere a página desenhada. */
+async function setNativePdfViewer(page: Page, enabled: boolean) {
+  await page.evaluate((value) => Object.defineProperty(Navigator.prototype, "pdfViewerEnabled", { configurable: true, get: () => value }), enabled);
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "pdfViewerEnabled", { configurable: true, get: () => false }));
+});
 
 test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do colaborador", async ({ page }, testInfo) => {
   test.setTimeout(300_000);
@@ -74,6 +83,14 @@ test("Acervo abre pastas, arquivos e modelos nos três modos e mostra a ficha do
   expect(settledOwnListCalls).toBeLessThanOrEqual(2); // React Strict Mode pode repetir somente a montagem inicial.
   await publishedFile.click();
   expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1); // reabrir reaproveita a prévia
+  // No computador, a prévia ampliada usa o visualizador de PDF do navegador com o mesmo arquivo já autorizado.
+  await setNativePdfViewer(page, true);
+  await panel.getByRole("button", { name: "Ampliar prévia", exact: true }).click();
+  await expect(page.getByRole("dialog").locator('iframe[data-viewer="native"][title="Prévia de Kit publicado de teste"]')).toHaveAttribute("src", /^blob:/);
+  expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
+  await page.getByRole("dialog").press("Escape");
+  await setNativePdfViewer(page, false);
+  await publishedFile.click();
   await panel.getByRole("button", { name: "Renomear", exact: true }).click();
   await page.getByLabel("Nome no Acervo").fill("Kit publicado conferido");
   await page.getByRole("button", { name: "Salvar nome", exact: true }).click();

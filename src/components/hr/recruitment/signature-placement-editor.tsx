@@ -4,6 +4,7 @@ import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type Dr
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, Check, FileSignature, Loader2, Plus, RotateCcw, Save, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { openPdfDocument } from "@/lib/pdf/pdfjs-client";
 
 import {
   addAdmissionSignaturePlacement,
@@ -340,12 +341,8 @@ export default function SignaturePlacementEditor({
           const payload = await response.json().catch(() => ({})) as { error?: string };
           throw new Error(payload.error || "Não foi possível abrir o PDF congelado.");
         }
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.min.mjs",
-          import.meta.url,
-        ).toString();
-        loaded = await pdfjs.getDocument({ data: await response.arrayBuffer() }).promise as unknown as PdfDocument;
+        const task = await openPdfDocument(await response.arrayBuffer());
+        loaded = await task.promise as unknown as PdfDocument;
         if (cancelled) {
           await loaded.destroy().catch(() => undefined);
           return;

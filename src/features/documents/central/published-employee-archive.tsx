@@ -17,6 +17,7 @@ import { isPublishedToEmployee, type DocumentPublication } from "@/lib/hr/employ
 import { ownDocumentFolderPath } from "@/features/hr/documents/own-document-folders";
 import { ArchiveEntryIcon, ArchiveShell } from "./archive-explorer";
 import { ArchivePreview } from "./archive-preview";
+import { warmPdfjs } from "@/lib/pdf/pdfjs-client";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 import {
   ArchiveDocumentOrganizationDialog,
@@ -114,6 +115,9 @@ export function PublishedEmployeeArchive() {
   const [path, setPath] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [documents, setDocuments] = useState<PublishedDocument[]>([]);
+  const hasDocuments = documents.length > 0;
+  // Baixa e inicia o leitor de PDF enquanto a pessoa escolhe o arquivo; não lê documento algum.
+  useEffect(() => { if (hasDocuments) warmPdfjs(); }, [hasDocuments]);
   const [cursors, setCursors] = useState<Cursor[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [ownLimitReached, setOwnLimitReached] = useState(false);
@@ -379,7 +383,7 @@ export function PublishedEmployeeArchive() {
         </div>
       </>}
     </SidePanel>
-    <Dialog open={expanded && Boolean(selectedDoc) && preview?.id === selectedDoc?.id} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selectedDoc ? employeeArchiveDocumentName(selectedDoc) : "Documento"}</DialogTitle></DialogHeader>{selectedDoc && preview?.id === selectedDoc.id && <ArchivePreview url={preview.url} mime={preview.mime} title={employeeArchiveDocumentName(selectedDoc)} />}</DialogContent></Dialog>
+    <Dialog open={expanded && Boolean(selectedDoc) && preview?.id === selectedDoc?.id} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selectedDoc ? employeeArchiveDocumentName(selectedDoc) : "Documento"}</DialogTitle></DialogHeader>{selectedDoc && preview?.id === selectedDoc.id && <ArchivePreview variant="expanded" url={preview.url} mime={preview.mime} title={employeeArchiveDocumentName(selectedDoc)} />}</DialogContent></Dialog>
     <ArchiveDocumentOrganizationDialog mode={organizationMode} target={organizationTarget} onClose={() => { setOrganizationMode(null); setOrganizationTarget(null); }} onSave={saveOrganization} />
   </>;
 }
