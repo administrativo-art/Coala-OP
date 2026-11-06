@@ -134,7 +134,7 @@ export async function recordOwnJourneyLocation(context: ServerUserContext, raw: 
   const livePolicies = await deps.loadPolicies(deps.policyDb, context.workspace_id, unitIds);
   const policyActive = unitIds.every((unitId) => {
     const policy = livePolicies.get(unitId);
-    return policy?.mode === 'observe' && policy.participantUserIds.includes(context.decoded.uid)
+    return policy?.mode === 'observe'
       && Boolean(policy.legalBasisReference) && policy.retentionDays === REP_P_LOCATION_RETENTION_DAYS;
   });
   if (!policyActive && !preliminary) {
