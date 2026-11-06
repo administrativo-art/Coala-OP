@@ -26,7 +26,7 @@ src/app/dashboard/documents/editor/templates/page.tsx,active,document-generation
 src/app/dashboard/documents/editor/templates/[tid]/page.tsx,active,document-generation,Editor interno em modo modelo (salvar versão; prévia de exemplo; publicar para revisores).
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
 src/app/dashboard/documents/page.tsx,navigation,employee-documents;company-documents;document-templates;document-generation;document-central,
-src/app/dashboard/documents/published/page.tsx,active,employee-documents;document-central,Pasta publicada por titular com consulta própria ou DP por pessoa e acesso revalidado na origem.
+src/app/dashboard/documents/published/page.tsx,active,employee-documents;document-central,Ficha do colaborador: documentos publicados por titular com consulta própria ou DP por pessoa e acesso revalidado na origem.
 src/app/dashboard/documents/templates/[id]/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models/[id] preservando query.
 src/app/dashboard/documents/templates/page.tsx,redirect,document-templates,Compatibilidade para Gerador/models.
 src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx,active,people-access,

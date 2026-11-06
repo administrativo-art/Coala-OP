@@ -1,15 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { ChevronRight, Loader2, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { LiftRow } from "@/components/patterns/lift-row";
+import { PersonAvatar } from "@/components/patterns/person-avatar";
+import { PanelField, SidePanel } from "@/components/patterns/side-panel";
+import { fichaGroups, fichaPlacement, fichaTabs, resolveFichaTab } from "@/lib/documents/archive-view-mode";
 
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessUserByUnit } from "@/lib/unit-access";
-import { employeeArchiveIds, employeeArchiveChildFolders, employeeArchiveDocumentName, groupPublishedAdmissionReferences } from "@/lib/documents/employee-archive";
+import { employeeArchiveIds, employeeArchiveDocumentName, groupPublishedAdmissionReferences } from "@/lib/documents/employee-archive";
 import { isPublishedToEmployee, type DocumentPublication } from "@/lib/hr/employee-document-publication";
 import { ownDocumentFolderPath } from "@/features/hr/documents/own-document-folders";
-import { ArchiveExplorer, type ArchiveEntry } from "./archive-explorer";
+import { ArchiveEntryIcon, ArchiveShell } from "./archive-explorer";
 import { ArchivePreview } from "./archive-preview";
 import { archivePreviewable, archiveTimestamp } from "@/lib/documents/archive-entry-sort";
 import {
@@ -92,7 +98,6 @@ function organizationDestinations(document: PublishedDocument, documents: Publis
 }
 
 export function PublishedEmployeeArchive() {
-  const router = useRouter();
   const { firebaseUser, user, activeUsers, terminatedUsers, permissions, isDefaultAdmin } = useAuth();
   const canViewTeam = isDefaultAdmin || Boolean(permissions.settings?.manageUsers ||
     permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly);
@@ -120,7 +125,13 @@ export function PublishedEmployeeArchive() {
   const [organizationTarget, setOrganizationTarget] = useState<ArchiveOrganizationTarget | null>(null);
   const requestSequence = useRef(0);
   const fileSequence = useRef(0);
-  const employee = people.find(person => person.id === employeeId);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+  // Sem acesso à equipe, a ficha abre direto na própria pessoa (não há o que escolher).
+  const openedEmployeeId = employeeId ?? (!canViewTeam ? user?.id ?? null : null);
+  const employee = people.find(person => person.id === openedEmployeeId);
   const selectedEmployeeId = employee?.id ?? "";
   const own = Boolean(employee && user && employee.id === user.id);
   const aliases = employee ? employeeArchiveIds(employee) : [];
@@ -188,6 +199,7 @@ export function PublishedEmployeeArchive() {
 
   function navigate(id: string | null, nextPath: string[] = []) {
     setEmployeeId(id); setPath(nextPath); setSearch(""); setPreview(null); fileSequence.current++;
+    setSelectedDocId(null); setPanelOpen(false); setExpanded(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("employee"); url.searchParams.delete("path");
     if (id) url.searchParams.set("employee", id);
@@ -239,42 +251,135 @@ export function PublishedEmployeeArchive() {
       ? { ...document, archiveName: request.name, displayName: request.name }
       : { ...document, archivePath: request.path }));
     setPreview(null);
-    if (request.action === "move" && employeeId) navigate(employeeId, request.path);
+    if (request.action === "move" && employee) navigate(employee.id, request.path);
   }
 
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const visibleDocuments = own ? documents : groupPublishedAdmissionReferences(documents);
   const paths = visibleDocuments.map(ownDocumentFolderPath);
-  const childFolders = employeeArchiveChildFolders(paths, path).sort((a,b) => a.localeCompare(b,"pt-BR"));
-  const entries: ArchiveEntry[] = !employeeId
-    ? people.filter(person => person.username.toLocaleLowerCase("pt-BR").includes(term))
-      .map(person => ({id:person.id, name:person.username, kind:"folder", description:person.id === user?.id ? "Minha pasta publicada" : "Documentos publicados", open:() => navigate(person.id)}))
-    : !employee ? [] : [
-      ...(!term ? childFolders.map((name):ArchiveEntry => ({id:`folder:${name}`,name,kind:"folder",open:() => navigate(employeeId,[...path,name])})) : []),
-      ...visibleDocuments.filter(doc => path.every((part,index) => ownDocumentFolderPath(doc)[index] === part))
-        .filter(doc => term ? `${employeeArchiveDocumentName(doc)} ${doc.documentType ?? ""}`.toLocaleLowerCase("pt-BR").includes(term) : ownDocumentFolderPath(doc).length === path.length)
-        .map((doc):ArchiveEntry => ({id:doc.id,name:employeeArchiveDocumentName(doc),kind:"file",description:doc.documentType ?? undefined,
-          modified:doc.publishedAt ? new Date(doc.publishedAt).toLocaleDateString("pt-BR") : undefined,
-          modifiedAt:archiveTimestamp(doc.publishedAt),
-          size:doc.size ? `${Math.ceil(doc.size / 1024)} KB` : undefined, sizeBytes:doc.size,
-          open:() => void access(doc,!archivePreviewable(doc.mimeType)),
-          loadPreview:archivePreviewable(doc.mimeType) ? () => void access(doc) : undefined,
-          actions:[{label:"Baixar",run:() => void access(doc,true)},
-            ...(canOrganize ? [{label:"Renomear",run:() => requestOrganization("rename",doc)}] : []),
-            ...(canOrganize && organizationDestinations(doc, visibleDocuments).length ? [{label:"Mover",run:() => requestOrganization("move",doc)}] : [])]})),
-    ];
-  return <><ArchiveExplorer area="published" selectionScope={JSON.stringify([employeeId, path])} hasMorePages={ownLimitReached || cursors.length > 0} entries={entries} search={search} onSearch={setSearch} loading={loading} refreshing={refreshing}
-    error={employeeId && !employee ? "Pasta indisponível para seu acesso atual." : error}
-    breadcrumbs={employee ? [{name:employee.username,open:() => navigate(employeeId)},...path.map((name,index) => ({name,open:() => navigate(employeeId,path.slice(0,index+1))}))] : []}
-    folders={employee ? childFolders.map(name => ({id:name,name,open:() => navigate(employeeId,[...path,name])})) : []}
-    onRoot={() => navigate(null)} onUp={() => path.length ? navigate(employeeId,path.slice(0,-1)) : employeeId ? navigate(null) : router.push("/dashboard/documents")}
-    onRefresh={() => void load(true)} onSelect={() => {fileSequence.current++;setPreview(null);}}
-    footer={employee ? <div className="px-4 pt-3 text-xs text-slate-600">
-      {ownLimitReached && <p role="status">Há mais documentos publicados do que esta consulta exibe. Peça ao DP a conferência dos demais.</p>}
-      {(ownLimitReached || cursors.length > 0) && <p>Busca e ordenação consideram somente as páginas carregadas.</p>}
-      {cursors.length > 0 && <Button type="button" variant="outline" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Carregando…" : "Carregar mais documentos"}</Button>}
-    </div> : null}
-    preview={entry => preview?.id === entry.id ? <ArchivePreview url={preview.url} mime={preview.mime} title={entry.name} /> : <p className="text-xs text-slate-500">{entry.description}</p>} />
+  const tabs = fichaTabs(paths);
+  const activeTab = resolveFichaTab(tabs, path[0]);
+  const groups = activeTab ? fichaGroups(paths, activeTab) : [];
+  const activeGroup = path[1] && groups.some((group) => group.name === path[1]) ? path[1] : null;
+  const rows = visibleDocuments
+    .map((doc) => ({ doc, placement: fichaPlacement(ownDocumentFolderPath(doc)), name: employeeArchiveDocumentName(doc) }))
+    .filter(({ doc, placement, name }) => term
+      ? `${name} ${doc.documentType ?? ""} ${ownDocumentFolderPath(doc).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term)
+      : placement.tab === activeTab && (!activeGroup || placement.group === activeGroup))
+    .sort((left, right) => (archiveTimestamp(right.doc.publishedAt) ?? 0) - (archiveTimestamp(left.doc.publishedAt) ?? 0) || left.name.localeCompare(right.name, "pt-BR", { numeric: true }));
+  const hasMore = ownLimitReached || cursors.length > 0;
+  const selectedDoc = visibleDocuments.find((doc) => doc.id === selectedDocId) ?? null;
+  const pickerPeople = people.filter((person) => person.username.toLocaleLowerCase("pt-BR").includes(pickerSearch.trim().toLocaleLowerCase("pt-BR")));
+
+  function openDocument(doc: PublishedDocument) {
+    setSelectedDocId(doc.id); setPanelOpen(true); setExpanded(false);
+    if (preview?.id === doc.id) return; // reabrir o mesmo documento reaproveita a prévia já carregada
+    fileSequence.current++; setPreview(null);
+    if (archivePreviewable(doc.mimeType)) void access(doc);
+  }
+  const chipClass = (active: boolean) => `inline-flex h-8 items-center gap-1.5 rounded-ds-pill border px-3 text-[12.5px] font-bold ${active ? "border-ds-ink bg-ds-dark text-ds-on-dark" : "border-ds-border bg-ds-surface text-ds-ink-muted hover:bg-ds-muted"}`;
+
+  if (!employee) {
+    return <ArchiveShell tab="ficha">
+      <div className="flex flex-col gap-4 p-4 sm:p-6">
+        <div>
+          <h2 className="text-lg font-extrabold text-ds-ink">Selecione o colaborador</h2>
+          <p className="mt-1 max-w-[68ch] text-[13px] text-ds-ink-muted">A ficha mostra os documentos publicados ou compartilhados com a pessoa: exatamente o que ela vê no portal do colaborador.</p>
+        </div>
+        {employeeId && <p role="alert" className="rounded-ds-md border border-ds-confirm-border bg-ds-confirm-bg p-3 text-sm text-ds-confirm-ink">Ficha indisponível para seu acesso atual.</p>}
+        <div className="relative w-full sm:w-80"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" /><Input aria-label="Buscar colaborador" placeholder="Buscar colaborador…" value={pickerSearch} onChange={(event) => setPickerSearch(event.target.value)} className="h-9 bg-ds-surface pl-8 text-xs" /></div>
+        <div role="group" aria-label="Colaboradores" className="rounded-ds-card border border-ds-border">
+          {pickerPeople.map((person) => <LiftRow key={person.id} aria-label={`Abrir ficha de ${person.username}`} onClick={() => navigate(person.id)} className="flex items-center gap-3">
+            <PersonAvatar name={person.username} avatarUrl={person.avatarUrl} color={person.color} size={36} />
+            <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-bold text-ds-ink">{person.username}</span><span className="block text-[11.5px] text-ds-ink-faint">{person.id === user?.id ? "Minha ficha" : "Documentos publicados"}</span></span>
+            {person.isActive === false && <span className="rounded-ds-pill bg-ds-neutral-bg px-2 py-0.5 text-[11px] font-bold text-ds-neutral">Desligado</span>}
+            <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />
+          </LiftRow>)}
+          {pickerPeople.length === 0 && <p className="m-3 rounded-ds-md border border-dashed border-ds-border p-4 text-center text-[13px] text-ds-ink-muted">Nenhum colaborador encontrado.</p>}
+        </div>
+      </div>
+    </ArchiveShell>;
+  }
+
+  return <><ArchiveShell tab="ficha">
+    <div className="flex flex-wrap items-center gap-4 border-b border-ds-border px-4 py-4 sm:px-6">
+      <PersonAvatar name={employee.username} avatarUrl={employee.avatarUrl} color={employee.color} size={48} />
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-lg font-extrabold text-ds-ink">{employee.username}</h2>
+        <p className="text-[12.5px] text-ds-ink-muted">{own ? "Seus documentos publicados" : "O que o colaborador vê no portal"} · {visibleDocuments.length} {visibleDocuments.length === 1 ? "documento" : "documentos"}{(ownLimitReached || cursors.length > 0) ? " carregados" : ""}{employee.isActive === false ? " · Desligado" : ""}</p>
+      </div>
+      {canViewTeam && people.length > 1 && <label className="flex items-center gap-2 text-[12px] font-bold text-ds-ink-2">Colaborador
+        <select aria-label="Trocar colaborador" value={employee.id} onChange={(event) => navigate(event.target.value || null)} className="h-9 max-w-[220px] rounded-ds-sm border border-ds-border-input bg-ds-surface px-2 text-xs font-semibold text-ds-ink">
+          {people.map((person) => <option key={person.id} value={person.id}>{person.username}{person.isActive === false ? " (desligado)" : ""}</option>)}
+        </select>
+      </label>}
+      <Button size="icon" variant="ds-ghost" aria-label="Atualizar ficha" disabled={loading || refreshing} onClick={() => void load(true)}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /></Button>
+    </div>
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ds-border px-4 sm:px-6">
+      <nav aria-label="Pastas da ficha" className="-mb-px flex gap-1 overflow-x-auto">
+        {tabs.map((tab) => <button key={tab.name} type="button" aria-current={!term && tab.name === activeTab ? "page" : undefined} onClick={() => { setSearch(""); navigate(employee.id, [tab.name]); }}
+          className={`inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[13px] font-bold ${!term && tab.name === activeTab ? "border-ds-accent text-ds-ink" : "border-transparent text-ds-ink-muted hover:text-ds-ink"}`}>
+          {tab.name}<span className="font-ds-mono text-[11px] font-semibold text-ds-ink-faint">{tab.count}</span>
+        </button>)}
+      </nav>
+      <div className="relative mb-2 w-full sm:w-60"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" /><Input aria-label="Buscar na ficha" placeholder="Buscar na ficha…" value={search} onChange={(event) => setSearch(event.target.value)} className="h-9 bg-ds-surface pl-8 text-xs" /></div>
+    </div>
+    <main aria-label="Documentos da ficha" className="min-w-0">
+      {error && <p role="alert" className="m-3 rounded-ds-md border border-ds-confirm-border bg-ds-confirm-bg p-3 text-sm text-ds-confirm-ink">{error}</p>}
+      {!term && groups.length > 0 && <div role="group" aria-label="Subpastas" className="flex flex-wrap gap-2 px-4 pt-3 sm:px-6">
+        <button type="button" aria-pressed={!activeGroup} onClick={() => activeTab && navigate(employee.id, [activeTab])} className={chipClass(!activeGroup)}>Todas</button>
+        {groups.map((group) => <button key={group.name} type="button" aria-pressed={activeGroup === group.name} onClick={() => activeTab && navigate(employee.id, [activeTab, group.name])} className={chipClass(activeGroup === group.name)}>{group.name}<span className="opacity-70">{group.count}</span></button>)}
+      </div>}
+      {loading ? <div role="status" className="grid min-h-64 place-items-center"><Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-ds-ink-muted" /><span className="sr-only">Carregando ficha</span></div> : <div className="px-0 pt-3">
+        {rows.length > 0 && <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-y border-ds-border bg-ds-muted px-[18px] py-2 text-[10.5px] font-extrabold uppercase tracking-[0.08em] text-ds-ink-faint md:grid-cols-[minmax(0,1fr)_220px_110px_80px]">
+          <span>Documento</span><span className="hidden md:block">Pasta</span><span className="hidden md:block">Publicado em</span><span className="hidden md:block">Tamanho</span>
+        </div>}
+        <div role="group" aria-label="Documentos publicados">
+          {rows.map(({ doc, name }) => {
+            const folder = ownDocumentFolderPath(doc);
+            const where = term ? folder.join(" › ") : folder.slice(1).join(" › ");
+            return <LiftRow key={doc.id} id={"ficha-doc-" + encodeURIComponent(doc.id)} aria-label={`Arquivo: ${name}`} table selected={panelOpen && selectedDocId === doc.id} onClick={() => openDocument(doc)}
+              className="grid grid-cols-[minmax(0,1fr)] items-center gap-3 md:grid-cols-[minmax(0,1fr)_220px_110px_80px]">
+              <span className="flex min-w-0 items-center gap-3"><ArchiveEntryIcon entry={{ kind: "file", name: doc.originalName || name, mimeType: doc.mimeType }} className="h-5 w-5" />
+                <span className="min-w-0"><span className="block break-words text-[13px] font-semibold text-ds-ink">{name}</span>{doc.documentType && <span className="mt-0.5 block truncate text-[11.5px] text-ds-ink-faint">{doc.documentType}</span>}</span></span>
+              <span className="hidden truncate text-[12px] text-ds-ink-muted md:block">{where || "—"}</span>
+              <span className="hidden text-[12px] tabular-nums text-ds-ink-muted md:block">{doc.publishedAt ? new Date(doc.publishedAt).toLocaleDateString("pt-BR") : "—"}</span>
+              <span className="hidden text-[12px] tabular-nums text-ds-ink-muted md:block">{doc.size ? `${Math.ceil(doc.size / 1024)} KB` : "—"}</span>
+            </LiftRow>;
+          })}
+        </div>
+        {rows.length === 0 && !error && <p className="m-4 rounded-ds-md border border-dashed border-ds-border p-6 text-center text-[13px] text-ds-ink-muted sm:mx-6">{term ? "Nenhum documento encontrado na ficha." : visibleDocuments.length === 0 ? (hasMore ? "Nenhum documento nas páginas carregadas." : "Nenhum documento publicado para este colaborador.") : "Nenhum documento nesta pasta."}</p>}
+      </div>}
+      <div className="space-y-2 px-4 py-3 text-xs text-ds-ink-muted sm:px-6">
+        {ownLimitReached && <p role="status">Há mais documentos publicados do que esta consulta exibe. Peça ao DP a conferência dos demais.</p>}
+        {hasMore && <p>Busca e abas consideram somente as páginas carregadas.</p>}
+        {cursors.length > 0 && <Button type="button" variant="ds-secondary" size="xs" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Carregando…" : "Carregar mais documentos"}</Button>}
+        <p className="text-[11px] text-ds-ink-faint">Clique num documento para ver a prévia e as ações.</p>
+      </div>
+    </main>
+  </ArchiveShell>
+    <SidePanel open={panelOpen && Boolean(selectedDoc)} onOpenChange={setPanelOpen} kicker="Documento publicado"
+      title={selectedDoc ? employeeArchiveDocumentName(selectedDoc) : "Documento"} subtitle={selectedDoc?.documentType ?? undefined}>
+      {selectedDoc && <>
+        <div role="region" aria-label="Prévia e detalhes" className="flex flex-col gap-3">
+          {preview?.id === selectedDoc.id ? <ArchivePreview url={preview.url} mime={preview.mime} title={employeeArchiveDocumentName(selectedDoc)} />
+            : archivePreviewable(selectedDoc.mimeType) ? <p className="text-xs text-ds-ink-muted">Carregando a prévia…</p> : <p className="text-xs text-ds-ink-muted">Este formato não tem prévia. Use Baixar.</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <PanelField label="Pasta">{ownDocumentFolderPath(selectedDoc).join(" › ") || "—"}</PanelField>
+          <PanelField label="Publicado em">{selectedDoc.publishedAt ? new Date(selectedDoc.publishedAt).toLocaleDateString("pt-BR") : "—"}</PanelField>
+          {selectedDoc.size ? <PanelField label="Tamanho">{`${Math.ceil(selectedDoc.size / 1024)} KB`}</PanelField> : null}
+          <PanelField label="Visível para">{own ? "Você" : employee.username}</PanelField>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {archivePreviewable(selectedDoc.mimeType) && <Button variant="ds-secondary" size="md" disabled={preview?.id !== selectedDoc.id} onClick={() => { setPanelOpen(false); setExpanded(true); }}>Ampliar prévia</Button>}
+          <Button variant="ds-secondary" size="md" onClick={() => void access(selectedDoc, true)}>Baixar</Button>
+          {canOrganize && <Button variant="ds-secondary" size="md" onClick={() => { setPanelOpen(false); requestOrganization("rename", selectedDoc); }}>Renomear</Button>}
+          {canOrganize && organizationDestinations(selectedDoc, visibleDocuments).length > 0 && <Button variant="ds-secondary" size="md" onClick={() => { setPanelOpen(false); requestOrganization("move", selectedDoc); }}>Mover</Button>}
+        </div>
+      </>}
+    </SidePanel>
+    <Dialog open={expanded && Boolean(selectedDoc) && preview?.id === selectedDoc?.id} onOpenChange={setExpanded}><DialogContent className="flex max-h-[90vh] max-w-[min(1000px,95vw)] sm:max-w-[min(1000px,95vw)] flex-col overflow-auto"><DialogHeader><DialogTitle className="break-words">{selectedDoc ? employeeArchiveDocumentName(selectedDoc) : "Documento"}</DialogTitle></DialogHeader>{selectedDoc && preview?.id === selectedDoc.id && <ArchivePreview url={preview.url} mime={preview.mime} title={employeeArchiveDocumentName(selectedDoc)} />}</DialogContent></Dialog>
     <ArchiveDocumentOrganizationDialog mode={organizationMode} target={organizationTarget} onClose={() => { setOrganizationMode(null); setOrganizationTarget(null); }} onSave={saveOrganization} />
   </>;
 }
