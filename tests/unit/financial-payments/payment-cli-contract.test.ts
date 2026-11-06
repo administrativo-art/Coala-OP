@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
 
 const order = {
   sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_1", expenseId: "expense_1",
@@ -167,4 +167,30 @@ test("guia pública íntegra dispensa o CNPJ; outros códigos continuam exigindo
   assert.doesNotThrow(() => validatePaymentCliAction({ request, action: "authorize", ...action }));
   assert.throws(() => validatePaymentCliAction({ request: { ...request, sourceType: "expense_boleto", sourceId: "expense_darf" }, action: "authorize", ...action }));
   assert.throws(() => validatePaymentCliAction({ request, action: "authorize", ...action, beneficiaryDocument: "12345678000195" }));
+});
+
+test("Pix copia e cola da guia FGTS: prepara, autoriza e envia somente a ordem exata", () => {
+  const pix = "00020101021226900014br.gov.bcb.pix2568pix-qrcode.caixa.gov.br/api/v2/cobv/7848581fcaea42e993a4208953e6c5cb5204000053039865802BR5923CAIXA ECONOMICA FEDERAL6008Brasilia62070503***6304DC8A";
+  const message = {
+    id: "inbox_fgts", status: "linked", linkedExpenseId: "expense_fgts", paymentRequestId: null,
+    classification: { documentType: "fgts", fiscalIdentity: { documentKind: "fgts" }, amountCents: 378507, dueDate: "2026-11-19" },
+    existingBankPayment: null, existingSettlement: null,
+  };
+  const preparation = { message, inboxMessageId: "inbox_fgts", amountCents: 378507, scheduledFor: "2026-11-19", expenseId: "expense_fgts", pixPayload: pix };
+  const parsed = validatePaymentCliPixPreparation(preparation);
+  assert.match(parsed.payloadHash, /^[0-9a-f]{64}$/);
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, scheduledFor: "2026-11-20" }));
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, pixPayload: `${pix.slice(0, -4)}0000` }));
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, message: { ...message, classification: { ...message.classification, documentType: "inss_darf" } } }));
+
+  const request = { sourceType: "financial_inbox", paymentRail: "pix_copy_paste", sourceId: "inbox_fgts", expenseId: "expense_fgts",
+    amount: 3785.07, status: "awaiting_financial_authorization",
+    pixCopyPasteSnapshot: { payloadHash: parsed.payloadHash, scheduledFor: "2026-11-19" } };
+  const action = { amountCents: 378507, scheduledFor: "2026-11-19", expenseId: "expense_fgts", pixPayloadSha256: parsed.payloadHash };
+  assert.doesNotThrow(() => validatePaymentCliPixAction({ request, action: "authorize", ...action }));
+  assert.doesNotThrow(() => validatePaymentCliPixAction({ request: { ...request, status: "ready_to_submit" }, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request: { ...request, status: "ready_to_submit", submissionStartedAt: "x" }, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request, action: "authorize", ...action, pixPayloadSha256: "0".repeat(64) }));
+  assert.throws(() => validatePaymentCliPixAction({ request: { ...request, paymentRail: "barcode" }, action: "authorize", ...action }));
 });

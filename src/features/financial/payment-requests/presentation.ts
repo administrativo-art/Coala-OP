@@ -108,6 +108,8 @@ export function paymentSchedulePresentation(item: BankPaymentRequest, now = new 
     label: item.status === "scheduled" ? "Agendado para" : "Pagamento previsto",
     date,
     timing,
-    dueDate: item.paymentRail === "barcode" ? formatFinancialDate(item.barcodeSnapshot?.dueDate) : null,
+    dueDate: item.paymentRail === "barcode"
+      ? formatFinancialDate(item.barcodeSnapshot?.dueDate)
+      : item.paymentRail === "pix_copy_paste" ? formatFinancialDate(item.pixCopyPasteSnapshot?.dueDate) : null,
   };
 }
