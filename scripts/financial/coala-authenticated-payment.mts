@@ -14,6 +14,7 @@ import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-co
 import { mainPaymentLookupQuery, summarizeMainPaymentLookup } from "./payment-cli-main-query-contract";
 import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJson } from "./payment-cli-transport";
 import { startMemorySessionServer, tokenFromMemorySession } from "./payment-cli-memory-session";
+import { readHiddenPassword, setTerminalEcho } from "./payment-cli-password";
 import { expenseBoletoSchema, validateExpenseBoleto } from "../../src/features/financial/payment-requests/expense-boleto";
 import {
   assertPurchaseSnapshot,
@@ -82,31 +83,7 @@ Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação fina
 }
 
 async function hiddenPassword() {
-  if (!stdin.isTTY || !stdin.setRawMode) throw new PaymentCliError("Execute login em um terminal interativo.");
-  stdout.write("Senha do Coala (não será exibida): ");
-  const previousRaw = stdin.isRaw;
-  stdin.setRawMode(true);
-  stdin.resume();
-  return new Promise<string>((resolve, reject) => {
-    let value = "";
-    const finish = (error?: Error) => {
-      stdin.off("data", onData);
-      stdin.setRawMode(previousRaw);
-      stdin.pause();
-      stdout.write("\n");
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const onData = (chunk: Buffer) => {
-      for (const character of chunk.toString("utf8")) {
-        if (character === "\r" || character === "\n") return finish();
-        if (character === "\u0003") return finish(new PaymentCliError("Login cancelado."));
-        if (character === "\u007f") value = value.slice(0, -1);
-        else if (character >= " ") value += character;
-      }
-    };
-    stdin.on("data", onData);
-  });
+  return readHiddenPassword({ input: stdin, output: stdout, setEcho: setTerminalEcho });
 }
 
 async function loginEmail() {
