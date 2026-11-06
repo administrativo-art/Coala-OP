@@ -725,7 +725,8 @@ async function reconcileExpectedBankDebit(params: {
         && paymentRequest.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE");
     if (
       paymentRequest.expenseId !== params.expected.expenseId
-      || paymentRequest.paymentRail !== "barcode"
+      || (paymentRequest.paymentRail !== "barcode"
+        && !(paymentRequest.paymentRail === "pix_copy_paste" && paymentRequest.sourceType === "financial_inbox"))
       || (paymentRequest.sourceType === "financial_inbox"
         ? paymentRequest.sourceId !== params.expected.financialInboxMessageId
         : paymentRequest.sourceId !== params.expected.expenseId || Boolean(params.expected.financialInboxMessageId))
@@ -752,7 +753,9 @@ async function reconcileExpectedBankDebit(params: {
       cashAmount: cash,
       expectedAmount: params.expected.amount,
       bankSettlementAmount: paymentRequest.bankSettlementAmount,
-      dueDate: paymentRequest.barcodeSnapshot.dueDate,
+      dueDate: paymentRequest.paymentRail === "pix_copy_paste"
+        ? paymentRequest.pixCopyPasteSnapshot.dueDate
+        : paymentRequest.barcodeSnapshot.dueDate,
       paidOn: params.entry.date,
     });
     if (settlementObservation.divergence === "expected_amount") {

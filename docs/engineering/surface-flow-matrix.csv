@@ -238,6 +238,7 @@ api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/finan
 api,src/app/api/financial/inbox/[id]/files/[fileId]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/link/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/payment/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/inbox/[id]/pix-payment/route.ts,,docs/engineering/flows/payment-requests.md,Prepara Pix copia e cola da guia FGTS Digital; contrato secureRoute.
 api,src/app/api/financial/inbox/[id]/restore/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/bulk-review/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
