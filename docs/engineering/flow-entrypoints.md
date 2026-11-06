@@ -723,7 +723,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
 
-Arquivos locais percorridos: 44.
+Arquivos locais percorridos: 45.
 
 Chamadas candidatas encontradas:
 
