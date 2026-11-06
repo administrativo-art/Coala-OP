@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **548 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **562 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -105,6 +105,19 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/company/folder` | POST | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/intake` | POST, PATCH | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company/units` | GET | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) | [company-documents](flows/company-documents.md) |
+| `/api/documents/editor` | GET, POST | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/[id]` | GET | [src/app/api/documents/editor/[id]/route.ts](../../src/app/api/documents/editor/%5Bid%5D/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/[id]/content` | PUT | [src/app/api/documents/editor/[id]/content/route.ts](../../src/app/api/documents/editor/%5Bid%5D/content/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/[id]/file` | GET | [src/app/api/documents/editor/[id]/file/route.ts](../../src/app/api/documents/editor/%5Bid%5D/file/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/[id]/finalize` | POST | [src/app/api/documents/editor/[id]/finalize/route.ts](../../src/app/api/documents/editor/%5Bid%5D/finalize/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/[id]/preview` | POST | [src/app/api/documents/editor/[id]/preview/route.ts](../../src/app/api/documents/editor/%5Bid%5D/preview/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates` | GET, POST | [src/app/api/documents/editor/templates/route.ts](../../src/app/api/documents/editor/templates/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]` | GET | [src/app/api/documents/editor/templates/[tid]/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]/archive` | POST | [src/app/api/documents/editor/templates/[tid]/archive/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/archive/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]/content` | PUT | [src/app/api/documents/editor/templates/[tid]/content/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/content/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]/preview` | POST | [src/app/api/documents/editor/templates/[tid]/preview/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/preview/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]/publish` | POST | [src/app/api/documents/editor/templates/[tid]/publish/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/publish/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/editor/templates/[tid]/use` | POST | [src/app/api/documents/editor/templates/[tid]/use/route.ts](../../src/app/api/documents/editor/templates/%5Btid%5D/use/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generate` | POST | [src/app/api/documents/generate/route.ts](../../src/app/api/documents/generate/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated` | GET | [src/app/api/documents/generated/route.ts](../../src/app/api/documents/generated/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]` | POST, PATCH, DELETE | [src/app/api/documents/generated/[id]/route.ts](../../src/app/api/documents/generated/%5Bid%5D/route.ts) | [document-generation](flows/document-generation.md) |
@@ -380,6 +393,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/hr/employee-documents/cleanup` | POST | [src/app/api/hr/employee-documents/cleanup/route.ts](../../src/app/api/hr/employee-documents/cleanup/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/confirm` | POST | [src/app/api/hr/employee-documents/confirm/route.ts](../../src/app/api/hr/employee-documents/confirm/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/item` | PATCH | [src/app/api/hr/employee-documents/item/route.ts](../../src/app/api/hr/employee-documents/item/route.ts) | [employee-documents](flows/employee-documents.md) |
+| `/api/hr/employee-documents/organization` | POST | [src/app/api/hr/employee-documents/organization/route.ts](../../src/app/api/hr/employee-documents/organization/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/publication` | POST | [src/app/api/hr/employee-documents/publication/route.ts](../../src/app/api/hr/employee-documents/publication/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/publication-policy` | GET, PUT | [src/app/api/hr/employee-documents/publication-policy/route.ts](../../src/app/api/hr/employee-documents/publication-policy/route.ts) | [employee-documents](flows/employee-documents.md) |
 | `/api/hr/employee-documents/reanalyze` | POST | [src/app/api/hr/employee-documents/reanalyze/route.ts](../../src/app/api/hr/employee-documents/reanalyze/route.ts) | [employee-documents](flows/employee-documents.md) |

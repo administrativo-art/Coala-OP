@@ -69,34 +69,34 @@ describe("resolveDocumentProcess", () => {
 });
 
 describe("taxonomia híbrida de pastas", () => {
-  test("identificação usa agrupamento fixo por natureza", () => {
+  test("identificação deixa documentos nomeados diretamente na categoria", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "personal",
       documentTypeCode: "ADDRESS_PROOF",
       documentTypeLabel: "Comprovante de residência",
       destinationTrail: ["Identificação", "Comprovante de residência"],
-    }), ["Documentos pessoais"]);
+    }), []);
   });
 
-  test("CTPS e PIS ficam em documentos pessoais", () => {
+  test("CTPS e PIS não criam subpastas redundantes", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "personal",
       documentTypeCode: "WORK_CARD",
       documentTypeLabel: "Carteira de trabalho",
-    }), ["Documentos pessoais"]);
+    }), []);
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "personal",
       documentTypeCode: "PIS_PASEP",
       documentTypeLabel: "PIS/PASEP",
-    }), ["Documentos pessoais"]);
+    }), []);
   });
 
-  test("contratos ficam diretamente na pasta Contrato de Admissão", () => {
+  test("admissão não cria subpastas porque os arquivos já são nomeados", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "admission",
       documentTypeCode: "PROBATION_CONTRACT",
       documentTypeLabel: "Contrato de experiência",
-    }), ["Contrato"]);
+    }), []);
   });
 
   test("prestação de serviços não é tratada como admissão e separa contrato, aditivos e histórico PF", () => {
@@ -117,40 +117,55 @@ describe("taxonomia híbrida de pastas", () => {
     }), ["Histórico PF", "Contrato principal"]);
   });
 
-  test("recibos e pagamentos de férias compartilham a mesma pasta", () => {
+  test("férias sem período confiável não cria pasta por tipo", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "vacations",
       documentTypeCode: "VACATION_RECEIPT",
       documentTypeLabel: "Recibo de férias",
-    }), ["Recibos e pagamentos"]);
+    }), []);
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "vacations",
       documentTypeCode: "VACATION_PAYMENT",
       documentTypeLabel: "Pagamento de férias",
-    }), ["Recibos e pagamentos"]);
+    }), []);
   });
 
-  test("escala e hora extra legadas são consolidadas no espelho de ponto", () => {
-    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Escala de trabalho" }), ["Espelhos de ponto"]);
-    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Horas extras" }), ["Espelhos de ponto"]);
+  test("fechamento legado sem competência fica diretamente na categoria", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Escala de trabalho" }), []);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Horas extras" }), []);
   });
 
-  test("remuneração organiza processo antes da natureza", () => {
+  test("remuneração entra no fechamento mensal somente por ano e mês", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "remuneration",
       documentTypeCode: "PAYSLIP",
       documentTypeLabel: "Contracheque",
       destinationTrail: ["Remuneração", "2026", "Julho", "Contracheque"],
-    }), ["2026", "Julho", "Contracheques"]);
+    }), ["2026", "Julho"]);
   });
 
-  test("férias preserva período e parcela antes do tipo", () => {
+  test("afastamentos usam somente ano e mês extraídos do período", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "leaves",
+      documentTypeCode: "MEDICAL_CERTIFICATE",
+      documentTypeLabel: "Atestado médico",
+      destinationTrail: ["Afastamentos", "Afastamento 13/08/2026 a 15/08/2026", "Atestado"],
+    }), ["2026", "Agosto"]);
+  });
+
+  test("férias termina a navegação na parcela porque o arquivo já identifica o tipo", () => {
     assert.deepEqual(resolveEmployeeDocumentFolderPath({
       category: "vacations",
       documentTypeCode: "VACATION_NOTICE",
       documentTypeLabel: "Aviso de férias",
       destinationTrail: ["Férias", "Período aquisitivo 2025-2026", "Parcela 01", "Aviso de férias"],
-    }), ["Período aquisitivo 2025-2026", "Parcela 01", "Avisos"]);
+    }), ["Período aquisitivo 2025-2026", "Parcela 01"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "vacations",
+      documentTypeCode: "VACATION_RECEIPT",
+      documentTypeLabel: "Recibo de férias",
+      destinationTrail: ["Férias", "Período aquisitivo 2025-2026", "Parcela 01", "Recibo de férias"],
+    }), ["Período aquisitivo 2025-2026", "Parcela 01"]);
   });
 });
 

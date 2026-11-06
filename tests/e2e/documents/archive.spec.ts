@@ -12,11 +12,15 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   const bytes = Buffer.from(await pdf.save());
   const accesses: Array<{ id: string; action: string }> = [];
   const ownAccesses: Array<{ id: string; action: string }> = [];
+  const organizationCalls: Array<Record<string, unknown>> = [];
+  let ownListCalls = 0;
   let deleteCalls = 0;
-  await page.route("**/api/collaborator/documents", (route) => route.fulfill({ json: { documents: [
+  await page.route("**/api/collaborator/documents", (route) => { ownListCalls++; return route.fulfill({ json: { documents: [
     {id:"published-kit-e2e",displayName:"Kit publicado de teste",documentType:"Kit admissional",documentTypeCode:"ADMISSION_PACKAGE",category:"admission",destinationTrail:[],mimeType:"application/pdf",publishedAt:"2026-11-03T12:00:00.000Z"},
-  ],folderProfile:{folders:[]} } }));
+    {id:"published-vacation-e2e",displayName:"Aviso publicado",documentType:"Aviso de férias",documentTypeCode:"VACATION_NOTICE",category:"vacations",destinationTrail:["Férias","Período aquisitivo 2025-2026","Parcela 01","Aviso de férias"],archivePath:["Férias","Conferência"],mimeType:"application/pdf",publishedAt:"2026-11-04T12:00:00.000Z"},
+  ],folderProfile:{folders:[]} } }); });
   await page.route("**/api/collaborator/documents/access", async (route) => { ownAccesses.push(route.request().postDataJSON()); await route.fulfill({ contentType:"application/pdf", body:bytes }); });
+  await page.route("**/api/hr/employee-documents/organization", async (route) => { organizationCalls.push(route.request().postDataJSON()); await route.fulfill({ json: { document: { ok: true } } }); });
   await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [
     { id: "archive-company-e2e", title: "Contrato da unidade", category: "Contratos", status: "active", originalName: "original.pdf", standardizedName: "CONTRATO__UNIDADE-001__v01.pdf", mimeType: "application/pdf", size: bytes.length, uploadedAt: "2026-11-02T12:00:00.000Z" },
     { id: "archive-company-second-e2e", title: "Aditivo da unidade", category: "Contratos", status: "active", originalName: "aditivo.pdf", mimeType: "application/pdf", size: bytes.length + 1000, uploadedAt: "2026-11-01T12:00:00.000Z" },
@@ -36,22 +40,24 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await expect(page.getByRole("navigation", { name: "Documentos", exact: true })).toHaveCount(0);
   await expect(contents.getByRole("button", { name: /^Pasta:/ })).toHaveCount(2);
   const names = () => contents.getByRole("button", { name: /^Pasta:/ }).evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label")));
-  expect(await names()).toEqual(["Pasta: Documentos dos colaboradores", "Pasta: Empresa"]);
+  expect(await names()).toEqual(["Pasta: Colaboradores", "Pasta: Empresa"]);
+  await expect(page.getByRole("button", { name: "Modificado", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Tamanho", exact: true })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Ordenar documentos" }).selectOption("title-desc");
-  expect(await names()).toEqual(["Pasta: Empresa", "Pasta: Documentos dos colaboradores"]);
+  expect(await names()).toEqual(["Pasta: Empresa", "Pasta: Colaboradores"]);
   await page.getByRole("button", { name: "Título", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Ordenar documentos" })).toHaveValue("title-asc");
   await page.getByRole("textbox", { name: "Buscar nesta pasta" }).fill("Empresa");
   await expect(contents.getByRole("button", { name: /^Pasta:/ })).toHaveCount(1);
   await page.getByRole("textbox", { name: "Buscar nesta pasta" }).clear();
-  await page.getByRole("button", { name: "Pasta: Documentos dos colaboradores", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Pasta: Colaboradores", exact: true }).press("Enter");
   await expect(page).toHaveURL(/\/dashboard\/documents\/published$/, {timeout:90_000});
   await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: Admissão", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Pasta: Cadastro e registro", exact: true }).dblclick();
   const publishedFile = page.getByRole("button", { name: "Arquivo: Kit publicado de teste", exact: true });
   await publishedFile.click();
   await expect(page.getByRole("complementary", { name: "Prévia e detalhes" }).getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
+  const settledOwnListCalls = ownListCalls;
   expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await publishedFile.dblclick();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Kit publicado de teste" })).toHaveAttribute("data-rendered", "true");
@@ -60,6 +66,27 @@ test("Acervo mantém o explorador ao abrir pastas, arquivos e modelos", async ({
   await page.screenshot({ path: testInfo.outputPath("acervo-leitura-ampliada.png"), fullPage: true });
   expect(ownAccesses.filter(call => call.action === "view")).toHaveLength(1);
   await page.getByRole("dialog").press("Escape");
+  expect(ownListCalls).toBe(settledOwnListCalls);
+  expect(settledOwnListCalls).toBeLessThanOrEqual(2); // React Strict Mode pode repetir somente a montagem inicial.
+  await publishedFile.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Renomear", exact: true }).click();
+  await page.getByLabel("Nome no Acervo").fill("Kit publicado conferido");
+  await page.getByRole("button", { name: "Salvar nome", exact: true }).click();
+  const renamedPublishedFile = page.getByRole("button", { name: "Arquivo: Kit publicado conferido", exact: true });
+  await expect(renamedPublishedFile).toBeVisible();
+  await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Administrador E2E", exact: true }).click();
+  await page.getByRole("button", { name: "Pasta: Férias", exact: true }).dblclick();
+  await page.getByRole("button", { name: "Pasta: Conferência", exact: true }).dblclick();
+  const vacationFile = page.getByRole("button", { name: "Arquivo: Aviso publicado", exact: true });
+  await vacationFile.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mover", exact: true }).click();
+  await page.getByLabel("Pasta de destino").selectOption(JSON.stringify(["Férias", "Período aquisitivo 2025-2026", "Parcela 01"]));
+  await page.getByRole("button", { name: "Mover documento", exact: true }).click();
+  await expect(vacationFile).toBeVisible();
+  expect(organizationCalls).toEqual([
+    { ids: ["published-kit-e2e"], action: "rename", name: "Kit publicado conferido", expectedName: "Kit publicado de teste" },
+    { ids: ["published-vacation-e2e"], action: "move", path: ["Férias", "Período aquisitivo 2025-2026", "Parcela 01"], expectedPath: ["Férias", "Conferência"] },
+  ]);
   await page.getByRole("navigation", { name: "Árvore de pastas" }).getByRole("link", { name: "Acervo", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: Empresa", exact: true }).dblclick();
   await expect(page).toHaveURL(/\/dashboard\/documents\/company$/, { timeout: 90_000 });
@@ -172,13 +199,11 @@ test("Colaboradores e Financeiro institucional mantêm pastas e arquivos no expl
   await expect(page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true })).toBeVisible({ timeout: 180_000 });
   await page.getByRole("button", { name: "Pasta: Administrador E2E", exact: true }).dblclick();
   await page.getByRole("button", { name: "Pasta: Identificação", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Pasta: Documentos pessoais", exact: true }).dblclick();
   await page.getByRole("button", { name: "Arquivo: Identidade de teste", exact: true }).dblclick();
   await expect(page.getByRole("dialog").getByRole("img", { name: "Prévia de Identidade de teste" })).toHaveAttribute("data-rendered", "true");
   await page.getByRole("dialog").press("Escape");
   await page.getByRole("navigation", { name: "Caminho da pasta" }).getByRole("button", { name: "Administrador E2E", exact: true }).click();
   await page.getByRole("button", { name: "Pasta: Admissão", exact: true }).dblclick();
-  await page.getByRole("button", { name: "Pasta: Cadastro e registro", exact: true }).dblclick();
   await expect(page.getByRole("button", { name: "Arquivo: Kit admissional assinado", exact: true })).toHaveCount(1);
   await page.getByRole("button", { name: "Arquivo: Kit admissional assinado", exact: true }).dblclick();
   await page.getByRole("dialog").press("Escape");
@@ -244,8 +269,9 @@ test("perfil comum vê só a pasta própria publicada e baixa com o nome da orig
     await expect(page.getByRole("navigation",{name:"Árvore de pastas"}).getByRole("link",{name:"Empresa",exact:true})).toHaveCount(0);
     await page.getByRole("button",{name:"Pasta: Colaboradora Comum E2E",exact:true}).press("Enter");
     await page.getByRole("button",{name:"Pasta: Admissão",exact:true}).press("Enter");
-    await page.getByRole("button",{name:"Pasta: Cadastro e registro",exact:true}).press("Enter");
     await page.getByRole("button",{name:"Arquivo: Kit comum",exact:true}).click({button:"right"});
+    await expect(page.getByRole("menuitem",{name:"Renomear",exact:true})).toHaveCount(0);
+    await expect(page.getByRole("menuitem",{name:"Mover",exact:true})).toHaveCount(0);
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("menuitem",{name:"Baixar",exact:true}).click();
     assert.equal((await downloadPromise).suggestedFilename(),"KIT-CANONICO.pdf");

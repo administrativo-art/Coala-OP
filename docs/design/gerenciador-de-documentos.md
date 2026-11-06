@@ -1,5 +1,9 @@
 # Gerenciador de documentos
 
+Implementado na área publicada em 05/11/2026: o DP autorizado usa `Renomear` e `Mover` sobre metadados próprios da projeção (`archiveName`/`archivePath`), com conferência/auditoria no servidor; o titular comum permanece somente leitura. A ação não altera o artefato canônico. As demais origens continuam oferecendo apenas as capacidades explicitamente documentadas em seus contratos.
+
+Taxonomia visual aprovada em 05/11/2026: a pasta da pessoa evita repetir categoria e subpasta. **Identificação**, **Admissão**, **Benefícios**, **Uniformes e EPIs**, **Treinamentos**, **Desligamento** e **Ocorrências e medidas disciplinares** recebem arquivos diretamente. **Férias** conserva somente `Período aquisitivo → Parcela`. **Fechamento do mês** reúne as projeções canônicas de Jornada/Ponto e Remuneração em `Ano → Mês`. **Afastamentos** usa `Ano → Mês`; o arquivo começa pelo período e termina no tipo. Saúde ocupacional conserva ASOs, exames complementares e outros, mas cada ASO explicita finalidade e data. Perfis de pasta antigos são projetados nessa estrutura sem mover bytes nem reclassificar registros.
+
 Decisão posterior de 02/11/2026: a raiz do Acervo contém Empresa. **12 - Colaboradores** fica dentro de Empresa; nomes de pessoas e suas subpastas continuam sem números. Essa organização reúne arquivos internos sem mudar fonte ou acesso e substitui a árvore Empresa/Colaboradores descrita anteriormente. O portal do titular continua dependente de publicação explícita ou da política já configurada.
 
 O gerenciador pode reproduzir as interações familiares de pastas de um computador sem expor a estrutura física do armazenamento. A árvore exibida é uma camada de organização; mover um item altera metadados de organização e auditoria, não o caminho privado do arquivo no Storage, sua política de acesso, categoria legal, retenção ou histórico de versões.
@@ -26,6 +30,9 @@ Acervo não copia arquivos para uma coleção central. As telas centrais usam re
 Toda ação do menu precisa ter equivalente visível e acessível. O menu de contexto é atalho, nunca o único caminho para uma operação.
 
 ## Regras de pasta
+
+- O nome da categoria não se repete como subpasta. Uma subpasta só existe quando acrescenta contexto de processo ou tempo que vários documentos realmente compartilham.
+- Nomes de afastamento usam `DD/MM/AAAA [a DD/MM/AAAA] — Tipo`; ocorrências disciplinares usam `DD/MM/AAAA — Tipo`; ASOs usam `ASO finalidade — DD/MM/AAAA`. “Contrato de experiência” é apresentado no Acervo como “Contrato de trabalho”, sem alterar o tipo canônico nem o download.
 
 - **Documentos da empresa → Sistemas e conformidade → Regularidade do sistema de registro de ponto** reúne artefatos de regularidade técnica do REP-P; comprovantes individuais e espelhos de jornada pertencem a fluxos próprios. A existência de um arquivo nessa pasta não certifica conformidade legal.
 

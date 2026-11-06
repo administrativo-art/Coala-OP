@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **548**
-- Totalmente contratados: **218**
+- Arquivos de rota: **562**
+- Totalmente contratados: **232**
 - Legados congelados: **320**
 - Exceções temporárias: **10**
 - Violações: **0**
@@ -82,6 +82,19 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/company/folder` | POST ✓ | `CONTRACTED` | [src/app/api/documents/company/folder/route.ts](../../src/app/api/documents/company/folder/route.ts) |
 | `/api/documents/company/intake` | PATCH ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/company/intake/route.ts](../../src/app/api/documents/company/intake/route.ts) |
 | `/api/documents/company/units` | GET ✓ | `CONTRACTED` | [src/app/api/documents/company/units/route.ts](../../src/app/api/documents/company/units/route.ts) |
+| `/api/documents/editor` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/route.ts](../../src/app/api/documents/editor/route.ts) |
+| `/api/documents/editor/[id]` | GET ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/route.ts](../../src/app/api/documents/editor/[id]/route.ts) |
+| `/api/documents/editor/[id]/content` | PUT ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/content/route.ts](../../src/app/api/documents/editor/[id]/content/route.ts) |
+| `/api/documents/editor/[id]/file` | GET ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/file/route.ts](../../src/app/api/documents/editor/[id]/file/route.ts) |
+| `/api/documents/editor/[id]/finalize` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/finalize/route.ts](../../src/app/api/documents/editor/[id]/finalize/route.ts) |
+| `/api/documents/editor/[id]/preview` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/[id]/preview/route.ts](../../src/app/api/documents/editor/[id]/preview/route.ts) |
+| `/api/documents/editor/templates` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/route.ts](../../src/app/api/documents/editor/templates/route.ts) |
+| `/api/documents/editor/templates/[tid]` | GET ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/route.ts](../../src/app/api/documents/editor/templates/[tid]/route.ts) |
+| `/api/documents/editor/templates/[tid]/archive` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/archive/route.ts](../../src/app/api/documents/editor/templates/[tid]/archive/route.ts) |
+| `/api/documents/editor/templates/[tid]/content` | PUT ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/content/route.ts](../../src/app/api/documents/editor/templates/[tid]/content/route.ts) |
+| `/api/documents/editor/templates/[tid]/preview` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/preview/route.ts](../../src/app/api/documents/editor/templates/[tid]/preview/route.ts) |
+| `/api/documents/editor/templates/[tid]/publish` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/publish/route.ts](../../src/app/api/documents/editor/templates/[tid]/publish/route.ts) |
+| `/api/documents/editor/templates/[tid]/use` | POST ✓ | `CONTRACTED` | [src/app/api/documents/editor/templates/[tid]/use/route.ts](../../src/app/api/documents/editor/templates/[tid]/use/route.ts) |
 | `/api/documents/generate` | POST ✓ | `CONTRACTED` | [src/app/api/documents/generate/route.ts](../../src/app/api/documents/generate/route.ts) |
 | `/api/documents/generated` | GET ✓ | `CONTRACTED` | [src/app/api/documents/generated/route.ts](../../src/app/api/documents/generated/route.ts) |
 | `/api/documents/generated/[id]` | DELETE, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/documents/generated/[id]/route.ts](../../src/app/api/documents/generated/[id]/route.ts) |
@@ -357,6 +370,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/employee-documents/cleanup` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/cleanup/route.ts](../../src/app/api/hr/employee-documents/cleanup/route.ts) |
 | `/api/hr/employee-documents/confirm` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/confirm/route.ts](../../src/app/api/hr/employee-documents/confirm/route.ts) |
 | `/api/hr/employee-documents/item` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/item/route.ts](../../src/app/api/hr/employee-documents/item/route.ts) |
+| `/api/hr/employee-documents/organization` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/organization/route.ts](../../src/app/api/hr/employee-documents/organization/route.ts) |
 | `/api/hr/employee-documents/publication` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/publication/route.ts](../../src/app/api/hr/employee-documents/publication/route.ts) |
 | `/api/hr/employee-documents/publication-policy` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/publication-policy/route.ts](../../src/app/api/hr/employee-documents/publication-policy/route.ts) |
 | `/api/hr/employee-documents/reanalyze` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/reanalyze/route.ts](../../src/app/api/hr/employee-documents/reanalyze/route.ts) |

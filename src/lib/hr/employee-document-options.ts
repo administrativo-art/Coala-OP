@@ -2,7 +2,7 @@ export const EMPLOYEE_DOCUMENT_CATEGORIES = [
   { id: "personal", label: "Identificação" },
   { id: "admission", label: "Admissão" },
   { id: "contracts", label: "Contratos" },
-  { id: "work_schedule", label: "Jornada e ponto" },
+  { id: "work_schedule", label: "Fechamento do mês" },
   { id: "remuneration", label: "Remuneração" },
   { id: "benefits", label: "Benefícios" },
   { id: "occupational_health", label: "Saúde ocupacional" },
@@ -10,17 +10,17 @@ export const EMPLOYEE_DOCUMENT_CATEGORIES = [
   { id: "leaves", label: "Afastamentos" },
   { id: "uniforms", label: "Uniformes e EPIs" },
   { id: "training", label: "Treinamentos" },
-  { id: "warnings", label: "Disciplina" },
+  { id: "warnings", label: "Ocorrências e medidas disciplinares" },
   { id: "termination", label: "Desligamento" },
   { id: "pending_classification", label: "A classificar" },
 ] as const;
 
 export type EmployeeDocumentCategoryId = (typeof EMPLOYEE_DOCUMENT_CATEGORIES)[number]["id"];
 
-export const EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES = EMPLOYEE_DOCUMENT_CATEGORIES;
+export const EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES = EMPLOYEE_DOCUMENT_CATEGORIES.filter((category) => category.id !== "remuneration");
 
 export function normalizeEmployeeDocumentCategory(category: EmployeeDocumentCategoryId): EmployeeDocumentCategoryId {
-  return category;
+  return category === "remuneration" ? "work_schedule" : category;
 }
 
 // Taxonomia fixa por natureza. Processos como competência, férias e afastamentos
@@ -183,6 +183,23 @@ function reliableProcessSegments(destinationTrail?: readonly string[] | null): s
   });
 }
 
+const MONTH_LABELS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"] as const;
+
+function temporalYearMonthSegments(destinationTrail?: readonly string[] | null): string[] {
+  const segments = destinationTrail?.map((segment) => segment.trim()).filter(Boolean) ?? [];
+  for (let index = 0; index < segments.length; index++) {
+    if (!/^20\d{2}$/.test(segments[index])) continue;
+    const monthIndex = MONTH_LABELS.findIndex((month) => month.toLocaleLowerCase("pt-BR") === segments[index + 1]?.toLocaleLowerCase("pt-BR"));
+    if (monthIndex >= 0) return [segments[index], MONTH_LABELS[monthIndex]];
+  }
+  const text = segments.join(" ");
+  const brDate = text.match(/\b(\d{2})\/(\d{2})\/(20\d{2})\b/);
+  if (brDate) return [brDate[3], MONTH_LABELS[Number(brDate[2]) - 1]].filter(Boolean);
+  const isoDate = text.match(/\b(20\d{2})-(\d{2})-\d{2}\b/);
+  if (isoDate) return [isoDate[1], MONTH_LABELS[Number(isoDate[2]) - 1]].filter(Boolean);
+  return [];
+}
+
 /** Caminho exibido dentro de uma categoria: processo confiável + natureza fixa. */
 export function resolveEmployeeDocumentFolderPath(input: {
   category: EmployeeDocumentCategoryId;
@@ -190,8 +207,13 @@ export function resolveEmployeeDocumentFolderPath(input: {
   documentTypeLabel?: string | null;
   destinationTrail?: readonly string[] | null;
 }): string[] {
-  if (input.category === "pending_classification") return [];
-  if (input.category === "contracts") {
+  const category = normalizeEmployeeDocumentCategory(input.category);
+  if (category === "pending_classification") return [];
+  // A admissão é uma pasta única: o próprio nome do documento distingue
+  // cadastro, contrato, declaração e termo sem criar diretórios vazios.
+  if (["personal", "admission", "benefits", "uniforms", "training", "warnings", "termination"].includes(category)) return [];
+  if (category === "work_schedule" || category === "leaves") return temporalYearMonthSegments(input.destinationTrail);
+  if (category === "contracts") {
     if (input.documentTypeCode === "SERVICE_PROVIDER_CONTRACT_PJ") {
       return ["Prestação de serviços PJ", "Contrato principal"];
     }
@@ -202,11 +224,14 @@ export function resolveEmployeeDocumentFolderPath(input: {
       return ["Histórico PF", "Contrato principal"];
     }
   }
-  const definitions = getEmployeeDocumentSubfolders(input.category);
-  const subfolderId = resolveEmployeeDocumentSubfolder(input.category, input.documentTypeCode, input.documentTypeLabel);
+  const definitions = getEmployeeDocumentSubfolders(category);
+  const subfolderId = resolveEmployeeDocumentSubfolder(category, input.documentTypeCode, input.documentTypeLabel);
   const fixedLabel = definitions.find((definition) => definition.id === subfolderId)?.label;
   const process = reliableProcessSegments(input.destinationTrail);
-  const position = PROCESS_POSITION[input.category] ?? "ignore";
+  const position = PROCESS_POSITION[category] ?? "ignore";
+  // Em férias, período/parcela já identificam o processo. O nome do arquivo
+  // distingue aviso, recibo e pagamento sem criar mais uma pasta redundante.
+  if (category === "vacations") return process;
   if (position === "before") return [...process, ...(fixedLabel ? [fixedLabel] : [])];
   if (position === "after") return [...(fixedLabel ? [fixedLabel] : []), ...process];
   return fixedLabel ? [fixedLabel] : [];

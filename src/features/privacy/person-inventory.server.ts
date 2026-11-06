@@ -11,6 +11,7 @@ import { canAccessUnit, canAccessUserByUnit, resolveUnitAccess } from "@/lib/uni
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import { firestorePersonLookup } from "./person-lookup.server";
 import { matchesPersonWorkspace } from "./person-workspace";
+import { decodeGroupPosition, encodeGroupPosition, isPersonSourceGroup, ownedGroupParent } from "./person-source-group";
 import { PERSON_SOURCES, SOURCE_VALUES, sourceById, type Source } from "./person-inventory";
 import { resolveStrictPersonRefs, subjectKey, type SubjectRef } from "./person-subject";
 
@@ -65,7 +66,16 @@ export function canViewPersonRecord(actor: ServerUserContext, source: Source, da
   }
 }
 /** Classification rows carry a receipt ID, not a copy of its execution unit. */
-async function canViewPersonSourceRow(actor: ServerUserContext, source: Source, doc: FirebaseFirestore.QueryDocumentSnapshot) {
+export async function canViewPersonSourceRow(actor: ServerUserContext, source: Source, doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  if (isPersonSourceGroup(source)) {
+    // Collection group: reject any same-named subcollection outside the declared parent, then
+    // require the parent's own workspace (subcollection rows carry none). Missing workspace denies.
+    const parent = ownedGroupParent(source, doc.ref);
+    if (!parent) return false;
+    const parentData = (await parent.get()).data();
+    if (!parentData || parentData.workspaceId === undefined || !matchesPersonWorkspace(parentData, actor.workspace_id)) return false;
+    return canViewPersonRecord(actor, source, { ...doc.data(), id: doc.id, workspaceId: parentData.workspaceId });
+  }
   if (source.scopePolicy !== "classification-receipt") return canViewPersonRecord(actor, source, { ...doc.data(), id: doc.id });
   if (!canViewPersonSource(actor, source) || !matchesPersonWorkspace(doc.data(), actor.workspace_id, true)
     || typeof doc.get("receiptId") !== "string" || doc.get("receiptId") !== doc.id) return false;
@@ -167,10 +177,13 @@ export async function collectPersonSource(params: {
       if (snapshot.exists && !matchesPersonWorkspace(snapshot.data(), actor.workspace_id, true)) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
       return { source, status: "complete" as const, items: snapshot.exists ? [referenceItem(snapshot, source)] : [], nextCursor: null, conflicts: prepared.resolution.conflicts };
     }
-    const cursorId = params.cursor ? await readPersonCursor(params.cursor, actor, sourceId, ref, limit) : null;
+    const group = isPersonSourceGroup(source);
+    const storedCursor = params.cursor ? await readPersonCursor(params.cursor, actor, sourceId, ref, limit) : null;
+    const cursorId = storedCursor && group ? decodeGroupPosition(source, storedCursor) : storedCursor;
+    if (params.cursor && !cursorId) throw invalid("PERSON_CURSOR_INVALID");
     const collection = source.field === "__parent__"
       ? db.collection("employees").doc(value).collection(source.collection)
-      : db.collection(source.collection);
+      : group ? db.collectionGroup(source.collection) : db.collection(source.collection);
     let query: FirebaseFirestore.Query = collection;
     if (source.field !== "__parent__") query = source.namespace === "subjectKeys" ? query.where(source.field, "array-contains-any", prepared.resolution.refs.map(subjectKey)) : query.where(source.field, "==", value);
     if (source.scopePolicy === "finance-workspace") query = query.where("workspaceId", "==", actor.workspace_id);
@@ -189,22 +202,24 @@ export async function collectPersonSource(params: {
     let reads = 0, queries = 0, denied = 0, eof = false;
     const items: ReturnType<typeof referenceItem>[] = [];
     while (reads < PERSON_SOURCE_READ_BUDGET && queries < PERSON_SOURCE_QUERY_BUDGET && items.length < limit) {
-      const costPerRow = source.scopePolicy === "classification-receipt" ? 2 : 1;
+      const costPerRow = source.scopePolicy === "classification-receipt" || group ? 2 : 1;
       const batchSize = Math.min(Math.floor((PERSON_SOURCE_READ_BUDGET - reads) / costPerRow), Math.max(20, limit));
       if (!batchSize) break;
-      const pageQuery = position ? query.startAfter(position) : query;
+      const pageQuery = position ? query.startAfter(group ? db.doc(position) : position) : query;
       const snapshot = await pageQuery.limit(batchSize).get();
       queries++; reads += Math.max(1, snapshot.size);
       let processed = 0;
       for (const doc of snapshot.docs) {
-        position = doc.id; processed++;
-        if (source.scopePolicy === "classification-receipt") reads++; // reserve the parent proof conservatively
+        position = group ? doc.ref.path : doc.id; processed++;
+        if (source.scopePolicy === "classification-receipt" || group) reads++; // reserve the parent proof conservatively
+        // Same-named subcollection of another module: never exposed and not a scope denial (cursor still advances).
+        if (group && !ownedGroupParent(source, doc.ref)) continue;
         if (await canViewPersonSourceRow(actor, source, doc)) items.push(referenceItem(doc, source)); else denied++;
         if (items.length === limit) break;
       }
       if (processed === snapshot.size && snapshot.size < batchSize) { eof = true; break; }
     }
-    const nextCursor = !eof && position ? await savePersonCursor(actor, sourceId, ref, limit, position) : null;
+    const nextCursor = !eof && position ? await savePersonCursor(actor, sourceId, ref, limit, group ? encodeGroupPosition(position) : position) : null;
     return { source, status: source.reason || denied > 0 || nextCursor ? "partial" as const : "complete" as const,
       items, nextCursor, conflicts: prepared.resolution.conflicts,
       reason: source.reason ?? (nextCursor ? "A consulta tem continuação; carregue mais referências." : denied > 0 ? "Algumas referências não possuem escopo confirmado ou não estão autorizadas nesta consulta." : undefined) };
