@@ -18,22 +18,23 @@ function loadGoogleMaps(apiKey: string) {
 }
 
 /** Busca oficial do Google, mapa da área e pino ajustável; a chave é pública e restrita por site no Cloud Console. */
-export function UnitLocationMap({ apiKey, center, radiusMeters, onPoint, onAddress }: {
+export function UnitLocationMap({ apiKey, center, radiusMeters, initialAddress, onPoint, onAddress, onAddressReadyChange }: {
   apiKey: string | null; center: Point | null; radiusMeters: number; onPoint: (point: Point) => void;
-  onAddress: (address: string) => void;
+  initialAddress?: string; onAddress: (address: string) => void; onAddressReadyChange: (ready: boolean) => void;
 }) {
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObjectRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const circleRef = useRef<google.maps.Circle | null>(null);
-  const callbacksRef = useRef({ onPoint, onAddress });
+  const callbacksRef = useRef({ onPoint, onAddress, onAddressReadyChange });
   const centerRef = useRef(center);
   const radiusRef = useRef(radiusMeters);
   const [loading, setLoading] = useState(Boolean(apiKey));
   const [error, setError] = useState<string | null>(null);
+  const [locatedInitialAddress, setLocatedInitialAddress] = useState(false);
 
-  useEffect(() => { callbacksRef.current = { onPoint, onAddress }; }, [onPoint, onAddress]);
+  useEffect(() => { callbacksRef.current = { onPoint, onAddress, onAddressReadyChange }; }, [onPoint, onAddress, onAddressReadyChange]);
   useEffect(() => { centerRef.current = center; radiusRef.current = radiusMeters; }, [center, radiusMeters]);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function UnitLocationMap({ apiKey, center, radiusMeters, onPoint, onAddre
     let marker: google.maps.Marker | null = null;
     let circle: google.maps.Circle | null = null;
     let autocomplete: google.maps.places.PlaceAutocompleteElement | null = null;
+    let operation = 0;
     const listeners: google.maps.MapsEventListener[] = [];
     setLoading(true); setError(null);
     void loadGoogleMaps(apiKey).then(() => {
@@ -56,45 +58,99 @@ export function UnitLocationMap({ apiKey, center, radiusMeters, onPoint, onAddre
       circle = new google.maps.Circle({ map, center: position, radius: radiusRef.current, clickable: false,
         fillColor: "#D13670", fillOpacity: 0.14, strokeColor: "#D13670", strokeOpacity: 0.8, strokeWeight: 2 });
       mapObjectRef.current = map; markerRef.current = marker; circleRef.current = circle;
-      const applyPosition = (lat: number, lng: number, zoom = false) => {
+      const geocoder = new google.maps.Geocoder();
+      const resolveAddress = async (lat: number, lng: number) => {
+        const currentOperation = ++operation;
+        callbacksRef.current.onAddressReadyChange(false);
+        setError(null);
+        try {
+          const response = await geocoder.geocode({ location: { lat, lng }, region: "BR" });
+          if (cancelled || currentOperation !== operation) return;
+          const formatted = response.results[0]?.formatted_address?.trim();
+          if (formatted) {
+            setError(null);
+            if (autocomplete) autocomplete.value = formatted;
+            callbacksRef.current.onAddress(formatted);
+            callbacksRef.current.onAddressReadyChange(true);
+          } else {
+            setError("Não foi possível identificar o endereço deste ponto. Busque o local pelo nome.");
+          }
+        } catch {
+          if (cancelled || currentOperation !== operation) return;
+          setError("O pino mudou, mas não foi possível identificar o endereço. Busque o local pelo nome.");
+        }
+      };
+      const applyPosition = (lat: number, lng: number, zoom = false, identifyAddress = false) => {
         const next = { lat, lng };
         marker?.setPosition(next); circle?.setCenter(next);
         if (zoom) { map.setCenter(next); map.setZoom(18); }
         callbacksRef.current.onPoint({ latitude: lat, longitude: lng });
+        if (identifyAddress) void resolveAddress(lat, lng);
       };
       listeners.push(marker.addListener("dragend", () => {
-        const next = marker?.getPosition(); if (next) applyPosition(next.lat(), next.lng());
+        const next = marker?.getPosition(); if (next) applyPosition(next.lat(), next.lng(), false, true);
       }));
       listeners.push(map.addListener("click", (event: google.maps.MapMouseEvent) => {
-        if (event.latLng) applyPosition(event.latLng.lat(), event.latLng.lng());
+        if (event.latLng) applyPosition(event.latLng.lat(), event.latLng.lng(), false, true);
       }));
 
       autocomplete = new google.maps.places.PlaceAutocompleteElement({ includedRegionCodes: ["br"] });
       autocomplete.placeholder = "Busque o endereço ou o nome do local";
-      autocomplete.className = "block w-full";
+      autocomplete.value = initialAddress?.trim() ?? "";
+      autocomplete.className = "block w-full rounded-ds-md";
+      autocomplete.style.colorScheme = "light";
       const select = async (event: google.maps.places.PlacePredictionSelectEvent) => {
+        const currentOperation = ++operation;
+        callbacksRef.current.onAddressReadyChange(false);
+        setError(null);
         try {
           const place = event.placePrediction.toPlace();
           await place.fetchFields({ fields: ["displayName", "formattedAddress", "location", "viewport"] });
+          if (cancelled || currentOperation !== operation) return;
           if (!place.location) return;
           const lat = place.location.lat(); const lng = place.location.lng();
           applyPosition(lat, lng, !place.viewport);
           if (place.viewport) map.fitBounds(place.viewport);
-          callbacksRef.current.onAddress(place.formattedAddress ?? place.displayName ?? "");
-        } catch { setError("Não foi possível carregar o local escolhido."); }
+          const formatted = place.formattedAddress ?? place.displayName ?? "";
+          autocomplete!.value = formatted;
+          callbacksRef.current.onAddress(formatted);
+          callbacksRef.current.onAddressReadyChange(Boolean(formatted));
+        } catch {
+          if (cancelled || currentOperation !== operation) return;
+          setError("Não foi possível carregar o local escolhido.");
+        }
       };
       autocomplete.addEventListener("gmp-select", select);
       autocompleteRef.current.replaceChildren(autocomplete);
+      if (!centerRef.current && initialAddress?.trim()) {
+        const currentOperation = ++operation;
+        callbacksRef.current.onAddressReadyChange(false);
+        void geocoder.geocode({ address: initialAddress.trim(), region: "BR" }).then((response) => {
+          if (cancelled || currentOperation !== operation) return;
+          const location = response.results[0]?.geometry.location;
+          if (!location) return;
+          applyPosition(location.lat(), location.lng(), true);
+          callbacksRef.current.onAddress(initialAddress.trim());
+          callbacksRef.current.onAddressReadyChange(true);
+          setLocatedInitialAddress(true);
+        }).catch(() => {
+          if (cancelled || currentOperation !== operation) return;
+          callbacksRef.current.onAddressReadyChange(false);
+        });
+      } else {
+        callbacksRef.current.onAddressReadyChange(Boolean(centerRef.current && initialAddress?.trim()));
+      }
       setLoading(false);
     }).catch(() => { if (!cancelled) { setLoading(false); setError("Não foi possível carregar o Google Maps."); } });
     return () => {
       cancelled = true;
+      operation += 1;
       listeners.forEach((listener) => listener.remove());
       marker?.setMap(null); circle?.setMap(null);
       mapObjectRef.current = null; markerRef.current = null; circleRef.current = null;
       autocomplete?.remove();
     };
-  }, [apiKey]);
+  }, [apiKey, initialAddress]);
 
   useEffect(() => {
     circleRef.current?.setRadius(radiusMeters);
@@ -108,11 +164,13 @@ export function UnitLocationMap({ apiKey, center, radiusMeters, onPoint, onAddre
   return <div className="space-y-2">
     <div ref={autocompleteRef} className="min-h-12 rounded-ds-btn border border-ds-border-input bg-ds-surface p-1" />
     <div className="relative overflow-hidden rounded-ds-card border border-ds-border bg-ds-warm">
-      <div ref={mapRef} className="h-64 w-full" aria-label="Mapa da área da unidade" />
+      <div ref={mapRef} className="h-56 w-full" aria-label="Mapa da área da unidade" />
       {loading ? <div className="absolute inset-0 grid place-items-center bg-ds-warm/80"><Loader2 className="h-6 w-6 animate-spin text-ds-accent-ink" /></div> : null}
       {!loading && visibleError ? <div className="absolute inset-0 grid place-items-center p-6 text-center text-xs font-semibold text-ds-warn">
         <span><MapPin className="mx-auto mb-2 h-5 w-5" aria-hidden />{visibleError}</span></div> : null}
     </div>
-    <p className="text-xs text-ds-ink-muted">Busque um lugar, clique no mapa ou arraste o pino. O círculo representa o raio configurado.</p>
+    <p className="text-xs text-ds-ink-muted">{locatedInitialAddress
+      ? "O endereço já cadastrado foi localizado no mapa. Busque outro lugar, clique no mapa ou arraste o pino para trocar."
+      : "Busque um lugar, clique no mapa ou arraste o pino. O círculo representa o raio configurado."}</p>
   </div>;
 }
