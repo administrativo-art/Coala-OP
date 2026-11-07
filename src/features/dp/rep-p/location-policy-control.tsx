@@ -7,11 +7,9 @@ import { Loader2, MapPin } from "lucide-react";
 import { errorMessageOf } from "@/components/patterns/panel-form";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { StatusPill } from "@/components/ui/status-pill";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
-import { parseMapCoordinates } from "./map-coordinates";
 import { UnitLocationMap } from "./unit-location-map";
 
 type Policy = {
@@ -55,7 +53,7 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
   const [address, setAddress] = useState("");
   const [savedAddress, setSavedAddress] = useState("");
   const [complement, setComplement] = useState("");
-  const [coordinatesText, setCoordinatesText] = useState("");
+  const [addressReady, setAddressReady] = useState(false);
   const [mapsBrowserApiKey, setMapsBrowserApiKey] = useState<string | null>(null);
   const getIdToken = () => firebaseUser?.getIdToken() ?? Promise.resolve(null);
   const busy = saving || removing;
@@ -63,7 +61,7 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
   async function show() {
     const currentAddress = unitAddress?.trim() ?? "";
     setOpen(true); setLoading(true); setError(null); setConfirmingRemoval(false);
-    setAddress(currentAddress); setSavedAddress(currentAddress); setComplement(""); setCoordinatesText("");
+    setAddress(currentAddress); setSavedAddress(currentAddress); setComplement(""); setAddressReady(false);
     try {
       const response = await authenticatedApiRequest<{ policy: Policy; mapsBrowserApiKey: string | null }>(`/api/dp/time-recording/location-policies/${unitId}`,
         { getIdToken, fallbackError: "Não foi possível carregar a área da unidade." });
@@ -74,12 +72,6 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
 
   function update(patch: Partial<Form>) { setForm((current) => current ? { ...current, ...patch } : current); setError(null); }
 
-  function pasteCoordinates(text: string) {
-    setCoordinatesText(text);
-    const point = parseMapCoordinates(text);
-    if (point) update({ latitude: point.latitude.toFixed(7), longitude: point.longitude.toFixed(7) });
-  }
-
   const canonicalAddress = [address.trim(), complement.trim()].filter(Boolean).join(" · ");
   const addressChanged = canonicalAddress !== savedAddress;
   const pointChosen = Boolean(form && form.latitude.trim() && form.longitude.trim()
@@ -87,13 +79,13 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
 
   async function save() {
     if (!policy || !form) return;
-    if (!pointChosen) { setError("Escolha o lugar na busca, clique no mapa ou arraste o pino."); return; }
+    if (!pointChosen || !addressReady) { setError("Escolha um endereço válido e aguarde a localização no mapa."); return; }
     setSaving(true); setError(null);
     const numberOrNull = (value: string) => value.trim() ? Number(value) : null;
     let addressSaved = false;
     try {
       // Um só salvar: o endereço oficial só muda junto com a área, e a área só entra depois do endereço.
-      if (canManageAddress && addressChanged && canonicalAddress) {
+      if (addressChanged && canonicalAddress) {
         await onAddressSave(canonicalAddress);
         addressSaved = true;
         setSavedAddress(canonicalAddress); setAddress(canonicalAddress); setComplement("");
@@ -131,7 +123,8 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
     finally { setRemoving(false); }
   }
 
-  if (!canManage) return null;
+  // Endereço e centro da área formam um único local; não ofereça uma edição parcial a quem não pode salvar ambos.
+  if (!canManage || !canManageAddress) return null;
   const radius = Number(form?.radiusMeters) || 150;
   return <>
     <div className="flex items-center justify-between gap-3 rounded-ds-btn border border-ds-border bg-ds-warm p-3">
@@ -141,32 +134,27 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
     </div>
     <Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
       <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden p-0">
-        <DialogHeader className="border-b px-5 py-4">
-          <div className="flex items-start justify-between gap-3 pr-6">
-            <DialogTitle>Área de ponto · {unitName}</DialogTitle>
-            {form ? <StatusPill variant={hasArea(policy) ? "ok" : "neutral"}>
-              {hasArea(policy) ? `Área cadastrada · ${policy?.radiusMeters ?? radius} m` : "Sem área"}</StatusPill> : null}
-          </div>
+        <DialogHeader className="border-b border-ds-divider px-6 py-5">
+          <DialogTitle>Área de ponto</DialogTitle>
           <DialogDescription>
-            A unidade só diz onde fica. Quem pede a posição é o turno (Config › DP › Turnos › Uso da localização), e ela nunca impede o registro.
+            {unitName} · Defina o endereço e o raio usados para conferir as batidas.
           </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {loading ? <div className="grid min-h-48 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-ds-accent-ink" /></div> : null}
           {!loading && form ? <div className="space-y-4">
-            <UnitLocationMap apiKey={mapsBrowserApiKey}
-              center={pointChosen ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null}
-              radiusMeters={radius}
-              onPoint={(point) => update({ latitude: point.latitude.toFixed(7), longitude: point.longitude.toFixed(7) })}
-              onAddress={(formatted) => setAddress(formatted)} />
-
-            <div className="flex items-start gap-2 rounded-ds-btn border border-ds-border bg-ds-warm p-3">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ds-ink-muted" aria-hidden />
-              <div className="min-w-0 text-sm">
-                <p className="text-xs font-bold text-ds-ink-muted">Endereço da unidade</p>
-                <p className="break-words font-semibold text-ds-ink">{address.trim() || "Escolha um lugar na busca acima."}</p>
+            <section className="space-y-3 rounded-ds-card border border-ds-border bg-ds-surface p-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-ds-ink">Endereço da unidade</h3>
+                <p className="text-xs text-ds-ink-muted">Este é o único endereço da unidade. Busque um lugar ou ajuste o pino no mapa.</p>
               </div>
-            </div>
+              <UnitLocationMap apiKey={mapsBrowserApiKey}
+                center={pointChosen ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null}
+                radiusMeters={radius} initialAddress={savedAddress}
+                onPoint={(point) => update({ latitude: point.latitude.toFixed(7), longitude: point.longitude.toFixed(7) })}
+                onAddress={(formatted) => { setAddress(formatted); setError(null); }}
+                onAddressReadyChange={setAddressReady} />
+            </section>
 
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <label className="block space-y-1 text-xs font-bold text-ds-ink-muted">Complemento
@@ -185,25 +173,12 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
                 </div>
               </div>
             </div>
-            <p className="text-xs text-ds-ink-muted">
-              {canManageAddress ? "O endereço acima e o complemento passam a ser o endereço oficial da unidade e vão para os documentos."
-                : "Somente quem administra o cadastro de unidades pode substituir o endereço oficial; a área é salva mesmo assim."}
-              {" "}Um raio menor aumenta falsos alertas em ambientes cobertos.
-            </p>
+            <p className="text-xs text-ds-ink-muted">Ao salvar, este endereço também passa a ser usado nos documentos da unidade.
+              Um raio menor aumenta falsos alertas em ambientes cobertos.</p>
 
             <details className="rounded-ds-btn border border-ds-border p-3">
               <summary className="cursor-pointer text-xs font-bold text-ds-ink-muted">Ajustes avançados</summary>
               <div className="mt-3 space-y-3">
-                <label className="block space-y-1 text-xs font-bold text-ds-ink-muted">Colar coordenadas ou link do Google Maps
-                  <input className={inputClass} value={coordinatesText} placeholder="-2.5307, -44.3068"
-                    onChange={(event) => pasteCoordinates(event.target.value)} />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 text-xs font-bold text-ds-ink-muted">Latitude
-                    <input className={inputClass} inputMode="decimal" value={form.latitude} onChange={(e) => update({ latitude: e.target.value })} /></label>
-                  <label className="space-y-1 text-xs font-bold text-ds-ink-muted">Longitude
-                    <input className={inputClass} inputMode="decimal" value={form.longitude} onChange={(e) => update({ longitude: e.target.value })} /></label>
-                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <label className="space-y-1 text-xs font-bold text-ds-ink-muted">Precisão máxima (m)
                     <input className={inputClass} inputMode="numeric" value={form.maxAccuracyMeters} onChange={(e) => update({ maxAccuracyMeters: e.target.value })} /></label>
@@ -216,21 +191,22 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
               </div>
             </details>
 
-            {confirmingRemoval ? <InlineConfirm message="Remover a área? As batidas deixam de ser conferidas com esta unidade."
-              confirmLabel="Remover" loadingLabel="Removendo…" loading={removing} onConfirm={() => void removeArea()}
-              onCancel={() => setConfirmingRemoval(false)} /> : null}
           </div> : null}
         </div>
-        <footer className="border-t px-5 py-3">{error ? <p role="alert" className="mb-2 text-xs font-semibold text-ds-danger">{error}</p> : null}
-          <div className="flex items-center justify-between gap-2">
-            <div>{hasArea(policy) && !confirmingRemoval ? <Button variant="ds-ghost" disabled={busy}
+        <div className="border-t border-ds-divider px-6 py-4">
+          {error ? <p role="alert" className="mb-3 text-xs font-semibold text-ds-danger">{error}</p> : null}
+          {confirmingRemoval ? <InlineConfirm message="Remover a área? As batidas deixam de ser conferidas com esta unidade."
+            confirmLabel="Remover" loadingLabel="Removendo…" loading={removing} onConfirm={() => void removeArea()}
+            onCancel={() => setConfirmingRemoval(false)} /> : <DialogFooter className="items-center justify-between sm:justify-between">
+            <div>{hasArea(policy) ? <Button variant="danger-link" size="xs" disabled={busy}
               onClick={() => setConfirmingRemoval(true)}>Remover área</Button> : null}</div>
             <div className="flex gap-2">
-              <Button variant="ds-ghost" disabled={busy} onClick={() => setOpen(false)}>Fechar</Button>
-              <Button variant="primary-modal" loading={saving} loadingLabel="Salvando…" disabled={!form || loading || removing || !pointChosen}
-                onClick={() => void save()}>Salvar</Button>
+              <Button variant="ds-ghost" size="md" disabled={busy} onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button variant="primary-modal" size="md" loading={saving} loadingLabel="Salvando…"
+                disabled={!form || loading || removing || !pointChosen || !addressReady} onClick={() => void save()}>Salvar área</Button>
             </div>
-          </div></footer>
+          </DialogFooter>}
+        </div>
       </DialogContent>
     </Dialog>
   </>;
