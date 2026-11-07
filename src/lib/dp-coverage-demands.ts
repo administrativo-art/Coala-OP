@@ -58,7 +58,7 @@ export type DPCoverageGap = {
 
 export type DPDailyCoverage = {
   date: string;
-  mode: Exclude<DPCoverageMode, 'disabled'>;
+  mode: Exclude<DPCoverageMode, 'disabled'> | 'empty_day';
   configured: boolean;
   isOpen: boolean;
   hasDemand: boolean;
@@ -73,6 +73,23 @@ export function resolveDPCoverageMode(
   unit: Pick<DPUnit, 'coverageMode'> | null | undefined,
 ): DPCoverageMode {
   return dpCoverageModeSchema.safeParse(unit?.coverageMode).data ?? 'fixed_hours';
+}
+
+/** Os dois modos antigos significam alerta ligado até a unidade ser salva no novo seletor. */
+export function alertsWhenUnitEmpty(unit: Pick<DPUnit, 'coverageMode'> | null | undefined) {
+  return resolveDPCoverageMode(unit) !== 'disabled';
+}
+
+export function buildDailyEmptyUnitCoverage(params: {
+  date: string;
+  shifts: readonly Pick<DPShift, 'type' | 'date'>[];
+}): DPDailyCoverage {
+  const empty = !params.shifts.some((shift) => shift.date === params.date && shift.type !== 'day_off');
+  return {
+    date: params.date, mode: 'empty_day', configured: true, isOpen: true,
+    hasDemand: true, hasUnplannedShifts: false, windows: [],
+    gaps: empty ? [{ startTime: '00:00', endTime: '23:59' }] : [],
+  };
 }
 
 export function normalizeDPCoverageDemands(value: unknown): DPCoverageDemands {

@@ -1,5 +1,13 @@
 # Escalas do DP
 
+## Alerta de escala vazia por unidade
+
+Na edição da unidade, **Alerta de escala vazia** é um único seletor. Unidades antigas com `coverageMode=fixed_hours` ou `on_demand` aparecem ligadas; `disabled` permanece desligada. Unidade nova nasce desligada. O campo legado continua persistido para preservar as configurações existentes; ao ligar uma unidade nova, grava-se `fixed_hours`, sem exigir horário de funcionamento.
+
+No editor mensal, uma unidade com alerta ligado sinaliza cada data sem turno de trabalho naquela unidade. DSR não conta como turno; um turno de qualquer duração elimina o aviso daquele dia. O alerta não verifica lacunas entre horários, mínimo de pessoas ou setores. As janelas antigas de demanda e horários de funcionamento continuam armazenados, mas não alimentam esse aviso. Essa regra é visual no editor; não altera a validação de publicação, o registro de ponto nem os dados da escala. A CLI local da Natasha ainda interpreta os campos legados de cobertura para seu planejamento separado.
+
+O cartão **Escala vazia** conta datas distintas com ao menos uma unidade vazia. Já a meta de dias preenchidos na lista e na visão mensal é calculada separadamente a partir de horários de funcionamento ou definições de turno, sem consultar o seletor do alerta.
+
 Edição do nome do turno (02/11/2026): o cadastro reutilizável permite renomear turnos existentes em `dp-settings-shifts.tsx`. O PATCH de configuração aceita `name` sob a permissão de gestão já existente e registra os campos alterados em `actionLogs`; somente código e ID Bizneo permanecem protegidos pela regra de identidade externa. A alteração atualiza a definição, sem reescrever snapshots de escalas já gravados ou enviar atualização ao Bizneo automaticamente. Horários, jornadas e cálculos seguem suas regras existentes.
 
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).

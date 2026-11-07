@@ -25,6 +25,8 @@ O retorno deve preferir um `returnTo` interno validado, depois histórico compro
 
 Telas de lista usam uma casca escura com contexto, indicadores ou abas, busca, filtros, ações e chips. Tudo que filtra a lista fica no painel; ações sobre um item ficam no `SidePanel`.
 
+O painel escuro de controle não projeta sombra sobre o conteúdo abaixo. A separação vem do contraste entre o fundo escuro e o fundo da página. Ao encontrar a faixa cinza difusa sob um painel, confira a classe do componente `ControlPanel` e remova `shadow-ds-panel` ou outra classe de `box-shadow` aplicada ao próprio painel; não compense com margens, overlays ou uma cor artificial no conteúdo seguinte. Essa regra não altera as sombras da navegação lateral, do cabeçalho ou dos modais.
+
 O guia entrega `ControlPanel` e `ControlIndicator` isolados. `ControlIndicator` recebe `tone` semântico, nunca uma cor hexadecimal. Unificar esse componente com implementações operacionais requer uma migração separada.
 
 ## Abas de contexto
