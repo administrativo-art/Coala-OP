@@ -248,7 +248,6 @@ export function DPSettingsUnits() {
     });
 
   const selectedUnit = selectedUnitKey ? mergedUnits.find((unit) => unit.key === selectedUnitKey) ?? null : null;
-  const selectedDpUnitId = selectedUnit?.dpUnit?.id;
 
   /* ───────── gravações (mesma regra de antes; só a apresentação mudou) ───────── */
 
@@ -337,6 +336,10 @@ export function DPSettingsUnits() {
           stockRole: form.stockRole,
         });
         if (created && nextTimeZone) await setUnitTimeZone(created.id, nextTimeZone);
+        if (created) {
+          setUnitDialog({ mode: "edit", unit: { ...created, timeZone: nextTimeZone ?? undefined } });
+          return;
+        }
       }
       setUnitDialog(null);
     } finally {
@@ -669,16 +672,9 @@ export function DPSettingsUnits() {
         group={selectedUnit ? structureOf(selectedUnit).group : undefined}
         shifts={selectedUnit ? shiftsFor(selectedUnit) : []}
         canManage={canManageUnits}
-        canManageTime={canManageTime}
-        firebaseUser={firebaseUser}
         busy={saving === "unit" || saving === "delete"}
         onClose={() => setSelectedUnitKey(null)}
         onEdit={(unit) => { setSelectedUnitKey(null); setUnitDialog({ mode: "edit", unit }); }}
-        onAddressSave={async (unit, address) => {
-          setSaving("unit");
-          try { await updateUnit({ ...unit, address }); }
-          finally { setSaving(null); }
-        }}
         onRegister={(kioskId) => { setSelectedUnitKey(null); setUnitDialog({ mode: "sync", kioskId }); }}
         onDetachFromGroup={(unit) => void detachUnitFromGroup(unit)}
         onDelete={(unit) => removeWith(() => deleteUnit(unit.id), () => setSelectedUnitKey(null))}
@@ -691,6 +687,11 @@ export function DPSettingsUnits() {
         kiosks={kiosks}
         syncCandidates={syncCandidates}
         saving={saving === "unit"}
+        firebaseUser={firebaseUser}
+        canManageLocation={canManageTime && canManageUnits}
+        onAddressSave={async (unit, address) => {
+          await updateUnit({ ...unit, address });
+        }}
         onClose={() => setUnitDialog(null)}
         onSubmit={saveUnit}
       />
