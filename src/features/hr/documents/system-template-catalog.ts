@@ -1,9 +1,9 @@
 import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
 import {
-  PROBATION_CONTRACT_V4_FIELD_MAPPING,
-  PROBATION_CONTRACT_V4_HASH,
-  PROBATION_CONTRACT_V4_SOURCE,
-  PROBATION_CONTRACT_V4_VARIABLES,
+  PROBATION_CONTRACT_V5_FIELD_MAPPING,
+  PROBATION_CONTRACT_V5_HASH,
+  PROBATION_CONTRACT_V5_SOURCE,
+  PROBATION_CONTRACT_V5_VARIABLES,
 } from "@/features/hr/documents/probation-contract-template";
 import {
   HOURS_BANK_V2_HASH,
@@ -159,12 +159,12 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     shortName: "Contrato de experiência",
     slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Versão 4 no padrão documental CT Sorvetes, com qualificação destacada e área ampliada para assinatura.",
-    sourcePath: PROBATION_CONTRACT_V4_SOURCE,
-    contentHash: PROBATION_CONTRACT_V4_HASH,
-    version: 4,
-    variables: [...PROBATION_CONTRACT_V4_VARIABLES],
-    fieldMapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
+    description: "Versão 5 no padrão documental CT Sorvetes, com qualificação destacada, área ampliada para assinatura e referências alinhadas ao Termo LGPD e ao Regulamento de Metas e Prêmios.",
+    sourcePath: PROBATION_CONTRACT_V5_SOURCE,
+    contentHash: PROBATION_CONTRACT_V5_HASH,
+    version: 5,
+    variables: [...PROBATION_CONTRACT_V5_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V5_FIELD_MAPPING,
   },
   {
     id: "system-admission-hours-bank-agreement",
@@ -180,10 +180,10 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-lgpd-awareness-term",
     name: "Termo de Ciência sobre o Tratamento de Dados Pessoais",
     category: "Admissão",
-    description: "Versão 5 com ciência sobre localização no ponto e acompanhamento entre unidades, sem consentimento genérico.",
-    sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v5.docx`,
-    contentHash: "0dd7f0309096dd7e7a938d8789fcb297c1a25b78f56f22ee135ae3be0edb2ba2",
-    version: 5,
+    description: "Versão 6 com localização no ponto e durante a jornada, aparelhos empresariais, metas e prêmios, aplicativos e IA, sem consentimento genérico.",
+    sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v6.docx`,
+    contentHash: "09658d1c5dea398dcf76100fe30c9ac1b540b9ba4253021686a95f5b4549ec0d",
+    version: 6,
     variables: [
       "employee.cpf",
       "employee.name",
@@ -215,9 +215,9 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     name: "Regulamento de Metas e Prêmios por Desempenho",
     category: "Admissão",
     description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
-    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
-    contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
-    version: 2,
+    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v4.docx`,
+    contentHash: "bb6c2c80561cbd2aa76d5dc62ffb29945b0bdf2751b561b5fcfcb7588a09857f",
+    version: 4,
     variables: [
       "employee.ctps_number",
       "employee.ctps_series",
@@ -500,7 +500,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   category: "Patrimônio",
   description: "Termo contextual emitido na transferência de posse de um patrimônio da empresa para um colaborador.",
   status: "published",
-  version: 1,
+  version: 2,
   templateKind: "system_pdf",
   renderer: "asset_custody_term",
   generationMode: "contextual",
@@ -517,7 +517,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   sourceFormat: "pdf",
   isSystem: true,
   previewUrl: "/api/documents/templates/system-asset-custody-term/preview",
-  updatedAt: "2026-10-30T00:00:00.000Z",
+  updatedAt: "2026-11-02T00:00:00.000Z",
 }, {
   id: "system-asset-maintenance-order", name: "Ordem de manutenção patrimonial", documentTitle: "ORDEM DE MANUTENÇÃO PATRIMONIAL", category: "Patrimônio", description: "Ordem contextual de manutenção preventiva, corretiva ou manual, sem assinatura eletrônica.", status: "published", version: 1, templateKind: "system_pdf", renderer: "asset_maintenance_order", generationMode: "contextual", sourceModule: "assets", sourceModulePath: "src/features/assets/maintenance.server.ts", variables: ["asset.code", "asset.name", "maintenance.type", "maintenance.description", "maintenance.checklist", "maintenance.components", "document.protocol"], letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "asset_lifecycle_plus_5y", sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-asset-maintenance-order/preview", updatedAt: "2026-10-30T00:00:00.000Z",
 }];

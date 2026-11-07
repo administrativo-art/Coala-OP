@@ -9,7 +9,7 @@ import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company
 import { allocateIdempotentDocumentProtocol } from "@/features/hr/documents/document-protocol.server";
 import { resolveDocumentLegalEntitySnapshot } from "@/features/hr/documents/legal-entity-snapshot.server";
 import { archiveAutentiqueSignedDocument, reconcileGeneratedDocumentStandaloneSignature, sendGeneratedDocumentForStandaloneSignature } from "@/features/hr/documents/signature-workflow.server";
-import { renderAssetCustodyTermPdf, safeAssetCustodyTermText } from "@/features/assets/custody-term-pdf";
+import { ASSET_CUSTODY_TERM_VERSION, renderAssetCustodyTermPdf, safeAssetCustodyTermText } from "@/features/assets/custody-term-pdf";
 import { createManualTask } from "@/features/tasks/lib/server";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
@@ -101,7 +101,7 @@ export async function ensureAssetCustodyTerm(params: { context: ServerUserContex
       await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(pdf, { resumable: false, metadata: { contentType: "application/pdf", cacheControl: "private, no-store" } });
       const now = new Date().toISOString();
       await generatedRef.create({
-        workspaceId: params.context.workspace_id, templateId: TEMPLATE_ID, templateName: "Termo de transferência de posse de patrimônio", templateVersion: 1,
+        workspaceId: params.context.workspace_id, templateId: TEMPLATE_ID, templateName: "Termo de transferência de posse de patrimônio", templateVersion: ASSET_CUSTODY_TERM_VERSION,
         status: "approved", signatureScope: "independent", signaturePurpose: PURPOSE, signatureStatus: "pending", documentTypeCode: DOCUMENT_TYPE,
         employeeId: employee.id, subjectKeys: await confirmedSubjectKeysForIdentifier(employee.id), employeeName, sourceModule: "assets", sourceAssetId: params.assetId, sourceCustodyTransferId: params.transferId,
         protocol, legalEntityId: legalEntity.entityId, legalEntitySnapshot: legalEntity,

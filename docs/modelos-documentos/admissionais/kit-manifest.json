@@ -10,7 +10,7 @@
       "id": "employment_probation_contract",
       "order": 1,
       "name": "Contrato de Trabalho a Título de Experiência",
-      "file": "01-contrato-experiencia-v4.docx",
+      "file": "01-contrato-experiencia-v5.docx",
       "selectableByHr": true,
       "signatureScope": "bundle"
     },
@@ -26,7 +26,7 @@
       "id": "lgpd_awareness_term",
       "order": 3,
       "name": "Termo de Ciência sobre o Tratamento de Dados Pessoais",
-      "file": "03-termo-lgpd-v4.docx",
+      "file": "03-termo-lgpd-v6.docx",
       "selectableByHr": true,
       "signatureScope": "bundle"
     },
@@ -44,7 +44,7 @@
       "id": "goals_awards_policy",
       "order": 5,
       "name": "Regulamento de Metas e Prêmios por Desempenho",
-      "file": "05-metas-premios-v2.docx",
+      "file": "05-metas-premios-v4.docx",
       "selectableByHr": true,
       "signatureScope": "bundle"
     },

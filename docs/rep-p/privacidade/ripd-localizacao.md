@@ -1,6 +1,6 @@
 # Relatório preparatório de impacto da localização
 
-Versão 1 para revisão — 27/10/2026. Responsável pela aprovação: controladora identificada no vínculo de cada colaborador, com avaliação do responsável de privacidade e jurídico. Não é RIPD aprovado nem liberação de tratamento.
+Versão 1 para revisão — 27/10/2026, com acréscimos de 02/11/2026 para o termo LGPD v6 (aparelho pessoal, frequência e dados efetivamente coletados e gestão de aparelhos empresariais). Responsável pela aprovação: controladora identificada no vínculo de cada colaborador, com avaliação do responsável de privacidade e jurídico. Não é RIPD aprovado nem liberação de tratamento.
 
 ## Escopo e fluxo confirmado
 
@@ -8,10 +8,13 @@ Versão 1 para revisão — 27/10/2026. Responsável pela aprovação: controlad
 | --- | --- | --- |
 | Captura pontual | Confirmação da batida → captura no dispositivo → avaliação no servidor → `repP_locationEvidence` em banco fiscal dedicado, fora da ARP → consulta auditada | Por que conferência de local exige coordenadas exatas frente a unidade declarada, escala e conferência pelo responsável |
 | Acompanhamento entre unidades | Turno elegível → serviço Android visível → eventos de início, amostra, pausa, retomada e fim → `dp_journeyLocationEvents` e sessões no RH → consulta auditada | Por que capturas por evento e declaração de deslocamento não bastam; quais funções e turnos exigem essa modalidade |
+| Gestão de aparelhos empresariais | Google Workspace com gerenciamento avançado → inventário, apps gerenciados, políticas, bloqueio/apagamento remoto → vínculo aparelho × usuário no Coala Go com auditoria | Quais ações remotas são necessárias, quem as executa e como evitar acesso a conteúdo pessoal |
 
 Categorias: identidade do colaborador, unidade, datas, horários, latitude, longitude, precisão, disponibilidade do sensor, versão da política e identificadores de eventos. Coordenadas podem revelar contextos pessoais; inferências sobre saúde, religião ou vida privada não fazem parte da finalidade e devem ser vedadas. Listas e documentos fiscais não recebem coordenadas.
 
 A controladora determina finalidade e pessoas autorizadas; RH atende pedidos internos e encaminha questões de privacidade. Backend e Android executam o tratamento conforme configuração. Infraestrutura utiliza serviços Firebase/Google Cloud; contratos, papéis, localização dos dados, suboperadores e mecanismo de transferência internacional devem ser confirmados pelo inventário contratual, sem presumir que região do serviço comprove residência de todo o tratamento.
+
+Aparelho do acompanhamento: o serviço roda no aparelho em que a pessoa estiver autenticada, empresarial ou pessoal; o vínculo empresarial é controle administrativo adicional, não requisito da coleta ([plano](../../planos/plano-monitoramento-continuo-celular-empresarial.md)). Em aparelho pessoal, a expectativa de privacidade é maior e o risco de coleta fora do trabalho também; avaliar separadamente se a modalidade deve ser limitada a aparelhos empresariais. Hoje o serviço usa somente posição, precisão, velocidade e deslocamento do sistema de localização; sensores de movimento e orientação, bateria e rede não são usados, e adotá-los exige nova versão do termo e nova avaliação neste relatório. A geocodificação para endereço aproximado envolve fornecedor de mapas.
 
 ## Hipóteses e alternativas
 
@@ -23,7 +26,7 @@ Para eventual legítimo interesse, preencher avaliação documentada de finalida
 
 - Captura pontual não impede a batida e não muda o original fiscal. A avaliação de área é acessória, sujeita a erro e conferência humana.
 - Acompanhamento depende de turno, participante e política. O kill switch permanece falso. O ciclo pausa/retoma/encerra, reconhece e descarta lote tardio após revogação.
-- Android solicita atualizações por provedor com mínimos de cinco minutos e 100 metros. Medir frequência efetiva e duplicidade entre provedores no Galaxy; não afirmar teto global ou periodicidade exata.
+- O Android pede posição aos provedores GPS e rede a cada 60 segundos ou 25 metros, mas o serviço grava no máximo um marco a cada 2 minutos em movimento (velocidade de pelo menos 1,2 m/s ou deslocamento de 120 m) e um marco a cada 15 minutos parado, descartando posições com precisão pior que 150 m (`journey-location-lease.server.ts`, `JourneyLocationService.kt`). Não há uso de acelerômetro, giroscópio, orientação, bateria ou rede para decidir a coleta. Medir no Galaxy a frequência efetiva e a duplicidade entre provedores antes de afirmar periodicidade exata.
 - Janela técnica de quatro horas antes e duas após escala não representa autorização para coleta fora do trabalho. Avaliar ajuste, horas extras, ausência de encerramento e forma de parada efetiva.
 - Consulta usa titular real ou concessão expressa, uma pessoa/unidade/dia/fonte, paginação, motivo e auditoria antes de resposta. Evidências vencidas não são entregues pela consulta comum; consulta e índices ainda precisam de publicação e ensaio no destino.
 - Guarda configurada: 1.825 dias para evidências e trilha de acesso. Justificar separadamente o prazo das coordenadas e da auditoria, comparar prazo menor e definir destino após expiração. TTL não garante eliminação imediata nem cobre todos os backups.
@@ -39,6 +42,9 @@ Para eventual legítimo interesse, preencher avaliação documentada de finalida
 | Retenção excessiva ou descarte incompleto | Expiração, recusa de leitura vencida, dados separados da ARP | Decisão por classe, TTL no destino, backups, eliminação e custódia |
 | Inferências indevidas e finalidade ampliada | Uso limitado à conferência humana; sem coordenadas nos fiscais | Política disciplinar, treinamento e revisão de acessos |
 | Cópia ou divulgação em canais externos | Sem mapa externo no painel; campos de resposta limitados | Procedimento RH de entrega segura e resposta a incidente |
+| Coleta em aparelho pessoal além do esperado | Ciência no termo v6, notificação permanente, encerramento por logout/troca de usuário e fim de jornada | Decisão sobre limitar a aparelhos empresariais, orientação RH sobre recusa e ensaio no aparelho pessoal |
+| Inferência a partir de velocidade, deslocamento ou de sinais futuros | Vedação de inferências no termo v6; sensores, bateria e rede fora da coleta atual | Avaliar neste relatório e em nova versão do termo antes de adotar qualquer sinal adicional |
+| Bloqueio ou apagamento remoto indevido de aparelho empresarial | Vínculo aprovado por administrador com auditoria; termo de patrimônio orienta não guardar conteúdo pessoal | Definir quem executa ações remotas, motivos admitidos e registro no console do Workspace |
 | Dados incorretos, adulterados ou sem precisão | Precisão/status preservados; canal de contestação; origem declarada pelo cliente | Verificar aparelho físico e limites de confiança; não afirmar prova de presença |
 
 Classificação e aceitação do risco residual devem ser preenchidas e assinadas pelo responsável após as medidas e os ensaios. Esta minuta não presume risco baixo nem aceitação da controladora.
