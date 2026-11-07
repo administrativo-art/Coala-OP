@@ -128,14 +128,14 @@ export function LocationPolicyControl({ firebaseUser, unitId, unitName, unitAddr
   const radius = Number(form?.radiusMeters) || 150;
   return <>
     <div className="flex items-center justify-between gap-3 rounded-ds-btn border border-ds-border bg-ds-warm p-3">
-      <div><p className="text-xs font-black text-ds-ink">Área da unidade</p>
-        <p className="mt-0.5 text-xs text-ds-ink-muted">Onde fica a unidade para conferir as batidas. A posição só é pedida nos turnos com localização ligada.</p></div>
-      <Button type="button" variant="ds-secondary" size="sm" onClick={() => void show()}><MapPin className="h-4 w-4" /> Configurar</Button>
+      <div><p className="text-xs font-black text-ds-ink">Localização da unidade</p>
+        <p className="mt-0.5 text-xs text-ds-ink-muted">Escolha o local no mapa e ajuste o raio para conferir as batidas.</p></div>
+      <Button type="button" variant="ds-secondary" size="sm" onClick={() => void show()}><MapPin className="h-4 w-4" /> Editar localização</Button>
     </div>
     <Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
       <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b border-ds-divider px-6 py-5">
-          <DialogTitle>Área de ponto</DialogTitle>
+          <DialogTitle>Localização da unidade</DialogTitle>
           <DialogDescription>
             {unitName} · Defina o endereço e o raio usados para conferir as batidas.
           </DialogDescription>

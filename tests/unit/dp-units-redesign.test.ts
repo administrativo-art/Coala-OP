@@ -93,6 +93,15 @@ test('endereço e CEP são botões visíveis, sem depender de passar o mouse ou 
   assert.doesNotMatch(detail, /Popover|onMouseEnter|onContextMenu/);
 });
 
+test('localização é editada na identificação e deriva o endereço da ficha', () => {
+  assert.doesNotMatch(detail, /LocationPolicyControl|Registro de ponto/);
+  assert.match(wizard, /<LocationPolicyControl/);
+  assert.match(wizard, /patch\(\{ address: address \?\? "" \}\)/);
+  assert.match(wizard, /Cancelar esta edição não desfaz a localização já salva/);
+  assert.match(wizard, /A localização e o endereço são alterados juntos/);
+  assert.match(screen, /setUnitDialog\(\{ mode: "edit", unit: \{ \.\.\.created/);
+});
+
 test('contrato com o e2e de estoque: grupo que abastece, função no estoque e botões de salvar', () => {
   assert.match(structure, /data-testid="group-supplied-groups"/);
   assert.match(structure, /aria-label=\{`Abastece \$\{candidate\.name\}`\}/);

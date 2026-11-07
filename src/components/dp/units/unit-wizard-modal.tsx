@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import type { User as FirebaseUser } from "firebase/auth";
 
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
@@ -19,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { BRAZIL_TIME_ZONES } from "@/features/dp/rep-p/time-zones";
+import { LocationPolicyControl } from "@/features/dp/rep-p/location-policy-control";
 import { cn } from "@/lib/utils";
 import type { DPCoverageMode, DPUnit, DPUnitGroup, DPUnitOrganization, DPUnitStockRole, Kiosk } from "@/types";
 import {
@@ -35,7 +37,7 @@ export type UnitDialogState =
   | { mode: "edit"; unit: DPUnit };
 
 const STEPS: WizardStep[] = [
-  { id: "identity", label: "Identificação", description: "Nome, CNPJ, tipo e endereço da unidade." },
+  { id: "identity", label: "Identificação", description: "Nome, CNPJ, tipo e localização da unidade." },
   { id: "structure", label: "Estrutura", description: "Organização, grupo e função no estoque." },
   { id: "coverage", label: "Cobertura", description: "Como a escala identifica falta de pessoas na unidade." },
   { id: "integrations", label: "Integrações", description: "Vínculos independentes com o PDV Legal e o Bizneo." },
@@ -70,6 +72,9 @@ export function UnitWizardModal({
   kiosks,
   syncCandidates,
   saving,
+  firebaseUser,
+  canManageLocation,
+  onAddressSave,
   onClose,
   onSubmit,
 }: {
@@ -79,6 +84,9 @@ export function UnitWizardModal({
   kiosks: Kiosk[];
   syncCandidates: Kiosk[];
   saving: boolean;
+  firebaseUser: FirebaseUser | null;
+  canManageLocation: boolean;
+  onAddressSave: (unit: DPUnit, address: string | undefined) => Promise<void>;
   onClose: () => void;
   onSubmit: (form: UnitForm, dialog: UnitDialogState) => Promise<void>;
 }) {
@@ -354,17 +362,27 @@ export function UnitWizardModal({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Endereço do estabelecimento" htmlFor="unit-address" requirement="opcional"
-            hint="Obrigatório, junto com o CNPJ, para usar esta unidade como empregadora no registro de ponto.">
-            <Textarea
-              id="unit-address"
-              value={form.address}
-              onChange={(event) => patch({ address: event.target.value })}
-              placeholder="Rua, número, complemento, bairro, cidade e UF"
-              rows={3}
-              className={cn(fieldInputClass, "h-auto py-2.5")}
-            />
-          </Field>
+          {dialog.mode === "edit" ? <div className="space-y-3">
+            <Field label="Endereço da unidade" hint={canManageLocation
+              ? "Derivado da localização escolhida. Também é usado nos documentos da unidade."
+              : "A localização e o endereço são alterados juntos por quem configura a área do ponto."}>
+              <p className="rounded-ds-btn border border-ds-border bg-ds-warm px-3 py-2.5 text-sm text-ds-ink">
+                {form.address || "Endereço ainda não definido"}
+              </p>
+            </Field>
+            {canManageLocation ? <LocationPolicyControl firebaseUser={firebaseUser} unitId={dialog.unit.id}
+              unitName={form.name} unitAddress={form.address} canManage canManageAddress
+              onAddressSave={async (address) => {
+                await onAddressSave(dialog.unit, address);
+                patch({ address: address ?? "" });
+              }} /> : null}
+            {canManageLocation ? <p className="text-xs text-ds-ink-muted">Salvar localização atualiza o endereço imediatamente. Cancelar esta edição não desfaz a localização já salva.</p> : null}
+          </div> : <Field label="Endereço cadastral inicial" htmlFor="unit-address" requirement="opcional"
+            hint="Após criar a unidade, a localização poderá substituir este endereço pelo resultado do mapa.">
+            <Textarea id="unit-address" value={form.address} onChange={(event) => patch({ address: event.target.value })}
+              placeholder="Rua, número, complemento, bairro, cidade e UF" rows={3}
+              className={cn(fieldInputClass, "h-auto py-2.5")} />
+          </Field>}
         </div>
       ) : null}
 
