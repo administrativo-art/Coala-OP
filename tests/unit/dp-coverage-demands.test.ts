@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  alertsWhenUnitEmpty,
+  buildDailyEmptyUnitCoverage,
   buildDailyOnDemandCoverage,
   coverageDemandRouteSchema,
   coverageDemandWindowsSchema,
@@ -28,6 +30,21 @@ test('assume horário fixo para unidades antigas e respeita o modo explícito', 
   assert.equal(resolveDPCoverageMode({}), 'fixed_hours');
   assert.equal(resolveDPCoverageMode({ coverageMode: 'on_demand' }), 'on_demand');
   assert.equal(resolveDPCoverageMode({ coverageMode: 'disabled' }), 'disabled');
+});
+
+test('preserva o alerta das unidades antigas e só desliga as explicitamente desativadas', () => {
+  assert.equal(alertsWhenUnitEmpty({}), true);
+  assert.equal(alertsWhenUnitEmpty({ coverageMode: 'fixed_hours' }), true);
+  assert.equal(alertsWhenUnitEmpty({ coverageMode: 'on_demand' }), true);
+  assert.equal(alertsWhenUnitEmpty({ coverageMode: 'disabled' }), false);
+});
+
+test('avisa apenas quando não há turno de trabalho da unidade na data', () => {
+  const date = '2026-09-04';
+  assert.equal(buildDailyEmptyUnitCoverage({ date, shifts: [] }).gaps.length, 1);
+  assert.equal(buildDailyEmptyUnitCoverage({ date, shifts: [{ date, type: 'day_off' }] }).gaps.length, 1);
+  assert.equal(buildDailyEmptyUnitCoverage({ date, shifts: [shift('maria', '11:00', '11:30')] }).gaps.length, 0);
+  assert.equal(buildDailyEmptyUnitCoverage({ date, shifts: [{ ...shift('maria', '11:00', '11:30'), date: '2026-09-05' }] }).gaps.length, 1);
 });
 
 test('rejeita intervalos sobrepostos e aceita intervalos adjacentes', () => {

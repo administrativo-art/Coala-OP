@@ -6,7 +6,7 @@ import type { DPShiftDefinition, DPUnit } from '../../src/types';
 
 const createdAt = {} as DPUnit['createdAt'];
 
-test('on-demand units do not expose an artificial expected-shift target', () => {
+test('sem horários ou turnos definidos não há meta de dias, independentemente do alerta', () => {
   const unit: DPUnit = {
     id: 'distribution-center',
     name: 'Centro de distribuição',
@@ -20,6 +20,19 @@ test('on-demand units do not expose an artificial expected-shift target', () => 
     month: 9,
     shiftDefinitions: [],
   }), null);
+});
+
+test('a meta de dias não depende do seletor de alerta da unidade', () => {
+  const definition = {
+    id: 'morning', code: 'M', name: 'Manhã', startTime: '09:00', endTime: '15:00',
+    unitIds: ['distribution-center'], daysOfWeek: [1], createdAt,
+  } as DPShiftDefinition;
+  for (const coverageMode of ['fixed_hours', 'on_demand', 'disabled'] as const) {
+    assert.equal(countExpectedDPUnitDays({
+      unit: { id: 'distribution-center', name: 'CD', coverageMode, createdAt },
+      year: 2026, month: 9, shiftDefinitions: [definition],
+    }), 4);
+  }
 });
 
 test('filled days count unique work dates and ignore day-off records', () => {
