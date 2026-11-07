@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { UsersRound } from "lucide-react";
 
 import {
   CadastrosHero,
@@ -17,15 +18,18 @@ import {
 import { buildChips } from "@/components/cadastros/cadastros-utils";
 import { useDP } from "@/components/dp-context";
 import { Segmented } from "@/components/patterns/segmented";
+import { SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useAuth } from "@/hooks/use-auth";
+import { canReadUsersDirectory } from "@/features/auth/users-directory-access";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
-import { dpOperatingHoursSchema } from "@/lib/dp-operating-hours";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
+import { userMatchesDPUnit } from "@/lib/dp-schedule-roster";
+import { isWorkforceEmploymentRelationship } from "@/lib/hr/employment-relationship";
 import { activeOperationalUnits } from "@/lib/dp-units";
 import { cn } from "@/lib/utils";
 import type { DPUnit, DPUnitGroup, DPUnitOrganization } from "@/types";
@@ -61,7 +65,7 @@ type UnitsTab = "units" | "groups" | "organizations";
 const NO_GROUP = "__no_group__";
 const NO_ORGANIZATION = "__no_organization__";
 
-const UNIT_TEMPLATE = "minmax(200px,1.5fr) minmax(150px,1fr) minmax(130px,0.9fr) minmax(190px,1.3fr) 120px 84px 16px";
+const UNIT_TEMPLATE = "minmax(200px,1.5fr) minmax(150px,1fr) minmax(130px,0.9fr) minmax(190px,1.3fr) 120px 84px 48px";
 const GROUP_TEMPLATE = "minmax(220px,1.5fr) minmax(160px,1fr) 110px minmax(200px,1.3fr) 16px";
 const ORGANIZATION_TEMPLATE = "minmax(240px,1.6fr) 100px 110px minmax(200px,1.3fr) 16px";
 
@@ -99,6 +103,7 @@ export function DPSettingsUnits() {
     permissions.dp?.settings?.manageUnits
   );
   const canManageTime = isDefaultAdmin || permissions.dp?.settings?.manageTime === true;
+  const canReadStaff = isDefaultAdmin || canReadUsersDirectory(permissions);
 
   const [tab, setTab] = useState<UnitsTab>("units");
   const [search, setSearch] = useState("");
@@ -106,6 +111,7 @@ export function DPSettingsUnits() {
   const [groupBy, setGroupBy] = useState<Record<UnitsTab, GroupByMode>>({ units: "none", groups: "none", organizations: "none" });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [selectedUnitKey, setSelectedUnitKey] = useState<string | null>(null);
+  const [staffUnitKey, setStaffUnitKey] = useState<string | null>(null);
   const [unitDialog, setUnitDialog] = useState<UnitDialogState | null>(null);
   const [groupPanel, setGroupPanel] = useState<GroupPanelState | null>(null);
   const [organizationPanel, setOrganizationPanel] = useState<OrganizationPanelState | null>(null);
@@ -125,6 +131,12 @@ export function DPSettingsUnits() {
   const organizationById = useMemo(() => new Map(organizations.map((item) => [item.id, item])), [organizations]);
   const groupById = useMemo(() => new Map(groups.map((item) => [item.id, item])), [groups]);
   const mergedUnits = useMemo(() => mergeOperationalUnits(sortedUnits, kiosks), [sortedUnits, kiosks]);
+  const staffUnit = staffUnitKey ? mergedUnits.find((unit) => unit.key === staffUnitKey) ?? null : null;
+  const staffForUnit = (unit: MergedOperationalUnit) => directory.users.filter((user) => {
+    if (!isWorkforceEmploymentRelationship(user.employmentRelationshipType)) return false;
+    if (unit.dpUnit) return userMatchesDPUnit(user, unit.dpUnit.id, units, kiosks);
+    return user.operationalUnitPeriods === undefined && Boolean(unit.kiosk && user.assignedKioskIds?.includes(unit.kiosk.id));
+  });
 
   const registeredKioskIds = useMemo(
     () => new Set(mergedUnits.filter((unit) => unit.dpUnit).map((unit) => unit.kiosk?.id).filter(Boolean) as string[]),
@@ -293,7 +305,6 @@ export function DPSettingsUnits() {
     if (!name) return;
     const cnpj = form.cnpj.trim() ? CnpjValidator.validate(form.cnpj) : null;
     if (cnpj && !cnpj.valid) return;
-    if (!dpOperatingHoursSchema.safeParse(form.operatingHours).success) return;
 
     const selectedGroup = form.groupId ? groupById.get(form.groupId) : null;
     const organizationId = selectedGroup?.organizationId ?? form.organizationId;
@@ -422,9 +433,10 @@ export function DPSettingsUnits() {
                     isMuted={false}
                     onOpen={() => setSelectedUnitKey(unit.key)}
                     label={`Abrir ${unit.name}`}
+                    interactive={false}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-bold">{unit.name}</p>
+                      <button type="button" className="block max-w-full truncate text-left text-[13.5px] font-bold text-ds-ink hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent" onClick={() => { setStaffUnitKey(null); setSelectedUnitKey(unit.key); }} aria-label={`Abrir ${unit.name}`}>{unit.name}</button>
                       {meta ? <p className="truncate text-xs text-ds-ink-muted">{meta}</p> : null}
                     </div>
                     <div className="min-w-0">
@@ -442,7 +454,7 @@ export function DPSettingsUnits() {
                       <StatusPill variant={unit.dpUnit ? "neutral" : "warn"}>{unit.dpUnit ? unitExternalLabel(unit.dpUnit) : "Só operacional"}</StatusPill>
                     </div>
                     <span className="text-xs text-ds-ink-muted">{shiftCount > 0 ? pluralize(shiftCount, "turno", "turnos") : "Sem turnos"}</span>
-                    <Chevron />
+                    {canReadStaff ? <button type="button" className="grid h-9 w-9 place-items-center rounded-ds-btn text-ds-ink-muted hover:bg-ds-warm hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent" aria-label={`Ver colaboradores vinculados a ${unit.name}`} title="Ver colaboradores" onClick={() => { setSelectedUnitKey(null); setStaffUnitKey(unit.key); }}><UsersRound aria-hidden="true" className="h-4 w-4" /></button> : <span />}
                   </ListRow>
                 );
   };
@@ -586,7 +598,7 @@ export function DPSettingsUnits() {
               <span>Unidade</span>
               <span>Estrutura</span>
               <span>Integrações</span>
-              <span>Cobertura</span>
+              <span>Alerta da escala</span>
               <span>Origem</span>
               <span>Turnos</span>
               <span />
@@ -679,6 +691,17 @@ export function DPSettingsUnits() {
         onDetachFromGroup={(unit) => void detachUnitFromGroup(unit)}
         onDelete={(unit) => removeWith(() => deleteUnit(unit.id), () => setSelectedUnitKey(null))}
       />
+
+      <SidePanel open={Boolean(staffUnit)} onOpenChange={(open) => { if (!open) setStaffUnitKey(null); }}
+        kicker="Unidade" title={staffUnit?.name ?? "Colaboradores"}
+        subtitle="Colaboradores com vínculo operacional nesta unidade hoje">
+        {staffUnit ? <div className="space-y-3">
+          <p className="text-xs font-bold text-ds-ink-muted">{pluralize(staffForUnit(staffUnit).length, "colaborador vinculado", "colaboradores vinculados")}</p>
+          {staffForUnit(staffUnit).length ? <ul className="divide-y divide-ds-divider rounded-ds-card border border-ds-border bg-ds-surface">
+            {staffForUnit(staffUnit).map((user) => <li key={user.id} className="px-4 py-3 text-sm font-semibold text-ds-ink">{user.name || user.username}</li>)}
+          </ul> : <p className="rounded-ds-card border border-dashed border-ds-border p-5 text-sm text-ds-ink-muted">Nenhum colaborador ativo vinculado a esta unidade hoje.</p>}
+        </div> : null}
+      </SidePanel>
 
       <UnitWizardModal
         dialog={unitDialog}

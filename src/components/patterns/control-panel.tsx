@@ -10,7 +10,7 @@ export function ControlPanel({ className, ...props }: React.HTMLAttributes<HTMLD
   return (
     <section
       data-ui="control-panel"
-      className={cn("rounded-ds-panel bg-ds-dark p-6 text-ds-on-dark shadow-ds-panel", className)}
+      className={cn("rounded-ds-panel bg-ds-dark p-6 text-ds-on-dark", className)}
       {...props}
     />
   )

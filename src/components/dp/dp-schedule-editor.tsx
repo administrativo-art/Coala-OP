@@ -92,11 +92,10 @@ import {
   isDayOffShift,
   isWorkShift,
 } from '@/lib/dp-shift-rules';
-import { buildDailyUnitCoverage } from '@/lib/dp-operating-hours';
 import {
-  buildDailyOnDemandCoverage,
+  buildDailyEmptyUnitCoverage,
+  alertsWhenUnitEmpty,
   normalizeDPCoverageDemands,
-  resolveDPCoverageMode,
   saveCoverageDemandsSchema,
   type DPDailyCoverage,
 } from '@/lib/dp-coverage-demands';
@@ -1026,6 +1025,11 @@ function CoverageStatus({
   canEditDemand: boolean;
   onEditDemand?: () => void;
 }) {
+  if (coverage.mode === 'empty_day') return coverage.gaps.length ? (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-[11px] font-semibold text-destructive">
+      Unidade sem ninguém escalado neste dia
+    </div>
+  ) : null;
   if (coverage.mode === 'fixed_hours' && coverage.gaps.length === 0) return null;
 
   if (coverage.mode === 'on_demand' && !coverage.hasDemand) {
@@ -2093,20 +2097,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const coverageByCellKey = useMemo(() => {
     const coverage = new Map<string, DPDailyCoverage>();
     activeUnits.forEach((unit) => {
-      const mode = resolveDPCoverageMode(unit);
-      if (mode === 'disabled') return;
+      if (!alertsWhenUnitEmpty(unit)) return;
       const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
       days.forEach(({ date }) => {
-        const daily = mode === 'on_demand'
-          ? buildDailyOnDemandCoverage({ date, windows: coverageDemands[date] ?? [], shifts: unitShifts })
-          : buildDailyUnitCoverage({ date, operatingHours: unit.operatingHours, shifts: unitShifts });
-        if (mode === 'on_demand' || daily.gaps.length > 0) {
+        const daily = buildDailyEmptyUnitCoverage({ date, shifts: unitShifts });
+        if (daily.gaps.length > 0) {
           coverage.set(`${date}::${unit.id}`, daily);
         }
       });
     });
     return coverage;
-  }, [activeUnits, coverageDemands, days, units, workShifts]);
+  }, [activeUnits, days, units, workShifts]);
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -2132,7 +2133,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         if (coverage?.gaps.length) {
           alerts.push({
             key: 'coverage',
-            label: coverage.gaps.length === 1 ? 'Cobertura incompleta' : `${coverage.gaps.length} lacunas de cobertura`,
+            label: 'Unidade sem ninguém escalado',
             tone: 'danger',
           });
         } else if (coverage?.hasUnplannedShifts) {
@@ -2230,7 +2231,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return issues.size;
   }, [crossConflictShiftIds, journeyValidation, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
   const coverageAlertCount = useMemo(
-    () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
+    () => new Set([...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).map((coverage) => coverage.date)).size,
     [coverageByCellKey],
   );
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
@@ -2609,9 +2610,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
         >
           <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#94a3b8]'}`}>
-            <span>Cobertura</span>
+            <span>Escala vazia</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias sem escala' : 'todos com escala'}</span></p>
         </button>
         <button
           type="button"
