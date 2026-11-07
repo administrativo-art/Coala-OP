@@ -1,6 +1,5 @@
 import type { DPShift, DPShiftDefinition, DPUnit } from '@/types';
 import { getShiftDefinitionUnitIds, shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
-import { resolveDPCoverageMode } from '@/lib/dp-coverage-demands';
 import { hasConfiguredOperatingHours, normalizeOperatingHours } from '@/lib/dp-operating-hours';
 
 export function countFilledDPShiftDays(shifts: Array<Pick<DPShift, 'type' | 'date'>>) {
@@ -10,8 +9,8 @@ export function countFilledDPShiftDays(shifts: Array<Pick<DPShift, 'type' | 'dat
 }
 
 /**
- * Returns the number of operating days expected to be filled for a fixed-hours unit.
- * On-demand units intentionally return null because they do not have a fixed target.
+ * Returns an expected-day count from operating hours or shift definitions, independently
+ * of the empty-schedule alert configured on the unit.
  */
 export function countExpectedDPUnitDays({
   unit,
@@ -24,8 +23,6 @@ export function countExpectedDPUnitDays({
   month: number;
   shiftDefinitions: DPShiftDefinition[];
 }) {
-  if (resolveDPCoverageMode(unit) !== 'fixed_hours') return null;
-
   const exactDefinitions = shiftDefinitions.filter((definition) => (
     getShiftDefinitionUnitIds(definition).includes(unit.id)
   ));
