@@ -2,11 +2,17 @@
 
 Os nomes identificam responsabilidades; não definem personalidade ou estilo. A única exceção é TARS, conforme `development-technology.md`. Antes de nomear outro agente, conferir este catálogo e as configurações dos demais worktrees.
 
+## Coordenação geral
+
+| Nome | Papel | Configuração |
+| --- | --- | --- |
+| Capitão Nemo | Recebe demandas, identifica o departamento responsável e acompanha o resultado | `docs/engineering/nemo-routing.md` e `workspace/AGENTS.md` |
+
 ## Departamento de Desenvolvimento e Tecnologia
 
 | Nome | Papel | Configuração |
 | --- | --- | --- |
-| TARS | Coordenação pela sessão principal | `AGENTS.md` e `CLAUDE.md` |
+| TARS | Direção de Desenvolvimento e Tecnologia | `AGENTS.md`, `CLAUDE.md` e `tars` |
 | Gandalf | Arquitetura e requisitos | `gandalf` |
 | Shuri | Back-end e integrações | `shuri` |
 | Edna Moda | Front-end, UX e UI | `edna` |
@@ -30,6 +36,12 @@ Nomes encontrados no worktree `Coala-OP-financial-agent-hierarchy` em 2026-09-23
 | Mônica Geller | Numerário |
 | Spock | Controladoria |
 | Diana Prince | Revisão independente |
+
+## Departamento de Marketing
+
+| Nome | Papel | Configuração |
+| --- | --- | --- |
+| Nick Fury | Direção de Marketing | `Coala | Marketing/AGENTS.md` e `nick` |
 
 ## Departamento de Recursos Humanos
 
