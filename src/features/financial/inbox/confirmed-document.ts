@@ -2,7 +2,20 @@ import { CnpjValidator } from "@/lib/company/cnpj-validator";
 
 import { bankSlipAmountCents, maskPaymentBarcode, normalizeBrazilianServiceNumber, normalizePaymentBarcode } from "./parser";
 import { validatedCollectionBarcode } from "@/features/financial/payment-requests/inbox-barcode";
-import type { FinancialInboxClassification } from "./types";
+import type { FinancialInboxBillingIdentity, FinancialInboxClassification } from "./types";
+
+export function telecomBillingIdentitiesMatch(
+  confirmed: FinancialInboxBillingIdentity | null | undefined,
+  forecast: FinancialInboxBillingIdentity | null | undefined,
+): boolean {
+  const confirmedAccount = confirmed?.customerAccount?.replace(/\D/g, "") ?? "";
+  const forecastAccount = forecast?.customerAccount?.replace(/\D/g, "") ?? "";
+  const confirmedNumbers = (confirmed?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+  const forecastNumbers = (forecast?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+  return Boolean(confirmedAccount && forecastAccount && confirmedAccount === forecastAccount
+    && confirmedNumbers.length && forecastNumbers.length
+    && confirmedNumbers.some((number) => forecastNumbers.includes(number)));
+}
 
 export type ConfirmedInboxDocumentInput = {
   amountCents: number;

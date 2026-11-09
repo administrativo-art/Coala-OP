@@ -90,6 +90,8 @@ Os testes dirigidos de triagem, segurança de pagamento, retenção, apresentaç
 
 Em 2026-10-06, a confirmação manual protegida recebeu testes unitários para valor principal codificado, divergências dos campos já observados, CNPJ e compatibilidade do fornecedor. Esses testes cobrem a validação determinística; o vínculo transacional real e a etapa bancária continuam dependentes das verificações operacionais do ambiente implantado.
 
+Previsões legadas sem `workspaceId` podem ser vinculadas a uma cobrança de telefonia somente com confirmação documental explícita e correspondência exata da conta e de ao menos uma linha normalizada. Um `workspaceId` presente e diferente continua impedindo o vínculo. Fornecedor, competência, vencimento, CNPJ quando presente e pontuação mínima da sugestão também são validados na transação.
+
 ## Preparação de pagamento e exceções rastreadas
 
 [`POST /inbox/{id}/payment`](../../../src/app/api/financial/inbox/[id]/payment/route.ts) exige, além de visão financeira/caixa, edição de despesa e visão/criação de pedidos de pagamento. A entrada exige CNPJ válido do favorecido, data e, quando ausente na classificação, o código completo. [`createInboxBarcodePaymentRequest`](../../../src/features/financial/payment-requests/service.server.ts) revalida esses campos e confere workspace, ausência de liquidação/pagamento bancário prévio, mensagem principal `linked`, despesa vinculada, código normalizado, vencimento, agendamento não passado e valor inteiro positivo. Recusa agendar depois de vencimento ainda futuro. Pedido pré-existente pela mesma origem só é retornado quando despesa, valor, código, vencimento, data solicitada e CNPJ coincidem; divergência é bloqueada.
