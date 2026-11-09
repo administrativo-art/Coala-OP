@@ -7,7 +7,7 @@ import { calculateFinancialObligationSummary } from "@/features/financial/obliga
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
-import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
+import { classifyFinancialEmail, extractBillingIdentity, mergeBillingIdentities, normalizeBrazilianServiceNumber } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, scoreProvisionCandidate, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
@@ -728,6 +728,19 @@ export async function linkSuggestedInboxCharge(
     if (documentConfirmation && provisionSupplierTaxId
       && CnpjValidator.clean(String(provisionSupplierTaxId)) !== CnpjValidator.clean(confirmedSupplierTaxId ?? "")) {
       throw new Error("O CNPJ confirmado não corresponde ao provisionamento informado.");
+    }
+    if (documentConfirmation && ["mobile", "landline"].includes(classification.billingIdentity?.serviceType ?? "")) {
+      const forecastIdentity = (provision.billingIdentity as FinancialInboxMessage["classification"]["billingIdentity"] | null | undefined)
+        ?? extractBillingIdentity([provision.description, provision.supplier, provision.notes].filter(Boolean).join("\n"));
+      const confirmedAccount = classification.billingIdentity?.customerAccount?.replace(/\D/g, "") ?? "";
+      const forecastAccount = forecastIdentity.customerAccount?.replace(/\D/g, "") ?? "";
+      const confirmedNumbers = (classification.billingIdentity?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+      const forecastNumbers = (forecastIdentity.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+      if (!confirmedAccount || !forecastAccount || confirmedAccount !== forecastAccount
+        || !confirmedNumbers.length || !forecastNumbers.length
+        || !confirmedNumbers.some((number) => forecastNumbers.includes(number))) {
+        throw new Error("A conta e a linha telefônica confirmadas devem corresponder à previsão.");
+      }
     }
     const provisionMatch = scoreProvisionCandidate(classification, {
       id: provisionId,

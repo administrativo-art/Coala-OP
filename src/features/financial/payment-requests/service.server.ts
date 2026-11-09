@@ -12,7 +12,7 @@ import { listInterStatementEntries } from "@/lib/integrations/inter/statements.s
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoAttachmentId, expenseBoletoSchema } from "./expense-boleto";
-import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
+import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema, validatedCollectionBarcode } from "./inbox-barcode";
 import {
   compareFgtsPixReceiver,
   InboxPixPaymentPreparationError,
@@ -336,6 +336,12 @@ export async function createInboxBarcodePaymentRequest(input: {
   }
   const amountCents = Number(message.classification?.amountCents);
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("Confirme o valor antes de preparar o pagamento.");
+  if (code.startsWith("8") && [44, 48].includes(code.length)) {
+    const collection = validatedCollectionBarcode(code);
+    if (!collection || (collection.amountCents != null && collection.amountCents !== amountCents)) {
+      throw new Error("A linha de arrecadação é inválida ou diverge do valor confirmado da cobrança.");
+    }
+  }
   const governmentCollection = governmentCollectionBarcode(code);
   if (governmentCollection?.amountCents != null && governmentCollection.amountCents !== amountCents) {
     throw new Error("O valor da guia de arrecadação diverge do valor confirmado da cobrança.");

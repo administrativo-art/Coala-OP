@@ -232,6 +232,7 @@ api,src/app/api/financial/expenses/[expenseId]/boleto/route.ts,,docs/engineering
 api,src/app/api/financial/expenses/[expenseId]/payments/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/expenses/provision-series/route.ts,,docs/engineering/flows/expenses.md,Ajuste assistido e transacional de valor de previsoes recorrentes com identidade e valor anterior conferidos.
 api,src/app/api/financial/import-sessions/[sessionId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/analyze/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/financial-inbox.md,Consulta segura do contexto da cobrança e correção allowlistada da leitura sem alterar a despesa.
