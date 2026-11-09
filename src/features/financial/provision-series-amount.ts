@@ -14,11 +14,14 @@ function cents(value: unknown) {
 }
 
 export function selectProvisionSeriesAmountTarget(data: Record<string, unknown>, selection: ProvisionSeriesAmountSelection) {
-  if (data.workspaceId !== selection.workspaceId || data.provisionSeriesKey !== selection.seriesKey) {
-    throw new Error("Série fora do espaço autorizado.");
-  }
+  if (data.provisionSeriesKey !== selection.seriesKey) throw new Error("Série divergente.");
   const competence = String(data.provisionCompetence ?? "");
   if (competence < selection.fromCompetence) return null;
+  // Previsões legadas da série Vivo não possuem workspaceId. A identidade de
+  // conta e linha abaixo continua obrigatória para cada alvo sem esse campo.
+  if (data.workspaceId != null && data.workspaceId !== selection.workspaceId) {
+    throw new Error("Série fora do espaço autorizado.");
+  }
   if (data.provisionType !== "forecast" || data.status !== "provisioned"
     || data.provisionReconciliationStatus !== "awaiting_actual"
     || data.replacedByExpenseId || data.paymentRequestId) return null;
