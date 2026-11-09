@@ -8,6 +8,7 @@ import {
 import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
 
 const BARCODE = "10491158171700010004400014406375415900000146798";
+const VIVO_COLLECTION_LINE = "846800000008408900740015104618553796112602611256";
 
 function classification(overrides: Partial<FinancialInboxClassification> = {}): FinancialInboxClassification {
   return {
@@ -46,6 +47,28 @@ test("confirma campos ausentes sem alterar valor e vencimento já observados", (
   assert.equal(result.supplierName, "OCEANOS INVESTIMENTOS IMOBILIARIOS LTDA");
   assert.equal(result.billingIdentity?.supplierTaxId, "05695860000100");
   assert.equal(result.confidence, "high");
+});
+
+test("confirma conta Vivo de 48 dígitos com valor, conta e linha íntegros", () => {
+  const result = confirmFinancialInboxDocument(classification({
+    documentType: "utility_bill",
+    supplierName: "Vivo",
+    dueDate: null,
+    amountCents: null,
+    billingIdentity: { supplierTaxId: null, customerAccount: null, contractNumber: null,
+      serviceType: "mobile", serviceNumbers: [] },
+  }), {
+    amountCents: 4089, dueDate: "2026-11-25", competence: "2026-11",
+    barcode: VIVO_COLLECTION_LINE, supplierName: "Vivo", supplierTaxId: "02.558.157/0004-05",
+    customerAccount: "0461855379", serviceNumbers: ["98-99907-2739"], serviceType: "mobile",
+  });
+  assert.equal(result.barcode, VIVO_COLLECTION_LINE);
+  assert.equal(result.billingIdentity?.customerAccount, "0461855379");
+  assert.equal(result.billingIdentity?.serviceType, "mobile");
+  assert.deepEqual(result.billingIdentity?.serviceNumbers, ["+5598999072739"]);
+  assert.throws(() => confirmFinancialInboxDocument(classification({ dueDate: null, amountCents: null }), {
+    ...confirmation, amountCents: 4089, dueDate: "2026-11-25", barcode: `${VIVO_COLLECTION_LINE.slice(0, -1)}7`,
+  }), /linha digitável não é válida/);
 });
 
 test("recusa linha digitável cujo principal não corresponde ao valor confirmado", () => {

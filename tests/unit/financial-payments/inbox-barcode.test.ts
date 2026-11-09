@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema } from "../../../src/features/financial/payment-requests/inbox-barcode";
+import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema, validatedCollectionBarcode } from "../../../src/features/financial/payment-requests/inbox-barcode";
 
 const valid = {
   scheduledFor: "2026-10-10",
@@ -41,4 +41,15 @@ test("recusa guia alterada, de outro segmento ou boleto bancário", () => {
   assert.equal(governmentCollectionBarcode(`84${darf.slice(2)}`), null);
   assert.equal(governmentCollectionBarcode("1".repeat(47)), null);
   assert.equal(governmentCollectionBarcode(""), null);
+});
+
+test("valida a linha de arrecadação da fatura de telefonia e seu valor", () => {
+  const vivo = "846800000008408900740015104618553796112602611256";
+  assert.deepEqual(validatedCollectionBarcode(vivo), {
+    barcode: "84680000000408900740011046185537911260261125",
+    segment: "4",
+    amountCents: 4089,
+  });
+  assert.equal(validatedCollectionBarcode(`${vivo.slice(0, -1)}7`), null);
+  assert.equal(governmentCollectionBarcode(vivo), null);
 });

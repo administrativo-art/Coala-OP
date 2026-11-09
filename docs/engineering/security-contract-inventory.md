@@ -2,9 +2,9 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **563**
-- Totalmente contratados: **233**
-- Legados congelados: **320**
+- Arquivos de rota: **564**
+- Totalmente contratados: **235**
+- Legados congelados: **319**
 - Exceções temporárias: **10**
 - Violações: **0**
 
@@ -265,6 +265,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/expenses/[expenseId]/payments` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/payments/route.ts](../../src/app/api/financial/expenses/[expenseId]/payments/route.ts) |
 | `/api/financial/expenses/[expenseId]/reconcile-provision` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts](../../src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts) |
 | `/api/financial/expenses/[expenseId]/settlement` | GET | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/settlement/route.ts](../../src/app/api/financial/expenses/[expenseId]/settlement/route.ts) |
+| `/api/financial/expenses/provision-series` | PATCH ✓ | `CONTRACTED` | [src/app/api/financial/expenses/provision-series/route.ts](../../src/app/api/financial/expenses/provision-series/route.ts) |
 | `/api/financial/import-sessions/[sessionId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/financial/import-sessions/[sessionId]/route.ts](../../src/app/api/financial/import-sessions/[sessionId]/route.ts) |
 | `/api/financial/inbox` | GET | `LEGACY_BASELINE` | [src/app/api/financial/inbox/route.ts](../../src/app/api/financial/inbox/route.ts) |
 | `/api/financial/inbox/[id]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/route.ts](../../src/app/api/financial/inbox/[id]/route.ts) |
@@ -273,7 +274,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/inbox/[id]/files/[fileId]` | GET ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/route.ts) |
 | `/api/financial/inbox/[id]/files/[fileId]/destination` | DELETE ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts) |
 | `/api/financial/inbox/[id]/files/[fileId]/naming` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts](../../src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts) |
-| `/api/financial/inbox/[id]/link` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/[id]/link/route.ts) |
+| `/api/financial/inbox/[id]/link` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/link/route.ts](../../src/app/api/financial/inbox/[id]/link/route.ts) |
 | `/api/financial/inbox/[id]/payment` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/[id]/payment/route.ts) |
 | `/api/financial/inbox/[id]/pix-payment` | POST ✓ | `CONTRACTED` | [src/app/api/financial/inbox/[id]/pix-payment/route.ts](../../src/app/api/financial/inbox/[id]/pix-payment/route.ts) |
 | `/api/financial/inbox/[id]/restore` | POST | `LEGACY_BASELINE` | [src/app/api/financial/inbox/[id]/restore/route.ts](../../src/app/api/financial/inbox/[id]/restore/route.ts) |
