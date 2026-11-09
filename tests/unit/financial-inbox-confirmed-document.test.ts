@@ -4,11 +4,22 @@ import test from "node:test";
 import {
   confirmFinancialInboxDocument,
   supplierNamesAreCompatible,
+  telecomBillingIdentitiesMatch,
 } from "../../src/features/financial/inbox/confirmed-document";
 import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
 
 const BARCODE = "10491158171700010004400014406375415900000146798";
 const VIVO_COLLECTION_LINE = "846800000008408900740015104618553796112602611256";
+
+test("identidade de telecom exige conta e linha coincidentes para previsão legada", () => {
+  const confirmed = { supplierTaxId: "02558157000405", customerAccount: "0461855379",
+    contractNumber: null, serviceType: "mobile" as const, serviceNumbers: ["+5598999072739"] };
+  const forecast = { ...confirmed, customerAccount: "046.185.537-9", serviceNumbers: ["98-99907-2739"] };
+  assert.equal(telecomBillingIdentitiesMatch(confirmed, forecast), true);
+  assert.equal(telecomBillingIdentitiesMatch(confirmed, { ...forecast, customerAccount: "0461855378" }), false);
+  assert.equal(telecomBillingIdentitiesMatch(confirmed, { ...forecast, serviceNumbers: ["+5598999072740"] }), false);
+  assert.equal(telecomBillingIdentitiesMatch(confirmed, { ...forecast, serviceNumbers: [] }), false);
+});
 
 function classification(overrides: Partial<FinancialInboxClassification> = {}): FinancialInboxClassification {
   return {
