@@ -28,6 +28,9 @@ test("seleciona a previsão Vivo de novembro e as futuras ainda pendentes", () =
   assert.equal(selectProvisionSeriesAmountTarget(forecast, selection)?.competence, "2026-11");
   assert.equal(selectProvisionSeriesAmountTarget({ ...forecast, provisionCompetence: "2026-12" }, selection)?.competence, "2026-12");
   assert.equal(selectProvisionSeriesAmountTarget({ ...forecast, provisionCompetence: "2026-10" }, selection), null);
+  const { workspaceId: _legacyWorkspace, ...legacy } = forecast;
+  assert.equal(selectProvisionSeriesAmountTarget(legacy, selection)?.competence, "2026-11");
+  assert.equal(selectProvisionSeriesAmountTarget({ ...legacy, provisionCompetence: "2026-10" }, selection), null);
   assert.equal(selectProvisionSeriesAmountTarget({ ...forecast, status: "reconciled" }, selection), null);
 });
 
