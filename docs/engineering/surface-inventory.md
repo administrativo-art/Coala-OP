@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **563 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **564 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -288,6 +288,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/expenses/[expenseId]/payments` | POST | [src/app/api/financial/expenses/[expenseId]/payments/route.ts](../../src/app/api/financial/expenses/%5BexpenseId%5D/payments/route.ts) | [expenses](flows/expenses.md) |
 | `/api/financial/expenses/[expenseId]/reconcile-provision` | POST | [src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts](../../src/app/api/financial/expenses/%5BexpenseId%5D/reconcile-provision/route.ts) | [expenses](flows/expenses.md) |
 | `/api/financial/expenses/[expenseId]/settlement` | GET | [src/app/api/financial/expenses/[expenseId]/settlement/route.ts](../../src/app/api/financial/expenses/%5BexpenseId%5D/settlement/route.ts) | [expenses](flows/expenses.md) |
+| `/api/financial/expenses/provision-series` | PATCH | [src/app/api/financial/expenses/provision-series/route.ts](../../src/app/api/financial/expenses/provision-series/route.ts) | [expenses](flows/expenses.md) |
 | `/api/financial/import-sessions/[sessionId]` | PATCH | [src/app/api/financial/import-sessions/[sessionId]/route.ts](../../src/app/api/financial/import-sessions/%5BsessionId%5D/route.ts) | [expenses](flows/expenses.md) |
 | `/api/financial/inbox` | GET | [src/app/api/financial/inbox/route.ts](../../src/app/api/financial/inbox/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]` | GET, PATCH | [src/app/api/financial/inbox/[id]/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/route.ts) | [financial-inbox](flows/financial-inbox.md) |
