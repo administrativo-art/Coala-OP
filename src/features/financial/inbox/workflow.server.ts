@@ -7,7 +7,7 @@ import { calculateFinancialObligationSummary } from "@/features/financial/obliga
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
-import { classifyFinancialEmail, extractBillingIdentity, mergeBillingIdentities, normalizeBrazilianServiceNumber } from "./parser";
+import { classifyFinancialEmail, extractBillingIdentity, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, scoreProvisionCandidate, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
@@ -15,6 +15,7 @@ import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
 import {
   confirmFinancialInboxDocument,
   supplierNamesAreCompatible,
+  telecomBillingIdentitiesMatch,
   type ConfirmedInboxDocumentInput,
 } from "./confirmed-document";
 import {
@@ -703,9 +704,6 @@ export async function linkSuggestedInboxCharge(
     const provisionSnapshot = await transaction.get(provisionRef);
     if (!provisionSnapshot.exists) throw new Error("O provisionamento sugerido não existe mais.");
     const provision = provisionSnapshot.data() as Record<string, unknown>;
-    if (provision.workspaceId !== expectedWorkspaceId) {
-      throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
-    }
     if (provision.provisionType !== "forecast" || provision.status !== "provisioned") {
       throw new Error("O provisionamento sugerido já foi tratado. Analise novamente a cobrança.");
     }
@@ -729,18 +727,18 @@ export async function linkSuggestedInboxCharge(
       && CnpjValidator.clean(String(provisionSupplierTaxId)) !== CnpjValidator.clean(confirmedSupplierTaxId ?? "")) {
       throw new Error("O CNPJ confirmado não corresponde ao provisionamento informado.");
     }
+    let verifiedTelecomIdentity = false;
     if (documentConfirmation && ["mobile", "landline"].includes(classification.billingIdentity?.serviceType ?? "")) {
       const forecastIdentity = (provision.billingIdentity as FinancialInboxMessage["classification"]["billingIdentity"] | null | undefined)
         ?? extractBillingIdentity([provision.description, provision.supplier, provision.notes].filter(Boolean).join("\n"));
-      const confirmedAccount = classification.billingIdentity?.customerAccount?.replace(/\D/g, "") ?? "";
-      const forecastAccount = forecastIdentity.customerAccount?.replace(/\D/g, "") ?? "";
-      const confirmedNumbers = (classification.billingIdentity?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
-      const forecastNumbers = (forecastIdentity.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
-      if (!confirmedAccount || !forecastAccount || confirmedAccount !== forecastAccount
-        || !confirmedNumbers.length || !forecastNumbers.length
-        || !confirmedNumbers.some((number) => forecastNumbers.includes(number))) {
+      verifiedTelecomIdentity = telecomBillingIdentitiesMatch(classification.billingIdentity, forecastIdentity);
+      if (!verifiedTelecomIdentity) {
         throw new Error("A conta e a linha telefônica confirmadas devem corresponder à previsão.");
       }
+    }
+    if (provision.workspaceId !== expectedWorkspaceId
+      && !(provision.workspaceId == null && verifiedTelecomIdentity)) {
+      throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
     }
     const provisionMatch = scoreProvisionCandidate(classification, {
       id: provisionId,
