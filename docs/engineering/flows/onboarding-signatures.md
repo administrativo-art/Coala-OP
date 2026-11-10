@@ -1,5 +1,16 @@
 # Integração: pacote de documentos para assinatura
 
+10/11/2026 — extensão local: a coleta pública agora registra, por filho, a
+declaração expressa de dependência para IR. A seleção do kit inclui a
+declaração somente para os filhos marcados. O termo de salário-família entra
+quando a análise da competência de 2026 encontra dependente elegível com
+remuneração e comprovantes aprovados. Ambos são matrizes DOCX timbradas,
+geradas na preparação, consolidadas antes do termo final e assinadas pelo
+mesmo pacote. A preparação bloqueia ano de admissão com filhos sem parâmetros
+de salário-família suportados; a geração não concede o benefício. A versão
+enviada continua congelada por hash. Não houve homologação externa nem
+publicação da extensão neste registro.
+
 02/11/2026 — complemento de armazenamento: o Acervo passa a referenciar diretamente o PDF completo em signedStoragePath, depois de validar os bytes pelo SHA-256. Promoção de kit ou de assinatura individual não copia nem salva outro objeto. Solicitação, workflows e registro da pessoa reutilizam o mesmo assinado; origens já arquivadas não são reescritas. O PDF pré-assinatura continua sendo um artefato diferente. Remoção da entrada do Acervo preserva o assinado compartilhado e sua auditoria.
 
 O retorno da Autentique para kit admissional usa a mesma promoção única tanto com colaborador já ativo quanto após sua ativação. Recepção no Storage é identificada pelo hash; solicitação/componentes são persistidos juntos antes da promoção, com retomada por estado assinado. Ensaio `node scripts/test-integration.mjs --document-central` em demo verifica os dois momentos, callbacks repetidos, um arquivo final e recusa de bytes com hash divergente. Não envia assinaturas externas. Storage, Firestore e publicação continuam etapas distintas; falha parcial pede retry/reconciliação.

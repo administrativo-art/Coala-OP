@@ -372,6 +372,32 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     ],
   },
   {
+    id: "system-admission-family-salary-term",
+    name: "Termo de responsabilidade para salário-família",
+    category: "Admissão",
+    description: "Incluído quando a análise da competência confirma dependente elegível e documentação aprovada.",
+    sourcePath: `${ADMISSION_BASE}/08-termo-salario-familia-v1.docx`,
+    contentHash: "6b94f2417f3b3d2e4c886b026b479b7a0348bf2d08a2a1b6f2a66d34be711452",
+    version: 1,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "family_salary_dependents_lines"],
+    fieldMapping: {
+      family_salary_dependents_lines: { kind: "manual", label: "Dependentes elegíveis ao salário-família", format: "multiline", required: true },
+    },
+  },
+  {
+    id: "system-admission-income-tax-dependents",
+    name: "Declaração de dependentes para imposto de renda",
+    category: "Admissão",
+    description: "Incluída somente para filhos que a pessoa marcou expressamente como dependentes de IR.",
+    sourcePath: `${ADMISSION_BASE}/08-declaracao-dependentes-ir-v1.docx`,
+    contentHash: "d3271e2414a25867637c8412c76a9c767fba626d3c1fdcfeffc8cd64c93b5ce1",
+    version: 1,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "income_tax_dependents_lines"],
+    fieldMapping: {
+      income_tax_dependents_lines: { kind: "manual", label: "Dependentes declarados para IR", format: "multiline", required: true },
+    },
+  },
+  {
     id: "system-admission-bundle-closing-term",
     name: "Termo de Encerramento, Ciência e Assinatura",
     category: "Admissão",
