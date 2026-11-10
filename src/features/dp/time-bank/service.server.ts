@@ -11,7 +11,7 @@ import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-
 import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
 import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
 import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from '@/features/dp/time-adjustments/automatic-absence.server';
-import { automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
+import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -114,7 +114,7 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
   if (adjustments.size > 200 || absences.size > 200 || automaticAbsences.size > 200) throw fail('PTRP_BANK_PREVIEW_TRUNCATED', 'O mês tem ocorrências demais para uma prévia segura.', 'CONFLICT');
   const adjustmentItems = adjustments.docs.map((doc) => doc.data() as AdjustmentRecord);
   const absenceItems = absences.docs.map((doc) => doc.data() as AbsenceRequestRecord);
-  const approvedAdjustmentDays = new Set(adjustmentItems.filter((item) => item.status === 'approved').map((item) => item.workDate));
+  const approvedAdjustmentDays = new Set(adjustmentItems.filter(adjustmentRestoresAutomaticAbsence).map((item) => item.workDate));
   const approvedAbsences = absenceItems.filter((item) => item.status === 'approved');
   const effectiveAutomaticAbsences = automaticAbsences.docs.map((doc) => doc.data() as AutomaticAbsenceRecord)
     .filter((item) => item.status === 'active' && !automaticAbsenceSuperseded(item.workDate, approvedAdjustmentDays, approvedAbsences));
