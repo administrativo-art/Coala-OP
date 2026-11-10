@@ -16,6 +16,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { reportSystemError } from '@/lib/observability/reporter';
 import { canAccessUnit } from '@/lib/unit-access';
 
 import {
@@ -733,7 +734,8 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
       await reconcileAutomaticAbsenceForDay(result.workspaceId, result.employeeUid, result.workDate, deps);
     } catch (error) {
       // The hourly reconciliation retries the durable HR decision if the scale update is unavailable.
-      console.error('[automaticAbsence] Correção aprovada; reconciliação da escala pendente.', error);
+      reportSystemError({ error, source: 'dp.time-adjustments', operation: 'reconcileAutomaticAbsenceForDay',
+        code: 'AUTOMATIC_ABSENCE_SCHEDULE_SYNC_PENDING', isTerminal: false });
     }
   }
   return adjustmentDto(result);
