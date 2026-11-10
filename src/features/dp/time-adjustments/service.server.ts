@@ -16,6 +16,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { reportSystemError } from '@/lib/observability/reporter';
 import { canAccessUnit } from '@/lib/unit-access';
 
 import {
@@ -24,6 +25,7 @@ import {
 } from './core';
 import type { AdjustmentDecisionInput, AdjustmentMonthInput, CreateAdjustmentInput } from './schemas';
 import { discardedReceiptIds, pilotTreatmentsOf } from './pilot-treatments';
+import { adjustmentRestoresAutomaticAbsence } from './automatic-absence-core';
 
 export const ADJUSTMENTS = 'ptrp_adjustmentRequests';
 export const PILOT_ADJUSTMENTS = 'repP_pilotAdjustmentRequests';
@@ -670,14 +672,17 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
     if (operation.target && operation.kind !== 'include' && await hasActiveDiscard(deps.hrDb, context.workspace_id, operation.target.receiptId)) discardTaken = true;
   }
   if (discardTaken) throw fail('PTRP_ADJUSTMENT_ALREADY_TREATED', 'Esta batida já foi desconsiderada por outro ajuste aprovado.', 'CONFLICT');
+  const automaticRef = deps.hrDb.collection('ptrp_automaticAbsences').doc(createHash('sha256')
+    .update(JSON.stringify([context.workspace_id, current.employeeUid, current.workDate])).digest('hex'));
   const result = await deps.hrDb.runTransaction(async (tx) => {
     const pilotDayGuard = deps.hrDb.collection(REP_P_PILOT_DAY_GUARDS)
       .doc(repPPilotDayGuardId(context.workspace_id, current.employeeUid, current.workDate));
-    const [snapshot, closure, pilotMarkings, pilotGuard] = await Promise.all([
+    const [snapshot, closure, pilotMarkings, pilotGuard, automatic] = await Promise.all([
       tx.get(ref),
       tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, current.workDate))),
       tx.get(pilotMarkingsOnDay(deps.hrDb, context.workspace_id, current.employeeUid, current.workDate)),
       tx.get(pilotDayGuard),
+      tx.get(automaticRef),
     ]);
     const value = snapshot.data() as AdjustmentRecord;
     if (input.action !== 'cancel' && closure.exists && closure.get('status') === 'closed') {
@@ -697,6 +702,10 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
       acts: [...value.acts, { ...act, previousHash, hash: adjustmentActHash(previousHash, act, adjustmentPayloadDigest({ id: value.id, status: action })) }],
       ...(action !== 'cancelled' ? { decidedAt: at, decidedBy: context.decoded.uid } : {}) };
     tx.set(ref, next);
+    if (automatic.exists && adjustmentRestoresAutomaticAbsence(next)) {
+      tx.update(automaticRef, { scheduleSyncStatus: 'pending_restoration', scheduleSyncRequestedAt: at,
+        scheduleSyncVersion: Number(automatic.get('scheduleSyncVersion') ?? 0) + 1 });
+    }
     if (action === 'approved') {
       // Original preservada na ARP; o tratamento só acrescenta informação identificada (art. 82 p.ú.).
       const common = { workspaceId: value.workspaceId, employeeUid: value.employeeUid, workDate: value.workDate,
@@ -719,5 +728,15 @@ export async function decideAdjustment(context: ServerUserContext, adjustmentId:
     }
     return next;
   });
+  if (adjustmentRestoresAutomaticAbsence(result)) {
+    try {
+      const { reconcileAutomaticAbsenceForDay } = await import('./automatic-absence.server');
+      await reconcileAutomaticAbsenceForDay(result.workspaceId, result.employeeUid, result.workDate, deps);
+    } catch (error) {
+      // The hourly reconciliation retries the durable HR decision if the scale update is unavailable.
+      reportSystemError({ error, source: 'dp.time-adjustments', operation: 'reconcileAutomaticAbsenceForDay',
+        code: 'AUTOMATIC_ABSENCE_SCHEDULE_SYNC_PENDING', isTerminal: false });
+    }
+  }
   return adjustmentDto(result);
 }

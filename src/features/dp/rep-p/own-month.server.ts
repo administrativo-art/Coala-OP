@@ -11,7 +11,7 @@ import { readOfficialPersonMonth, readOfficialScheduleShifts, type OfficialShift
 
 import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
 import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-absence.server';
-import { automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
+import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
@@ -224,7 +224,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     ]);
     const periods = approvedAbsences.docs.filter((doc) => doc.get('status') === 'approved')
       .map((doc) => ({ startDate: String(doc.get('startDate')), endDate: String(doc.get('endDate')) }));
-    const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => doc.get('status') === 'approved').map((doc) => String(doc.get('workDate'))));
+    const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => adjustmentRestoresAutomaticAbsence(doc.data()))
+      .map((doc) => String(doc.get('workDate'))));
     effectiveAutomaticDates = effectiveAutomaticDates.filter((date) => !automaticAbsenceSuperseded(date, adjustmentDates, periods));
   }
   return { month: competence, shifts: result, holidays,

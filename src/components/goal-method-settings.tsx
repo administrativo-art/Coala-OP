@@ -151,7 +151,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
   const [previewCollaborators, setPreviewCollaborators] = useState<number | null>(3);
   const [previewFixedCollaborators, setPreviewFixedCollaborators] = useState<number | null>(2);
   const [previewReliefWorkerCount, setPreviewReliefWorkerCount] = useState<number | null>(1);
-  const [previewTotalTurns, setPreviewTotalTurns] = useState<number | null>(60);
+  const [previewTotalTurns, setPreviewTotalTurns] = useState<number | null>(30);
   const [previewReliefCoveredTurns, setPreviewReliefCoveredTurns] = useState<number | null>(8);
 
   const selectedConfig = useMemo(
@@ -188,6 +188,9 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
       reliefWorkerCount: previewReliefCount,
       totalPeriodTurns: previewTotalTurns ?? 0,
       reliefWorkerCoveredTurns: previewReliefCoveredTurns ?? 0,
+      reliefWorkerBasis: 'days',
+      totalPeriodDays: previewTotalTurns ?? 0,
+      reliefWorkerCoveredDaysByPerson: Array.from({ length: previewReliefCount }, () => previewReliefCoveredTurns ?? 0),
     }),
     [
       previewConfig,
@@ -651,15 +654,15 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-blue-950">Folguista proporcional por turnos</p>
+                        <p className="font-bold text-blue-950">Folguista proporcional por dias</p>
                         <MethodInfoTooltip title="Como o sistema identifica e calcula a folguista">
                           <p>A identificação vem da escala e do organograma: se a colaboradora tem função/cargo de Folguista e aparece escalada nesta unidade, ela entra como folguista.</p>
-                          <p>O sistema conta quantos turnos ela cobriu e divide pelo total de turnos possíveis do período.</p>
-                          <p>Fórmula: turnos cobertos ÷ total de turnos × bonificação total da unidade. O restante é dividido igualmente entre as fixas.</p>
+                          <p>Nas metas iniciadas a partir de novembro de 2026, o sistema conta os dias em que ela trabalhou na escala publicada e divide pelos dias da meta.</p>
+                          <p>Fórmula: dias trabalhados ÷ dias da meta × bonificação total da unidade. O restante é dividido igualmente entre as fixas.</p>
                         </MethodInfoTooltip>
                       </div>
                       <p className="max-w-4xl text-xs leading-relaxed text-blue-800">
-                        O sistema identifica pela escala e pelo organograma: colaboradora com função de folguista escalada nesta unidade recebe proporcionalmente aos turnos cobertos.
+                        O sistema identifica pela escala e pelo organograma: colaboradora com função de folguista escalada nesta unidade recebe proporcionalmente aos dias trabalhados. Metas anteriores a novembro de 2026 conservam o cálculo por turno.
                       </p>
                     </div>
                   </div>
@@ -679,7 +682,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                               ...prev.teamBonus,
                               reliefWorker: {
                                 enabled: prev.teamBonus.reliefWorker?.enabled ?? true,
-                                splitMode: 'proportional_by_covered_shifts',
+                                splitMode: 'proportional_by_worked_days',
                                 turnsPerDay: prev.teamBonus.reliefWorker?.turnsPerDay ?? 2,
                                 fixedCollaboratorRule: 'remaining_equal_split',
                                 description: event.target.value,
@@ -694,7 +697,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                   <div className="mt-4 rounded-2xl border border-blue-200 bg-white/70 p-4 text-sm text-blue-950">
                     <p className="font-black">Fórmula</p>
                     <p className="mt-1">
-                      Bonificação da folguista = (turnos cobertos pela folguista ÷ total de turnos do mês) × bonificação total da unidade.
+                      Bonificação da folguista = (dias trabalhados pela folguista ÷ dias da meta) × bonificação total da unidade.
                     </p>
                     <p className="mt-1 text-xs text-blue-800">
                       Depois disso, o restante é dividido igualmente entre as colaboradoras fixas, sem considerar quantos turnos cada fixa cobriu entre si.
@@ -894,7 +897,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label>Total de turnos</Label>
+                        <Label>Dias da meta</Label>
                         <Input
                           type="number"
                           min={0}
@@ -903,7 +906,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Turnos por folguista</Label>
+                        <Label>Dias por folguista</Label>
                         <Input
                           type="number"
                           min={0}
@@ -914,7 +917,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                     </div>
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-blue-800">
-                    Exemplo: 30 dias x 2 turnos = 60 turnos possíveis. Se cada folguista cobrir 8, cada uma recebe 8/60 da bonificação da equipe.
+                    Exemplo: em uma meta com 30 dias, a folguista que trabalhou 8 dias recebe 8/30 da bonificação da equipe.
                   </p>
                 </div>
               )}
@@ -990,7 +993,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                           </div>
                           {preview?.reliefWorkerSplit && (
                             <p className="mt-1 text-xs text-blue-700">
-                              {previewReliefCoveredTurns ?? 0} de {preview.reliefWorkerSplit.totalPeriodTurns} turnos possíveis
+                              {previewReliefCoveredTurns ?? 0} de {preview.reliefWorkerSplit.totalPeriodDays} dias da meta
                             </p>
                           )}
                         </div>
@@ -1020,7 +1023,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                   <p className="font-black text-slate-950">Metodologia da divisão</p>
                   <div className="mt-2 grid gap-2">
                     <div>
-                      Folguista: {previewReliefCoveredTurns ?? 0} ÷ {preview.reliefWorkerSplit.totalPeriodTurns} x R$ {formatCurrencyBRL(preview.totalTeamBonus)} = R$ {formatCurrencyBRL(preview.reliefWorkerSplit.reliefWorkerBonus)}
+                      Folguista: {previewReliefCoveredTurns ?? 0} ÷ {preview.reliefWorkerSplit.totalPeriodDays} x R$ {formatCurrencyBRL(preview.totalTeamBonus)} = R$ {formatCurrencyBRL(preview.reliefWorkerSplit.reliefWorkerBonus)}
                     </div>
                     <div>
                       Restante para fixas: R$ {formatCurrencyBRL(preview.totalTeamBonus)} - R$ {formatCurrencyBRL(preview.reliefWorkerSplit.totalReliefWorkerBonus)}

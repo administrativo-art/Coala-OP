@@ -827,6 +827,10 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "shifts", "fieldPath": "userId", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" },
+      { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
     { "collectionGroup": "privacyPersonCursorStates", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "authIdentityMigrations", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     {
