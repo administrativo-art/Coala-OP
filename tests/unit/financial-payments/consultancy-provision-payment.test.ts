@@ -18,6 +18,8 @@ const forecast = {
 
 test("accepts one unpaid consulting forecast for its own beneficiary and due date", () => {
   assert.doesNotThrow(() => assertConsultancyProvisionPaymentTarget(input, forecast, employee));
+  assert.doesNotThrow(() => assertConsultancyProvisionPaymentTarget(input, { ...forecast, workspaceId: undefined }, employee));
+  assert.throws(() => assertConsultancyProvisionPaymentTarget(input, { ...forecast, workspaceId: "outro" }, employee));
 });
 
 test("blocks a different employee, date, amount or existing payment", () => {

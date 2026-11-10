@@ -34,10 +34,13 @@ function day(value: unknown) {
     ? value.toDate() as Date : value instanceof Date ? value : typeof value === "string" ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : "";
 }
+function normalized(value: unknown) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+}
 
 function validateExpense(id: string, data: FirebaseFirestore.DocumentData, competence: string, due: string) {
   const installment = Array.isArray(data.installments) && data.installments.length === 1 ? data.installments[0] : null;
-  if (data.workspaceId !== WORKSPACE_ID || data.status !== "provisioned" || data.provisionType !== "forecast"
+  if ((data.workspaceId && data.workspaceId !== WORKSPACE_ID) || data.status !== "provisioned" || data.provisionType !== "forecast"
     || data.provisionSeriesKey !== series || data.provisionCompetence !== competence
     || data.supplier !== supplier || data.description !== `Consultoria de RH - ${competence.slice(5)}/${competence.slice(0,4)} | ${supplier}`
     || Math.round(Number(data.totalValue) * 100) !== amountCents || day(data.dueDate) !== due
@@ -54,7 +57,7 @@ const [employee, contract] = await Promise.all([
   hrDbAdmin.collection("employees").doc(employeeId).get(),
   hrDbAdmin.collection("employeeDocuments").doc(contractDocumentId).get(),
 ]);
-if (!employee.exists || employee.get("status") !== "active" || employee.get("name") !== supplier) throw new Error("Cadastro RH da prestadora não confere.");
+if (!employee.exists || employee.get("status") !== "active" || normalized(employee.get("name")) !== normalized(supplier)) throw new Error("Cadastro RH da prestadora não confere.");
 const extracted = contract.data()?.extractedFields ?? {};
 if (!contract.exists || contract.get("employeeId") !== employeeId || contract.get("documentTypeCode") !== "SERVICE_PROVIDER_CONTRACT_ADDENDUM"
   || contract.get("status") !== "validated" || contract.get("contentHash") !== contractHash

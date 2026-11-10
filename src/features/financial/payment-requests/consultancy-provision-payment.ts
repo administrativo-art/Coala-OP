@@ -41,7 +41,7 @@ export function assertConsultancyProvisionPaymentTarget(input: ConsultancyProvis
     throw new Error("O favorecido da consultoria não corresponde a um cadastro ativo.");
   }
   if (expense.consultancyEmployeeId !== employee.id) throw new Error("A provisão não possui vínculo confirmado com este favorecido.");
-  if (expense.workspaceId !== workspaceId || expense.status !== "provisioned" || expense.provisionType !== "forecast") {
+  if ((expense.workspaceId && expense.workspaceId !== workspaceId) || expense.status !== "provisioned" || expense.provisionType !== "forecast") {
     throw new Error("A despesa não é uma provisão de consultoria aberta neste ambiente.");
   }
   const series = String(expense.provisionSeriesKey ?? "");

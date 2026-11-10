@@ -46,7 +46,9 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
     }
     const expense = await financialDbAdmin.collection("expenses").doc(expenseId.data).get();
     if (!expense.exists) throw new AppError({ code: "CONSULTANCY_PIX_NOT_FOUND", kind: "NOT_FOUND" });
-    if (expense.get("workspaceId") !== actor.workspace_id) throw new AppError({ code: "CONSULTANCY_PIX_SCOPE", kind: "AUTHORIZATION" });
+    if (actor.workspace_id !== "coala" || (expense.get("workspaceId") && expense.get("workspaceId") !== actor.workspace_id)) {
+      throw new AppError({ code: "CONSULTANCY_PIX_SCOPE", kind: "AUTHORIZATION" });
+    }
     return { actor, input: input.data, resource: { expenseId: expenseId.data } };
   },
 });
