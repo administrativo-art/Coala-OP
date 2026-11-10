@@ -39,14 +39,14 @@ Decidido em 28/10/2026: a efetivação é um **processo de conversão de víncul
 Decisão de 10/11/2026: a pessoa declara individualmente, no formulário público,
 se cada filho será considerado dependente para IR na folha. Somente os filhos
 marcados entram na declaração de IR. O termo de responsabilidade para
-salário-família entra no kit quando a análise do sistema, para a competência
-de admissão, confirma ao menos um dependente elegível com remuneração e
-documentos aprovados. As duas peças são montadas junto dos demais modelos,
+salário-família entra no kit quando o operador registra a concessão após
+a contabilidade concluir a ficha de registro. A análise dos critérios legais
+é informativa. As duas peças são montadas junto dos demais modelos,
 integram o PDF único e usam a assinatura final do pacote. Sua geração não
 concede o benefício; mudanças após a admissão preservam o kit anterior e
-exigem nova peça. O corte local implementado suporta os parâmetros de 2026;
-ano posterior com filhos bloqueia a preparação até atualização dos parâmetros.
+exigem nova peça. O corte local implementado analisa os parâmetros de 2026;
+em ano posterior a tela informa que não há parâmetros para concluir a análise.
 
-Implementação local em `feat/admission-dependent-documents`; testes de catálogo,
-seleção e dados passaram, prévias DOCX foram inspecionadas. Homologação integrada
-com conversor oficial, Autentique e publicação permanecem a verificar.
+A primeira versão foi publicada em 10/11/2026. A correção da decisão manual
+está em `fix/family-salary-operator-decision`; os testes dirigidos e o termo v2
+foram inspecionados. O ensaio integrado com Autentique permanece pendente.

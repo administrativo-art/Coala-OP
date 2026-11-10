@@ -1005,7 +1005,6 @@ export async function applyEmployeeProfileSuggestions(input: {
     const familyFields: Array<{ key: string; value: unknown }> = [
       { key: "employee.children_under_14", value: childrenLabel },
       { key: "employee.children", value: nextFamily.dependents },
-      { key: "employee.has_family_salary", value: nextFamily.eligibleDependentsCount > 0 },
     ];
 
     for (const familyField of familyFields) {

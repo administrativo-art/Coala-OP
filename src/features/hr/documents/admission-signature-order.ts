@@ -22,7 +22,7 @@ export const ADMISSION_FAMILY_SALARY_TEMPLATE_ID = "system-admission-family-sala
 export const ADMISSION_INCOME_TAX_TEMPLATE_ID = "system-admission-income-tax-dependents";
 
 export type AdmissionDependentTemplateConditions = {
-  familySalaryEligible: boolean;
+  familySalaryGranted: boolean;
   incomeTaxDeclared: boolean;
 };
 
@@ -65,10 +65,10 @@ export function admissionTransportVoucherTemplateId(answer: unknown) {
 export function isAdmissionSignatureTemplateApplicable(
   item: Pick<AdmissionSignatureOrderItem, "id" | "templateId">,
   transportVoucherAnswer: unknown,
-  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryEligible: false, incomeTaxDeclared: false },
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   const id = templateId(item);
-  if (id === ADMISSION_FAMILY_SALARY_TEMPLATE_ID) return dependentConditions.familySalaryEligible;
+  if (id === ADMISSION_FAMILY_SALARY_TEMPLATE_ID) return dependentConditions.familySalaryGranted;
   if (id === ADMISSION_INCOME_TAX_TEMPLATE_ID) return dependentConditions.incomeTaxDeclared;
   if (
     id !== ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
@@ -81,7 +81,7 @@ export function isAdmissionSignatureTemplateApplicable(
 
 export function admissionSignaturePackageTemplateIds(
   transportVoucherAnswer: unknown,
-  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryEligible: false, incomeTaxDeclared: false },
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   return ADMISSION_SIGNATURE_TEMPLATE_ORDER.filter(
     (id) =>
@@ -97,7 +97,7 @@ export function admissionSignaturePackageTemplateIds(
 export function isCompleteAdmissionSignaturePackage(
   templateIds: readonly string[],
   transportVoucherAnswer: unknown,
-  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryEligible: false, incomeTaxDeclared: false },
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   const expected = admissionSignaturePackageTemplateIds(
     transportVoucherAnswer,

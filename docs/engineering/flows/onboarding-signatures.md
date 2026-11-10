@@ -3,13 +3,12 @@
 10/11/2026 — extensão local: a coleta pública agora registra, por filho, a
 declaração expressa de dependência para IR. A seleção do kit inclui a
 declaração somente para os filhos marcados. O termo de salário-família entra
-quando a análise da competência de 2026 encontra dependente elegível com
-remuneração e comprovantes aprovados. Ambos são matrizes DOCX timbradas,
+quando o operador registra a concessão após a conclusão da contabilidade.
+A análise legal é informativa. Ambos são matrizes DOCX timbradas,
 geradas na preparação, consolidadas antes do termo final e assinadas pelo
-mesmo pacote. A preparação bloqueia ano de admissão com filhos sem parâmetros
-de salário-família suportados; a geração não concede o benefício. A versão
-enviada continua congelada por hash. Não houve homologação externa nem
-publicação da extensão neste registro.
+mesmo pacote. Sem parâmetros do ano, a tela informa a limitação. A versão
+enviada continua congelada por hash. A versão anterior foi publicada em
+10/11/2026; a decisão manual e o termo v2 aguardam a publicação desta correção.
 
 02/11/2026 — complemento de armazenamento: o Acervo passa a referenciar diretamente o PDF completo em signedStoragePath, depois de validar os bytes pelo SHA-256. Promoção de kit ou de assinatura individual não copia nem salva outro objeto. Solicitação, workflows e registro da pessoa reutilizam o mesmo assinado; origens já arquivadas não são reescritas. O PDF pré-assinatura continua sendo um artefato diferente. Remoção da entrada do Acervo preserva o assinado compartilhado e sua auditoria.
 

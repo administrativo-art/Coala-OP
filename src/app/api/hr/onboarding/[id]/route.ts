@@ -803,7 +803,10 @@ async function createCollaboratorFromOnboarding(params: {
   if (childRecords.length > 0) {
     values['employee.children'] = { value_json: childRecords };
     values['employee.children_under_14'] = { value_text: childCountLabel(childrenUnder14) };
-    values['employee.has_family_salary'] = { value_boolean: childrenUnder14 > 0 };
+  }
+  const familySalaryDecision = asRecord(params.process.familySalaryDecision);
+  if (typeof familySalaryDecision.grant === 'boolean') {
+    values['employee.has_family_salary'] = { value_boolean: familySalaryDecision.grant };
   }
 
   Object.entries(values).forEach(([fieldKey, value]) => {

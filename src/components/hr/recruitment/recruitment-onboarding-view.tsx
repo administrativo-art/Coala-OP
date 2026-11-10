@@ -212,6 +212,9 @@ type SignatureWorkflowPayload = {
   templates: SignatureTemplateOption[];
   documents: SignatureWorkflowDocument[];
   packageTemplateIds?: string[];
+  familySalaryAssessment?: string;
+  familySalaryDecision?: boolean | null;
+  familySalaryDecisionRequired?: boolean;
   signaturePackage?: {
     status: string;
     sandbox: boolean;
@@ -4428,6 +4431,33 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                       {signatureMainSteps.filter(step => step.done).length} de {signatureMainSteps.length} subetapas
                     </span>
                   </div>
+                  {signatureWorkflow?.familySalaryDecisionRequired ? (
+                    <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                      <p className="text-xs font-black text-violet-900">Decisão sobre salário-família</p>
+                      <p className="mt-1 text-xs font-semibold text-violet-800">
+                        Análise informativa do sistema: {signatureWorkflow.familySalaryAssessment ?? 'indisponível'}.
+                        {' '}A concessão é definida pelo operador após a conclusão da contabilidade.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {([{ grant: true, label: 'Conceder' }, { grant: false, label: 'Não conceder' }] as const).map((option) => (
+                          <button
+                            key={option.label}
+                            type="button"
+                            disabled={!signaturePackageEditable || !!signatureBusy}
+                            onClick={() => void signatureAction('set_family_salary_decision', { grant: option.grant })}
+                            className={`rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50 ${signatureWorkflow.familySalaryDecision === option.grant
+                              ? 'border-violet-700 bg-violet-700 text-white'
+                              : 'border-violet-300 bg-white text-violet-800 hover:bg-violet-100'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      {signatureWorkflow.familySalaryDecision === null ? (
+                        <p className="mt-2 text-xs font-semibold text-violet-800">Registre a decisão antes de gerar o pacote.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {signatureMainSteps.map((step, index) => {
                       const current = !step.done && index === (signatureCurrentStepIndex < 0 ? signatureMainSteps.length - 1 : signatureCurrentStepIndex);
@@ -4533,7 +4563,8 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                               ) : null}
                               <button
                                 type="button"
-                                disabled={!signaturePackageEditable || !signatureWorkflow?.packageTemplateIds?.length || !!signatureBusy}
+                                disabled={!signaturePackageEditable || !signatureWorkflow?.packageTemplateIds?.length || !!signatureBusy
+                                  || (signatureWorkflow.familySalaryDecisionRequired && signatureWorkflow.familySalaryDecision === null)}
                                 onClick={() => void generateSignaturePackage()}
                                 className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
                               >
