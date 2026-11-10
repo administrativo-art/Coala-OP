@@ -23,6 +23,8 @@ import {
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
+import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
+import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -97,7 +99,10 @@ export async function createPaymentRequest(input: {
         throw new Error("A despesa já possui outra solicitação bancária.");
       }
       if (!linkedRequestId) {
-        await expenseRef.set({ paymentRequestId: existing.id, updatedAt: new Date().toISOString() }, { merge: true });
+        const installments = existing.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
+          ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: existing.id }))
+          : null;
+        await expenseRef.set({ paymentRequestId: existing.id, ...(installments ? { installments } : {}), updatedAt: new Date().toISOString() }, { merge: true });
       }
     }
     return existing;
@@ -143,6 +148,14 @@ export async function createPaymentRequest(input: {
       scheduledFor: input.scheduledFor,
     });
   }
+  let consultancyEmployee: { id: string; name?: unknown; status?: unknown } | null = null;
+  if (input.sourceType === "consultancy_provision") {
+    if (input.beneficiaryReference.sourceType !== "employee") throw new Error("A consultoria exige favorecido identificado no RH.");
+    const employee = await hrDbAdmin.collection("employees").doc(input.beneficiaryReference.sourceId).get();
+    consultancyEmployee = employee.exists ? { id: employee.id, ...employee.data() } : null;
+    const actual = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
+    assertConsultancyActualPaymentTarget(input, actual?.exists ? { id: actual.id, ...actual.data() } : null, consultancyEmployee, WORKSPACE_ID);
+  }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
   if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
   const now = new Date().toISOString();
@@ -170,11 +183,24 @@ export async function createPaymentRequest(input: {
       const expenseRef = financialDbAdmin.collection("expenses").doc(input.expenseId);
       const expense = await transaction.get(expenseRef);
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      if (input.sourceType === "consultancy_provision") {
+        const [payments, otherRequests] = await Promise.all([
+          transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", input.expenseId).limit(2)),
+          transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", input.expenseId).limit(2)),
+        ]);
+        if (payments.docs.some((item) => item.get("reversed") !== true) || !otherRequests.empty) {
+          throw new Error("A obrigação real já possui pagamento ou solicitação bancária.");
+        }
+        assertConsultancyActualPaymentTarget(input, { id: expense.id, ...expense.data() }, consultancyEmployee, WORKSPACE_ID);
+      }
       const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
       if (linkedRequestId && linkedRequestId !== ref.id) {
         throw new Error("A despesa já possui outra solicitação bancária.");
       }
-      transaction.set(expenseRef, { paymentRequestId: ref.id, updatedAt: now }, { merge: true });
+      const consultancyInstallments = input.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
+        ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: ref.id }))
+        : null;
+      transaction.set(expenseRef, { paymentRequestId: ref.id, ...(consultancyInstallments ? { installments: consultancyInstallments } : {}), updatedAt: now }, { merge: true });
     }
     transaction.create(ref, Object.fromEntries(Object.entries(request).filter(([key]) => key !== "id")));
     transaction.create(eventRef, {
@@ -1211,6 +1237,12 @@ async function commitBankSubmissionResult(params: {
 
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
   const requestRef = paymentRequestRef(id);
+  const preflightRequest = await getPaymentRequest(id);
+  if (preflightRequest.sourceType === "consultancy_provision") {
+    if (preflightRequest.beneficiaryReference?.sourceType !== "employee" || !preflightRequest.scheduledFor) throw new Error("A consultoria perdeu favorecido ou data programada.");
+    const forecast = await financialDbAdmin.collection("expenses").doc(preflightRequest.sourceId).get();
+    await assertValidatedConsultancyContract(String(forecast.get("consultancyContractDocumentId") ?? ""), preflightRequest.beneficiaryReference.sourceId, preflightRequest.scheduledFor);
+  }
   const submissionStartedAt = new Date().toISOString();
   const submissionEventId = randomUUID();
   const pending = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -1377,6 +1409,32 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       assertExpenseBoletoTarget(data, input, WORKSPACE_ID);
       if (current.barcodeSnapshot.scheduledFor < todayInBelem() || current.barcodeSnapshot.scheduledFor > input.dueDate) throw new Error("Confira a data programada antes do envio.");
       if (input.barcode !== current.barcodeSnapshot.code || input.beneficiaryDocument !== current.barcodeSnapshot.beneficiaryDocument || input.amountCents !== Math.round(current.amount * 100)) throw new Error("O boleto mudou após a preparação.");
+    }
+    if (current.sourceType === "consultancy_provision") {
+      if (!current.expenseId || current.beneficiaryReference?.sourceType !== "employee" || !current.beneficiarySnapshot) {
+        throw new Error("A solicitação da consultoria perdeu a origem ou o favorecido.");
+      }
+      const [actual, forecast, payments, requests] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("expenses").doc(current.expenseId)),
+        transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId)),
+        transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", current.expenseId).limit(2)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", current.expenseId).limit(3)),
+      ]);
+      if (!actual.exists || !forecast.exists || forecast.get("status") !== "reconciled" || forecast.get("replacedByExpenseId") !== current.expenseId
+        || forecast.get("consultancyEmployeeId") !== current.beneficiaryReference.sourceId
+        || forecast.get("consultancyContractDocumentId") !== actual.get("consultancyContractDocumentId")
+        || payments.docs.some((item) => item.get("reversed") !== true)
+        || requests.size > 2 || requests.docs.some((item) => item.id !== current.id)) {
+        throw new Error("A provisão, a obrigação real ou os pagamentos mudaram; envio bloqueado.");
+      }
+      assertConsultancyActualPaymentTarget({
+        sourceId: current.sourceId, expenseId: current.expenseId,
+        beneficiaryReference: current.beneficiaryReference, amount: current.amount,
+        description: current.description, scheduledFor: current.scheduledFor,
+      }, { id: actual.id, ...actual.data() }, {
+        id: current.beneficiaryReference.sourceId, name: current.beneficiarySnapshot.name, status: "active",
+      }, WORKSPACE_ID, current.id);
+      if (current.scheduledFor && current.scheduledFor < todayInBelem()) throw new Error("A data programada passou; envie somente após revisar o vencimento.");
     }
     const patch = {
       status: "submitting" as const,
@@ -1765,8 +1823,9 @@ async function completeSource(request: BankPaymentRequest) {
       const expenseData = expense.data()!;
       const installments = Array.isArray(expenseData.installments) ? expenseData.installments : [];
       const isInstallmentBoleto = request.sourceType === "expense_boleto" && installments.length > 1 && request.installmentNumber != null;
-      if (isInstallmentBoleto) {
-        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === request.installmentNumber
+      const isSingleConsultancy = request.sourceType === "consultancy_provision" && installments.length === 1;
+      if (isInstallmentBoleto || isSingleConsultancy) {
+        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => isSingleConsultancy || Number(item.number ?? index + 1) === request.installmentNumber
           ? { ...item, status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath ?? null }
           : item);
         const allPaid = nextInstallments.every((item: Record<string, unknown>) => item.status === "paid" || Boolean(item.paidAt));
