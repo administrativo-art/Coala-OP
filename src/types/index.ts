@@ -3509,7 +3509,7 @@ export type GoalMethod = 'manual' | 'tiered_unit_bonus' | 'historical_average' |
 export type GoalParticipantSource = 'schedule' | 'manual'
 export type GoalParticipantRole = 'fixed' | 'relief' | 'leader'
 export type GoalBonusSplitMode = 'equal' | 'weighted_by_presence' | 'manual'
-export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts'
+export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts' | 'proportional_by_worked_days'
 export type GoalIncentiveTone = 'info' | 'warning' | 'success'
 export type GoalIncentiveTriggerType = 'distance_to_next_tier_percent' | 'distance_to_next_tier_amount' | 'tier_reached'
 
@@ -3583,6 +3583,7 @@ export interface GoalClosureBonusParticipant {
   employeeId: string
   role: GoalParticipantRole
   scheduledTurns: number
+  scheduledDays?: number
   bonusAmount: number
 }
 
@@ -3602,6 +3603,8 @@ export interface GoalClosureBonusSnapshot {
   leadershipBonus: number
   totalPrize: number
   totalPeriodTurns: number
+  totalPeriodDays?: number
+  reliefBasis?: 'turns' | 'days'
   participants: GoalClosureBonusParticipant[]
   capturedAt?: Timestamp
 }
@@ -3955,7 +3958,7 @@ export type DPResponsibilityTask = {
   id: string;
   workspaceId: string;
   activity: DPResponsibilityActivity;
-  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review';
+  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review' | 'automatic_absence_restoration_review';
   scope: DPResponsibilityScope;
   unitId: string;
   requestId: string;

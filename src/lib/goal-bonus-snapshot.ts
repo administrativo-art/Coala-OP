@@ -1,8 +1,27 @@
 import { calculateTieredGoalBonus } from '@/lib/goal-methods';
+import { goalReliefBasisForStart } from '@/lib/goal-relief-basis';
 import type { EmployeeGoal, GoalClosureBonusSnapshot, GoalParticipantRole, GoalPeriodDoc } from '@/types';
 
 function roundMoney(value: number): number {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}
+
+/** Resolve a contagem da pessoa a partir dos turnos oficiais já filtrados pela unidade e período. */
+export function countGoalScheduledWork(
+  goal: Pick<EmployeeGoal, 'employeeId' | 'shiftId'>,
+  period: Pick<GoalPeriodDoc, 'shifts'>,
+  shifts: Array<{ userId: string; date: string; startTime?: string; endTime?: string }>,
+) {
+  const configured = goal.shiftId ? period.shifts?.find((candidate) => candidate.id === goal.shiftId) : null;
+  const match = configured?.label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
+  const matching = shifts.filter((shift) => {
+    if (shift.userId !== goal.employeeId) return false;
+    if (!goal.shiftId) return true;
+    if (!configured) return false;
+    if (!match) return period.shifts?.length === 1;
+    return shift.startTime === match[1] && shift.endTime === match[2];
+  });
+  return { dates: [...new Set(matching.map((shift) => shift.date))].sort(), turns: matching.length };
 }
 
 function resolveRole(goals: EmployeeGoal[]): GoalParticipantRole {
@@ -17,10 +36,11 @@ function resolveRole(goals: EmployeeGoal[]): GoalParticipantRole {
  * Retorna null quando o período não usa o método por faixas.
  */
 export function buildGoalClosureBonusSnapshot(params: {
-  period: Pick<GoalPeriodDoc, 'currentValue' | 'goalMethodSnapshot' | 'shifts'>;
+  period: Pick<GoalPeriodDoc, 'currentValue' | 'goalMethodSnapshot' | 'shifts'> & { startDate?: GoalPeriodDoc['startDate'] | string };
   employeeGoals: EmployeeGoal[];
   periodDayCount: number;
   source: GoalClosureBonusSnapshot['source'];
+  workedDaysByEmployeeId?: Record<string, number>;
 }): GoalClosureBonusSnapshot | null {
   const { period, employeeGoals, periodDayCount, source } = params;
   const method = period.goalMethodSnapshot;
@@ -37,6 +57,8 @@ export function buildGoalClosureBonusSnapshot(params: {
     employeeId,
     role: resolveRole(goals),
     scheduledTurns: goals.reduce((sum, goal) => sum + (goal.scheduledTurnCount ?? 0), 0),
+    scheduledDays: params.workedDaysByEmployeeId?.[employeeId]
+      ?? Math.max(...goals.map((goal) => goal.scheduledDays ?? 0)),
   }));
   const bonusRows = rows.filter(row => row.role !== 'leader');
   const fixedRows = bonusRows.filter(row => row.role !== 'relief');
@@ -44,12 +66,16 @@ export function buildGoalClosureBonusSnapshot(params: {
 
   const turnsPerDay = Math.max(method.teamBonus.reliefWorker?.turnsPerDay ?? period.shifts?.length ?? 1, 1);
   const totalPeriodTurns = Math.max(periodDayCount, 1) * turnsPerDay;
+  const reliefBasis = goalReliefBasisForStart(period.startDate);
 
   const result = calculateTieredGoalBonus(method, period.currentValue ?? 0, bonusRows.length, {
     fixedCollaboratorCount: fixedRows.length,
     reliefWorkerCount: reliefRows.length,
     reliefWorkerCoveredTurnsByPerson: reliefRows.map(row => row.scheduledTurns),
     totalPeriodTurns,
+    reliefWorkerBasis: reliefBasis,
+    reliefWorkerCoveredDaysByPerson: reliefRows.map(row => row.scheduledDays),
+    totalPeriodDays: Math.max(periodDayCount, 1),
   });
   if (!result) return null;
 
@@ -64,6 +90,7 @@ export function buildGoalClosureBonusSnapshot(params: {
     employeeId: row.employeeId,
     role: row.role,
     scheduledTurns: row.scheduledTurns,
+    scheduledDays: row.scheduledDays,
     bonusAmount:
       row.role === 'leader'
         ? result.leadershipBonus
@@ -96,6 +123,8 @@ export function buildGoalClosureBonusSnapshot(params: {
     leadershipBonus: result.leadershipBonus,
     totalPrize: roundMoney(result.totalTeamBonus + result.leadershipBonus),
     totalPeriodTurns,
+    totalPeriodDays: Math.max(periodDayCount, 1),
+    reliefBasis,
     participants,
   };
 }

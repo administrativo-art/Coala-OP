@@ -63,28 +63,38 @@ function shiftMatchesGoal(shift: OfficialShift, goal: QueryDocumentSnapshot, per
   const configured = periodShifts.find((item) => item.id === shiftId);
   if (!configured || typeof configured.label !== 'string') return false;
   const match = configured.label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
-  return Boolean(match && match[1] === shift.startTime && match[2] === shift.endTime);
+  if (!match) return periodShifts.length === 1;
+  return match[1] === shift.startTime && match[2] === shift.endTime;
 }
 
 export function calculateScheduledTargets(period: Record<string, unknown>, goals: QueryDocumentSnapshot[], shifts: OfficialShift[],
   start: string, end: string) {
   const periodShifts = Array.isArray(period.shifts) ? period.shifts as Array<Record<string, unknown>> : [];
   const dateGoals = new Map<string, Set<string>>();
+  const datesByGoal = new Map<string, Set<string>>();
+  const turnsByGoal = new Map<string, Set<string>>();
   for (const shift of shifts) {
     if (shift.type !== 'work' || shift.countsTowardGoals === false || shift.date < start || shift.date > end) continue;
     for (const goal of goals) {
       if (goal.get('employeeId') !== shift.userId || !shiftMatchesGoal(shift, goal, periodShifts)) continue;
+      const dates = datesByGoal.get(goal.id) ?? new Set<string>();
+      dates.add(shift.date);
+      datesByGoal.set(goal.id, dates);
+      const turns = turnsByGoal.get(goal.id) ?? new Set<string>();
+      turns.add(`${shift.scheduleId}/${shift.id}`);
+      turnsByGoal.set(goal.id, turns);
       const key = `${goal.get('shiftId') ?? '__legacy__'}:${shift.date}`;
       const group = dateGoals.get(key) ?? new Set<string>();
       group.add(goal.id);
       dateGoals.set(key, group);
     }
   }
-  const targets = new Map<string, { targetValue: number; fraction: number }>();
+  const targets = new Map<string, { targetValue: number; fraction: number; scheduledDays: number; scheduledTurnCount: number }>();
   const targetValue = Number(period.targetValue);
   if (!Number.isFinite(targetValue) || targetValue < 0) throw new Error('Goal period target invalid.');
   const groups = periodShifts.length ? periodShifts : [{ id: '__legacy__', fraction: 1 }];
-  for (const goal of goals) targets.set(goal.id, { targetValue: 0, fraction: 0 });
+  for (const goal of goals) targets.set(goal.id, { targetValue: 0, fraction: 0,
+    scheduledDays: datesByGoal.get(goal.id)?.size ?? 0, scheduledTurnCount: turnsByGoal.get(goal.id)?.size ?? 0 });
   for (const group of groups) {
     const groupId = String(group.id);
     const fraction = Number(group.fraction);
@@ -94,14 +104,15 @@ export function calculateScheduledTargets(period: Record<string, unknown>, goals
       const share = targetValue * fraction / dates.length / goalIds.size;
       for (const id of goalIds) {
         const previous = targets.get(id)?.targetValue ?? 0;
-        targets.set(id, { targetValue: previous + share, fraction: 0 });
+        targets.set(id, { ...targets.get(id)!, targetValue: previous + share, fraction: 0 });
       }
     }
     for (const goal of goals) {
       if ((goal.get('shiftId') ?? '__legacy__') !== groupId) continue;
       const amount = targets.get(goal.id)?.targetValue ?? 0;
       const denominator = targetValue * fraction;
-      targets.set(goal.id, { targetValue: amount, fraction: denominator > 0 ? amount / denominator : Number(goal.get('fraction') ?? 0) });
+      targets.set(goal.id, { ...targets.get(goal.id)!, targetValue: amount,
+        fraction: denominator > 0 ? amount / denominator : Number(goal.get('fraction') ?? 0) });
     }
   }
   return targets;
