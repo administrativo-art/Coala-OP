@@ -4,8 +4,8 @@ Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autentic
 
 - Arquivos de rota: **565**
 - Totalmente contratados: **236**
-- Legados congelados: **319**
-- Exceções temporárias: **10**
+- Legados congelados: **318**
+- Exceções temporárias: **11**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -402,7 +402,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/onboarding/[id]/signature-documents` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/signature-documents/route.ts](../../src/app/api/hr/onboarding/[id]/signature-documents/route.ts) |
 | `/api/hr/onboarding/[id]/training` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/training/route.ts](../../src/app/api/hr/onboarding/[id]/training/route.ts) |
 | `/api/hr/onboarding/access-catalog` | GET | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/access-catalog/route.ts](../../src/app/api/hr/onboarding/access-catalog/route.ts) |
-| `/api/hr/onboarding/public/[token]` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/public/[token]/route.ts](../../src/app/api/hr/onboarding/public/[token]/route.ts) |
+| `/api/hr/onboarding/public/[token]` | GET, POST | `EXCEPTION` | [src/app/api/hr/onboarding/public/[token]/route.ts](../../src/app/api/hr/onboarding/public/[token]/route.ts) |
 | `/api/hr/openings` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/openings/route.ts](../../src/app/api/hr/openings/route.ts) |
 | `/api/hr/openings/[id]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/openings/[id]/route.ts](../../src/app/api/hr/openings/[id]/route.ts) |
 | `/api/hr/openings/public` | GET | `LEGACY_BASELINE` | [src/app/api/hr/openings/public/route.ts](../../src/app/api/hr/openings/public/route.ts) |

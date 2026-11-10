@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "exceptions": [
     {
+      "source": "src/app/api/hr/onboarding/public/[token]/route.ts",
+      "methods": ["GET", "POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "Alteração delimitada à coleta pública da declaração expressa de IR por filho. A rota legada usa token com expiração, limitação de tentativas e validação documental; a migração integral de GET/POST para secureRoute requer contrato próprio de acesso público e deve preservar essas barreiras.",
+      "expiresAt": "2026-11-24"
+    },
+    {
       "source": "src/app/api/hr/employee-documents/route.ts",
       "methods": ["GET", "POST", "PATCH", "DELETE"],
       "owner": "plataforma-seguranca",
