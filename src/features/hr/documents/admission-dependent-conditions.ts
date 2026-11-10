@@ -33,13 +33,14 @@ export function admissionDependentConditions(process: Record<string, unknown>) {
   const analysis = familyBenefitRelationship && year === 2026 && date && !Number.isNaN(date.getTime())
     ? buildAccountantDependentAnalysis({ answers, documents, monthlySalary: monthlySalary(process), today: date })
     : null;
-  const familyRows: Row[] = (analysis?.dependents ?? []).flatMap((item, index) =>
-    item.eligibility === 'Elegível' ? [{
-      name: item.name,
-      birthDate: item.birthDate,
-      cpf: text(children[index]?.cpf),
+  const familyRows: Row[] = children.flatMap((child) =>
+    text(child.name) && text(child.birthDate) ? [{
+      name: text(child.name),
+      birthDate: text(child.birthDate).split('-').reverse().join('/'),
+      cpf: text(child.cpf),
     }] : []
   );
+  const decision = record(process.familySalaryDecision).grant;
   const incomeTaxRows: Row[] = children.flatMap((child) =>
     child.incomeTaxDependent === true && text(child.name) && text(child.birthDate)
       && text(child.cpf).replace(/\D/g, '').length === 11
@@ -47,8 +48,18 @@ export function admissionDependentConditions(process: Record<string, unknown>) {
       : []
   );
   const conditions: AdmissionDependentTemplateConditions = {
-    familySalaryEligible: familyRows.length > 0,
+    familySalaryGranted: decision === true && familyRows.length > 0,
     incomeTaxDeclared: incomeTaxRows.length > 0,
   };
-  return { conditions, familyRows, incomeTaxRows, parameterYearSupported: !familyBenefitRelationship || year === 2026 };
+  return {
+    conditions,
+    familyRows,
+    incomeTaxRows,
+    familySalaryDecision: decision === true ? true : decision === false ? false : null,
+    familySalaryDecisionRequired: children.length > 0,
+    familySalaryAssessment: !familyBenefitRelationship ? 'Não apto pelo vínculo informado'
+      : year !== 2026 ? 'Parâmetros legais indisponíveis para o ano da admissão'
+        : analysis?.conclusion ?? 'Análise legal indisponível',
+    parameterYearSupported: !familyBenefitRelationship || year === 2026,
+  };
 }

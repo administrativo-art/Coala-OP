@@ -375,13 +375,13 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-family-salary-term",
     name: "Termo de responsabilidade para salário-família",
     category: "Admissão",
-    description: "Incluído quando a análise da competência confirma dependente elegível e documentação aprovada.",
-    sourcePath: `${ADMISSION_BASE}/08-termo-salario-familia-v1.docx`,
-    contentHash: "6b94f2417f3b3d2e4c886b026b479b7a0348bf2d08a2a1b6f2a66d34be711452",
-    version: 1,
+    description: "Incluído quando o operador registra a concessão após a conclusão da contabilidade; a análise legal é informativa.",
+    sourcePath: `${ADMISSION_BASE}/08-termo-salario-familia-v2.docx`,
+    contentHash: "929c79c62097ca63a772af96435f40f5c0a7135cff0398735ee417aec31630d6",
+    version: 2,
     variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "family_salary_dependents_lines"],
     fieldMapping: {
-      family_salary_dependents_lines: { kind: "manual", label: "Dependentes elegíveis ao salário-família", format: "multiline", required: true },
+      family_salary_dependents_lines: { kind: "manual", label: "Dependentes informados para salário-família", format: "multiline", required: true },
     },
   },
   {
