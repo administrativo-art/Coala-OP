@@ -23,11 +23,11 @@ const common = [
 
 const templates = [
   {
-    file: `${base}/admissionais/08-termo-salario-familia-v1.docx`,
+    file: `${base}/admissionais/08-termo-salario-familia-v2.docx`,
     body: [
       paragraph('Termo de responsabilidade para salário-família', { bold: true, size: 28, after: 300 }),
       common,
-      paragraph('Dependentes considerados aptos', { bold: true, color: 'DE2D82', before: 120, after: 150 }),
+      paragraph('Dependentes informados para salário-família', { bold: true, color: 'DE2D82', before: 120, after: 150 }),
       paragraph('{{family_salary_dependents_lines}}', { after: 300 }),
       paragraph('Declaro que as informações prestadas sobre os dependentes acima são verdadeiras. Comprometo-me a comunicar imediatamente ao empregador qualquer fato que altere o direito ao salário-família, inclusive falecimento, cessação de invalidez reconhecida ou decisão judicial que modifique a titularidade ou o pagamento.', { after: 220 }),
       paragraph('Estou ciente de que a manutenção do benefício depende dos requisitos aplicáveis e da conferência pelo Departamento Pessoal. Valores recebidos indevidamente poderão ser restituídos, sem prejuízo das medidas legais cabíveis.', { after: 270 }),

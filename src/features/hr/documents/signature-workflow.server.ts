@@ -129,9 +129,11 @@ function assertCompleteAdmissionPackage(
   templates: Array<{ templateId: unknown }>,
 ) {
   const dependents = admissionDependentConditions(process);
-  if (!dependents.parameterYearSupported && Array.isArray(record(process.publicFormAnswers).children)
-    && (record(process.publicFormAnswers).children as unknown[]).length > 0) {
-    throw new Error("Atualize os parâmetros do salário-família para o ano da admissão antes de preparar o kit.");
+  if (dependents.familySalaryDecisionRequired && dependents.familySalaryDecision === null) {
+    throw new Error("Registre a decisão do operador sobre o salário-família antes de preparar o kit.");
+  }
+  if (dependents.familySalaryDecision === true && !dependents.familyRows.length) {
+    throw new Error("Informe os dados dos dependentes para gerar o termo de salário-família.");
   }
   const templateIds = templates
     .map((template) => text(template.templateId))
@@ -859,10 +861,11 @@ export async function listSignatureWorkflow(
       .doc(admissionSignatureRequestId(onboardingId))
       .get(),
   ]);
+  const dependentAnalysis = admissionDependentConditions(process.data);
   const packageTemplateIds = new Set<string>(
     admissionSignaturePackageTemplateIds(
       transportVoucherAnswer(process.data),
-      admissionDependentConditions(process.data).conditions,
+      dependentAnalysis.conditions,
     ),
   );
   const systemTemplates = effectiveSystemTemplates
@@ -885,6 +888,9 @@ export async function listSignatureWorkflow(
     templates: systemTemplates,
     documents,
     packageTemplateIds: systemTemplates.map((template) => template.id),
+    familySalaryAssessment: dependentAnalysis.familySalaryAssessment,
+    familySalaryDecision: dependentAnalysis.familySalaryDecision,
+    familySalaryDecisionRequired: dependentAnalysis.familySalaryDecisionRequired,
     signaturePackage: admissionSignaturePackageState(
       signatureRequest,
       options.includeSensitive === true,
@@ -892,11 +898,63 @@ export async function listSignatureWorkflow(
   };
 }
 
+export async function setAdmissionFamilySalaryDecision(params: {
+  onboardingId: string;
+  grant: boolean;
+  actorId: string;
+  actorName: string;
+}) {
+  const process = await loadProcess(params.onboardingId);
+  if (process.data.currentStage !== "signature_preparation"
+    || record(process.data.accountantWorkflow).status !== "completed") {
+    throw new Error("A decisão sobre o salário-família só pode ser registrada após a conclusão da contabilidade.");
+  }
+  const dependents = admissionDependentConditions(process.data);
+  if (!dependents.familySalaryDecisionRequired) {
+    throw new Error("Não há dependentes informados neste processo.");
+  }
+  if (params.grant && !dependents.familyRows.length) {
+    throw new Error("Informe os dados dos dependentes antes de conceder o salário-família.");
+  }
+  const workflow = await listSignatureWorkflow(params.onboardingId);
+  if (workflow.documents.some((document) => ["sending", "sent", "viewed", "partially_signed", "signed", "signed_archived_pending_employee", "archived"]
+    .includes(String(document.status)))) {
+    throw new Error("A decisão não pode ser alterada após o envio do pacote para assinatura.");
+  }
+  if (dependents.familySalaryDecision === params.grant) return listSignatureWorkflow(params.onboardingId);
+  const now = new Date().toISOString();
+  await process.ref.update({
+    familySalaryDecision: {
+      grant: params.grant,
+      legalAssessment: dependents.familySalaryAssessment,
+      parameterYearSupported: dependents.parameterYearSupported,
+      decidedAt: now,
+      decidedBy: params.actorId,
+      decidedByName: params.actorName,
+    },
+    updatedAt: now,
+  });
+  const revised = admissionDependentConditions({
+    ...process.data,
+    familySalaryDecision: { grant: params.grant },
+  });
+  return selectSignatureTemplates({
+    onboardingId: params.onboardingId,
+    templateIds: admissionSignaturePackageTemplateIds(
+      transportVoucherAnswer(process.data), revised.conditions,
+    ),
+    actorId: params.actorId,
+    actorName: params.actorName,
+    forceRegeneration: true,
+  });
+}
+
 export async function selectSignatureTemplates(params: {
   onboardingId: string;
   templateIds: string[];
   actorId: string;
   actorName: string;
+  forceRegeneration?: boolean;
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
@@ -945,7 +1003,17 @@ export async function selectSignatureTemplates(params: {
     if (["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))) {
       return;
     }
-    batch.set(document.ref, { selected: false, updatedAt: now }, { merge: true });
+    batch.set(document.ref, {
+      selected: false,
+      updatedAt: now,
+      ...(params.forceRegeneration ? {
+        status: "selected",
+        generatedDocumentId: null,
+        generatedStoragePath: null,
+        generatedPdfStoragePath: null,
+        reviewStatus: "pending",
+      } : {}),
+    }, { merge: true });
   });
   templates.forEach((template, index) => {
     const id = workflowId(params.onboardingId, template.id);
@@ -963,7 +1031,13 @@ export async function selectSignatureTemplates(params: {
         selected: true,
         required: true,
         order: index,
-        status: current?.get("status") ?? "selected",
+        status: params.forceRegeneration ? "selected" : current?.get("status") ?? "selected",
+        ...(params.forceRegeneration ? {
+          generatedDocumentId: null,
+          generatedStoragePath: null,
+          generatedPdfStoragePath: null,
+          reviewStatus: "pending",
+        } : {}),
         selectedAt: now,
         selectedBy: params.actorId,
         selectedByName: params.actorName,

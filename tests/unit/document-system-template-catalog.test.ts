@@ -157,21 +157,21 @@ test("kit admissional exige todos os componentes aplicáveis como uma unidade", 
     true,
   );
   const withDependents = admissionSignaturePackageTemplateIds("yes", {
-    familySalaryEligible: true,
+    familySalaryGranted: true,
     incomeTaxDeclared: true,
   });
   assert.equal(withDependents.length, 9);
   assert.equal(isCompleteAdmissionSignaturePackage(withDependents, "yes", {
-    familySalaryEligible: true,
+    familySalaryGranted: true,
     incomeTaxDeclared: true,
   }), true);
   assert.equal(isCompleteAdmissionSignaturePackage(forRequest, "yes", {
-    familySalaryEligible: true,
+    familySalaryGranted: true,
     incomeTaxDeclared: true,
   }), false);
 });
 
-test("IR depende de declaração expressa e salário-família depende de análise e documentos aprovados", () => {
+test("análise legal não decide a concessão do salário-família", () => {
   const base = {
     employmentRelationshipType: "clt",
     expectedAdmissionDate: "2026-08-26",
@@ -185,19 +185,23 @@ test("IR depende de declaração expressa e salário-família depende de anális
     ],
   };
   assert.deepEqual(admissionDependentConditions(base).conditions, {
-    familySalaryEligible: true,
+    familySalaryGranted: false,
     incomeTaxDeclared: false,
   });
+  assert.match(admissionDependentConditions(base).familySalaryAssessment, /ELEGÍVEL/);
+  assert.equal(admissionDependentConditions(base).familySalaryDecisionRequired, true);
   assert.deepEqual(admissionDependentConditions({
     ...base,
+    familySalaryDecision: { grant: true },
     publicFormAnswers: { children: [{ ...base.publicFormAnswers.children[0], incomeTaxDependent: true }] },
     documents: [],
   }).conditions, {
-    familySalaryEligible: false,
+    familySalaryGranted: true,
     incomeTaxDeclared: true,
   });
   assert.equal(admissionDependentConditions({ ...base, expectedAdmissionDate: "2027-01-10" }).parameterYearSupported, false);
-  assert.equal(admissionDependentConditions({ ...base, employmentRelationshipType: "internship" }).conditions.familySalaryEligible, false);
+  assert.equal(admissionDependentConditions({ ...base, familySalaryDecision: { grant: false } }).conditions.familySalaryGranted, false);
+  assert.equal(admissionDependentConditions({ ...base, employmentRelationshipType: "internship", familySalaryDecision: { grant: true } }).conditions.familySalaryGranted, true);
 });
 
 test("posiciona as duas assinaturas no termo final do pacote", () => {

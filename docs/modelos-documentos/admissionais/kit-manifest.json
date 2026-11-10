@@ -78,9 +78,9 @@
       "id": "family_salary_term",
       "order": 8,
       "name": "Termo de responsabilidade para salário-família",
-      "file": "08-termo-salario-familia-v1.docx",
+      "file": "08-termo-salario-familia-v2.docx",
       "selectableByHr": false,
-      "selectedByCondition": "dependente elegível pela análise da competência e documentos aprovados",
+      "selectedByCondition": "concessão registrada pelo operador após a conclusão da contabilidade",
       "signatureScope": "bundle"
     },
     {
