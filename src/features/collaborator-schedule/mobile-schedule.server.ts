@@ -68,7 +68,7 @@ function dpUnits() {
  * result means "use calendar days", the same fallback the web applies.
  */
 export async function loadScheduledGoalEvidence(input: { kioskName: string; startKey: string; endKey: string; employeeIds: string[] }) {
-  if (!input.employeeIds.length) return { dateKeys: [], externalCoverageUserIds: [] };
+  if (!input.employeeIds.length) return { dateKeys: [], externalCoverageUserIds: [], workedDaysByEmployeeId: {} as Record<string, number> };
   const unit = matchDPUnitForKiosk(input.kioskName, await dpUnits());
   if (!unit) {
     throw new AppError({
@@ -99,6 +99,7 @@ export async function loadScheduledGoalEvidence(input: { kioskName: string; star
   }
   const schedules = scheduleSnapshots.flatMap((snapshot) => snapshot.docs);
   const dates = new Set<string>();
+  const datesByEmployee = new Map<string, Set<string>>();
   const externalCoverageUserIds = new Set<string>();
   for (const schedule of schedules) {
     const allowed = new Set(input.employeeIds);
@@ -112,12 +113,18 @@ export async function loadScheduledGoalEvidence(input: { kioskName: string; star
         const date = String(shift.date ?? "");
         if (shift.type !== "work" || date < input.startKey || date > input.endKey) continue;
         if (shift.countsTowardGoals === false) externalCoverageUserIds.add(userId);
-        else dates.add(date);
+        else {
+          dates.add(date);
+          const personDates = datesByEmployee.get(userId) ?? new Set<string>();
+          personDates.add(date);
+          datesByEmployee.set(userId, personDates);
+        }
     }
   }
   return {
     dateKeys: [...dates].sort(),
     externalCoverageUserIds: [...externalCoverageUserIds].filter(Boolean).sort(),
+    workedDaysByEmployeeId: Object.fromEntries([...datesByEmployee].map(([id, personDates]) => [id, personDates.size])),
   };
 }
 

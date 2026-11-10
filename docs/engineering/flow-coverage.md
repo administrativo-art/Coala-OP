@@ -4,6 +4,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
+10/11/2026: correção local de `goals`/`dp-schedules` para grupo mensal sem horário e contagem de dias/turnos da escala oficial em meta ativa e no fechamento. Nove testes dirigidos, build das Functions e typecheck passaram; função existente ACTIVE no Firebase, mas esta correção ainda não foi publicada nem exercitada por evento real. Falta automática sem alteração de escala permanece fora do gatilho; metas fechadas não recebem alteração retroativa.
+
 05/11/2026: ajuste local do Acervo publicado acrescenta organização visual auditada para DP, simplifica férias até a parcela, estabiliza carregamento e remove metadados decorativos de pastas. Testes dirigidos cobrem projeção, permissão, concorrência e preservação do canônico; E2E local e publicação permanecem gates. `document-central` e `employee-documents` continuam Traçado.
 
 03/11/2026: Acervo publicado por titular acrescentado à raiz e à cobertura de `employee-documents`/`document-central`, reutilizando APIs próprias e RH sob acesso existente. Projeção de kit assinado exercitada com sete referências e homônimos distintos; E2E local dirigido passou para árvore/pasta própria/abas retiradas e perfil comum com download canônico. Paginação DP com página filtrada vazia, cursor e unidade passou em integração; teto bruto da pasta própria e troca de titular durante Carregar mais também. Permissões e fontes conferidas no código; publicação/ACL e arquivos não mudaram.
