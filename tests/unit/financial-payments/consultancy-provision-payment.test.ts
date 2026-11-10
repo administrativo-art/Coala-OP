@@ -12,7 +12,7 @@ const input = {
 const forecast = {
   id: input.sourceId, workspaceId: "coala", status: "provisioned", provisionType: "forecast",
   provisionSeriesKey: "recurring:consultoria-rh:isabela-dominici-silva", provisionCompetence: "2026-11",
-  supplier: employee.name, consultancyEmployeeId: employee.id, description: input.description, totalValue: input.amount, dueDate: "2026-11-20T15:00:00.000Z",
+  supplier: employee.name, consultancyEmployeeId: employee.id, consultancyContractDocumentId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", description: input.description, totalValue: input.amount, dueDate: "2026-11-20T15:00:00.000Z",
   installments: [{ number: 1, dueDate: "2026-11-20T15:00:00.000Z", value: input.amount, status: "pending" }],
 };
 

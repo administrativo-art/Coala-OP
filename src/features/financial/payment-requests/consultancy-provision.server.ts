@@ -2,7 +2,9 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { reconcileExpenseProvisionOnServer } from "@/features/financial/expense-provision-reconciliation.server";
+import { resolvePaymentBeneficiary } from "@/features/financial/beneficiaries/resolver.server";
 import { assertConsultancyActualPaymentTarget, assertConsultancyProvisionPaymentTarget } from "./consultancy-provision-payment";
+import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
 import { createPaymentRequest } from "./service.server";
 import { findPaymentRequestBySource } from "./repository.server";
 import type { PaymentActor } from "./types";
@@ -12,6 +14,11 @@ function day(value: unknown) {
     ? value.toDate() as Date
     : value instanceof Date ? value : typeof value === "string" ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+}
+function todayInBelem() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 /** Materializes the contract debt once, then prepares a Pix linked to that debt. No bank call. */
@@ -35,6 +42,10 @@ export async function prepareConsultancyProvisionPix(forecastId: string, employe
     }
     return existing;
   }
+  if (day(scheduledFor) !== scheduledFor || scheduledFor < todayInBelem()) throw new Error("A data programada deve ser válida e futura.");
+  await assertValidatedConsultancyContract(String(forecast.consultancyContractDocumentId ?? ""), employeeId, scheduledFor);
+  const beneficiary = await resolvePaymentBeneficiary(reference);
+  if (!beneficiary.validated) throw new Error("O favorecido não tem destino Pix validado.");
   if (forecast.status === "provisioned") {
     assertConsultancyProvisionPaymentTarget({ sourceId: forecastId, expenseId: forecastId, beneficiaryReference: reference, amount, description, scheduledFor }, forecast, employee, WORKSPACE_ID);
     const [payments, requests, existingActual] = await Promise.all([

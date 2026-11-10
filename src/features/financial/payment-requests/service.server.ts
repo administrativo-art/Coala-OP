@@ -24,6 +24,7 @@ import {
 import { assertSalaryPaymentTarget } from "./salary-payment";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
+import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -1236,6 +1237,12 @@ async function commitBankSubmissionResult(params: {
 
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
   const requestRef = paymentRequestRef(id);
+  const preflightRequest = await getPaymentRequest(id);
+  if (preflightRequest.sourceType === "consultancy_provision") {
+    if (preflightRequest.beneficiaryReference?.sourceType !== "employee" || !preflightRequest.scheduledFor) throw new Error("A consultoria perdeu favorecido ou data programada.");
+    const forecast = await financialDbAdmin.collection("expenses").doc(preflightRequest.sourceId).get();
+    await assertValidatedConsultancyContract(String(forecast.get("consultancyContractDocumentId") ?? ""), preflightRequest.beneficiaryReference.sourceId, preflightRequest.scheduledFor);
+  }
   const submissionStartedAt = new Date().toISOString();
   const submissionEventId = randomUUID();
   const pending = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -1414,6 +1421,8 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", current.expenseId).limit(3)),
       ]);
       if (!actual.exists || !forecast.exists || forecast.get("status") !== "reconciled" || forecast.get("replacedByExpenseId") !== current.expenseId
+        || forecast.get("consultancyEmployeeId") !== current.beneficiaryReference.sourceId
+        || forecast.get("consultancyContractDocumentId") !== actual.get("consultancyContractDocumentId")
         || payments.docs.some((item) => item.get("reversed") !== true)
         || requests.size > 2 || requests.docs.some((item) => item.id !== current.id)) {
         throw new Error("A provisão, a obrigação real ou os pagamentos mudaram; envio bloqueado.");

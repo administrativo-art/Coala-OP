@@ -41,6 +41,7 @@ export function assertConsultancyProvisionPaymentTarget(input: ConsultancyProvis
     throw new Error("O favorecido da consultoria não corresponde a um cadastro ativo.");
   }
   if (expense.consultancyEmployeeId !== employee.id) throw new Error("A provisão não possui vínculo confirmado com este favorecido.");
+  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw new Error("A provisão não possui aditivo identificado.");
   if ((expense.workspaceId && expense.workspaceId !== workspaceId) || expense.status !== "provisioned" || expense.provisionType !== "forecast") {
     throw new Error("A despesa não é uma provisão de consultoria aberta neste ambiente.");
   }
@@ -94,6 +95,7 @@ export function assertConsultancyActualPaymentTarget(input: ConsultancyProvision
     throw new Error("O favorecido da obrigação real não corresponde à consultoria.");
   }
   if (expense.consultancyEmployeeId !== employee.id) throw new Error("A obrigação real perdeu o vínculo com o favorecido.");
+  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw new Error("A obrigação real perdeu o aditivo identificado.");
   if (!/^recurring:consultoria-rh:[a-z0-9-]+$/.test(String(expense.provisionSeriesKey ?? "")) || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(String(expense.provisionCompetence ?? ""))) {
     throw new Error("A obrigação real não tem identidade de competência válida.");
   }
