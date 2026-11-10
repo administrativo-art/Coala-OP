@@ -10,7 +10,10 @@ import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
+import { admissionDependentConditions } from "@/features/hr/documents/admission-dependent-conditions";
 import {
+  ADMISSION_FAMILY_SALARY_TEMPLATE_ID,
+  ADMISSION_INCOME_TAX_TEMPLATE_ID,
   admissionSignaturePackageTemplateIds,
   compareAdmissionSignatureOrder,
   isCompleteAdmissionSignaturePackage,
@@ -125,12 +128,18 @@ function assertCompleteAdmissionPackage(
   process: RecordValue,
   templates: Array<{ templateId: unknown }>,
 ) {
+  const dependents = admissionDependentConditions(process);
+  if (!dependents.parameterYearSupported && Array.isArray(record(process.publicFormAnswers).children)
+    && (record(process.publicFormAnswers).children as unknown[]).length > 0) {
+    throw new Error("Atualize os parâmetros do salário-família para o ano da admissão antes de preparar o kit.");
+  }
   const templateIds = templates
     .map((template) => text(template.templateId))
     .filter((templateId): templateId is string => Boolean(templateId));
   if (!isCompleteAdmissionSignaturePackage(
     templateIds,
     transportVoucherAnswer(process),
+    dependents.conditions,
   )) {
     throw new Error(
       "O kit admissional é indivisível. Gere, revise e envie todos os documentos aplicáveis em uma única operação.",
@@ -851,7 +860,10 @@ export async function listSignatureWorkflow(
       .get(),
   ]);
   const packageTemplateIds = new Set<string>(
-    admissionSignaturePackageTemplateIds(transportVoucherAnswer(process.data)),
+    admissionSignaturePackageTemplateIds(
+      transportVoucherAnswer(process.data),
+      admissionDependentConditions(process.data).conditions,
+    ),
   );
   const systemTemplates = effectiveSystemTemplates
     .filter(isSelectableAdmissionSignatureTemplate)
@@ -1055,11 +1067,25 @@ export async function generateSelectedSignatureDocuments(params: {
   for (const target of targets) {
     try {
       const templateId = String(target.get("templateId"));
+      const dependents = admissionDependentConditions(process.data);
+      const lines = (rows: typeof dependents.familyRows) => rows
+        .map((row) => `${row.name} — nascimento ${row.birthDate}${row.cpf ? ` — CPF ${row.cpf}` : ""}`)
+        .join("\n");
+      const manualValues = templateId === ADMISSION_FAMILY_SALARY_TEMPLATE_ID
+        ? { family_salary_dependents_lines: lines(dependents.familyRows) }
+        : templateId === ADMISSION_INCOME_TAX_TEMPLATE_ID
+          ? { income_tax_dependents_lines: lines(dependents.incomeTaxRows.map((row) => ({
+            ...row,
+            birthDate: /^\d{4}-\d{2}-\d{2}$/.test(row.birthDate)
+              ? row.birthDate.split("-").reverse().join("/") : row.birthDate,
+          }))) }
+          : undefined;
       const generated = await generateDocumentFromTemplate({
         templateId,
         employeeId: processEmployeeId(process.data),
         onboardingId: params.onboardingId,
         includeSensitive: params.includeSensitive,
+        manualValues,
         lifecycle: "draft",
         actorId: params.actorId,
         actorName: params.actorName,

@@ -33,3 +33,20 @@ Decidido em 28/10/2026: a efetivação é um **processo de conversão de víncul
 | Decorrências | Novo período de vínculo CLT a partir da data. Férias CLT contam desse dia; o recesso fica no histórico ([RN8 do plano de recesso](plano-recesso-estagio.md)). Ponto e escala seguem com a nova jornada. |
 | Generalização | O mesmo processo serve para aprendiz → CLT e PJ → CLT. |
 | A confirmar | Contrato de experiência logo após o estágio na mesma função (contador ou jurídico). |
+
+### 2.3 Dependentes no kit admissional
+
+Decisão de 10/11/2026: a pessoa declara individualmente, no formulário público,
+se cada filho será considerado dependente para IR na folha. Somente os filhos
+marcados entram na declaração de IR. O termo de responsabilidade para
+salário-família entra no kit quando a análise do sistema, para a competência
+de admissão, confirma ao menos um dependente elegível com remuneração e
+documentos aprovados. As duas peças são montadas junto dos demais modelos,
+integram o PDF único e usam a assinatura final do pacote. Sua geração não
+concede o benefício; mudanças após a admissão preservam o kit anterior e
+exigem nova peça. O corte local implementado suporta os parâmetros de 2026;
+ano posterior com filhos bloqueia a preparação até atualização dos parâmetros.
+
+Implementação local em `feat/admission-dependent-documents`; testes de catálogo,
+seleção e dados passaram, prévias DOCX foram inspecionadas. Homologação integrada
+com conversor oficial, Autentique e publicação permanecem a verificar.
