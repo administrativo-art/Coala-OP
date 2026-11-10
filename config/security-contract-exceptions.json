@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "exceptions": [
     {
+      "source": "src/app/api/hr/onboarding/[id]/signature-documents/route.ts",
+      "methods": ["GET", "POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "A decisão manual de salário-família foi adicionada à rota legada de documentos admissionais. POST mantém assertFormalizationAccess/documents.generate, valida booleano e grava auditoria; GET mantém signatures.view. A migração integral para secureRoute exige contrato dedicado para PDFs e ações de assinatura.",
+      "expiresAt": "2026-11-24"
+    },
+    {
       "source": "src/app/api/hr/onboarding/public/[token]/route.ts",
       "methods": ["GET", "POST"],
       "owner": "plataforma-seguranca",
