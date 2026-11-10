@@ -229,6 +229,7 @@ api,src/app/api/financial/dre/stock-cmv/route.ts,,docs/engineering/flows/dre.md,
 api,src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/expenses/[expenseId]/boleto/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
+api,src/app/api/financial/expenses/[expenseId]/consultancy-pix/route.ts,,docs/engineering/flows/payment-requests.md,Preparo protegido de Pix da consultoria de RH provisionada com obrigacao real deterministica; sem envio automatico.
 api,src/app/api/financial/expenses/[expenseId]/payments/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
