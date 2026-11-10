@@ -3,7 +3,8 @@
   "nonPersonalCollections": [],
   "approvedLegacyGaps": [
     "audit-targets",
-    "editor-content-versions"
+    "editor-content-versions",
+    "financial-expense-payment-records"
   ],
   "dynamicCollectionReaders": [
     {

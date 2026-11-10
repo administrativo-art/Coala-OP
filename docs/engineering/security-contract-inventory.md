@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **564**
-- Totalmente contratados: **235**
+- Arquivos de rota: **565**
+- Totalmente contratados: **236**
 - Legados congelados: **319**
 - Exceções temporárias: **10**
 - Violações: **0**
@@ -262,6 +262,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts](../../src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts) |
 | `/api/financial/expenses/[expenseId]/boleto` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/boleto/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/route.ts) |
 | `/api/financial/expenses/[expenseId]/boleto/payment` | POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts](../../src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts) |
+| `/api/financial/expenses/[expenseId]/consultancy-pix` | POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/consultancy-pix/route.ts](../../src/app/api/financial/expenses/[expenseId]/consultancy-pix/route.ts) |
 | `/api/financial/expenses/[expenseId]/payments` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/payments/route.ts](../../src/app/api/financial/expenses/[expenseId]/payments/route.ts) |
 | `/api/financial/expenses/[expenseId]/reconcile-provision` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts](../../src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts) |
 | `/api/financial/expenses/[expenseId]/settlement` | GET | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/settlement/route.ts](../../src/app/api/financial/expenses/[expenseId]/settlement/route.ts) |
