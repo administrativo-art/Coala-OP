@@ -4,7 +4,9 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
-10/11/2026: correção local de `goals`/`dp-schedules` para grupo mensal sem horário e contagem de dias/turnos da escala oficial em meta ativa e no fechamento. Nove testes dirigidos, build das Functions e typecheck passaram; função existente ACTIVE no Firebase, mas esta correção ainda não foi publicada nem exercitada por evento real. Falta automática sem alteração de escala permanece fora do gatilho; metas fechadas não recebem alteração retroativa.
+10/11/2026: guia interativo de metas (Entenda a meta) no dashboard web, com entrada em Acompanhamento e no painel do colaborador. O exemplo usa o motor de bonificação existente e não publica o PDF. Testes de cálculo e o E2E dirigido cobrem o guia; não há equivalente no aplicativo Android.
+
+10/11/2026: correção de `goals`/`dp-schedules` para grupo mensal sem horário e contagem de dias/turnos da escala oficial em meta ativa e no fechamento, promovida pelo PR #797. O App Hosting concluiu rollout do SHA `46e49dc6`, e a função de metas ficou ACTIVE; o evento real após a publicação não foi ensaiado. Metas fechadas não recebem alteração retroativa.
 
 05/11/2026: ajuste local do Acervo publicado acrescenta organização visual auditada para DP, simplifica férias até a parcela, estabiliza carregamento e remove metadados decorativos de pastas. Testes dirigidos cobrem projeção, permissão, concorrência e preservação do canônico; E2E local e publicação permanecem gates. `document-central` e `employee-documents` continuam Traçado.
 
@@ -87,7 +89,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `financial-inbox` | 3 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote e confirmação manual cobertos localmente; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
 | `forms` | 6 | Traçado | [Modelos, execução e tarefas](flows/forms.md) — percurso complementado; verificação integrada pendente |
-| `goals` | 5 | Traçado | [Metas](flows/goals.md) — percurso complementado; verificação integrada pendente |
+| `goals` | 6 | Traçado | [Metas](flows/goals.md) — percurso complementado; verificação integrada pendente |
 | `help` | 1 | Traçado | [Central de ajuda](flows/help.md) — revisão editorial pendente |
 | `hr-integration` | 1 | Traçado | [Criação não PJ](flows/onboarding-non-pj-creation.md), [criação PJ](flows/onboarding-pj-creation.md), [formulário e documentos](flows/onboarding-public-documents.md), [ASO](flows/onboarding-aso.md), [contador](flows/onboarding-accountant.md), [assinaturas](flows/onboarding-signatures.md), [treinamento](flows/onboarding-training.md), [fluxo PJ](flows/onboarding-pj-workflow.md), [controle de etapas](flows/onboarding-stage-control.md), [ativação](flows/onboarding-activation.md) — percurso complementado; verificação integrada pendente |
 | `inventory-conversion` | 1 | Traçado | [Conversão por produto](flows/conversions.md) — fonte e autorização conferidas; embalagem malformada, fallback e custo pendentes |

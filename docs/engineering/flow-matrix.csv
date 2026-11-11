@@ -94,6 +94,7 @@ src/app/dashboard/forms/models/[modelId]/page.tsx,active,forms,
 src/app/dashboard/forms/models/new/page.tsx,active,forms,
 src/app/dashboard/forms/page.tsx,active,forms,
 src/app/dashboard/goals/analysis/page.tsx,active,goals,
+src/app/dashboard/goals/guide/page.tsx,active,goals,
 src/app/dashboard/goals/history/page.tsx,redirect,goals,/dashboard/goals/analysis?tab=closures
 src/app/dashboard/goals/page.tsx,redirect,goals,/dashboard/goals/tracking
 src/app/dashboard/goals/registration/page.tsx,active,goals,

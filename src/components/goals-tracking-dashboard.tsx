@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { ControlPanel } from '@/components/patterns/control-panel';
 import { FilterChips } from '@/components/patterns/filter-chips';
 import { PanelStat } from '@/components/goals/goals-ui';
@@ -32,7 +33,7 @@ import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { type GoalPeriod, type GoalPeriodDoc, type EmployeeGoal, type SalesReport } from '@/types';
 import { 
-  Target, Plus, RefreshCw, ChevronDown, ChevronLeft, Menu, BarChart2, Sparkles, Pencil, CheckCircle, Trash2, Flag, Store
+  Target, Plus, RefreshCw, ChevronDown, ChevronLeft, Menu, BarChart2, Sparkles, Pencil, CheckCircle, Trash2, Flag, Store, BookOpen
 } from 'lucide-react';
 import {
   format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay
@@ -2943,11 +2944,16 @@ export function GoalsTrackingDashboard() {
             <h1 className="text-2xl font-extrabold">Acompanhamento</h1>
             <p className="mt-1 text-[13px] font-semibold text-ds-on-dark-sub">Performance e projeção das metas de faturamento em tempo real.</p>
           </div>
-          {isManager && (
-            <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
-              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="on-dark-secondary" size="md">
+              <Link href="/dashboard/goals/guide"><BookOpen aria-hidden="true" className="mr-2 h-4 w-4" />Entenda a meta</Link>
             </Button>
-          )}
+            {isManager && (
+              <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
+                <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
+              </Button>
+            )}
+          </div>
         </div>
 
         {periodGroups.length > 0 && (
