@@ -153,11 +153,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/forms/models/new` | [page.tsx](../../src/app/dashboard/forms/models/new/page.tsx) | [form-model-page-shell.tsx](../../src/components/forms/form-model-page-shell.tsx) |
 | `dashboard/forms` | [page.tsx](../../src/app/dashboard/forms/page.tsx) | [forms-dashboard-shell.tsx](../../src/components/forms/forms-dashboard-shell.tsx) |
 
-## goals (5)
+## goals (6)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/goals/analysis` | [page.tsx](../../src/app/dashboard/goals/analysis/page.tsx) | [goals-analysis-dashboard.tsx](../../src/components/goals-analysis-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
+| `dashboard/goals/guide` | [page.tsx](../../src/app/dashboard/goals/guide/page.tsx) | [GuiaMetas.tsx](../../src/components/goals/guide/GuiaMetas.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
 | `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | Redireciona para `/dashboard/goals/analysis?tab=closures` |
 | `dashboard/goals` | [page.tsx](../../src/app/dashboard/goals/page.tsx) | Redireciona para `/dashboard/goals/tracking` |
 | `dashboard/goals/registration` | [page.tsx](../../src/app/dashboard/goals/registration/page.tsx) | [goals-registration-dashboard.tsx](../../src/components/goals-registration-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
@@ -362,4 +363,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **180 páginas** no checkout usado para a geração.
+Total: **181 páginas** no checkout usado para a geração.

@@ -1510,7 +1510,12 @@ function SidebarMetas({
           </Tabs>
         )}
 
-        <div className="flex justify-end border-t pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button asChild variant="ds-secondary">
+            <Link href="/dashboard/goals/guide">
+              <BookOpen aria-hidden="true" className="mr-2 h-4 w-4" />Entenda a meta
+            </Link>
+          </Button>
           <Button asChild className="bg-ds-accent text-white hover:bg-ds-accent-hover">
             <Link href="/dashboard/goals/tracking">
               Acompanhar metas
