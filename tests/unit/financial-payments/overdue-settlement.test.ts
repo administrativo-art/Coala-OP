@@ -126,3 +126,19 @@ test("bloqueia revisão sem segunda rejeição definitiva, documento ou soma exa
   assert.throws(() => plan({ input: { ...input, scheduledFor: "2026-10-05" } }));
   assert.throws(() => plan({ message: { ...message, classification: { ...message.classification, barcode: "1".repeat(47) } } }));
 });
+
+test("aceita na primeira recusa somente o valor mínimo informado pelo Inter para o dia", () => {
+  const quoted = {
+    ...request,
+    submissionAttemptCount: 1,
+    lastError: { ...request.lastError, occurredAt: "2026-10-07T16:00:05.000Z", details: '{"message":"Pagamento mínimo aceito: R$ 1512.00. Gentileza alterar o valor total pago"}' },
+  };
+  const bankInput = { ...input, scheduledFor: "2026-10-07", evidenceSource: "inter_rejection" as const };
+  const patch = plan({ request: quoted, message: { ...message, status: "payment_failed", bankState: "failed" }, input: bankInput, today: "2026-10-07" });
+  assert.equal(patch.requestedSettlementAmount, 1512);
+  assert.equal(patch.settlementRevision.source, "inter_rejection");
+  assert.equal(patch.settlementRevision.interQuoteAmountCents, 151200);
+  assert.throws(() => plan({ request: quoted, input: { ...bankInput, settlementAmountCents: 151201, lateChargeAmountCents: 4403 }, today: "2026-10-07" }));
+  assert.throws(() => plan({ request: quoted, input: { ...bankInput, scheduledFor: "2026-10-08" }, today: "2026-10-08" }));
+  assert.throws(() => plan({ request: { ...quoted, interRequestId: "inter_1" }, input: bankInput, today: "2026-10-07" }));
+});

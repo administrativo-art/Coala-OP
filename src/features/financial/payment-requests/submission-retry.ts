@@ -1,9 +1,11 @@
+import { interOverdueMinimumCents } from "./inter-overdue-quote";
+
 export type PaymentSubmissionRetrySnapshot = {
   status?: string | null;
   interRequestId?: string | null;
   submissionStartedAt?: string | null;
   submissionAttemptCount?: number | null;
-  lastError?: { code?: string | null } | null;
+  lastError?: { code?: string | null; details?: string | null; occurredAt?: string | null } | null;
 };
 
 export type PaymentBankPreflightSnapshot = {
@@ -22,14 +24,16 @@ export function paymentSubmissionAttemptCount(input: PaymentSubmissionRetrySnaps
 /**
  * A single retry is allowed only after a definitive request rejection. HTTP
  * 400 cannot represent an accepted payment, and the retry still performs the
- * bank lookup before issuing another POST. Ambiguous and transient failures
- * remain blocked for manual reconciliation.
+ * bank lookup before issuing another POST. An explicit minimum from Inter
+ * requires a settlement revision instead of repeating the rejected amount.
+ * Ambiguous and transient failures remain blocked for manual reconciliation.
  */
 export function canRetryDefinitivelyRejectedPayment(input: PaymentSubmissionRetrySnapshot) {
   return input.status === "failed"
     && !input.interRequestId
     && Boolean(input.submissionStartedAt)
     && input.lastError?.code === "INTER_HTTP_400"
+    && interOverdueMinimumCents(input.lastError) === null
     && paymentSubmissionAttemptCount(input) === 1;
 }
 

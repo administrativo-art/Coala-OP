@@ -86,7 +86,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `employee-documents` | 6 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — aba Colaborador do Acervo (pasta completa para quem gerencia, publicada para o titular, envio com IA e visibilidade) e publicação com teste de integração |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
-| `financial-inbox` | 3 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote e confirmação manual cobertos localmente; verificação integrada pendente |
+| `financial-inbox` | 3 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote, confirmação manual e retomada após recusa bancária cobertos localmente; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
 | `forms` | 6 | Traçado | [Modelos, execução e tarefas](flows/forms.md) — percurso complementado; verificação integrada pendente |
 | `goals` | 6 | Traçado | [Metas](flows/goals.md) — percurso complementado; verificação integrada pendente |
@@ -96,7 +96,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `measure-conversion` | 1 | Traçado | [Conversão local](flows/conversions.md) — cálculo, acesso e ausência de escrita conferidos; renderização visual não testada |
 | `operations` | 1 | Traçado | [Agregação do painel](flows/operations-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `organization` | 1 | Traçado | [Organograma](flows/organization.md) — percurso complementado; verificação integrada pendente |
-| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — `REALIZADO`, recuperação versionada, conciliação conservadora por conjunto e adoção de agendamento DDA possuem cobertura unitária; teste de gravação no emulador foi criado, mas sua execução local depende de Java; fronteiras bancárias reais permanecem pendentes |
+| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — `REALIZADO`, recuperação versionada, conciliação conservadora por conjunto, adoção de agendamento DDA e cotação de boleto vencido possuem cobertura unitária; teste de gravação no emulador foi criado, mas sua execução local depende de Java; fronteiras bancárias reais permanecem pendentes |
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
