@@ -225,27 +225,36 @@ export function GuiaMetas({
   const somaPremiacoes = metas.filter((m) => m.atingida).reduce((s, m) => s + m.premiacao, 0);
   const atual: ResultadoMeta | undefined = r.metasAtingidas > 0 ? metas[r.metasAtingidas - 1] : undefined;
 
-  const atalhos = [
-    ...metas.map((m) => ({ rotulo: m.nome, valor: m.valor })),
-    { rotulo: 'Zerar', valor: 0 },
-  ];
-
   const partesBarra = [
     ...Array.from({ length: r.pessoasFixas }, (_, i) => ({ chave: `f${i}`, rotulo: `fixa ${i + 1}`, valor: r.porFixa, cls: i % 2 ? 'gm-b-roxo2' : 'gm-b-roxo' })),
     { chave: 'g', rotulo: 'folguista', valor: r.folguista, cls: 'gm-b-azul' },
     { chave: 'l', rotulo: 'liderança', valor: r.adicionalLideranca, cls: 'gm-b-laranja' },
   ].filter((x) => x.valor > 0);
 
-  const atalhosNode = (
-    <div className="gm-atalhos" role="group" aria-label="Escolher um valor pronto">
-      {atalhos.map((a) => (
-        <button key={a.rotulo} type="button" className={a.valor > 0 && faturamento >= a.valor ? 'on' : ''} onClick={() => setFaturamento(a.valor)}>
-          {a.rotulo}
-          {a.valor > 0 && <small>{reais(a.valor)}</small>}
+  const marcasNode = (
+    <div className="gm-marcas" role="group" aria-label="Escolher uma meta">
+      {metas.map((m) => (
+        <button
+          key={m.nome}
+          type="button"
+          className={faturamento >= m.valor ? 'on' : ''}
+          style={{ ['--x' as string]: `${Math.min(m.valor / maxRange, 1)}` }}
+          aria-label={`${m.nome}: ${reais(m.valor)}`}
+          onClick={() => setFaturamento(m.valor)}
+        >
+          <i aria-hidden="true" />
+          {m.nome.replace(/^Meta\s+/i, '')}
+          <small>{(m.valor / 1000).toLocaleString('pt-BR')} mil</small>
         </button>
       ))}
     </div>
   );
+  const ultima = metas[M - 1];
+  const situacao = !ultima
+    ? null
+    : r.proximaMeta
+      ? { ok: false, titulo: `Faltam ${reais(r.proximaMeta.faltam)}`, detalhe: `para a ${r.proximaMeta.nome}` }
+      : { ok: true, titulo: `✓ ${ultima.nome} alcançada`, detalhe: faturamento > ultima.valor ? `${reais(faturamento - ultima.valor)} acima` : '' };
   const contadoresNode = (
     <div className="gm-contadores">
       <Contador rotulo="Dias do mês" valor={diasMes} min={28} max={31} sufixo="dias" onChange={(v) => { setDiasMes(v); if (diasFolguista > v) setDiasFolguista(v); }} />
@@ -280,14 +289,22 @@ export function GuiaMetas({
               autoComplete="off"
               placeholder="0"
               value={faturamento === 0 ? '' : faturamento.toLocaleString('pt-BR')}
+              style={{ ['--chars' as string]: Math.max(faturamento.toLocaleString('pt-BR').length, 4) }}
               onChange={(e) => setFaturamento(Math.min(9_999_999, Number(e.target.value.replace(/\D/g, '')) || 0))}
             />
           </div>
+          {situacao && (
+            <p className={`gm-situacao ${situacao.ok ? 'ok' : ''}`} aria-live="polite">
+              <b>{situacao.titulo}</b>
+              {situacao.detalhe && <span>{situacao.detalhe}</span>}
+            </p>
+          )}
         </div>
         <div className="gm-fixa-r">
           <div><small>Prêmio da equipe</small><Pulso valor={reais(r.premioEquipe)} /></div>
           <div className="gm-fixa-lid"><small>Adicional liderança</small><Pulso valor={reais(r.adicionalLideranca)} /></div>
         </div>
+        <div className="gm-regua-fixa">
         <input
           className="gm-range"
           type="range"
@@ -299,7 +316,12 @@ export function GuiaMetas({
           style={{ ['--p' as string]: `${(Math.min(faturamento, maxRange) / maxRange) * 100}%` }}
           onChange={(e) => setFaturamento(Number(e.target.value))}
         />
-        <div className="gm-fixa-ctrl">{atalhosNode}{contadoresNode}</div>
+        {marcasNode}
+        </div>
+        <div className="gm-fixa-ctrl">
+          <button type="button" className="gm-zerar" onClick={() => setFaturamento(0)}>Zerar</button>
+          {contadoresNode}
+        </div>
       </div>
 
       {/* ============ PÁGINA 1 ============ */}
@@ -979,10 +1001,9 @@ const CSS = `
 .gm-ds .gm-fixa .gm-range::-webkit-slider-thumb{border-color:var(--ds-accent);box-shadow:none}
 .gm-ds .gm-passo button,.gm-ds .gm-ms,.gm-ds .gm-soma-l{border-width:1px}
 @media (min-width:1024px){
-  .gm-ds .gm-fixa{grid-template-columns:auto minmax(220px,1fr) auto;align-items:center;gap:6px 32px;padding:12px 24px}
+  .gm-ds .gm-fixa{grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px 32px;padding:16px 24px 12px}
   .gm-ds .gm-fixa-l{grid-column:1;grid-row:1}
-  .gm-ds .gm-fixa .gm-range{grid-column:2;grid-row:1;margin:0}
-  .gm-ds .gm-fixa-r{grid-column:3;grid-row:1;gap:28px}
+  .gm-ds .gm-fixa-r{grid-column:2;grid-row:1;gap:28px;padding-bottom:6px}
   .gm-ds .gm-fixa-r b{font-size:22px}
 }
 
@@ -1015,6 +1036,41 @@ const CSS = `
 .gm-ds .gm-pg>.gm-pg-corpo{padding-top:22px}
 
 /* a barra do simulador para logo abaixo da barra superior do sistema (header: sticky top-3 + h-11 = 56px) */
-.gm-ds .gm-pg{scroll-margin-top:290px}
+.gm-ds .gm-pg{scroll-margin-top:330px}
+/* vendas no mês em destaque: número grande, situação da meta e régua com as metas */
+.gm-ds .gm-fixa-l label{font-size:15px;color:var(--ds-ink-on-dark-2)}
+.gm-ds .gm-fixa .gm-campo{background:transparent;border:0;border-radius:12px;padding:0 6px;margin-left:-6px;align-items:baseline;width:fit-content;max-width:100%}
+.gm-ds .gm-fixa .gm-campo:hover{background:rgba(255,255,255,.06)}
+.gm-ds .gm-fixa .gm-campo span{font-size:clamp(22px,3vw,30px)}
+.gm-ds .gm-fixa .gm-campo input{font-size:clamp(44px,6vw,64px);line-height:1.08;letter-spacing:-.03em;width:calc(var(--chars,6) * 1ch + .4ch);max-width:100%;flex:none}
+.gm-situacao{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;font-size:15px}
+.gm-ds .gm-situacao b{color:var(--ds-accent-kicker-dark)}
+.gm-ds .gm-situacao span{color:var(--ds-ink-on-dark-2);font-size:14px}
+.gm-ds .gm-situacao.ok b{color:var(--ds-ink-on-dark-ok)}
+.gm-regua-fixa{grid-column:1/-1;position:relative;margin:14px 0 46px}
+.gm-ds .gm-fixa .gm-regua-fixa .gm-range{display:block;margin:0;height:34px}
+.gm-ds .gm-fixa .gm-regua-fixa .gm-range::-webkit-slider-runnable-track{height:18px;border-radius:10px}
+.gm-ds .gm-fixa .gm-regua-fixa .gm-range::-moz-range-track,.gm-ds .gm-fixa .gm-regua-fixa .gm-range::-moz-range-progress{height:18px;border-radius:10px}
+.gm-ds .gm-fixa .gm-regua-fixa .gm-range::-webkit-slider-thumb{width:34px;height:34px;margin-top:-8px}
+.gm-marcas{position:absolute;left:17px;right:17px;top:100%;height:0}
+.gm-marcas button{position:absolute;top:6px;left:calc(var(--x) * 100%);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;background:none;border:0;border-radius:8px;padding:2px 4px;font:700 12px/1.2 var(--font-ds);color:var(--ds-ink-on-dark-muted);cursor:pointer;white-space:nowrap}
+.gm-marcas button small{font-size:11px;font-weight:600}
+.gm-marcas button i{position:absolute;bottom:100%;left:50%;width:2px;height:30px;transform:translateX(-50%);background:rgba(255,255,255,.3);pointer-events:none}
+.gm-marcas button.on{color:var(--ds-accent-kicker-dark)}
+.gm-marcas button.on i{background:var(--ds-ink-on-dark)}
+.gm-marcas button:hover{color:var(--ds-ink-on-dark)}
+.gm-marcas button:focus-visible,.gm-zerar:focus-visible{outline:3px solid var(--ds-accent-kicker-dark);outline-offset:2px}
+.gm-zerar{font:600 14px var(--font-ds);border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--ds-ink-on-dark);border-radius:999px;padding:8px 16px;min-height:40px;cursor:pointer}
+.gm-zerar:hover{border-color:var(--ds-accent-kicker-dark)}
+/* tela estreita: as metas ficam juntas demais no trilho e viram botões abaixo da barra */
+@media (max-width:899px){
+  .gm-regua-fixa{margin:12px 0 4px}
+  .gm-marcas{position:static;height:auto;display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .gm-marcas button{position:static;transform:none;flex-direction:row;gap:6px;align-items:baseline;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:8px 14px;min-height:40px;font-size:13px;color:var(--ds-ink-on-dark)}
+  .gm-marcas button i{display:none}
+  .gm-marcas button small{color:var(--ds-ink-on-dark-muted)}
+  .gm-marcas button.on{background:var(--ds-accent);border-color:var(--ds-accent);color:#fff}
+  .gm-marcas button.on small{color:#ffe1ec}
+}
 @media (max-width:1023px){.gm-ds .gm-fixa{position:relative;top:0}.gm-ds .gm-pg{scroll-margin-top:80px}}
 `;
