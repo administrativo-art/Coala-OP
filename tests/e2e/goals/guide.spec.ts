@@ -26,7 +26,7 @@ test('guia interativo funciona no celular, tablet e desktop sem PDF exposto', as
   await page.getByRole('button', { name: 'Aumentar Dias da folguista' }).first().click();
   await expect(page.getByText('R$ 192').first()).toBeVisible();
 
-  const shortcuts = page.locator('.gm-atalhos');
+  const shortcuts = page.locator('.gm-marcas');
   await expect(shortcuts.getByRole('button', { name: 'Exemplo do guia' })).toHaveCount(0);
   const alvo = shortcuts.getByRole('button', { name: /Meta Alvo/ });
   const up = shortcuts.getByRole('button', { name: /Meta UP/ });
