@@ -73,6 +73,9 @@ test("retoma uma única vez somente rejeição HTTP 400 confirmada", () => {
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, submissionAttemptCount: 2 }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, lastError: { code: "INTER_REQUEST_FAILED" } }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, interRequestId: "bank_1" }, action: "retry-send", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...failed,
+    lastError: { code: "INTER_HTTP_400", details: '{"message":"Pagamento mínimo aceito: R$ 1098.80"}' },
+  }, action: "retry-send", ...expected }));
 });
 
 test("revisa e envia valor documental vencido somente após duas rejeições", () => {
@@ -117,6 +120,40 @@ test("revisa e envia valor documental vencido somente após duas rejeições", (
     settlementAmountCents: 109880, lateChargeAmountCents: 3200, sourceAttachmentId: "attachment_1",
     sourceAttachmentSha256: "a".repeat(64) }));
   assert.throws(() => validatePaymentCliAction({ request: adjusted, action: "send", ...expected }));
+});
+
+test("revisa valor vencido após uma recusa somente com cotação exata do Inter", () => {
+  const failed = {
+    ...order,
+    status: "failed",
+    submissionStartedAt: "2026-10-07T16:00:00.000Z",
+    submissionAttemptCount: 1,
+    lastError: { code: "INTER_HTTP_400", occurredAt: "2026-10-07T16:00:05.000Z", details: '{"message":"Pagamento mínimo aceito: R$ 1098.80. Gentileza alterar o valor total pago"}' },
+    barcodeSnapshot: { ...order.barcodeSnapshot, dueDate: "2026-09-29" },
+  };
+  const revision = {
+    request: failed, principalAmountCents: 106680, settlementAmountCents: 109880,
+    lateChargeAmountCents: 3200, scheduledFor: "2026-10-07",
+    beneficiaryDocument: expected.beneficiaryDocument, expenseId: expected.expenseId,
+    barcode: expected.barcode, sourceAttachmentId: "attachment_1", sourceAttachmentSha256: "a".repeat(64),
+  };
+  assert.equal(validateOverdueSettlementCliRevision(revision).evidenceSource, "inter_rejection");
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, settlementAmountCents: 109881, lateChargeAmountCents: 3201 }));
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, scheduledFor: "2026-10-08" }));
+  const adjusted = {
+    ...failed, status: "ready_to_submit", requestedSettlementAmount: 1098.8,
+    requestedLateChargeAmount: 32,
+    settlementRevision: {
+      source: "inter_rejection", evidenceSource: "inter_rejection", interQuoteAmountCents: 109880,
+      interQuoteObservedAt: "2026-10-07T16:00:05.000Z", sourceAttachmentId: "attachment_1",
+      sourceAttachmentSha256: "a".repeat(64), barcode: expected.barcode,
+      beneficiaryDocument: expected.beneficiaryDocument,
+    },
+    barcodeSnapshot: { ...failed.barcodeSnapshot, scheduledFor: "2026-10-07" },
+  };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request: adjusted, action: "send-adjusted", ...expected,
+    scheduledFor: "2026-10-07", settlementAmountCents: 109880, lateChargeAmountCents: 3200,
+    sourceAttachmentId: "attachment_1", sourceAttachmentSha256: "a".repeat(64) }));
 });
 
 test("recusa datas impossíveis, ações desconhecidas e estados posteriores", () => {

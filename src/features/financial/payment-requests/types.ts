@@ -64,8 +64,10 @@ type BankPaymentRequestBase = {
   requestedSettlementAmount?: number | null;
   requestedLateChargeAmount?: number | null;
   settlementRevision?: {
-    source: "confirmed_document";
-    evidenceSource: "manual_document_review";
+    source: "confirmed_document" | "inter_rejection";
+    evidenceSource: "manual_document_review" | "inter_rejection";
+    interQuoteAmountCents?: number;
+    interQuoteObservedAt?: string;
     sourceAttachmentId: string;
     sourceAttachmentSha256: string;
     barcode: string;
