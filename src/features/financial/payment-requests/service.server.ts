@@ -1120,6 +1120,12 @@ export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
       today: todayInBelem(),
     });
     transaction.set(ref, patch, { merge: true });
+    const projection = planFinancialInboxPaymentProjection({
+      message: message as FinancialInboxMessage,
+      request: { ...current, ...patch } as BankPaymentRequest,
+      observedAt: now,
+    });
+    transaction.set(messageRef, projection.patch, { merge: true });
     transaction.set(expenseRef, { paymentRequestId: id, updatedAt: now }, { merge: true });
     transaction.create(ref.collection("events").doc(), {
       type: "OVERDUE_BARCODE_SETTLEMENT_REAUTHORIZED",
@@ -1127,6 +1133,7 @@ export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
       sourceAttachmentId: input.sourceAttachmentId,
+      evidenceSource: input.evidenceSource,
       principalAmountCents: input.principalAmountCents,
       settlementAmountCents: input.settlementAmountCents,
       lateChargeAmountCents: input.lateChargeAmountCents,

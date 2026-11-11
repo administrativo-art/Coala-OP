@@ -8,6 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
+import { interOverdueMinimumCents } from "../../src/features/financial/payment-requests/inter-overdue-quote";
 import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
@@ -640,6 +641,7 @@ function printStatus(request: Record<string, unknown>) {
     id: request.id, status: request.status, amount: request.amount,
     requestedSettlementAmount: request.requestedSettlementAmount ?? null,
     requestedLateChargeAmount: request.requestedLateChargeAmount ?? null,
+    interMinimumAmountCents: interOverdueMinimumCents(request.lastError as { code?: string; details?: string } | null),
     submissionAttemptCount: request.submissionAttemptCount ?? null,
     sourceId: request.sourceId ?? null, expenseId: request.expenseId ?? null,
     scheduledFor: barcode?.scheduledFor ?? null,
