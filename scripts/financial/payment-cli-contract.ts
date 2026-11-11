@@ -2,6 +2,7 @@ import { PaymentCliError } from "./payment-cli-transport";
 import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "../../src/features/financial/payment-requests/submission-retry";
 import { overdueBarcodeSettlementRevisionSchema } from "../../src/features/financial/payment-requests/overdue-settlement";
+import { interOverdueQuoteEvidenceMatches, interOverdueQuoteFromRejection } from "../../src/features/financial/payment-requests/inter-overdue-quote";
 import { governmentCollectionBarcode } from "../../src/features/financial/payment-requests/inbox-barcode";
 import { parseAllowedPixCopyPaste } from "../../src/features/financial/payment-requests/pix-copy-paste";
 
@@ -95,14 +96,20 @@ export function validatePaymentCliAction(input: {
   const validRetry = input.action === "retry-send" && canRetryDefinitivelyRejectedPayment(request);
   const revision = record(request.settlementRevision);
   const validAdjustedSend = input.action === "send-adjusted"
+    && revision !== null
     && request.status === "ready_to_submit"
     && !request.interRequestId
     && Boolean(request.submissionStartedAt)
-    && paymentSubmissionAttemptCount(request) === 2
+    && (revision?.evidenceSource === "inter_rejection"
+      ? paymentSubmissionAttemptCount(request) >= 1
+      : paymentSubmissionAttemptCount(request) === 2)
     && Math.round(Number(request.requestedSettlementAmount) * 100) === input.settlementAmountCents
     && Math.round(Number(request.requestedLateChargeAmount) * 100) === input.lateChargeAmountCents
-    && revision?.source === "confirmed_document"
-    && revision.evidenceSource === "manual_document_review"
+    && (revision?.evidenceSource === "inter_rejection"
+      ? revision.source === "inter_rejection"
+        && revision.interQuoteAmountCents === input.settlementAmountCents
+        && interOverdueQuoteEvidenceMatches(revision.interQuoteAmountCents, revision.interQuoteObservedAt, input.scheduledFor)
+      : revision?.source === "confirmed_document" && revision.evidenceSource === "manual_document_review")
     && revision.sourceAttachmentId === input.sourceAttachmentId
     && revision.sourceAttachmentSha256 === input.sourceAttachmentSha256
     && revision.barcode === input.barcode
@@ -161,6 +168,13 @@ export function validateOverdueSettlementCliRevision(input: {
   sourceAttachmentId: string;
   sourceAttachmentSha256: string;
 }) {
+  const lastError = record(input.request.lastError);
+  const quote = interOverdueQuoteFromRejection({
+    code: String(lastError?.code ?? ""),
+    details: typeof lastError?.details === "string" ? lastError.details : null,
+    occurredAt: typeof lastError?.occurredAt === "string" ? lastError.occurredAt : null,
+  }, input.scheduledFor);
+  const quotedAmountMatches = quote?.amountCents === input.settlementAmountCents;
   const parsed = overdueBarcodeSettlementRevisionSchema.safeParse({
     principalAmountCents: input.principalAmountCents,
     settlementAmountCents: input.settlementAmountCents,
@@ -171,7 +185,7 @@ export function validateOverdueSettlementCliRevision(input: {
     barcode: input.barcode,
     sourceAttachmentId: input.sourceAttachmentId,
     sourceAttachmentSha256: input.sourceAttachmentSha256,
-    evidenceSource: "manual_document_review",
+    evidenceSource: quotedAmountMatches ? "inter_rejection" : "manual_document_review",
     confirmed: true,
   });
   const request = input.request;
@@ -183,7 +197,7 @@ export function validateOverdueSettlementCliRevision(input: {
     || request.interRequestId
     || request.lastError == null
     || record(request.lastError)?.code !== "INTER_HTTP_400"
-    || paymentSubmissionAttemptCount(request) !== 2
+    || (quotedAmountMatches ? paymentSubmissionAttemptCount(request) < 1 : paymentSubmissionAttemptCount(request) !== 2)
     || Math.round(Number(request.amount) * 100) !== input.principalAmountCents
     || request.expenseId !== input.expenseId
     || barcode?.code !== input.barcode

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import type { BankPaymentRequest } from "./types";
 import { paymentSubmissionAttemptCount } from "./submission-retry";
+import { interOverdueQuoteEvidenceMatches, interOverdueQuoteFromRejection } from "./inter-overdue-quote";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -25,7 +26,7 @@ export const overdueBarcodeSettlementRevisionSchema = z.object({
     .pipe(z.string().regex(/^(\d{44}|\d{46}|\d{47}|\d{48})$/)),
   sourceAttachmentId: z.string().trim().min(1).max(200),
   sourceAttachmentSha256: z.string().regex(/^[a-f0-9]{64}$/i).transform((value) => value.toLowerCase()),
-  evidenceSource: z.literal("manual_document_review"),
+  evidenceSource: z.enum(["manual_document_review", "inter_rejection"]),
   confirmed: z.literal(true),
 }).strict().superRefine((value, context) => {
   if (value.settlementAmountCents !== value.principalAmountCents + value.lateChargeAmountCents) {
@@ -80,11 +81,15 @@ export function assertFinancialInboxPaymentTarget(params: {
   const payableAmountCents = installment
     ? Math.round(Number(installment.value) * 100)
     : Math.round(Number(expense.totalValue) * 100);
+  const expectedMessageState = request.status === "failed"
+    ? (message.status === "payment_failed" && message.bankState === "failed")
+      || (message.status === "awaiting_authorization" && message.bankState === "awaiting_authorization")
+    : message.status === "awaiting_authorization"
+      && ["awaiting_authorization", "ready_to_submit"].includes(String(message.bankState));
   if (message.id !== request.sourceId
     || message.linkedExpenseId !== request.expenseId
     || message.paymentRequestId !== request.id
-    || message.status !== "awaiting_authorization"
-    || message.bankState !== "awaiting_authorization"
+    || !expectedMessageState
     || message.existingBankPayment?.transactionId
     || message.existingSettlement?.transactionId
     || expense.id !== request.expenseId
@@ -110,7 +115,11 @@ export function assertFinancialInboxPaymentTarget(params: {
   const revision = request.settlementRevision;
   const attachment = message.attachments?.find((item) => item.id === revision?.sourceAttachmentId);
   if (!revision
-    || revision.evidenceSource !== "manual_document_review"
+    || !["manual_document_review", "inter_rejection"].includes(revision.evidenceSource)
+    || (revision.evidenceSource === "inter_rejection"
+      && (revision.source !== "inter_rejection"
+        || revision.interQuoteAmountCents !== revision.settlementAmountCents
+        || !interOverdueQuoteEvidenceMatches(revision.interQuoteAmountCents, revision.interQuoteObservedAt, params.today)))
     || revision.documentedFor !== params.today
     || revision.documentedFor !== request.barcodeSnapshot.scheduledFor
     || revision.documentedFor <= request.barcodeSnapshot.dueDate
@@ -125,7 +134,7 @@ export function assertFinancialInboxPaymentTarget(params: {
     || typeof attachment.storagePath !== "string"
     || !attachment.storagePath
     || attachment.sha256 !== revision.sourceAttachmentSha256) {
-    throw new Error("A confirmação documental do valor atualizado mudou ou não está disponível.");
+    throw new Error("A evidência do valor atualizado mudou ou não está disponível.");
   }
 }
 
@@ -145,12 +154,18 @@ export function planOverdueBarcodeSettlementRevision(params: {
   const storedBarcode = String(classification?.barcode ?? "").replace(/[.\s-]/g, "");
   const storedDocument = String(classification?.billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
   const attachment = message.attachments?.find((item) => item.id === input.sourceAttachmentId);
+  const quote = interOverdueQuoteFromRejection(request.lastError, input.scheduledFor);
+  const validQuote = input.evidenceSource === "inter_rejection"
+    && paymentSubmissionAttemptCount(request) >= 1
+    && quote?.amountCents === input.settlementAmountCents;
+  const validDocument = input.evidenceSource === "manual_document_review"
+    && paymentSubmissionAttemptCount(request) === 2;
   if (request.sourceType !== "financial_inbox"
     || request.paymentRail !== "barcode"
     || request.status !== "failed"
     || request.interRequestId
     || request.lastError?.code !== "INTER_HTTP_400"
-    || paymentSubmissionAttemptCount(request) !== 2
+    || (!validQuote && !validDocument)
     || Math.round(request.amount * 100) !== input.principalAmountCents
     || request.expenseId !== input.expenseId
     || message.linkedExpenseId !== input.expenseId
@@ -181,8 +196,12 @@ export function planOverdueBarcodeSettlementRevision(params: {
     requestedSettlementAmount: input.settlementAmountCents / 100,
     requestedLateChargeAmount: input.lateChargeAmountCents / 100,
     settlementRevision: {
-      source: "confirmed_document" as const,
+      source: input.evidenceSource === "inter_rejection" ? "inter_rejection" as const : "confirmed_document" as const,
       evidenceSource: input.evidenceSource,
+      ...(input.evidenceSource === "inter_rejection" && quote ? {
+        interQuoteAmountCents: quote.amountCents,
+        interQuoteObservedAt: quote.observedAt,
+      } : {}),
       sourceAttachmentId: input.sourceAttachmentId,
       sourceAttachmentSha256: attachment.sha256.toLowerCase(),
       barcode: input.barcode,
