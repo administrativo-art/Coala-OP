@@ -14,6 +14,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
 import { useDP } from '@/components/dp-context';
 import { operationalMinimum } from '@/lib/replenishment-display';
+import { replenishmentMarginFactor } from '@/lib/replenishment-policy';
 import { unitFullName, unitSymbol } from '@/lib/base-product-unit-display';
 
 const formatCurrency = (value?: number) => {
@@ -171,7 +172,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
     ? String(baseProduct.consumptionMonths ?? '—')
     : policyEnabled ? (baseProduct.minStockRecalcPeriod === 'biweekly' ? 'Quinzenal · 15 dias' : 'Mensal · 30 dias') : 'Política não verificada';
   const policyLine = policyEnabled === true
-    ? 'Ativa. Mínimo automático com margem de 30%.'
+    ? `Ativa. Mínimo automático com margem padrão de 30%${replenishmentMarginFactor(baseProduct.id, 'matriz') === 1.15 ? '; amendoim no CD usa 15%' : ''}.`
     : legacy ? 'Regra legada. A política nova permanece em comparação até sua ativação.' : 'Indisponível. Os mínimos não puderam ser verificados.';
   const gridTemplateColumns = legacy ? 'minmax(0,1.1fr) minmax(0,1.6fr) 120px 90px' : 'minmax(0,1.1fr) minmax(0,1.8fr) 90px';
   const firstProductId = visibleProducts[0]?.id;
@@ -259,7 +260,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                       </div>
                       {showHow && (
                         <ul className="flex list-disc flex-col gap-1.5 rounded-xl bg-[#f1efe9] py-3 pl-7 pr-3.5 text-[12.5px] leading-[1.55] text-[#4a4f57]">
-                          <li>Nos dias 1 e 16, o sistema recalcula o estoque mínimo, com margem de 30%. A recomendação considera o estoque físico líquido de reservas, sem abater compras a caminho.</li>
+                          <li>Nos dias 1 e 16, o sistema recalcula o estoque mínimo, com margem padrão de 30%{replenishmentMarginFactor(baseProduct.id, 'matriz') === 1.15 ? ' e 15% para este insumo no CD' : ''}. A recomendação considera o estoque físico líquido de reservas, sem abater compras a caminho.</li>
                           <li>A base do cálculo (mensal ou quinzenal) é definida na edição do insumo. Itens em unidades são arredondados para cima; itens em kg/L mantêm casas decimais.</li>
                           <li>{legacy
                             ? 'No modelo legado, unidades com "Travado" mantêm o valor manual. A política nova permanece em comparação até sua ativação.'

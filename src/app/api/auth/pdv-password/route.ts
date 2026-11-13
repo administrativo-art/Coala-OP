@@ -37,7 +37,9 @@ const contract = defineSecurityContract({
 const enforcer = createStandardSecurityEnforcer<
   NextRequest, RouteContext, unknown, ServerUserContext, z.infer<typeof inputSchema>, Resource
 >(contract, {
-  authenticate: ({ request }) => requireUser(request),
+  authenticate: ({ request }) => requireUser(request).catch(() => {
+    throw new AppError({ code: 'PDV_PASSWORD_AUTH_REQUIRED', kind: 'AUTHENTICATION' });
+  }),
   loadResource: ({ actor }) => ({ ownerId: actor.decoded.uid }),
   authorize: ({ actor, resource }) => {
     if (resource.ownerId !== actor.decoded.uid) {

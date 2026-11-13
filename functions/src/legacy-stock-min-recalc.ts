@@ -1,11 +1,11 @@
 import { getFirestore, FieldValue, type Firestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
+import { replenishmentMarginFactor } from "./replenishment-policy.js";
 
 const TIME_ZONE = "America/Belem";
 const HISTORY_MONTHS = 6;
 const HISTORY_QUINZENAS = HISTORY_MONTHS * 2;
-const SAFETY_MARGIN = 1.3; // +30% sobre a média de consumo
 const MOVEMENT_HISTORY_READ_LIMIT = 20000; // salvaguarda: sem índice composto (type, timestamp) hoje, lemos tudo e filtramos em memória
 
 type Period = "monthly" | "biweekly";
@@ -214,7 +214,8 @@ export type RecalculationSummary = {
 
 /**
  * Recalcula `stockLevels.<kioskId>.min` de cada insumo (baseProduct), usando a média de
- * consumo dos últimos 6 meses + 30% de margem de segurança. Extraída do trigger `onSchedule`
+ * consumo dos últimos 6 meses + margem padrão de 30%, com exceção de 15% para
+ * amendoim no CD. Extraída do trigger `onSchedule`
  * abaixo para poder ser exercitada por teste de integração contra o emulador do Firestore.
  *
  * Fonte de consumo: primeiro tenta `consumptionReports` (consumo ligado a vendas via PDV);
@@ -231,7 +232,7 @@ export type RecalculationSummary = {
  *
  * Unidades de abastecimento/mistas (ver `loadSupplyMap`) usam a soma do consumo das unidades
  * atendidas que estejam roteadas via CD para o insumo, na mesma base mensal/quinzenal, com a
- * mesma margem de 30%. Quando todos os destinos são compra direta, o mínimo legado do CD é zerado.
+ * margem do par insumo/local. Quando todos os destinos são compra direta, o mínimo legado do CD é zerado.
  */
 export async function runMinimumStockRecalculation(db: Firestore, now: Date): Promise<RecalculationSummary> {
   const quinzenas = lastCompleteQuinzenas(now);
@@ -322,7 +323,7 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
           summary.skippedNoData++;
           continue;
         }
-        newMin = roundForUnit(mean * SAFETY_MARGIN, product.unit);
+        newMin = roundForUnit(mean * replenishmentMarginFactor(doc.id, kioskId), product.unit);
       }
 
       batch.update(doc.ref, {
