@@ -2721,6 +2721,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       if (accountError) return jsonError(accountError);
     }
     const batch = dbAdmin.batch();
+    const normalizedServiceFee = Number(rest.serviceFee ?? currentOrder.serviceFee ?? 0);
+    if (!Number.isFinite(normalizedServiceFee) || normalizedServiceFee < 0) return jsonError('Taxa de serviço inválida.');
+    const itemDocs = Array.isArray(items) || normalizedServiceFee > 0
+      ? (await orderRef.collection('items').get()).docs
+      : [];
 
     // If items are provided, we need to recalculate the totalEstimated
     if (Array.isArray(items)) {
@@ -2734,8 +2739,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       rest.totalEstimated = Math.max(itemsTotal + deliveryFee + serviceFee, 0);
 
       // Replace items: delete old ones first
-      const itemsSnap = await orderRef.collection('items').get();
-      for (const itemDoc of itemsSnap.docs) {
+      for (const itemDoc of itemDocs) {
         batch.delete(itemDoc.ref);
       }
 
@@ -2785,12 +2789,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     }
 
     const normalizedDeliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
-    const normalizedServiceFee = Number(rest.serviceFee ?? currentOrder.serviceFee ?? 0);
-    if (!Number.isFinite(normalizedServiceFee) || normalizedServiceFee < 0) return jsonError('Taxa de serviço inválida.');
     if (normalizedServiceFee > 0) {
       const nextItems = Array.isArray(items)
         ? items
-        : (await orderRef.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1).get()).docs.map((itemDoc) => itemDoc.data());
+        : itemDocs.map((itemDoc) => itemDoc.data());
       if (nextItems.some(isLegacyServiceFeeItem)) return jsonError('Remova a taxa de serviço dos itens para evitar cobrança duplicada.');
     }
     if ('serviceFeePaymentMode' in rest || 'serviceFee' in rest) {
