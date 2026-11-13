@@ -46,6 +46,12 @@ Complemento transversal da etapa 8, em 2026-09-26. Estes percursos não dependem
 
 ## Autenticação e primeiro acesso
 
+### Troca da senha do PDV Legal no perfil
+
+O menu do perfil distingue **Alterar senha do Coala One** (Firebase Auth) de **Alterar senha do PDV Legal**. A segunda opção aparece para a identidade real quando o cadastro tem acesso ativo ao PDV. A pessoa escolhe o acesso quando há mais de um, confirma a identidade por reautenticação Firebase (senha do Coala One ou provedor Google vinculado) e informa uma nova senha numérica de quatro dígitos, sem zero inicial. O cliente envia apenas o ID do acesso e a nova senha ao `POST /api/auth/pdv-password` com token renovado; não grava nem exibe o segredo.
+
+A rota exige usuário ativo, `auth_time` dos últimos cinco minutos e vínculo ativo do ID solicitado no cadastro autenticado (`users/{uid}`), com fallback para o ID legado somente quando não existe lista `pdvAccesses`. A integração envia a nova senha à API do PDV preservando os demais campos do usuário e consulta o cadastro novamente para confirmar a senha recebida. Não altera a senha do Coala One nem permissões do PDV. O PDV Legal é um serviço externo sem transação compartilhada com o Coala One; falha ou confirmação divergente gera erro sem afirmar sucesso. A confirmação em ambiente real continua pendente de homologação.
+
 ### Visualização assistida exclusiva do desenvolvimento
 
 O Sistema e o Coala Go oferecem **Visualizar como usuário** exclusivamente quando a identidade autenticada tem o e-mail exato `administrativo@coalashakes.com`. A opção fica no menu da foto/perfil. O seletor mostra somente usuários ativos e a API `GET/POST/DELETE /api/auth/view-as` repete a autorização no servidor; ocultar o item na interface não é o controle de acesso. Iniciar e encerrar a visualização geram eventos `developer_view_as_started` e `developer_view_as_stopped` em `actionLogs`, sempre atribuídos ao UID real e com o alvo nos metadados.
