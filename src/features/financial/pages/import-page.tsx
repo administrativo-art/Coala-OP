@@ -1720,7 +1720,7 @@ export function FinancialImportPage({
         const financial = financialByOrderId.get(order.id);
         if (!financial || financial.status === "cancelled") return null;
         const goodsAmountEstimated = Math.max(
-          Number(financial.goodsAmountEstimated ?? order.totalEstimated ?? 0) - Number(financial.freightAmountEstimated ?? order.deliveryFee ?? 0),
+          Number(financial.goodsAmountEstimated ?? (Number(order.totalEstimated ?? 0) - Number(financial.freightAmountEstimated ?? order.deliveryFee ?? 0))),
           0
         );
         const freightAmountEstimated = Number(financial.freightAmountEstimated ?? order.deliveryFee ?? 0);

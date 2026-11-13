@@ -2672,6 +2672,10 @@ export type PurchaseOrder = {
   freightPaymentMode?: PurchaseFreightPaymentMode;
   freightSupplierId?: string | null;
   freightSupplierName?: string | null;
+  serviceFee?: number;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -2681,6 +2685,7 @@ export type PurchaseOrder = {
   notes?: string;
   linkedExpenseId?: string;
   linkedFreightExpenseId?: string;
+  linkedServiceFeeExpenseId?: string;
   archivedLinkedExpenseId?: string;
   financialArchiveRunId?: string;
   financialExpenseArchivedAt?: string;
@@ -2865,6 +2870,9 @@ export type PurchaseFinancial = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
   freightSupplierId?: string | null;
   freightSupplierName?: string | null;
   resultCenterId?: string;
@@ -2873,6 +2881,7 @@ export type PurchaseFinancial = {
   amountEstimated: number;
   goodsAmountEstimated?: number;
   freightAmountEstimated?: number;
+  serviceFeeAmountEstimated?: number;
   goodsAmountPaid?: number;
   freightAmountPaid?: number;
   amountConfirmed?: number;
@@ -2882,6 +2891,7 @@ export type PurchaseFinancial = {
   installmentsCount?: number;
   linkedExpenseId?: string;
   linkedFreightExpenseId?: string;
+  linkedServiceFeeExpenseId?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;

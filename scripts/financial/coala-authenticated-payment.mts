@@ -453,7 +453,7 @@ async function purchaseCatalogSearch(token: string, query: string) {
     const rows = await paymentCliJson<Array<Record<string, unknown>>>(response);
     const keys = resource === "operational-categories"
       ? ["id", "name", "destination", "active"]
-      : ["id", "baseProductId", "baseName", "name", "brand", "packageSize", "packageType", "unit", "operationalCategoryId", "operationalCategoryName", "isArchived"];
+      : ["id", "baseProductId", "baseName", "name", "brand", "packageSize", "packageType", "unit", "multiplo_caixa", "rotulo_caixa", "operationalCategoryId", "operationalCategoryName", "isArchived"];
     return rows.filter((row) => normalizeSearch([row.name, row.baseName, row.brand, row.packageType].join(" ")).includes(needle))
       .slice(0, 25)
       .map((row) => Object.fromEntries(keys.filter((key) => Object.hasOwn(row, key)).map((key) => [key, row[key]])));

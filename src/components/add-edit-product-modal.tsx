@@ -1525,6 +1525,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                 {packageTypeWatch === 'Caixa' ? 'Caixa mestra' : 'Caixa'}
                                                                             </SelectItem>
                                                                             <SelectItem value="Fardo">Fardo</SelectItem>
+                                                                            <SelectItem value="Pacote">Pacote</SelectItem>
                                                                             <SelectItem value="Pallet">Pallet</SelectItem>
                                                                             <SelectItem value="Tambor">Tambor</SelectItem>
                                                                         </SelectContent>
