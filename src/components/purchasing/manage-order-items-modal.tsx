@@ -558,11 +558,16 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
           : item.itemName.trim().length > 0 && item.unit.trim().length > 0;
     const hasRequiredCategory = skipsOperationalEntry || !!category;
     const hasRequiredUnit = skipsOperationalEntry ? item.unit.trim().length > 0 : true;
+    const requiresPackDecision = item.entryType === 'stock' || item.entryType === 'uniform';
     const product = item.productId ? products.find((entry) => entry.id === item.productId) : null;
     const packIssue = item.isMultipack
-      ? product ? purchasePackIssue(product, item.unitsPerPackage, item.stockRegistrationMode) : 'Selecione o cadastro que receberá o estoque.'
+      ? product
+        ? purchasePackIssue(product, item.unitsPerPackage, item.stockRegistrationMode)
+        : !Number.isInteger(item.unitsPerPackage) || item.unitsPerPackage < 2
+          ? 'Informe quantas unidades existem em cada embalagem.'
+          : item.isRegistered ? 'Selecione o cadastro que receberá o estoque.' : null
       : null;
-    return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0 && !packIssue && item.packChoiceConfirmed;
+    return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0 && !packIssue && (!requiresPackDecision || item.packChoiceConfirmed);
   };
 
   const validItems = items.filter(isItemValid);
@@ -740,8 +745,12 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
               const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
-              const packIssue = item.isMultipack && selectedRawProduct
-                ? purchasePackIssue(selectedRawProduct, item.unitsPerPackage, item.stockRegistrationMode)
+              const packIssue = item.isMultipack
+                ? selectedRawProduct
+                  ? purchasePackIssue(selectedRawProduct, item.unitsPerPackage, item.stockRegistrationMode)
+                  : !Number.isInteger(item.unitsPerPackage) || item.unitsPerPackage < 2
+                    ? 'Informe quantas unidades existem em cada embalagem.'
+                    : item.isRegistered ? 'Selecione o cadastro que receberá o estoque.' : null
                 : null;
               const packPreview = item.isMultipack && item.unitsPerPackage > 1
                 ? purchasePackPreview(item.quantityOrdered, item.unitPriceOrdered, item.discountOrdered, item.unitsPerPackage, item.stockRegistrationMode)
@@ -870,7 +879,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                           </span>
                         </label>
                       )}
-                      {selectedRawProduct && (
+                      {(item.entryType === 'stock' || item.entryType === 'uniform') && (
                         <div className="space-y-3 rounded-md border bg-background p-3 text-xs">
                           <div className="flex items-center justify-between gap-3">
                             <div>
@@ -882,10 +891,10 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                               onCheckedChange={(checked) => updateItem(item.key, {
                                 isMultipack: checked,
                                 packChoiceConfirmed: true,
-                                unitsPerPackage: checked ? item.unitsPerPackage || selectedRawProduct.multiplo_caixa || suggestedUnitsPerPackage(item.aliasCandidate) || 0 : 0,
+                                unitsPerPackage: checked ? item.unitsPerPackage || selectedRawProduct?.multiplo_caixa || suggestedUnitsPerPackage(item.aliasCandidate) || 0 : 0,
                                 stockRegistrationMode: 'individual',
                                 purchaseUnitType: checked ? 'logistic' : 'content',
-                                unit: checked ? 'Embalagem' : getContentPurchaseUnitLabel(selectedRawProduct),
+                                unit: checked ? 'Embalagem' : selectedRawProduct ? getContentPurchaseUnitLabel(selectedRawProduct) : 'un',
                               })}
                               aria-label="Compra em embalagem com várias unidades"
                             />
@@ -924,6 +933,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                           )}
                         </div>
                       )}
+                      {item.isMultipack && !item.isRegistered && (
+                        <p className="text-xs text-muted-foreground">A embalagem ficará registrada no pedido. Para confirmar a compra e receber no estoque, vincule o cadastro da unidade avulsa ou da embalagem correspondente.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -935,6 +947,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                     if (categoryDestination === 'asset' || item.itemTreatment === 'asset') {
                       return <Input value="un" readOnly className="bg-muted" />;
                     }
+                    if (item.isMultipack) return <Input value="Embalagem" readOnly className="bg-muted" />;
                     if (!item.isRegistered || item.itemTreatment === 'asset_component' || item.itemTreatment === 'expense') {
                       return (
                         <Input
@@ -1041,7 +1054,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                      </div>
                    )}
                    {packIssue && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">{packIssue}</p>}
-                   {!item.isMultipack && suggestedUnitsPerPackage(item.aliasCandidate) && selectedRawProduct && (
+                   {(item.entryType === 'stock' || item.entryType === 'uniform') && !item.isMultipack && suggestedUnitsPerPackage(item.aliasCandidate) && (
                      <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                        A descrição sugere {suggestedUnitsPerPackage(item.aliasCandidate)} unidades por embalagem. Confirme no controle acima antes de salvar; como item avulso, a quantidade informada será lançada sem multiplicação.
                        {!item.packChoiceConfirmed && <Button type="button" variant="outline" size="sm" className="mt-2 block" onClick={() => updateItem(item.key, { packChoiceConfirmed: true })}>Confirmar compra avulsa</Button>}
