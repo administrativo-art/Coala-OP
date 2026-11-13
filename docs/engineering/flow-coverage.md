@@ -110,7 +110,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de unidades e fluxo local de perfis cobertos por contratos; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
-| `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
+| `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — margem padrão de 30%, exceção de 15% para AMENDOIM no CD, compra direta por unidade e comparação local; testes puro e de integração no emulador passaram; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |
 | `stock-count` | 3 | Traçado | [Sessões e ajustes de lote](flows/stock-count.md) — percurso complementado; verificação integrada pendente |
 | `stock-reposition` | 2 | Traçado | [Reserva e transição](flows/stock-requests-reposition-returns.md) — percurso complementado; verificação integrada pendente |

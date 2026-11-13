@@ -177,12 +177,12 @@ async function seedUnit(id: string, data: Record<string, unknown>) {
   await db.collection("dp_units").doc(id).set({ name: id, ...data });
 }
 
-test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos atendidos (+30%)", async () => {
+test("amendoim no CD soma unidades atendidas com 15%, mantendo 30% nas lojas", async () => {
   const suffix = randomUUID().slice(0, 8);
-  const baseProductId = `test-supply-${suffix}`;
+  const baseProductId = "xeMEVoUWeKSqgcBkO0NH";
   const groupCd = `group-cd-${suffix}`;
   const groupStores = `group-stores-${suffix}`;
-  const cd = `cd-${suffix}`;
+  const cd = "matriz";
   const storeA = `store-a-${suffix}`;
   const storeB = `store-b-${suffix}`;
   const storeArchived = `store-archived-${suffix}`;
@@ -196,7 +196,7 @@ test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos
   await seedUnit(`u-${storeArchived}`, { externalSource: "kiosk", externalId: storeArchived, groupId: groupStores, isArchived: true });
   await seedUnit(`u-${storeOtherGroup}`, { externalSource: "kiosk", externalId: storeOtherGroup, groupId: `outro-${suffix}` });
 
-  // A: 10/mês, B: 20/mês, arquivada e outro grupo não contam => CD: 30/mês => 30*1.3 = 39
+  // A: 10/mês, B: 20/mês, arquivada e outro grupo não contam => CD: 30/mês × 1,15 = 34,5.
   for (const month of [3, 4, 5, 6, 7, 8]) {
     await seedConsumptionReport(storeA, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 10 }]);
     await seedConsumptionReport(storeB, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 20 }]);
@@ -206,9 +206,9 @@ test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos
 
   // o CD nem tem linha no insumo: deve ser criada; storeB não tem linha também
   await db.collection("baseProducts").doc(baseProductId).set({
-    name: "TESTE SUPPLY",
-    unit: "L",
-    category: "Volume",
+    name: "AMENDOIM",
+    unit: "g",
+    category: "Massa",
     stockLevels: { [storeA]: { override: false } },
   });
 
@@ -217,7 +217,7 @@ test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos
   const levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
   assert.equal(levels[storeA].min, 13, "unidade comercial usa o próprio consumo: 10*1.3");
   assert.equal(levels[storeB].min, 26, "quiosque sem linha no cadastro é criado: 20*1.3");
-  assert.equal(levels[cd].min, 39, "CD soma A+B (30) e aplica 30%");
+  assert.equal(levels[cd].min, 34.5, "CD soma A+B (30) e aplica 15%");
   assert.equal(levels[cd].lastAutoCalculatedMean, 30);
   assert.equal(levels[cd].override, false);
 });

@@ -22,6 +22,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { getUnitsPerPackageForProduct, operationalMinimum, previewMinimum } from '@/lib/replenishment-display';
+import { replenishmentMarginFactor } from '@/lib/replenishment-policy';
 import { useDP } from '@/components/dp-context';
 import { CATEGORY_SYMBOLS, unitFullName as getUnitFullName, unitSymbol as getUnitSymbol } from '@/lib/base-product-unit-display';
 
@@ -346,7 +347,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       {policyEnabled === true && (
                         <div className="flex flex-col gap-1.5 rounded-xl border border-[rgba(155,231,181,.22)] bg-[rgba(155,231,181,.1)] px-3.5 py-3">
                           <span className="flex items-center gap-[7px] text-[12.5px] font-extrabold text-[#9be7b5]"><span className="h-[7px] w-[7px] rounded-full bg-[#9be7b5]" />Ativa · mínimo sempre automático</span>
-                          <span className="text-[12.5px] leading-normal text-[#c8c7d0]">Meta automática: média diária × {period === 'monthly' ? '30' : '15'} dias × 1,3. A margem de 30% entra uma vez. Prazo de entrega e validade são informações separadas.</span>
+                          <span className="text-[12.5px] leading-normal text-[#c8c7d0]">Meta automática: média diária × {period === 'monthly' ? '30' : '15'} dias × margem. A margem padrão é 30%; para amendoim no CD, 15%. Prazo de entrega e validade são informações separadas.</span>
                         </div>
                       )}
                       {policyEnabled === false && (
@@ -381,7 +382,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       <button type="button" onClick={() => setShowHow((v) => !v)} aria-expanded={showHow} className="self-start text-[12.5px] font-bold text-[#b9b9ff]">{showHow ? 'Ocultar detalhes' : 'Como é calculado?'}</button>
                       {showHow && (
                         <ul className="flex list-disc flex-col gap-1.5 rounded-xl bg-white/5 py-3 pl-7 pr-3.5 text-xs leading-[1.55] text-[#c8c7d0]">
-                          <li>Com a política ativa, a meta usa média diária dos 180 dias completos anteriores × 30 dias (mensal) ou 15 dias (quinzenal) × 1,3. O mínimo é sempre automático.</li>
+                          <li>Com a política ativa, a meta usa média diária dos 180 dias completos anteriores × 30 dias (mensal) ou 15 dias (quinzenal) × margem. O padrão é 30%; amendoim no CD usa 15%.</li>
                           <li>Consumo interno do PDV é a fonte principal; transferências podem aparecer como aproximação de abastecimento. Dados incompletos deixam o cálculo pendente.</li>
                           <li>O CD considera somente unidades que recebem dele. Compra direta usa prazo próprio da unidade; rota via CD usa prazo operacional de dois dias na unidade comercial.</li>
                         </ul>
@@ -621,7 +622,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                     </FormItem>
                                   )}/>
                                 ) : (
-                                  <div title="A margem de 30% entra uma vez na meta automática" className="flex h-[38px] items-center rounded-[10px] bg-[#f4f3ef] px-2.5 text-[11.5px] text-[#70757d]"><span className="truncate">{policyEnabled === null ? '—' : 'Na margem de 30%'}</span></div>
+                                  <div title="A margem entra uma vez na meta automática" className="flex h-[38px] items-center rounded-[10px] bg-[#f4f3ef] px-2.5 text-[11.5px] text-[#70757d]"><span className="truncate">{policyEnabled === null ? '—' : `Na margem de ${Math.round((replenishmentMarginFactor(productToEditId ?? '', kiosk.id) - 1) * 100)}%`}</span></div>
                                 )}
                               </div>
 
