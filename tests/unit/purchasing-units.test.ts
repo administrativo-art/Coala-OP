@@ -51,3 +51,26 @@ test('mantém a compra avulsa disponível quando escolhida explicitamente', () =
   assert.equal(stock.ok, true);
   if (stock.ok) assert.equal(stock.stockQuantity, 20);
 });
+
+test('pacote de 100 sacos mantém preço do volume e lança 100 unidades no estoque', () => {
+  const sack = {
+    packageSize: 1,
+    unit: 'un',
+    category: 'Unidade' as const,
+    multiplo_caixa: 100,
+    rotulo_caixa: 'Pacote',
+  };
+  const base = { unit: 'un' };
+  const price = calculatePricePerBaseUnit(78.97, sack, base, 'logistic');
+  const stock = calculateStockQuantityFromPurchase(1, sack, sack, base, 'logistic');
+  assert.equal(price.ok, true);
+  if (price.ok) {
+    assert.equal(price.baseUnitsPerPurchaseUnit, 100);
+    assert.equal(price.pricePerBaseUnit, 0.7897);
+  }
+  assert.equal(stock.ok, true);
+  if (stock.ok) {
+    assert.equal(stock.baseQuantity, 100);
+    assert.equal(stock.stockQuantity, 100);
+  }
+});
