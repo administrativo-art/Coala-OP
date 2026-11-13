@@ -4,11 +4,11 @@ import path from "node:path";
 import { generateDocx, extractDocxVariables } from "../src/features/hr/documents/docx-generator";
 import { applyFieldMapping } from "../src/features/hr/documents/field-mapping";
 import {
-  PROBATION_CONTRACT_V4_FIELD_MAPPING,
-  PROBATION_CONTRACT_V4_SOURCE,
+  PROBATION_CONTRACT_V5_FIELD_MAPPING,
+  PROBATION_CONTRACT_V5_SOURCE,
 } from "../src/features/hr/documents/probation-contract-template";
 
-const source = await readFile(path.resolve(PROBATION_CONTRACT_V4_SOURCE));
+const source = await readFile(path.resolve(PROBATION_CONTRACT_V5_SOURCE));
 const data: Record<string, unknown> = {
   employee: {
     name: "THAISE CORREIA MARINHO",
@@ -52,7 +52,7 @@ applyFieldMapping({
   data,
   flat,
   rawFlat,
-  mapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
+  mapping: PROBATION_CONTRACT_V5_FIELD_MAPPING,
 });
 
 const generated = generateDocx(source, data);
@@ -62,7 +62,7 @@ if (unresolved.length) {
 }
 
 const outputDirectory = path.resolve("output/docx");
-const outputPath = path.join(outputDirectory, "contrato-experiencia-v4-piloto.docx");
+const outputPath = path.join(outputDirectory, "contrato-experiencia-v5-piloto.docx");
 await mkdir(outputDirectory, { recursive: true });
 await writeFile(outputPath, generated);
 process.stdout.write(`${outputPath}\n`);

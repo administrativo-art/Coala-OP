@@ -1,6 +1,7 @@
-export const ONBOARDING_PRIVACY_NOTICE_VERSION = "1.0";
-export const ONBOARDING_PRIVACY_NOTICE_EFFECTIVE_AT = "2026-07-16";
-export const ONBOARDING_PRIVACY_NOTICE_SNAPSHOT_ID = "formalization_1_0";
+export const ONBOARDING_PRIVACY_NOTICE_VERSION = "1.1";
+export const ONBOARDING_PRIVACY_NOTICE_EFFECTIVE_AT = "2026-11-02";
+// Cada versão tem cópia própria em privacy_notice_versions; a 1.0 continua preservada em formalization_1_0.
+export const ONBOARDING_PRIVACY_NOTICE_SNAPSHOT_ID = "formalization_1_1";
 
 export const ONBOARDING_DATA_CONTROLLER_NAME = "CT SORVETES LTDA.";
 export const ONBOARDING_DATA_CONTROLLER_TRADE_NAME = "COALA SHAKES TIRITICAL";
@@ -16,8 +17,8 @@ export const ONBOARDING_PRIVACY_NOTICE_SUMMARY = [
 
 export const ONBOARDING_PRIVACY_NOTICE_TEXT = `AVISO DE PRIVACIDADE DA FORMALIZAÇÃO DE CANDIDATOS
 
-Versão 1.0
-Data de vigência: 16/07/2026
+Versão 1.1
+Data de vigência: 02/11/2026
 
 1. Identificação da empresa responsável
 
@@ -94,7 +95,7 @@ O sistema indicará quais campos e documentos são obrigatórios e quais são fa
 
 10. Compartilhamento dos dados
 
-Dentro dos limites necessários, os dados poderão ser compartilhados com prestadores de tecnologia, hospedagem, autenticação, segurança, prevenção de fraude, assinatura e gestão eletrônica de documentos; escritório de contabilidade e responsáveis pela folha; prestadores de benefícios; instituições financeiras; clínicas, médicos e serviços de saúde ocupacional; prestadores de segurança e saúde do trabalho; auditores, consultores e assessores jurídicos; seguradoras ou operadoras de benefícios; eSocial; autoridades públicas; e outros prestadores necessários à admissão e à gestão da relação de trabalho.
+Dentro dos limites necessários, os dados poderão ser compartilhados com prestadores de tecnologia, hospedagem, autenticação, segurança, prevenção de fraude, assinatura e gestão eletrônica de documentos; serviços de inteligência artificial utilizados para leitura, classificação e organização dos documentos enviados, sem decisão final automática sobre o candidato; escritório de contabilidade e responsáveis pela folha; prestadores de benefícios; instituições financeiras; clínicas, médicos e serviços de saúde ocupacional; prestadores de segurança e saúde do trabalho; auditores, consultores e assessores jurídicos; seguradoras ou operadoras de benefícios; eSocial; autoridades públicas; e outros prestadores necessários à admissão e à gestão da relação de trabalho.
 
 O compartilhamento será limitado aos dados necessários à atuação de cada destinatário. Os prestadores deverão observar a legislação, as obrigações contratuais e as instruções legítimas da Coala Shakes.
 
@@ -133,7 +134,7 @@ Este Aviso poderá ser atualizado para refletir mudanças legais, regulatórias,
 Ao marcar a caixa correspondente, o candidato declara que teve acesso a este Aviso; pôde consultar as informações sobre o tratamento; foi informado sobre finalidades, compartilhamentos, conservação e direitos; está ciente dos registros técnicos e de auditoria; e compreende que a confirmação registra ciência, não consentimento genérico, e não substitui a assinatura do contrato de trabalho ou de outros documentos admissionais.`;
 
 export const ONBOARDING_PRIVACY_ACKNOWLEDGEMENT_TEXT =
-  "Declaro que tive acesso e estou ciente do Aviso de Privacidade da Formalização, versão 1.0, incluindo as finalidades, os compartilhamentos, os critérios de conservação, os registros técnicos do procedimento e os direitos relacionados aos meus dados pessoais.";
+  "Declaro que tive acesso e estou ciente do Aviso de Privacidade da Formalização, versão 1.1, incluindo as finalidades, os compartilhamentos, os critérios de conservação, os registros técnicos do procedimento e os direitos relacionados aos meus dados pessoais.";
 
 export const ONBOARDING_PRIVACY_CONFIRMATION_NOTE =
   "Esta confirmação registra apenas a ciência sobre o tratamento de dados descrito no Aviso de Privacidade. Ela não constitui consentimento ou autorização genérica para o uso dos dados e não substitui a assinatura do contrato de trabalho.";
