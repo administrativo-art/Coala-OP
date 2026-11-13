@@ -25,6 +25,8 @@ import { LogOut, Warehouse, Camera, Upload, KeyRound, Loader2, Eye, RotateCcw, S
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { ChangePasswordModal } from './change-password-modal';
+import { ChangePdvPasswordModal } from './change-pdv-password-modal';
+import { activePdvPasswordAccesses } from '@/lib/pdv-password-access';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import type { DeveloperViewAsUser } from '@/features/auth/developer-view-as';
@@ -66,6 +68,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
 
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isPdvPasswordModalOpen, setIsPdvPasswordModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isViewAsOpen, setIsViewAsOpen] = useState(false);
   const [viewAsQuery, setViewAsQuery] = useState('');
@@ -78,6 +81,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
   const kioskNames = (user.assignedKioskIds ?? [])
     .map(id => kiosks.find(k => k.id === id)?.name)
     .filter((name): name is string => Boolean(name));
+  const pdvAccesses = activePdvPasswordAccesses(user);
 
   const profile = user?.profileId ? profiles.find(p => p.id === user.profileId) : null;
   const profileName = profile ? profile.name : 'Perfil não encontrado';
@@ -299,7 +303,13 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
           {!displayedViewAs && (
             <DropdownMenuItem onSelect={() => setIsPasswordModalOpen(true)}>
               <KeyRound className="mr-2 h-4 w-4" />
-              <span>Alterar senha</span>
+              <span>Alterar senha do Coala One</span>
+            </DropdownMenuItem>
+          )}
+          {!displayedViewAs && pdvAccesses.length > 0 && (
+            <DropdownMenuItem onSelect={() => setIsPdvPasswordModalOpen(true)}>
+              <KeyRound className="mr-2 h-4 w-4" />
+              <span>Alterar senha do PDV Legal</span>
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
@@ -327,6 +337,11 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
       <ChangePasswordModal
         open={isPasswordModalOpen}
         onOpenChange={setIsPasswordModalOpen}
+      />
+      <ChangePdvPasswordModal
+        open={isPdvPasswordModalOpen}
+        onOpenChange={setIsPdvPasswordModalOpen}
+        accesses={pdvAccesses}
       />
 
       <Dialog open={isViewAsOpen} onOpenChange={setIsViewAsOpen}>
