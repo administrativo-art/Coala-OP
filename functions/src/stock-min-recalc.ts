@@ -1,5 +1,5 @@
 import { type Firestore, type Query, type DocumentData } from 'firebase-admin/firestore';
-import { belemDate, calculateReplenishment, effectiveLeadTime, historyStart, historyEnd, type DemandDay, type DemandSource, type SupplyMode } from './replenishment-policy.js';
+import { belemDate, calculateReplenishment, effectiveLeadTime, historyStart, historyEnd, replenishmentMarginFactor, type DemandDay, type DemandSource, type SupplyMode } from './replenishment-policy.js';
 
 const PAGE_SIZE = 400;
 const READ_CAP = 20_000;
@@ -258,7 +258,8 @@ export async function runMinimumStockRecalculation(
       const result = calculateReplenishment({ days, source, unit: base.unit,
         cycleDays: base.minStockRecalcPeriod === 'biweekly' ? 15 : 30,
         isSupplyUnit: isSupply, servedUnitCount: served.length,
-        minimumValidDays: source === 'transfer_proxy' ? 14 : undefined });
+        minimumValidDays: source === 'transfer_proxy' ? 14 : undefined,
+        marginFactor: replenishmentMarginFactor(doc.id, kioskId) });
       if (source === 'transfer_proxy' && served.some(id => transferData.invalid.has(`${doc.id}:${id}`))) {
         result.target = null;
         result.calculationStatus = 'pending';
