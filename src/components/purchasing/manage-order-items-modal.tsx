@@ -79,6 +79,7 @@ interface Props {
   initialItems: PurchaseOrderItem[];
   initialItemId?: string | null;
   deliveryFee?: number;
+  serviceFee?: number;
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onSuccess?: () => void;
@@ -325,7 +326,7 @@ function AssetLinkField({
   );
 }
 
-export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = null, deliveryFee = 0, open, onOpenChange, onSuccess }: Props) {
+export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = null, deliveryFee = 0, serviceFee = 0, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { assets } = useAssets();
@@ -517,7 +518,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
     [items],
   );
 
-  const orderEstimatedTotal = goodsNetTotal + deliveryFee;
+  const orderEstimatedTotal = goodsNetTotal + deliveryFee + serviceFee;
 
   const isItemValid = (item: DraftItem) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
@@ -707,15 +708,18 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
               const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
+              const supplierPackCount = Number(/\bC\s*\/\s*(\d{2,4})\b/i.exec(item.aliasCandidate)?.[1] ?? 0);
               const logisticSummary =
                 selectedRawProduct &&
                 item.purchaseUnitType === 'logistic' &&
+                item.quantityOrdered > 0 &&
                 selectedRawProduct.multiplo_caixa &&
                 selectedRawProduct.multiplo_caixa > 0
                   ? {
                       contentUnitLabel: getContentPurchaseUnitLabel(selectedRawProduct),
                       totalContentUnits: item.quantityOrdered * selectedRawProduct.multiplo_caixa,
-                      pricePerContentUnit: item.unitPriceOrdered / selectedRawProduct.multiplo_caixa,
+                      pricePerContentUnit: (item.lineGrossOrdered - item.discountOrdered) /
+                        (item.quantityOrdered * selectedRawProduct.multiplo_caixa),
                     }
                   : null;
               const availableProducts = categoryDestination
@@ -977,12 +981,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                     </p>
                   )}
                    {logisticSummary && (
-                     <p className="rounded-md bg-background px-3 py-2 text-xs text-muted-foreground">
-                       {fmtQuantity(item.quantityOrdered)} {item.unit} ={' '}
-                       <span className="font-medium text-foreground">
-                         {fmtQuantity(logisticSummary.totalContentUnits)} {logisticSummary.contentUnitLabel}
-                       </span>
-                       {' '}· {fmtCurrency(logisticSummary.pricePerContentUnit)} por {logisticSummary.contentUnitLabel}
+                     <div className="grid gap-2 rounded-md border bg-background px-3 py-2 text-xs sm:grid-cols-3">
+                       <div><span className="block text-muted-foreground">Compra total</span><strong>{fmtQuantity(item.quantityOrdered)} {item.unit} · {fmtCurrency(Math.max(item.lineGrossOrdered - item.discountOrdered, 0))}</strong></div>
+                       <div><span className="block text-muted-foreground">Quantidade de unidades</span><strong>{fmtQuantity(logisticSummary.totalContentUnits)} {logisticSummary.contentUnitLabel}</strong></div>
+                       <div><span className="block text-muted-foreground">Custo por unidade</span><strong>{fmtCurrency(logisticSummary.pricePerContentUnit)} / {logisticSummary.contentUnitLabel}</strong></div>
+                     </div>
+                   )}
+                   {selectedRawProduct && supplierPackCount > 1 && !selectedRawProduct.multiplo_caixa && (
+                     <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                       A descrição do fornecedor indica {supplierPackCount} unidades por volume, mas o produto cadastrado está como unidade avulsa. Configure o agrupamento no cadastro do produto antes de salvar a compra por volume; sem isso, o estoque receberá apenas a quantidade de volumes informada.
                      </p>
                    )}
                    <Input 
@@ -1016,6 +1023,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
               {fmtCurrency(goodsGrossTotal)} em itens
               {discountTotal > 0 ? ` - ${fmtCurrency(discountTotal)} em descontos` : ''}
               {deliveryFee > 0 ? ` + ${fmtCurrency(deliveryFee)} de frete` : ''}
+              {serviceFee > 0 ? ` + ${fmtCurrency(serviceFee)} de taxa de serviço` : ''}
               {' = '}
               <span className="font-medium text-foreground">{fmtCurrency(orderEstimatedTotal)}</span>
             </p>

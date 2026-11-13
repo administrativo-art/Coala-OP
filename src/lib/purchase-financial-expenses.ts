@@ -10,7 +10,7 @@ import { purchaseExpenseHasSettlementEvidence } from "@/lib/purchasing-order-rev
 export type PurchaseFreightPaymentMode = "included_with_goods" | "separate";
 
 export type PurchaseExpenseComponent = {
-  role: "combined" | "goods" | "freight";
+  role: "combined" | "goods" | "freight" | "service_fee";
   description: string;
   supplier: string;
   totalValue: number;
@@ -27,13 +27,17 @@ export type PurchaseExpenseComponent = {
 type PurchaseExpenseComponentInput = {
   totalValue: number;
   deliveryFee?: number | null;
+  serviceFee?: number | null;
   freightPaymentMode?: PurchaseFreightPaymentMode | null;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode | null;
   goodsSupplier: string;
   freightSupplier?: string | null;
   goodsAccountPlanId?: string | null;
   goodsAccountPlanName?: string | null;
   freightAccountPlanId?: string | null;
   freightAccountPlanName?: string | null;
+  serviceFeeAccountPlanId?: string | null;
+  serviceFeeAccountPlanName?: string | null;
 };
 
 export type PurchasePaymentInstrument = CreditCardInstrument & {
@@ -227,13 +231,16 @@ export function buildPurchaseExpenseComponents(
 ): PurchaseExpenseComponent[] {
   const totalValue = money(input.totalValue);
   const freightValue = Math.min(money(input.deliveryFee), totalValue);
-  const goodsValue = money(totalValue - freightValue);
+  const serviceFeeValue = Math.min(money(input.serviceFee), money(totalValue - freightValue));
+  const goodsValue = money(totalValue - freightValue - serviceFeeValue);
   const goodsSupplier = input.goodsSupplier.trim() || "Fornecedor da compra";
   const freightSupplier = String(input.freightSupplier || "").trim();
   const goodsAccountPlanId = String(input.goodsAccountPlanId || "").trim();
   const goodsAccountPlanName = String(input.goodsAccountPlanName || "").trim();
   const freightAccountPlanId = String(input.freightAccountPlanId || "").trim();
   const freightAccountPlanName = String(input.freightAccountPlanName || "").trim();
+  const serviceFeeAccountPlanId = String(input.serviceFeeAccountPlanId || "").trim();
+  const serviceFeeAccountPlanName = String(input.serviceFeeAccountPlanName || "").trim();
 
   const goodsComponent = (role: "combined" | "goods", value: number): PurchaseExpenseComponent => ({
     role,
@@ -246,38 +253,48 @@ export function buildPurchaseExpenseComponents(
     accountAllocations: null,
   });
 
-  if (freightValue <= 0) return [goodsComponent("goods", totalValue)];
-
-  if (input.freightPaymentMode !== "separate") {
-    const combined = goodsComponent("combined", totalValue);
-    const distinctPlans = goodsAccountPlanId && freightAccountPlanId && goodsAccountPlanId !== freightAccountPlanId;
-    return [{
-      ...combined,
-      hasAccountAllocations: Boolean(distinctPlans),
-      accountAllocations: distinctPlans
-        ? [
-            { accountPlanId: goodsAccountPlanId, accountPlanName: goodsAccountPlanName, amount: goodsValue },
-            { accountPlanId: freightAccountPlanId, accountPlanName: freightAccountPlanName, amount: freightValue },
-          ]
-        : null,
-    }];
-  }
-
-  if (!freightSupplier) {
+  const freightSeparate = freightValue > 0 && input.freightPaymentMode === "separate";
+  const serviceSeparate = serviceFeeValue > 0 && input.serviceFeePaymentMode === "separate";
+  if (freightSeparate && !freightSupplier) {
     throw new Error("Informe o favorecido do frete pago separadamente.");
   }
-
-  return [
-    goodsComponent("goods", goodsValue),
-    {
-      role: "freight",
-      description: `Frete sobre compra | ${freightSupplier}`,
-      supplier: freightSupplier,
-      totalValue: freightValue,
-      accountPlanId: freightAccountPlanId,
-      accountPlanName: freightAccountPlanName,
-      hasAccountAllocations: false,
-      accountAllocations: null,
-    },
+  const includedFreight = freightSeparate ? 0 : freightValue;
+  const includedService = serviceSeparate ? 0 : serviceFeeValue;
+  const primaryValue = money(goodsValue + includedFreight + includedService);
+  const allocations = [
+    { accountPlanId: goodsAccountPlanId, accountPlanName: goodsAccountPlanName, amount: goodsValue },
+    ...(includedFreight > 0 ? [{ accountPlanId: freightAccountPlanId, accountPlanName: freightAccountPlanName, amount: includedFreight }] : []),
+    ...(includedService > 0 ? [{ accountPlanId: serviceFeeAccountPlanId, accountPlanName: serviceFeeAccountPlanName, amount: includedService }] : []),
   ];
+  const distinctPlans = new Set(allocations.filter((entry) => entry.amount > 0).map((entry) => entry.accountPlanId)).size > 1;
+  const primaryPlan = goodsValue > 0 ? allocations[0] : allocations.find((entry) => entry.amount > 0) ?? allocations[0];
+  const primary = {
+    ...goodsComponent(includedFreight > 0 || includedService > 0 ? "combined" : "goods", primaryValue),
+    accountPlanId: primaryPlan.accountPlanId,
+    accountPlanName: primaryPlan.accountPlanName,
+    hasAccountAllocations: distinctPlans,
+    accountAllocations: distinctPlans ? allocations.filter((entry) => entry.amount > 0) : null,
+  };
+  const components: PurchaseExpenseComponent[] = [primary];
+  if (freightSeparate) components.push({
+    role: "freight",
+    description: `Frete sobre compra | ${freightSupplier}`,
+    supplier: freightSupplier,
+    totalValue: freightValue,
+    accountPlanId: freightAccountPlanId,
+    accountPlanName: freightAccountPlanName,
+    hasAccountAllocations: false,
+    accountAllocations: null,
+  });
+  if (serviceSeparate) components.push({
+    role: "service_fee",
+    description: `Taxa de serviço da compra on-line | ${goodsSupplier}`,
+    supplier: goodsSupplier,
+    totalValue: serviceFeeValue,
+    accountPlanId: serviceFeeAccountPlanId,
+    accountPlanName: serviceFeeAccountPlanName,
+    hasAccountAllocations: false,
+    accountAllocations: null,
+  });
+  return components;
 }

@@ -490,7 +490,9 @@ export function ExpenseExpandedDetails({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className={KICKER_CLASS}>
-                  {expense.purchaseExpenseRole === "freight" ? "Mercadoria relacionada" : "Frete pago separadamente"}
+                  {expense.purchaseExpenseRole === "freight" || expense.purchaseExpenseRole === "service_fee"
+                    ? "Mercadoria relacionada"
+                    : relatedPurchaseExpense.purchaseExpenseRole === "service_fee" ? "Taxa de serviço paga separadamente" : "Frete pago separadamente"}
                 </p>
                 <p className="mt-1 truncate text-[12.5px] font-semibold">{relatedPurchaseExpense.description || "Despesa vinculada à compra"}</p>
                 <p className="mt-0.5 text-[11px] text-[#9a9ba1]">{relatedPurchaseExpense.supplier || "Favorecido não informado"}</p>

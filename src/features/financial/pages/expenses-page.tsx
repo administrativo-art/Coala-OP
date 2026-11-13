@@ -1027,7 +1027,9 @@ export function ExpensesPage() {
           {relatedPurchaseExpense ? (
             <Button variant="ds-secondary" size="xs" asChild>
               <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
-                {expense.purchaseExpenseRole === "freight" ? "Ver mercadoria" : "Ver frete separado"}
+                {expense.purchaseExpenseRole === "freight" || expense.purchaseExpenseRole === "service_fee"
+                  ? "Ver mercadoria"
+                  : relatedPurchaseExpense.purchaseExpenseRole === "service_fee" ? "Ver taxa de serviço" : "Ver frete separado"}
               </Link>
             </Button>
           ) : null}
