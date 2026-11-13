@@ -42,23 +42,29 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/design` | [page.tsx](../../src/app/dashboard/design/page.tsx) | [design-guide.tsx](../../src/components/design/design-guide.tsx) |
 
-## documents (15)
+## documents (21)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [archive-employees.tsx](../../src/features/documents/central/archive-employees.tsx) |
-| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | [archive-preview.tsx](../../src/features/documents/central/archive-preview.tsx), [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx) |
+| `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [collaborator-archive.tsx](../../src/features/documents/central/collaborator-archive.tsx) |
+| `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | Ler a própria página |
 | `dashboard/documents/consents/[employeeId]` | [page.tsx](../../src/app/dashboard/documents/consents/[employeeId]/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts), [image-voice-consent.ts](../../src/features/hr/consents/image-voice-consent.ts) |
-| `dashboard/documents/financial` | [page.tsx](../../src/app/dashboard/documents/financial/page.tsx) | [financial-archive.tsx](../../src/features/documents/central/financial-archive.tsx), [company-archive-navigation.ts](../../src/lib/documents/company-archive-navigation.ts) |
+| `dashboard/documents/editor/[id]` | [page.tsx](../../src/app/dashboard/documents/editor/[id]/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-loader.tsx](../../src/features/documents/editor/ui/editor-loader.tsx) |
+| `dashboard/documents/editor/documents` | [page.tsx](../../src/app/dashboard/documents/editor/documents/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-documents-list.tsx](../../src/features/documents/editor/ui/editor-documents-list.tsx) |
+| `dashboard/documents/editor` | [page.tsx](../../src/app/dashboard/documents/editor/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-blank-entry.tsx](../../src/features/documents/editor/ui/editor-blank-entry.tsx) |
+| `dashboard/documents/editor/templates/[tid]` | [page.tsx](../../src/app/dashboard/documents/editor/templates/[tid]/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-loader.tsx](../../src/features/documents/editor/ui/editor-loader.tsx) |
+| `dashboard/documents/editor/templates` | [page.tsx](../../src/app/dashboard/documents/editor/templates/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [editor-templates-list.tsx](../../src/features/documents/editor/ui/editor-templates-list.tsx) |
+| `dashboard/documents/financial` | [page.tsx](../../src/app/dashboard/documents/financial/page.tsx) | Redireciona para `/dashboard/financial/inbox` |
 | `dashboard/documents/generated/manage` | [page.tsx](../../src/app/dashboard/documents/generated/manage/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx) |
 | `dashboard/documents/generated` | [page.tsx](../../src/app/dashboard/documents/generated/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [central-workspace.tsx](../../src/features/documents/central/central-workspace.tsx) |
 | `dashboard/documents/generator/models/[id]` | [page.tsx](../../src/app/dashboard/documents/generator/models/[id]/page.tsx) | [template-editor-workspace.tsx](../../src/features/hr/documents/template-editor-workspace.tsx), [page-container.tsx](../../src/components/layout/page-container.tsx) |
 | `dashboard/documents/generator/models` | [page.tsx](../../src/app/dashboard/documents/generator/models/page.tsx) | [template-library-workspace.tsx](../../src/features/hr/documents/template-library-workspace.tsx), [page-container.tsx](../../src/components/layout/page-container.tsx) |
-| `dashboard/documents/generator` | [page.tsx](../../src/app/dashboard/documents/generator/page.tsx) | [document-generator-workspace.tsx](../../src/components/documents/document-generator-workspace.tsx), [document-navigation.tsx](../../src/features/documents/central/document-navigation.tsx) |
+| `dashboard/documents/generator` | [page.tsx](../../src/app/dashboard/documents/generator/page.tsx) | [document-generator-workspace.tsx](../../src/components/documents/document-generator-workspace.tsx), [page-container.tsx](../../src/components/layout/page-container.tsx) |
 | `dashboard/documents/history` | [page.tsx](../../src/app/dashboard/documents/history/page.tsx) | [page-container.tsx](../../src/components/layout/page-container.tsx), [history-workspace.tsx](../../src/features/documents/central/history-workspace.tsx) |
 | `dashboard/documents/management` | [page.tsx](../../src/app/dashboard/documents/management/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts) |
 | `dashboard/documents/models` | [page.tsx](../../src/app/dashboard/documents/models/page.tsx) | [archive-models.tsx](../../src/features/documents/central/archive-models.tsx) |
-| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx) |
+| `dashboard/documents` | [page.tsx](../../src/app/dashboard/documents/page.tsx) | [archive-explorer.tsx](../../src/features/documents/central/archive-explorer.tsx), [company-archive.tsx](../../src/features/documents/central/company-archive.tsx) |
+| `dashboard/documents/published` | [page.tsx](../../src/app/dashboard/documents/published/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | Redireciona para `/dashboard/documents/generator/models` |
 
@@ -66,12 +72,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [publication-control.tsx](../../src/features/hr/documents/publication-control.tsx), [legacy-document-classification.tsx](../../src/features/hr/documents/legacy-document-classification.tsx) |
+| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators/[userId]/time-recording` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx) | [my-time-recording-page.tsx](../../src/features/dp/rep-p/my-time-recording-page.tsx) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
-| `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [index.ts](../../src/types/index.ts) |
+| `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | Ler a própria página |
 | `dashboard/dp/fechamento` | [page.tsx](../../src/app/dashboard/dp/fechamento/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [closure-section.tsx](../../src/features/dp/time-adjustments/closure-section.tsx) |
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx) |
@@ -147,11 +153,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/forms/models/new` | [page.tsx](../../src/app/dashboard/forms/models/new/page.tsx) | [form-model-page-shell.tsx](../../src/components/forms/form-model-page-shell.tsx) |
 | `dashboard/forms` | [page.tsx](../../src/app/dashboard/forms/page.tsx) | [forms-dashboard-shell.tsx](../../src/components/forms/forms-dashboard-shell.tsx) |
 
-## goals (5)
+## goals (6)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/goals/analysis` | [page.tsx](../../src/app/dashboard/goals/analysis/page.tsx) | [goals-analysis-dashboard.tsx](../../src/components/goals-analysis-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
+| `dashboard/goals/guide` | [page.tsx](../../src/app/dashboard/goals/guide/page.tsx) | [GuiaMetas.tsx](../../src/components/goals/guide/GuiaMetas.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
 | `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | Redireciona para `/dashboard/goals/analysis?tab=closures` |
 | `dashboard/goals` | [page.tsx](../../src/app/dashboard/goals/page.tsx) | Redireciona para `/dashboard/goals/tracking` |
 | `dashboard/goals/registration` | [page.tsx](../../src/app/dashboard/goals/registration/page.tsx) | [goals-registration-dashboard.tsx](../../src/components/goals-registration-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
@@ -356,4 +363,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **174 páginas** no checkout usado para a geração.
+Total: **181 páginas** no checkout usado para a geração.

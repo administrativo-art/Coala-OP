@@ -21,7 +21,7 @@ import {
 import type { ClosureActionInput, ClosureCloseInput } from './schemas';
 import { actInstant, ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
 import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from './automatic-absence.server';
-import { automaticAbsenceSuperseded } from './automatic-absence-core';
+import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from './automatic-absence-core';
 import { belongsToTimeClosureRoster } from '@/lib/hr/employment-relationship';
 
 const ABSENCES = 'dp_absenceRequests';
@@ -178,7 +178,7 @@ async function readDeclaration(get: (query: Query<DocumentData>) => Promise<{ do
   const absenceItems = absences.docs.slice(0, ITEM_LIMIT).map((doc) => doc.data() as AbsenceRequestRecord)
     .filter((record) => record.status !== 'draft' && overlapsCompetence(record, competence)).map(absenceItem);
   const approvedAbsences = absenceItems.filter((item) => item.status === 'approved');
-  const approvedAdjustmentDays = new Set(adjustmentItems.filter((item) => item.status === 'approved').map((item) => `${item.employeeUid}|${item.workDate}`));
+  const approvedAdjustmentDays = new Set(adjustmentItems.filter(adjustmentRestoresAutomaticAbsence).map((item) => `${item.employeeUid}|${item.workDate}`));
   const automaticItems = automaticAbsences.docs.slice(0, ITEM_LIMIT).map((doc) => doc.data() as AutomaticAbsenceRecord)
     .filter((record) => record.status === 'active')
     .filter((record) => !automaticAbsenceSuperseded(record.workDate,
@@ -186,7 +186,9 @@ async function readDeclaration(get: (query: Query<DocumentData>) => Promise<{ do
       approvedAbsences.filter((item) => item.beneficiaryUid === record.employeeUid)))
     .map(automaticAbsenceItem);
   const people = buildDeclaration(adjustmentItems, [...absenceItems, ...automaticItems]);
-  return { people, truncated };
+  const pendingAutomaticSchedule = automaticAbsences.docs.some((doc) =>
+    ['pending_removal', 'pending_restoration', 'review_required'].includes(String(doc.data().scheduleSyncStatus ?? '')));
+  return { people, truncated, pendingAutomaticSchedule };
 }
 
 async function readShiftSwaps(mainDb: Firestore, workspaceId: string, competence: string) {
@@ -265,6 +267,8 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
     if ((current?.version ?? 0) !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
     const declaration = await readDeclaration((query) => tx.get(query), deps.hrDb, context.workspace_id, input.competence);
+    if (declaration.pendingAutomaticSchedule) throw fail('PTRP_AUTOMATIC_ABSENCE_SCHEDULE_PENDING',
+      'Há falta automática ainda não reconciliada com a escala. Resolva a pendência antes de fechar o ponto.', 'CONFLICT');
     const people = includeClosureRoster(withShiftSwaps(declaration.people, swaps.items), roster);
     const truncated = declaration.truncated || swaps.truncated;
     if (truncated || people.length > PEOPLE_LIMIT) throw fail('PTRP_CLOSURE_TOO_LARGE', 'O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.', 'CONFLICT');

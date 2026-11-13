@@ -1,5 +1,7 @@
 # Acesso, privacidade e entradas compartilhadas
 
+O inventário por pessoa de Privacidade em `/api/privacy/person-inventory` exige sessão, permissão de visualizar Privacidade, escopo da pessoa por workspace/unidade e a permissão específica da fonte antes da consulta. Fontes restritas não revelam coleção, campo ou contagem; itens liberados mostram apenas referência e papel. Consulte [rastreabilidade de pessoa](document-person-traceability.md) para cobertura e limites históricos.
+
 ## Georreferenciamento planejado do ponto
 
 A [especificação técnica de georreferenciamento](time-recording-geolocation.md) implementa coleta de localização somente quando o trabalhador confirma uma batida, sem rastreamento contínuo e sem bloqueio por posição externa, imprecisa ou indisponível. A evidência fica fora da ARP, do AFD e do comprovante para possuir acesso e retenção próprios. Coordenadas exatas são server-only e têm TTL fixo de 1.825 dias; ainda não há leitor administrativo publicado. Base legal, cláusula LGPD/aditivo, aviso, parâmetros físicos, participantes nominais e ativação explícita continuam como gates anteriores à coleta com pessoas reais.
@@ -43,6 +45,12 @@ Em `firestore.rules`, clientes não podem criar política/metadados de cálculo 
 Complemento transversal da etapa 8, em 2026-09-26. Estes percursos não dependem de uma página ativa do dashboard; não acrescentam automaticamente grupos à matriz de 53 grupos. Estado: leitura estática das fronteiras abaixo, sem homologação dos provedores.
 
 ## Autenticação e primeiro acesso
+
+### Troca da senha do PDV Legal no perfil
+
+O menu do perfil distingue **Alterar senha do Coala One** (Firebase Auth) de **Alterar senha do PDV Legal**. A segunda opção aparece para a identidade real quando o cadastro tem acesso ativo ao PDV. A pessoa escolhe o acesso quando há mais de um, confirma a identidade por reautenticação Firebase (senha do Coala One ou provedor Google vinculado) e informa uma nova senha numérica de quatro dígitos, sem zero inicial. O cliente envia apenas o ID do acesso e a nova senha ao `POST /api/auth/pdv-password` com token renovado; não grava nem exibe o segredo.
+
+A rota exige usuário ativo, `auth_time` dos últimos cinco minutos e vínculo ativo do ID solicitado no cadastro autenticado (`users/{uid}`), com fallback para o ID legado somente quando não existe lista `pdvAccesses`. A integração envia a nova senha à API do PDV preservando os demais campos do usuário e consulta o cadastro novamente para confirmar a senha recebida. Não altera a senha do Coala One nem permissões do PDV. O PDV Legal é um serviço externo sem transação compartilhada com o Coala One; falha ou confirmação divergente gera erro sem afirmar sucesso. A confirmação em ambiente real continua pendente de homologação.
 
 ### Visualização assistida exclusiva do desenvolvimento
 
@@ -110,6 +118,8 @@ O [webhook Stone](../../src/app/api/webhooks/stone/conciliation/route.ts) exige 
 
 As [rotas de pedidos](../../src/app/api/privacy/requests/route.ts) e [incidentes](../../src/app/api/privacy/incidents/route.ts) separam consulta e gestão. `settings.view` permite somente GET; POST/PATCH exigem administrador padrão, gestão de usuários/perfis ou edição/desligamento de colaboradores. A interface recebe a mesma capacidade e não oferece ações de mutação ao perfil somente leitor; o servidor continua sendo a fronteira autoritativa.
 
+Ao criar pedido com `subjectRef`, o servidor também exige leitura da origem pessoal, valida workspace/unidade por `preparePersonInventory` e rejeita cadastro ausente ou com conflitos; a permissão de gestão de Privacidade isolada não autoriza associar qualquer pessoa. O vínculo continua opcional, e o PATCH não permite corrigir identidade legada. A consulta avulsa e a ação do pedido vinculado usam o inventário autenticado por origem, com seleção manual, paginação e indicação explícita de cobertura; não escrevem vínculo nem executam exclusão. Ver [rastreabilidade](document-person-traceability.md).
+
 Dados: `privacyRequests` e `securityIncidents` no principal. GET filtra `workspace_id` e limita a 100 documentos. POST/PATCH usam schemas estritos, revalidam workspace e gravam registro mais auditoria autoritativa na mesma transação. O teste com Auth/Firestore Emulator comprova GET para leitor, 403 em suas mutações e criação pelo gestor. As transições ainda aceitam qualquer estado enumerado; não há máquina de estados completa. Retenção declarada no registro não prova a execução de uma política TTL no ambiente implantado.
 
 ## Auditoria, reparo e uploads operacionais
@@ -142,3 +152,7 @@ O [serviço](../../src/features/dp/rep-p/location-access.server.ts) filtra por p
 A nova trilha contratual por alvo exige admin/`settings.manageUsers` e escopo no servidor, além do controle de visibilidade no cliente. PATCH reutiliza gestão de usuários/edição DP e valida escopo. Sem nova permissão ou migração de perfis. Campos RH contratuais não têm segunda edição manual. O job não altera grants por unidades operacionais; perfil derivado de cargo/função é aplicado somente na data, com revalidação do catálogo.
 
 Motivo, ator e antes/depois ficam em `users/{id}/contractualChanges`, subcoleção sem leitura cliente; o estado agendado no diretório guarda somente campos de aplicação, ID, data e guardas do ciclo/perfil. A API dedicada autoriza a consulta da trilha.
+
+2026-11-03 — Passe de revisão do inventário pessoal: ACL nativa por unidade de execução/snapshot e todas as unidades de ajuste; readLocation expresso inclusive para admin; pagamentos exigem financial.paymentRequests.view junto às leituras financeira/pessoal. Workspace bruto contraditório/inválido é recusado em núcleo, censo, âncoras/processos/targets antes da projeção. Policy/scope desconhecidos negam antes de qualquer bypass/lookup. Detalhes e cobertura em [rastreabilidade por pessoa](document-person-traceability.md).
+
+2026-11-03 — Revisão residual: GET inventário declara cache write privado (token randômico, ator real/efetivo, workspace/ref/source/limit, TTL15min, uso único), sem emitir posição/IDs negados. [TTL e implantação](person-inventory-cursor-ttl.md). Geração/partes migradas para secureRoute e autorização RH namespace-aware no servidor antes de detalhes/CPF; fontes patrimoniais separam assets.view de viewHistory. Escopos restantes conferidos contra produtores nativos e recibo pai oficial. [Detalhes e custo](document-person-traceability.md).

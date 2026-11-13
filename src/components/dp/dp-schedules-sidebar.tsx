@@ -8,6 +8,7 @@ export type DPSchedulesSidebarUnit = {
   key: string;
   name: string;
   draft?: boolean;
+  published?: boolean;
   selected?: boolean;
   disabled?: boolean;
   filledDays: number;
@@ -40,11 +41,20 @@ function unitMeta(unit: DPSchedulesSidebarUnit) {
   return `${unit.filledDays}/${unit.expectedDays}`;
 }
 
+function unitStatus(unit: DPSchedulesSidebarUnit) {
+  if (unit.draft && unit.published) return { label: 'Publicada · rascunho em edição', dot: 'bg-[#0ea5e9]', bar: 'bg-[#0ea5e9]' };
+  if (unit.draft) return { label: 'Rascunho', dot: 'bg-[#0ea5e9]', bar: 'bg-[#0ea5e9]' };
+  if (unit.published) return { label: 'Publicada', dot: 'bg-[#db2777]', bar: 'bg-[#db2777]' };
+  return { label: 'Não iniciada', dot: 'border border-[#5b6a83] bg-transparent', bar: 'bg-[#43516a]' };
+}
+
 function unitDetail(unit: DPSchedulesSidebarUnit) {
+  const status = unitStatus(unit).label;
+  if (unit.filledDays <= 0 && !unit.draft && !unit.published) return status;
   if (unit.expectedDays == null || unit.expectedDays <= 0) {
-    return `${unit.filledDays} ${unit.filledDays === 1 ? 'dia preenchido' : 'dias preenchidos'}`;
+    return `${status} · ${unit.filledDays} ${unit.filledDays === 1 ? 'dia' : 'dias'}`;
   }
-  return `${unit.filledDays} preenchidos · ${unit.expectedDays} esperados`;
+  return `${status} · ${unit.filledDays} de ${unit.expectedDays} dias`;
 }
 
 export function DPSchedulesSidebar({
@@ -120,6 +130,7 @@ export function DPSchedulesSidebar({
 
                 {city.units.map((unit) => {
                   const progress = progressForUnit(unit);
+                  const status = unitStatus(unit);
                   const interactive = !unit.disabled && !!unit.onClick;
                   return (
                     <div
@@ -139,14 +150,14 @@ export function DPSchedulesSidebar({
                           unit.onDelete && 'pr-8',
                         )}
                       >
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-full', status.dot)} />
                           <span className={cn(
                             'min-w-0 flex-1 truncate text-[12.5px] leading-4',
                             unit.selected ? 'font-extrabold text-white' : unit.filledDays > 0 ? 'font-semibold text-[#d8deea]' : 'font-semibold text-[#8491a6]',
                           )}>
                             {unit.name}
                           </span>
-                          {unit.draft && <span title="Rascunho" className="shrink-0 rounded bg-amber-500 px-1 text-[9px] font-bold text-white">R</span>}
                           <span className={cn(
                             'shrink-0 text-[10px] font-extrabold tabular-nums',
                             unit.filledDays > 0 ? 'text-[#90a0b8]' : 'text-[#f472a5]',
@@ -156,11 +167,11 @@ export function DPSchedulesSidebar({
                         </div>
                         <div className="mt-[5px] h-[3px] overflow-hidden rounded-sm bg-[#2b3a52]">
                           <div
-                            className={cn('h-[3px] rounded-sm', unit.selected ? 'bg-[#db2777]' : unit.filledDays > 0 ? 'bg-[#718199]' : 'bg-[#43516a]')}
+                            className={cn('h-[3px] rounded-sm', status.bar)}
                             style={{ width: `${progress}%` }}
                           />
                         </div>
-                        <p className="mt-1 truncate text-[9.5px] font-semibold leading-3 text-[#67758c]">{unitDetail(unit)}</p>
+                        <p className="mt-1 truncate pl-4 text-[9.5px] font-semibold leading-3 text-[#67758c]">{unitDetail(unit)}</p>
                       </button>
 
                       {unit.onDelete && (

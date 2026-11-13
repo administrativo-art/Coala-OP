@@ -272,10 +272,14 @@ export async function updatePdvLegalUserAccess(params: {
   userId: string;
   filialId: string;
   profileId?: string | null;
+  newPassword?: string;
 }): Promise<PdvLegalUser> {
   const cleanId = params.userId.trim();
   if (!/^\d+$/.test(cleanId)) throw new PdvApiError('Código de usuário do PDV inválido.', 'USER_ID_INVALID');
   const requestedProfileId = params.profileId?.trim() || null;
+  if (params.newPassword !== undefined && !/^[1-9]\d{3}$/.test(params.newPassword)) {
+    throw new PdvApiError('A senha do PDV deve ter 4 números e não pode começar com zero.', 'USER_PASSWORD_INVALID');
+  }
   if (!/^\d+$/.test(params.filialId) || (requestedProfileId !== null && !/^\d+$/.test(requestedProfileId))) {
     throw new PdvApiError('Filial ou perfil do PDV inválido.', 'USER_ACCESS_INVALID');
   }
@@ -289,7 +293,7 @@ export async function updatePdvLegalUserAccess(params: {
   const password = current.senha;
   const currentProfileId = String(current.codperfil ?? current.codPerfil ?? current.codigoPerfil ?? '').trim();
   const targetProfileId = requestedProfileId ?? currentProfileId;
-  if (!name || (typeof password !== 'number' && typeof password !== 'string')) {
+  if (!name || (params.newPassword === undefined && typeof password !== 'number' && typeof password !== 'string')) {
     throw new PdvApiError('O PDV não retornou os dados necessários para preservar usuário e senha.', 'USER_UPDATE_DATA_MISSING');
   }
   if (!/^\d+$/.test(targetProfileId)) {
@@ -312,7 +316,7 @@ export async function updatePdvLegalUserAccess(params: {
       nome: name,
       codFilial: Number(params.filialId),
       codperfil: Number(targetProfileId),
-      senha: Number(password),
+      senha: Number(params.newPassword ?? password),
       isEntregador: current.isEntregador === true,
       codRefExterna: typeof current.codRefExterna === 'number' ? current.codRefExterna : 0,
       ativo: current.ativo !== false,
@@ -327,6 +331,14 @@ export async function updatePdvLegalUserAccess(params: {
   const updated = await findPdvLegalUser({ name, filialId: params.filialId, id: cleanId });
   if (!updated || updated.filialId !== params.filialId || updated.profileId !== targetProfileId) {
     throw new PdvApiError('O PDV Legal não confirmou a nova filial e o novo perfil.', 'USER_UPDATE_NOT_CONFIRMED');
+  }
+  if (params.newPassword !== undefined) {
+    const confirmed = await pdvGet(`/usuariopdv/get/${encodeURIComponent(cleanId)}`);
+    const savedPassword = confirmed && typeof confirmed === 'object' && !Array.isArray(confirmed)
+      ? (confirmed as Record<string, unknown>).senha : undefined;
+    if (String(savedPassword) !== String(Number(params.newPassword))) {
+      throw new PdvApiError('O PDV Legal não confirmou a nova senha.', 'USER_PASSWORD_NOT_CONFIRMED');
+    }
   }
   return updated;
 }

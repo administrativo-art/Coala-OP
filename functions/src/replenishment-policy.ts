@@ -4,6 +4,15 @@ export type CalculationStatus = 'calculated' | 'pending' | 'partial' | 'no_depen
 export type DemandSource = 'pdv_internal' | 'transfer_proxy' | 'none';
 export type DemandDay = { date: string; quantity: number; usable: boolean };
 
+// Approved exception for the AMENDOIM base product at the distribution center.
+// All other product/location pairs retain the 30% margin.
+const AMENDOIM_BASE_PRODUCT_ID = 'xeMEVoUWeKSqgcBkO0NH';
+const DISTRIBUTION_CENTER_ID = 'matriz';
+
+export function replenishmentMarginFactor(baseProductId: string, kioskId: string): number {
+  return baseProductId === AMENDOIM_BASE_PRODUCT_ID && kioskId === DISTRIBUTION_CENTER_ID ? 1.15 : 1.3;
+}
+
 export type ReplenishmentResult = {
   target: number | null;
   meanDaily: number | null;
@@ -49,6 +58,7 @@ export function calculateReplenishment(input: {
   isSupplyUnit?: boolean;
   servedUnitCount?: number;
   minimumValidDays?: number;
+  marginFactor?: number;
 }): ReplenishmentResult {
   if (input.isSupplyUnit && input.servedUnitCount === 0) {
     return { target: 0, meanDaily: 0, validDays: 0, source: 'none',
@@ -69,7 +79,7 @@ export function calculateReplenishment(input: {
         : 'Histórico de transferências concluídas insuficiente; consumo físico não comprovado.' };
   }
   const meanDaily = [...grouped.values()].reduce((sum, n) => sum + n, 0) / validDays;
-  const raw = meanDaily * input.cycleDays * 1.3;
+  const raw = meanDaily * input.cycleDays * (input.marginFactor ?? 1.3);
   const target = input.unit === 'un' ? Math.ceil(raw) : Math.round(raw * 100) / 100;
   return { target, meanDaily: Math.round(meanDaily * 10_000) / 10_000, validDays,
     source: input.source, calculationStatus: 'calculated',

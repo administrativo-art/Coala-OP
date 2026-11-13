@@ -49,6 +49,7 @@ api,src/app/api/auth/first-access/[token]/route.ts,,docs/engineering/access-and-
 api,src/app/api/auth/forgot-password/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/last-login/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/password-changed/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/auth/pdv-password/route.ts,,docs/engineering/access-and-privacy.md,POST autenticado do titular; reautenticacao recente e acesso PDV ativo; troca a senha na API externa.
 api,src/app/api/auth/view-as/route.ts,,docs/engineering/access-and-privacy.md,Ferramenta DEV somente leitura; ator real preservado e inicio/fim auditados.
 api,src/app/api/catalogo/route.ts,,docs/engineering/flows/catalog.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/client/bootstrap/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -72,13 +73,19 @@ api,src/app/api/documents/company/units/route.ts,,docs/engineering/flows/company
 api,src/app/api/documents/company/intake/route.ts,,docs/engineering/flows/company-documents.md,Upload com nomenclatura por ID escopo validado e versões transacionais.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts,,docs/engineering/flows/financial-inbox.md,Prévia e confirmação de nomenclatura por contraparte cadastrada na despesa vinculada.
 api,src/app/api/financial/document-counterparties/route.ts,,docs/engineering/flows/financial-inbox.md,Seleção paginada de nomes e IDs para contraparte documental com acesso a cadastros e classificação financeira.
-api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/editor/[id]/content/route.ts,,docs/engineering/flows/document-generation.md,PUT secureRoute: salva versao imutavel com expectedContentVersion; autor ou documents.review e generate; escopo por workspace; 409 com versao atual.
+api,src/app/api/documents/editor/[id]/file/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute: baixa o PDF final (somente final com PDF pronto); autor ou documents.review e generate; escopo por workspace; grava auditoria editor.pdf_downloaded sem conteudo; Storage 503 fixo.
+api,src/app/api/documents/editor/[id]/finalize/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: exige generate e documents.review; PDF no Storage antes do commit; documento com campos exige titular e escopo pessoal; sem assinatura.
+api,src/app/api/documents/editor/[id]/preview/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: PDF de previa sem persistir; sample sem PII; resolved exige escopo pessoal e dado sensivel; grava auditoria editor.preview_resolved sem conteudo; bloqueia campos ausentes; limite por uid.
+api,src/app/api/documents/editor/[id]/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute: abre rascunho ou final por workspace; autor ou documents.review; sem efeito colateral.
+api,src/app/api/documents/editor/route.ts,,docs/engineering/flows/document-generation.md,GET lista paginada (status draft/final, limit 1-25, cursor; <=26 leituras) e POST cria rascunho idempotente por clientRequestId; secureRoute; exige hr.documents.generate; sem review so os proprios (generatedBy), com review todos do workspace.
+api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute com schema estrito e autorização pessoal servidor antes de resolução e Storage.
 api,src/app/api/documents/generated/[id]/audit/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/file/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/signature/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/documents/generator/parties/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/generator/parties/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute com helper RH/UID e escopo de unidade antes de detalhes e CPF.
 api,src/app/api/documents/generator/templates/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/ai-plan/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/editable-version/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -122,9 +129,9 @@ api,src/app/api/dp/time-recording/afd/route.ts,,docs/engineering/flows/dp-time-r
 api,src/app/api/dp/time-recording/aej/route.ts,,docs/engineering/flows/dp-time-recording.md,POST AEJ leiaute 002 de um estabelecimento e periodo de competencias fechadas para o gestor de ponto; originais da ARP mais tratamentos aprovados e horario contratual da escala; CAdES da desenvolvedora; auditoria em ptrp_aejExports.
 api,src/app/api/dp/time-recording/fiscal-options/route.ts,,docs/engineering/flows/dp-time-recording.md,GET lista estabelecimentos fiscais do workspace para gestor global de Tempo selecionar na tela de exportacao AFD e AEJ.
 api,src/app/api/dp/time-recording/options/route.ts,,docs/engineering/flows/dp-time-recording.md,Unidades de execucao do proprio usuario na data pela abrangencia do vinculo historico; somente leitura sem ARP.
-api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno e politica nominal ativos grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
-api,src/app/api/dp/time-recording/journey-location/lease/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e atestado emite lease curta apenas para usuario autenticado com jornada workday e politica nominal ativa; classificacao empresarial nao participa da autorizacao.
-api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da politica central de geolocalizacao por unidade para gestor de Tempo com escopo; lista nominal do piloto revisao e auditoria autoritativas; nunca le evidencias.
+api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno workday gate global e politica da area com referencia juridica valida; grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
+api,src/app/api/dp/time-recording/journey-location/lease/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e atestado emite lease curta apenas para usuario autenticado com jornada workday e politica da area juridicamente habilitada; classificacao empresarial nao participa da autorizacao.
+api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da area de geolocalizacao por unidade para gestor de Tempo com escopo; revisao e auditoria autoritativas; campos nominais legados nao decidem elegibilidade e a rota nunca le evidencias.
 api,src/app/api/dp/time-recording/offline-permits/route.ts,,docs/engineering/flows/dp-time-recording.md,POST prepara protocolo v2 de 24h para iniciar ciclo e 24h desde a primeira batida com aparelho unico; v1 preservado para filas antigas; exclusivo Coala Go atestado sem criar NSR.
 api,src/app/api/dp/time-recording/offline-cycles/route.ts,,docs/engineering/flows/dp-time-recording.md,POST encerra ciclo proprio assinado e drenado com Hora Legal e auditoria sem criar NSR; nao inicia nem prolonga ciclo.
 api,src/app/api/dp/time-recording/month/route.ts,,docs/engineering/flows/dp-time-recording.md,Escala do mes do proprio usuario para o Registro de ponto: escalas do mes uma por unidade e turnos proprios pelo indice userId+date (ate 62) com intervalo do cadastro; somente leitura sem ARP.
@@ -223,15 +230,18 @@ api,src/app/api/financial/dre/stock-cmv/route.ts,,docs/engineering/flows/dre.md,
 api,src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/expenses/[expenseId]/boleto/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
+api,src/app/api/financial/expenses/[expenseId]/consultancy-pix/route.ts,,docs/engineering/flows/payment-requests.md,Preparo protegido de Pix da consultoria de RH provisionada com obrigacao real deterministica; sem envio automatico.
 api,src/app/api/financial/expenses/[expenseId]/payments/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/expenses/provision-series/route.ts,,docs/engineering/flows/expenses.md,Ajuste assistido e transacional de valor de previsoes recorrentes com identidade e valor anterior conferidos.
 api,src/app/api/financial/import-sessions/[sessionId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/analyze/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/financial-inbox.md,Consulta segura do contexto da cobrança e correção allowlistada da leitura sem alterar a despesa.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/link/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/payment/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/inbox/[id]/pix-payment/route.ts,,docs/engineering/flows/payment-requests.md,Prepara Pix copia e cola da guia FGTS Digital; contrato secureRoute.
 api,src/app/api/financial/inbox/[id]/restore/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/bulk-review/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -320,6 +330,7 @@ api,src/app/api/hr/employee-documents/batches/route.ts,,docs/engineering/flows/e
 api,src/app/api/hr/employee-documents/cleanup/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/confirm/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-documents/item/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/hr/employee-documents/organization/route.ts,,docs/engineering/flows/employee-documents.md,POST renomeia ou move somente a projecao visual do Acervo; exige DP com edicao e unidade; valida categoria e concorrencia; audita na mesma transacao.
 api,src/app/api/hr/employee-documents/reanalyze/route.ts,,docs/engineering/flows/employee-documents.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/hr/employee-document-folder-profile/route.ts,,docs/engineering/flows/employee-documents.md,GET retorna somente o modelo de pastas do colaborador; exige acesso RH perfil proprio quando aplicavel e escopo da unidade; sem documentos ou escrita.
 api,src/app/api/hr/employee-documents/publication/route.ts,,docs/engineering/flows/employee-documents.md,POST publica ou retira documento da pasta do colaborador; so DP autorizado com edicao; politica do tipo; retirar exige motivo; auditoria.
@@ -409,6 +420,7 @@ api,src/app/api/mercadorias/route.ts,,docs/engineering/flows/registry.md,Destino
 api,src/app/api/observability/client-errors/route.ts,,docs/engineering/observability.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/incidents/[id]/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/incidents/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/privacy/person-inventory/route.ts,,docs/engineering/document-person-traceability.md,Inventario paginado por identificador imutavel com ACL por fonte unidade e workspace sem conteudo ou URL.
 api,src/app/api/privacy/requests/[id]/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/privacy/requests/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/processes/route.ts,,docs/engineering/flows/termination-process-center.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -631,3 +643,13 @@ api,src/app/api/assets/[assetId]/maintenance-occurrences/[occurrenceId]/order/ro
 api,src/app/api/assets/[assetId]/maintenance-occurrences/list/route.ts,,docs/engineering/flows/assets.md,Ocorrências de manutenção paginadas e limitadas.
 api,src/app/api/assets/[assetId]/maintenance-plans/list/route.ts,,docs/engineering/flows/assets.md,Planos preventivos paginados e limitados.
 api,src/app/api/users/[userId]/assets/route.ts,,docs/engineering/flows/assets.md,Equipamentos em posse atual com self-access e acesso RH ou Patrimônio.
+api,src/app/api/assets/lookup/route.ts,,docs/engineering/flows/assets.md,Consulta exata de etiqueta no workspace sob assets.view para confirmar destino patrimonial de NF.
+api,src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts,,docs/engineering/flows/assets.md,Acesso privado a NF da caixa por ativo com dupla referencia hash versao e workspace sem copia de bytes.
+api,src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts,,docs/engineering/flows/financial-inbox.md,Confirmacao por arquivo de NF patrimonial ou nao patrimonial com exclusao fisica dupla confirmacao e recuperacao verificada.
+api,src/app/api/documents/editor/templates/[tid]/archive/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: arquiva modelo (idempotente); exige generate e documents.review; 409 com versao atual; auditoria editor_template.archived sem conteudo; escopo por workspace.
+api,src/app/api/documents/editor/templates/[tid]/content/route.ts,,docs/engineering/flows/document-generation.md,PUT secureRoute: salva nova versao do modelo ou so nome/descricao quando o conteudo e identico (nao altera a versao publicada nem publishedName); exige hr.documents.generate; 409 com currentVersion; arquivado => 409.
+api,src/app/api/documents/editor/templates/[tid]/preview/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: PDF de previa de EXEMPLO da versao corrente do modelo, sem titular e sem persistir; exige hr.documents.generate; 429 por uid.
+api,src/app/api/documents/editor/templates/[tid]/publish/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: move o ponteiro da versao publicada; exige generate e documents.review; modelo vazio/arquivado recusado; 409 com versao atual.
+api,src/app/api/documents/editor/templates/[tid]/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute: abre modelo e conteudo da versao atual por workspace; exige hr.documents.generate; sem escrita.
+api,src/app/api/documents/editor/templates/[tid]/use/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: cria rascunho sem titular a partir da versao PUBLICADA (transacao com auditoria used); exige hr.documents.generate; 409 se arquivado/nao publicado/versao publicada mudou.
+api,src/app/api/documents/editor/templates/route.ts,,docs/engineering/flows/document-generation.md,GET lista paginada (status, limit 1-25, cursor) e POST cria modelo (content ou fromDocument; fromDocument exige poder abrir o documento); secureRoute; exige hr.documents.generate; sem catalogo.

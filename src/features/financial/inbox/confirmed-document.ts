@@ -1,7 +1,21 @@
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 
-import { bankSlipAmountCents, maskPaymentBarcode, normalizePaymentBarcode } from "./parser";
-import type { FinancialInboxClassification } from "./types";
+import { bankSlipAmountCents, maskPaymentBarcode, normalizeBrazilianServiceNumber, normalizePaymentBarcode } from "./parser";
+import { validatedCollectionBarcode } from "@/features/financial/payment-requests/inbox-barcode";
+import type { FinancialInboxBillingIdentity, FinancialInboxClassification } from "./types";
+
+export function telecomBillingIdentitiesMatch(
+  confirmed: FinancialInboxBillingIdentity | null | undefined,
+  forecast: FinancialInboxBillingIdentity | null | undefined,
+): boolean {
+  const confirmedAccount = confirmed?.customerAccount?.replace(/\D/g, "") ?? "";
+  const forecastAccount = forecast?.customerAccount?.replace(/\D/g, "") ?? "";
+  const confirmedNumbers = (confirmed?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+  const forecastNumbers = (forecast?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter(Boolean);
+  return Boolean(confirmedAccount && forecastAccount && confirmedAccount === forecastAccount
+    && confirmedNumbers.length && forecastNumbers.length
+    && confirmedNumbers.some((number) => forecastNumbers.includes(number)));
+}
 
 export type ConfirmedInboxDocumentInput = {
   amountCents: number;
@@ -10,6 +24,9 @@ export type ConfirmedInboxDocumentInput = {
   barcode: string;
   supplierName: string;
   supplierTaxId: string;
+  customerAccount?: string;
+  serviceNumbers?: string[];
+  serviceType?: "mobile" | "landline";
 };
 
 function validIsoDate(value: string) {
@@ -34,7 +51,10 @@ export function confirmFinancialInboxDocument(
   if (!validCompetence(input.competence)) throw new Error("Confirme uma competência válida para a cobrança.");
 
   const barcode = normalizePaymentBarcode(input.barcode);
-  if (!barcode || barcode.length !== 47 || bankSlipAmountCents(barcode) !== input.amountCents) {
+  const encodedAmount = barcode?.length === 47
+    ? bankSlipAmountCents(barcode)
+    : barcode?.length === 48 ? validatedCollectionBarcode(barcode)?.amountCents : null;
+  if (!barcode || encodedAmount !== input.amountCents) {
     throw new Error("A linha digitável não é válida ou não corresponde ao valor principal da cobrança.");
   }
   const currentBarcode = normalizePaymentBarcode(current.barcode ?? "");
@@ -60,6 +80,22 @@ export function confirmFinancialInboxDocument(
     && CnpjValidator.clean(currentSupplierTaxId) !== supplierDocument.clean) {
     throw new Error("O CNPJ confirmado diverge do documento analisado.");
   }
+  const customerAccount = input.customerAccount?.replace(/\D/g, "") || current.billingIdentity?.customerAccount || null;
+  if (input.customerAccount && (!/^\d{5,20}$/.test(customerAccount ?? "")
+    || (current.billingIdentity?.customerAccount
+      && current.billingIdentity.customerAccount.replace(/\D/g, "") !== customerAccount))) {
+    throw new Error("A conta do cliente confirmada é inválida ou diverge do documento analisado.");
+  }
+  const serviceNumbers = input.serviceNumbers?.map(normalizeBrazilianServiceNumber) ?? current.billingIdentity?.serviceNumbers ?? [];
+  if (serviceNumbers.some((number) => !number)) throw new Error("A linha telefônica confirmada é inválida.");
+  if (input.serviceNumbers && current.billingIdentity?.serviceNumbers.length
+    && !serviceNumbers.some((number) => current.billingIdentity?.serviceNumbers.includes(number ?? ""))) {
+    throw new Error("A linha telefônica confirmada diverge do documento analisado.");
+  }
+  if (input.serviceType && current.billingIdentity?.serviceType
+    && input.serviceType !== current.billingIdentity.serviceType) {
+    throw new Error("O tipo de serviço confirmado diverge do documento analisado.");
+  }
 
   return {
     ...current,
@@ -72,10 +108,10 @@ export function confirmFinancialInboxDocument(
     barcodeMasked: maskPaymentBarcode(barcode),
     billingIdentity: {
       supplierTaxId: supplierDocument.clean,
-      customerAccount: current.billingIdentity?.customerAccount ?? null,
+      customerAccount,
       contractNumber: current.billingIdentity?.contractNumber ?? null,
-      serviceType: current.billingIdentity?.serviceType ?? null,
-      serviceNumbers: current.billingIdentity?.serviceNumbers ?? [],
+      serviceType: input.serviceType ?? current.billingIdentity?.serviceType ?? null,
+      serviceNumbers: [...new Set(serviceNumbers as string[])],
     },
   };
 }

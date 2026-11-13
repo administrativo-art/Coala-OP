@@ -1,6 +1,9 @@
 
 {
   "indexes": [
+    {"collectionGroup":"assets","queryScope":"COLLECTION","fields":[{"fieldPath":"custody.holderId","order":"ASCENDING"},{"fieldPath":"custody.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"assetCustodyTransfers","queryScope":"COLLECTION","fields":[{"fieldPath":"fromHolder.holderId","order":"ASCENDING"},{"fieldPath":"fromHolder.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"assetCustodyTransfers","queryScope":"COLLECTION","fields":[{"fieldPath":"toHolder.holderId","order":"ASCENDING"},{"fieldPath":"toHolder.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     { "collectionGroup": "assetMaintenancePlans", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" },
       { "fieldPath": "active", "order": "ASCENDING" },
@@ -770,6 +773,36 @@
       "fields": [{ "fieldPath": "sourceAssetId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }]
     },
     {
+      "collectionGroup": "editorTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "generatedBy", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "editorDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "generatedBy", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }]
+    },
+    {
       "collectionGroup": "assets",
       "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "custody.holderType", "order": "ASCENDING" }, { "fieldPath": "custody.holderId", "order": "ASCENDING" }]
@@ -794,6 +827,11 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "shifts", "fieldPath": "userId", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" },
+      { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
+    { "collectionGroup": "privacyPersonCursorStates", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "authIdentityMigrations", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     {
       "collectionGroup": "shifts",
@@ -807,6 +845,41 @@
           "order": "ASCENDING",
           "queryScope": "COLLECTION_GROUP"
         }
+      ]
+    },
+    {
+      "collectionGroup": "audit",
+      "fieldPath": "actorId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "audit",
+      "fieldPath": "subjectKeys",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "contentVersions",
+      "fieldPath": "savedBy",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "savedBy",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
     }
   ]

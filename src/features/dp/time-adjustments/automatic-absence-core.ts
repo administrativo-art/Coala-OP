@@ -13,3 +13,14 @@ export function automaticAbsenceSuperseded(date: string,
   approvedAdjustmentDates: ReadonlySet<string>, approvedAbsencePeriods: ReadonlyArray<{ startDate: string; endDate: string }>) {
   return approvedAdjustmentDates.has(date) || approvedAbsencePeriods.some((item) => item.startDate <= date && item.endDate >= date);
 }
+
+/** Only an approved adjustment that adds a marking can invalidate a missing-day absence. */
+export function adjustmentRestoresAutomaticAbsence(record: {
+  status?: unknown; kind?: unknown; inclusion?: { markedAt?: unknown } | null;
+  operations?: Array<{ kind?: unknown; inclusion?: { markedAt?: unknown } | null }> | null;
+}) {
+  if (record.status !== 'approved') return false;
+  const operations = record.operations?.length ? record.operations : [record];
+  return operations.some((operation) => (operation.kind === 'include' || operation.kind === 'correct')
+    && typeof operation.inclusion?.markedAt === 'string' && Boolean(operation.inclusion.markedAt));
+}

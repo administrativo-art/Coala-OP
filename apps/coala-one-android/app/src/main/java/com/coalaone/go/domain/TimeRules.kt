@@ -557,6 +557,33 @@ object TimeRules {
         val absolute = Math.abs(minutes)
         return "$sign${absolute / 60}h${String.format("%02d", absolute % 60)}"
     }
+    /** Conta do dia: trabalhado menos jornada contratual igual ao resultado do banco. */
+    data class DayEquation(val worked: Int, val reference: Int, val result: Int, val planned: Int?)
+
+    /** Resultado do dia como o banco o lançou: crédito e horas extras somam, débito e desconto subtraem. */
+    fun dayBankBalance(lines: List<TimeBankStatementLine>) = lines.sumOf {
+        when (it.line.nature) { "bank_credit", "payroll_overtime" -> it.line.minutes; "bank_debit", "payroll_discount" -> -it.line.minutes; else -> 0 }
+    }
+
+    /**
+     * A conta só é mostrada quando fecha com o que o banco lançou e com as batidas; fora disso (tolerância, ausência em horas,
+     * aprovação pendente) a tela mantém o resumo e a memória de cálculo, para não exibir uma conta que não bate.
+     */
+    fun dayEquation(base: TimeBankDayBase?, lines: List<TimeBankStatementLine>, workedByPunches: Int?): DayEquation? {
+        val reference = base?.referenceMinutes?.takeIf { it > 0 } ?: return null
+        val considered = base.consideredMinutes ?: return null
+        if (lines.isEmpty() || workedByPunches == null || considered != workedByPunches || considered != base.workedMinutes) return null
+        // Hora extra paga em folha não é saldo de banco: o resultado do dia só vira conta quando todas as linhas são do banco.
+        if (lines.any { it.line.nature != "bank_credit" && it.line.nature != "bank_debit" }) return null
+        val result = dayBankBalance(lines)
+        if (considered - reference != result) return null
+        return DayEquation(considered, reference, result, base.plannedMinutes)
+    }
+
+    /** A conta do dia explica sozinha um débito ou crédito simples; adicional (categoria, percentual) pede a memória de cálculo. */
+    fun dayEquationExplainsLines(lines: List<TimeBankStatementLine>) =
+        lines.size == 1 && lines[0].line.categoryId == null && lines[0].line.ratePercent == null
+
     /** Filter group of a bank line: credit, debit, payroll or review. */
     fun bankGroup(nature: String) = when (nature) {
         "bank_credit" -> "credit"

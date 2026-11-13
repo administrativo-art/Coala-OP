@@ -11,5 +11,5 @@ export function companyArchiveFolderLabel(name: string): string {
 }
 
 export function companyArchiveHref(category?: string): string {
-  return `/dashboard/documents/company${category ? `?category=${encodeURIComponent(category)}` : ""}`;
+  return `/dashboard/documents${category ? `?category=${encodeURIComponent(category)}` : ""}`;
 }

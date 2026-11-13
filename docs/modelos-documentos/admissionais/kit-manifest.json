@@ -2,7 +2,7 @@
   "kitId": "admission_documents",
   "name": "Documentos admissionais",
   "category": "Informações admissionais",
-  "version": "2.2",
+  "version": "2.3",
   "editableOutput": "docx",
   "signatureOutput": "single_merged_pdf",
   "models": [
@@ -52,7 +52,7 @@
       "id": "transportation_voucher_request",
       "order": 6,
       "name": "Solicitação de Vale-Transporte",
-      "file": "06-vale-transporte-solicitacao-v2.docx",
+      "file": "06-vale-transporte-solicitacao-v3.docx",
       "selectableByHr": false,
       "selectedByDecision": "requested",
       "signatureScope": "bundle"
@@ -61,7 +61,7 @@
       "id": "transportation_voucher_waiver",
       "order": 6,
       "name": "Declaração de Não Utilização de Vale-Transporte",
-      "file": "06-vale-transporte-renuncia-v2.docx",
+      "file": "06-vale-transporte-renuncia-v3.docx",
       "selectableByHr": false,
       "selectedByDecision": "waived",
       "signatureScope": "bundle"
@@ -75,8 +75,26 @@
       "signatureScope": "bundle"
     },
     {
-      "id": "admission_bundle_closing_term",
+      "id": "family_salary_term",
       "order": 8,
+      "name": "Termo de responsabilidade para salário-família",
+      "file": "08-termo-salario-familia-v2.docx",
+      "selectableByHr": false,
+      "selectedByCondition": "concessão registrada pelo operador após a conclusão da contabilidade",
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "income_tax_dependents",
+      "order": 9,
+      "name": "Declaração de dependentes para imposto de renda",
+      "file": "08-declaracao-dependentes-ir-v1.docx",
+      "selectableByHr": false,
+      "selectedByCondition": "filho marcado expressamente como dependente de IR no formulário público",
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "admission_bundle_closing_term",
+      "order": 10,
       "name": "Termo de Encerramento, Ciência e Assinatura",
       "file": "09-termo-encerramento-v4.docx",
       "selectableByHr": false,

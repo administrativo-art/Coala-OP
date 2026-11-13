@@ -11,6 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { useAssets } from '@/hooks/use-assets';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { useFinancialCollection } from '@/features/financial/hooks/use-financial-collection';
@@ -810,12 +811,27 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   );
   const { categories, refreshAssets, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada } = useAssets();
   const { toast } = useToast();
+  const authenticatedApi = useAuthenticatedApi();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fiscalDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const [qrUrl, setQrUrl] = useState('');
   const [movements, setMovements] = useState<AssetMovement[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingFiscalDocument, setUploadingFiscalDocument] = useState(false);
+  const [openingInboxInvoice, setOpeningInboxInvoice] = useState<string | null>(null);
+  async function openInboxInvoice(messageId: string, fileId: string) {
+    if (!asset) return;
+    const key = `${messageId}:${fileId}`;
+    setOpeningInboxInvoice(key);
+    try {
+      const blob = await authenticatedApi<Blob>(`/api/assets/${encodeURIComponent(asset.id)}/inbox-invoices/${encodeURIComponent(messageId)}/${encodeURIComponent(fileId)}`, { responseType: 'blob', cache: 'no-store' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) {
+      toast({ variant: 'destructive', title: cause instanceof Error ? cause.message : 'Falha ao abrir nota fiscal.' });
+    } finally { setOpeningInboxInvoice(null); }
+  }
   const [plateScannerOpen, setPlateScannerOpen] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1729,6 +1745,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                             Remover anexo
                           </Button>
                         ) : null}
+                        {asset?.inboxInvoiceRefs?.map((invoice, index) => (
+                          <Button key={invoice.key} type="button" variant="ds-secondary" className="mt-2 mr-2" disabled={openingInboxInvoice === invoice.key} onClick={() => void openInboxInvoice(invoice.messageId, invoice.fileId)}>
+                            <FileText className="mr-2 h-4 w-4" />{openingInboxInvoice === invoice.key ? 'Abrindo…' : `Abrir NF recebida ${index + 1}`}
+                          </Button>
+                        ))}
                       </FormItem>
                     )} />
                   </div>

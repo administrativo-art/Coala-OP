@@ -70,10 +70,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DPScheduleRestSummary, type DPScheduleRestSummaryRow } from '@/components/dp/dp-schedule-rest-summary';
 import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { buildVisibleSchedulePeople } from '@/lib/dp-schedule-bulk-selection';
+import { buildScheduleRestPreview } from '@/lib/dp-schedule-rest-preview';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
 import {
@@ -90,11 +92,10 @@ import {
   isDayOffShift,
   isWorkShift,
 } from '@/lib/dp-shift-rules';
-import { buildDailyUnitCoverage } from '@/lib/dp-operating-hours';
 import {
-  buildDailyOnDemandCoverage,
+  buildDailyEmptyUnitCoverage,
+  alertsWhenUnitEmpty,
   normalizeDPCoverageDemands,
-  resolveDPCoverageMode,
   saveCoverageDemandsSchema,
   type DPDailyCoverage,
 } from '@/lib/dp-coverage-demands';
@@ -1024,6 +1025,11 @@ function CoverageStatus({
   canEditDemand: boolean;
   onEditDemand?: () => void;
 }) {
+  if (coverage.mode === 'empty_day') return coverage.gaps.length ? (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-[11px] font-semibold text-destructive">
+      Unidade sem ninguém escalado neste dia
+    </div>
+  ) : null;
   if (coverage.mode === 'fixed_hours' && coverage.gaps.length === 0) return null;
 
   if (coverage.mode === 'on_demand' && !coverage.hasDemand) {
@@ -1364,6 +1370,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   } = useDPShifts(schedule.id, isDefaultAdmin || permissions.dp?.schedules?.edit === true);
   const {
     validation: journeyValidation,
+    loading: journeyValidationLoading,
+    error: journeyValidationError,
   } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
@@ -1596,6 +1604,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     if (!canPublish || publishing) return;
     setPublishing(true);
     try {
+      if (journeyValidation?.status === 'blocked') {
+        throw new Error(`Revise os repousos e as jornadas antes de publicar: ${journeyValidation.issues.filter((issue) => issue.blocking).slice(0, 3).map((issue) => issue.message).join(' ')}`);
+      }
       const currentDraft = await fetchDraftScheduleShifts(schedule.id);
       if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
       await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
@@ -2086,20 +2097,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const coverageByCellKey = useMemo(() => {
     const coverage = new Map<string, DPDailyCoverage>();
     activeUnits.forEach((unit) => {
-      const mode = resolveDPCoverageMode(unit);
-      if (mode === 'disabled') return;
+      if (!alertsWhenUnitEmpty(unit)) return;
       const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
       days.forEach(({ date }) => {
-        const daily = mode === 'on_demand'
-          ? buildDailyOnDemandCoverage({ date, windows: coverageDemands[date] ?? [], shifts: unitShifts })
-          : buildDailyUnitCoverage({ date, operatingHours: unit.operatingHours, shifts: unitShifts });
-        if (mode === 'on_demand' || daily.gaps.length > 0) {
+        const daily = buildDailyEmptyUnitCoverage({ date, shifts: unitShifts });
+        if (daily.gaps.length > 0) {
           coverage.set(`${date}::${unit.id}`, daily);
         }
       });
     });
     return coverage;
-  }, [activeUnits, coverageDemands, days, units, workShifts]);
+  }, [activeUnits, days, units, workShifts]);
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -2125,7 +2133,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         if (coverage?.gaps.length) {
           alerts.push({
             key: 'coverage',
-            label: coverage.gaps.length === 1 ? 'Cobertura incompleta' : `${coverage.gaps.length} lacunas de cobertura`,
+            label: 'Unidade sem ninguém escalado',
             tone: 'danger',
           });
         } else if (coverage?.hasUnplannedShifts) {
@@ -2223,7 +2231,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return issues.size;
   }, [crossConflictShiftIds, journeyValidation, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
   const coverageAlertCount = useMemo(
-    () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
+    () => new Set([...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).map((coverage) => coverage.date)).size,
     [coverageByCellKey],
   );
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
@@ -2359,6 +2367,54 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   if (shiftsError && shifts.length === 0) {
     return <p className="text-sm text-destructive">Erro ao carregar os turnos da escala: {shiftsError}</p>;
   }
+
+  const publishedRestRecord = publication.journeyValidation?.restRecord;
+  const restMonthStart = parseISO(`${schedule.year}-${String(schedule.month).padStart(2, '0')}-01`);
+  const restPeriodStart = format(restMonthStart, 'yyyy-MM-dd');
+  const restPeriodEnd = format(new Date(schedule.year, schedule.month - 1, getDaysInMonth(restMonthStart)), 'yyyy-MM-dd');
+  const restPreview = buildScheduleRestPreview({ shifts, siblingWorkShifts, periodStart: restPeriodStart, periodEnd: restPeriodEnd });
+  const restSummaryUserIds = [...new Set([
+    ...restPreview.userIds,
+    ...Object.keys(journeyValidation?.people ?? {}),
+    ...Object.keys(publishedRestRecord?.people ?? {}),
+  ])].sort((left, right) => (effectiveUserMap.get(left)?.username ?? left).localeCompare(effectiveUserMap.get(right)?.username ?? right, 'pt-BR'));
+  const restCompetenceLabel = format(restMonthStart, 'MMMM yyyy', { locale: ptBR });
+  const fmtRestDate = (date: string) => format(parseISO(date), 'dd/MM');
+  const restSummaryRows: DPScheduleRestSummaryRow[] = restSummaryUserIds.map((userId) => {
+    const person = journeyValidation?.people[userId];
+    const current = person?.restSummary;
+    const published = publishedRestRecord?.people[userId];
+    const launchedDates = restPreview.datesByUser.get(userId) ?? [];
+    const notes: DPScheduleRestSummaryRow['notes'] = [];
+    if (current?.nextRestDueDate) {
+      notes.push({
+        tone: 'info',
+        text: `Próximo repouso até ${format(parseISO(current.nextRestDueDate), 'dd/MM/yyyy')}${current.nextRestDueDate > restPeriodEnd ? ' · conta no mês seguinte' : ' · neste mês'}`,
+      });
+    }
+    for (const week of current?.weeks ?? []) {
+      notes.push({
+        tone: week.complete && week.granted < week.required ? 'warn' : 'muted',
+        text: `Semana ${format(parseISO(week.start), 'dd/MM')} a ${format(parseISO(week.end), 'dd/MM')}: ${week.granted}/${week.required}${week.workedMinutes !== null ? ` · ${Math.floor(week.workedMinutes / 60)}h${String(week.workedMinutes % 60).padStart(2, '0')}` : ''}${!week.complete ? ' · continua no mês seguinte' : ''}`,
+      });
+    }
+    return {
+      userId,
+      name: effectiveUserMap.get(userId)?.username ?? userId,
+      journeyName: person?.journey?.name ?? 'Jornada não identificada',
+      resolved: !!current,
+      granted: current ? current.monthGranted : launchedDates.length,
+      required: current && current.distribution === 'monthly_collective' ? current.monthRequired : null,
+      dates: (current ? current.monthRestDates : launchedDates).map(fmtRestDate),
+      notes,
+      published: published ? {
+        version: publishedRestRecord?.publicationVersion,
+        text: `${published.monthGranted}${published.monthRequired !== null ? `/${published.monthRequired}` : ''} repousos`
+          + (published.nextRestDueDate ? ` · próximo até ${format(parseISO(published.nextRestDueDate), 'dd/MM/yyyy')}${published.nextRestDueDate > restPeriodEnd ? ' (mês seguinte)' : ''}` : ''),
+        dates: published.monthRestDates.map(fmtRestDate),
+      } : null,
+    };
+  });
 
   return (
     <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
@@ -2554,9 +2610,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
         >
           <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#94a3b8]'}`}>
-            <span>Cobertura</span>
+            <span>Escala vazia</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias sem escala' : 'todos com escala'}</span></p>
         </button>
         <button
           type="button"
@@ -2643,6 +2699,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       )}
 
       {/* Grid */}
+      {restSummaryRows.length ? (
+        <DPScheduleRestSummary
+          competenceLabel={restCompetenceLabel}
+          rows={restSummaryRows}
+          unresolvedMessage={journeyValidationLoading
+            ? 'Conferindo a jornada e as regras de repouso…'
+            : journeyValidationError
+              ? 'Conferência automática indisponível. Tente atualizar a escala.'
+              : 'Jornada sem regra de distribuição resolvida para este mês; meta e prazo não conferidos.'}
+        />
+      ) : null}
       {activeUnits.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <p className="text-sm">Nenhuma unidade cadastrada. Cadastre unidades em Configurações primeiro.</p>

@@ -7,6 +7,7 @@ import { getStorage } from "firebase-admin/storage";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { confirmedSubjectKeysForIdentifier } from "@/features/privacy/person-lookup.server";
 import { getDocumentTypeConfig } from "@/lib/hr/employee-document-catalog";
 import {
   resolveDocumentDestination,
@@ -106,6 +107,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
       version: typeof doc.get("version") === "number" ? doc.get("version") : 1,
     }));
   const identity = await loadExpectedIdentity(params.employeeId);
+  const subjectKeys = await confirmedSubjectKeysForIdentifier(params.employeeId);
   const employeeCode = employeeCodeFrom(identity, params.employeeId);
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
 
@@ -195,6 +197,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
     const uploadedAt = timestampFromIso(document.receivedAt, now);
     const payload = {
       employeeId: params.employeeId,
+      subjectKeys,
       candidateId: asString(params.process.candidateId),
       category: config.category,
       documentType: config.label,

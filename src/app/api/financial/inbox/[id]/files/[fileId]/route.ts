@@ -42,12 +42,14 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
     if (message.workspaceId !== actor.workspace_id) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
 
     const isRaw = fileId === "raw";
+    if (isRaw && message.rawArchiveState === "redacting") return NextResponse.json({ error: "O e-mail está sendo saneado. Tente novamente após a conclusão." }, { status: 409 });
     const attachment = isRaw ? null : message.attachments.find((item) => item.id === fileId);
+    if (attachment?.destination?.kind === "non_asset_invoice") return NextResponse.json({ error: "Arquivo descartado da recepção." }, { status: 404 });
     const storagePath = isRaw ? message.rawStoragePath : attachment?.storagePath;
     if (!storagePath) return NextResponse.json({ error: "Arquivo não foi arquivado." }, { status: 404 });
     const [contents] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).download();
     const contentType = isRaw ? "message/rfc822" : attachment?.contentType || "application/octet-stream";
-    const filename = downloadName(isRaw ? `${message.subject || "email-original"}.eml` : attachment?.documentNaming?.downloadName || attachment?.filename || "arquivo");
+    const filename = downloadName(isRaw ? `${message.subject || "email"}-${message.rawArchiveState === "redacted" ? "saneado" : "original"}.eml` : attachment?.documentNaming?.downloadName || attachment?.filename || "arquivo");
     const disposition = contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment";
     return new NextResponse(new Uint8Array(contents), {
       headers: {

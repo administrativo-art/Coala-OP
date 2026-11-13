@@ -429,4 +429,40 @@ class TimeRulesTest {
         assertEquals("1 dia", TimeRules.quantityText(1.0, "day")); assertEquals("1,5 h", TimeRules.quantityText(1.5, "hour"))
         assertThrows(IllegalArgumentException::class.java) { TimeRules.voucherRequest("cancel", "") }
     }
+
+    private fun bankLine(nature: String, minutes: Int, reason: String) =
+        TimeBankStatementLine("2026-11-03", "2026-11", 0, TimeBankLineValue(nature, minutes, reason))
+
+    @Test fun dayEquationUsesContractualJourneyAsBase() {
+        val base = TimeBankDayBase("2026-11-03", referenceMinutes = 440, plannedMinutes = 360, workedMinutes = 321, consideredMinutes = 321)
+        val equation = TimeRules.dayEquation(base, listOf(bankLine("bank_debit", 119, "worked_less")), 321)
+        assertNotNull(equation)
+        assertEquals(321, equation!!.worked)
+        assertEquals(440, equation.reference)
+        assertEquals(-119, equation.result)
+        assertEquals(360, equation.planned)
+        assertEquals("−1h59", TimeRules.durationText(equation.result, true))
+    }
+
+    @Test fun dayEquationIsHiddenWhenItDoesNotAddUp() {
+        val base = TimeBankDayBase("2026-11-03", referenceMinutes = 440, plannedMinutes = 360, workedMinutes = 321, consideredMinutes = 321)
+        val debit = listOf(bankLine("bank_debit", 119, "worked_less"))
+        assertNull(TimeRules.dayEquation(null, debit, 321))
+        assertNull(TimeRules.dayEquation(base, emptyList(), 321))
+        assertNull(TimeRules.dayEquation(base, debit, null))
+        assertNull(TimeRules.dayEquation(base, listOf(bankLine("bank_debit", 39, "worked_less")), 321))
+        assertNull(TimeRules.dayEquation(base.copy(consideredMinutes = 330), debit, 321))
+        assertNull(TimeRules.dayEquation(base.copy(referenceMinutes = 0), debit, 321))
+    }
+
+    @Test fun dayEquationIsHiddenForPayrollLinesAndKeepsMemoryForAdditionals() {
+        val base = TimeBankDayBase("2026-11-03", referenceMinutes = 360, plannedMinutes = 360, workedMinutes = 400, consideredMinutes = 400)
+        assertNull(TimeRules.dayEquation(base, listOf(bankLine("payroll_overtime", 40, "worked_more")), 400))
+        val credit = listOf(bankLine("bank_credit", 40, "worked_more"))
+        assertNotNull(TimeRules.dayEquation(base, credit, 400))
+        assertTrue(TimeRules.dayEquationExplainsLines(credit))
+        val additional = listOf(TimeBankStatementLine("2026-11-03", "2026-11", 0, TimeBankLineValue("bank_credit", 40, "worked_more", "domingo", 100.0)))
+        assertFalse(TimeRules.dayEquationExplainsLines(additional))
+        assertFalse(TimeRules.dayEquationExplainsLines(credit + credit))
+    }
 }

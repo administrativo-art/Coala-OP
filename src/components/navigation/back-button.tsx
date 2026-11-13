@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
@@ -13,8 +13,8 @@ type BackButtonProps = {
   iconOnly?: boolean;
   className?: string;
   iconClassName?: string;
-  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
-  size?: "default" | "sm" | "lg" | "icon";
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
 };
 
 export function BackButton({

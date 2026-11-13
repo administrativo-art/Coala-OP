@@ -38,7 +38,7 @@ test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente a
   const token = await user("inbox-payment-admin", true), restricted = await user("inbox-payment-restricted", false);
   const inboxId = "inbox-payment-e2e", expenseId = "expense-inbox-payment-e2e";
   const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-  const barcode = "8".repeat(48), beneficiaryDocument = "11222333000181";
+  const barcode = "1".repeat(47), beneficiaryDocument = "11222333000181";
   await financial.collection("expenses").doc(expenseId).set({
     workspaceId: "coala",
     status: "pending",
@@ -50,6 +50,7 @@ test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente a
   });
   await financial.collection("financialInboxMessages").doc(inboxId).set({
     workspaceId: "coala", status: "linked", subject: "Cobrança de teste", linkedExpenseId: expenseId,
+    attachments: [],
     classification: { amountCents: 3999, dueDate, barcode }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
   const casePath = `/api/financial/inbox/${inboxId}/case`;
@@ -175,6 +176,7 @@ test("API E2E: prepara cobrança, bloqueia arquivo prematuro e arquiva somente a
   await financial.collection("financialInboxMessages").doc(confirmedInboxId).set({
     workspaceId: "coala",
     status: "document_pending",
+    attachments: [],
     subject: "Boleto do Shopping do Automóvel",
     receivedAt: "2026-10-06T12:00:00.000Z",
     linkedExpenseId: null,

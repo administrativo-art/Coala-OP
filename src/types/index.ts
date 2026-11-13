@@ -276,6 +276,7 @@ export type Asset = {
   costCenter?: string;
   accountingAccount?: string;
   documentUrl?: string;
+  inboxInvoiceRefs?: Array<{ key: string; messageId: string; fileId: string; sha256: string; version: number; confirmedAt: string }>;
   usefulLifeYears?: number;
   residualValue?: number;
   depreciationMethod?: string;
@@ -858,7 +859,7 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
-    inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; };
+    inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; deleteFiles?: boolean; };
     audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
     reconciliation: { view: boolean; confirm: boolean; correct: boolean; classifyAdjustments: boolean; administer: boolean; };
     cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
@@ -1006,6 +1007,8 @@ export type UnitAccessScope = 'linked' | 'selected' | 'all';
 export type PersonRecordType = 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
 
 export type User = {
+  onboardingPersonRef?: { namespace: "hr.onboardingPersons"; id: string } | null;
+  onboardingProvisioningId?: string | null;
   id: string; // Firebase Auth UID
   username: string;
   email: string;
@@ -1640,6 +1643,9 @@ export type OnboardingPrivacyAcceptance = {
 };
 
 export type OnboardingProcess = {
+  personIdentity?: import("@/features/privacy/onboarding-person").OnboardingPersonIdentity;
+  personOrigin?: { schemaVersion: 1; kind: "manual-natural" | "pj-company" };
+  personProvisioning?: { schemaVersion: 1; operationId: string; uid: string; hrEmployeeId: string; origin: string; subjectRef: import("@/features/privacy/person-subject").SubjectRef | null; state: string };
   id: string;
   candidateId: string;
   candidateName?: string | null;
@@ -2666,6 +2672,10 @@ export type PurchaseOrder = {
   freightPaymentMode?: PurchaseFreightPaymentMode;
   freightSupplierId?: string | null;
   freightSupplierName?: string | null;
+  serviceFee?: number;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -2675,6 +2685,7 @@ export type PurchaseOrder = {
   notes?: string;
   linkedExpenseId?: string;
   linkedFreightExpenseId?: string;
+  linkedServiceFeeExpenseId?: string;
   archivedLinkedExpenseId?: string;
   financialArchiveRunId?: string;
   financialExpenseArchivedAt?: string;
@@ -2716,6 +2727,9 @@ export type PurchaseOrderItem = {
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
+  isMultipack?: boolean;
+  unitsPerPackage?: number | null;
+  stockRegistrationMode?: 'individual' | 'package' | null;
   quantityOrdered: number;
   unitPriceOrdered: number;
   discountOrdered?: number;
@@ -2804,6 +2818,9 @@ export type PurchaseReceiptItem = {
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
+  isMultipack?: boolean;
+  unitsPerPackage?: number | null;
+  stockRegistrationMode?: 'individual' | 'package' | null;
   quantityOrdered: number;
   quantityReceived: number;
   quantityPendingStockEntry?: number;
@@ -2859,6 +2876,9 @@ export type PurchaseFinancial = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
   freightSupplierId?: string | null;
   freightSupplierName?: string | null;
   resultCenterId?: string;
@@ -2867,6 +2887,7 @@ export type PurchaseFinancial = {
   amountEstimated: number;
   goodsAmountEstimated?: number;
   freightAmountEstimated?: number;
+  serviceFeeAmountEstimated?: number;
   goodsAmountPaid?: number;
   freightAmountPaid?: number;
   amountConfirmed?: number;
@@ -2876,6 +2897,7 @@ export type PurchaseFinancial = {
   installmentsCount?: number;
   linkedExpenseId?: string;
   linkedFreightExpenseId?: string;
+  linkedServiceFeeExpenseId?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -3110,7 +3132,7 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
-      inbox: { view: false, analyze: false, link: false, discard: false },
+      inbox: { view: false, analyze: false, link: false, discard: false, deleteFiles: false },
       audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
       reconciliation: { view: false, confirm: false, correct: false, classifyAdjustments: false, administer: false },
       cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
@@ -3226,7 +3248,7 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
-      inbox: { view: true, analyze: true, link: true, discard: true },
+      inbox: { view: true, analyze: true, link: true, discard: true, deleteFiles: true },
       audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
       reconciliation: { view: true, confirm: true, correct: true, classifyAdjustments: true, administer: true },
       cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },
@@ -3503,7 +3525,7 @@ export type GoalMethod = 'manual' | 'tiered_unit_bonus' | 'historical_average' |
 export type GoalParticipantSource = 'schedule' | 'manual'
 export type GoalParticipantRole = 'fixed' | 'relief' | 'leader'
 export type GoalBonusSplitMode = 'equal' | 'weighted_by_presence' | 'manual'
-export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts'
+export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts' | 'proportional_by_worked_days'
 export type GoalIncentiveTone = 'info' | 'warning' | 'success'
 export type GoalIncentiveTriggerType = 'distance_to_next_tier_percent' | 'distance_to_next_tier_amount' | 'tier_reached'
 
@@ -3577,6 +3599,7 @@ export interface GoalClosureBonusParticipant {
   employeeId: string
   role: GoalParticipantRole
   scheduledTurns: number
+  scheduledDays?: number
   bonusAmount: number
 }
 
@@ -3596,6 +3619,8 @@ export interface GoalClosureBonusSnapshot {
   leadershipBonus: number
   totalPrize: number
   totalPeriodTurns: number
+  totalPeriodDays?: number
+  reliefBasis?: 'turns' | 'days'
   participants: GoalClosureBonusParticipant[]
   capturedAt?: Timestamp
 }
@@ -3813,6 +3838,8 @@ export type DPWeeklyRestRule = {
   placement: 'fixed_cycle' | 'schedule';
   /** Proteção aplicada sobre datas corridas, inclusive entre competências e unidades. */
   maxConsecutiveWorkDays: number;
+  /** Ausente em versões legadas; novas jornadas distinguem repouso semanal e compensação mensal coletiva. */
+  distribution?: 'weekly' | 'monthly_collective';
   /** Regra opcional de CCT para coincidência do descanso com domingo. */
   sundayCadenceWeeks?: number;
 };
@@ -3947,7 +3974,7 @@ export type DPResponsibilityTask = {
   id: string;
   workspaceId: string;
   activity: DPResponsibilityActivity;
-  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review';
+  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review' | 'automatic_absence_restoration_review';
   scope: DPResponsibilityScope;
   unitId: string;
   requestId: string;
@@ -4091,10 +4118,24 @@ export type DPSchedule = {
     checkedBy: string;
     version: number;
     blockingIssueCount: number;
+    restRecord?: DPScheduleRestRecord;
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   draftCoverageDemands?: DPCoverageDemands;
   createdAt: Timestamp;
+};
+
+/** Conferência congelada na publicação; datas pertencem somente à competência informada. */
+export type DPScheduleRestRecord = {
+  competence: string;
+  publicationVersion: number;
+  people: Record<string, {
+    distribution: 'weekly' | 'monthly_collective';
+    monthGranted: number;
+    monthRestDates: string[];
+    monthRequired: number | null;
+    nextRestDueDate?: string;
+  }>;
 };
 
 export type DPShift = {

@@ -27,6 +27,12 @@ exigem confirmação explícita e fazem preflight/validação posterior sem retr
 `expense-boleto-attach` e `expense-boleto-prepare` exigem `--installment-number` para
 despesas parceladas.
 
+A senha é lida em modo canônico do terminal, apenas com o eco desligado (`stty -echo`), e o eco é restaurado inclusive em erro ou Ctrl+C. A leitura anterior em modo bruto recusou repetidamente a senha correta digitada no Terminal do macOS em 2026-11-06 (causa exata não reproduzida em pseudo-terminal); o modo canônico aceitou na primeira tentativa.
+
+`prepare-pix` prepara a guia do FGTS Digital pelo Pix copia e cola lido de `--pix-file` (o código tem espaços e `***`); confere a cobrança e o BR Code antes de escrever e devolve o SHA-256 do payload. `authorize` e `send` dessa ordem usam `--pix-payload-sha256` no lugar de `--barcode`/`--beneficiary-document` e só aceitam a primeira tentativa.
+
+`prepare`, `authorize` e `send` aceitam omitir `--beneficiary-document` somente para guia de arrecadação de órgão público (DARF, DAS), cujo valor é conferido pelo próprio código; qualquer outro código continua exigindo o CNPJ.
+
 Sem `--email`, o login pede o endereço no terminal antes da senha. `--email EMAIL`
 continua aceito para uso não interativo do endereço; a senha sempre é digitada
 no terminal interativo. O login valida a conta também na API do Coala antes de

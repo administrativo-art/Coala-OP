@@ -63,7 +63,7 @@ export function formatFinancialDate(value?: string | null) {
 }
 
 function scheduledFor(item: BankPaymentRequest) {
-  return item.barcodeSnapshot?.scheduledFor ?? item.scheduledFor ?? null;
+  return item.barcodeSnapshot?.scheduledFor ?? item.pixCopyPasteSnapshot?.scheduledFor ?? item.scheduledFor ?? null;
 }
 
 export function buildPaymentTimeline(
@@ -92,7 +92,7 @@ export function buildPaymentTimeline(
         ? `Aguardando a data programada (${scheduledDate})`
         : "—";
   const statementStatus = item.statementReconciliationStatus;
-  const statementRequired = item.paymentRail === "barcode"
+  const statementRequired = item.paymentRail === "barcode" || item.paymentRail === "pix_copy_paste"
     || Boolean(statementStatus && statementStatus !== "not_expected");
 
   return [

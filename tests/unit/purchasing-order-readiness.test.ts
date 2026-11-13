@@ -115,6 +115,21 @@ test("não exige produto para consumo direto, mas mantém estoque sem vínculo p
   assert.deepEqual(getPurchaseOrderConfirmationIssues(readyOrder(), [legacyAsset]), []);
 });
 
+test("exige plano próprio quando a compra tem taxa de serviço", () => {
+  const issues = getPurchaseOrderConfirmationIssues(readyOrder({ serviceFee: 12.9 }), [readyItem()]);
+  assert.ok(issues.some((issue) => issue.code === "service_fee_account_plan"));
+  assert.ok(!getPurchaseOrderConfirmationIssues(readyOrder({ serviceFee: 12.9, serviceFeeAccountPlanId: "service-plan" }), [readyItem()])
+    .some((issue) => issue.code === "service_fee_account_plan"));
+});
+
+test("bloqueia taxa própria duplicada por item antigo", () => {
+  const issues = getPurchaseOrderConfirmationIssues(
+    readyOrder({ serviceFee: 12.9, serviceFeeAccountPlanId: "service-plan" }),
+    [readyItem({ itemTreatment: "expense", itemName: "Taxa de serviço Mateus Mais" })],
+  );
+  assert.ok(issues.some((issue) => issue.code === "service_fee_duplicate" && issue.scope === "items"));
+});
+
 test("exige destino para item operacional e preserva consumo direto sem destino", () => {
   assert.deepEqual(
     getPurchaseOrderConfirmationIssues(

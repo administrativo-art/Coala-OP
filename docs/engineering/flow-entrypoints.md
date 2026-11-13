@@ -2,13 +2,13 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **58**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
 Páginas: [`src/app/dashboard/assets/page.tsx`](../../src/app/dashboard/assets/page.tsx).
 
-Arquivos locais percorridos: 34.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
@@ -328,26 +328,6 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dashboard.collaborator` — [`src/components/collaborator-schedule-page.tsx`](../../src/components/collaborator-schedule-page.tsx)
 - `dashboard.view` — [`src/components/collaborator-schedule-page.tsx`](../../src/components/collaborator-schedule-page.tsx)
 
-## `company-documents`
-
-Páginas: [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx).
-
-Arquivos locais percorridos: 11.
-
-Chamadas candidatas encontradas:
-
-- `/api/documents/company` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/route.ts`](../../src/app/api/documents/company/route.ts)
-- `/api/documents/company/access` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/access/route.ts`](../../src/app/api/documents/company/access/route.ts)
-- `/api/documents/company/analyze` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/analyze/route.ts`](../../src/app/api/documents/company/analyze/route.ts)
-- `/api/documents/company/folder` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/folder/route.ts`](../../src/app/api/documents/company/folder/route.ts)
-- `/api/documents/company/intake` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/intake/route.ts`](../../src/app/api/documents/company/intake/route.ts)
-- `/api/documents/company/units` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/units/route.ts`](../../src/app/api/documents/company/units/route.ts)
-
-Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
-
-- `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-
 ## `consents`
 
 Páginas: [`src/app/dashboard/documents/consents/[employeeId]/page.tsx`](../../src/app/dashboard/documents/consents/%5BemployeeId%5D/page.tsx).
@@ -368,48 +348,55 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 ## `document-central`
 
-Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx).
+Páginas: [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/documents/generated/page.tsx`](../../src/app/dashboard/documents/generated/page.tsx), [`src/app/dashboard/documents/history/page.tsx`](../../src/app/dashboard/documents/history/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx).
 
-Arquivos locais percorridos: 27.
+Arquivos locais percorridos: 44.
 
 Chamadas candidatas encontradas:
 
-- `/api/documents/company` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/route.ts`](../../src/app/api/documents/company/route.ts)
-- `/api/documents/company/access` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/access/route.ts`](../../src/app/api/documents/company/access/route.ts)
-- `/api/documents/company/analyze` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/analyze/route.ts`](../../src/app/api/documents/company/analyze/route.ts)
-- `/api/documents/company/folder` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/folder/route.ts`](../../src/app/api/documents/company/folder/route.ts)
-- `/api/documents/company/intake` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/intake/route.ts`](../../src/app/api/documents/company/intake/route.ts)
-- `/api/documents/company/units` — interface [`src/app/dashboard/documents/company/page.tsx`](../../src/app/dashboard/documents/company/page.tsx); rota candidata [`src/app/api/documents/company/units/route.ts`](../../src/app/api/documents/company/units/route.ts)
-- `/api/documents/generated` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
-- `/api/documents/generated/` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
+- `/api/collaborator/documents` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/collaborator/documents/route.ts`](../../src/app/api/collaborator/documents/route.ts)
+- `/api/collaborator/documents/access` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/collaborator/documents/access/route.ts`](../../src/app/api/collaborator/documents/access/route.ts)
+- `/api/documents/generated` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
+- `/api/documents/generated/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
 - `/api/documents/history` — interface [`src/features/documents/central/history-workspace.tsx`](../../src/features/documents/central/history-workspace.tsx); rota candidata [`src/app/api/documents/history/route.ts`](../../src/app/api/documents/history/route.ts)
 - `/api/documents/templates` — interface [`src/features/documents/central/archive-models.tsx`](../../src/features/documents/central/archive-models.tsx); rota candidata [`src/app/api/documents/templates/route.ts`](../../src/app/api/documents/templates/route.ts)
 - `/api/documents/templates/` — interface [`src/features/documents/central/archive-models.tsx`](../../src/features/documents/central/archive-models.tsx); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
 - `/api/documents/work-items` — interface [`src/features/documents/central/central-workspace.tsx`](../../src/features/documents/central/central-workspace.tsx); rota candidata [`src/app/api/documents/work-items/route.ts`](../../src/app/api/documents/work-items/route.ts)
-- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
-- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
-- `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
-- `/api/hr/employee-documents` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
-- `/api/hr/employee-documents/access` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
-- `/api/hr/onboarding/` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
+- `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
+- `/api/hr/employee-documents` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
+- `/api/hr/employee-documents/access` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
+- `/api/hr/employee-documents/analyze-upload` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/analyze-upload/route.ts`](../../src/app/api/hr/employee-documents/analyze-upload/route.ts)
+- `/api/hr/employee-documents/batches` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/batches/route.ts`](../../src/app/api/hr/employee-documents/batches/route.ts)
+- `/api/hr/employee-documents/classification` — interface [`src/features/hr/documents/legacy-document-classification.tsx`](../../src/features/hr/documents/legacy-document-classification.tsx); rota candidata [`src/app/api/hr/employee-documents/classification/route.ts`](../../src/app/api/hr/employee-documents/classification/route.ts)
+- `/api/hr/employee-documents/confirm` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/confirm/route.ts`](../../src/app/api/hr/employee-documents/confirm/route.ts)
+- `/api/hr/employee-documents/item` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/item/route.ts`](../../src/app/api/hr/employee-documents/item/route.ts)
+- `/api/hr/employee-documents/organization` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/organization/route.ts`](../../src/app/api/hr/employee-documents/organization/route.ts)
+- `/api/hr/employee-documents/publication` — interface [`src/features/hr/documents/publication-control.tsx`](../../src/features/hr/documents/publication-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication/route.ts`](../../src/app/api/hr/employee-documents/publication/route.ts)
+- `/api/hr/employee-documents/publication-policy` — interface [`src/features/hr/documents/publication-policy-control.tsx`](../../src/features/hr/documents/publication-policy-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication-policy/route.ts`](../../src/app/api/hr/employee-documents/publication-policy/route.ts)
+- `/api/hr/employee-documents/reanalyze` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/reanalyze/route.ts`](../../src/app/api/hr/employee-documents/reanalyze/route.ts)
+- `/api/hr/employee-documents/status` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
+- `/api/hr/employee-documents/summary` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
+- `/api/hr/employee-documents/visibility` — interface [`src/features/hr/documents/employee-document-visibility-dialog.tsx`](../../src/features/hr/documents/employee-document-visibility-dialog.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
+- `/api/hr/onboarding/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `dp.collaborators.edit` — [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx)
-- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx)
-- `dp.collaborators.view` — [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx)
+- `dp.collaborators.edit` — [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx)
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `settings.manageUsers` — [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `document-generation`
 
-Páginas: [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
+Páginas: [`src/app/dashboard/documents/editor/[id]/page.tsx`](../../src/app/dashboard/documents/editor/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/editor/documents/page.tsx`](../../src/app/dashboard/documents/editor/documents/page.tsx), [`src/app/dashboard/documents/editor/page.tsx`](../../src/app/dashboard/documents/editor/page.tsx), [`src/app/dashboard/documents/editor/templates/[tid]/page.tsx`](../../src/app/dashboard/documents/editor/templates/%5Btid%5D/page.tsx), [`src/app/dashboard/documents/editor/templates/page.tsx`](../../src/app/dashboard/documents/editor/templates/page.tsx), [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
 
-Arquivos locais percorridos: 17.
+Arquivos locais percorridos: 51.
 
 Chamadas candidatas encontradas:
 
+- `/api/documents/editor` — interface [`src/features/documents/editor/ui/editor-client.ts`](../../src/features/documents/editor/ui/editor-client.ts); rota candidata [`src/app/api/documents/editor/route.ts`](../../src/app/api/documents/editor/route.ts)
 - `/api/documents/generate` — interface [`src/components/documents/document-generator-workspace.tsx`](../../src/components/documents/document-generator-workspace.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
 - `/api/documents/generated` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
 - `/api/documents/generated/` — interface [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
@@ -420,7 +407,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/documents/generator/models/[id]/page.tsx`](../../src/app/dashboard/documents/generator/models/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/generator/models/page.tsx`](../../src/app/dashboard/documents/generator/models/page.tsx), [`src/app/dashboard/documents/models/page.tsx`](../../src/app/dashboard/documents/models/page.tsx).
 
-Arquivos locais percorridos: 27.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
@@ -434,8 +421,11 @@ Chamadas candidatas encontradas:
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `dp-overview`
 
@@ -456,7 +446,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx), [`src/app/dashboard/dp/schedules/month/[period]/page.tsx`](../../src/app/dashboard/dp/schedules/month/%5Bperiod%5D/page.tsx), [`src/app/dashboard/dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx).
 
-Arquivos locais percorridos: 59.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
@@ -601,37 +591,46 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `employee-documents`
 
-Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx), [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx).
+Páginas: [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx), [`src/app/dashboard/documents/collaborators/page.tsx`](../../src/app/dashboard/documents/collaborators/page.tsx).
 
-Arquivos locais percorridos: 43.
+Arquivos locais percorridos: 48.
 
 Chamadas candidatas encontradas:
 
-- `/api/collaborator/documents` — interface [`src/features/hr/documents/own-documents-page.tsx`](../../src/features/hr/documents/own-documents-page.tsx); rota candidata [`src/app/api/collaborator/documents/route.ts`](../../src/app/api/collaborator/documents/route.ts)
-- `/api/collaborator/documents/access` — interface [`src/features/hr/documents/own-documents-page.tsx`](../../src/features/hr/documents/own-documents-page.tsx); rota candidata [`src/app/api/collaborator/documents/access/route.ts`](../../src/app/api/collaborator/documents/access/route.ts)
-- `/api/documents/generated` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
-- `/api/documents/generated/` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
+- `/api/collaborator/documents` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/collaborator/documents/route.ts`](../../src/app/api/collaborator/documents/route.ts)
+- `/api/collaborator/documents/access` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/collaborator/documents/access/route.ts`](../../src/app/api/collaborator/documents/access/route.ts)
+- `/api/documents/generated` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/documents/generated/route.ts`](../../src/app/api/documents/generated/route.ts)
+- `/api/documents/generated/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/documents/generated/[id]/route.ts`](../../src/app/api/documents/generated/%5Bid%5D/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
-- `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
-- `/api/hr/employee-documents` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
-- `/api/hr/employee-documents/access` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
+- `/api/hr/employee-document-folder-profile` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
+- `/api/hr/employee-documents` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
+- `/api/hr/employee-documents/access` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
+- `/api/hr/employee-documents/analyze-upload` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/analyze-upload/route.ts`](../../src/app/api/hr/employee-documents/analyze-upload/route.ts)
+- `/api/hr/employee-documents/batches` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/batches/route.ts`](../../src/app/api/hr/employee-documents/batches/route.ts)
+- `/api/hr/employee-documents/classification` — interface [`src/features/hr/documents/legacy-document-classification.tsx`](../../src/features/hr/documents/legacy-document-classification.tsx); rota candidata [`src/app/api/hr/employee-documents/classification/route.ts`](../../src/app/api/hr/employee-documents/classification/route.ts)
+- `/api/hr/employee-documents/confirm` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/confirm/route.ts`](../../src/app/api/hr/employee-documents/confirm/route.ts)
+- `/api/hr/employee-documents/item` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/item/route.ts`](../../src/app/api/hr/employee-documents/item/route.ts)
+- `/api/hr/employee-documents/organization` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/organization/route.ts`](../../src/app/api/hr/employee-documents/organization/route.ts)
+- `/api/hr/employee-documents/publication` — interface [`src/features/hr/documents/publication-control.tsx`](../../src/features/hr/documents/publication-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication/route.ts`](../../src/app/api/hr/employee-documents/publication/route.ts)
 - `/api/hr/employee-documents/publication-policy` — interface [`src/features/hr/documents/publication-policy-control.tsx`](../../src/features/hr/documents/publication-policy-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication-policy/route.ts`](../../src/app/api/hr/employee-documents/publication-policy/route.ts)
-- `/api/hr/employee-documents/summary` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
-- `/api/hr/employee-documents/visibility` — interface [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
-- `/api/hr/onboarding/` — interface [`src/features/documents/central/archive-employees.tsx`](../../src/features/documents/central/archive-employees.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
+- `/api/hr/employee-documents/reanalyze` — interface [`src/features/hr/documents/employee-document-intake.tsx`](../../src/features/hr/documents/employee-document-intake.tsx); rota candidata [`src/app/api/hr/employee-documents/reanalyze/route.ts`](../../src/app/api/hr/employee-documents/reanalyze/route.ts)
+- `/api/hr/employee-documents/status` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
+- `/api/hr/employee-documents/summary` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
+- `/api/hr/employee-documents/visibility` — interface [`src/features/hr/documents/employee-document-visibility-dialog.tsx`](../../src/features/hr/documents/employee-document-visibility-dialog.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
+- `/api/hr/onboarding/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
 - `dashboard.collaborator` — [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx)
 - `dashboard.view` — [`src/app/dashboard/collaborator/documents/page.tsx`](../../src/app/dashboard/collaborator/documents/page.tsx)
-- `dp.collaborators.edit` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
-- `dp.collaborators.ownProfileOnly` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
-- `dp.collaborators.view` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
+- `dp.collaborators.edit` — [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx)
+- `dp.collaborators.ownProfileOnly` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `settings.manageUsers` — [`src/app/dashboard/dp/documents/page.tsx`](../../src/app/dashboard/dp/documents/page.tsx)
+- `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `expenses`
 
@@ -695,7 +694,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
@@ -724,28 +723,31 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/financial/page.tsx`](../../src/app/dashboard/documents/financial/page.tsx), [`src/app/dashboard/financial/expenses/inbox/page.tsx`](../../src/app/dashboard/financial/expenses/inbox/page.tsx).
 
-Arquivos locais percorridos: 49.
+Arquivos locais percorridos: 45.
 
 Chamadas candidatas encontradas:
 
+- `/api/assets/lookup` — interface [`src/features/financial/inbox/invoice-destination-editor.tsx`](../../src/features/financial/inbox/invoice-destination-editor.tsx); rota candidata [`src/app/api/assets/lookup/route.ts`](../../src/app/api/assets/lookup/route.ts)
 - `/api/financial/document-counterparties` — interface [`src/features/financial/inbox/document-naming-editor.tsx`](../../src/features/financial/inbox/document-naming-editor.tsx); rota candidata [`src/app/api/financial/document-counterparties/route.ts`](../../src/app/api/financial/document-counterparties/route.ts)
-- `/api/financial/inbox` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
-- `/api/financial/inbox/` — interface [`src/features/documents/central/financial-archive.tsx`](../../src/features/documents/central/financial-archive.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
+- `/api/financial/inbox` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/route.ts`](../../src/app/api/financial/inbox/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/financial/inbox/document-naming-editor.tsx`](../../src/features/financial/inbox/document-naming-editor.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/inbox/bulk-review` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/bulk-review/route.ts`](../../src/app/api/financial/inbox/bulk-review/route.ts)
 - `/api/financial/inbox/settings` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/inbox/settings/route.ts`](../../src/app/api/financial/inbox/settings/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `assets.edit` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `assets.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.expenses.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.analyze` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
+- `financial.inbox.deleteFiles` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.discard` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.inbox.link` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
-- `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `financial.inbox.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.create` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
 - `financial.paymentRequests.view` — [`src/features/financial/inbox/financial-inbox-page.tsx`](../../src/features/financial/inbox/financial-inbox-page.tsx)
-- `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 
 ## `financial-overview`
 
@@ -806,9 +808,9 @@ Chamadas candidatas encontradas:
 
 ## `goals`
 
-Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
+Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 65.
 
 Chamadas candidatas encontradas:
 
@@ -835,6 +837,8 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dashboard.collaborator` — [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx)
+- `dashboard.view` — [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx)
 - `goals.manage` — [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx)
 - `goals.view` — [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx)
 - `settings.manageUsers` — [`src/components/goals-history-view.tsx`](../../src/components/goals-history-view.tsx)
@@ -1001,7 +1005,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/authorizations/page.tsx`](../../src/app/dashboard/financial/expenses/authorizations/page.tsx).
 
-Arquivos locais percorridos: 26.
+Arquivos locais percorridos: 27.
 
 Chamadas candidatas encontradas:
 
@@ -1034,9 +1038,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `people-access`
 
-Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
+Páginas: [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 95.
+Arquivos locais percorridos: 90.
 
 Chamadas candidatas encontradas:
 
@@ -1046,18 +1050,6 @@ Chamadas candidatas encontradas:
 - `/api/hr/collaborators/` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `/api/hr/departments` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/route.ts`](../../src/app/api/hr/departments/route.ts)
 - `/api/hr/departments/` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/[departmentId]/route.ts`](../../src/app/api/hr/departments/%5BdepartmentId%5D/route.ts)
-- `/api/hr/employee-document-folder-profile` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-document-folder-profile/route.ts`](../../src/app/api/hr/employee-document-folder-profile/route.ts)
-- `/api/hr/employee-documents` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/route.ts`](../../src/app/api/hr/employee-documents/route.ts)
-- `/api/hr/employee-documents/access` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/access/route.ts`](../../src/app/api/hr/employee-documents/access/route.ts)
-- `/api/hr/employee-documents/analyze-upload` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/analyze-upload/route.ts`](../../src/app/api/hr/employee-documents/analyze-upload/route.ts)
-- `/api/hr/employee-documents/batches` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/batches/route.ts`](../../src/app/api/hr/employee-documents/batches/route.ts)
-- `/api/hr/employee-documents/classification` — interface [`src/features/hr/documents/legacy-document-classification.tsx`](../../src/features/hr/documents/legacy-document-classification.tsx); rota candidata [`src/app/api/hr/employee-documents/classification/route.ts`](../../src/app/api/hr/employee-documents/classification/route.ts)
-- `/api/hr/employee-documents/confirm` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/confirm/route.ts`](../../src/app/api/hr/employee-documents/confirm/route.ts)
-- `/api/hr/employee-documents/item` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/item/route.ts`](../../src/app/api/hr/employee-documents/item/route.ts)
-- `/api/hr/employee-documents/publication` — interface [`src/features/hr/documents/publication-control.tsx`](../../src/features/hr/documents/publication-control.tsx); rota candidata [`src/app/api/hr/employee-documents/publication/route.ts`](../../src/app/api/hr/employee-documents/publication/route.ts)
-- `/api/hr/employee-documents/reanalyze` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/reanalyze/route.ts`](../../src/app/api/hr/employee-documents/reanalyze/route.ts)
-- `/api/hr/employee-documents/status` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
-- `/api/hr/employee-documents/visibility` — interface [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
 - `/api/hr/functions` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/functions/route.ts`](../../src/app/api/hr/functions/route.ts)
 - `/api/hr/functions/` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/functions/[functionId]/route.ts`](../../src/app/api/hr/functions/%5BfunctionId%5D/route.ts)
 - `/api/hr/integrations/pdvlegal/catalog` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx); rota candidata [`src/app/api/hr/integrations/pdvlegal/catalog/route.ts`](../../src/app/api/hr/integrations/pdvlegal/catalog/route.ts)
@@ -1111,8 +1103,8 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dashboard.technicalSheets` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dashboard.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.add` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
-- `dp.collaborators.edit` — [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx)
-- `dp.collaborators.ownProfileOnly` — [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx)
+- `dp.collaborators.edit` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
+- `dp.collaborators.ownProfileOnly` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.collaborators.syncProfile` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.terminate` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
@@ -1174,6 +1166,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.pay` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.expenses.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.analyze` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.inbox.deleteFiles` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.discard` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1251,7 +1244,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `settings.manageLabels` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `settings.manageProfiles` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `settings.managePublicBio` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
-- `settings.manageUsers` — [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx)
+- `settings.manageUsers` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `settings.view` — [`src/components/inactive-users-screen.tsx`](../../src/components/inactive-users-screen.tsx)
 - `settings.viewAiCosts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `settings.viewSystemNotices` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1580,7 +1573,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 245.
+Arquivos locais percorridos: 249.
 
 Chamadas candidatas encontradas:
 
@@ -1598,6 +1591,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
 - `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-editor-document/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
@@ -1649,6 +1643,7 @@ Chamadas candidatas encontradas:
 - `/api/hr/upload` — interface [`src/components/hr/recruitment/recruitment-onboarding-view.tsx`](../../src/components/hr/recruitment/recruitment-onboarding-view.tsx); rota candidata [`src/app/api/hr/upload/route.ts`](../../src/app/api/hr/upload/route.ts)
 - `/api/privacy/incidents` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/incidents/route.ts`](../../src/app/api/privacy/incidents/route.ts)
 - `/api/privacy/incidents/` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/incidents/[id]/route.ts`](../../src/app/api/privacy/incidents/%5Bid%5D/route.ts)
+- `/api/privacy/person-inventory` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/person-inventory/route.ts`](../../src/app/api/privacy/person-inventory/route.ts)
 - `/api/privacy/requests` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/requests/route.ts`](../../src/app/api/privacy/requests/route.ts)
 - `/api/privacy/requests/` — interface [`src/features/privacy/client.ts`](../../src/features/privacy/client.ts); rota candidata [`src/app/api/privacy/requests/[id]/route.ts`](../../src/app/api/privacy/requests/%5Bid%5D/route.ts)
 - `/api/products` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/route.ts`](../../src/app/api/products/route.ts)
@@ -1789,6 +1784,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.pay` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.expenses.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.analyze` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.inbox.deleteFiles` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.discard` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)

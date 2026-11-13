@@ -17,7 +17,8 @@ import {
   Send,
 } from "lucide-react";
 
-import { DocumentNavigation } from "./document-navigation";
+import { BackButton } from "@/components/navigation/back-button";
+import { DocumentCreateLink } from "./document-create-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
@@ -25,7 +26,7 @@ import type { CentralDocumentDimensions, CentralWorkItem, CentralWorkPage, Centr
 
 const TABS: Array<{ value: CentralWorkTab; label: string; description: string; icon: typeof FileQuestion }> = [
   { value: "classify", label: "A classificar", description: "Arquivos recebidos que ainda precisam de confirmação.", icon: FileQuestion },
-  { value: "preparation", label: "Em preparação", description: "Documentos em revisão, finalização ou tratamento financeiro.", icon: FileCheck2 },
+  { value: "preparation", label: "Em preparação", description: "Documentos em revisão ou finalização.", icon: FileCheck2 },
   { value: "flows", label: "Fluxos", description: "Processos e requisitos, inclusive documentos ainda não recebidos.", icon: GitBranch },
   { value: "signatures", label: "Assinaturas", description: "Envios, falhas e trilhas que ainda não terminaram.", icon: Send },
 ];
@@ -141,17 +142,17 @@ export function CentralDocumentWorkspace() {
   return (
     <div className="overflow-hidden rounded-xl border bg-white shadow-xs">
       <header className="border-b px-5 py-4">
-        <div className="mb-3"><DocumentNavigation active="work" /></div>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">Gestão documental</p>
+            <BackButton fallbackHref="/dashboard/documents" ariaLabel="Voltar ao Acervo" />
             <h1 className="text-xl font-black text-slate-950">Fluxos e pendências</h1>
             <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">Acompanhe o trabalho documental. Cada ação continua no módulo responsável e respeita as permissões daquela origem.</p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+          <div className="flex items-center gap-2"><DocumentCreateLink /><Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Atualizar
-          </Button>
+          </Button></div>
         </div>
         <nav className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Áreas de trabalho documental">
           {TABS.map((tab) => {

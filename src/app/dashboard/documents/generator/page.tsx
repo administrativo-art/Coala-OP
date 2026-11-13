@@ -1,12 +1,29 @@
 import { DocumentGeneratorWorkspace } from "@/components/documents/document-generator-workspace";
-import { DocumentNavigation } from "@/features/documents/central/document-navigation";
+import { BackButton } from "@/components/navigation/back-button";
 import { PageContainer } from "@/components/layout/page-container";
-import Link from "next/link";
+import { DocumentModelsLink } from "@/features/documents/central/document-create-link";
 
 export default async function DocumentGeneratorPage(props: {
   searchParams: Promise<{ template?: string | string[] }>;
 }) {
   const searchParams = await props.searchParams;
   const templateId = Array.isArray(searchParams.template) ? searchParams.template[0] : searchParams.template;
-  return <PageContainer><div className="space-y-4"><DocumentNavigation active="generator" /><Link className="inline-block rounded-md border bg-white px-3 py-2 text-sm font-semibold text-teal-800" href="/dashboard/documents/generator/models">Criar e gerenciar modelos</Link><DocumentGeneratorWorkspace initialTemplateId={templateId} /></div></PageContainer>;
+  return (
+    <PageContainer>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <BackButton
+            fallbackHref="/dashboard/documents"
+            ariaLabel="Voltar ao Acervo"
+            iconOnly
+            variant="ds-secondary"
+            className="h-11 w-11 rounded-ds-btn sm:h-9 sm:w-9"
+            iconClassName="h-4 w-4"
+          />
+          <DocumentModelsLink />
+        </div>
+        <DocumentGeneratorWorkspace initialTemplateId={templateId} />
+      </div>
+    </PageContainer>
+  );
 }

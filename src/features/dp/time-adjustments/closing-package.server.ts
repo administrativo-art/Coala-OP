@@ -9,6 +9,7 @@ import { PDFDocument } from 'pdf-lib';
 import { signPtrpDetached } from '@/features/dp/rep-p/service.server';
 import { autoPublishDocument } from '@/features/hr/documents/publication.server';
 import { buildSignatureDocumentName, buildSignatureFileName } from '@/features/hr/documents/signature-document-name';
+import { signaturePersonFields } from '@/features/privacy/signature-person-fields';
 import { openSystemNotice, resolveSystemNoticeKeys as resolveNoticeKeys, resolveSystemNotices, type SystemNoticeInput } from '@/features/system-notices/service.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { createAutentiqueDocument } from '@/lib/autentique.server';
@@ -220,6 +221,7 @@ export async function sendClosingPackage(context: ServerUserContext, input: Extr
     }
     tx.set(target, record);
     tx.set(deps.hrDb.collection(SIGNATURE_REQUESTS).doc(signatureRequestId), {
+      ...signaturePersonFields({ subject: { namespace: 'main.users', id: input.employeeUid }, employeeSigns: true, actorUserId: context.decoded.uid }),
       type: PURPOSE, purpose: PURPOSE, status: 'sending', provider: 'autentique', workspaceId: context.workspace_id, competence: input.competence,
       closureVersion: closure.version, employeeUid: input.employeeUid, employeeId, documentName: providerDocumentName, documentStoragePath: record.bundle.storagePath,
       documentHash: bundle.sha256, signers: [{ party: 'employee', name, email }], requestedAt: now, requestedBy: context.decoded.uid, updatedAt: now,
@@ -305,6 +307,7 @@ export async function syncClosingPackageSignature(params: { signatureRequestId: 
     const existing = await tx.get(documentRef);
     if (!existing.exists) {
       tx.create(documentRef, {
+        subjectKeys: signaturePersonFields({ subject: { namespace: 'main.users', id: current.uid } }).subjectKeys,
         employeeId: current.employeeId, category: 'remuneration', documentType: 'Espelho de ponto e contracheque', documentTypeCode: 'TIME_CLOSING_PACKAGE',
         accessLevel: 'confidential', accessPolicyId: 'HR_FINANCE', status: 'validated', signatureRequired: true, signatureStatus: 'signed',
         folderCode: 'REMUNERATION', caseId: `month-${current.competence}`, subcaseId: null, destinationTrail: [year, MONTHS[Number(month) - 1]],

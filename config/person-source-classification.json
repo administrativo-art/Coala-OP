@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "nonPersonalCollections": [],
+  "approvedLegacyGaps": [
+    "audit-targets",
+    "editor-content-versions",
+    "financial-expense-payment-records"
+  ],
+  "dynamicCollectionReaders": [
+    {
+      "file": "src/features/privacy/person-inventory.server.ts",
+      "function": "collectPersonSource",
+      "call": "db.collection(source.collection)",
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+    },
+    {
+      "file": "src/features/privacy/person-inventory.server.ts",
+      "function": "collectPersonSource",
+      "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+    },
+    {
+      "file": "src/features/privacy/person-inventory.server.ts",
+      "function": "collectPersonSource",
+      "call": "db.collectionGroup(source.collection)",
+      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+    }
+  ]
+}

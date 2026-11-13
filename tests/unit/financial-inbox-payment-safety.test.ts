@@ -55,9 +55,12 @@ test("resultado bancário atualiza a caixa e separa falha de handoff confirmado"
   assert.match(statementSync, /message: inboxMessage,/);
 });
 
-test("preparação exige e preserva a identidade confirmada do favorecido", () => {
+test("preparação exige o favorecido, salvo guia pública íntegra com valor conferido", () => {
   assert.match(inboxPaymentRoute, /inboxBarcodePaymentPreparationSchema\.parse/);
-  assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument/);
+  assert.match(paymentService, /const governmentCollection = governmentCollectionBarcode\(code\)/);
+  assert.match(paymentService, /governmentCollection\?\.amountCents != null && governmentCollection\.amountCents !== amountCents/);
+  assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument \?\? null/);
+  assert.match(paymentService, /if \(!beneficiaryDocument && !governmentCollection\)/);
   assert.match(paymentService, /barcodeSnapshot: \{[\s\S]{0,300}beneficiaryDocument,/);
   assert.match(paymentService, /assertMatchingInboxBarcodeRequest/);
   assert.doesNotMatch(paymentService, /beneficiaryDocument: null/);
@@ -203,4 +206,16 @@ test("boleto liquidado continua sendo consultado até o Inter informar o valor p
   assert.doesNotMatch(paymentService, /current\.status === "awaiting_statement"\) return current/);
   assert.match(paymentService, /expectedBarcodeDebitAmountCents/);
   assert.match(paymentService, /"processing", "awaiting_statement"\]\.includes\(status\)/);
+});
+
+test("Pix copia e cola da guia FGTS reaproveita as transações do código de barras", () => {
+  // Preparação e resultado do envio passam pelas mesmas transações da caixa (sem gravação paralela).
+  assert.match(paymentService, /export async function createInboxPixCopyPastePaymentRequest[\s\S]{0,6000}commitInboxPaymentPreparation\(/);
+  assert.match(paymentService, /pending\.paymentRail === "pix_copy_paste"[\s\S]{0,1800}pixCopyPasteBeneficiary\(snapshot\)[\s\S]{0,2400}commitBankSubmissionResult\(/);
+  // Duplicidade usa o SHA-256 do payload no lugar da linha digitável.
+  assert.match(paymentService, /hashField: "pixCopyPasteSnapshot\.payloadHash"/);
+  // Pago no banco só vira awaiting_statement; recebedor diferente da Caixa e valor divergente bloqueiam a baixa.
+  assert.match(paymentService, /compareFgtsPixReceiver\(transaction\.recebedor\?\.cpfCnpj\) === "divergent"/);
+  assert.match(paymentService, /mapped === "paid" \? "awaiting_statement" as const : mapped/);
+  assert.match(statementSync, /paymentRequest\.paymentRail === "pix_copy_paste" && paymentRequest\.sourceType === "financial_inbox"/);
 });

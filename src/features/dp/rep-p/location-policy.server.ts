@@ -33,23 +33,19 @@ const repPLocationPolicyFieldsSchema = z.object({
   privacyNoticeUrl: z.string().url().max(500).refine((value) => value.startsWith('https://'), 'O aviso precisa usar HTTPS.').nullable(),
   legalBasisReference: z.string().trim().min(10).max(500).nullable(),
   retentionDays: z.literal(REP_P_LOCATION_RETENTION_DAYS).nullable(),
-  participantUserIds: z.array(z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/)).max(20),
+  // Legado do piloto nominal: não decide mais quem tem a posição pedida (o turno decide). Aceito só por compatibilidade.
+  participantUserIds: z.array(z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/)).max(20).default([]),
 }).strict();
 
 export const repPLocationPolicyInputSchema = repPLocationPolicyFieldsSchema.extend({
   expectedRevision: z.number().int().nonnegative(),
   activationConfirmation: z.boolean(),
 }).strict().superRefine((value, context) => {
-  if (new Set(value.participantUserIds).size !== value.participantUserIds.length) {
-    context.addIssue({ code: 'custom', path: ['participantUserIds'], message: 'A lista do piloto contém pessoa repetida.' });
-  }
   if (value.mode === 'disabled') return;
   for (const field of ['center', 'radiusMeters', 'maxAccuracyMeters', 'maxAgeSeconds', 'captureTimeoutMs',
-    'legalBasisReference', 'retentionDays'] as const) {
+    'retentionDays'] as const) {
     if (value[field] === null) context.addIssue({ code: 'custom', path: [field], message: 'Campo obrigatório para ativar a coleta.' });
   }
-  if (!value.participantUserIds.length) context.addIssue({ code: 'custom', path: ['participantUserIds'],
-    message: 'Escolha ao menos um participante do piloto.' });
   if (!value.activationConfirmation) context.addIssue({ code: 'custom', path: ['activationConfirmation'],
     message: 'Confirme a ativação da coleta nesta unidade.' });
 });
@@ -128,19 +124,6 @@ async function assertUnit(deps: Dependencies, unitId: string) {
   return { id: unit.id, name: String(unit.get('name') ?? '').trim() || unit.id, externalId };
 }
 
-async function assertParticipants(deps: Dependencies, unit: { id: string; externalId: string | null }, participantUserIds: string[]) {
-  const users = await deps.mainDb.getAll(...participantUserIds.map((userId) => deps.mainDb.collection('users').doc(userId)));
-  const invalid = users.some((user) => {
-    if (!user.exists || user.get('isActive') === false) return true;
-    const unitIds = Array.isArray(user.get('unitIds')) ? user.get('unitIds') as unknown[] : [];
-    const kioskIds = Array.isArray(user.get('assignedKioskIds')) ? user.get('assignedKioskIds') as unknown[] : [];
-    return user.get('unitId') !== unit.id && !unitIds.includes(unit.id)
-      && !(unit.externalId && kioskIds.includes(unit.externalId));
-  });
-  if (invalid) throw fail('DP_TIME_LOCATION_POLICY_PARTICIPANT_INVALID',
-    'Uma das pessoas do piloto não está ativa ou não pertence a esta unidade.');
-}
-
 export async function readRepPLocationPolicy(context: ServerUserContext, unitId: string, injected: Partial<Dependencies> = {}) {
   assertCanManage(context, unitId);
   const deps = { ...defaults, ...injected };
@@ -156,7 +139,6 @@ export async function saveRepPLocationPolicy(context: ServerUserContext, unitId:
   if (!parsed.success) throw fail('DP_TIME_LOCATION_POLICY_INPUT_INVALID', parsed.error.issues[0]?.message ?? 'Política inválida.');
   const deps = { ...defaults, ...injected };
   const unit = await assertUnit(deps, unitId);
-  if (parsed.data.mode === 'observe') await assertParticipants(deps, unit, parsed.data.participantUserIds);
   const ref = repPLocationPolicyRef(deps.repDb, context.workspace_id, unitId);
   const now = deps.now();
   const policy = await deps.repDb.runTransaction(async (transaction) => {
@@ -173,7 +155,7 @@ export async function saveRepPLocationPolicy(context: ServerUserContext, unitId:
       radiusMeters: parsed.data.radiusMeters, maxAccuracyMeters: parsed.data.maxAccuracyMeters,
       maxAgeSeconds: parsed.data.maxAgeSeconds, captureTimeoutMs: parsed.data.captureTimeoutMs,
       privacyNoticeUrl: parsed.data.privacyNoticeUrl, legalBasisReference: parsed.data.legalBasisReference,
-      retentionDays: parsed.data.retentionDays, participantUserIds: parsed.data.participantUserIds,
+      retentionDays: parsed.data.retentionDays, participantUserIds: [],
       activatedAt, activatedBy };
     transaction.set(ref, { ...next, updatedAt: Timestamp.fromDate(now), updatedBy: context.decoded.uid });
     transaction.create(ref.collection('revisions').doc(String(revision).padStart(8, '0')), {

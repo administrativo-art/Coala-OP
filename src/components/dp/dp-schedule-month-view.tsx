@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CreateScheduleDialog } from '@/components/dp/dp-schedules-list';
 import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
 import { DPSchedulesSidebar } from '@/components/dp/dp-schedules-sidebar';
-import { schedulePublicationStatus } from '@/lib/dp-schedule-publication';
+import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
 import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
 
@@ -357,6 +357,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
                   key,
                   name: unit?.name ?? schedule?.unitId ?? 'Todas as unidades',
                   draft: schedule ? schedulePublicationStatus(schedule) === 'draft' : false,
+                  published: schedule ? hasPublishedScheduleVersion(schedule) : false,
                   selected: !!schedule && selectedSchedule?.id === schedule.id,
                   disabled: !interactive,
                   filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,

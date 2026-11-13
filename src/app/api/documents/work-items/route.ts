@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { absenceFlowItem } from "@/features/documents/central/adapters/absence";
-import { financialWorkItem } from "@/features/documents/central/adapters/financial";
 import { generatedWorkItem } from "@/features/documents/central/adapters/generated";
 import { admissionSignatureItem } from "@/features/documents/central/adapters/admission-signature";
 import { canAccessUnit } from "@/lib/unit-access";
@@ -15,7 +14,6 @@ import { emptyDimensions } from "@/features/documents/central/types";
 import { canViewDocumentProcess, documentProcessPage, documentProcessWorkItem } from "@/features/documents/central/processes.server";
 import { listAbsenceRequests } from "@/features/dp/absences/requests/workflow.server";
 import { serializeHrValue } from "@/features/hr/lib/server-access";
-import { listFinancialInboxMessages } from "@/features/financial/inbox/repository.server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -33,7 +31,7 @@ const path = "/api/documents/work-items" as const;
 const querySchema = z.object({
   tab: z.enum(["classify", "preparation", "flows", "signatures"]),
   limit: z.coerce.number().int().min(1).max(50).default(25),
-  source: z.enum(["generated", "onboarding", "employee_upload", "financial", "absence", "company", "vacation", "termination"]).optional(),
+  source: z.enum(["generated", "onboarding", "employee_upload", "absence", "company", "vacation", "termination"]).optional(),
   stage: z.enum(["classify", "link", "pay", "bank"]).optional(),
   cursor: z.string().min(1).max(1500).regex(/^[^/]+$/).optional(),
 }).strict().refine((value) => !value.cursor || Boolean(value.source), "Cursor exige origem.");
@@ -61,7 +59,6 @@ function canUseCentral(actor: ServerUserContext) {
     || hasFormalizationPermission(actor.permissions, "signatures.view", actor.isDefaultAdmin)
     || hasFormalizationPermission(actor.permissions, "view", actor.isDefaultAdmin)
     || hasFormalizationPermission(actor.permissions, "companyDocuments.view", actor.isDefaultAdmin)
-    || (actor.permissions.financial?.view && actor.permissions.financial?.inbox?.view)
     || actor.permissions.dp?.requests?.view
     || actor.permissions.dp?.requests?.review;
 }
@@ -207,22 +204,6 @@ async function uploadItems(actor: ServerUserContext, input: Input): Promise<Sour
   };
 }
 
-async function financialItems(actor: ServerUserContext, input: Input): Promise<SourceResult | null> {
-  if (!["classify", "preparation"].includes(input.tab)
-    || (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.inbox?.view))) return null;
-  const stages = input.tab === "classify" ? ["classify" as const] : input.stage && input.stage !== "classify" ? [input.stage] : ["link" as const, "pay" as const, "bank" as const];
-  const perStage = Math.max(1, Math.ceil(input.limit / stages.length));
-  const results = await Promise.all(stages.map((stage) => listFinancialInboxMessages({
-    workspaceId: actor.workspace_id, view: "work", status: null, stage,
-    resolutionKind: null, financialState: null, search: null, cursor: input.cursor ?? null, limit: perStage,
-  })));
-  const items = results.flatMap((result) => result.messages)
-    .map((message) => financialWorkItem(message as unknown as Record<string, unknown> & { id: string }))
-    .filter((value): value is CentralWorkItem => value !== null)
-    .filter((item) => item.tab === input.tab);
-  return { source: "financial", items, partial: results.some((result) => Boolean(result.nextCursor)), continuations: results.flatMap((result, index) => result.nextCursor ? [{ cursor: result.nextCursor, stage: stages[index] }] : []) };
-}
-
 async function absenceItems(actor: ServerUserContext, input: Input): Promise<SourceResult | null> {
   if (input.tab !== "flows"
     || (!actor.isDefaultAdmin && actor.permissions.dp?.requests?.view !== true && actor.permissions.dp?.requests?.review !== true)) return null;
@@ -244,8 +225,8 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
     if (!page) return null;
     return { source, items: page.records.map((record) => documentProcessWorkItem(record, source)).filter((item): item is CentralWorkItem => item !== null), partial: Boolean(page.nextCursor), nextCursor: page.nextCursor };
   };
-  const sourceNames: CentralDocumentSource[] = ["generated", "onboarding", "employee_upload", "financial", "absence", "company", "vacation", "termination"];
-  const readers = [generatedItems, onboardingItems, uploadItems, financialItems, absenceItems, companyItems, processReader("vacation"), processReader("termination")];
+  const sourceNames: CentralDocumentSource[] = ["generated", "onboarding", "employee_upload", "absence", "company", "vacation", "termination"];
+  const readers = [generatedItems, onboardingItems, uploadItems, absenceItems, companyItems, processReader("vacation"), processReader("termination")];
   const settled = await Promise.allSettled([
     ...readers.map((reader, index) => !input.source || input.source === sourceNames[index] ? reader(actor, input) : Promise.resolve(null)),
   ]);

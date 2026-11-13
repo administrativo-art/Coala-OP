@@ -58,6 +58,8 @@ import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { usePurchaseReceipts } from "@/hooks/use-purchase-receipts";
 import { useQuotationItems } from "@/hooks/use-quotation-items";
+import { getContentPurchaseUnitLabel } from "@/lib/purchasing-units";
+import { purchasePackPreview } from "@/lib/purchase-packaging";
 import { usePurchasingFinancialOptions } from "@/hooks/use-purchasing-financial-options";
 import { PurchasingModuleNavigation } from "@/components/purchasing/purchasing-module-navigation";
 import {
@@ -170,9 +172,12 @@ type EditForm = {
   paymentDueDate: string;
   estimatedReceiptDate: string;
   deliveryFee: number;
+  serviceFee: number;
   accountPlanId: string;
   freightAccountPlanId: string;
+  serviceFeeAccountPlanId: string;
   freightPaymentMode: PurchaseFreightPaymentMode;
+  serviceFeePaymentMode: PurchaseFreightPaymentMode;
   freightSupplierName: string;
   resultCenterId: string;
   paymentCardKey: string;
@@ -473,8 +478,8 @@ export default function PurchaseOrderPage() {
     [goodsGrossSubtotal, goodsSubtotal],
   );
   const effectiveOrderTotal = useMemo(
-    () => goodsSubtotal + Number(order?.deliveryFee ?? 0),
-    [goodsSubtotal, order?.deliveryFee],
+    () => goodsSubtotal + Number(order?.deliveryFee ?? 0) + Number(order?.serviceFee ?? 0),
+    [goodsSubtotal, order?.deliveryFee, order?.serviceFee],
   );
   const isCancelled = order?.status === "cancelled";
   const isCreated = order?.status === "created";
@@ -610,6 +615,7 @@ export default function PurchaseOrderPage() {
         10,
       ),
       deliveryFee: order.deliveryFee ?? 0,
+      serviceFee: order.serviceFee ?? 0,
       accountPlanId:
         order.accountPlanId ?? purchasingDefaults.goodsAccountPlanId ?? "",
       freightAccountPlanId:
@@ -617,6 +623,8 @@ export default function PurchaseOrderPage() {
         purchasingDefaults.freightAccountPlanId ??
         "",
       freightPaymentMode: order.freightPaymentMode ?? "separate",
+      serviceFeeAccountPlanId: order.serviceFeeAccountPlanId ?? "",
+      serviceFeePaymentMode: order.serviceFeePaymentMode ?? "included_with_goods",
       freightSupplierName: order.freightSupplierName ?? "",
       resultCenterId: order.resultCenterId ?? "",
       paymentCardKey: getPaymentCardKey(
@@ -659,6 +667,12 @@ export default function PurchaseOrderPage() {
     }
     if (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId)
       pending.push("Plano de contas do frete");
+    if (editForm.serviceFee > 0 && !editForm.serviceFeeAccountPlanId)
+      pending.push("Plano de contas da taxa de serviço");
+    if (editForm.serviceFee > 0 && displayItems.some((item) =>
+      item.itemTreatment === "expense" && /taxa de servi[çc]o/i.test(item.itemName ?? ""))) {
+      pending.push("Remova a taxa de serviço dos itens para evitar cobrança duplicada");
+    }
     if (
       editForm.deliveryFee > 0 &&
       editForm.freightPaymentMode === "separate" &&
@@ -676,6 +690,9 @@ export default function PurchaseOrderPage() {
     );
     const selectedFreightAccountPlan = flattenedAccountPlans.find(
       (plan) => plan.id === editForm.freightAccountPlanId,
+    );
+    const selectedServiceFeeAccountPlan = flattenedAccountPlans.find(
+      (plan) => plan.id === editForm.serviceFeeAccountPlanId,
     );
     const selectedResultCenter = (resultCenters ?? []).find(
       (center) => center.id === editForm.resultCenterId,
@@ -726,6 +743,7 @@ export default function PurchaseOrderPage() {
             ? editForm.estimatedReceiptDate
             : undefined,
         deliveryFee: editForm.deliveryFee,
+        serviceFee: editForm.serviceFee,
         accountPlanId: editForm.accountPlanId,
         accountPlanName: selectedAccountPlan?.name,
         freightAccountPlanId:
@@ -734,6 +752,12 @@ export default function PurchaseOrderPage() {
           editForm.deliveryFee > 0 ? selectedFreightAccountPlan?.name : "",
         freightPaymentMode:
           editForm.deliveryFee > 0 ? editForm.freightPaymentMode : undefined,
+        serviceFeeAccountPlanId:
+          editForm.serviceFee > 0 ? editForm.serviceFeeAccountPlanId : "",
+        serviceFeeAccountPlanName:
+          editForm.serviceFee > 0 ? selectedServiceFeeAccountPlan?.name : "",
+        serviceFeePaymentMode:
+          editForm.serviceFee > 0 ? editForm.serviceFeePaymentMode : undefined,
         freightSupplierName:
           editForm.deliveryFee > 0 && editForm.freightPaymentMode === "separate"
             ? editForm.freightSupplierName.trim()
@@ -910,7 +934,8 @@ export default function PurchaseOrderPage() {
               </p>
               {order.quotationId ||
               order.linkedExpenseId ||
-              order.linkedFreightExpenseId ? (
+              order.linkedFreightExpenseId ||
+              order.linkedServiceFeeExpenseId ? (
                 <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-violet-700">
                   {order.quotationId ? (
                     <Link
@@ -931,6 +956,11 @@ export default function PurchaseOrderPage() {
                       href={`/dashboard/financial/expenses/new?edit=${order.linkedFreightExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
                     >
                       Abrir despesa do frete
+                    </Link>
+                  ) : null}
+                  {order.linkedServiceFeeExpenseId ? (
+                    <Link href={`/dashboard/financial/expenses/new?edit=${order.linkedServiceFeeExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}>
+                      Abrir despesa da taxa de serviço
                     </Link>
                   ) : null}
                 </div>
@@ -1189,6 +1219,13 @@ export default function PurchaseOrderPage() {
                     const product = products.find(
                       (p) => p.id === item.productId,
                     );
+                    const unitsPerVolume = item.purchaseUnitType === "logistic"
+                      ? Number(item.isMultipack ? item.unitsPerPackage : product?.multiplo_caixa ?? 0)
+                      : 0;
+                    const totalInternalUnits = Number(item.quantityOrdered ?? 0) * unitsPerVolume;
+                    const packPreview = item.isMultipack && (item.stockRegistrationMode === 'individual' || item.stockRegistrationMode === 'package')
+                      ? purchasePackPreview(item.quantityOrdered, item.unitPriceOrdered, item.discountOrdered ?? 0, item.unitsPerPackage ?? 0, item.stockRegistrationMode)
+                      : null;
                     const displayName =
                       (product ? getProductFullName(product) : "") ||
                       item.itemName ||
@@ -1227,6 +1264,19 @@ export default function PurchaseOrderPage() {
                                   {item.purchaseUnitLabel ?? item.unit} x{" "}
                                   {fmtUnit(item.unitPriceOrdered)} ={" "}
                                   {fmt(item.grossTotal)}
+                                </p>
+                              )}
+                              {packPreview && (
+                                <p className="text-xs font-medium text-zinc-700">
+                                  Estoque previsto: {packPreview.stockQuantity.toLocaleString('pt-BR')} {item.stockRegistrationMode === 'individual' ? 'unidades individuais' : 'embalagens fechadas'} ·
+                                  {' '}{packPreview.stockUnitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4, maximumFractionDigits: 4 })} por unidade de estoque
+                                </p>
+                              )}
+                              {!packPreview && product && totalInternalUnits > 0 && (
+                                <p className="text-xs font-medium text-zinc-700">
+                                  Volume: {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} por {fmt(item.totalOrdered)} ·
+                                  {" "}{totalInternalUnits.toLocaleString("pt-BR")} {getContentPurchaseUnitLabel(product)} ·
+                                  {" "}{(Number(item.totalOrdered ?? 0) / totalInternalUnits).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 4 })} por {getContentPurchaseUnitLabel(product)}
                                 </p>
                               )}
                               {base && base.name !== displayName && (
@@ -1299,6 +1349,17 @@ export default function PurchaseOrderPage() {
                   </p>
                   <p className="mt-0.5 text-[10.5px] text-zinc-500">
                     {order.freightAccountPlanName || "Sem frete"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                    Taxa de serviço
+                  </p>
+                  <p className="mt-1 font-mono text-[13.5px] font-extrabold text-zinc-800">
+                    {fmt(order.serviceFee ?? 0)}
+                  </p>
+                  <p className="mt-0.5 text-[10.5px] text-zinc-500">
+                    {order.serviceFeeAccountPlanName || "Sem taxa"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -1471,6 +1532,11 @@ export default function PurchaseOrderPage() {
                         order.freightPaymentMode ?? "separate"
                       ]
                     }
+                  </DetailSummaryRow>
+                )}
+                {(order.serviceFee ?? 0) > 0 && (
+                  <DetailSummaryRow label="Liquidação da taxa de serviço">
+                    {FREIGHT_PAYMENT_MODE_LABELS[order.serviceFeePaymentMode ?? "included_with_goods"]}
                   </DetailSummaryRow>
                 )}
                 <DetailSummaryRow label="Valor confirmado">
@@ -2377,6 +2443,50 @@ export default function PurchaseOrderPage() {
                   </EditSectionCard>
 
                   <EditSectionCard
+                    icon={ReceiptText}
+                    title="Taxa de serviço da compra on-line"
+                    description="Valor e classificação da taxa cobrada pela plataforma."
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="purchase-service-fee">Taxa de serviço</Label>
+                        <CurrencyInput
+                          id="purchase-service-fee"
+                          value={editForm.serviceFee}
+                          onChange={(value) => setEditForm((current) => current && { ...current, serviceFee: value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Plano de contas da taxa {editForm.serviceFee > 0 && <RequiredMark />}</Label>
+                        <AccountPlanTreeSelect
+                          value={editForm.serviceFee > 0 ? editForm.serviceFeeAccountPlanId : "__none__"}
+                          onChange={(value) => setEditForm((current) => current && { ...current, serviceFeeAccountPlanId: value === "__none__" ? "" : value })}
+                          options={accountPlans}
+                          placeholder="Selecione o plano de contas"
+                          noneLabel="Sem taxa"
+                          allowNone
+                          disabled={editForm.serviceFee <= 0}
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Liquidação da taxa</Label>
+                        <Select
+                          value={editForm.serviceFeePaymentMode}
+                          onValueChange={(value) => setEditForm((current) => current && { ...current, serviceFeePaymentMode: value as PurchaseFreightPaymentMode })}
+                          disabled={editForm.serviceFee <= 0}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </EditSectionCard>
+
+                  <EditSectionCard
                     icon={Truck}
                     title="Frete"
                     description="Valor, classificação e forma de liquidação da entrega."
@@ -2699,6 +2809,7 @@ export default function PurchaseOrderPage() {
           initialItems={items}
           initialItemId={editingItemId}
           deliveryFee={order?.deliveryFee ?? 0}
+          serviceFee={order?.serviceFee ?? 0}
           open={itemsEditOpen}
           onOpenChange={(nextOpen) => {
             setItemsEditOpen(nextOpen);

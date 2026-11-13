@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
@@ -22,7 +22,9 @@ import {
   type ExistingDocumentRef,
 } from "@/lib/hr/employee-document-distribution";
 import { matchEmployeeAgainstExpected } from "@/lib/hr/employee-document-match";
+import { isPublishedToEmployee } from "@/lib/hr/employee-document-publication";
 import { loadExpectedIdentity, employeeCodeFrom, hashBuffer } from "@/lib/hr/employee-document-identity";
+import { confirmedSubjectKeysForIdentifier } from "@/features/privacy/person-lookup.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +77,7 @@ async function saveEmployeeDocument(input: {
   file: File;
 }): Promise<SaveResult> {
   const { access, employeeId, candidateId, extractedFields, file } = input;
+  const subjectKeys = await confirmedSubjectKeysForIdentifier(employeeId);
   if (!isAllowedEmployeeDocumentMimeType(file.type) || file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) {
     throw new Error("Envie PDF, DOC, DOCX, JPG ou PNG de até 15 MB.");
   }
@@ -149,6 +152,7 @@ async function saveEmployeeDocument(input: {
   const now = Timestamp.now();
   const payload = {
     employeeId, candidateId,
+    subjectKeys,
     category: config.category,
     documentType: config.label,
     documentTypeCode: config.code,
@@ -188,16 +192,33 @@ export async function GET(request: NextRequest) {
     const access = await assertHrAccess(request, "view");
     const employeeId = request.nextUrl.searchParams.get("employeeId")?.trim();
     if (!employeeId) return error("Colaborador não informado.");
+    const publishedOnly = request.nextUrl.searchParams.get("publishedOnly");
+    if (publishedOnly !== null && publishedOnly !== "1") return error("Filtro de publicação inválido.");
+    const paged = publishedOnly === "1";
+    const cursor = request.nextUrl.searchParams.get("cursor");
+    const rawLimit = request.nextUrl.searchParams.get("limit");
+    if (!paged && (cursor !== null || rawLimit !== null)) return error("Paginação exige filtro publicado.");
+    if (paged && [...request.nextUrl.searchParams.keys()].some(key => !["employeeId","publishedOnly","cursor","limit"].includes(key))) return error("Parâmetro inválido.");
+    if (cursor !== null && !/^[A-Za-z0-9_-]{1,128}$/.test(cursor)) return error("Cursor inválido.");
+    if (rawLimit !== null && !/^(?:[1-9]|[1-9]\d|100)$/.test(rawLimit)) return error("Limite inválido.");
+    const pageSize = rawLimit ? Number(rawLimit) : 100;
     if (access.permissions.dp?.collaborators?.ownProfileOnly === true && employeeId !== access.userDoc.id) {
       return error("Este perfil permite acessar apenas os próprios documentos.", 403);
     }
     await assertEmployeeUnitAccess(access, employeeId);
-    const snap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
+    const collection = hrDbAdmin.collection(COLLECTION);
+    const query = paged
+      ? collection.where("employeeId", "==", employeeId).where("publication.status", "==", "published").orderBy(FieldPath.documentId()).limit(pageSize + 1)
+      : collection.where("employeeId", "==", employeeId);
+    const snap = await (paged && cursor ? query.startAfter(cursor) : query).get();
+    const page = paged ? snap.docs.slice(0, pageSize) : snap.docs;
+    const nextCursor = paged && snap.docs.length > pageSize ? page.at(-1)?.id ?? null : null;
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);
     const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);
-    const documents = snap.docs
+    const documents = page
       .filter((doc) => !doc.get("deletedAt"))
+      .filter((doc) => !paged || isPublishedToEmployee(doc.data()))
       .filter((doc) => canAccessDocument(
         { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category"), accessLevel: doc.get("accessLevel") },
         subject,
@@ -206,15 +227,18 @@ export async function GET(request: NextRequest) {
       .map((doc) => ({
         id: doc.id,
         ...serializedObject(doc.data()),
+        storagePath: undefined,
+        storageSubfolder: undefined,
+        signedFileUrl: undefined,
         resolvedVisibility: resolveDocumentVisibility(
           { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category") },
           accessSettings.visibilityConfig,
         ),
       }))
       .sort((a: any, b: any) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
-    return NextResponse.json({ documents });
-  } catch (cause) {
-    return error(cause instanceof Error ? cause.message : "Falha ao carregar documentos.", 403);
+    return NextResponse.json(paged ? { documents, nextCursor } : { documents });
+  } catch {
+    return error("Não foi possível consultar documentos com este acesso.", 403);
   }
 }
 
@@ -307,6 +331,20 @@ export async function DELETE(request: NextRequest) {
     if (!snap.exists) return error("Documento não encontrado.", 404);
     await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? ""));
     const storagePath = snap.get("storagePath");
+    // Signed binaries belong to the signature history and may have multiple references.
+    // Removing an archive entry must not destroy that shared original.
+    if (snap.get("signatureStatus") === "signed" || snap.get("source") === "autentique_signature") {
+      const auditRef = ref.collection("audit").doc();
+      await hrDbAdmin.runTransaction(async (transaction) => {
+        const current = await transaction.get(ref);
+        if (current.get("deletedAt")) return;
+        if (current.get("storagePath") !== storagePath) throw new Error("O documento mudou; atualize a lista antes de remover.");
+        const now = Timestamp.now();
+        transaction.update(ref, { deletedAt: now, deletedBy: access.decoded.uid, updatedAt: now });
+        transaction.set(auditRef, { action: "DOCUMENT_REMOVED_FROM_ARCHIVE", actorId: access.decoded.uid, actorName: access.actorName, storageRetained: true, reason: "Original assinado preservado na trilha de assinatura", at: now });
+      });
+      return NextResponse.json({ ok: true, storageRetained: true });
+    }
     if (typeof storagePath === "string") await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).delete({ ignoreNotFound: true });
     await ref.update({ deletedAt: Timestamp.now(), deletedBy: access.decoded.uid, storagePath: FieldValue.delete(), updatedAt: Timestamp.now() });
     await ref.collection("audit").add({ action: "DOCUMENT_DELETED", actorId: access.decoded.uid, actorName: access.actorName, at: Timestamp.now() });

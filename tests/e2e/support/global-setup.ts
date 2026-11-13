@@ -29,6 +29,7 @@ export const E2E_FINANCIAL_INBOX_IDS = {
   noiseB: "inbox-e2e-noise-0004",
 };
 export const E2E_FINANCIAL_INBOX_BARCODE = "23793493079001004992396000130003915620000113884";
+export const E2E_INVOICE_DESTINATIONS = { nonAsset: "inbox-e2e-invoice-discard", asset: "inbox-e2e-invoice-asset", assetId: "asset-e2e-invoice", assetCode: "PAT-990911" };
 export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
 export const E2E_CASH_COUNTING = {
   sessionId: "cash-counting-session-e2e",
@@ -313,6 +314,7 @@ export default async function seedE2E() {
   };
   batch.set(mainDb.collection("purchase_orders").doc(E2E_ORDER_IDS.issued), {
     ...commonOrder,
+    paymentMethod: "pix",
     supplierId: "supplier-e2e-issued",
     supplierName: "Fornecedor E2E Emitido",
     status: "created",
@@ -418,6 +420,11 @@ export async function resetFinancialE2EFixtures() {
   const financialBatch = financialDb.batch();
   financialBatch.set(financialDb.collection("accounts").doc("account-e2e"), {
     name: "Equipamentos e maquinários",
+    active: true,
+    parentId: null,
+  });
+  financialBatch.set(financialDb.collection("accounts").doc("service-fee-e2e"), {
+    name: "Taxa de serviço E2E",
     active: true,
     parentId: null,
   });
@@ -892,4 +899,40 @@ export async function resetFinancialE2EFixtures() {
     updatedInLastRun: 0,
   });
   await financialBatch.commit();
+}
+
+export async function seedInvoiceDestinationE2EFixtures() {
+  assertFirestoreEmulatorSafety({ projectId: PROJECT_ID });
+  const app = getApps().find((entry) => entry.name === "coala-e2e-seed")
+    ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
+  const financialDb = getFirestore(app, "coala-financeiro");
+  const mainDb = getFirestore(app, "coala");
+  const base = (await financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.message).get()).data();
+  if (!base) throw new Error("Fixture base da caixa financeira ausente.");
+  const now = new Date().toISOString();
+  const batch = financialDb.batch();
+  for (const [id, subject, hash] of [
+    [E2E_INVOICE_DESTINATIONS.nonAsset, "Nota fiscal sem patrimônio E2E", "b".repeat(64)],
+    [E2E_INVOICE_DESTINATIONS.asset, "Nota fiscal patrimonial E2E", "c".repeat(64)],
+  ]) {
+    batch.set(financialDb.collection("financialInboxMessages").doc(id), {
+      ...base, providerEmailId: `email-${id}`, providerEventId: `event-${id}`, status: "pending_review",
+      subject, from: "Fornecedor NF E2E <nf@example.test>", fromAddress: "nf@example.test", senderDomain: "example.test",
+      receivedAt: now, updatedAt: now, linkedExpenseId: null, paymentRequestId: null,
+      classification: { ...base.classification, documentType: "invoice", financeLikely: true, supplierName: "Fornecedor NF E2E", barcode: null, barcodeMasked: null, links: [] },
+      attachments: [{ id: "nf", filename: `${id}.pdf`, contentType: "application/pdf", size: 32, contentDisposition: "attachment", storagePath: `financial-inbox/coala/${id}/attachments/nf.pdf`, sha256: hash, archiveStatus: "stored", sourceType: "attachment", extractionStatus: "not_attempted", extractedTextStoragePath: null, extractedHints: null }],
+      rawStoragePath: null, rawSha256: null, archiveWarnings: [], searchTerms: [],
+    });
+  }
+  await batch.commit();
+  await mainDb.collection("assets").doc(E2E_INVOICE_DESTINATIONS.assetId).set({ id: E2E_INVOICE_DESTINATIONS.assetId, workspaceId: "coala", code: E2E_INVOICE_DESTINATIONS.assetCode, name: "Máquina NF E2E", category: "Patrimônio", subcategory: "Equipamentos", status: "ativo", currentKioskId: "e2e-kiosk", currentKioskName: "Quiosque E2E", sourceType: "manual", createdAt: now, updatedAt: now });
+}
+
+export async function clearInvoiceDestinationE2EFixtures() {
+  assertFirestoreEmulatorSafety({ projectId: PROJECT_ID });
+  const app = getApps().find((entry) => entry.name === "coala-e2e-seed")
+    ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
+  const financialDb = getFirestore(app, "coala-financeiro");
+  const mainDb = getFirestore(app, "coala");
+  await Promise.all([financialDb.collection("financialInboxMessages").doc(E2E_INVOICE_DESTINATIONS.nonAsset).delete(), financialDb.collection("financialInboxMessages").doc(E2E_INVOICE_DESTINATIONS.asset).delete(), mainDb.collection("assets").doc(E2E_INVOICE_DESTINATIONS.assetId).delete()]);
 }

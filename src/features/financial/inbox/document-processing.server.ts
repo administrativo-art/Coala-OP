@@ -38,7 +38,7 @@ async function processAttachment(
   message: FinancialInboxMessage,
   allowAi: boolean,
 ) {
-  if (attachment.archiveStatus !== "stored" || !attachment.storagePath) {
+  if (attachment.archiveStatus !== "stored" || !attachment.storagePath || attachment.destination?.kind === "non_asset_invoice") {
     return { attachment, text: "", hints: null as FinancialInboxDocumentHints | null };
   }
   const cachedText = await existingExtractedText(attachment);
@@ -67,7 +67,7 @@ async function processAttachment(
       Buffer.from(extraction.text, "utf8"),
       {
         resumable: false,
-        metadata: { contentType: "text/plain; charset=utf-8", cacheControl: "private, no-store" },
+        metadata: { contentType: "text/plain; charset=utf-8", cacheControl: "private, no-store", metadata: { sourceSha256: attachment.sha256 || "" } },
       },
     );
   }
@@ -101,8 +101,8 @@ export async function prepareFinancialInboxDocuments(
   let analyzedDocuments = 0;
   for (let index = 0; index < sourceAttachments.length; index += 1) {
     const attachment = sourceAttachments[index];
-    if (attachment.archiveStatus !== "stored" || !attachment.storagePath) {
-      results.push({ attachment, text: "", hints: attachment.extractedHints ?? null });
+    if (attachment.archiveStatus !== "stored" || !attachment.storagePath || attachment.destination?.kind === "non_asset_invoice") {
+      results.push({ attachment, text: "", hints: attachment.destination?.kind === "non_asset_invoice" ? null : attachment.extractedHints ?? null });
       continue;
     }
     if (analyzedDocuments >= MAX_DOCUMENTS_TO_ANALYZE) {

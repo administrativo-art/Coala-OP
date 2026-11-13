@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { User as FirebaseUser } from "firebase/auth";
 import { Check, Copy } from "lucide-react";
 
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
@@ -13,7 +12,6 @@ import { extractBrazilianPostalCode } from "@/lib/brazilian-postal-code";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
 import type { DPShiftDefinition, DPUnitGroup, DPUnitOrganization } from "@/types";
-import { LocationPolicyControl } from "@/features/dp/rep-p/location-policy-control";
 import {
   COVERAGE_MODE_LABELS,
   STOCK_ROLE_LABELS,
@@ -48,13 +46,9 @@ export function UnitDetailPanel({
   group,
   shifts,
   canManage,
-  canManageTime,
-  firebaseUser,
-  locationParticipants,
   busy,
   onClose,
   onEdit,
-  onAddressSave,
   onRegister,
   onDetachFromGroup,
   onDelete,
@@ -64,13 +58,9 @@ export function UnitDetailPanel({
   group?: DPUnitGroup;
   shifts: DPShiftDefinition[];
   canManage: boolean;
-  canManageTime: boolean;
-  firebaseUser: FirebaseUser | null;
-  locationParticipants: Array<{ id: string; name: string }>;
   busy: boolean;
   onClose: () => void;
   onEdit: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => void;
-  onAddressSave: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>, address: string | undefined) => Promise<void>;
   onRegister: (kioskId?: string) => void;
   onDetachFromGroup: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => void;
   onDelete: (unit: NonNullable<MergedOperationalUnit["dpUnit"]>) => Promise<void>;
@@ -171,7 +161,7 @@ export function UnitDetailPanel({
           </PanelSection>
 
           <PanelSection title="Operação" aside={COVERAGE_MODE_LABELS[coverageMode]}>
-            <PanelField label="Cobertura">
+            <PanelField label="Alerta da escala">
               <span className={coverage.needsConfiguration ? "text-ds-warn" : undefined}>{coverage.text}</span>
             </PanelField>
             <PanelField label={`Turnos vinculados · ${pluralize(shifts.length, "turno", "turnos")}`}>
@@ -190,11 +180,6 @@ export function UnitDetailPanel({
             </PanelField>
           </PanelSection>
 
-          {dpUnit ? <PanelSection title="Registro de ponto">
-            <LocationPolicyControl firebaseUser={firebaseUser} unitId={dpUnit.id} unitName={unit.name}
-              unitAddress={dpUnit.address} canManage={canManageTime} canManageAddress={canManage} participants={locationParticipants}
-              onAddressSave={(address) => onAddressSave(dpUnit, address)} />
-          </PanelSection> : null}
 
           {canManage ? (
             <div className="mt-auto flex flex-col gap-3 border-t border-ds-divider pt-4">

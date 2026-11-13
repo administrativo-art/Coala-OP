@@ -31,8 +31,16 @@ Arquivos enviados apenas como instâncias não entram nesse catálogo: pertencem
 
 AFD e AEJ são exceções `reference` deliberadas: não são modelos editáveis nem documentos gerais da pasta do colaborador, mas exportações fiscais de leiautes oficiais, geradas por estabelecimento/período e preservadas junto da assinatura e da auditoria. Permanecem fora da lista **Geração e publicação**; o fluxo e a retenção estão documentados em [Registro de ponto REP-P](flows/dp-time-recording.md). O comprovante individual e o espelho, por serem documentos pessoais apresentados ao colaborador, continuam registrados no catálogo.
 
+## Identidade na admissão
+
+O catálogo de modelos permanece único; a correção de identidade não cria novos modelos. As saídas admissionais existentes preservam namespace/papéis: hr.candidates somente para candidatura real, hr.onboardingPersons para pessoa natural manual antes da conta e contexto empresarial PJ sem titular humano inventado. UID/RH só são equivalentes por vínculo recíproco explícito. Geração, assinatura, retomada e limites readonly estão no [contrato de rastreabilidade](document-person-traceability.md#admissão-natural-antes-da-conta-e-provisionamento) e nas [trilhas](document-trails.md).
+
 ## Patrimônio
 
 `system-asset-custody-term` é o termo contextual de entrega e responsabilidade criado ao transferir a posse de um patrimônio para colaborador. Usa `coala-letterhead-v2`, protocolo patrimonial `PAT`, assinatura independente do colaborador e do signatário institucional, retenção `employment_plus_5y` e publicação automática somente depois da assinatura. A origem preserva `sourceAssetId` e `sourceCustodyTransferId`; o arquivo assinado segue para **Documentos do colaborador → Uniformes e EPIs → Entregas**. Veja o [fluxo patrimonial](flows/assets.md).
 
 `system-asset-maintenance-order` é a ordem contextual das manutenções preventivas, corretivas e manuais. Usa o timbre `coala-letterhead-v2`, protocolo `MNT`, retenção `asset_lifecycle_plus_5y` e não passa pelo Autentique (`signatureScope: none`). O registro preserva `sourceAssetId` e `sourceMaintenanceOccurrenceId`; o PDF contém componentes enviados e linhas para complemento manual, sem IMEI, telefone ou segredo.
+
+## Documento livre do editor
+
+`system-editor-document` ("Documento livre (editor)", categoria Documentos) registra o documento em branco redigido no editor (`renderer: editor_html`, PDF a partir de HTML). É `contextual` (`sourceModule: documents`): `direct` o listaria no gerador DOCX legado, onde não funciona. As instâncias ficam em `editorDocuments` (não em `generatedDocuments`). No 1º corte é avulso (sem titular), sem assinatura (`signatureScope: none`), com `coala-letterhead-v2`, `variables: []` (campos dinâmicos do catálogo de variáveis) e publicação ao colaborador restrita. A retenção `fiscal_generation_date_pending` é **provisória, pendente de validação jurídica pelo DEV**: `employment_plus_5y` depende do fim do vínculo, inexistente sem titular, e esta política não fixa prazo de descarte. Não declara conformidade. Ver [guia do fluxo](flows/document-generation.md#documento-livre-do-editor-catálogo-e-montagem-05112026).

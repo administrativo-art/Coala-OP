@@ -1,10 +1,16 @@
 # Gerenciador de documentos
 
+Implementado na área publicada em 05/11/2026: o DP autorizado usa `Renomear` e `Mover` sobre metadados próprios da projeção (`archiveName`/`archivePath`), com conferência/auditoria no servidor; o titular comum permanece somente leitura. A ação não altera o artefato canônico. As demais origens continuam oferecendo apenas as capacidades explicitamente documentadas em seus contratos.
+
+Taxonomia visual aprovada em 05/11/2026: a pasta da pessoa evita repetir categoria e subpasta. **Identificação**, **Admissão**, **Benefícios**, **Uniformes e EPIs**, **Treinamentos**, **Desligamento** e **Ocorrências e medidas disciplinares** recebem arquivos diretamente. **Férias** conserva somente `Período aquisitivo → Parcela`. **Fechamento do mês** reúne as projeções canônicas de Jornada/Ponto e Remuneração em `Ano → Mês`. **Afastamentos** usa `Ano → Mês`; o arquivo começa pelo período e termina no tipo. Saúde ocupacional conserva ASOs, exames complementares e outros, mas cada ASO explicita finalidade e data. Perfis de pasta antigos são projetados nessa estrutura sem mover bytes nem reclassificar registros.
+
+Decisão posterior de 02/11/2026: a raiz do Acervo contém Empresa. **12 - Colaboradores** fica dentro de Empresa; nomes de pessoas e suas subpastas continuam sem números. Essa organização reúne arquivos internos sem mudar fonte ou acesso e substitui a árvore Empresa/Colaboradores descrita anteriormente. O portal do titular continua dependente de publicação explícita ou da política já configurada.
+
 O gerenciador pode reproduzir as interações familiares de pastas de um computador sem expor a estrutura física do armazenamento. A árvore exibida é uma camada de organização; mover um item altera metadados de organização e auditoria, não o caminho privado do arquivo no Storage, sua política de acesso, categoria legal, retenção ou histórico de versões.
 
 ## Estrutura do módulo
 
-- **Acervo** tem Empresa e Colaboradores na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Colaboradores e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, árvore, caminho, lista/grade e prévia acoplada; a organização visual não altera permissões, categoria persistida ou Storage.
+- **Acervo** tem Empresa na raiz. Dentro de Empresa, as pastas principais recebem `01 - Nome`, incluindo `12 - Colaboradores`; Financeiro é uma pasta única, incluindo os arquivos institucionais e os acessos à caixa financeira. Modelos também fica em Empresa e conserva categorias internas sem numeração. Pessoas e seus diretórios não recebem prefixos. Entrar em uma pasta conserva barra de ferramentas, caminho em pílula e o modo de visualização escolhido (Painel lateral, Clássico ou Cascata, [decisão 0007](decisoes/0007-modos-do-acervo.md)); a organização visual não altera permissões, categoria persistida ou Storage.
 - **Gerador de documentos** reúne geração por modelos e a biblioteca de criação, edição e publicação já existente. Os links antigos redirecionam ao novo local. Acervo → Empresa → Modelos consulta a mesma biblioteca. Criar do zero com editor timbrado e auxílio de redação por IA é uma evolução descrita no [plano do Gerador](../planos/plano-gerador-documentos.md); não se confunde com o mapeamento por IA já existente.
 - **Fluxos e pendências** é a mesa de trabalho. As abas A classificar, Em preparação, Fluxos e Assinaturas representam dimensões independentes; um mesmo documento pode aparecer em mais de uma aba.
 - **Histórico** apresenta fatos persistidos pelas origens e snapshots atuais claramente identificados. A interface não inventa uma linha do tempo quando a fonte legada não registra eventos.
@@ -13,17 +19,21 @@ Acervo não copia arquivos para uma coleção central. As telas centrais usam re
 
 ## Interações de desktop
 
-- clique simples seleciona um arquivo ou pasta; duplo clique abre;
-- `Ctrl`/`Cmd` adiciona ou remove itens da seleção e `Shift` seleciona um intervalo;
+Atualizado em 05/11/2026 pela [decisão 0007](decisoes/0007-modos-do-acervo.md) (três modos de visualização) e em 06/11/2026 pela [decisão 0008](decisoes/0008-acervo-empresa-e-colaborador.md): abas **Empresa** e **Colaborador**, busca por termos em toda a aba e botões **Gerar documento** e **Criar documento**.
+
+- **Painel lateral** (padrão): clique numa pasta entra nela; clique num arquivo abre o `SidePanel` com prévia, dados e ações. Clique direito e `Shift+F10` abrem o mesmo painel.
+- **Clássico**: clique no nome abre (pasta entra; arquivo abre a prévia ampliada); o botão `⋯` de cada linha e o clique direito abrem o menu com Abrir/Visualizar e as ações permitidas.
+- **Cascata**: clique numa pasta abre a coluna seguinte; clique num arquivo mostra a prévia e as ações na última coluna; duplo clique ou `Enter` amplia a prévia.
 - a movimentação entre pastas ocorre por **Mover para…**, com escolha explícita de destino; arrastar entre pastas não movimenta documentos;
-- botão direito abre um menu contextual com as ações permitidas para o item: Abrir, Visualizar, Baixar, Renomear, Mover, Ver versões e Excluir;
-- `Shift+F10` ou a tecla de menu abre o mesmo menu para navegação por teclado;
-- `Enter` abre, `F2` renomeia quando permitido, `Esc` cancela e as setas percorrem os itens;
-- em telas touch, toque abre e pressão longa mostra o menu contextual; não se exige duplo toque.
+- `Enter` abre, `F2` renomeia quando permitido, `Esc` cancela, as setas percorrem os itens e `Alt+↑` sobe uma pasta;
+- em telas touch, toque abre; não se exige duplo toque.
 
 Toda ação do menu precisa ter equivalente visível e acessível. O menu de contexto é atalho, nunca o único caminho para uma operação.
 
 ## Regras de pasta
+
+- O nome da categoria não se repete como subpasta. Uma subpasta só existe quando acrescenta contexto de processo ou tempo que vários documentos realmente compartilham.
+- Nomes de afastamento usam `DD/MM/AAAA [a DD/MM/AAAA] — Tipo`; ocorrências disciplinares usam `DD/MM/AAAA — Tipo`; ASOs usam `ASO finalidade — DD/MM/AAAA`. “Contrato de experiência” é apresentado no Acervo como “Contrato de trabalho”, sem alterar o tipo canônico nem o download.
 
 - **Documentos da empresa → Sistemas e conformidade → Regularidade do sistema de registro de ponto** reúne artefatos de regularidade técnica do REP-P; comprovantes individuais e espelhos de jornada pertencem a fluxos próprios. A existência de um arquivo nessa pasta não certifica conformidade legal.
 
@@ -36,11 +46,12 @@ Toda ação do menu precisa ter equivalente visível e acessível. O menu de con
 
 ## Comportamento visual
 
-- Barra de busca atua na pasta atual; o caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
-- A prévia permanece acoplada ao explorador no desktop, com largura estável para não deslocar os alvos entre os cliques; no celular fica abaixo da lista. Esta composição de arquivos usa o comportamento de seleção/abertura deste guia, em vez da abertura imediata de SidePanel/LiftRow das listas administrativas.
+- A barra de busca procura em toda a aba (Empresa ou a pessoa aberta), por termos, enquanto se digita; cada resultado mostra onde está. O caminho é clicável em cada nível. Título/nome começa em A–Z e alterna para Z–A pelo cabeçalho ou seletor, em lista e grade.
+- No modo Painel lateral a prévia abre no `SidePanel`, como nas listas administrativas; no Clássico, em prévia ampliada; na Cascata, na última coluna. O caminho em pílula é a forma de voltar a qualquer pasta anterior; não há botões Voltar/Pasta acima nem árvore lateral.
+- A prévia no painel, na Cascata e no celular é desenhada pelo PDF.js. A prévia ampliada, no computador, usa o visualizador de PDF do próprio navegador (zoom, busca, impressão e todas as páginas); em aparelho de toque ou sem visualizador nativo, continua o PDF.js.
 - Modelos reutiliza a biblioteca de geração/publicação existente; não cria outro catálogo. PDF é renderizado no navegador a partir do binário já autorizado, com troca de páginas; ações preservam os serviços e as permissões da origem.
 
-- pastas aceitam grade ou lista e mostram quantidade de documentos;
+- pastas aparecem nos três modos de visualização; na aba Colaborador, quem gerencia vê todas as pastas padrão com a quantidade de documentos (vazias apagadas) e a marca Publicado nos documentos que a pessoa vê no portal;
 - o arraste de arquivo externo para a área de upload segue as validações do formulário; a navegação entre pastas não interpreta arraste como movimentação;
 - o breadcrumb representa a pasta virtual atual e aceita navegação;
 - ações destrutivas usam `InlineConfirm`; o menu nunca executa exclusão imediatamente;

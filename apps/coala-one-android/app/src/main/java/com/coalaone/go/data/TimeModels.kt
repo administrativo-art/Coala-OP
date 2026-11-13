@@ -101,10 +101,13 @@ import kotlinx.serialization.Serializable
 @Serializable data class TimeBankCycle(val start: String, val end: String, val index: Int)
 @Serializable data class TimeBankLineValue(val nature: String, val minutes: Int, val reason: String, val categoryId: String? = null, val ratePercent: Double? = null)
 @Serializable data class TimeBankStatementLine(val date: String, val competence: String, val closureVersion: Int, val line: TimeBankLineValue)
+/** Base do dia no banco de horas: jornada contratual (referência) e escala; "considerado" é o que o cálculo contou como trabalhado. */
+@Serializable data class TimeBankDayBase(val date: String, val referenceMinutes: Int? = null, val plannedMinutes: Int? = null,
+    val workedMinutes: Int = 0, val consideredMinutes: Int? = null)
 @Serializable data class TimeBankLimits(val positiveExceeded: Boolean = false, val negativeExceeded: Boolean = false, val negativeNotAllowed: Boolean = false)
 @Serializable data class TimeBankStatement(val cycle: TimeBankCycle? = null, val openingMinutes: Int = 0, val balanceMinutes: Int = 0,
     val credit: Int = 0, val debit: Int = 0, val payroll: Int = 0, val discount: Int = 0, val review: Int = 0, val nightMinutes: Int = 0,
-    val lines: List<TimeBankStatementLine> = emptyList(), val missing: List<String> = emptyList(), val ended: Boolean = false,
+    val lines: List<TimeBankStatementLine> = emptyList(), val dayBases: List<TimeBankDayBase> = emptyList(), val missing: List<String> = emptyList(), val ended: Boolean = false,
     val settlementOutdated: Boolean = false, val limits: TimeBankLimits = TimeBankLimits())
 @Serializable data class TimeBankResponse(val policy: TimeBankPolicy? = null, val statement: TimeBankStatement? = null, val previewCompetences: List<String> = emptyList())
 

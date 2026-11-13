@@ -19,7 +19,7 @@ import {
 import { isWorkShift } from '@/lib/dp-shift-rules';
 import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
 import { resolveBizneoShiftId } from '@/lib/dp-shift-bizneo';
-import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
+import { activeOperationalUnits, canonicalOperationalUnitId, operationalUnitsExistingInPeriod } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
 import { filterUnitsByAccess } from '@/lib/unit-access';
 import { resolveDPUnitCity } from '@/lib/dp-unit-city';
@@ -58,8 +58,6 @@ import {
 import { AlertTriangle, ChevronRight, Download, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
-import { DPSchedulesSidebar, type DPSchedulesSidebarGroup } from '@/components/dp/dp-schedules-sidebar';
-import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
 import { useDPSchedulesShifts } from '@/hooks/use-dp-schedules-shifts';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -756,7 +754,6 @@ export function DPSchedulesList() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [unitQuery, setUnitQuery] = useState('');
 
   const accessibleUnits = React.useMemo(
     () => (user ? filterUnitsByAccess(activeOperationalUnits(units), user, { isDefaultAdmin }) : []),
@@ -815,88 +812,35 @@ export function DPSchedulesList() {
     return { states: states.size, cities: cities.size };
   }, [accessibleUnits, canonicalOf, locationByUnit]);
 
-  const sidebarSchedules = React.useMemo(() => visibleSchedules.filter((schedule) => (
-    schedule.year === currentYear && schedule.month === currentMonth
-  )), [currentMonth, currentYear, visibleSchedules]);
-  const filledDaysByScheduleId = useDPScheduleFilledDays(sidebarSchedules);
-
-  const sidebarGroups = React.useMemo<DPSchedulesSidebarGroup[]>(() => {
-    const scheduleByCanonicalUnit = new Map<string, DPSchedule>();
-    sidebarSchedules.forEach((schedule) => {
-      if (!schedule.unitId) return;
-      const canonicalId = canonicalOf(schedule.unitId);
-      if (!scheduleByCanonicalUnit.has(canonicalId)) scheduleByCanonicalUnit.set(canonicalId, schedule);
-    });
-
-    const queryValue = normalizeLocationLabel(unitQuery.trim());
-    const byState = new Map<string, Map<string, DPUnit[]>>();
-    accessibleUnits.forEach((unit) => {
-      const location = locationByUnit.get(canonicalOf(unit.id));
-      const city = location?.city || 'Sem cidade definida';
-      const stateValue = location?.state?.trim() || 'Sem estado definido';
-      if (queryValue && ![unit.name, city, stateValue].some((value) => (
-        normalizeLocationLabel(value).includes(queryValue)
-      ))) return;
-      if (!byState.has(stateValue)) byState.set(stateValue, new Map());
-      const byCity = byState.get(stateValue)!;
-      if (!byCity.has(city)) byCity.set(city, []);
-      byCity.get(city)!.push(unit);
-    });
-
-    return Array.from(byState.entries())
-      .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
-      .map(([state, byCity]) => {
-        const stateCode = stateCodeOf(state);
-        const cities = Array.from(byCity.entries())
-          .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
-          .map(([city, cityUnits]) => ({
-            city,
-            units: cityUnits
-              .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-              .map((unit) => {
-                const schedule = scheduleByCanonicalUnit.get(canonicalOf(unit.id));
-                const period = formatDPSchedulePeriod(currentYear, currentMonth);
-                return {
-                  key: unit.id,
-                  name: unit.name,
-                  draft: schedule ? schedulePublicationStatus(schedule) === 'draft' : false,
-                  filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
-                  expectedDays: countExpectedDPUnitDays({ unit, year: currentYear, month: currentMonth, shiftDefinitions }),
-                  onClick: () => router.push(
-                    `/dashboard/dp/schedules/month/${period}${schedule ? `?schedule=${schedule.id}` : '?create=1'}`,
-                  ),
-                };
-              }),
-          }));
-        return {
-          state: BRAZILIAN_STATE_NAMES[stateCode] ?? state,
-          stateCode,
-          unitCount: cities.reduce((sum, city) => sum + city.units.length, 0),
-          cities,
-        };
-      });
-  }, [accessibleUnits, canonicalOf, currentMonth, currentYear, filledDaysByScheduleId, locationByUnit, router, shiftDefinitions, sidebarSchedules, unitQuery]);
-
   const summarize = React.useCallback((year: number, month: number) => {
     const items = visibleSchedules.filter((s) => s.year === year && s.month === month);
     const hasData = items.length > 0;
     const hasDraft = items.some((s) => schedulePublicationStatus(s) === 'draft');
     const legacyAllUnits = items.some((s) => !s.unitId);
+    const legacyPublished = items.some((s) => !s.unitId && hasPublishedScheduleVersion(s));
     const startedCanonical = new Set(items.filter((s) => s.unitId).map((s) => canonicalOf(s.unitId!)));
+    // Só contam as unidades que já existiam no mês (ou que já têm escala nele).
+    const expectedUnits = operationalUnitsExistingInPeriod(accessibleUnits, units, year, month)
+      .concat(accessibleUnits.filter((u) => startedCanonical.has(canonicalOf(u.id))))
+      .filter((u, index, list) => list.findIndex((other) => other.id === u.id) === index);
+    const expectedCount = expectedUnits.length;
+    const publishedCanonical = new Set(items.filter((s) => s.unitId && hasPublishedScheduleVersion(s)).map((s) => canonicalOf(s.unitId!)));
+    const publishedCount = legacyPublished ? expectedCount : expectedUnits.filter((u) => publishedCanonical.has(canonicalOf(u.id))).length;
+    const allPublished = expectedCount > 0 && publishedCount === expectedCount;
     const startedCount = !hasData
       ? 0
       : legacyAllUnits
-        ? totalUnits
-        : accessibleUnits.filter((u) => startedCanonical.has(canonicalOf(u.id))).length;
+        ? expectedCount
+        : expectedUnits.filter((u) => startedCanonical.has(canonicalOf(u.id))).length;
     const shiftCount = items.reduce((sum, s) => sum + (s.shiftCount ?? 0), 0);
     const isCurrent = year === currentYear && month === currentMonth;
-    const missing = Math.max(0, totalUnits - startedCount);
+    const missing = Math.max(0, expectedCount - startedCount);
     const tone: 'active' | 'draft' | 'empty' = !hasData
       ? 'empty'
-      : hasDraft ? 'draft' : 'active';
+      : allPublished ? 'active' : 'draft';
     const statusLabel = !hasData
       ? 'Não iniciada'
-      : hasDraft ? 'Rascunho' : 'Publicada';
+      : allPublished ? 'Publicada' : publishedCount > 0 ? 'Publicação parcial' : 'Rascunho';
     const alert = isCurrent && missing > 0
         ? `${missing} sem escala`
         : null;
@@ -904,15 +848,17 @@ export function DPSchedulesList() {
       period: formatDPSchedulePeriod(year, month),
       month,
       hasData,
+      hasDraft,
       startedCount,
+      expectedCount,
       missing,
       shiftCount,
       tone,
       statusLabel,
       alert,
-      pct: totalUnits ? Math.round((startedCount / totalUnits) * 100) : 0,
+      pct: expectedCount ? Math.round((startedCount / expectedCount) * 100) : 0,
     };
-  }, [accessibleUnits, canonicalOf, currentMonth, currentYear, totalUnits, visibleSchedules]);
+  }, [accessibleUnits, canonicalOf, currentMonth, currentYear, units, visibleSchedules]);
 
   const years = React.useMemo(() => {
     const set = new Set<number>([currentYear]);
@@ -951,7 +897,6 @@ export function DPSchedulesList() {
     () => Array.from({ length: 12 }, (_, i) => ({ name: MONTHS[i], ...summarize(effectiveYear, i + 1) })),
     [effectiveYear, summarize],
   );
-  const sidebarSummary = summarize(currentYear, currentMonth);
 
   const attention = React.useMemo(() => {
     const out: Array<{ key: string; title: string; detail: string; tone: 'err' | 'warn'; period: string }> = [];
@@ -969,11 +914,11 @@ export function DPSchedulesList() {
       for (let offset = 1; offset <= 3; offset += 1) {
         const d = new Date(currentYear, currentMonth - 1 - offset, 1);
         const s = summarize(d.getFullYear(), d.getMonth() + 1);
-        if (s.hasData && s.statusLabel === 'Rascunho') {
+        if (s.hasDraft) {
           out.push({
             key: `open-${s.period}`,
             title: `${MONTHS[d.getMonth()]} tem alterações por publicar`,
-            detail: `${s.startedCount} de ${totalUnits} unidades · mês encerrado`,
+            detail: `${s.startedCount} de ${s.expectedCount} unidades · mês encerrado`,
             tone: 'err',
             period: s.period,
           });
@@ -1015,18 +960,9 @@ export function DPSchedulesList() {
 
   return (
     <div
-      className="dp-schedules-redesign flex flex-col gap-[6px] bg-[#eef1f6] lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
+      className="dp-schedules-redesign flex flex-col bg-[#eef1f6] lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px]"
       style={{ fontFamily: "'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif" }}
     >
-      <DPSchedulesSidebar
-        groups={sidebarGroups}
-        query={unitQuery}
-        onQueryChange={setUnitQuery}
-        onBack={() => router.push('/dashboard/dp/schedules')}
-        startedCount={sidebarSummary.startedCount}
-        totalCount={totalUnits}
-        emptyLabel={unitQuery ? 'Nenhuma unidade encontrada.' : 'Nenhuma unidade disponível.'}
-      />
 
       <div className="no-scrollbar min-w-0 flex-1 overflow-y-auto bg-[#eef1f6]">
       <div className="mx-auto max-w-[1180px] px-[18px] pb-11 pt-7 md:px-[34px] md:pt-[34px]">
@@ -1136,7 +1072,7 @@ export function DPSchedulesList() {
               </div>
               <div className="mt-[9px] flex items-baseline gap-1.5 whitespace-nowrap">
                 <span className={cn('text-[12.5px] font-extrabold tabular-nums', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#334155]')}>
-                  {card.hasData ? `${card.startedCount} de ${totalUnits}` : `0 de ${totalUnits}`}
+                  {`${card.startedCount} de ${card.expectedCount}`}
                 </span>
                 <span className="text-[11.5px] font-bold text-[#a3aec0]">unidades</span>
                 {card.alert && (

@@ -58,6 +58,10 @@ export interface CreatePurchasePayload {
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
+  serviceFee?: number;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
   trackingInfo?: string;
   notes?: string;
   items: Array<{
@@ -107,6 +111,10 @@ export type OrderEdits = {
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
+  serviceFee?: number;
+  serviceFeeAccountPlanId?: string;
+  serviceFeeAccountPlanName?: string;
+  serviceFeePaymentMode?: PurchaseFreightPaymentMode;
   trackingInfo?: string;
   notes?: string;
   items?: Array<{

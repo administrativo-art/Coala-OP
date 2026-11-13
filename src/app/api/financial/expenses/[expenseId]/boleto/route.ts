@@ -16,6 +16,8 @@ import { AppError } from "@/lib/observability";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { confirmedInboxBoleto } from "@/features/financial/inbox/invoice-destination";
+import { getFinancialInboxMessage } from "@/features/financial/inbox/repository.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -142,12 +144,23 @@ export const GET = secureRoute({ contract: downloadContract, enforcer: downloadE
   const stored = await financialDbAdmin.collection("expenseBoletoAttachments")
     .doc(expenseBoletoAttachmentId(resource.expenseId, input.installmentNumber)).get();
   const attachment = stored.data();
-  if (attachment?.workspaceId !== actor.workspace_id || !attachment?.sha256 || !/^[a-f0-9]{64}$/.test(attachment.sha256)) {
-    throw new AppError({ code: "BOLETO_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Boleto não encontrado." });
+  let path: string | null = null;
+  if (attachment?.workspaceId === actor.workspace_id && attachment?.sha256 && /^[a-f0-9]{64}$/.test(attachment.sha256)) {
+    const versionedPath = `financial/expense-boletos/${actor.workspace_id}/${resource.expenseId}/${input.installmentNumber ?? "single"}/${attachment.sha256}.pdf`;
+    const legacyPath = `financial/expense-boletos/${actor.workspace_id}/${resource.expenseId}/${attachment.sha256}.pdf`;
+    path = input.installmentNumber == null && attachment.storagePath === legacyPath ? legacyPath : versionedPath;
+  } else {
+    const expense = await financialDbAdmin.collection("expenses").doc(resource.expenseId).get();
+    const installments = Array.isArray(expense.get("installments")) ? expense.get("installments") as Array<Record<string, unknown>> : [];
+    const installment = input.installmentNumber == null ? null : installments.find((item) => Number(item.number) === input.installmentNumber);
+    const messageId = input.installmentNumber == null ? expense.get("financialInboxMessageId") : installment?.financialInboxMessageId;
+    if (typeof messageId === "string" && /^[a-zA-Z0-9_-]{1,256}$/.test(messageId)) {
+      const message = await getFinancialInboxMessage(messageId);
+      const boleto = confirmedInboxBoleto(message, actor.workspace_id, resource.expenseId, input.installmentNumber);
+      path = boleto?.storagePath ?? null;
+    }
   }
-  const versionedPath = `financial/expense-boletos/${actor.workspace_id}/${resource.expenseId}/${input.installmentNumber ?? "single"}/${attachment.sha256}.pdf`;
-  const legacyPath = `financial/expense-boletos/${actor.workspace_id}/${resource.expenseId}/${attachment.sha256}.pdf`;
-  const path = input.installmentNumber == null && attachment.storagePath === legacyPath ? legacyPath : versionedPath;
+  if (!path) throw new AppError({ code: "BOLETO_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Boleto não encontrado." });
   const [bytes] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(path).download();
   return new NextResponse(new Uint8Array(bytes), {
     headers: {

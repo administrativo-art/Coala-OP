@@ -13,6 +13,14 @@ test("catálogo de configurações lista todo modelo gerável e exclui somente r
   assert.ok(generated.every((template) => template.version > 0 && Boolean(template.retentionPolicyId)));
 });
 
+test("documento livre do editor aparece em Geração e publicação sem lista paralela", () => {
+  const generated = SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.generationMode !== "reference");
+  const editor = generated.find((template) => template.id === "system-editor-document");
+  assert.ok(editor);
+  assert.equal(editor.name, "Documento livre (editor)");
+  assert.equal(editor.signatureScope, "none");
+});
+
 test("Configurações mantém políticas e encaminha a biblioteca única de modelos ao Gerador", async () => {
   const [settingsSource, catalogSource, templatesSource, templateDetailSource, settingsDetailRoute, sidebarSource, instructions, registryGuide, harness, librarySource, editorSource] = await Promise.all([
     readFile(path.join(process.cwd(), "src/app/dashboard/settings/page.tsx"), "utf8"),

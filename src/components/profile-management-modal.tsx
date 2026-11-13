@@ -922,6 +922,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                     {renderPermissionSwitch("permissions.financial.inbox.analyze" as any, "Analisar provisionamentos", "Permite procurar e atualizar sugestões de vínculo com provisionamentos.", !financialInboxViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.inbox.link" as any, "Vincular cobranças", "Permite vincular cobranças a despesas e provisionamentos; também exige as permissões de criar e editar despesas.", !financialInboxViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.inbox.discard" as any, "Descartar cobranças", "Permite retirar da fila uma cobrança ainda não vinculada, preservando a auditoria.", !financialInboxViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.inbox.deleteFiles" as any, "Excluir arquivos fiscais recebidos", "Permite excluir arquivo de NF confirmado sem patrimônio após verificação de referências e recuperação temporária. Não inclui excluir cobranças nem e-mails inteiros.", !financialInboxViewWatch, true)}
                                   </div>
                                 </div>
 

@@ -1,9 +1,9 @@
 # Especificação técnica do georreferenciamento no registro de ponto
 
-- **Estado:** captura pontual e complemento Entre unidades implementados; gate global autorizado em 30/10/2026, com todos os turnos atuais em `disabled`; primeiro turno real ainda depende da configuração nominal e homologação física.
+- **Estado:** captura pontual e complemento Entre unidades implementados; todos os turnos atuais permanecem em `disabled`. Em 06/11/2026 foi preparado o desenho em que o turno seleciona a modalidade e a unidade fornece somente a área, mas a ampliação além do piloto nominal continua bloqueada até decisão jurídica registrada.
 - **Escopo:** Coala One web e Coala Go, com a mesma avaliação no servidor.
 - **Fluxo relacionado:** [Registro de ponto REP-P](flows/dp-time-recording.md).
-- **Última revisão técnica:** 30/10/2026.
+- **Última revisão técnica:** 06/11/2026.
 
 ## Decisões aprovadas em 22/10/2026
 
@@ -18,9 +18,15 @@
 
 A implementação adotou as coleções `repP_locationPolicies` e `repP_locationEvidence` no banco dedicado `coala-rep-p`. Os modelos mais detalhados descritos abaixo registram a proposta original; quando divergirem, prevalecem estas decisões e o contrato implementado nos arquivos listados ao fim.
 
+## Decisão de produto preparada em 06/11/2026 — rollout jurídico pendente
+
+O programador decidiu retirar a seleção manual de participantes: quando o rollout for liberado, toda pessoa cujo turno da data tenha `locationTrackingPolicy=punch_only|workday` será elegível. A unidade não liga a coleta; ela fornece centro, raio e parâmetros físicos. O campo `participantUserIds` permanece apenas para leitura de documentos legados e não deve ser apresentado como controle futuro.
+
+Esta decisão de produto ainda não autoriza coleta ampliada. O servidor exige uma `legalBasisReference` real e retenção aprovada; área sem essa referência é tratada como coleta inativa. Não existe valor padrão “Aditivo LGPD v6”, e ciência/aditivo do empregado não substitui a definição da base legal. Antes de habilitar qualquer turno para além do piloto já comunicado, o controlador deve registrar base legal por modalidade, necessidade/proporcionalidade, RIPD, comunicação aos atuais e justificativa da retenção. O modo `workday` precisa de decisão separada por ser mais invasivo que a captura pontual.
+
 ## Complemento Entre unidades — implementado, desativado e arquivado
 
-A decisão de 22/10 continua valendo para a coleta pontual. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. Em 30/10 a implantação foi retomada com opt-in estrito: o backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, política nominal da unidade e uma lease curta renovada a cada 20 minutos. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`. Todos os turnos atuais permanecem `disabled`; ligar o gate não ativa nenhum deles.
+A decisão de 22/10 continua valendo para a coleta pontual até a liberação jurídica da decisão de 06/11. Em 23/10 foi implementado um segundo modo, `workday`, exclusivamente para turnos cujo local de execução é **Entre unidades**. Em 24/10 o programador confirmou que a regra permanece configurada no próprio turno, sem automatismo adicional por cargo. Em 30/10 a implantação foi retomada com opt-in estrito: o backend exige `DP_JOURNEY_LOCATION_ENABLED=true`, política da unidade com referência jurídica válida e uma lease curta renovada a cada 20 minutos. O acompanhamento só é elegível quando o turno combina `executionUnitPolicy=free` com `locationTrackingPolicy=workday`. Todos os turnos atuais permanecem `disabled`; ligar o gate não ativa nenhum deles.
 
 O acompanhamento pertence à pessoa autenticada e à política copiada para a jornada. Pode funcionar em aparelho pessoal ou empresarial. A aprovação de aparelho empresarial é somente uma classificação administrativa adicional: não inicia, bloqueia nem prolonga rastreio. Logout ou troca de usuário encerram a sessão anterior e a nova pessoa passa a seguir exclusivamente a própria jornada.
 
@@ -28,7 +34,7 @@ No Android, o serviço foreground só liga os sensores depois de obter a lease. 
 
 ### Ciclo da lease da jornada
 
-1. O serviço solicita uma lease somente depois do início da jornada. O servidor relê o turno, a janela escalada, a política nominal, o UID, a data, a unidade e o gate global.
+1. O serviço solicita uma lease somente depois do início da jornada. O servidor relê o turno, a janela escalada, a política válida, o UID, a data, a unidade e o gate global.
 2. A lease vale 20 minutos. O token aleatório permanece apenas em memória no Android; o servidor guarda somente seu hash, vinculado a UID, sessão, data e unidade.
 3. Antes de cada lote, o app renova a lease quando restarem menos de 90 segundos. Falha transitória de rede mantém o serviço aguardando e tenta novamente; recusa de política, turno, unidade, expiração ou kill switch encerra sensores e descarta a fila daquela sessão.
 4. O servidor limita a sessão a 500 eventos, ignora amostra redundante com menos de 30 segundos e recusa lote que misture unidades. Pausa, retomada e fim continuam ordenados pela máquina de estados.
@@ -42,9 +48,11 @@ O servidor é a autoridade da sessão: exige fuso brasileiro explícito na unida
 
 O programador confirmou em 30/10/2026 que a autorização geral de LGPD já existe e autorizou o gate global. Frequência, retenção, acesso restrito, auditoria, descarte e contestação permanecem documentados e sujeitos à governança interna. Como todos os turnos atuais continuam em `disabled`, nenhuma coleta periódica real inicia até uma configuração nominal futura e sua homologação física.
 
-## Área da unidade separada da coleta (29/10/2026)
+## Área da unidade separada da coleta (atualizada em 06/11/2026)
 
-Decisão do programador: toda unidade cadastrada deve ter a sua área, independentemente de a coleta estar ligada. Em **Unidades › unidade › Localização da unidade** o modal tem duas partes: **Onde fica a unidade** (latitude, longitude e raio; aceita colar o endereço completo de um lugar do Google Maps ou as coordenadas, usando o pino do lugar e não o centro da tela; o link curto precisa ser aberto antes) e **Coleta no registro de ponto** (modo, precisão, aviso, base jurídica, participantes e confirmação). Com a coleta **Desligada**, a área é salva sozinha, sem campos de privacidade, e nenhuma posição é pedida. O armazenamento continua em `repP_locationPolicies` no banco do REP-P (a política é lida na mesma transação da marcação); `dp_units` segue sem coordenadas.
+Decisão do programador: toda unidade cadastrada pode ter a sua área, independentemente de a coleta estar liberada. Em **Unidades › Editar unidade › Identificação › Localização da unidade**, a busca é o campo de localização: nasce com o endereço oficial já cadastrado, localiza esse valor no mapa e é atualizada ao escolher outro lugar, clicar no mapa ou arrastar o pino. O endereço da ficha em **Identificação** deriva dessa escolha; o campo livre sai da edição da unidade. O cadastro inicial conserva endereço textual até existir ID da unidade, e o editor abre após a criação. Perfis que administram unidades mas não têm `dp.settings.manageTime` veem o endereço sem edição, para não separar endereço oficial e centro da área. Salvar localização é uma ação imediata e separada do salvamento dos demais dados da unidade; a interface informa que cancelar o editor não a desfaz. Complemento, raio e tolerâncias pertencem ao mesmo formulário. Como o endereço vive em `dp_units` no banco principal e a área em `repP_locationPolicies` no banco REP-P, não há transação entre os bancos: se o endereço for salvo e a área falhar, a interface informa o estado parcial e permite repetir com segurança.
+
+O editor de localização não escolhe participantes nem modalidade. O turno da data decide `disabled|punch_only|workday`; a unidade fornece somente a área. Salvar a área não basta para coletar: enquanto não houver `legalBasisReference` aprovada, o servidor devolve política inativa ao coletor. O campo legado `mode=observe` significa “área disponível” e não é um segundo interruptor apresentado ao usuário.
 
 Depois de a batida ser aceita, a classificação nominal compara a leitura com as áreas do workspace em páginas de 50 políticas e grava o nome da área que contém a posição. Essa derivação é best effort: falha ou 500 áreas ou mais preserva a evidência original sem nome e nunca afeta a batida. Para `U` áreas e `P` batidas capturadas, o custo adicional máximo normal é aproximadamente `U × P` leituras de política, mais uma leitura da unidade quando houver correspondência. Antes de ampliar muito o número de unidades, substituir a varredura por um diretório espacial versionado.
 
@@ -67,7 +75,7 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 - política lida na transação da marcação no `coala-rep-p`; a evidência acessória é persistida depois do commit sem alterar ou bloquear a batida;
 - replay idempotente da mesma tentativa sem recapturar a posição;
 - classificação conservadora que considera a precisão informada pelo aparelho;
-- lista nominal de participantes do piloto dentro da política da unidade;
+- compatibilidade de leitura com a lista nominal legada, sem usá-la como regra futura de elegibilidade;
 - coleta equivalente no Android, sem permissão de localização em segundo plano;
 - TTL de cinco anos para a evidência completa;
 - feature flag global e ativação explícita por unidade.
@@ -95,7 +103,7 @@ A evidência geográfica será persistida fora da ARP fiscal. Ela não integrar�
 7. Alterações de política não reinterpretam automaticamente evidências antigas. Cada evidência guarda a revisão aplicada.
 8. Um cliente anterior ao novo contrato continua conseguindo marcar. O servidor registra `unavailable` quando uma política ativa esperava uma tentativa de captura.
 9. Coordenadas exatas não aparecem em listas, logs, métricas ou mensagens. Elas são carregadas somente no detalhe autorizado.
-10. A ativação em pessoas reais depende do aviso/cláusula, lista nominal do piloto, parâmetros da unidade e gates jurídicos documentados.
+10. A ativação em pessoas reais depende do turno habilitado, parâmetros da unidade, referência jurídica válida e gates de comunicação/RIPD documentados; a expansão além do piloto permanece bloqueada até essa decisão.
 11. Uma política ausente ou corrompida desliga apenas a coleta; nunca derruba a batida.
 12. O resultado aparece somente no detalhe do dia e apenas quando a própria evidência registra que o gate do turno estava em `punch_only|workday` no instante da batida. Evidência legada sem essa prova permanece oculta; editar hoje a definição do turno não muda dias passados.
 13. Turnos atuais e legados sem valor explícito resolvem `locationTrackingPolicy=disabled`. A política da unidade não é suficiente para iniciar coleta; o servidor exige também `punch_only` no turno da data. A permissão Android pode permanecer concedida ao Coala Go sem que isso autorize uma leitura fora dessas condições.
@@ -134,7 +142,7 @@ As políticas e as evidências ficam no `coala-rep-p`, que recebe a transação 
 
 ## Modelo de política
 
-O desenho inicial abaixo é histórico. A implementação consolidou cabeçalho e estado atual em `repP_locationPolicies/{hash(workspaceId, unitId)}` e grava cada versão nas subcoleções `revisions` e `audit`. O contrato executável está em `location-policy.server.ts`: uma área circular, modos `disabled|observe`, lista nominal de até 20 participantes, referência jurídica e retenção fixa de 1.825 dias. O campo legado `privacyNoticeUrl` continua aceito como nulo por compatibilidade, mas não é exibido nem exigido: a seção 3-A do termo LGPD v5 é a fonte documental única.
+O desenho inicial abaixo é histórico. A implementação consolidou cabeçalho e estado atual em `repP_locationPolicies/{hash(workspaceId, unitId)}` e grava cada versão nas subcoleções `revisions` e `audit`. O contrato executável está em `location-policy.server.ts`: uma área circular, modos legados `disabled|observe`, referência jurídica e retenção fixa de 1.825 dias. `participantUserIds` e `privacyNoticeUrl` continuam aceitos por compatibilidade, mas não decidem a elegibilidade futura. Área sem referência jurídica válida não é exposta ao coletor.
 
 ### Cabeçalho ativo — proposta histórica substituída
 

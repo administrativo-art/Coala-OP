@@ -28,7 +28,7 @@ export async function createAndStoreConfirmedPaymentProof(request: BankPaymentRe
   const rows = [
     ["Favorecido", request.beneficiarySnapshot?.name ?? "Cobrança por código de barras"],
     ["CPF/CNPJ", request.beneficiarySnapshot?.document ?? "—"],
-    ["Destino", request.beneficiarySnapshot?.maskedPaymentDestination ?? request.barcodeSnapshot?.maskedCode ?? "—"],
+    ["Destino", request.beneficiarySnapshot?.maskedPaymentDestination ?? request.barcodeSnapshot?.maskedCode ?? (request.pixCopyPasteSnapshot ? `Pix copia e cola ${request.pixCopyPasteSnapshot.maskedPayload} · ${request.pixCopyPasteSnapshot.merchantName}` : "—")],
     ["Valor", money(request.amount)],
     ["Descrição", request.description],
     ["Confirmado em", request.paidAt ?? new Date().toISOString()],

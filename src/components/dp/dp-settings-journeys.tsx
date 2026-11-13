@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Input } from '@/components/ui/input';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
@@ -35,11 +36,12 @@ import {
   timeConfigStatusLabel,
   weeklyRestPlacementLabel,
 } from '@/lib/dp-time-config-ui';
-import { defaultExpectedBreakMinutes, formatShiftMinutes, shiftJourneyComparisons } from '@/lib/dp-shift-duration';
+import { defaultExpectedBreakMinutes, formatShiftMinutes } from '@/lib/dp-shift-duration';
 import { activeOperationalUnits } from '@/lib/dp-units';
+import { journeyApplicabilityMatches } from '@/lib/dp-journey-resolution';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
-import type { DPJourney, DPJourneyDay, DPShiftDefinition, DPTimeApplicability } from '@/types';
+import type { DPJourney, DPJourneyDay, DPTimeApplicability } from '@/types';
 
 const ROW_TEMPLATE = 'minmax(220px,1.35fr) 110px 110px minmax(180px,1fr) 140px 16px';
 
@@ -53,6 +55,7 @@ type JourneyForm = {
   flexibleWindowStart: string;
   flexibleWindowEnd: string;
   weeklyRestPlacement: NonNullable<DPJourney['weeklyRest']>['placement'];
+  restDistribution?: 'weekly' | 'monthly_collective';
   scaleValidationMode: NonNullable<DPJourney['scaleValidation']>['mode'];
   expectedBreakMinutes: string;
   useDefinedShiftWhenShorter: boolean;
@@ -73,19 +76,12 @@ type PanelState =
   | { mode: 'edit'; item: DPJourney }
   | { mode: 'create'; supersedes?: DPJourney };
 
-const defaultDays = ['07:20', '07:20', '07:20', '07:20', '07:20', '07:20', '00:00'];
+const defaultDays = ['08:00', '08:00', '08:00', '08:00', '08:00', '00:00', '00:00'];
 
-function shorterShiftComparisons(
-  journey: Pick<DPJourney, 'days' | 'expectedBreakMinutes' | 'allowedShiftDefinitionIds'>,
-  shiftDefinitions: DPShiftDefinition[],
-) {
-  const allowed = new Set(journey.allowedShiftDefinitionIds ?? []);
-  const candidates = allowed.size
-    ? shiftDefinitions.filter((shift) => allowed.has(shift.id))
-    : shiftDefinitions.filter((shift) => shift.isArchived !== true);
-  return candidates.flatMap((shift) => shiftJourneyComparisons(shift, journey)
-    .filter((comparison) => comparison.endsBeforeExpected)
-    .map((comparison) => ({ shift, comparison })));
+function suggestCycleDistribution(form: JourneyForm): JourneyForm {
+  // A sugestão 5×2 só é inequívoca para este conjunto de parâmetros.
+  if (form.weeklyLoad !== '40:00' || form.cycleLengthDays !== '7' || form.maxConsecutiveWorkDays !== '5') return form;
+  return { ...form, dayDurations: ['08:00', '08:00', '08:00', '08:00', '08:00', '00:00', '00:00'] };
 }
 
 const regimeOptions: Array<{
@@ -110,8 +106,8 @@ function formFor(item?: DPJourney): JourneyForm {
   return {
     name: item?.name ?? '',
     description: item?.description ?? '',
-    weeklyLoad: formatDuration(item?.weeklyMinutes ?? 44 * 60),
-    cycleLengthDays: item ? String(item.cycleLengthDays) : '',
+    weeklyLoad: formatDuration(item?.weeklyMinutes ?? 40 * 60),
+    cycleLengthDays: item ? String(item.cycleLengthDays) : '7',
     dayDurations: item
       ? buildJourneyDays(item.cycleLengthDays, item.days).map((day) => formatDuration(day.plannedMinutes))
       : defaultDays,
@@ -119,11 +115,12 @@ function formFor(item?: DPJourney): JourneyForm {
     flexibleWindowStart: item?.regime?.mode === 'flexible' ? item.regime.windowStart ?? '' : '',
     flexibleWindowEnd: item?.regime?.mode === 'flexible' ? item.regime.windowEnd ?? '' : '',
     weeklyRestPlacement: item?.weeklyRest?.placement ?? 'fixed_cycle',
+    restDistribution: item ? item.weeklyRest?.distribution : 'weekly',
     scaleValidationMode: item?.scaleValidation?.mode ?? 'consecutive_days',
     expectedBreakMinutes: String(item?.expectedBreakMinutes ?? defaultExpectedBreakMinutes(firstWorkdayMinutes)),
     useDefinedShiftWhenShorter: item ? item.useDefinedShiftWhenShorter ?? true : false,
     toleranceMinutes: item ? item.toleranceMinutes === undefined ? '' : String(item.toleranceMinutes) : '5',
-    maxConsecutiveWorkDays: String(item?.weeklyRest?.maxConsecutiveWorkDays ?? 6),
+    maxConsecutiveWorkDays: String(item?.weeklyRest?.maxConsecutiveWorkDays ?? 5),
     sundayCadenceWeeks: item?.weeklyRest?.sundayCadenceWeeks ? String(item.weeklyRest.sundayCadenceWeeks) : '',
     allowedShiftDefinitionIds: item?.allowedShiftDefinitionIds ?? [],
     applicability: item?.applicability ?? { scope: { kind: 'company' } },
@@ -136,6 +133,85 @@ function statusVariant(status: DPJourney['status']) {
   if (status === 'published') return 'ok' as const;
   if (status === 'archived') return 'neutral' as const;
   return 'warn' as const;
+}
+
+function ApplicabilityDetails({
+  journey,
+  label,
+  roles,
+  functions,
+  people,
+  units,
+  unitGroups,
+}: {
+  journey: DPJourney;
+  label: string;
+  roles: Array<{ id: string; name: string }>;
+  functions: Array<{ id: string; name: string }>;
+  people: Array<{ id: string; username: string; jobRoleId?: string; jobFunctionIds?: string[]; unitId?: string; unitIds?: string[] }>;
+  units: Array<{ id: string; groupId?: string; organizationId?: string }>;
+  unitGroups: Array<{ id: string; organizationId?: string }>;
+}) {
+  const roleNames = (journey.applicability.jobRoleIds ?? []).map((id) => roles.find((role) => role.id === id)?.name ?? id);
+  const functionNames = (journey.applicability.jobFunctionIds ?? []).map((id) => functions.find((entry) => entry.id === id)?.name ?? id);
+  const explicitPeople = (journey.applicability.collaboratorIds ?? []).map((id) => people.find((person) => person.id === id)?.username ?? id);
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
+  const groupById = new Map(unitGroups.map((group) => [group.id, group]));
+  const affectedPeople = people.filter((person) => {
+    const unitIds = [...new Set([person.unitId, ...(person.unitIds ?? [])].filter((id): id is string => Boolean(id)))];
+    const groupIds = [...new Set(unitIds.map((id) => unitById.get(id)?.groupId).filter((id): id is string => Boolean(id)))];
+    const organizationIds = [...new Set([
+      ...unitIds.map((id) => unitById.get(id)?.organizationId),
+      ...groupIds.map((id) => groupById.get(id)?.organizationId),
+    ].filter((id): id is string => Boolean(id)))];
+    return journeyApplicabilityMatches(journey.applicability, {
+      collaboratorId: person.id,
+      jobRoleId: person.jobRoleId,
+      jobFunctionIds: person.jobFunctionIds,
+      unitId: person.unitId,
+      unitIds,
+      unitGroupIds: groupIds,
+      unitOrganizationIds: organizationIds,
+    });
+  });
+  const DetailList = ({ title, values, fallback }: { title: string; values: string[]; fallback: string }) => (
+    <div>
+      <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-ds-ink-muted">{values.length ? values.join(', ') : fallback}</p>
+    </div>
+  );
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" onClick={(event) => event.stopPropagation()} className="truncate text-left text-xs text-ds-ink-muted underline decoration-dotted underline-offset-4 transition-colors hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent">
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[420px] max-w-[calc(100vw-2rem)] space-y-4 rounded-ds-card border-ds-divider p-4 shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <div>
+          <p className="text-sm font-extrabold text-ds-ink">Abrangência da jornada</p>
+          <p className="mt-0.5 text-xs text-ds-ink-muted">Pessoas alcançadas pelos vínculos atuais.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 rounded-ds-md border border-ds-divider bg-ds-surface p-3">
+          <DetailList title="Cargos" values={roleNames} fallback="Todos os cargos" />
+          <DetailList title="Funções" values={functionNames} fallback="Todas as funções" />
+          {explicitPeople.length ? <div className="col-span-2"><DetailList title="Pessoas específicas" values={explicitPeople} fallback="Nenhuma" /></div> : null}
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Colaboradores alcançados</p>
+            <span className="text-xs font-bold text-ds-ink-muted">{affectedPeople.length}</span>
+          </div>
+          <div className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
+            {affectedPeople.length ? affectedPeople.map((person) => (
+              <div key={person.id} className="rounded-ds-md bg-ds-muted px-3 py-2 text-xs font-semibold text-ds-ink">{person.username}</div>
+            )) : <p className="rounded-ds-md bg-ds-muted px-3 py-3 text-center text-xs text-ds-ink-muted">Nenhum colaborador ativo alcançado.</p>}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function buildPayload(form: JourneyForm) {
@@ -200,6 +276,7 @@ function buildPayload(form: JourneyForm) {
     weeklyRest: {
       placement: form.weeklyRestPlacement,
       maxConsecutiveWorkDays,
+      ...(form.restDistribution ? { distribution: form.restDistribution } : {}),
       ...(sundayCadenceWeeks ? { sundayCadenceWeeks } : {}),
     },
     scaleValidation: { mode: form.scaleValidationMode },
@@ -225,6 +302,7 @@ export function DPSettingsJourneys() {
   const { items, loading, error, reload, create, update } = useDPTimeConfigs('journeys', canManage);
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [form, setForm] = useState<JourneyForm>(() => formFor());
+  const [distributionEdited, setDistributionEdited] = useState(false);
   const [search, setSearch] = useState('');
   const [listStatus, setListStatus] = useState<DPTimeConfigListStatus>('active');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -239,6 +317,7 @@ export function DPSettingsJourneys() {
   useEffect(() => {
     setSaveError(null);
     setConfirmingArchive(false);
+    setDistributionEdited(false);
     if (panel?.mode === 'edit') setForm(formFor(panel.item));
     if (panel?.mode === 'create') setForm(formFor(panel.supersedes));
   }, [panel]);
@@ -253,20 +332,6 @@ export function DPSettingsJourneys() {
     if (!term) return statusItems;
     return statusItems.filter((entry) => `${entry.name} ${entry.description ?? ''} ${journeyRegimeLabel(entry.regime)} ${applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}`.toLocaleLowerCase('pt-BR').includes(term));
   }, [groupNames, organizationNames, search, statusItems, unitNames]);
-  const draftComparisonRows = useMemo(() => {
-    const cycleLengthDays = parseCycleLengthDaysInput(form.cycleLengthDays);
-    if (!editing || !cycleLengthDays) return [];
-    const days = Array.from({ length: cycleLengthDays }, (_, index) => {
-      const plannedMinutes = parseDuration(form.dayDurations[index] ?? '00:00') ?? 0;
-      return { dayIndex: index + 1, plannedMinutes, isRestDay: plannedMinutes === 0 };
-    });
-    const expectedBreakMinutes = Number(form.expectedBreakMinutes);
-    return shorterShiftComparisons({
-      days,
-      ...(Number.isInteger(expectedBreakMinutes) ? { expectedBreakMinutes } : {}),
-      allowedShiftDefinitionIds: form.allowedShiftDefinitionIds,
-    }, shiftDefinitions);
-  }, [editing, form.allowedShiftDefinitionIds, form.cycleLengthDays, form.dayDurations, form.expectedBreakMinutes, shiftDefinitions]);
 
   async function saveJourney() {
     setSaveError(null);
@@ -386,7 +451,15 @@ export function DPSettingsJourneys() {
             </div>
             <span className="font-ds-mono text-[13px] font-semibold">{formatDuration(entry.weeklyMinutes)}</span>
             <span className="font-ds-mono text-[13px] font-semibold">{formatDuration(monthlyWorkloadMinutes(entry.weeklyMinutes))}</span>
-            <span className="truncate text-xs text-ds-ink-muted">{applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}</span>
+            <ApplicabilityDetails
+              journey={entry}
+              label={applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}
+              roles={roles}
+              functions={functions}
+              people={activeUsers}
+              units={units}
+              unitGroups={unitGroups}
+            />
             <StatusPill variant={statusVariant(entry.status)}>{timeConfigStatusLabel(entry.status)}</StatusPill>
             <Chevron />
           </ListRow>
@@ -432,6 +505,7 @@ export function DPSettingsJourneys() {
               </div>
             </PanelSection>
             <PanelSection title="Descanso semanal remunerado">
+              <PanelField label="Distribuição dos repousos">{item.weeklyRest?.distribution === 'monthly_collective' ? 'Compensação dentro do mês' : item.weeklyRest?.distribution === 'weekly' ? 'Dois repousos por semana' : 'Versão anterior sem distribuição configurada'}</PanelField>
               <PanelField label="Posicionamento">{weeklyRestPlacementLabel(item.weeklyRest)}</PanelField>
               <PanelField label="Limite de trabalho seguido">{item.weeklyRest?.maxConsecutiveWorkDays ?? 6} dias</PanelField>
               <PanelField label="Coincidência com domingo">
@@ -471,28 +545,6 @@ export function DPSettingsJourneys() {
               <PanelField label="Intervalo do expediente esperado">
                 {formatShiftMinutes(item.expectedBreakMinutes ?? defaultExpectedBreakMinutes(item.days.find((day) => !day.isRestDay)?.plannedMinutes ?? 0))}
               </PanelField>
-              {(item.useDefinedShiftWhenShorter ?? true) ? (
-                <div className="space-y-2">
-                  {shorterShiftComparisons(item, shiftDefinitions).map(({ shift, comparison }) => (
-                    <div key={`${shift.id}:${comparison.expectedWorkMinutes}`} className="rounded-ds-md border border-ds-divider bg-ds-surface px-3 py-2.5 text-xs">
-                      <p className="font-extrabold text-ds-ink">{shift.name}</p>
-                      <p className="mt-1 text-ds-ink-muted">
-                        Definido: <span className="font-ds-mono font-bold text-ds-ink">{shift.startTime}–{shift.endTime}</span>
-                        {' · '}{formatShiftMinutes(comparison.defined.workedMinutes)} trabalhadas
-                        {' · '}{formatShiftMinutes(comparison.defined.breakMinutes)} de intervalo
-                      </p>
-                      <p className="mt-0.5 text-ds-ink-muted">
-                        Esperado: <span className="font-ds-mono font-bold text-ds-ink">{comparison.expectedStartTime}–{comparison.expectedEndTime}</span>
-                        {' · '}{formatShiftMinutes(comparison.expectedWorkMinutes)} de jornada
-                        {' · '}{formatShiftMinutes(comparison.expectedBreakMinutes)} de intervalo
-                      </p>
-                    </div>
-                  ))}
-                  {shorterShiftComparisons(item, shiftDefinitions).length === 0 ? (
-                    <p className="text-xs text-ds-ink-muted">Nenhum turno permitido termina antes do expediente esperado.</p>
-                  ) : null}
-                </div>
-              ) : null}
             </PanelSection>
             <PanelSection title="Aplicação">
               <PanelField label="Abrangência">{applicabilityLabel(item.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}</PanelField>
@@ -539,7 +591,10 @@ export function DPSettingsJourneys() {
                   maxLength={6}
                   className={`${fieldInputClass} font-ds-mono`}
                   value={form.weeklyLoad}
-                  onChange={(event) => setForm((current) => ({ ...current, weeklyLoad: maskDurationInput(event.target.value) }))}
+                  onChange={(event) => setForm((current) => {
+                    const next = { ...current, weeklyLoad: maskDurationInput(event.target.value) };
+                    return distributionEdited ? next : suggestCycleDistribution(next);
+                  })}
                   placeholder="44:00"
                 />
               </Field>
@@ -552,7 +607,10 @@ export function DPSettingsJourneys() {
                   value={form.cycleLengthDays}
                   onChange={(event) => {
                     const cycleLengthDays = event.target.value.replace(/\D/g, '').slice(0, 2);
-                    setForm((current) => ({ ...current, cycleLengthDays }));
+                    setForm((current) => {
+                      const next = { ...current, cycleLengthDays };
+                      return distributionEdited ? next : suggestCycleDistribution(next);
+                    });
                   }}
                   placeholder="Ex.: 7"
                 />
@@ -669,29 +727,6 @@ export function DPSettingsJourneys() {
                   onChange={(event) => setForm((current) => ({ ...current, expectedBreakMinutes: event.target.value }))}
                 />
               </Field>
-              {form.useDefinedShiftWhenShorter ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-ds-ink-2">Comparativo dos turnos menores</p>
-                  {draftComparisonRows.map(({ shift, comparison }) => (
-                    <div key={`${shift.id}:${comparison.expectedWorkMinutes}`} className="rounded-ds-md border border-ds-divider bg-ds-surface px-3 py-2.5 text-xs">
-                      <p className="font-extrabold text-ds-ink">{shift.name}</p>
-                      <p className="mt-1 text-ds-ink-muted">
-                        Definido: <span className="font-ds-mono font-bold text-ds-ink">{shift.startTime}–{shift.endTime}</span>
-                        {' · '}{formatShiftMinutes(comparison.defined.workedMinutes)} trabalhadas
-                        {' · '}{formatShiftMinutes(comparison.defined.breakMinutes)} de intervalo
-                      </p>
-                      <p className="mt-0.5 text-ds-ink-muted">
-                        Esperado: <span className="font-ds-mono font-bold text-ds-ink">{comparison.expectedStartTime}–{comparison.expectedEndTime}</span>
-                        {' · '}{formatShiftMinutes(comparison.expectedWorkMinutes)} de jornada
-                        {' · '}{formatShiftMinutes(comparison.expectedBreakMinutes)} de intervalo
-                      </p>
-                    </div>
-                  ))}
-                  {draftComparisonRows.length === 0 ? (
-                    <p className="rounded-ds-md border border-dashed border-ds-divider px-3 py-3 text-xs text-ds-ink-muted">Nenhum turno permitido termina antes do expediente esperado.</p>
-                  ) : null}
-                </div>
-              ) : null}
             </PanelSection>
             <PanelSection
               title="Descanso semanal remunerado"
@@ -702,6 +737,20 @@ export function DPSettingsJourneys() {
                 </InfoTooltip>
               )}
             >
+              <div className="grid gap-2" role="radiogroup" aria-label="Distribuição dos repousos">
+                {([
+                  { value: 'weekly', label: '2 repousos em cada semana', description: 'Regra ordinária: as datas são escolhidas na escala.' },
+                  { value: 'monthly_collective', label: 'Compensação dentro do mês', description: 'Exige negociação coletiva aplicável: ao menos 1 repouso em cada semana de trabalho e média de 2 por semana no mês-calendário.' },
+                ] as const).map((option) => (
+                  <button key={option.value} type="button" role="radio" aria-checked={form.restDistribution === option.value}
+                    onClick={() => setForm((current) => ({ ...current, restDistribution: option.value,
+                      maxConsecutiveWorkDays: option.value === 'monthly_collective' ? '6' : '5' }))}
+                    className={`rounded-ds-btn border px-3.5 py-3 text-left ${form.restDistribution === option.value ? 'border-ds-modal bg-ds-modal-soft text-ds-modal-ink' : 'border-ds-border-input bg-white text-ds-ink-2'}`}>
+                    <span className="block text-sm font-extrabold">{option.label}</span>
+                    <span className="mt-0.5 block text-xs">{option.description}</span>
+                  </button>
+                ))}
+              </div>
               <div className="grid gap-2" role="radiogroup" aria-label="Posicionamento do descanso semanal">
                 {([
                   { value: 'fixed_cycle', label: 'Posição fixa no ciclo', description: 'O dia marcado com 00:00 é o descanso previsto.' },
@@ -731,10 +780,13 @@ export function DPSettingsJourneys() {
                     maxLength={1}
                     className={fieldInputClass}
                     value={form.maxConsecutiveWorkDays}
-                    onChange={(event) => setForm((current) => ({ ...current, maxConsecutiveWorkDays: event.target.value.replace(/\D/g, '').slice(0, 1) }))}
+                    onChange={(event) => setForm((current) => {
+                      const next = { ...current, maxConsecutiveWorkDays: event.target.value.replace(/\D/g, '').slice(0, 1) };
+                      return distributionEdited ? next : suggestCycleDistribution(next);
+                    })}
                   />
                 </Field>
-                <Field label="Domingo a cada" htmlFor="journey-rest-sunday" requirement="opcional" hint="Semanas; conforme CCT aplicável.">
+                <Field label="Domingo a cada" htmlFor="journey-rest-sunday" requirement="opcional" hint="Semanas; aplica-se a todas as pessoas desta jornada. Ex.: 2 exige folga em um domingo a cada duas semanas.">
                   <Input
                     id="journey-rest-sunday"
                     inputMode="numeric"
@@ -803,7 +855,7 @@ export function DPSettingsJourneys() {
                       aria-label={`Duração do dia ${index + 1}`}
                       className={`${fieldInputClass} h-8 font-ds-mono`}
                       value={duration}
-                      onChange={(event) => setForm((current) => {
+                      onChange={(event) => { setDistributionEdited(true); setForm((current) => {
                         const dayDurations = Array.from(
                           { length: Math.max(current.dayDurations.length, index + 1) },
                           (_, dayIndex) => dayIndex === index
@@ -811,7 +863,7 @@ export function DPSettingsJourneys() {
                             : current.dayDurations[dayIndex] ?? '00:00',
                         );
                         return { ...current, dayDurations };
-                      })}
+                      }); }}
                     />
                   </label>
                   );

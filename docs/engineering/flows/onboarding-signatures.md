@@ -1,5 +1,21 @@
 # Integração: pacote de documentos para assinatura
 
+10/11/2026 — extensão local: a coleta pública agora registra, por filho, a
+declaração expressa de dependência para IR. A seleção do kit inclui a
+declaração somente para os filhos marcados. O termo de salário-família entra
+quando o operador registra a concessão após a conclusão da contabilidade.
+A análise legal é informativa. Ambos são matrizes DOCX timbradas,
+geradas na preparação, consolidadas antes do termo final e assinadas pelo
+mesmo pacote. Sem parâmetros do ano, a tela informa a limitação. A versão
+enviada continua congelada por hash. A versão anterior foi publicada em
+10/11/2026; a decisão manual e o termo v2 aguardam a publicação desta correção.
+
+02/11/2026 — complemento de armazenamento: o Acervo passa a referenciar diretamente o PDF completo em signedStoragePath, depois de validar os bytes pelo SHA-256. Promoção de kit ou de assinatura individual não copia nem salva outro objeto. Solicitação, workflows e registro da pessoa reutilizam o mesmo assinado; origens já arquivadas não são reescritas. O PDF pré-assinatura continua sendo um artefato diferente. Remoção da entrada do Acervo preserva o assinado compartilhado e sua auditoria.
+
+O retorno da Autentique para kit admissional usa a mesma promoção única tanto com colaborador já ativo quanto após sua ativação. Recepção no Storage é identificada pelo hash; solicitação/componentes são persistidos juntos antes da promoção, com retomada por estado assinado. Ensaio `node scripts/test-integration.mjs --document-central` em demo verifica os dois momentos, callbacks repetidos, um arquivo final e recusa de bytes com hash divergente. Não envia assinaturas externas. Storage, Firestore e publicação continuam etapas distintas; falha parcial pede retry/reconciliação.
+
+02/11/2026 — correção de arquivamento: os componentes de um pacote admissional apontam para um único PDF assinado. A promoção valida manifesto, seleção, solicitação e SHA-256 e cria um employeeDocuments com tipo ADMISSION_PACKAGE e identidade estável por solicitação; componentes passam a referenciar esse arquivo. Grava os bytes cujo hash foi conferido, com auditoria transacional da criação, e reconfirma o estado antes de vincular componentes. Reexecução reutiliza o arquivo; legados já arquivados preservam IDs/cópias, sem retarget automático. Arquivamento parcial exige reconciliação. As políticas existentes de publicação ao assinar continuam vigentes para novos arquivos; classificação pontual dos legados não executa publicação. Testes puros do planejador cobrem manifesto, repetição, seleção e legado; não equivalem à homologação externa da Autentique.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** subfluxo traçado no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. O arquivamento posterior ao retorno da Autentique é compartilhado com outros documentos.
@@ -30,3 +46,9 @@ O [teste de contrato do servidor](../../../tests/unit/hr-documents/admission-sig
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+## Referências pessoais congeladas — 03/11/2026
+
+Preparação do pacote persiste titular confirmado do processo, `signerKeys` do titular e UID cadastrado da empresa, e `actorKeys` do preparador. Solicitação independente guarda o solicitante separadamente. O preflight recusa equivalência unilateral ou candidato/conta incompatíveis; uma candidatura sem conta conserva `hr.candidates`. O callback usa as referências congeladas na solicitação com origem/versão/hash/caminho conferidos. Cadastro removido ou aliases atuais colidentes não reatribuem titularidade nem impedem a repetição idempotente de arquivo já validado. Solicitação antiga sem chaves tipadas requer reconciliação explícita. Integração/PJ registra ator e sujeito do processo; representantes externos sem cadastro não recebem IDs por inferência. Testemunhas e limites no [guia de pessoa](../document-person-traceability.md).
+
+Admissão manual pré-conta usa a referência hr.onboardingPersons persistida pelo intake nativo; recrutamento usa candidato real respaldado. Reservas/checkpoints de provisionamento confirmam vínculos antes da promoção documental. PJ não recebe owner humano da empresa ou do usuário de acesso. Callback frozen preserva as referências históricas, inclusive ausência de titular. [Modelo e limites](../document-person-traceability.md#admissão-natural-antes-da-conta-e-provisionamento).

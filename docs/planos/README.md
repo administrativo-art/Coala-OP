@@ -4,6 +4,9 @@
 
 | Plano | Área |
 | --- | --- |
+| [Rastreabilidade por pessoa](plano-rastreabilidade-pessoa.md) | Privacidade, Pessoas, documentos e integrações |
+| [Destinação dos arquivos de Cobranças](plano-destinacao-documental-cobrancas.md) | Financeiro, Patrimônio e Documentos |
+| [Armazenamento documental único](plano-armazenamento-documental-unico.md) | PDF assinado compartilhado por Acervo/processo, integridade e limpeza histórica separada |
 | [Gerador de documentos](plano-gerador-documentos.md) | Documentos, modelos, edição e assistência opcional de IA |
 | [Publicação das escalas do DP](plano-publicacao-escalas.md) | Escalas, ponto, metas e solicitações |
 | [Plano — Ponto, Jornada e Fechamento da Competência](plano-jornada-fechamento-rh.md) | Ponto e DP |

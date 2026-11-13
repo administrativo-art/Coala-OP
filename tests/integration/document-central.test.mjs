@@ -12,21 +12,227 @@ enableServerOnlyTestImports("demo-coala-repository");
 const { authAdmin, dbAdmin, adminApp } = await import("../../src/lib/firebase-admin.ts");
 const { hrDbAdmin } = await import("../../src/lib/firebase-rh-admin.ts");
 const { financialDbAdmin } = await import("../../src/lib/firebase-financial-admin.ts");
+const { ingestFinancialEmail } = await import("../../src/features/financial/inbox/ingest.server.ts");
+const { analyzeFinancialInboxMessage } = await import("../../src/features/financial/inbox/workflow.server.ts");
+const { classifyFinancialEmail } = await import("../../src/features/financial/inbox/parser.ts");
 const work = await import("../../src/app/api/documents/work-items/route.ts");
 const history = await import("../../src/app/api/documents/history/route.ts");
 const generated = await import("../../src/app/api/documents/generated/route.ts");
 const folder = await import("../../src/app/api/documents/company/folder/route.ts");
 const employeeAccess = await import("../../src/app/api/hr/employee-documents/access/route.ts");
+const employeeDocuments = await import("../../src/app/api/hr/employee-documents/route.ts");
 const intake = await import("../../src/app/api/documents/company/intake/route.ts");
 const companyUnits = await import("../../src/app/api/documents/company/units/route.ts");
 const financialNaming = await import("../../src/app/api/financial/inbox/[id]/files/[fileId]/naming/route.ts");
 const financialFile = await import("../../src/app/api/financial/inbox/[id]/files/[fileId]/route.ts");
 const counterparties = await import("../../src/app/api/financial/document-counterparties/route.ts");
+const invoiceDestination = await import("../../src/app/api/financial/inbox/[id]/files/[fileId]/destination/route.ts");
+const assetInvoice = await import("../../src/app/api/assets/[assetId]/inbox-invoices/[messageId]/[fileId]/route.ts");
+const assetLookup = await import("../../src/app/api/assets/lookup/route.ts");
 const autentique = await import("../../src/lib/autentique.server.ts");
 const autentiqueWebhook = await import("../../src/app/api/webhooks/autentique/route.ts");
 const uid = "central-integration-reader";
 const profileId = `${uid}-profile`;
 const employeeId = `${uid}-employee`;
+
+test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retorno repetido", async (t) => {
+  const { archiveAutentiqueSignedDocument, promoteSignedOnboardingDocuments } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const { PDFDocument } = await import("pdf-lib");
+  const pdf = await PDFDocument.create(); pdf.addPage();
+  const bytes = Buffer.from(await pdf.save());
+  const contentHash = createHash("sha256").update(bytes).digest("hex");
+  const originalFetch = globalThis.fetch;
+  const signedUrl = "https://api.autentique.com.br/synthetic-signed-kit.pdf";
+  globalThis.fetch = async (input, init) => String(input) === signedUrl ? new Response(bytes, { headers: { "Content-Type": "application/pdf" } }) : originalFetch(input, init);
+  const refs = [], paths = [];
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    await Promise.all(refs.map((ref) => hrDbAdmin.recursiveDelete(ref)));
+    await Promise.all(paths.map((path) => bucket.file(path).delete({ ignoreNotFound: true })));
+  });
+  for (const alreadyActive of [false, true]) {
+    const onboardingId = `signed-kit-${alreadyActive ? "active" : "pending"}`;
+    const person = `${onboardingId}-employee`;
+    const requestId = `signature_bundle_${onboardingId}`;
+    const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);
+    const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+    const workflows = ["contract", "privacy"].map((templateId, index) => ({ id: `${onboardingId}-${index}`, templateId }));
+    const workflowRefs = workflows.map((workflow) => hrDbAdmin.collection("hrSignatureDocuments").doc(workflow.id));
+    const archiveId = createHash("sha256").update(`signed-admission-package:${requestId}`).digest("hex").slice(0, 32);
+    const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(archiveId);
+    refs.push(processRef, requestRef, ...workflowRefs, archiveRef);
+    const signedPath = `signed-documents/${onboardingId}/${requestId}/${contentHash}/signed.pdf`;
+    const permanentPath = signedPath;
+    paths.push(signedPath, permanentPath);
+    await processRef.set({ candidateName: "Pessoa sintética", expectedAdmissionDate: "2099-01-01", currentStage: "completed", ...(alreadyActive ? { employeeId: person } : {}) });
+    await requestRef.set({ onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
+    await Promise.all(workflowRefs.map((ref, index) => ref.set({ onboardingId, signatureRequestId: requestId, selected: true, status: "sent", documentTypeCode: "ADMISSION_DOCUMENT", templateId: workflows[index].templateId })));
+    const first = await archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl });
+    if (!alreadyActive) {
+      assert.equal(first, null); assert.equal((await archiveRef.get()).exists, false);
+      await processRef.update({ employeeId: person });
+      await bucket.file(signedPath).save(Buffer.from("%PDF-conteúdo divergente"), { resumable: false });
+      await assert.rejects(promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), /hash assinado/);
+      assert.equal((await archiveRef.get()).exists, false);
+      await bucket.file(signedPath).save(bytes, { resumable: false });
+      assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), [archiveId]);
+    } else assert.equal(first, archiveId);
+    assert.equal(await archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl }), archiveId);
+    assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId: person }), [archiveId]);
+    const archived = await archiveRef.get();
+    assert.equal(archived.get("documentTypeCode"), "ADMISSION_PACKAGE");
+    assert.equal(archived.get("contentHash"), contentHash);
+    assert.equal(archived.get("storagePath"), permanentPath);
+    assert.equal(archived.get("employeeId"), person);
+    assert.equal((await hrDbAdmin.collection("employeeDocuments").where("sourceOnboardingId", "==", onboardingId).limit(10).get()).size, 1);
+    for (const ref of workflowRefs) assert.equal((await ref.get()).get("employeeDocumentId"), archiveId);
+    assert.equal((await requestRef.get()).get("archivedDocumentId"), archiveId);
+    assert.equal((await requestRef.get()).get("signedStoragePath"), archived.get("storagePath"));
+    const [copies] = await bucket.getFiles({ prefix: `hr/employee-documents/${person}/documents/${archiveId}/`, autoPaginate: false, maxResults: 10 });
+    assert.equal(copies.length, 0, "arquivar deve reutilizar o PDF assinado, sem criar cópia física");
+    assert.equal(createHash("sha256").update((await bucket.file(permanentPath).download())[0]).digest("hex"), contentHash);
+    assert.equal((await archiveRef.collection("audit").where("action", "==", "SIGNED_DOCUMENT_ARCHIVED").get()).size, 1);
+  }
+});
+
+test("assinatura individual da admissão também reutiliza o arquivo e valida seu hash", async (t) => {
+  const { promoteSignedOnboardingDocuments } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const onboardingId = "single-storage-independent", employeeId = "single-storage-independent-person", workflowId = "single-storage-independent-workflow";
+  const requestId = "single-storage-independent-request";
+  const workflow = hrDbAdmin.collection("hrSignatureDocuments").doc(workflowId);
+  const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);
+  const request = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+  const documentId = createHash("sha256").update(`signed-signature:${workflowId}`).digest("hex").slice(0, 32);
+  const document = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const path = `signed-documents/${onboardingId}/${requestId}/signed.pdf`;
+  const bytes = Buffer.from("%PDF-assinatura-individual-sintetica"), hash = createHash("sha256").update(bytes).digest("hex");
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => { await Promise.all([workflow, processRef, request, document].map((ref) => hrDbAdmin.recursiveDelete(ref))); await bucket.file(path).delete({ ignoreNotFound: true }); });
+  await processRef.set({ candidateName: "Pessoa sintética", employeeId, expectedAdmissionDate: "2099-01-01" });
+  await request.set({ onboardingId, status: "signed", signedStoragePath: path });
+  await workflow.set({ onboardingId, signatureRequestId: requestId, status: "signed", selected: true, signedStoragePath: path, signedHash: "0".repeat(64), documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-independent" });
+  await bucket.file(path).save(bytes, { resumable: false });
+  await assert.rejects(promoteSignedOnboardingDocuments({ onboardingId, employeeId }), /hash assinado/);
+  assert.equal((await document.get()).exists, false);
+  await workflow.update({ signedHash: hash });
+  assert.deepEqual(await promoteSignedOnboardingDocuments({ onboardingId, employeeId }), [documentId]);
+  assert.equal((await document.get()).get("storagePath"), path);
+  assert.equal((await document.get()).get("contentHash"), hash);
+  const [copies] = await bucket.getFiles({ prefix: `hr/employee-documents/${employeeId}/documents/${documentId}/`, autoPaginate: false, maxResults: 10 });
+  assert.equal(copies.length, 0);
+});
+
+test("callbacks concorrentes com conteúdos distintos não sobrescrevem o original arquivado", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const refs = [], files = [];
+  const originalFetch = globalThis.fetch;
+  t.after(async () => { globalThis.fetch = originalFetch; await Promise.all(refs.map(([db, ref]) => db.recursiveDelete(ref))); await Promise.all(files.map((path) => bucket.file(path).delete({ ignoreNotFound: true }))); });
+  for (const mode of ["individual", "generated"]) {
+    const contextId = `single-storage-race-${mode}`, person = `${contextId}-person`, requestId = `${contextId}-request`;
+    const generatedId = `${contextId}-generated`, workflowId = `${contextId}-workflow`;
+    const request = hrDbAdmin.collection("hrSignatureRequests").doc(requestId);
+    const documentId = createHash("sha256").update(mode === "individual" ? `signed-signature:${workflowId}` : `signed-generated-document:${generatedId}`).digest("hex").slice(0, 32);
+    const document = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+    refs.push([hrDbAdmin, request], [hrDbAdmin, document]);
+    if (mode === "individual") {
+      const processRef = hrDbAdmin.collection("onboardingProcesses").doc(contextId), workflow = hrDbAdmin.collection("hrSignatureDocuments").doc(workflowId);
+      refs.push([hrDbAdmin, processRef], [hrDbAdmin, workflow]);
+      await processRef.set({ candidateName: "Pessoa sintética", employeeId: person, currentStage: "completed" });
+      await workflow.set({ onboardingId: contextId, signatureRequestId: requestId, status: "sent", selected: true, documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-race" });
+      await request.set({ onboardingId: contextId, workflowDocumentIds: [workflowId], status: "sent", providerDocumentId: "synthetic-race" });
+    } else {
+      const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedId); refs.push([dbAdmin, generatedRef]);
+      await generatedRef.set({ employeeId: person, documentTypeCode: "VACATION_RECEIPT", templateName: "Recibo sintético", status: "final" });
+      await request.set({ generatedDocumentId: generatedId, employeeId: person, documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-race" });
+    }
+    const bodies = [Buffer.from(`%PDF-conteudo-A-${mode}`), Buffer.from(`%PDF-conteudo-B-${mode}`)];
+    const urls = bodies.map((_, index) => `https://api.autentique.com.br/${contextId}-${index}.pdf`);
+    let arrivals = 0, release;
+    const ready = new Promise((resolve) => { release = resolve; });
+    globalThis.fetch = async (input, init) => {
+      const index = urls.indexOf(String(input));
+      if (index < 0) return originalFetch(input, init);
+      if (++arrivals === 2) release();
+      await ready; return new Response(bodies[index], { headers: { "Content-Type": "application/pdf" } });
+    };
+    for (const bytes of bodies) { const hash = createHash("sha256").update(bytes).digest("hex"); files.push(mode === "individual" ? `signed-documents/${contextId}/${requestId}/${hash}/signed.pdf` : `signed-documents/generated/${generatedId}/${requestId}/${hash}/signed.pdf`); }
+    const outcomes = await Promise.allSettled(urls.map((signedUrl) => archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl })));
+    assert.equal(outcomes.filter((result) => result.status === "fulfilled").length, 1);
+    assert.match(outcomes.find((result) => result.status === "rejected").reason.message, /diverge/);
+    const stored = await document.get(), signedPath = stored.get("storagePath");
+    assert.ok(signedPath.includes(stored.get("contentHash")));
+    assert.equal(createHash("sha256").update((await bucket.file(signedPath).download())[0]).digest("hex"), stored.get("contentHash"));
+    assert.equal((await request.get()).get("signedStoragePath"), signedPath);
+    if (mode === "generated") assert.equal((await dbAdmin.collection("generatedDocuments").doc(generatedId).get()).get("signedStoragePath"), signedPath);
+  }
+});
+
+test("recepção concorrente exige claim antes do arquivo e callback repetido é idempotente", async (t) => {
+  const emailId = `claim-synthetic-${Date.now()}`;
+  const claim = financialDbAdmin.collection("financialInboxIngestClaims").doc(emailId);
+  const message = financialDbAdmin.collection("financialInboxMessages").doc(emailId);
+  const rawPath = `financial-inbox/coala/${emailId}/original.eml`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => { const events = await message.collection("events").get(); await Promise.all(events.docs.map((entry) => entry.ref.delete())); await message.delete(); await claim.delete(); await bucket.file(rawPath).delete({ ignoreNotFound: true }); });
+  const rawUrl = `https://resend.com/synthetic/${emailId}`;
+  const input = { eventId: `event-${emailId}`, eventAt: "2026-11-03T00:00:00.000Z", emailId, apiKey: "synthetic", received: { from: "newsletter@example.com", to: ["financeiro@example.com"], subject: "Promoção da semana", text: "Oferta comercial sem cobrança", attachments: [], raw: { download_url: rawUrl } } };
+  const priorFetch = globalThis.fetch;
+  let enterDownload, releaseDownload;
+  const entered = new Promise((resolve) => { enterDownload = resolve; });
+  const gate = new Promise((resolve) => { releaseDownload = resolve; });
+  globalThis.fetch = (url, options) => String(url) === rawUrl ? (enterDownload(), gate.then(() => new Response(Buffer.from("From: newsletter@example.com\r\nSubject: Promoção\r\n\r\nOferta")))) : priorFetch(url, options);
+  let first;
+  try {
+    const original = ingestFinancialEmail(input);
+    await entered;
+    await assert.rejects(ingestFinancialEmail(input), /aguarda conclusão ou reconciliação/);
+    assert.equal((await message.get()).exists, false);
+    releaseDownload();
+    first = await original;
+  } finally { releaseDownload(); globalThis.fetch = priorFetch; }
+  assert.equal(first.duplicate, false);
+  assert.equal((await claim.get()).get("state"), "completed");
+  assert.equal((await ingestFinancialEmail(input)).duplicate, true);
+});
+
+test("gravação incerta de anexo segura claim, espera anexos paralelos e exige censo antes de retry", async (t) => {
+  const emailId = `claim-uncertain-${Date.now()}`, base = `financial-inbox/coala/${emailId}`;
+  const claim = financialDbAdmin.collection("financialInboxIngestClaims").doc(emailId);
+  const message = financialDbAdmin.collection("financialInboxMessages").doc(emailId);
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  t.after(async () => { const [objects] = await bucket.getFiles({ prefix: `${base}/`, autoPaginate: false, maxResults: 20 }); await Promise.all(objects.map((object) => object.delete({ ignoreNotFound: true }))); const events = await message.collection("events").get(); await Promise.all(events.docs.map((entry) => entry.ref.delete())); await message.delete(); await claim.delete(); });
+  const attachments = [0, 1].map((index) => ({ id: `file${index}`, filename: `anexo${index}.pdf`, content_type: "application/pdf", size: 12 }));
+  const input = { eventId: `event-${emailId}`, eventAt: "2026-11-03T00:00:00.000Z", emailId, apiKey: "synthetic", received: { from: "newsletter@example.com", to: ["financeiro@example.com"], subject: "Promoção da semana", text: "Oferta comercial", attachments } };
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => {
+    const value = String(url);
+    if (value.startsWith(`https://api.resend.com/emails/receiving/${emailId}/attachments/`)) return Promise.resolve(new Response(JSON.stringify({ download_url: `https://resend.com/synthetic/${value.split("/").at(-1)}` }), { headers: { "Content-Type": "application/json" } }));
+    if (value.startsWith("https://resend.com/synthetic/file")) return Promise.resolve(new Response(Buffer.from(`%PDF-${value.split("/").at(-1)}`)));
+    return priorFetch(url, options);
+  };
+  const prototype = Object.getPrototypeOf(bucket.file(`${base}/attachments/file0-anexo0.pdf`)), originalSave = prototype.save;
+  let failedAfterSave = false;
+  prototype.save = async function (...args) { const result = await originalSave.apply(this, args); if (this.name === `${base}/attachments/file0-anexo0.pdf` && !failedAfterSave) { failedAfterSave = true; throw new Error("synthetic uncertain storage save"); } return result; };
+  try { await assert.rejects(ingestFinancialEmail(input), /resultado incerto/); } finally { prototype.save = originalSave; globalThis.fetch = priorFetch; }
+  assert.equal(failedAfterSave, true);
+  assert.equal((await message.get()).exists, false);
+  const held = await claim.get();
+  assert.equal(held.get("state"), "reconciliation_required");
+  assert.equal(held.get("plannedObjects").length, 2);
+  await assert.rejects(ingestFinancialEmail({ ...input, received: { ...input.received, attachments: [] } }), /aguarda conclusão ou reconciliação/);
+  // Demo-only rehearsal of the documented manual recovery after both producers have ended.
+  for (const planned of held.get("plannedObjects")) {
+    const object = bucket.file(planned.path);
+    const [meta] = await object.getMetadata();
+    assert.equal(meta.metadata.sha256, planned.sha256);
+    await object.delete({ ifGenerationMatch: meta.generation });
+  }
+  assert.equal((await bucket.getFiles({ prefix: `${base}/`, autoPaginate: false, maxResults: 20 }))[0].length, 0);
+  await claim.delete({ lastUpdateTime: held.updateTime });
+  assert.equal((await ingestFinancialEmail({ ...input, received: { ...input.received, attachments: [] } })).duplicate, false);
+});
 
 test("central: autorização atual, paginação e proposta preservadas pelas APIs", async (t) => {
   const refs = [];
@@ -51,6 +257,69 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
   const signIn = await fetch(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${uid}@example.test`, password: "synthetic-test-password", returnSecureToken: true }) });
   assert.equal(signIn.ok, true);
   const { idToken } = await signIn.json();
+  const authRoutes = (token) => [
+    assetLookup.GET(new NextRequest("http://localhost/api/assets/lookup?code=PAT-000001", { headers: token ? { Authorization: `Bearer ${token}` } : {} }), { params: Promise.resolve({}) }),
+    assetInvoice.GET(new NextRequest("http://localhost/api/assets/a/inbox-invoices/m/f", { headers: token ? { Authorization: `Bearer ${token}` } : {} }), { params: Promise.resolve({ assetId: "a", messageId: "m", fileId: "f" }) }),
+    invoiceDestination.POST(new NextRequest("http://localhost/api/financial/inbox/m/files/f/destination", { method: "POST", headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ kind: "non_asset_invoice", assetIds: [], expectedSha256: "0".repeat(64) }) }), { params: Promise.resolve({ id: "m", fileId: "f" }) }),
+    invoiceDestination.DELETE(new NextRequest("http://localhost/api/financial/inbox/m/files/f/destination", { method: "DELETE", headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: "0".repeat(64), expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: "m", fileId: "f" }) }),
+  ];
+  assert.deepEqual((await Promise.all(authRoutes(null))).map((response) => response.status), [401, 401, 401, 401]);
+  await dbAdmin.collection("users").doc(uid).update({ isActive: false });
+  assert.deepEqual((await Promise.all(authRoutes(idToken))).map((response) => response.status), [403, 403, 403, 403]);
+  await dbAdmin.collection("users").doc(uid).update({ isActive: true });
+  await t.test("projeção RH publicada pagina mesmo com página filtrada vazia e mantém unidade", async () => {
+    const base = { employeeId, category:"admission", documentTypeCode:"ADMISSION_PACKAGE", storagePath:"private/fixture.pdf",
+      publication:{status:"published",at:"2026-11-03",by:uid,source:"manual"}, deletedAt:null };
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-a`,{...base,deletedAt:"2026-11-03"});
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-b`,base);
+    await seed(hrDbAdmin,"employeeDocuments",`${uid}-page-c`,base);
+    const read = (params) => employeeDocuments.GET(new NextRequest(`http://localhost/api/hr/employee-documents?${new URLSearchParams({employeeId,publishedOnly:"1",limit:"1",...params})}`, {headers:{Authorization:`Bearer ${idToken}`}}));
+    const first = await read({}); assert.equal(first.status,200);
+    const firstPage = await first.json(); assert.equal(firstPage.documents.length,0); assert.ok(firstPage.nextCursor);
+    const second = await read({cursor:firstPage.nextCursor}); assert.equal(second.status,200);
+    const secondPage = await second.json(); assert.deepEqual(secondPage.documents.map(doc => doc.id),[`${uid}-page-b`]); assert.ok(secondPage.nextCursor);
+    const third = await read({cursor:secondPage.nextCursor}); assert.equal(third.status,200);
+    const thirdPage = await third.json(); assert.deepEqual(thirdPage.documents.map(doc => doc.id),[`${uid}-page-c`]); assert.equal(thirdPage.nextCursor,null);
+    assert.equal((await read({limit:"101"})).status,400);
+    assert.equal((await read({cursor:"bad/cursor"})).status,400);
+    await person.update({unitIds:["central-unit-b"]});
+    assert.equal((await read({})).status,403);
+    await person.update({unitIds:["central-unit-a"]});
+  });
+  await t.test("remover assinado do Acervo preserva o original compartilhado e revalida gestão/unidade", async () => {
+    const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    const path = `central-integration/${uid}/shared-signed.pdf`;
+    const bytes = Buffer.from("%PDF-original-assinado-sintetico");
+    await bucket.file(path).save(bytes, { resumable: false });
+    t.after(() => bucket.file(path).delete({ ignoreNotFound: true }));
+    const document = await seed(hrDbAdmin, "employeeDocuments", `${uid}-shared-signed`, { employeeId, category: "admission", documentTypeCode: "ADMISSION_PACKAGE", storagePath: path, storageSubfolder: "private-source-namespace", signedFileUrl: "https://api.autentique.com.br/private-test.pdf", source: "autentique_signature", signatureStatus: "signed", deletedAt: null });
+    const request = await seed(hrDbAdmin, "hrSignatureRequests", `${uid}-shared-signed-request`, { employeeId, signedStoragePath: path, archivedDocumentId: document.id, status: "signed" });
+    const remove = (authenticated = true) => employeeDocuments.DELETE(new NextRequest(`http://localhost/api/hr/employee-documents?id=${document.id}`, { method: "DELETE", headers: authenticated ? { Authorization: `Bearer ${idToken}` } : {} }));
+    const listing = await employeeDocuments.GET(new NextRequest(`http://localhost/api/hr/employee-documents?employeeId=${employeeId}`, { headers: { Authorization: `Bearer ${idToken}` } }));
+    assert.equal(listing.status, 200);
+    const listed = (await listing.json()).documents.find((item) => item.id === document.id);
+    assert.ok(listed);
+    for (const field of ["storagePath", "storageSubfolder", "signedFileUrl"]) assert.equal(field in listed, false, "a lista não deve expor caminhos ou links privados");
+    assert.equal((await remove(false)).status, 403);
+    await person.update({ unitIds: ["central-unit-b"] });
+    assert.equal((await remove()).status, 403);
+    assert.equal((await document.get()).get("deletedAt"), null);
+    await person.update({ unitIds: ["central-unit-a"] });
+    const result = await remove();
+    assert.equal(result.status, 200); assert.equal((await result.json()).storageRetained, true);
+    assert.ok((await document.get()).get("deletedAt"));
+    assert.equal((await document.get()).get("storagePath"), path);
+    assert.equal((await request.get()).get("signedStoragePath"), path);
+    assert.deepEqual((await bucket.file(path).download())[0], bytes);
+    assert.equal((await remove()).status, 200);
+    assert.equal((await document.collection("audit").where("action", "==", "DOCUMENT_REMOVED_FROM_ARCHIVE").limit(10).get()).size, 1);
+    const plainPath = `central-integration/${uid}/unsigned-upload.pdf`;
+    await bucket.file(plainPath).save(bytes, { resumable: false });
+    t.after(() => bucket.file(plainPath).delete({ ignoreNotFound: true }));
+    const plain = await seed(hrDbAdmin, "employeeDocuments", `${uid}-unsigned-upload`, { employeeId, storagePath: plainPath, source: "upload", signatureStatus: "not_required" });
+    assert.equal((await employeeDocuments.DELETE(new NextRequest(`http://localhost/api/hr/employee-documents?id=${plain.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}` } }))).status, 200);
+    assert.equal((await bucket.file(plainPath).exists())[0], false);
+  });
   const unauthenticated = await work.GET(new NextRequest("http://localhost/api/documents/work-items?tab=classify"), { params: Promise.resolve({}) });
   assert.equal(unauthenticated.status, 401);
   const call = async (route, path, params) => {
@@ -304,10 +573,7 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
 
   await profile.set({ permissions: { financial: { view: true, inbox: { view: true, link: true } }, hr: { formalization: { view: false, documents: { view: false } } } } });
   const financial = await call(work, "/api/documents/work-items", { tab: "classify", source: "financial", limit: "2" });
-  assert.equal(financial.body.items.length, 2, JSON.stringify(financial.body));
-  assert.ok(financial.body.items.every((item) => item.title === "Nota sintética"));
-  const financialNext = await call(work, "/api/documents/work-items", { tab: "classify", source: "financial", stage: "classify", limit: "2", cursor: financial.body.continuations[0].cursor });
-  assert.equal(financialNext.body.items.length, 1);
+  assert.equal(financial.status, 403, "permissão somente financeira não dá acesso à Central Documental");
   await seed(dbAdmin, "entities", `${uid}-supplier`, { name: "Contraparte sintética", isActive: true });
   const expenseRef = await seed(financialDbAdmin, "expenses", `${uid}-expense`, { workspaceId: "coala", supplierId: `${uid}-supplier`, supplier: "Contraparte sintética", amount: 100, status: "pending" });
   const namingMessage = await seed(financialDbAdmin, "financialInboxMessages", `${uid}-naming`, {
@@ -333,7 +599,8 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
   assert.equal((await namingCall(confirmName)).status, 200);
   assert.equal((await namingMessage.collection("audit").where("action", "==", "DOCUMENT_NAMING_CONFIRMED").get()).size, 1);
   const financialTrail = await call(history, "/api/documents/history", { source: "financial", documentId: namingMessage.id });
-  assert.ok(financialTrail.body.entries.some((entry) => entry.eventLabel === "Nome confirmado" && entry.appliedName === previewName.body.naming.downloadName));
+  assert.equal(financialTrail.status, 200, "filtro legado permanece somente leitura para o perfil financeiro");
+  assert.deepEqual(financialTrail.body.entries, [], "trilha da caixa permanece apenas na origem financeira");
   const namedAttachment = (await namingMessage.get()).get("attachments")[0];
   assert.equal(namedAttachment.filename, "nome-original.pdf");
   assert.equal(namedAttachment.storagePath, file.name);
@@ -359,11 +626,190 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
   assert.equal((await namingCall({ ...manualScopeInput, mode: "confirm", expectedVersion: manualScope.body.naming.version, expectedFingerprint: manualScope.body.fingerprint })).status, 200);
   assert.equal((await expenseRef.get()).get("supplierId"), "");
   assert.equal((await namingMessage.get()).get("attachments")[0].documentNaming.scopeSource, "document_confirmation");
+  // A confirmação por IDs projeta a mesma NF em dois ativos sem duplicar bytes.
+  const invoiceBytes = Buffer.from("%PDF-NF-patrimonial-sintetica");
+  const invoiceHash = createHash("sha256").update(invoiceBytes).digest("hex");
+  const invoiceMessageId = `${uid}-invoice`, invoiceFileId = "nf1";
+  const invoiceStoragePath = `financial-inbox/coala/${invoiceMessageId}/attachments/${invoiceFileId}-nf.pdf`;
+  const invoiceBlob = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).file(invoiceStoragePath);
+  await invoiceBlob.save(invoiceBytes, { resumable: false, metadata: { contentType: "application/pdf", metadata: { sha256: invoiceHash } } });
+  t.after(() => invoiceBlob.delete({ ignoreNotFound: true }));
+  const firstAsset = await seed(dbAdmin, "assets", `${uid}-asset-a`, { workspaceId: "coala", code: "PAT-990001", name: "Ativo A" });
+  const secondAsset = await seed(dbAdmin, "assets", `${uid}-asset-b`, { workspaceId: "coala", code: "PAT-990002", name: "Ativo B" });
+  const invoiceMessage = await seed(financialDbAdmin, "financialInboxMessages", invoiceMessageId, { workspaceId: "coala", provider: "resend", status: "pending_review", classification: { barcode: null }, attachments: [{ id: invoiceFileId, filename: "nf.pdf", contentType: "application/pdf", storagePath: invoiceStoragePath, sha256: invoiceHash, archiveStatus: "stored" }] });
+  t.after(async () => { const events = await invoiceMessage.collection("audit").get(); await Promise.all(events.docs.map((event) => event.ref.delete())); });
+  await profile.set({ permissions: { financial: { view: true, inbox: { view: true, link: true, discard: true } }, assets: { view: true, edit: true } } });
+  const destinationPath = `/api/financial/inbox/${invoiceMessageId}/files/${invoiceFileId}/destination`;
+  const destinationCall = (body) => invoiceDestination.POST(new NextRequest(`http://localhost${destinationPath}`, { method: "POST", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }), { params: Promise.resolve({ id: invoiceMessageId, fileId: invoiceFileId }) });
+  const assetDecision = { kind: "asset_invoice", assetIds: [firstAsset.id, secondAsset.id], expectedSha256: invoiceHash };
+  assert.equal((await destinationCall(assetDecision)).status, 200);
+  await firstAsset.update({ inboxInvoiceRefs: [], inboxInvoiceKeys: [] }); // falha parcial simulada após intenção na origem
+  assert.equal((await destinationCall(assetDecision)).status, 200); // retry repara só a projeção
+  assert.equal((await firstAsset.get()).get("inboxInvoiceRefs").length, 1);
+  assert.equal((await secondAsset.get()).get("inboxInvoiceRefs").length, 1);
+  assert.equal((await destinationCall({ ...assetDecision, assetIds: [firstAsset.id] })).status, 409);
+  const lookup = await assetLookup.GET(new NextRequest("http://localhost/api/assets/lookup?code=PAT-990002", { headers: { Authorization: `Bearer ${idToken}` } }), { params: Promise.resolve({}) });
+  assert.deepEqual((await lookup.json()).map((asset) => asset.id), [secondAsset.id]);
+  await profile.set({ permissions: { assets: { view: true } } });
+  const invoiceRead = await assetInvoice.GET(new NextRequest(`http://localhost/api/assets/${firstAsset.id}/inbox-invoices/${invoiceMessageId}/${invoiceFileId}`, { headers: { Authorization: `Bearer ${idToken}` } }), { params: Promise.resolve({ assetId: firstAsset.id, messageId: invoiceMessageId, fileId: invoiceFileId }) });
+  assert.equal(invoiceRead.status, 200);
+  assert.deepEqual(Buffer.from(await invoiceRead.arrayBuffer()), invoiceBytes);
+  await firstAsset.update({ workspaceId: "another-workspace" });
+  assert.equal((await assetInvoice.GET(new NextRequest(`http://localhost/api/assets/${firstAsset.id}/inbox-invoices/${invoiceMessageId}/${invoiceFileId}`, { headers: { Authorization: `Bearer ${idToken}` } }), { params: Promise.resolve({ assetId: firstAsset.id, messageId: invoiceMessageId, fileId: invoiceFileId }) })).status, 404);
+  const nonAssetMessage = await seed(financialDbAdmin, "financialInboxMessages", `${uid}-nonasset`, { workspaceId: "coala", provider: "resend", attachments: [{ id: "nf", filename: "nf.pdf", contentType: "application/pdf", storagePath: `financial-inbox/coala/${uid}-nonasset/attachments/nf.pdf`, sha256: invoiceHash, destination: { kind: "non_asset_invoice", assetIds: [], version: 1, sha256: invoiceHash, confirmedAt: "2026-11-03", confirmedBy: uid, deletionState: "pending" } }] });
+  await profile.set({ permissions: { financial: { view: true, inbox: { view: true, discard: true } } } });
+  const deniedDelete = await invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${nonAssetMessage.id}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: invoiceHash, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: nonAssetMessage.id, fileId: "nf" }) });
+  assert.equal(deniedDelete.status, 403, "descartar cobrança não concede exclusão física");
+  // Duas NFs do mesmo EML disputam o lock da mensagem; retry preserva só o boleto.
+  const MailComposer = (await import("nodemailer/lib/mail-composer/index.js")).default;
+  const mailParts = [Buffer.from("%PDF-NF-1"), Buffer.from("%PDF-NF-2"), Buffer.from("%PDF-BOLETO")];
+  const mail = new MailComposer({ from: "supplier@example.com", to: "financeiro@example.com", subject: "Três anexos", text: "Cobrança sintética", attachments: mailParts.map((content, index) => ({ filename: `${index < 2 ? "nf" : "boleto"}-${index}.pdf`, content, contentType: "application/pdf" })) });
+  const emlBytes = await new Promise((resolve, reject) => mail.compile().build((error, value) => error ? reject(error) : resolve(value)));
+  const emlId = `${uid}-mixed`, emlBase = `financial-inbox/coala/${emlId}`;
+  const emlBucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalRaw = `${emlBase}/original.eml`;
+  await emlBucket.file(originalRaw).save(emlBytes, { resumable: false, metadata: { contentType: "message/rfc822", metadata: { sha256: createHash("sha256").update(emlBytes).digest("hex") } } });
+  const emlAttachments = await Promise.all(mailParts.map(async (bytes, index) => {
+    const path = `${emlBase}/attachments/file${index}.pdf`;
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    await emlBucket.file(path).save(bytes, { resumable: false, metadata: { contentType: "application/pdf", metadata: { sha256 } } });
+    return { id: `file${index}`, filename: `${index < 2 ? "nf" : "boleto"}-${index}.pdf`, contentType: "application/pdf", storagePath: path, sha256, archiveStatus: "stored" };
+  }));
+  const sidecarPath = `${emlAttachments[0].storagePath}.extracted-v1.txt`;
+  await emlBucket.file(sidecarPath).save(Buffer.from("Texto fiscal sensível"), { resumable: false });
+  const sidecarV2 = `${emlAttachments[0].storagePath}.extracted-v2.txt`;
+  const boletoSidecar = `${emlAttachments[2].storagePath}.extracted-v1.txt`;
+  await emlBucket.file(sidecarV2).save(Buffer.from("Outra versão de texto fiscal"), { resumable: false, metadata: { metadata: { sourceSha256: emlAttachments[0].sha256 } } });
+  await emlBucket.file(boletoSidecar).save(Buffer.from("Texto do boleto preservado"), { resumable: false, metadata: { metadata: { sourceSha256: emlAttachments[2].sha256 } } });
+  emlAttachments[0].extractedTextStoragePath = sidecarPath;
+  emlAttachments[0].extractedHints = { documentText: "Texto fiscal sensível", barcode: null };
+  const mixed = await seed(financialDbAdmin, "financialInboxMessages", emlId, { workspaceId: "coala", provider: "resend", status: "pending_review", updatedAt: "2026-11-03T00:00:00.000Z", classification: { barcode: null }, rawStoragePath: originalRaw, rawSha256: createHash("sha256").update(emlBytes).digest("hex"), attachments: emlAttachments });
+  t.after(async () => { const audits = await mixed.collection("audit").get(); await Promise.all(audits.docs.map((entry) => entry.ref.delete())); const [stored] = await emlBucket.getFiles({ prefix: `${emlBase}/`, autoPaginate: false, maxResults: 30 }); await Promise.all(stored.map((item) => item.delete({ ignoreNotFound: true }))); });
+  await profile.set({ permissions: { financial: { view: true, inbox: { view: true, discard: true, deleteFiles: true } } } });
+  const classifyInvoice = async (index) => invoiceDestination.POST(new NextRequest(`http://localhost/api/financial/inbox/${emlId}/files/file${index}/destination`, { method: "POST", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ kind: "non_asset_invoice", assetIds: [], expectedSha256: emlAttachments[index].sha256 }) }), { params: Promise.resolve({ id: emlId, fileId: `file${index}` }) });
+  assert.equal((await classifyInvoice(0)).status, 200);
+  assert.equal((await classifyInvoice(1)).status, 200);
+  const bucketPrototype = Object.getPrototypeOf(emlBucket), originalMetadata = bucketPrototype.getMetadata;
+  const originalGetFiles = bucketPrototype.getFiles;
+  // Storage Emulator não implementa política do bucket; injeta apenas esse metadado do demo.
+  bucketPrototype.getMetadata = async function () { return [{ softDeletePolicy: { retentionDurationSeconds: 7 * 86400 } }]; };
+  bucketPrototype.getFiles = async function (options) { return originalGetFiles.call(this, options?.prefix === `${emlAttachments[0].storagePath}.extracted-` ? { ...options, maxResults: 1 } : options); };
+  t.after(() => { bucketPrototype.getMetadata = originalMetadata; bucketPrototype.getFiles = originalGetFiles; });
+  const dispose = async (index) => invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${emlId}/files/file${index}/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: emlAttachments[index].sha256, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: emlId, fileId: `file${index}` }) });
+  const concurrentDisposal = await Promise.all([dispose(0), dispose(1)]);
+  assert.ok(concurrentDisposal.some((response) => response.status === 200), JSON.stringify(await Promise.all(concurrentDisposal.map(async (response) => ({ status: response.status, body: await response.clone().json() })))));
+  const retry = await Promise.all([dispose(0), dispose(1)]);
+  assert.ok(retry.every((response) => response.status === 200), JSON.stringify(await Promise.all(retry.map(async (response) => ({ status: response.status, body: await response.clone().json() })))));
+  const finalMixed = await mixed.get();
+  assert.equal(finalMixed.get("rawArchiveOperation"), null);
+  assert.equal(finalMixed.get("rawArchiveState"), "redacted");
+  assert.equal(finalMixed.get("attachments")[0].extractedHints, null);
+  assert.equal((await emlBucket.file(sidecarPath).exists())[0], false);
+  assert.equal((await emlBucket.file(sidecarV2).exists())[0], false);
+  assert.equal((await emlBucket.file(boletoSidecar).exists())[0], true);
+  const finalRaw = (await emlBucket.file(finalMixed.get("rawStoragePath")).download())[0];
+  const parsedRaw = await (await import("mailparser")).simpleParser(finalRaw);
+  assert.deepEqual(parsedRaw.attachments.map((item) => createHash("sha256").update(item.content).digest("hex")), [emlAttachments[2].sha256]);
+  assert.deepEqual((await emlBucket.file(emlAttachments[2].storagePath).download())[0], mailParts[2]);
+  assert.equal((await ingestFinancialEmail({ eventId: `late-${emlId}`, eventAt: "2026-11-03T00:00:00.000Z", emailId: emlId, apiKey: "synthetic", received: { raw: { download_url: "https://resend.com/blocked-by-existing" } } })).duplicate, true);
+  assert.equal((await emlBucket.file(originalRaw).exists())[0], false, "callback atrasado não recria EML original após descarte");
+  // A crash after the durable claim but before candidate upload leaves no orphan; retry rebuilds it.
+  const crashId = `${uid}-claim-crash`, crashBase = `financial-inbox/coala/${crashId}`;
+  const crashRaw = `${crashBase}/original.eml`, crashTarget = `${crashBase}/attachments/nf.pdf`;
+  await emlBucket.file(crashRaw).save(emlBytes, { resumable: false, metadata: { metadata: { sha256: createHash("sha256").update(emlBytes).digest("hex") } } });
+  await emlBucket.file(crashTarget).save(mailParts[0], { resumable: false, metadata: { metadata: { sha256: emlAttachments[0].sha256 } } });
+  const crashMessage = await seed(financialDbAdmin, "financialInboxMessages", crashId, { workspaceId: "coala", provider: "resend", rawStoragePath: crashRaw, rawSha256: createHash("sha256").update(emlBytes).digest("hex"), attachments: [{ id: "nf", filename: "nf.pdf", contentType: "application/pdf", storagePath: crashTarget, sha256: emlAttachments[0].sha256, destination: { kind: "non_asset_invoice", assetIds: [], version: 1, sha256: emlAttachments[0].sha256, confirmedAt: "2026-11-03", confirmedBy: uid, deletionState: "pending" } }] });
+  t.after(async () => { const audits = await crashMessage.collection("audit").get(); await Promise.all(audits.docs.map((entry) => entry.ref.delete())); const [stored] = await emlBucket.getFiles({ prefix: `${crashBase}/`, autoPaginate: false, maxResults: 20 }); await Promise.all(stored.map((item) => item.delete({ ignoreNotFound: true }))); });
+  const crashDispose = () => invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${crashId}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: emlAttachments[0].sha256, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: crashId, fileId: "nf" }) });
+  const savePrototype = Object.getPrototypeOf(emlBucket.file(crashRaw)), originalSave = savePrototype.save;
+  let saveFailure = false;
+  savePrototype.save = async function (...args) { if (this.name.startsWith(`${crashBase}/redacted/`) && !saveFailure) { saveFailure = true; throw new Error("synthetic failure after durable claim"); } return originalSave.apply(this, args); };
+  try { assert.equal((await crashDispose()).status, 500); } finally { savePrototype.save = originalSave; }
+  assert.equal(saveFailure, true);
+  const crashPending = await crashMessage.get();
+  assert.equal(crashPending.get("rawArchiveState"), "redacting");
+  assert.equal((await emlBucket.file(crashPending.get("rawArchiveOperation").nextRawPath).exists())[0], false);
+  assert.equal((await crashDispose()).status, 200);
+  const crashFinal = await crashMessage.get();
+  assert.equal(crashFinal.get("rawArchiveState"), "redacted");
+  assert.deepEqual((await (await import("mailparser")).simpleParser((await emlBucket.file(crashFinal.get("rawStoragePath")).download())[0])).attachments.map((item) => createHash("sha256").update(item.content).digest("hex")), [emlAttachments[1].sha256, emlAttachments[2].sha256]);
+  // Two DELETEs for one file must not let the losing claim remove the winner's sanitized EML.
+  const sameId = `${uid}-same-file`, sameBase = `financial-inbox/coala/${sameId}`;
+  const sameRawPath = `${sameBase}/original.eml`, sameTargetPath = `${sameBase}/attachments/nf.pdf`, sameBoletoPath = `${sameBase}/attachments/boleto.pdf`;
+  await emlBucket.file(sameRawPath).save(emlBytes, { resumable: false, metadata: { metadata: { sha256: createHash("sha256").update(emlBytes).digest("hex") } } });
+  await emlBucket.file(sameTargetPath).save(mailParts[0], { resumable: false, metadata: { metadata: { sha256: emlAttachments[0].sha256 } } });
+  await emlBucket.file(sameBoletoPath).save(mailParts[2], { resumable: false, metadata: { metadata: { sha256: emlAttachments[2].sha256 } } });
+  const sameMessage = await seed(financialDbAdmin, "financialInboxMessages", sameId, { workspaceId: "coala", provider: "resend", status: "pending_review", rawStoragePath: sameRawPath, rawSha256: createHash("sha256").update(emlBytes).digest("hex"), attachments: [{ id: "nf", filename: "nf.pdf", contentType: "application/pdf", storagePath: sameTargetPath, sha256: emlAttachments[0].sha256, destination: { kind: "non_asset_invoice", assetIds: [], version: 1, sha256: emlAttachments[0].sha256, confirmedAt: "2026-11-03", confirmedBy: uid, deletionState: "pending" } }, { id: "boleto", filename: "boleto.pdf", contentType: "application/pdf", storagePath: sameBoletoPath, sha256: emlAttachments[2].sha256 }] });
+  t.after(async () => { const audits = await sameMessage.collection("audit").get(); await Promise.all(audits.docs.map((entry) => entry.ref.delete())); const [stored] = await emlBucket.getFiles({ prefix: `${sameBase}/`, autoPaginate: false, maxResults: 20 }); await Promise.all(stored.map((item) => item.delete({ ignoreNotFound: true }))); });
+  const filePrototype = Object.getPrototypeOf(emlBucket.file(sameTargetPath)), originalDelete = filePrototype.delete;
+  let injectedFailure = false;
+  filePrototype.delete = async function (options) { if (this.name === sameTargetPath && !injectedFailure) { injectedFailure = true; throw new Error("synthetic failure after original EML deletion"); } return originalDelete.call(this, options); };
+  const disposeSame = () => invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${sameId}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: emlAttachments[0].sha256, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: sameId, fileId: "nf" }) });
+  try { await Promise.all([disposeSame(), disposeSame()]); } finally { filePrototype.delete = originalDelete; }
+  assert.equal(injectedFailure, true);
+  const samePending = await sameMessage.get();
+  assert.equal(samePending.get("rawArchiveState"), "redacting");
+  assert.equal((await emlBucket.file(samePending.get("rawArchiveOperation").nextRawPath).exists())[0], true);
+  assert.equal((await disposeSame()).status, 200);
+  const sameFinal = await sameMessage.get();
+  assert.equal(sameFinal.get("rawArchiveState"), "redacted");
+  assert.deepEqual((await (await import("mailparser")).simpleParser((await emlBucket.file(sameFinal.get("rawStoragePath")).download())[0])).attachments.map((item) => createHash("sha256").update(item.content).digest("hex")), [emlAttachments[1].sha256, emlAttachments[2].sha256]);
+  assert.deepEqual((await emlBucket.file(sameBoletoPath).download())[0], mailParts[2]);
+  const duplicateId = `${uid}-duplicate-mime`, duplicateBase = `financial-inbox/coala/${duplicateId}`;
+  const duplicateRawPath = `${duplicateBase}/original.eml`, duplicateTarget = `${duplicateBase}/attachments/nf.pdf`;
+  const duplicateMail = new MailComposer({ from: "supplier@example.com", to: "financeiro@example.com", subject: "Partes iguais", text: "Teste", attachments: [{ filename: "nf.pdf", content: mailParts[0], contentType: "application/pdf" }, { filename: "inline-duplicado.pdf", content: mailParts[0], contentType: "application/pdf", contentDisposition: "inline" }] });
+  const duplicateRaw = await new Promise((resolve, reject) => duplicateMail.compile().build((error, value) => error ? reject(error) : resolve(value)));
+  await emlBucket.file(duplicateRawPath).save(duplicateRaw, { resumable: false, metadata: { metadata: { sha256: createHash("sha256").update(duplicateRaw).digest("hex") } } });
+  await emlBucket.file(duplicateTarget).save(mailParts[0], { resumable: false, metadata: { metadata: { sha256: emlAttachments[0].sha256 } } });
+  const duplicateMessage = await seed(financialDbAdmin, "financialInboxMessages", duplicateId, { workspaceId: "coala", provider: "resend", rawStoragePath: duplicateRawPath, rawSha256: createHash("sha256").update(duplicateRaw).digest("hex"), attachments: [{ id: "nf", filename: "nf.pdf", contentType: "application/pdf", storagePath: duplicateTarget, sha256: emlAttachments[0].sha256, destination: { kind: "non_asset_invoice", assetIds: [], version: 1, sha256: emlAttachments[0].sha256, confirmedAt: "2026-11-03", confirmedBy: uid, deletionState: "pending" } }] });
+  t.after(async () => { const [objects] = await emlBucket.getFiles({ prefix: `${duplicateBase}/`, autoPaginate: false, maxResults: 10 }); await Promise.all(objects.map((object) => object.delete({ ignoreNotFound: true }))); });
+  const duplicateDelete = await invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${duplicateId}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: emlAttachments[0].sha256, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: duplicateId, fileId: "nf" }) });
+  assert.equal(duplicateDelete.status, 409);
+  assert.match((await duplicateDelete.json()).error.message, /partes idênticas/);
+  assert.equal((await duplicateMessage.get()).get("rawArchiveOperation"), undefined, "duplicata MIME bloqueia antes do claim");
+  assert.equal((await emlBucket.file(duplicateTarget).exists())[0], true);
+  // Analysis owns a durable message claim before writing text; deletion waits, then removes every version.
+  const fenceId = `${uid}-analysis-fence`, fenceBase = `financial-inbox/coala/${fenceId}`;
+  const xmlBytes = Buffer.from("<NFe><info>Nota fiscal de teste com texto extraível</info></NFe>");
+  const xmlHash = createHash("sha256").update(xmlBytes).digest("hex");
+  const fenceRaw = `${fenceBase}/original.eml`, fenceTarget = `${fenceBase}/attachments/nf.xml`, fenceOther = `${fenceBase}/attachments/outro.pdf`;
+  const fenceMail = new MailComposer({ from: "supplier@example.com", to: "financeiro@example.com", subject: "Documento recebido", text: "Mensagem sintética", attachments: [{ filename: "nf.xml", content: xmlBytes, contentType: "application/xml" }, { filename: "outro.pdf", content: mailParts[2], contentType: "application/pdf" }] });
+  const fenceRawBytes = await new Promise((resolve, reject) => fenceMail.compile().build((error, value) => error ? reject(error) : resolve(value)));
+  await emlBucket.file(fenceRaw).save(fenceRawBytes, { resumable: false, metadata: { metadata: { sha256: createHash("sha256").update(fenceRawBytes).digest("hex") } } });
+  await emlBucket.file(fenceTarget).save(xmlBytes, { resumable: false, metadata: { metadata: { sha256: xmlHash } } });
+  await emlBucket.file(fenceOther).save(mailParts[2], { resumable: false, metadata: { metadata: { sha256: emlAttachments[2].sha256 } } });
+  const oldFenceSidecar = `${fenceTarget}.extracted-pdfjs-v1.txt`, otherFenceSidecar = `${fenceOther}.extracted-pdfjs-v1.txt`;
+  await emlBucket.file(oldFenceSidecar).save(Buffer.from("Versão antiga da NF"), { resumable: false });
+  await emlBucket.file(otherFenceSidecar).save(Buffer.from("Texto de outro arquivo"), { resumable: false });
+  const fenceMessage = await seed(financialDbAdmin, "financialInboxMessages", fenceId, { workspaceId: "coala", provider: "resend", status: "pending_review", updatedAt: "2026-11-03T00:00:00.000Z", receivedAt: "2026-11-03T00:00:00.000Z", from: "supplier@example.com", senderDomain: "example.com", subject: "Documento recebido", textContent: "Mensagem sintética", classification: classifyFinancialEmail({ subject: "Documento recebido", text: "Mensagem sintética", senderDomain: "example.com" }).classification, rawStoragePath: fenceRaw, rawSha256: createHash("sha256").update(fenceRawBytes).digest("hex"), attachments: [{ id: "nf", filename: "nf.xml", contentType: "application/xml", storagePath: fenceTarget, sha256: xmlHash, archiveStatus: "stored" }, { id: "other", filename: "outro.pdf", contentType: "application/pdf", storagePath: fenceOther, sha256: emlAttachments[2].sha256, archiveStatus: "stored" }] });
+  t.after(async () => { const audits = await fenceMessage.collection("audit").get(); const events = await fenceMessage.collection("events").get(); await Promise.all([...audits.docs, ...events.docs].map((entry) => entry.ref.delete())); const [objects] = await emlBucket.getFiles({ prefix: `${fenceBase}/`, autoPaginate: false, maxResults: 30 }); await Promise.all(objects.map((object) => object.delete({ ignoreNotFound: true }))); });
+  const fenceSavePrototype = Object.getPrototypeOf(emlBucket.file(fenceTarget)), saveOriginal = fenceSavePrototype.save;
+  let releaseSidecar, enterSidecar;
+  const sidecarEntered = new Promise((resolve) => { enterSidecar = resolve; });
+  const sidecarGate = new Promise((resolve) => { releaseSidecar = resolve; });
+  fenceSavePrototype.save = async function (...args) { if (this.name.startsWith(`${fenceTarget}.extracted-`)) { enterSidecar(); await sidecarGate; } return saveOriginal.apply(this, args); };
+  const analysis = analyzeFinancialInboxMessage(fenceId, "coala");
+  try {
+    await sidecarEntered;
+    assert.ok((await fenceMessage.get()).get("documentAnalysisOperation"));
+    const fencePost = invoiceDestination.POST(new NextRequest(`http://localhost/api/financial/inbox/${fenceId}/files/nf/destination`, { method: "POST", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ kind: "non_asset_invoice", assetIds: [], expectedSha256: xmlHash }) }), { params: Promise.resolve({ id: fenceId, fileId: "nf" }) });
+    assert.equal((await fencePost).status, 200);
+    const blocked = await invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${fenceId}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: xmlHash, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: fenceId, fileId: "nf" }) });
+    assert.equal(blocked.status, 409, "descarte não passa pelo claim de análise enquanto o sidecar pode ser salvo");
+  } finally { releaseSidecar(); fenceSavePrototype.save = saveOriginal; }
+  await analysis;
+  assert.equal((await fenceMessage.get()).get("documentAnalysisOperation"), null);
+  const lateSidecars = (await emlBucket.getFiles({ prefix: `${fenceTarget}.extracted-`, autoPaginate: false, maxResults: 20 }))[0];
+  assert.ok(lateSidecars.length >= 2, "versões antiga e nova coexistem antes do descarte");
+  const fenceDelete = await invoiceDestination.DELETE(new NextRequest(`http://localhost/api/financial/inbox/${fenceId}/files/nf/destination`, { method: "DELETE", headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ expectedSha256: xmlHash, expectedVersion: 1, confirmed: true }) }), { params: Promise.resolve({ id: fenceId, fileId: "nf" }) });
+  assert.equal(fenceDelete.status, 200);
+  assert.equal((await emlBucket.getFiles({ prefix: `${fenceTarget}.extracted-`, autoPaginate: false, maxResults: 20 }))[0].length, 0);
+  assert.equal((await emlBucket.file(otherFenceSidecar).exists())[0], true);
+  assert.equal((await emlBucket.file(fenceTarget).exists())[0], false);
   const financeOnly = await call(work, "/api/documents/work-items", { tab: "signatures", source: "generated" });
-  assert.equal(financeOnly.status, 200);
-  assert.deepEqual(financeOnly.body.items, []);
+  assert.equal(financeOnly.status, 403);
   assert.equal((await call(generated, "/api/documents/generated", { documentId: `${uid}-old-discarded` })).status, 403);
-  assert.equal((await call(history, "/api/documents/history", { source: "employee_upload" })).body.entries.length, 0);
+  assert.equal((await call(history, "/api/documents/history", { source: "employee_upload" })).status, 403);
   await profile.set({ permissions: { hr: { formalization: { view: false } } } });
   assert.equal((await call(work, "/api/documents/work-items", { tab: "classify" })).status, 403);
   assert.equal((await call(history, "/api/documents/history", { source: "employee_upload" })).status, 403);

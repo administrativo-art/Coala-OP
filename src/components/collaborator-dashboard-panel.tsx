@@ -59,6 +59,7 @@ import {
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
 import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
+import { goalReliefBasisForStart } from "@/lib/goal-relief-basis";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
@@ -390,7 +391,9 @@ function getGoalBonusContext(
   const fixedGoals = bonusParticipants.filter((item) => item.participantRole !== "relief");
   const reliefGoals = bonusParticipants.filter((item) => item.participantRole === "relief");
   const periodShiftCount = Math.max(period.shifts?.length ?? 1, 1);
-  const totalPeriodTurns = getPeriodDateKeys(period).length * periodShiftCount;
+  const totalPeriodDays = getPeriodDateKeys(period).length;
+  const totalPeriodTurns = totalPeriodDays * periodShiftCount;
+  const reliefBasis = goalReliefBasisForStart(period.startDate);
   const preview = calculateTieredGoalBonus(
     methodSnapshot,
     period.currentValue ?? goal.currentValue,
@@ -400,6 +403,9 @@ function getGoalBonusContext(
       reliefWorkerCount: reliefGoals.length,
       reliefWorkerCoveredTurnsByPerson: reliefGoals.map((item) => item.scheduledTurnCount ?? 0),
       totalPeriodTurns,
+      reliefWorkerBasis: reliefBasis,
+      reliefWorkerCoveredDaysByPerson: reliefGoals.map((item) => item.scheduledDays ?? 0),
+      totalPeriodDays,
     }
   );
 
@@ -407,6 +413,7 @@ function getGoalBonusContext(
 
   const role = getGoalRole(goal);
   const ownCoveredTurns = getGoalCoveredTurns(goal);
+  const ownCoveredDays = Math.max(0, ...(goal.originalGoals ?? [goal]).map((item) => item.scheduledDays ?? 0));
   let individualBonus = preview.perCollaboratorBonus;
   let roleLabel = "Colaborador fixo";
 
@@ -416,8 +423,10 @@ function getGoalBonusContext(
   } else if (role === "relief") {
     roleLabel = "Folguista";
     if (preview.reliefWorkerSplit) {
-      individualBonus = totalPeriodTurns > 0
-        ? (ownCoveredTurns / totalPeriodTurns) * preview.totalTeamBonus
+      const denominator = reliefBasis === 'days' ? totalPeriodDays : totalPeriodTurns;
+      const covered = reliefBasis === 'days' ? ownCoveredDays : ownCoveredTurns;
+      individualBonus = denominator > 0
+        ? (covered / denominator) * preview.totalTeamBonus
         : preview.reliefWorkerSplit.reliefWorkerBonus;
     }
   } else if (preview.reliefWorkerSplit) {
@@ -1501,7 +1510,12 @@ function SidebarMetas({
           </Tabs>
         )}
 
-        <div className="flex justify-end border-t pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button asChild variant="ds-secondary">
+            <Link href="/dashboard/goals/guide">
+              <BookOpen aria-hidden="true" className="mr-2 h-4 w-4" />Entenda a meta
+            </Link>
+          </Button>
           <Button asChild className="bg-ds-accent text-white hover:bg-ds-accent-hover">
             <Link href="/dashboard/goals/tracking">
               Acompanhar metas

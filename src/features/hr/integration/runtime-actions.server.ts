@@ -1,7 +1,10 @@
+import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
+import { subjectKey, readSubjectRef } from "@/features/privacy/person-subject";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
+import { confirmedSubjectKeys, confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
 import { SYSTEM_DOCUMENT_TEMPLATES } from "@/features/hr/documents/system-template-catalog";
 import {
   buildSignatureDocumentName,
@@ -225,6 +228,7 @@ async function writeProfileValue(params: {
       status: "managed_by_access_account",
     };
   }
+  await prepareOnboardingPersonForWrite(params.processId);
   const requestId = idempotencyKey([
     "integration_profile_update",
     params.processId,
@@ -244,6 +248,7 @@ async function writeProfileValue(params: {
         status,
         onboardingId: params.processId,
         employeeId: employeeId ?? null,
+        subjectKeys: await confirmedSubjectKeysForDocument(employeeId, params.processId),
         fieldKey: params.fieldKey,
         blockId: params.block?.id ?? null,
         blockLabel: params.block?.label ?? null,
@@ -510,8 +515,19 @@ export function createIntegrationActionAdapter(params: {
           "name",
         ]),
       });
+      await prepareOnboardingPersonForWrite(params.processId);
+      const subjectKeys = await confirmedSubjectKeysForDocument(processString(params.processData, ["employeeId", "collaboratorUserId"]), params.processId);
+      const rawSigners = data.signers ?? data.signer;
+      const explicitSigners = (Array.isArray(rawSigners) ? rawSigners : rawSigners ? [rawSigners] : []).filter((item) => /^\S+@\S+\.\S+$/.test(text(record(item).email) ?? (typeof item === "string" ? item : "")));
+      // The default invitation belongs to the process subject; explicit contacts have
+      // identity only when their namespace/ID is supplied, never from their email.
+      const signerKeys = explicitSigners.length ? [...new Set((await Promise.all(explicitSigners.map(async (signer) => {
+        const ref = readSubjectRef(record(signer).subjectRef);
+        return ref ? confirmedSubjectKeys(ref) : [];
+      }))).flat())] : signers.length ? subjectKeys : [];
       const baseRequest = {
         type: "integration_document_signature",
+        subjectKeys, signerKeys, actorKeys: [subjectKey({ namespace: "main.users", id: params.access.decoded.uid })],
         status: provider === "autentique" ? "sending" : "pending",
         onboardingId: params.processId,
         process: processContext,

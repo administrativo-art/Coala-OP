@@ -200,9 +200,12 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
 }
-function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
-  return policy.participantUserIds.includes(context.decoded.uid)
-    ? policy : disabledRepPLocationPolicy(context.workspace_id, policy.executionUnitId);
+/** A coleta vale para todos: quem decide é o turno (uso da localização) e a unidade só entrega a área. */
+function locationPolicyForActor(_context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
+  // A área pode ser cadastrada antes da aprovação jurídica. Sem referência aprovada, o servidor não pede nem grava posição.
+  return policy.mode === 'observe' && policy.legalBasisReference
+    && policy.retentionDays === REP_P_LOCATION_RETENTION_DAYS
+    ? policy : disabledRepPLocationPolicy(policy.workspaceId, policy.executionUnitId);
 }
 function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function establishmentKey(workspaceId: string, cnpj: string) { return digest(['establishment', workspaceId, cnpj]); }
