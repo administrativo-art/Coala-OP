@@ -276,11 +276,24 @@ function normalizeFreightPaymentMode(
   return rawValue === 'included_with_goods' ? 'included_with_goods' : 'separate';
 }
 
+function normalizeServiceFeePaymentMode(
+  serviceFee: number,
+  rawValue: unknown,
+): 'included_with_goods' | 'separate' | null {
+  if (!(serviceFee > 0)) return null;
+  return rawValue === 'separate' ? 'separate' : 'included_with_goods';
+}
+
 function purchaseLineNetTotal(item: Record<string, any>) {
   const quantity = Number(item.quantityOrdered ?? 0);
   const unitPrice = Number(item.unitPriceOrdered ?? 0);
   const discount = Number(item.discountOrdered ?? 0);
   return Math.max(quantity * unitPrice - discount, 0);
+}
+
+function isLegacyServiceFeeItem(item: Record<string, any>) {
+  return ['expense', 'service'].includes(String(item.itemTreatment ?? '')) &&
+    /taxa de servi[çc]o/i.test(String(item.itemName ?? ''));
 }
 
 function purchaseLineEffectiveUnitPrice(item: Record<string, any>) {
@@ -407,8 +420,9 @@ function chargeableReceiptItemTotal(item: Record<string, any>) {
 }
 
 function buildPurchaseAuditNotes(orderData: Record<string, any>) {
-  const goodsAmount = Number(orderData.totalEstimated ?? 0) - Number(orderData.deliveryFee ?? 0);
+  const goodsAmount = Number(orderData.totalEstimated ?? 0) - Number(orderData.deliveryFee ?? 0) - Number(orderData.serviceFee ?? 0);
   const freightAmount = Number(orderData.deliveryFee ?? 0);
+  const serviceFeeAmount = Number(orderData.serviceFee ?? 0);
   const freightMode = normalizeFreightPaymentMode(freightAmount, orderData.freightPaymentMode);
   const modeLabel =
     freightAmount > 0
@@ -422,6 +436,7 @@ function buildPurchaseAuditNotes(orderData: Record<string, any>) {
   const auditBlock = [
     '[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.',
     `Mercadorias: ${goodsAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`,
+    serviceFeeAmount > 0 ? `Taxa de serviço: ${serviceFeeAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.` : null,
     freightAmount > 0
       ? `Frete: ${freightAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`
       : null,
@@ -511,18 +526,24 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   const components = buildPurchaseExpenseComponents({
     totalValue,
     deliveryFee: orderData.deliveryFee,
+    serviceFee: orderData.serviceFee,
     freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
+    serviceFeePaymentMode: normalizeServiceFeePaymentMode(Number(orderData.serviceFee ?? 0), orderData.serviceFeePaymentMode),
     goodsSupplier: goodsSupplierName,
     freightSupplier: orderData.freightSupplierName,
     goodsAccountPlanId: orderData.accountPlanId,
     goodsAccountPlanName: orderData.accountPlanName,
     freightAccountPlanId: orderData.freightAccountPlanId,
     freightAccountPlanName: orderData.freightAccountPlanName,
+    serviceFeeAccountPlanId: orderData.serviceFeeAccountPlanId,
+    serviceFeeAccountPlanName: orderData.serviceFeeAccountPlanName,
   });
   const linkedGoodsId = String(orderData.linkedExpenseId || '').trim();
   const linkedFreightId = String(orderData.linkedFreightExpenseId || '').trim();
+  const linkedServiceFeeId = String(orderData.linkedServiceFeeExpenseId || '').trim();
   const freightComponent = components.find((component) => component.role === 'freight');
-  const primaryComponent = components.find((component) => component.role !== 'freight');
+  const serviceFeeComponent = components.find((component) => component.role === 'service_fee');
+  const primaryComponent = components.find((component) => component.role === 'goods' || component.role === 'combined');
   if (!primaryComponent) throw new Error('A compra não gerou uma despesa principal válida.');
   const usesCard = orderData.paymentMethod === 'card_credit' || orderData.paymentMethod === 'card_debit';
   const canonicalOrderData = usesCard && !orderData.purchaseDate
@@ -563,8 +584,9 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     originStatus: 'pending_audit',
     purchaseOrderId: orderId,
     purchaseOrderTotalValue: totalValue,
-    purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0), 0),
+    purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0) - Number(orderData.serviceFee ?? 0), 0),
     purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
+    purchaseServiceFeeAmount: Number(orderData.serviceFee ?? 0),
     freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
     purchaseFinancialStatus: orderData.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
     cancelledAt: FieldValue.delete(),
@@ -579,15 +601,15 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     relatedExpenseId: string | null,
     goodsExpenseId: string,
   ) {
-    const canInstall = component.role !== 'freight' && orderData.paymentCondition === 'installments';
-    const separateFreight = component.role === 'freight';
-    const componentPaymentFields = separateFreight
+    const separateComponent = component.role === 'freight' || component.role === 'service_fee';
+    const canInstall = !separateComponent && orderData.paymentCondition === 'installments';
+    const componentPaymentFields = separateComponent
       ? purchasePaymentFields(canonicalOrderData, null, null, { separateFromOrderPayment: true })
       : canonicalPaymentFields;
     return {
       ...sharedPayload,
       ...componentPaymentFields,
-      ...(separateFreight ? {
+      ...(separateComponent ? {
         paymentAccountId: null,
         paymentAccountName: null,
         paymentMethodId: null,
@@ -619,10 +641,12 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       installmentPeriodicity: canInstall ? 'monthly' : null,
       firstInstallmentDueDate: canInstall ? componentPaymentFields.firstInstallmentDueDate : null,
       purchaseExpenseRole: component.role,
-      purchaseComponentType: component.role === 'freight' ? 'inbound_freight' : 'goods',
+      purchaseComponentType: component.role === 'freight' ? 'inbound_freight' : component.role === 'service_fee' ? 'online_service_fee' : 'goods',
       relatedPurchaseExpenseId: relatedExpenseId,
       notes: component.role === 'freight'
         ? `${buildPurchaseAuditNotes(orderData)}\n\nFrete vinculado à despesa ${goodsExpenseId} do pedido ${orderId}.`
+        : component.role === 'service_fee'
+        ? `${buildPurchaseAuditNotes(orderData)}\n\nTaxa de serviço vinculada à despesa ${goodsExpenseId} do pedido ${orderId}.`
         : buildPurchaseAuditNotes(orderData),
     };
   }
@@ -639,11 +663,13 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     const existingExpenses = financialSnap.docs;
     const existingGoods = existingExpenses.find((document) => document.id === linkedGoodsId)
       ?? existingExpenses.find((document) => ['goods', 'combined'].includes(String(document.data().purchaseExpenseRole || '')))
-      ?? existingExpenses.find((document) => document.data().purchaseExpenseRole !== 'freight');
+      ?? existingExpenses.find((document) => !['freight', 'service_fee'].includes(String(document.data().purchaseExpenseRole || '')));
     const existingFreight = existingExpenses.find((document) => document.id === linkedFreightId)
       ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'freight');
+    const existingServiceFee = existingExpenses.find((document) => document.id === linkedServiceFeeId)
+      ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'service_fee');
 
-    for (const existingExpense of [existingGoods, existingFreight]) {
+    for (const existingExpense of [existingGoods, existingFreight, existingServiceFee]) {
       if (!existingExpense) continue;
       assertPurchaseExpenseCanSync(existingExpense.data());
     }
@@ -652,9 +678,11 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       ?? financialDbAdmin.collection('expenses').doc(`purchase_goods_${orderId}`);
     const freightRef = existingFreight?.ref
       ?? financialDbAdmin.collection('expenses').doc(`purchase_freight_${orderId}`);
+    const serviceFeeRef = existingServiceFee?.ref
+      ?? financialDbAdmin.collection('expenses').doc(`purchase_service_fee_${orderId}`);
 
     transaction.set(goodsRef, {
-      ...componentPayload(primaryComponent, freightComponent ? freightRef.id : null, goodsRef.id),
+      ...componentPayload(primaryComponent, freightComponent ? freightRef.id : serviceFeeComponent ? serviceFeeRef.id : null, goodsRef.id),
       ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
     }, { merge: true });
     if (freightComponent) {
@@ -670,10 +698,23 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
         updatedAt: now,
       }, { merge: true });
     }
+    if (serviceFeeComponent) {
+      transaction.set(serviceFeeRef, {
+        ...componentPayload(serviceFeeComponent, goodsRef.id, goodsRef.id),
+        ...(existingServiceFee ? {} : { createdAt: now, createdBy: uid }),
+      }, { merge: true });
+    } else if (existingServiceFee) {
+      transaction.set(existingServiceFee.ref, {
+        status: 'cancelled', originStatus: 'superseded_by_purchase_sync',
+        cancelledReason: 'A taxa de serviço passou a ser paga junto com a mercadoria ou foi removida.',
+        updatedAt: now,
+      }, { merge: true });
+    }
 
     return {
       goodsExpenseId: goodsRef.id,
       freightExpenseId: freightComponent ? freightRef.id : null,
+      serviceFeeExpenseId: serviceFeeComponent ? serviceFeeRef.id : null,
     };
   });
 
@@ -681,6 +722,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     dbAdmin.collection('purchase_orders').doc(orderId).set({
       linkedExpenseId: syncedExpenses.goodsExpenseId,
       linkedFreightExpenseId: syncedExpenses.freightExpenseId ?? FieldValue.delete(),
+      linkedServiceFeeExpenseId: syncedExpenses.serviceFeeExpenseId ?? FieldValue.delete(),
       ...(usesCard && !orderData.purchaseDate ? { purchaseDate: orderData.paymentDueDate } : {}),
     }, { merge: true }),
     dbAdmin
@@ -692,6 +734,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
         Promise.all(snapshot.docs.map((doc) => doc.ref.set({
           linkedExpenseId: syncedExpenses.goodsExpenseId,
           linkedFreightExpenseId: syncedExpenses.freightExpenseId ?? FieldValue.delete(),
+          linkedServiceFeeExpenseId: syncedExpenses.serviceFeeExpenseId ?? FieldValue.delete(),
         }, { merge: true }))),
       ),
   ]);
@@ -901,7 +944,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       const destination = await dbAdmin.collection('kiosks').doc(destinationKioskId).get();
       if (!destination.exists) return jsonError('Destino da compra não encontrado.', 400);
     }
-    for (const accountField of [body.accountPlanId, body.freightAccountPlanId]) {
+    for (const accountField of [body.accountPlanId, body.freightAccountPlanId, body.serviceFeeAccountPlanId]) {
       const accountError = await validateAccountPlanForPosting(accountField);
       if (accountError) return jsonError(accountError);
     }
@@ -909,7 +952,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const items = Array.isArray(body.items) ? body.items : [];
     const itemsTotal = items.reduce((sum: number, item: any) => sum + purchaseLineNetTotal(item), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
-    const totalEstimated = Number(body.totalEstimated ?? (itemsTotal + deliveryFee));
+    const serviceFee = Number(body.serviceFee ?? 0);
+    if (!Number.isFinite(serviceFee) || serviceFee < 0) return jsonError('Taxa de serviço inválida.');
+    if (serviceFee > 0 && items.some(isLegacyServiceFeeItem)) return jsonError('Remova a taxa de serviço dos itens antes de preencher a taxa própria.');
+    const totalEstimated = Number(body.totalEstimated ?? (itemsTotal + deliveryFee + serviceFee));
 
     let supplierName = body.supplierName;
     if (!supplierName && body.supplierId) {
@@ -941,6 +987,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       totalEstimated,
       totalConfirmed: 0,
       deliveryFee,
+      serviceFee,
+      serviceFeeAccountPlanId: body.serviceFeeAccountPlanId ?? null,
+      serviceFeeAccountPlanName: body.serviceFeeAccountPlanName ?? null,
+      serviceFeePaymentMode: normalizeServiceFeePaymentMode(serviceFee, body.serviceFeePaymentMode),
       paymentCondition: body.paymentCondition ?? 'cash',
       paymentDueDate,
       paymentMethod: body.paymentMethod || 'pix',
@@ -1069,6 +1119,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         totalEstimated += (doc.data().totalOrdered || 0);
       });
       totalEstimated += (order.deliveryFee || 0);
+      totalEstimated += (order.serviceFee || 0);
     }
     const confirmationFreightAmount = Number(order.deliveryFee ?? 0);
     const confirmationFreightMode = normalizeFreightPaymentMode(
@@ -1087,6 +1138,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       String(order.freightSupplierName || '').trim().length < 2
     ) {
       return jsonError('Informe o favorecido do frete antes de confirmar a compra.');
+    }
+    if (Number(order.serviceFee ?? 0) > 0 && !String(order.serviceFeeAccountPlanId || '').trim()) {
+      return jsonError('Informe o plano de contas da taxa de serviço antes de confirmar a compra.');
+    }
+    if (Number(order.serviceFee ?? 0) > 0 && itemsSnap.docs.some((itemDoc) => isLegacyServiceFeeItem(itemDoc.data()))) {
+      return jsonError('Remova a taxa de serviço dos itens para evitar cobrança duplicada.');
     }
 
     batch.update(orderRef, { 
@@ -1183,8 +1240,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       batch.delete(orphanedItem.ref);
     }
 
+    // O acompanhamento de pagamentos conserva dois grupos legados: principal e frete.
+    // A taxa integra o principal para que importações antigas liquidem o valor total.
     const goodsAmountEstimated = Math.max(totalEstimated - Number(order.deliveryFee ?? 0), 0);
     const freightAmountEstimated = Number(order.deliveryFee ?? 0);
+    const serviceFeeAmountEstimated = Number(order.serviceFee ?? 0);
     const freightPaymentMode = normalizeFreightPaymentMode(
       freightAmountEstimated,
       order.freightPaymentMode,
@@ -1198,7 +1258,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       amountEstimated: totalEstimated,
       goodsAmountEstimated,
       freightAmountEstimated,
+      serviceFeeAmountEstimated,
       freightPaymentMode,
+      serviceFeePaymentMode: normalizeServiceFeePaymentMode(serviceFeeAmountEstimated, order.serviceFeePaymentMode),
+      serviceFeeAccountPlanId: order.serviceFeeAccountPlanId ?? null,
+      serviceFeeAccountPlanName: order.serviceFeeAccountPlanName ?? null,
       freightSupplierId: freightPaymentMode === 'separate' ? order.freightSupplierId ?? null : null,
       freightSupplierName: freightPaymentMode === 'separate' ? order.freightSupplierName ?? null : null,
       paymentMethod: order.paymentMethod ?? null,
@@ -1334,6 +1398,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           confirmedBy: FieldValue.delete(),
           linkedExpenseId: FieldValue.delete(),
           linkedFreightExpenseId: FieldValue.delete(),
+          linkedServiceFeeExpenseId: FieldValue.delete(),
           financialReversalStatus: 'pending',
           financialReversalError: FieldValue.delete(),
           lastStageReversion: event,
@@ -1795,7 +1860,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       ? 'stocked_with_divergence'
       : 'stocked';
     const deliveryFee = Number(order.deliveryFee ?? 0);
-    const financialConfirmed = goodsConfirmed + deliveryFee;
+    const financialConfirmed = goodsConfirmed + deliveryFee + Number(order.serviceFee ?? 0);
     const resolutionSummary = items
       .map((item: any) => {
         const action = normalizeDivergenceResolutionAction(item.action);
@@ -1989,7 +2054,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     finSnap.forEach((d) => {
       const { status, amountConfirmed } = computeReceiptFinancialUpdate({
         totalConfirmed,
-        deliveryFee,
+        deliveryFee: deliveryFee + Number(order.serviceFee ?? 0),
         amountEstimated: Number(d.data().amountEstimated ?? 0),
         receiptMode: receipt.receiptMode,
         hasRemaining,
@@ -2427,7 +2492,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     finSnap.forEach((d) => {
       const { status, amountConfirmed } = computeReceiptFinancialUpdate({
         totalConfirmed,
-        deliveryFee,
+        deliveryFee: deliveryFee + Number(order.serviceFee ?? 0),
         amountEstimated: Number(d.data().amountEstimated ?? 0),
         receiptMode: receipt.receiptMode,
         hasRemaining: finalStatus === 'partially_stocked',
@@ -2527,6 +2592,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
     const currentItem = itemSnap.data() ?? {};
     const nextItem = { ...currentItem, ...body };
+    if (Number(currentOrder.serviceFee ?? 0) > 0 && isLegacyServiceFeeItem(nextItem)) {
+      return jsonError('A taxa de serviço já está registrada no campo próprio do pedido.');
+    }
     const quantity = Number(nextItem.quantityOrdered ?? 0);
     const unitPrice = Number(nextItem.unitPriceOrdered ?? 0);
     const discount = Number(nextItem.discountOrdered ?? 0);
@@ -2551,7 +2619,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       itemsSnap.docs.reduce((sum, itemDocument) => {
         if (itemDocument.id === childId) return sum + totalOrdered;
         return sum + purchaseLineNetTotal(itemDocument.data());
-      }, 0) + Number(currentOrder.deliveryFee ?? 0),
+      }, 0) + Number(currentOrder.deliveryFee ?? 0) + Number(currentOrder.serviceFee ?? 0),
       0,
     );
 
@@ -2592,6 +2660,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               amountEstimated: nextTotalEstimated,
               goodsAmountEstimated: Math.max(nextTotalEstimated - deliveryFee, 0),
               freightAmountEstimated: deliveryFee,
+              serviceFeeAmountEstimated: Number(currentOrder.serviceFee ?? 0),
               updatedAt: now,
             },
             { merge: true },
@@ -2647,11 +2716,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       return jsonError('Informe a data da compra para o pagamento no cartão.', 400);
     }
     if (nextUsesCard) rest.purchaseDate = nextPurchaseDate;
-    for (const accountField of [rest.accountPlanId, rest.freightAccountPlanId]) {
+    for (const accountField of [rest.accountPlanId, rest.freightAccountPlanId, rest.serviceFeeAccountPlanId]) {
       const accountError = await validateAccountPlanForPosting(accountField);
       if (accountError) return jsonError(accountError);
     }
     const batch = dbAdmin.batch();
+    const normalizedServiceFee = Number(rest.serviceFee ?? currentOrder.serviceFee ?? 0);
+    if (!Number.isFinite(normalizedServiceFee) || normalizedServiceFee < 0) return jsonError('Taxa de serviço inválida.');
+    const itemDocs = Array.isArray(items) || normalizedServiceFee > 0
+      ? (await orderRef.collection('items').get()).docs
+      : [];
 
     // If items are provided, we need to recalculate the totalEstimated
     if (Array.isArray(items)) {
@@ -2661,11 +2735,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         0,
       );
       const deliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
-      rest.totalEstimated = Math.max(itemsTotal + deliveryFee, 0);
+      const serviceFee = Number(rest.serviceFee ?? currentOrder.serviceFee ?? 0);
+      rest.totalEstimated = Math.max(itemsTotal + deliveryFee + serviceFee, 0);
 
       // Replace items: delete old ones first
-      const itemsSnap = await orderRef.collection('items').get();
-      for (const itemDoc of itemsSnap.docs) {
+      for (const itemDoc of itemDocs) {
         batch.delete(itemDoc.ref);
       }
 
@@ -2706,15 +2780,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           notes: item.notes ?? null,
         });
       }
-    } else if ('deliveryFee' in rest) {
+    } else if ('deliveryFee' in rest || 'serviceFee' in rest) {
       const currentGoodsTotal = Math.max(
-        Number(currentOrder.totalEstimated ?? 0) - Number(currentOrder.deliveryFee ?? 0),
+        Number(currentOrder.totalEstimated ?? 0) - Number(currentOrder.deliveryFee ?? 0) - Number(currentOrder.serviceFee ?? 0),
         0,
       );
-      rest.totalEstimated = Math.max(currentGoodsTotal + Number(rest.deliveryFee ?? 0), 0);
+      rest.totalEstimated = Math.max(currentGoodsTotal + Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0) + Number(rest.serviceFee ?? currentOrder.serviceFee ?? 0), 0);
     }
 
     const normalizedDeliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
+    if (normalizedServiceFee > 0) {
+      const nextItems = Array.isArray(items)
+        ? items
+        : itemDocs.map((itemDoc) => itemDoc.data());
+      if (nextItems.some(isLegacyServiceFeeItem)) return jsonError('Remova a taxa de serviço dos itens para evitar cobrança duplicada.');
+    }
+    if ('serviceFeePaymentMode' in rest || 'serviceFee' in rest) {
+      rest.serviceFeePaymentMode = normalizeServiceFeePaymentMode(normalizedServiceFee, rest.serviceFeePaymentMode ?? currentOrder.serviceFeePaymentMode);
+    }
     if ('freightPaymentMode' in rest || 'deliveryFee' in rest) {
       rest.freightPaymentMode = normalizeFreightPaymentMode(
         normalizedDeliveryFee,
@@ -2753,6 +2836,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               amountEstimated: nextTotalEstimated,
               goodsAmountEstimated: nextGoodsAmountEstimated,
               freightAmountEstimated: nextDeliveryFee,
+              serviceFeeAmountEstimated: normalizedServiceFee,
+              serviceFeePaymentMode: rest.serviceFeePaymentMode ?? currentOrder.serviceFeePaymentMode ?? null,
+              serviceFeeAccountPlanId: rest.serviceFeeAccountPlanId ?? currentOrder.serviceFeeAccountPlanId ?? null,
+              serviceFeeAccountPlanName: rest.serviceFeeAccountPlanName ?? currentOrder.serviceFeeAccountPlanName ?? null,
               freightPaymentMode: nextFreightPaymentMode,
               freightSupplierId: nextFreightSupplierId,
               freightSupplierName: nextFreightSupplierName,
