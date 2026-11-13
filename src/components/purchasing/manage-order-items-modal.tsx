@@ -910,7 +910,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                                   onValueChange={(value) => updateItem(item.key, {
                                     stockRegistrationMode: value as StockRegistrationMode,
                                     purchaseUnitType: value === 'individual' ? 'logistic' : 'content',
-                                    unit: value === 'individual' ? 'Embalagem' : (selectedRawProduct.packageType || 'Embalagem'),
+                                    unit: 'Embalagem',
                                   })}
                                 >
                                   <SelectTrigger><SelectValue /></SelectTrigger>
