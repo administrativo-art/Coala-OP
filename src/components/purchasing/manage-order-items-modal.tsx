@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -27,6 +28,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useAssets } from '@/hooks/use-assets';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getContentPurchaseUnitLabel, getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
+import { purchasePackIssue, purchasePackPreview, suggestedUnitsPerPackage, type StockRegistrationMode } from '@/lib/purchase-packaging';
 import {
   type Asset,
   type Product,
@@ -72,6 +74,10 @@ type DraftItem = {
   notes: string;
   aliasCandidate: string;
   linkAlias: boolean;
+  isMultipack: boolean;
+  unitsPerPackage: number;
+  stockRegistrationMode: StockRegistrationMode;
+  packChoiceConfirmed: boolean;
 };
 
 interface Props {
@@ -118,6 +124,10 @@ function newDraftItem(): DraftItem {
     notes: '',
     aliasCandidate: '',
     linkAlias: false,
+    isMultipack: false,
+    unitsPerPackage: 0,
+    stockRegistrationMode: 'individual',
+    packChoiceConfirmed: true,
   };
 }
 
@@ -334,6 +344,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
   const [items, setItems] = useState<DraftItem[]>([]);
   const [activeItemKey, setActiveItemKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -380,9 +391,14 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
             notes: item.notes ?? '',
             aliasCandidate,
             linkAlias: !!aliasCandidate && shouldLinkAlias(aliasCandidate, product, productLabel),
+            isMultipack: item.isMultipack ?? item.purchaseUnitType === 'logistic',
+            unitsPerPackage: item.unitsPerPackage ?? product?.multiplo_caixa ?? suggestedUnitsPerPackage(aliasCandidate) ?? 0,
+            stockRegistrationMode: item.stockRegistrationMode ?? 'individual',
+            packChoiceConfirmed: item.isMultipack != null || item.purchaseUnitType === 'logistic' || !suggestedUnitsPerPackage(aliasCandidate),
           };
         });
       setItems(nextItems);
+      setSaveError('');
       setActiveItemKey(
         nextItems.some((item) => item.key === initialItemId)
           ? String(initialItemId)
@@ -397,6 +413,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
         if (item.key !== key) return item;
         const next = { ...item, ...patch };
         if (patch.operationalCategoryId) {
+          next.isMultipack = false;
           const category = activeCategories.find((entry) => entry.id === patch.operationalCategoryId);
           next.entryType = category?.destination === 'asset' ? 'asset' : category?.destination === 'uniform' ? 'uniform' : 'stock';
           if (patch.itemTreatment == null) {
@@ -413,6 +430,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
         if (patch.itemTreatment) {
           next.entryType = getTreatmentEntryType(patch.itemTreatment);
           if (purchaseTreatmentSkipsOperationalEntry(patch.itemTreatment)) {
+            next.isMultipack = false;
             next.operationalCategoryId = '';
             next.operationalCategoryName = undefined;
             next.isRegistered = false;
@@ -439,6 +457,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
           }
         }
         if (patch.isRegistered != null) {
+          next.isMultipack = false;
           next.productId = '';
           next.baseItemId = '';
           next.itemName = '';
@@ -449,7 +468,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
           const product = products.find((entry) => entry.id === patch.productId);
           if (product) {
             const purchaseUnitOptions = getPurchaseUnitOptions(product);
-            const purchaseUnitType = getDefaultPurchaseUnitType(product);
+            const purchaseUnitType: PurchaseUnitType = 'content';
             const purchaseUnitLabel =
               purchaseUnitOptions.find((option) => option.type === purchaseUnitType)?.label ??
               purchaseUnitOptions[0]?.label ??
@@ -459,6 +478,10 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
             next.purchaseUnitType = purchaseUnitType;
             next.unit = purchaseUnitLabel;
             next.linkAlias = shouldLinkAlias(next.aliasCandidate, product, next.itemName);
+            next.isMultipack = false;
+            next.unitsPerPackage = product.multiplo_caixa ?? suggestedUnitsPerPackage(next.aliasCandidate) ?? 0;
+            next.stockRegistrationMode = 'individual';
+            next.packChoiceConfirmed = next.isMultipack || !suggestedUnitsPerPackage(next.aliasCandidate);
           }
         }
         if (patch.quantityOrdered != null && patch.unitPriceOrdered == null && patch.lineGrossOrdered == null) {
@@ -535,7 +558,11 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
           : item.itemName.trim().length > 0 && item.unit.trim().length > 0;
     const hasRequiredCategory = skipsOperationalEntry || !!category;
     const hasRequiredUnit = skipsOperationalEntry ? item.unit.trim().length > 0 : true;
-    return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+    const product = item.productId ? products.find((entry) => entry.id === item.productId) : null;
+    const packIssue = item.isMultipack
+      ? product ? purchasePackIssue(product, item.unitsPerPackage, item.stockRegistrationMode) : 'Selecione o cadastro que receberá o estoque.'
+      : null;
+    return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0 && !packIssue && item.packChoiceConfirmed;
   };
 
   const validItems = items.filter(isItemValid);
@@ -557,6 +584,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
     unit: item.unit,
     purchaseUnitType: item.purchaseUnitType,
     purchaseUnitLabel: item.unit,
+    isMultipack: item.isMultipack,
+    unitsPerPackage: item.isMultipack ? item.unitsPerPackage : null,
+    stockRegistrationMode: item.isMultipack ? item.stockRegistrationMode : null,
     quantityOrdered: item.quantityOrdered,
     unitPriceOrdered: calculateUnitPriceFromGross(item.lineGrossOrdered, item.quantityOrdered),
     discountOrdered: item.discountOrdered,
@@ -591,6 +621,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
   const handleSave = async () => {
     if (!canSave || !activeItem) return;
     setSubmitting(true);
+    setSaveError('');
     try {
       const aliasCandidates = singleItemMode ? [activeItem] : items;
       const aliasUpdates = new Map<string, { product: Product; aliases: string[] }>();
@@ -631,6 +662,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
       onSuccess?.();
     } catch (error) {
       console.error('Error updating items:', error);
+      setSaveError(error instanceof Error ? error.message : 'Não foi possível salvar os itens.');
     } finally {
       setSubmitting(false);
     }
@@ -708,20 +740,12 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
               const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
-              const supplierPackCount = Number(/\bC\s*\/\s*(\d{2,4})\b/i.exec(item.aliasCandidate)?.[1] ?? 0);
-              const logisticSummary =
-                selectedRawProduct &&
-                item.purchaseUnitType === 'logistic' &&
-                item.quantityOrdered > 0 &&
-                selectedRawProduct.multiplo_caixa &&
-                selectedRawProduct.multiplo_caixa > 0
-                  ? {
-                      contentUnitLabel: getContentPurchaseUnitLabel(selectedRawProduct),
-                      totalContentUnits: item.quantityOrdered * selectedRawProduct.multiplo_caixa,
-                      pricePerContentUnit: (item.lineGrossOrdered - item.discountOrdered) /
-                        (item.quantityOrdered * selectedRawProduct.multiplo_caixa),
-                    }
-                  : null;
+              const packIssue = item.isMultipack && selectedRawProduct
+                ? purchasePackIssue(selectedRawProduct, item.unitsPerPackage, item.stockRegistrationMode)
+                : null;
+              const packPreview = item.isMultipack && item.unitsPerPackage > 1
+                ? purchasePackPreview(item.quantityOrdered, item.unitPriceOrdered, item.discountOrdered, item.unitsPerPackage, item.stockRegistrationMode)
+                : null;
               const availableProducts = categoryDestination
                 ? purchasableProducts.filter((option) => {
                     const product = products.find((entry) => entry.id === option.id);
@@ -846,6 +870,60 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                           </span>
                         </label>
                       )}
+                      {selectedRawProduct && (
+                        <div className="space-y-3 rounded-md border bg-background p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-foreground">Compra em embalagem com várias unidades?</p>
+                              <p className="text-muted-foreground">Defina como o estoque receberá esta compra.</p>
+                            </div>
+                            <Switch
+                              checked={item.isMultipack}
+                              onCheckedChange={(checked) => updateItem(item.key, {
+                                isMultipack: checked,
+                                packChoiceConfirmed: true,
+                                unitsPerPackage: checked ? item.unitsPerPackage || selectedRawProduct.multiplo_caixa || suggestedUnitsPerPackage(item.aliasCandidate) || 0 : 0,
+                                stockRegistrationMode: 'individual',
+                                purchaseUnitType: checked ? 'logistic' : 'content',
+                                unit: checked ? 'Embalagem' : getContentPurchaseUnitLabel(selectedRawProduct),
+                              })}
+                              aria-label="Compra em embalagem com várias unidades"
+                            />
+                          </div>
+                          {item.isMultipack && (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <label htmlFor={`pack-units-${item.key}`} className="font-medium">Unidades em cada embalagem</label>
+                                <Input
+                                  id={`pack-units-${item.key}`}
+                                  type="number"
+                                  min={2}
+                                  step={1}
+                                  value={item.unitsPerPackage || ''}
+                                  onChange={(event) => updateItem(item.key, { unitsPerPackage: Number(event.target.value) || 0 })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="font-medium">Registrar no estoque como</label>
+                                <Select
+                                  value={item.stockRegistrationMode}
+                                  onValueChange={(value) => updateItem(item.key, {
+                                    stockRegistrationMode: value as StockRegistrationMode,
+                                    purchaseUnitType: value === 'individual' ? 'logistic' : 'content',
+                                    unit: value === 'individual' ? 'Embalagem' : (selectedRawProduct.packageType || 'Embalagem'),
+                                  })}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="individual">Unidades individuais</SelectItem>
+                                    <SelectItem value="package">Embalagens fechadas</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -866,32 +944,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                         />
                       );
                     }
-                    if (selectedProduct && selectedProduct.purchaseUnitOptions.length > 1) {
-                      return (
-                        <Select
-                          value={item.purchaseUnitType}
-                          onValueChange={(value) => {
-                            const nextType = value as PurchaseUnitType;
-                            const nextOption = selectedProduct.purchaseUnitOptions.find((option) => option.type === nextType);
-                            updateItem(item.key, {
-                              purchaseUnitType: nextType,
-                              unit: nextOption?.label ?? item.unit,
-                            });
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedProduct.purchaseUnitOptions.map((option) => (
-                              <SelectItem key={option.type} value={option.type}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      );
-                    }
+                    if (selectedProduct) return <Input value={item.unit} readOnly className="bg-muted" />;
                     return <Input value={item.unit} readOnly className="bg-muted" />;
                   })()}
                 </div>
@@ -980,17 +1033,19 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
                       Tratamento: <span className="font-medium text-foreground">{getPurchaseItemTreatmentLabel(item.itemTreatment)}</span>. Este item não criará lote de estoque nem novo patrimônio no recebimento.
                     </p>
                   )}
-                   {logisticSummary && (
+                   {packPreview && (
                      <div className="grid gap-2 rounded-md border bg-background px-3 py-2 text-xs sm:grid-cols-3">
                        <div><span className="block text-muted-foreground">Compra total</span><strong>{fmtQuantity(item.quantityOrdered)} {item.unit} · {fmtCurrency(Math.max(item.lineGrossOrdered - item.discountOrdered, 0))}</strong></div>
-                       <div><span className="block text-muted-foreground">Quantidade de unidades</span><strong>{fmtQuantity(logisticSummary.totalContentUnits)} {logisticSummary.contentUnitLabel}</strong></div>
-                       <div><span className="block text-muted-foreground">Custo por unidade</span><strong>{fmtCurrency(logisticSummary.pricePerContentUnit)} / {logisticSummary.contentUnitLabel}</strong></div>
+                       <div><span className="block text-muted-foreground">Entrada no estoque</span><strong>{fmtQuantity(packPreview.stockQuantity)} {item.stockRegistrationMode === 'individual' ? 'unidades' : 'embalagens'}</strong></div>
+                       <div><span className="block text-muted-foreground">Custo no estoque</span><strong>{packPreview.stockUnitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4, maximumFractionDigits: 4 })} por {item.stockRegistrationMode === 'individual' ? 'unidade' : 'embalagem'}</strong></div>
                      </div>
                    )}
-                   {selectedRawProduct && supplierPackCount > 1 && !selectedRawProduct.multiplo_caixa && (
-                     <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                       A descrição do fornecedor indica {supplierPackCount} unidades por volume, mas o produto cadastrado está como unidade avulsa. Configure o agrupamento no cadastro do produto antes de salvar a compra por volume; sem isso, o estoque receberá apenas a quantidade de volumes informada.
-                     </p>
+                   {packIssue && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">{packIssue}</p>}
+                   {!item.isMultipack && suggestedUnitsPerPackage(item.aliasCandidate) && selectedRawProduct && (
+                     <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                       A descrição sugere {suggestedUnitsPerPackage(item.aliasCandidate)} unidades por embalagem. Confirme no controle acima antes de salvar; como item avulso, a quantidade informada será lançada sem multiplicação.
+                       {!item.packChoiceConfirmed && <Button type="button" variant="outline" size="sm" className="mt-2 block" onClick={() => updateItem(item.key, { packChoiceConfirmed: true })}>Confirmar compra avulsa</Button>}
+                     </div>
                    )}
                    <Input 
                      placeholder="Observações do item..." 
@@ -1015,6 +1070,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
         </div>
 
         <DialogFooter className="items-center sm:justify-between gap-3 border-t pt-4">
+          {saveError && <p role="alert" className="text-xs text-destructive">{saveError}</p>}
           <div className="space-y-1 text-sm">
             <p className="font-semibold">
               Total estimado: {fmtCurrency(orderEstimatedTotal)}

@@ -2727,6 +2727,9 @@ export type PurchaseOrderItem = {
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
+  isMultipack?: boolean;
+  unitsPerPackage?: number | null;
+  stockRegistrationMode?: 'individual' | 'package' | null;
   quantityOrdered: number;
   unitPriceOrdered: number;
   discountOrdered?: number;
@@ -2815,6 +2818,9 @@ export type PurchaseReceiptItem = {
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
+  isMultipack?: boolean;
+  unitsPerPackage?: number | null;
+  stockRegistrationMode?: 'individual' | 'package' | null;
   quantityOrdered: number;
   quantityReceived: number;
   quantityPendingStockEntry?: number;

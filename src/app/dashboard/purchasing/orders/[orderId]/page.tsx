@@ -59,6 +59,7 @@ import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { usePurchaseReceipts } from "@/hooks/use-purchase-receipts";
 import { useQuotationItems } from "@/hooks/use-quotation-items";
 import { getContentPurchaseUnitLabel } from "@/lib/purchasing-units";
+import { purchasePackPreview } from "@/lib/purchase-packaging";
 import { usePurchasingFinancialOptions } from "@/hooks/use-purchasing-financial-options";
 import { PurchasingModuleNavigation } from "@/components/purchasing/purchasing-module-navigation";
 import {
@@ -1219,9 +1220,12 @@ export default function PurchaseOrderPage() {
                       (p) => p.id === item.productId,
                     );
                     const unitsPerVolume = item.purchaseUnitType === "logistic"
-                      ? Number(product?.multiplo_caixa ?? 0)
+                      ? Number(item.isMultipack ? item.unitsPerPackage : product?.multiplo_caixa ?? 0)
                       : 0;
                     const totalInternalUnits = Number(item.quantityOrdered ?? 0) * unitsPerVolume;
+                    const packPreview = item.isMultipack && (item.stockRegistrationMode === 'individual' || item.stockRegistrationMode === 'package')
+                      ? purchasePackPreview(item.quantityOrdered, item.unitPriceOrdered, item.discountOrdered ?? 0, item.unitsPerPackage ?? 0, item.stockRegistrationMode)
+                      : null;
                     const displayName =
                       (product ? getProductFullName(product) : "") ||
                       item.itemName ||
@@ -1262,7 +1266,13 @@ export default function PurchaseOrderPage() {
                                   {fmt(item.grossTotal)}
                                 </p>
                               )}
-                              {product && totalInternalUnits > 0 && (
+                              {packPreview && (
+                                <p className="text-xs font-medium text-zinc-700">
+                                  Estoque previsto: {packPreview.stockQuantity.toLocaleString('pt-BR')} {item.stockRegistrationMode === 'individual' ? 'unidades individuais' : 'embalagens fechadas'} ·
+                                  {' '}{packPreview.stockUnitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4, maximumFractionDigits: 4 })} por unidade de estoque
+                                </p>
+                              )}
+                              {!packPreview && product && totalInternalUnits > 0 && (
                                 <p className="text-xs font-medium text-zinc-700">
                                   Volume: {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} por {fmt(item.totalOrdered)} ·
                                   {" "}{totalInternalUnits.toLocaleString("pt-BR")} {getContentPurchaseUnitLabel(product)} ·

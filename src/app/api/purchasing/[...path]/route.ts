@@ -21,6 +21,7 @@ import {
   calculatePricePerBaseUnit,
   calculateStockQuantityFromPurchase,
 } from '@/lib/purchasing-units';
+import { purchasePackIssue, purchaseProductForPack } from '@/lib/purchase-packaging';
 import {
   getPurchaseComponentActionLabel,
   getTreatmentEntryType,
@@ -1048,6 +1049,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           unit: item.unit || '',
           purchaseUnitType: item.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
+          isMultipack: item.isMultipack ?? false,
+          unitsPerPackage: item.unitsPerPackage ?? null,
+          stockRegistrationMode: item.stockRegistrationMode ?? null,
           quantityOrdered: q,
           unitPriceOrdered: p,
           netUnitPriceOrdered,
@@ -1219,6 +1223,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         unit: item.unit,
         purchaseUnitType: item.purchaseUnitType || 'content',
         purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
+        isMultipack: item.isMultipack ?? false,
+        unitsPerPackage: item.unitsPerPackage ?? null,
+        stockRegistrationMode: item.stockRegistrationMode ?? null,
         quantityOrdered: item.quantityOrdered,
         unitPriceOrdered: effectiveUnitPriceOrdered,
         grossUnitPriceOrdered: item.unitPriceOrdered ?? effectiveUnitPriceOrdered,
@@ -1989,6 +1996,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           unit: item.unit,
           purchaseUnitType: item.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? orderItem?.purchaseUnitLabel ?? item.unit,
+          isMultipack: orderItem?.isMultipack ?? false,
+          unitsPerPackage: orderItem?.unitsPerPackage ?? null,
+          stockRegistrationMode: orderItem?.stockRegistrationMode ?? null,
           itemDestination,
           entryType: itemDestination,
           ...treatmentFields,
@@ -2307,10 +2317,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const productDoc = await dbAdmin.collection('products').doc(item.productId).get();
         if (!productDoc.exists) return jsonError('Unidade de estoque não encontrada.');
         const product = { id: productDoc.id, ...productDoc.data() } as Product;
+        const isMultipack = Boolean(orderItem?.isMultipack ?? existingReceiptItem?.isMultipack);
+        const unitsPerPackage = Number(orderItem?.unitsPerPackage ?? existingReceiptItem?.unitsPerPackage ?? 0);
+        const stockRegistrationMode = orderItem?.stockRegistrationMode ?? existingReceiptItem?.stockRegistrationMode;
+        if (isMultipack) {
+          if (stockRegistrationMode !== 'individual' && stockRegistrationMode !== 'package') return jsonError('Forma de entrada da embalagem inválida.');
+          const packIssue = purchasePackIssue(product, unitsPerPackage, stockRegistrationMode);
+          if (packIssue) return jsonError(packIssue);
+          if (purchaseUnitType !== (stockRegistrationMode === 'individual' ? 'logistic' : 'content')) {
+            return jsonError('A unidade da compra não corresponde à forma de entrada no estoque.');
+          }
+        }
+        const purchaseProduct = purchaseProductForPack(product, isMultipack, unitsPerPackage, stockRegistrationMode);
 
         const convertedPrice = calculatePricePerBaseUnit(
           confirmedUnitPrice,
-          product,
+          purchaseProduct,
           baseProduct!,
           purchaseUnitType,
         );
@@ -2335,7 +2357,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
             const stockConversion = calculateStockQuantityFromPurchase(
               lot.quantity,
-              product,
+              purchaseProduct,
               product,
               baseProduct!,
               purchaseUnitType,
@@ -2634,6 +2656,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       unit: nextItem.unit || '',
       purchaseUnitType: nextItem.purchaseUnitType ?? 'content',
       purchaseUnitLabel: nextItem.purchaseUnitLabel ?? (nextItem.unit || ''),
+      isMultipack: nextItem.isMultipack ?? false,
+      unitsPerPackage: nextItem.unitsPerPackage ?? null,
+      stockRegistrationMode: nextItem.stockRegistrationMode ?? null,
       quantityOrdered: quantity,
       unitPriceOrdered: unitPrice,
       netUnitPriceOrdered,
@@ -2769,6 +2794,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           unit: item.unit || '',
           purchaseUnitType: item.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
+          isMultipack: item.isMultipack ?? false,
+          unitsPerPackage: item.unitsPerPackage ?? null,
+          stockRegistrationMode: item.stockRegistrationMode ?? null,
           quantityOrdered: q,
           unitPriceOrdered: p,
           netUnitPriceOrdered,
