@@ -87,7 +87,7 @@ export function ChangePasswordModal({ open, onOpenChange, forceChange = false }:
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRound /> {forceChange ? 'Defina uma nova senha' : 'Alterar senha'}
+            <KeyRound /> {forceChange ? 'Defina uma nova senha do Coala One' : 'Alterar senha do Coala One'}
           </DialogTitle>
           <DialogDescription>
             {forceChange

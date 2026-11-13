@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **565**
-- Totalmente contratados: **236**
+- Arquivos de rota: **566**
+- Totalmente contratados: **237**
 - Legados congelados: **317**
 - Exceções temporárias: **12**
 - Violações: **0**
@@ -45,6 +45,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/auth/forgot-password` | POST | `LEGACY_BASELINE` | [src/app/api/auth/forgot-password/route.ts](../../src/app/api/auth/forgot-password/route.ts) |
 | `/api/auth/last-login` | POST ✓ | `CONTRACTED` | [src/app/api/auth/last-login/route.ts](../../src/app/api/auth/last-login/route.ts) |
 | `/api/auth/password-changed` | POST ✓ | `CONTRACTED` | [src/app/api/auth/password-changed/route.ts](../../src/app/api/auth/password-changed/route.ts) |
+| `/api/auth/pdv-password` | POST ✓ | `CONTRACTED` | [src/app/api/auth/pdv-password/route.ts](../../src/app/api/auth/pdv-password/route.ts) |
 | `/api/auth/view-as` | DELETE ✓, GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/auth/view-as/route.ts](../../src/app/api/auth/view-as/route.ts) |
 | `/api/catalogo` | GET | `LEGACY_BASELINE` | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) |
 | `/api/client/bootstrap` | GET | `EXCEPTION` | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) |
