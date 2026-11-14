@@ -4,6 +4,7 @@ import { parseStoneAgendaXml } from "../../src/lib/integrations/stone/agenda-par
 import { stoneAccountKind, stoneBrandName } from "../../src/lib/integrations/stone/stone-codes";
 import {
   buildStoneAccountParcels,
+  groupReceiptWeeks,
   cardSaleInstallments,
   receiptGroupKey,
   saleAuditChecks,
@@ -201,4 +202,15 @@ test("auditoria: chargeback e líquido incoerente aparecem como divergência", (
   assert.equal(chargeback[5].result, "bad");
   const net = saleAuditChecks(audit({ installments: [{ ...base.installments[0], netCents: 7000 }] }), 0.0289);
   assert.equal(net[9].result, "bad");
+});
+
+test("semanas de segunda a domingo; dia sem arquivo não entra na diferença", () => {
+  const { parcels } = scenario();
+  const dates = ["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"];
+  const weeks = groupReceiptWeeks(summarizeReceiptDays(parcels, dates, ["2026-11-05"]));
+  assert.deepEqual(weeks.map(week => [week.index, week.from, week.through]), [[1, "2026-11-01", "2026-11-01"], [2, "2026-11-02", "2026-11-05"]]);
+  assert.equal(weeks[0].differenceCents, -3956);
+  assert.equal(weeks[0].daysWithDifference, 1);
+  assert.equal(weeks[1].daysMissingFile, 1);
+  assert.equal(weeks[1].paidCents, 7600 + 4946 + 3970 + 1985, "pagos dos dias com arquivo");
 });

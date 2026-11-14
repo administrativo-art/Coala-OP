@@ -331,6 +331,46 @@ export function summarizeReceiptDays(parcels: ReceiptParcel[], dates: string[], 
   });
 }
 
+export type ReceiptWeek = {
+  index: number;
+  from: string;
+  through: string;
+  days: ReceiptDay[];
+  parcelCount: number;
+  expectedCents: number;
+  paidCents: number;
+  /** Diferença só dos dias com arquivo; dia sem arquivo não vira zero. */
+  differenceCents: number;
+  daysWithDifference: number;
+  daysMissingFile: number;
+};
+
+/** Agrupa os dias em semanas de segunda a domingo, dentro do período (a primeira e a última podem ser parciais). */
+export function groupReceiptWeeks(days: ReceiptDay[]): ReceiptWeek[] {
+  const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const buckets: ReceiptDay[][] = [];
+  for (const day of ordered) {
+    const monday = new Date(`${day.date}T12:00:00Z`).getUTCDay() === 1;
+    if (!buckets.length || monday) buckets.push([]);
+    buckets[buckets.length - 1].push(day);
+  }
+  return buckets.map((items, position) => {
+    const withFile = items.filter(day => !day.missingFile);
+    return {
+      index: position + 1,
+      from: items[0].date,
+      through: items[items.length - 1].date,
+      days: items,
+      parcelCount: items.reduce((sum, day) => sum + day.parcelCount, 0),
+      expectedCents: items.reduce((sum, day) => sum + day.expectedCents, 0),
+      paidCents: withFile.reduce((sum, day) => sum + (day.paidCents ?? 0), 0),
+      differenceCents: withFile.reduce((sum, day) => sum + (day.differenceCents ?? 0), 0),
+      daysWithDifference: withFile.filter(day => (day.differenceCents ?? 0) !== 0).length,
+      daysMissingFile: items.length - withFile.length,
+    };
+  });
+}
+
 const MODALITY_LABEL: Record<ReceiptModality, string> = {
   pix: "Pix", debit: "Débito", credit: "Crédito à vista", installment: "Crédito parcelado", other: "Outro produto",
 };
