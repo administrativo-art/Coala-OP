@@ -218,9 +218,13 @@ export async function syncEnabledStonePortfolios(now = new Date()) {
   const sources = await financialDbAdmin.collection(sourceCollection)
     .where("enabled", "==", true).limit(21).get();
   if (sources.size > 20) throw new AppError({ code: "STONE_PORTFOLIO_SOURCE_LIMIT", kind: "EXPECTED_BUSINESS" });
-  const stoneCodes = sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
-    .filter(source => source.workspaceId === WORKSPACE_ID).map(source => source.stoneCode);
+  const enabled = sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
+    .filter(source => source.workspaceId === WORKSPACE_ID);
   const results = [];
-  for (const stoneCode of stoneCodes) results.push(await syncStonePortfolio(stoneCode, now));
+  for (const source of enabled) results.push(await syncStonePortfolio(source.stoneCode, now));
+  // Depois da carteira, confere e salva o "Recebido" do mês com os mesmos arquivos guardados.
+  // Import dinâmico evita ciclo de módulos (a conferência lê a carteira).
+  const { refreshStoneReceiptSnapshots } = await import("../receipts-reconciliation/stone-account-daily.server");
+  await refreshStoneReceiptSnapshots(enabled, readDay, now);
   return results;
 }

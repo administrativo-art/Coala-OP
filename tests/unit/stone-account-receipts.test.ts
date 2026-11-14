@@ -262,3 +262,13 @@ test("A3: sem MDR no arquivo, taxa proposta = bruto − líquido, entra no resum
   assert.equal(checks[8].result, "warn");
   assert.match(checks[8].note ?? "", /Verificar taxa/);
 });
+
+test("rotina diária: confere o mês do último arquivo e, nos 7 primeiros dias, também o anterior", async () => {
+  const { receiptMonthsToRefresh, receiptMonthRange } = await import("../../src/features/financial/receipts-reconciliation/stone-account");
+  assert.deepEqual(receiptMonthsToRefresh("2026-11-13"), ["2026-11"]);
+  assert.deepEqual(receiptMonthsToRefresh("2026-11-07"), ["2026-10", "2026-11"]);
+  assert.deepEqual(receiptMonthsToRefresh("2027-01-02"), ["2026-12", "2027-01"]);
+  assert.deepEqual(receiptMonthRange("2026-02"), { from: "2026-02-01", through: "2026-02-28" });
+  assert.ok(stoneAccountRequestSchema.safeParse({ view: "saved", kioskId: "k", stoneCode: "123", month: "2026-11" }).success);
+  assert.ok(!stoneAccountRequestSchema.safeParse({ view: "saved", kioskId: "k", stoneCode: "123", month: "2026-13" }).success);
+});

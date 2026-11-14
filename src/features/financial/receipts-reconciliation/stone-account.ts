@@ -39,7 +39,33 @@ const saleRequestSchema = z.object({
   saleId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
 }).strict();
 
-export const stoneAccountRequestSchema = z.union([monthRequestSchema, saleRequestSchema]);
+const savedRequestSchema = z.object({
+  view: z.literal("saved"),
+  ...scopeShape,
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+}).strict();
+
+export const stoneAccountRequestSchema = z.union([monthRequestSchema, saleRequestSchema, savedRequestSchema]);
+export type StoneAccountSavedRequest = z.infer<typeof savedRequestSchema>;
+
+/** Primeiro e último dia civil do mês "AAAA-MM". */
+export function receiptMonthRange(month: string) {
+  const [year, value] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(year, value, 0)).getUTCDate();
+  return { from: `${month}-01`, through: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * Meses que a rotina diária reconfere: o do último arquivo publicado e, nos 7 primeiros dias
+ * do mês, também o anterior (pagamentos, cancelamentos e revisões tardias da Stone).
+ */
+export function receiptMonthsToRefresh(latestPublished: string) {
+  const month = latestPublished.slice(0, 7);
+  if (Number(latestPublished.slice(8, 10)) > 7) return [month];
+  const [year, value] = month.split("-").map(Number);
+  const previous = value === 1 ? `${year - 1}-12` : `${year}-${String(value - 1).padStart(2, "0")}`;
+  return [previous, month];
+}
 export type StoneAccountMonthRequest = z.infer<typeof monthRequestSchema>;
 export type StoneAccountSaleRequest = z.infer<typeof saleRequestSchema>;
 
