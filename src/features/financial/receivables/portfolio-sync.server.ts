@@ -25,7 +25,10 @@ const snapshotCollection = "stonePortfolioSnapshots";
 const lockCollection = "stonePortfolioSyncLocks";
 const maxCachedXmlBytes = 800_000;
 const maxDays = 731;
-const projectionVersion = 2;
+// 3: parcelas trazem bandeira, tipo de conta, nº de parcelas e MDR da captura.
+const projectionVersion = 3;
+/** Versões que ainda contêm a posição de direitos (2.4). A 1 é anterior a ela. */
+const hasRights = (version: unknown) => version === 2 || version === 3;
 const rightsVersion = 1;
 const rightsSchema = z.object({
   workspaceId: z.string().min(1), stoneCode: stoneAgendaQuerySchema.shape.stoneCode,
@@ -196,10 +199,10 @@ export async function readStonePortfolio(stoneCode: string) {
   if (snapshot.get("workspaceId") !== WORKSPACE_ID || snapshot.get("stoneCode") !== stoneCode ||
     snapshot.get("mappingId") !== source.mappingId || snapshot.get("accountId") !== source.accountId ||
     snapshot.get("kioskId") !== source.kioskId || snapshot.get("firstCaptureDate") !== source.firstCaptureDate ||
-    ![1, projectionVersion].includes(snapshot.get("projectionVersion"))) {
+    ![1, 2, projectionVersion].includes(snapshot.get("projectionVersion"))) {
     throw new AppError({ code: "STONE_PORTFOLIO_SNAPSHOT_SCOPE", kind: "DATA_INTEGRITY" });
   }
-  if (snapshot.get("projectionVersion") === projectionVersion) {
+  if (hasRights(snapshot.get("projectionVersion"))) {
     const rights = rightsSchema.safeParse(snapshot.get("rightsPosition"));
     if (!rights.success || rights.data.workspaceId !== WORKSPACE_ID ||
       rights.data.stoneCode !== stoneCode || rights.data.referenceDate !== snapshot.get("asOf")) {
@@ -207,7 +210,7 @@ export async function readStonePortfolio(stoneCode: string) {
     }
   }
   return { status: "synchronized" as const, ...snapshot.data(), latestAvailableDate,
-    rightsPosition: snapshot.get("projectionVersion") === projectionVersion ? snapshot.get("rightsPosition") : null,
+    rightsPosition: hasRights(snapshot.get("projectionVersion")) ? snapshot.get("rightsPosition") : null,
     stale: snapshot.get("asOf") !== latestAvailableDate };
 }
 

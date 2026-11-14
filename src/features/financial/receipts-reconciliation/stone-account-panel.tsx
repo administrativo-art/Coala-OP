@@ -145,7 +145,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
         <td className={`${td} text-right font-ds-mono ${day.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{day.missingFile ? "?" : day.differenceCents ? centsLabel(day.differenceCents) : "—"}</td>
         <td className={`${td} text-[12.5px]`}>{day.missingFile ? <StatusPill variant="warn">Arquivo Stone não recebido</StatusPill>
           : day.reasons.length ? day.reasons.map(reason => `${reason.cents >= 0 ? "+" : "−"}${centsLabel(Math.abs(reason.cents))} ${dayReasonLabel[reason.kind]}`).join(" · ")
-            : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
+            : day.differenceCents ? <StatusPill variant="warn">Diferença sem explicação</StatusPill> : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
       </tr>
       {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-16 pt-2">
         {dayParcels.length ? <div className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} onOpen={() => openSale(parcel.id, null)} />)}</div>
@@ -202,7 +202,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
 
       <section id="dia-a-dia" className="scroll-mt-24 rounded-ds-card border border-ds-border bg-ds-surface">
         <header className="px-[18px] pb-3 pt-4">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Etapa 04 · previsto × pago</p>
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Recebido · previsto × pago</p>
           <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Semana a semana · previsto × caiu na conta Stone</h2>
           <p className="text-[12.5px] text-ds-ink-muted">Clique na semana para ver os dias; no dia, as parcelas; na parcela, a auditoria completa da venda.</p>
         </header>
@@ -262,7 +262,9 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
               <td className={`${td} text-right font-ds-mono text-ds-ok`}>{centsLabel(group.paidCents)}</td>
               <td className={`${td} text-right font-ds-mono`}>{centsLabel(group.toReceiveCents)}</td>
               <td className={`${td} text-right font-ds-mono`}>{group.onTimeRatio === null ? "—" : `${Math.round(group.onTimeRatio * 100)}%`}</td>
-              <td className={td}>{group.pendingCount ? <StatusPill variant="danger">{group.pendingCount} pendente{group.pendingCount > 1 ? "s" : ""}</StatusPill> : <span className="text-ds-ink-faint">—</span>}</td>
+              <td className={td}><span className="flex flex-wrap gap-1">{group.pendingCount ? <StatusPill variant="danger">{group.pendingCount} pendente{group.pendingCount > 1 ? "s" : ""}</StatusPill> : null}
+                {group.feeToVerifyCount ? <StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa · {group.feeToVerifyCount}</StatusPill> : null}
+                {!group.pendingCount && !group.feeToVerifyCount ? <span className="text-ds-ink-faint">—</span> : null}</span></td>
             </tr>;
           }) : <tr><td colSpan={8} className={`${td} text-center text-ds-ink-muted`}>Nenhuma venda desta bandeira na competência.</td></tr>}</tbody>
         </table></div>}

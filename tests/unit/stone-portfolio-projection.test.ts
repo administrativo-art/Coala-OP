@@ -52,3 +52,14 @@ test("arquivo de outro StoneCode e revisão conflitante são rejeitados", () => 
   const revised = { ...first, fileId: "revision" };
   assert.throws(() => projectStonePortfolio(scope, [first, revised]), { code: "STONE_PORTFOLIO_REVISION_CONFLICT" });
 });
+
+test("v3: a parcela aberta leva bandeira, tipo de conta, nº de parcelas e MDR da captura", () => {
+  const withCard = capture("open", "20261003").replace("<CaptureLocalDateTime>", "<AccountType>2</AccountType><BrandId>171</BrandId><NumberOfInstallments>1</NumberOfInstallments><CaptureLocalDateTime>")
+    .replace("<PrevisionPaymentDate>", "<MdrAmount>0.35</MdrAmount><PrevisionPaymentDate>");
+  const result = projectStonePortfolio(scope, [file("2026-09-01", withCard), file("2026-09-02"), file("2026-09-03")]);
+  const row = result.rows.find(item => item.transactionId === "open")!;
+  assert.equal(row.brandCode, "171");
+  assert.equal(row.accountTypeCode, "2");
+  assert.equal(row.installmentCount, 1);
+  assert.equal(row.mdr, "0.35");
+});

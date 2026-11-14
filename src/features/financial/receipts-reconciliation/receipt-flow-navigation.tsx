@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Landmark, Percent, RefreshCw, WalletCards } from "lucide-react";
+import { Landmark, Percent, RefreshCw, WalletCards } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type StoneReceiptFlowStep = "receivables" | "anticipations" | "fees" | "credit";
@@ -25,37 +25,36 @@ export function stoneReceiptFlowHref(step: StoneReceiptFlowStep, mappingId?: str
   return withScope("/dashboard/financial/stone-receipts", mappingId, stoneCode, step);
 }
 
-const steps = [
-  { id: "receivables" as const, number: "01", title: "Carteira e previsões", description: "Parcelas abertas, posição Stone e previsão por período.", icon: WalletCards },
-  { id: "anticipations" as const, number: "02", title: "Antecipações", description: "Pagamentos antes do vencimento e seus custos explícitos.", icon: RefreshCw },
-  { id: "fees" as const, number: "03", title: "Taxas praticadas", description: "Retenções comprovadas e apropriação da despesa.", icon: Percent },
-  { id: "credit" as const, number: "04", title: "Pago na conta Stone", description: "Previsto × pago na conta Stone, por dia e por cartão, com a auditoria de cada venda.", icon: Landmark },
+const tabs = [
+  { id: "receivables" as const, title: "A receber", description: "O que a Stone ainda deve pagar, e quando.", icon: WalletCards },
+  { id: "anticipations" as const, title: "Antecipações", description: "O que foi pago antes do prazo e quanto custou.", icon: RefreshCw },
+  { id: "fees" as const, title: "Taxas", description: "Quanto a Stone reteve de taxa, para contabilizar.", icon: Percent },
+  { id: "credit" as const, title: "Recebido", description: "O previsto caiu na conta Stone, venda a venda.", icon: Landmark },
 ];
 
+/**
+ * Quatro conferências independentes sobre os mesmos arquivos da Stone (não são etapas em sequência).
+ * Abas de contexto na faixa clara acima do conteúdo (docs/design/estrutura-e-navegacao.md).
+ */
 export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: StoneReceiptFlowNavigationProps) {
-  return <nav aria-label="Etapas dos recebimentos" className="rounded-2xl border border-ds-border bg-white p-4 sm:p-5">
-    <p className="text-xs font-extrabold uppercase tracking-widest text-ds-ink-faint">Acompanhe o recebimento</p>
-    <p className="mb-4 mt-1 text-sm text-muted-foreground">Da parcela prevista ao dinheiro que entrou na conta.</p>
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{steps.map(step => {
-      const Icon = step.icon;
-      const active = current === step.id;
+  const active = tabs.find(tab => tab.id === current);
+  return <nav aria-label="Recebíveis Stone" className="space-y-2">
+    <div className="flex max-w-full overflow-x-auto"><div className="inline-flex rounded-ds-md bg-ds-seg p-[3px]">{tabs.map(tab => {
+      const Icon = tab.icon;
+      const selected = current === tab.id;
       return <Link
-        key={step.id}
-        href={stoneReceiptFlowHref(step.id, mappingId, stoneCode)}
-        aria-current={active ? "page" : undefined}
+        key={tab.id}
+        href={stoneReceiptFlowHref(tab.id, mappingId, stoneCode)}
+        aria-current={selected ? "page" : undefined}
+        title={tab.description}
         className={cn(
-          "group flex items-center gap-3 rounded-xl border border-ds-border bg-ds-input px-3 py-3 transition hover:border-ds-border-input hover:bg-ds-warm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2",
-          active && "border-ds-accent bg-ds-accent-row"
+          "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-ds-sm px-4 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+          selected ? "bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink",
         )}
       >
-        <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", active ? "bg-white text-ds-accent-ink" : "bg-white text-ds-ink-muted")}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa {step.number}</span>
-          <span className="block text-sm font-bold text-ds-ink">{step.title}</span>
-        </span>
-        <span className="sr-only">{step.description} {active ? "Etapa atual" : "Abrir etapa"}</span>
-        <ArrowRight className="h-4 w-4 shrink-0 text-ds-accent-ink" aria-hidden="true" />
+        <Icon aria-hidden="true" className={cn("h-4 w-4", selected ? "text-ds-accent-ink" : "")} />{tab.title}
       </Link>;
-    })}</div>
+    })}</div></div>
+    {active ? <p className="text-[12.5px] text-ds-ink-muted">{active.description}</p> : null}
   </nav>;
 }

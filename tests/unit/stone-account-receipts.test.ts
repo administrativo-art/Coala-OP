@@ -214,3 +214,51 @@ test("semanas de segunda a domingo; dia sem arquivo não entra na diferença", (
   assert.equal(weeks[1].daysMissingFile, 1);
   assert.equal(weeks[1].paidCents, 7600 + 4946 + 3970 + 1985, "pagos dos dias com arquivo");
 });
+
+test("A1: pagamento sem data prevista no arquivo usa a data da captura (ou da carteira)", () => {
+  const capture = transaction("debit-no-prevision", { capture: "20261112203036", brand: "2", account: "3", captured: "21.50",
+    installments: [{ n: 1, gross: "21.50", net: "21.19", prevision: "20261113" }] });
+  const payment = transaction("debit-no-prevision", { capture: "20261112203036", brand: "2", account: "3", events: { Payments: 1 },
+    installments: [{ n: 1, gross: "21.50", net: "21.19", payment: "20261113", paymentId: "p-9" }] });
+  const portfolioOnly = transaction("old-no-prevision", { capture: "20261013100000", brand: "1", account: "2", events: { Payments: 1 },
+    installments: [{ n: 1, gross: "10.00", net: "9.71", payment: "20261113", paymentId: "p-10" }] });
+  const { parcels } = buildStoneAccountParcels({ from: "2026-11-12", through: "2026-11-13", latestPublished: "2026-11-13",
+    files: [file("2026-11-12", capture), file("2026-11-13", "", payment + portfolioOnly)], missingDates: [],
+    portfolio: [{ transactionId: "old-no-prevision", installment: 1, saleDate: "2026-10-13", dueDate: "2026-11-13", gross: "10.00", net: "9.71", status: "paid", paymentDate: "2026-11-13" }], pix: [] });
+  const byId = new Map(parcels.map(parcel => [parcel.id, parcel]));
+  assert.equal(byId.get("debit-no-prevision:1")?.expectedDate, "2026-11-13");
+  assert.equal(byId.get("debit-no-prevision:1")?.status, "paid");
+  assert.equal(byId.get("old-no-prevision:1")?.expectedDate, "2026-11-13");
+  const day = summarizeReceiptDays(parcels, ["2026-11-13"], [])[0];
+  assert.equal(day.differenceCents, 0);
+  assert.deepEqual(day.reasons, []);
+});
+
+test("A2: diferença sem motivo aparece como 'sem explicação', nunca como zero", () => {
+  const orphan = transaction("orphan", { capture: "20261001100000", brand: "1", account: "2", events: { Payments: 1 },
+    installments: [{ n: 1, gross: "10.00", net: "9.71", payment: "20261113", paymentId: "p-11" }] });
+  const { parcels } = buildStoneAccountParcels({ from: "2026-11-13", through: "2026-11-13", latestPublished: "2026-11-13",
+    files: [file("2026-11-13", "", orphan)], missingDates: [], portfolio: null, pix: [] });
+  const day = summarizeReceiptDays(parcels, ["2026-11-13"], [])[0];
+  assert.equal(day.differenceCents, 971);
+  assert.deepEqual(day.reasons.map(reason => [reason.kind, reason.cents]), [["no_expected", 971]]);
+  const total = day.reasons.reduce((sum, reason) => sum + reason.cents, 0);
+  assert.equal(total, day.differenceCents, "a explicação fecha com a diferença");
+});
+
+test("A3: sem MDR no arquivo, taxa proposta = bruto − líquido, entra no resumo e pede verificação", () => {
+  const capture = transaction("no-mdr", { capture: "20261112203036", brand: "2", account: "3", captured: "21.50",
+    installments: [{ n: 1, gross: "21.50", net: "21.19", prevision: "20261113" }] });
+  const { parcels } = buildStoneAccountParcels({ from: "2026-11-12", through: "2026-11-13", latestPublished: "2026-11-13",
+    files: [file("2026-11-12", capture), file("2026-11-13")], missingDates: [], portfolio: null, pix: [] });
+  const parcel = parcels.find(row => row.id === "no-mdr:1")!;
+  assert.equal(parcel.feeCents, 31);
+  assert.equal(parcel.feeSource, "derived");
+  const group = summarizeReceiptGroups(parcels, "2026-11-12", "2026-11-13", "2026-11-13").find(row => row.key === "Mastercard|debit")!;
+  assert.equal(group.saleCount, 1);
+  assert.equal(group.feeToVerifyCount, 1);
+  const base = audit();
+  const checks = saleAuditChecks(audit({ installments: [{ ...base.installments[0], feeCents: 236, feeSource: "derived" }] }), 0.0289);
+  assert.equal(checks[8].result, "warn");
+  assert.match(checks[8].note ?? "", /Verificar taxa/);
+});
