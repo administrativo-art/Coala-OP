@@ -733,3 +733,56 @@ export function cardSaleInstallments(input: {
     };
   });
 }
+
+// ---------- antecipações (aba Antecipações, alternativa C10) ----------
+
+export type AnticipationItem = {
+  id: string; saleId: string; brand: string | null; modality: ReceiptModality;
+  installment: number; installmentCount: number;
+  paidDate: string; originalDate: string; days: number;
+  /** Líquido que a Stone pagaria no vencimento original (antes da antecipação). */
+  baseCents: number; costCents: number; paidCents: number;
+  /** Custo ÷ (base × dias ÷ 30): taxa efetiva ao mês. */
+  monthlyRate: number | null;
+};
+
+const civilDays = (from: string, through: string) =>
+  Math.round((Date.parse(`${through}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+
+/** Parcelas pagas antes do vencimento original com custo de antecipação, a partir das parcelas do mês. */
+export function anticipationItems(parcels: ReceiptParcel[]): AnticipationItem[] {
+  return parcels.flatMap(parcel => {
+    if (parcel.source !== "card" || !parcel.paidDate || !parcel.expectedDate || parcel.paidDate >= parcel.expectedDate) return [];
+    const cost = Math.max(0, parcel.anticipationCents ?? 0);
+    const days = civilDays(parcel.paidDate, parcel.expectedDate);
+    return [{
+      id: parcel.id, saleId: parcel.saleId, brand: parcel.brand, modality: parcel.modality,
+      installment: parcel.installment, installmentCount: parcel.installmentCount,
+      paidDate: parcel.paidDate, originalDate: parcel.expectedDate, days,
+      baseCents: parcel.expectedNetCents, costCents: cost, paidCents: parcel.paidNetCents ?? parcel.expectedNetCents - cost,
+      monthlyRate: parcel.expectedNetCents > 0 && days > 0 ? cost / (parcel.expectedNetCents * days / 30) : null,
+    }];
+  }).sort((a, b) => b.paidDate.localeCompare(a.paidDate) || a.id.localeCompare(b.id));
+}
+
+/** Taxa efetiva a.m. ponderada por valor × dias. */
+export function weightedMonthlyRate(items: AnticipationItem[]) {
+  const weight = items.reduce((sum, item) => sum + item.baseCents * item.days, 0);
+  return weight > 0 ? items.reduce((sum, item) => sum + item.costCents, 0) / weight * 30 : null;
+}
+
+const mondayOfDate = (date: string) => {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - (value.getUTCDay() + 6) % 7);
+  return value.toISOString().slice(0, 10);
+};
+export function anticipationWeeks(items: AnticipationItem[]) {
+  const groups = new Map<string, AnticipationItem[]>();
+  for (const item of items) groups.set(mondayOfDate(item.paidDate), [...(groups.get(mondayOfDate(item.paidDate)) ?? []), item]);
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([from, list]) => ({
+    from, items: list,
+    baseCents: list.reduce((sum, item) => sum + item.baseCents, 0),
+    costCents: list.reduce((sum, item) => sum + item.costCents, 0),
+    monthlyRate: weightedMonthlyRate(list),
+  }));
+}
