@@ -36,6 +36,8 @@ export const dayReasonLabel: Record<ReceiptDay["reasons"][number]["kind"], strin
   chargeback: "chargeback",
   review: "a conferir",
   adjustment: "ajuste no valor pago",
+  no_expected: "pagos sem previsão identificada",
+  unexplained: "sem explicação",
 };
 
 export const checkView: Record<AuditCheckResult, { symbol: string; className: string; label: string }> = {

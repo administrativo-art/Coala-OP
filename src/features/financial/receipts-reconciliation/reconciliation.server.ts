@@ -213,7 +213,7 @@ async function querySale(request: StoneAccountSaleRequest, context: Context, dep
       stone: { transactionId: null, e2eId: evidence.e2eId, eventId: evidence.eventId, captureLocalDateTime: null, saleTime: belemTime(evidence.soldAt),
         authorizationDateTimeUtc: evidence.soldAt, brandCode: null, brand: null, accountTypeCode: null, feeTypeCode: null, modality: "pix",
         installmentCount: 1, capturedCents: evidence.grossCents, canceledCents: 0, events: {}, originFile: source.fileId ? { id: source.fileId, referenceDate: request.saleDate, generatedAt: "" } : null },
-      installments: [{ number: 1, grossCents: evidence.grossCents, feeCents: evidence.feeCents, anticipationCents: null,
+      installments: [{ number: 1, grossCents: evidence.grossCents, feeCents: evidence.feeCents, feeSource: "stone", anticipationCents: null,
         netCents: evidence.grossCents - evidence.feeCents, expectedDate: evidence.soldOn, originalDate: null, paidDate: settled,
         paymentId: null, paymentEventCount: settled ? 1 : 0, suspendedByChargeback: false,
         file: source.fileId ? { id: source.fileId, referenceDate: request.saleDate, generatedAt: "" } : null,

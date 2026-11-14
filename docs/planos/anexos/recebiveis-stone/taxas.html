@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taxas · escolhida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#f0eee9;--surface:#fff;--warm:#fffdf9;--input:#faf9f6;--muted:#f6f4ef;--seg:#e6e3dc;--dark:#15151c;--dark-hover:#2a2a35;
+  --border:#e3dfd6;--border-input:#dcd9d1;--divider:#f1eee8;
+  --ink:#1a1b1f;--ink2:#4a4f57;--ink-muted:#5f646c;--ink-faint:#6e737a;--on-dark:#f3f2ee;--on-dark-2:#c8c7d0;--on-dark-muted:#8e8d99;--on-dark-sub:#a9a8b3;--zero:#77768a;
+  --accent:#d13670;--accent-hover:#b8325f;--accent-ink:#a6325b;--accent-soft:#fbe7ef;--accent-row:#fbf3f6;--kicker-dark:#f08bb1;
+  --ok:#147337;--ok-bg:#e8f5ee;--warn:#c2410c;--warn-bg:#fff1e6;--danger:#be123c;--danger-bg:#ffe4e8;--info:#1d4ed8;--info-bg:#eef3fe;--neutral:#5f646c;--neutral-bg:#eceae5;
+  --alert-bg:#fff7e6;--alert-border:#f5d9a3;--alert-ink:#6b4500;
+  --shadow-lift:0 16px 36px rgba(21,21,28,.16),0 2px 6px rgba(21,21,28,.06);--shadow-side:-24px 0 60px rgba(0,0,0,.18);--shadow-cta:0 8px 24px rgba(209,54,112,.35);--scrim:rgba(21,21,28,.45);
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 "Inter Tight",-apple-system,BlinkMacSystemFont,sans-serif}
+.mono,.amt{font-family:"JetBrains Mono","Geist Mono",ui-monospace,monospace}
+button{font:inherit;cursor:pointer;color:inherit}
+.wrap{max-width:1440px;margin:0 auto;padding:20px 28px 60px;display:flex;flex-direction:column;gap:18px}
+@media(max-width:720px){.wrap{padding:16px}}
+.proto{background:var(--alert-bg);border-bottom:1px solid var(--alert-border);color:var(--alert-ink);padding:6px 28px;font-size:12px;font-weight:600}
+.kick{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.spacer{flex:1}.faint{color:var(--ink-faint)}.muted{color:var(--ink-muted)}.small{font-size:12.5px}.r{text-align:right}
+.k-ok{color:var(--ok)}.k-adj{color:var(--warn)}.k-bad{color:var(--danger)}.k-wait{color:var(--info)}.k-none{color:var(--ink-faint)}
+.diff{color:var(--danger);font-weight:700}
+/* PageHero */
+.hero{background:var(--dark);color:var(--on-dark);border-radius:28px;padding:20px 26px;display:flex;flex-direction:column;gap:16px}
+.hero .kick{color:var(--kicker-dark)}
+.hero h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em}
+.hero .sub{font-size:13px;color:var(--on-dark-sub)}
+.hrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.hchip{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);border:0;color:var(--on-dark-2)}
+.hchip .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700}.hchip .l{font-size:13px;font-weight:700}
+.hchip.ok .v{color:#7fd6a0}.hchip.danger .v{color:#ff8fa5}.hchip.info .v{color:#9db8ff}
+.btn-dark{height:36px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:none;color:var(--on-dark);font-weight:700;font-size:13px}
+.btn-dark:hover{background:rgba(255,255,255,.06)}
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px}
+.chead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;padding:16px 18px 12px}
+.chead h2{margin:2px 0 0;font-size:15.5px;font-weight:800}
+.scope{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:14px 18px}
+.sel{display:flex;flex-direction:column;gap:6px;min-width:170px}
+.sel span.box{height:40px;border:1px solid var(--border-input);border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-weight:600;font-size:13.5px}
+.sel span.box:after{content:"⌄";color:var(--ink-faint);margin-left:10px}
+.sync{font-size:12px;font-weight:700;color:var(--ok);background:var(--ok-bg);border-radius:999px;height:28px;display:inline-flex;align-items:center;padding:0 12px}
+/* fluxo */
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 16px}@media(max-width:900px){.flow{grid-template-columns:1fr 1fr}}
+.flow a{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--input);border-radius:12px;padding:10px 12px;text-decoration:none;color:var(--ink)}
+.flow a:hover{border-color:var(--border-input);background:var(--warm)}
+.flow a.on{border-color:var(--accent);background:var(--accent-row)}
+.flow i{font-style:normal;display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}.flow b{font-size:13.5px}
+.flow .arr{margin-left:auto;color:var(--accent-ink);font-weight:800}
+/* Segmented */
+.seg{display:inline-flex;background:var(--seg);border-radius:11px;padding:3px}
+.seg button{height:32px;border:0;background:none;border-radius:9px;padding:0 14px;font-weight:700;font-size:13px;color:var(--ink-muted)}
+.seg button[aria-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.jump a{color:var(--accent-ink);font-weight:700;font-size:13px;text-decoration:none;margin-left:14px}.jump a:hover{color:#8e294d;text-decoration:underline}
+/* StatusPill */
+.pill{display:inline-flex;align-items:center;height:21px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.s-ok{background:var(--ok-bg);color:var(--ok)}.s-wait{background:var(--info-bg);color:var(--info)}.s-review{background:var(--danger-bg);color:var(--danger)}.s-adj{background:var(--warn-bg);color:var(--warn)}.s-bank{background:var(--neutral-bg);color:var(--neutral)}
+/* tabela */
+.tw{overflow-x:auto}
+.tb{width:100%;border-collapse:separate;border-spacing:0}
+.tb th{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);padding:10px 18px;border-top:1px solid var(--divider);border-bottom:1px solid var(--divider);background:var(--muted);text-align:left;white-space:nowrap}
+.tb td{padding:13px 18px;border-bottom:1px solid var(--divider);vertical-align:top;font-size:13.5px}
+.tb th.r,.tb td.r{text-align:right}.tb td.mono{font-size:13px;font-weight:600}
+.tb tr:last-child>td{border-bottom:0}
+.tb tr.click{cursor:pointer}.tb tr.click:hover>td{background:var(--muted)}
+.tb tr.att>td{background:#fffaf4}
+.tb tr.child>td{background:var(--input)}.tb tr.child>td:first-child{padding-left:42px}
+.tb tr.open>td{background:var(--accent-row)}.tb tr.open>td:first-child{box-shadow:inset 3px 0 0 var(--accent-ink)}
+.tb td.sub{background:var(--input);padding:8px 18px 14px 42px}
+.chev{display:inline-block;width:14px;color:var(--ink-faint)}
+.foot{padding:12px 18px;border-top:1px solid var(--divider);font-size:12.5px;color:var(--ink-muted)}
+/* LiftRow */
+.rows{background:#fff;border:1px solid var(--border);border-radius:14px}
+.lift{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--divider);background:transparent;padding:13px 18px;position:relative;transition:transform .18s var(--ease),box-shadow .18s ease,border-radius .18s ease,background .18s ease}
+.lift:last-child{border-bottom:0}
+.lift:hover,.lift:focus-visible{z-index:3;transform:translateY(-3px) scale(1.006);background:#fff;border-radius:14px;box-shadow:var(--shadow-lift);outline:none}
+@media(prefers-reduced-motion:reduce){.lift:hover{transform:none}}
+.lift b{font-size:14px;font-weight:800}.amt{font-weight:700;font-size:13.5px;white-space:nowrap}
+.pp{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+/* SidePanel */
+.scrim{position:fixed;inset:0;background:var(--scrim);display:none;z-index:40}
+.panel{position:fixed;top:0;right:0;height:100dvh;width:min(920px,100vw);background:var(--warm);z-index:41;box-shadow:var(--shadow-side);transform:translateX(100%);transition:transform .2s var(--ease);display:flex;flex-direction:column;border-radius:20px 0 0 20px;overflow:hidden}
+.open .scrim{display:block}.open .panel{transform:none}
+.ph{background:var(--dark);color:var(--on-dark);padding:22px 24px;position:relative}
+.ph .kick{color:var(--kicker-dark)}.ph h2{margin:4px 0 0;font-size:20px;font-weight:800;padding-right:40px}.ph .sub{font-size:12.5px;color:var(--on-dark-sub);margin-top:2px}
+.ph .x{position:absolute;right:16px;top:16px;border:0;background:none;color:var(--on-dark-2);border-radius:9px;width:30px;height:30px;font-size:18px}.ph .x:hover{background:rgba(255,255,255,.1)}
+.ph .hl{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:14px;align-items:flex-end}
+.ph .hl div{display:flex;flex-direction:column}.ph .hl small{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-muted)}.ph .hl strong{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.pb{flex:1;overflow-y:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px}
+.psec{background:#fff;border:1px solid var(--border);border-radius:14px}
+.psec>header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--divider);padding:10px 16px}
+.psec>header h3{margin:0;font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.psec>header span{font-size:11.5px;color:var(--ink-faint)}
+.psec>.in{padding:14px 16px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.two{grid-template-columns:1fr}}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.f .kl{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.f .fn{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin-left:4px;text-transform:none;letter-spacing:0;font-weight:500}
+.f .v{margin-top:2px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.f.wide{grid-column:1/-1}
+.ptab{width:100%;border-collapse:collapse;font-size:13px}
+.ptab th,.ptab td{padding:8px 10px;border-bottom:1px solid var(--divider);text-align:right;white-space:nowrap}
+.ptab th:first-child,.ptab td:first-child{text-align:left;white-space:normal}
+.ptab thead th{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);background:var(--muted)}
+.ptab td:first-child{color:var(--ink-muted)}.ptab td:first-child .fn{display:block;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-faint)}
+.ptab td{font-weight:600}.ptab tr:last-child td{border-bottom:0}
+.cl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}@media(max-width:760px){.cl{grid-template-columns:1fr}}
+.cl div{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600}
+.ico{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:11px;flex-shrink:0}
+.ico.k-ok{background:var(--ok-bg)}.ico.k-bad{background:var(--danger-bg)}.ico.k-adj{background:var(--warn-bg)}.ico.k-wait{background:var(--info-bg)}
+.checks{display:flex;flex-direction:column;gap:0}
+.ck{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider)}.ck:last-child{border-bottom:0}
+.ck b{font-size:14px;font-weight:800}
+.ck.bad{background:#fff7f8}.ck.warn{background:#fffaf4}
+.cmp2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 2px}
+.cmp2 span{background:var(--input);border:1px solid var(--divider);border-radius:9px;padding:6px 10px;font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:600;overflow-wrap:anywhere}
+.cmp2 i{display:block;font-style:normal;font-family:"Inter Tight",sans-serif;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-faint);margin-bottom:2px}
+.btn{height:36px;padding:0 14px;border:1px solid var(--border-input);background:#fff;border-radius:12px;font-weight:700;font-size:13px;color:var(--ink)}
+.btn:hover{background:var(--muted)}
+.note{border:1px solid var(--alert-border);background:var(--alert-bg);color:var(--alert-ink);border-radius:12px;padding:10px 12px;font-size:12.5px}
+.tb tr.week>td{background:#fff;border-bottom:1px solid var(--border)}.tb tr.week:hover>td{background:var(--muted)}
+.tb tr.week.open>td{background:var(--accent-row)}.tb tr.week.open>td:first-child{box-shadow:inset 3px 0 0 var(--accent-ink)}
+.tb tr.day>td{background:var(--input)}.tb tr.day.att>td{background:#fffaf4}.tb tr.day.open>td{background:var(--accent-row)}
+.bar{height:4px;border-radius:999px;background:var(--divider);margin-top:6px;overflow:hidden;margin-left:auto;max-width:140px}.bar i{display:block;height:100%;background:var(--ok);border-radius:999px}
+.wpills{display:flex;gap:4px;flex-wrap:wrap}
+.tb tr.wk{cursor:pointer}.tb tr.wk>td{background:#fff;border-bottom:1px solid var(--divider);padding-top:14px;padding-bottom:14px}
+.tb tr.wk:hover>td{background:var(--muted)}.tb tr.wk.open>td{background:#fff;border-bottom-color:transparent}
+.tb tr.wk b{font-weight:800}.wname{display:inline-block;min-width:92px}.wdates{color:var(--ink-muted);font-size:12.5px;font-weight:600;margin-left:0;padding-left:12px;border-left:2px solid var(--ink-faint);display:inline-block;line-height:1.1}
+.wdots{display:flex;gap:4px;margin:7px 0 0 20px}
+.wd{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;background:var(--muted);color:var(--ink-faint);box-shadow:inset 0 -2px 0 var(--border-input)}
+.wd.ok{box-shadow:inset 0 -2px 0 #7cc49a;color:var(--ink-muted)}
+.wd.bad{box-shadow:inset 0 -2px 0 var(--danger);color:var(--danger);background:#fdf3f5}
+.wd.miss{box-shadow:inset 0 -2px 0 var(--warn);color:var(--warn);background:#fff8f1}
+.wd.none{opacity:.55}
+.bpills{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 14px}
+.bpills button{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--border-input);background:#fff;font-size:13px;font-weight:700;color:var(--ink2);display:inline-flex;align-items:center;gap:7px}
+.bpills button:hover{background:var(--muted)}
+.bpills button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.bpills .n{font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:800;opacity:.75}.bpills .dot{width:7px;height:7px;border-radius:50%;background:var(--danger)}
+.bpills button[aria-pressed=true] .dot{background:#fff}
+.empty{margin:0 18px 16px;border:1px dashed var(--border-input);border-radius:14px;padding:28px 16px;text-align:center;color:var(--ink-muted);font-size:13px}
+
+/* ---- A receber ---- */
+:root{--c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100}
+.altnav{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.altnav button{border:1px solid rgba(107,69,0,.25);background:#fff;color:var(--alert-ink);border-radius:999px;padding:5px 11px;font-weight:700;font-size:12px}
+.altnav button[aria-pressed=true]{background:var(--alert-ink);color:#fff;border-color:var(--alert-ink)}
+.tabsrail{display:inline-flex;background:var(--seg);border-radius:11px;padding:3px}
+.tabsrail a{height:36px;display:inline-flex;align-items:center;padding:0 16px;border-radius:9px;font-size:13px;font-weight:700;color:var(--ink-muted);text-decoration:none}
+.tabsrail a.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.idea{font-size:12.5px;color:var(--ink-muted);margin:-6px 0 0}
+.idea b{color:var(--ink)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.tile{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;text-align:left}
+.tile .v{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:700;margin-top:4px}
+.tile .h{font-size:12px;color:var(--ink-muted);margin-top:4px}
+button.tile{cursor:pointer}button.tile:hover{background:var(--muted)}button.tile[aria-pressed=true]{border-color:var(--accent);background:var(--accent-row)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding:0 18px 18px}
+.cal .wd{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);padding:4px 2px}
+.cal .c{min-height:74px;border:1px solid var(--divider);border-radius:10px;padding:7px 8px;text-align:left;background:#fff;display:flex;flex-direction:column;justify-content:space-between}
+.cal .c.out{background:transparent;border-style:dashed;opacity:.5}
+.cal .c b{font-size:12px;color:var(--ink-muted)}.cal .c .m{font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:700}
+.cal .c.today{outline:2px solid var(--accent-ink);outline-offset:-1px}
+.cal button.c:hover{border-color:var(--border-input)}
+.bars{display:flex;align-items:flex-end;gap:2px;height:180px;padding:12px 18px 0;border-bottom:1px solid var(--border)}
+.bars .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative;cursor:pointer}
+.bars .b i{display:block;border-radius:4px 4px 0 0;background:var(--c1);min-height:2px}
+.bars .b:hover i{filter:brightness(.9)}
+.bars .b .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;font-size:12px;padding:6px 9px;border-radius:8px;white-space:nowrap;z-index:5}
+.bars .b:hover .tip{display:block}
+.blabels{display:flex;gap:2px;padding:6px 18px 14px}.blabels span{flex:1;text-align:center;font-size:10.5px;color:var(--ink-faint);font-family:"JetBrains Mono",monospace}
+.stack{display:flex;height:14px;border-radius:999px;overflow:hidden;gap:2px;background:#fff}
+.stack i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink-muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.bucket{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}@media(max-width:900px){.bucket{grid-template-columns:1fr 1fr}}
+.rail{display:flex;gap:3px;flex-wrap:wrap}.rail i{width:22px;height:8px;border-radius:999px;background:var(--divider)}
+.rail i.p{background:var(--ok)}.rail i.o{background:var(--c1)}.rail i.x{background:var(--danger)}
+.svgc{width:100%;height:240px;display:block}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--border-input);background:#fff;font-size:13px;font-weight:700;color:var(--ink2);display:inline-flex;gap:7px;align-items:center}
+.chips button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chips .n{font-family:"JetBrains Mono",monospace;font-size:11.5px;opacity:.75}
+.search{height:36px;border:1px solid var(--border-input);border-radius:12px;padding:0 12px;font:inherit;font-size:13px;min-width:240px}
+.alertrow{display:flex;flex-wrap:wrap;gap:10px}
+.alert{border:1px solid var(--alert-border);background:var(--alert-bg);color:var(--alert-ink);border-radius:12px;padding:10px 14px;font-size:13px;display:flex;gap:10px;align-items:center}
+.alert.bad{border-color:#fecdd6;background:#fff1f3;color:#881337}
+.sortable th{cursor:pointer}.sortable th.on{color:var(--accent-ink)}
+
+.posbar{display:flex;height:22px;border-radius:999px;overflow:hidden;gap:2px;background:#fff}.posbar i{display:block;height:100%}
+.gantt{position:relative;height:20px}.gantt i{position:absolute;top:8px;height:4px;background:#eb6834;border-radius:999px}.gantt b{position:absolute;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid #fff}
+.gscale{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-faint);font-family:"JetBrains Mono",monospace;padding:0 4px}
+.dots{position:relative;height:260px;margin:0 18px 8px 54px;border-left:1px solid var(--border);border-bottom:1px solid var(--border)}
+.dots span{position:absolute;width:10px;height:10px;border-radius:50%;background:#2a78d6;border:2px solid #fff;transform:translate(-50%,50%);cursor:pointer}
+.dots span.hi{background:#eb6834}.dots span:hover{outline:2px solid var(--ink)}
+.dots .ref{position:absolute;left:0;right:0;border-top:1.5px dashed #6e737a}
+.dots .ref em{position:absolute;right:4px;top:-18px;font-size:11px;font-style:normal;color:var(--ink-muted)}
+.yax{position:absolute;left:-50px;font-size:10.5px;color:var(--ink-faint);font-family:"JetBrains Mono",monospace}
+.xlab{display:flex;justify-content:space-between;margin:0 18px 14px 54px;font-size:10.5px;color:var(--ink-faint)}
+.calc{display:grid;grid-template-columns:1fr auto;gap:4px 18px;font-size:13px}.calc dt{color:var(--ink-muted)}.calc dd{margin:0;font-family:"JetBrains Mono",monospace;font-weight:700;text-align:right}
+.ckl{display:flex;flex-direction:column;gap:6px;font-size:13px}.ckl div{display:flex;gap:8px;align-items:center}
+.ico{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0}
+.ico.ok{background:var(--ok-bg);color:var(--ok)}.ico.warn{background:var(--warn-bg);color:var(--warn)}.ico.bad{background:var(--danger-bg);color:var(--danger)}
+.sim{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}@media(max-width:900px){.sim{grid-template-columns:1fr}}
+input[type=range]{width:100%}
+.big2{font-family:"JetBrains Mono",monospace;font-size:26px;font-weight:700}
+
+.heat{display:grid;gap:4px;padding:0 18px 18px}
+.heat .h{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);padding:6px 4px}
+.heat .c{border-radius:8px;padding:10px 8px;text-align:center;font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:700;border:1px solid var(--divider)}
+.heat .c small{display:block;font-family:"Inter Tight",sans-serif;font-size:10.5px;font-weight:600;opacity:.8}
+.pair{display:grid;grid-template-columns:180px minmax(0,1fr) 110px;gap:12px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--divider)}
+.pair .t{height:8px;border-radius:999px;margin:3px 0}
+.stackbar{display:flex;flex-direction:column-reverse;height:100%;gap:2px}
+.stackbar i{display:block;border-radius:3px}
+.group-card{border:1px solid var(--border);border-radius:14px;background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.group-card .v{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:700}
+.btnp{height:34px;padding:0 14px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;font-size:13px}
+.btnp.done{background:var(--ok-bg);color:var(--ok)}
+.qrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--divider)}
+.line{width:100%;height:220px;display:block}
+
+.blk{display:flex;flex-direction:column;gap:0}
+.chg{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--divider)}
+.chg .up{color:var(--danger);font-weight:800}.chg .dn{color:var(--ok);font-weight:800}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.btn.sm{height:30px;font-size:12px;padding:0 10px}
+.btnp.sm{height:30px;font-size:12px;padding:0 10px;border-radius:10px}
+.btn.dng{color:var(--danger);border-color:#fecdd6}
+.two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:18px;align-items:start}@media(max-width:1000px){.two{grid-template-columns:1fr}}
+.sticky{position:sticky;top:12px}
+.steps3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.step{border:1px solid var(--border);border-radius:14px;background:#fff;padding:14px 16px}
+.step.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.step.ok{background:var(--ok-bg);border-color:#cfe9da}
+.step .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:12px;background:var(--seg);margin-bottom:6px}
+.step.ok .n{background:var(--ok);color:#fff}.step.on .n{background:var(--accent);color:#fff}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.gcard{border:1px solid var(--border);border-radius:14px;background:#fff;padding:14px 16px;text-align:left;display:flex;flex-direction:column;gap:4px}
+.gcard:hover{background:var(--muted)}.gcard.att{border-color:var(--alert-border);background:#fffaf2}
+.gcard .r{font-family:"JetBrains Mono",monospace;font-size:22px;font-weight:700}
+.progress{height:10px;border-radius:999px;background:var(--divider);overflow:hidden}.progress i{display:block;height:100%;background:var(--ok);border-radius:999px}
+.hero-num{font-family:"JetBrains Mono",monospace;font-size:34px;font-weight:800;letter-spacing:-.02em}
+.tl{position:relative;padding-left:22px;margin:0 18px 18px}
+.tl:before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--border)}
+.tl .ev{position:relative;padding:8px 0 12px}
+.tl .ev:before{content:"";position:absolute;left:-19px;top:12px;width:10px;height:10px;border-radius:50%;background:#2a78d6;border:2px solid #fff}
+.tl .ev.pend:before{background:#eb6834}
+.typepill{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+.locked{opacity:.55}
+.done-note{font-size:12px;color:var(--ok);font-weight:700}
+</style>
+</head>
+<body>
+<div class="proto">Protótipo · dados fictícios — <b>Taxas</b>: layout escolhido (E1) com vendas retráteis e histórico de taxas
+  <div class="altnav" id="altnav"></div>
+</div>
+<div class="wrap">
+  <section class="hero"><span class="kick">Recebíveis Stone</span>
+    <div class="hrow"><h1>Taxas</h1><span class="sub">A Stone cobrou a taxa de sempre? O que mudou, o que corrigir e a despesa do mês.</span><span class="spacer"></span><button class="btn-dark">← Financeiro</button></div>
+    <div class="hrow" id="chips"></div></section>
+  <div class="card"><div class="scope">
+    <label class="sel"><span class="kick">Unidade</span><span class="box">Quiosque Tirirical</span></label>
+    <label class="sel"><span class="kick">StoneCode</span><span class="box mono">113654392</span></label>
+    <label class="sel"><span class="kick">Competência</span><span class="box">Novembro 2026</span></label>
+    <span class="spacer"></span><span class="sync">✓ Arquivos até 13/11</span></div>
+    <div style="padding:0 18px 16px"><nav class="tabsrail"><a href="#">A receber</a><a href="#">Antecipações</a><a class="on" href="#">Taxas</a><a href="#">Recebido</a></nav></div>
+  </div>
+  <p class="idea" id="idea"></p>
+  <div id="view" style="display:flex;flex-direction:column;gap:18px"></div>
+</div>
+<div id="sheet"><div class="scrim" data-close></div><aside class="panel" role="dialog" aria-label="Detalhe" id="panel"></aside></div>
+<script>
+const r2=v=>Math.round(v*100)/100;
+const money=v=>v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const pct=v=>(v*100).toFixed(2).replace(".",",")+"%";
+const sum=(l,f)=>r2(l.reduce((a,x)=>a+(typeof f==="function"?f(x):x[f]),0));
+let seed=5;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
+// ---- estado de dados (fictício) ----
+const G=[ // taxas atuais por grupo (recorrência dos últimos 60 dias)
+ {k:"pix",l:"Pix",rate:.0075,since:"20/09",by:"Operador",n:212,hist:[["20/09",.0075]]},
+ {k:"vd",l:"Visa · Débito",rate:.0109,since:"20/09",by:"Operador",n:188,hist:[["20/09",.0109]]},
+ {k:"md",l:"Mastercard · Débito",rate:.0109,since:"20/09",by:"Operador",n:141,hist:[["20/09",.0109]]},
+ {k:"ed",l:"Elo · Débito",rate:.0179,since:"20/09",by:null,n:52,hist:[["20/09",.0179]]},
+ {k:"vc",l:"Visa · Crédito à vista",rate:.0289,since:"20/09",by:"Operador",n:97,hist:[["20/09",.0289]]},
+ {k:"mc",l:"Mastercard · Crédito à vista",rate:.0289,since:"20/09",by:"Operador",n:74,hist:[["20/09",.0289]]},
+ {k:"ec",l:"Elo · Crédito à vista",rate:.0349,since:"20/09",by:null,n:21,hist:[["20/09",.0349]]},
+ {k:"vp3",l:"Visa · Parcelado 3x",rate:.0374,since:"20/09",by:"Operador",n:11,hist:[["20/09",.0374]]},
+ {k:"ep6",l:"Elo · Parcelado 6x",rate:null,since:null,by:null,n:2,hist:[]},
+ {k:"ant",l:"Antecipação (a.m.)",rate:.0199,since:"25/09",by:"Operador",n:47,hist:[["25/09",.0199]]},
+];
+const CH=[ // mudanças detectadas
+ {id:"c1",g:"vc",from:.0289,to:.0309,since:"05/11",n:14,impact:r2(14*0.002*62)},
+ {id:"c2",g:"ed",from:.0179,to:.0169,since:"09/11",n:6,impact:-r2(6*0.001*40)},
+];
+const SV=[];const reasons=["acima","sem MDR, diferente","abaixo"];
+for(let i=0;i<9;i++){const g=G[[1,2,4,5,7][i%5]];const gross=r2(20+rnd()*180);const exp=r2(gross*g.rate);const kind=i===3?"sem MDR, diferente":i===6?"abaixo":"acima";const charged=kind==="abaixo"?r2(exp-0.3-rnd()*0.4):r2(exp+0.12+rnd()*1.1);
+  SV.push({id:"V"+(4100+i*37),date:`${String(2+i).padStart(2,"0")}/11`,g:g.k,gross,exp,charged,diff:r2(charged-exp),kind})}
+const OT=[{id:"O1",date:"06/11",l:"Tarifa de cancelamento (CancellationCharges)",v:3.50,sale:"V3920"},{id:"O2",date:"10/11",l:"Chargeback — valor estornado",v:58.90,sale:"V3871"}];
+const MONTH={mdr:842.37,pix:96.12,ant:211.40,gross:52840.10};
+let dec=[],contested=[],doneSV=new Set(),doneCH=new Set(),doneOT=new Set(),launched=false;
+const gl=k=>G.find(g=>g.k===k);
+const pendSV=()=>SV.filter(s=>!doneSV.has(s.id)),pendCH=()=>CH.filter(c=>!doneCH.has(c.id)),pendOT=()=>OT.filter(o=>!doneOT.has(o.id));
+const over=()=>sum(pendSV().filter(s=>s.diff>0),"diff")+sum(pendCH().filter(c=>c.impact>0),"impact");
+const ready=()=>!pendSV().length&&!pendCH().length&&!pendOT().length;
+const totalFees=()=>MONTH.mdr+MONTH.pix+MONTH.ant;
+const log=(t)=>dec.unshift({t,when:"14/11 17:4"+dec.length%10,by:"Operador"});
+function act(a,id){
+  if(a==="ok"){doneSV.add(id);log(`Venda ${id}: cobrança aceita`)}
+  if(a==="ct"){doneSV.add(id);contested.push(id);log(`Venda ${id}: contestação aberta na Stone`)}
+  if(a==="nova"){const s=SV.find(x=>x.id===id);doneSV.add(id);log(`${gl(s.g).l}: marcado como possível nova taxa`)}
+  if(a==="cy"){const c=CH.find(x=>x.id===id),g=gl(c.g);g.hist.push([c.since,c.to]);g.rate=c.to;g.since=c.since;g.by="Operador";doneCH.add(id);log(`${g.l}: nova taxa ${pct(c.to)} desde ${c.since}`)}
+  if(a==="cn"){const c=CH.find(x=>x.id===id);doneCH.add(id);contested.push(id);log(`${gl(c.g).l}: ${pct(c.to)} recusada — ${c.n} vendas contestadas`)}
+  if(a==="gok"){const g=gl(id);g.by="Operador";log(`${g.l}: taxa atual ${pct(g.rate)} confirmada`)}
+  if(a==="ook"){doneOT.add(id);log(`Cobrança ${id} aceita`)}
+  if(a==="oct"){doneOT.add(id);contested.push(id);log(`Cobrança ${id} contestada`)}
+  if(a==="launch"&&ready()){launched=true;log(`Despesa de novembro lançada: ${money(totalFees())}`)}
+  draw()}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-a]");if(b)return act(b.dataset.a,b.dataset.id);if(e.target.closest("[data-close]"))return document.getElementById("sheet").classList.remove("open");
+  const g=e.target.closest("[data-gp]");if(g)openGroup(g.dataset.gp);const t=e.target.closest("[data-tab]");if(t){tab=t.dataset.tab;draw()}const f=e.target.closest("[data-f6]");if(f){f6=f.dataset.f6;draw()}const p=e.target.closest("[data-b8]");if(p){b8=b8===p.dataset.b8?null:p.dataset.b8;draw()}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("sheet").classList.remove("open")});
+// ---- peças ----
+const B={ok:(id)=>`<button class="btn sm" data-a="ok" data-id="${id}">Aceitar</button>`,nova:id=>`<button class="btn sm" data-a="nova" data-id="${id}">É a nova taxa</button>`,ct:id=>`<button class="btn sm dng" data-a="ct" data-id="${id}">Contestar</button>`};
+const head=()=>{document.getElementById("chips").innerHTML=`<span class="hchip danger"><span class="v">${money(over())}</span><span class="l">cobrado acima da taxa atual</span></span><span class="hchip"><span class="v">${pendSV().length}</span><span class="l">vendas a corrigir</span></span><span class="hchip" style="color:#f3c49a"><span class="v">${pendCH().length}</span><span class="l">mudanças a confirmar</span></span><span class="hchip info"><span class="v">${money(totalFees())}</span><span class="l">taxas do mês · ${pct(totalFees()/MONTH.gross)} das vendas</span></span>`};
+const chRow=c=>{const g=gl(c.g),up=c.to>c.from;return `<div class="chg"><span><span class="typepill">Mudança de taxa</span><div><b>${g.l}</b> passou de <b>${pct(c.from)}</b> para <span class="${up?"up":"dn"}">${pct(c.to)} ${up?"▲":"▼"}</span> desde ${c.since}</div><div class="small muted">${c.n} vendas com a taxa nova · ${up?`custo extra no mês ${money(c.impact)}`:`economia no mês ${money(-c.impact)}`}</div></span><span class="acts"><button class="btnp sm" data-a="cy" data-id="${c.id}">É a nova taxa</button><button class="btn sm dng" data-a="cn" data-id="${c.id}">Não, contestar</button></span></div>`};
+const changes=()=>pendCH().length?`<section class="card"><div class="chead"><div><span class="kick">Mudanças a confirmar</span><h2>${pendCH().length} grupo(s) mudaram de taxa</h2></div></div>${pendCH().map(chRow).join("")}</section>`:"";
+const svTable=(list=pendSV())=>`<div class="tw"><table class="tb"><thead><tr><th>Venda</th><th>Grupo</th><th class="r">Bruto</th><th class="r">Taxa atual</th><th class="r">Cobrada</th><th class="r">Diferença</th><th>Motivo</th><th></th></tr></thead><tbody>${list.map(s=>{const g=gl(s.g);return `<tr><td class="mono">${s.date} · ${s.id}</td><td>${g.l}</td><td class="r mono">${money(s.gross)}</td><td class="r mono">${money(s.exp)} <span class="small faint">(${pct(g.rate)})</span></td><td class="r mono">${money(s.charged)} <span class="small faint">(${pct(s.charged/s.gross)})</span></td><td class="r mono ${s.diff>0?"k-bad":"k-ok"}"><b>${s.diff>0?"+":""}${money(s.diff)}</b></td><td class="small">${s.kind}</td><td><span class="acts">${B.ok(s.id)}${B.nova(s.id)}${B.ct(s.id)}</span></td></tr>`}).join("")||`<tr><td colspan="8" class="faint" style="text-align:center;padding:18px">Nenhuma venda a corrigir.</td></tr>`}</tbody></table></div>`;
+const sales=()=>{const open=salesOpen;return `<section class="card"><div class="chead click" data-toggle-sales style="cursor:pointer"><div><span class="kick">Vendas a corrigir</span><h2><span class="chev">${open?"▾":"▸"}</span>${pendSV().length} venda(s) · ${money(sum(pendSV().filter(s=>s.diff>0),"diff"))} acima</h2><div class="small muted">Só as vendas fora da taxa atual do grupo (tolerância de R$ 0,01 por parcela). ${open?"Clique para recolher.":"Clique para abrir."}</div></div><span class="spacer"></span>${pendSV().length?`<span class="pill s-review">${pendSV().length} pendente(s)</span>`:'<span class="pill s-ok">Nada a corrigir</span>'}</div>${open?(()=>{const gs=[...new Set(pendSV().map(s=>s.g))];return gs.map(k=>{const x=pendSV().filter(s=>s.g===k),go=openSG.has(k);return `<div class="chg click" data-sg="${k}" style="background:var(--muted);cursor:pointer"><span><span class="chev">${go?"▾":"▸"}</span><b>${gl(k).l}</b> <span class="small muted">· taxa atual ${pct(gl(k).rate)} · ${x.length} venda(s)</span></span><span class="mono ${sum(x,"diff")>0?"k-bad":"k-ok"}" style="font-weight:700">${sum(x,"diff")>0?"+":""}${money(sum(x,"diff"))}</span></div>${go?svTable(x):""}`}).join("")||'<div class="empty">Nenhuma venda a corrigir.</div>'})():""}</section>`};
+let salesOpen=false,openSG=new Set();
+document.addEventListener("click",e=>{if(e.target.closest("[data-a]"))return;if(e.target.closest("[data-toggle-sales]")){salesOpen=!salesOpen;draw()}const g=e.target.closest("[data-sg]");if(g){const k=g.dataset.sg;openSG.has(k)?openSG.delete(k):openSG.add(k);draw()}});
+const others=()=>pendOT().length?`<section class="card"><div class="chead" data-toggle-ot style="cursor:pointer"><div><span class="kick">Outras cobranças da Stone</span><h2><span class="chev">${otOpen?"▾":"▸"}</span>${pendOT().length} cobrança(s) · ${money(sum(pendOT(),"v"))} fora da taxa da venda</h2><div class="small muted">Tarifas e estornos que a Stone descontou além da taxa da venda. ${otOpen?"Clique para recolher.":"Clique para abrir."}</div></div><span class="spacer"></span><span class="pill s-review">${pendOT().length} pendente(s)</span></div>${otOpen?`<div class="tw"><table class="tb"><thead><tr><th>Data</th><th>Cobrança</th><th>Venda</th><th>Origem no arquivo</th><th class="r">Valor</th><th></th></tr></thead><tbody>${pendOT().map(o=>`<tr><td class="mono">${o.date}</td><td><b>${o.l.split(" (")[0].split(" — ")[0]}</b></td><td class="mono">${o.sale}</td><td class="small mono">${o.l.includes("Cancellation")?"CancellationCharges":"Chargebacks"}</td><td class="r mono k-bad"><b>${money(o.v)}</b></td><td><span class="acts"><button class="btn sm" data-a="ook" data-id="${o.id}">Aceitar</button><button class="btn sm dng" data-a="oct" data-id="${o.id}">Contestar</button></span></td></tr>`).join("")}</tbody></table></div>`:""}</section>`:"";
+let otOpen=false;document.addEventListener("click",e=>{if(e.target.closest("[data-a]"))return;if(e.target.closest("[data-toggle-ot]")){otOpen=!otOpen;draw()}});
+const rates=(compact)=>`<section class="card"><div class="chead"><div><span class="kick">Taxas atuais</span><h2>Taxa recorrente por grupo</h2><div class="small muted">Referência = taxa que mais se repete nos últimos 60 dias, confirmada pelo operador. Não é o contrato.</div></div></div><div class="tw"><table class="tb"><thead><tr><th>Grupo</th><th class="r">Taxa atual</th>${compact?"":"<th>Desde</th>"}<th>Situação</th>${compact?"":'<th class="r">Vendas (60d)</th>'}</tr></thead><tbody>${G.map(g=>`<tr class="click" data-gp="${g.k}"><td><b>${g.l}</b></td><td class="r mono">${g.rate===null?"—":pct(g.rate)}</td>${compact?"":`<td class="mono">${g.since??"—"}</td>`}<td>${g.rate===null?'<span class="pill s-bank">Sem referência (poucas vendas)</span>':g.by?`<span class="pill s-ok">Confirmada · ${g.by}</span>`:`<span class="pill s-adj">Sugerida</span> <button class="btn sm" data-a="gok" data-id="${g.k}">Confirmar</button>`}</td>${compact?"":`<td class="r mono">${g.n}</td>`}</tr>`).join("")}</tbody></table></div></section>`;
+const launch=()=>`<section class="card ${ready()||launched?"":"locked"}"><div class="chead"><div><span class="kick">Despesa do mês</span><h2>${money(totalFees())} · MDR ${money(MONTH.mdr)} · Pix ${money(MONTH.pix)} · Antecipação ${money(MONTH.ant)}</h2><div class="small muted">${launched?"Lançada como despesa já paga na origem (a Stone descontou do repasse).":ready()?"Mês conferido. Pode lançar.":"Libera quando não houver mudanças, vendas ou cobranças pendentes."}</div></div><span class="spacer"></span>${launched?'<span class="done-note">✓ Lançada</span>':`<button class="btnp" data-a="launch" ${ready()?"":"disabled"}>Lançar despesa do mês</button>`}</div></section>`;
+const decisions=()=>dec.length||contested.length?`<section class="card"><div class="chead"><div><span class="kick">Decisões</span><h2>${dec.length} registro(s) · ${contested.length} contestação(ões) aberta(s)</h2></div></div><div class="rows" style="margin:0 18px 18px">${dec.map(d=>`<div class="lift"><span>${d.t}</span><span class="small faint">${d.by} · ${d.when}</span></div>`).join("")}</div></section>`:"";
+function openGroup(k){const g=gl(k);document.getElementById("panel").innerHTML=`<header class="ph"><div class="kick">Taxa atual</div><h2>${g.l}</h2><div class="sub">${g.n} vendas nos últimos 60 dias</div><div class="hl"><div><small>Taxa atual</small><strong class="mono">${g.rate===null?"—":pct(g.rate)}</strong></div><div><small>Desde</small><strong class="mono">${g.since??"—"}</strong></div></div><button class="x" data-close aria-label="Fechar">×</button></header>
+ <div class="pb"><section class="psec"><header><h3>Histórico</h3></header><div class="in">${g.hist.map(([d,r])=>`<div class="small">${d}: <b class="mono">${pct(r)}</b></div>`).join("")||'<p class="small muted" style="margin:0">Ainda sem referência: menos de 5 vendas no período.</p>'}</div></section>
+ <section class="psec"><header><h3>Vendas a corrigir neste grupo</h3><span>${pendSV().filter(s=>s.g===k).length}</span></header>${svTable(pendSV().filter(s=>s.g===k))}</section></div>`;document.getElementById("sheet").classList.add("open")}
+// histórico semanal da taxa praticada por grupo (últimas 12 semanas)
+const WEEKS=["24/08","31/08","07/09","14/09","21/09","28/09","05/10","12/10","19/10","26/10","02/11","09/11"];
+const HIST={};for(const g of G){if(g.rate===null)continue;HIST[g.k]=WEEKS.map((w,i)=>{let r=g.rate;if(g.k==="vc"&&i>=10)r=.0309;if(g.k==="ed"&&i>=11)r=.0169;if(g.k==="mc"&&i===6)r=.0294;if(g.k==="ant")r=.0199+(i>7?.0006:0);return r})}
+let hg="vc";
+const NAMES={};G.forEach(g=>NAMES[g.k]=g.l);
+const history=()=>{const ks=Object.keys(HIST);const s=HIST[hg],W=1000,H=210,mn=Math.min(...s)*.97,mx=Math.max(...s)*1.03,x=i=>50+i/(s.length-1)*(W-80),y=v=>H-26-(v-mn)/((mx-mn)||1)*(H-50);
+  let path="";s.forEach((v,i)=>{path+=i?`H${x(i)}V${y(v)}`:`M${x(0)},${y(v)}`});
+  const chg=s.map((v,i)=>i&&v!==s[i-1]?i:null).filter(i=>i!==null);
+  return `<section class="card"><div class="chead"><div><span class="kick">Histórico de taxas</span><h2>Evolução da taxa praticada</h2><div class="small muted">Taxa que mais se repetiu em cada semana. Escolha o grupo.</div></div></div>
+  <div class="chips" style="padding:0 18px 12px">${ks.map(k=>{const a=HIST[k],d=a[a.length-1]-a[0];return `<button data-hg="${k}" aria-pressed="${hg===k}">${NAMES[k]}${Math.abs(d)>1e-6?`<span class="n">${d>0?"▲":"▼"}</span>`:""}</button>`}).join("")}</div>
+  <div style="padding:0 18px"><svg class="line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+   ${[mn,(mn+mx)/2,mx].map(v=>`<line x1="50" x2="${W-30}" y1="${y(v)}" y2="${y(v)}" stroke="#f1eee8"/><text x="0" y="${y(v)+4}" font-size="11" fill="#6e737a" font-family="JetBrains Mono">${pct(v)}</text>`).join("")}
+   <path d="${path}" fill="none" stroke="#2a78d6" stroke-width="2"/>
+   ${s.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="${chg.includes(i)?6:4}" fill="${chg.includes(i)?(v>s[i-1]?"#eb6834":"#1baf7a"):"#2a78d6"}" stroke="#fff" stroke-width="2"><title>Semana de ${WEEKS[i]}: ${pct(v)}</title></circle>`).join("")}
+   ${chg.map(i=>`<text x="${x(i)}" y="${y(s[i])-12}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1b1f">${pct(s[i-1])} → ${pct(s[i])}</text>`).join("")}
+  </svg><div class="gscale" style="padding-left:46px">${WEEKS.filter((_,i)=>i%2===0).map(w=>`<span>${w}</span>`).join("")}</div></div>
+  <div class="tw" style="margin-top:12px"><table class="tb"><thead><tr><th>Grupo</th><th class="r">Ago</th><th class="r">Set</th><th class="r">Out</th><th class="r">Nov</th><th>Variação</th></tr></thead><tbody>${ks.map(k=>{const a=HIST[k];const m=[a[1],a[4],a[8],a[11]];const d=m[3]-m[0];return `<tr class="click" data-hg="${k}"><td><b>${NAMES[k]}</b></td>${m.map((v,i)=>`<td class="r mono ${i&&v!==m[i-1]?(v>m[i-1]?"k-bad":"k-ok"):""}">${pct(v)}</td>`).join("")}<td>${Math.abs(d)<1e-6?'<span class="faint">estável</span>':d>0?`<span class="pill s-review">▲ ${pct(d)}</span>`:`<span class="pill s-ok">▼ ${pct(-d)}</span>`}</td></tr>`}).join("")}</tbody></table></div>
+  <div class="legend" style="padding:10px 18px 16px"><span><i style="background:#eb6834"></i>Subiu</span><span><i style="background:#1baf7a"></i>Desceu</span><span>Valores são a taxa praticada; a taxa atual é a confirmada na tabela abaixo.</span></div></section>`};
+document.addEventListener("click",e=>{const h=e.target.closest("[data-hg]");if(h){hg=h.dataset.hg;draw()}});
+// ---- layout escolhido ----
+let tab="corrigir",f6="all",b8=null;
+const V=[];
+V.push(["E1 escolhida","Blocos empilhados: mudanças a confirmar, vendas a corrigir (retrátil, por grupo), outras cobranças, histórico de taxas, taxas atuais e o lançamento da despesa.",()=>changes()+sales()+others()+history()+rates()+launch()+decisions()]);
+let cur=0;
+function draw(){head();const [name,idea,fn]=V[cur];document.getElementById("idea").innerHTML=`<b>${name}.</b> ${idea}`;document.getElementById("view").innerHTML=fn();
+  document.getElementById("altnav").innerHTML=V.map((v,i)=>`<button data-alt="${i}" aria-pressed="${i===cur}">${v[0]}</button>`).join("")}
+document.addEventListener("click",e=>{const a=e.target.closest("[data-alt]");if(a){cur=+a.dataset.alt;draw();window.scrollTo&&window.scrollTo(0,0)}});
+draw();
+</script>
+</body>
+</html>

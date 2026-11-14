@@ -30,6 +30,8 @@ export type StonePortfolioRow = {
   dueDate: string | null; gross: string; net: string;
   status: "open" | "paid" | "review"; reason: string | null;
   paymentDate: string | null; sourceFileIds: string[];
+  /** Desde a versão 3 da projeção: dados da captura para a tela A receber (ausentes em carteiras antigas). */
+  brandCode?: string | null; accountTypeCode?: string | null; installmentCount?: number | null; mdr?: string | null;
 };
 
 /** Rebuild a merchant's sale installments from an uninterrupted run of daily
@@ -112,6 +114,8 @@ export function projectStonePortfolio(input: {
       saleDate: captureDate(origin.transaction), dueDate: installment.expectedPaymentDate,
       gross: installment.grossAmount, net: installment.netAmount, status, reason,
       paymentDate: payment?.installment.paymentDate ?? null,
+      brandCode: origin.transaction.brandCode, accountTypeCode: origin.transaction.accountTypeCode,
+      installmentCount: origin.transaction.installmentCount, mdr: installment.mdrAmount,
       sourceFileIds: [...new Set([...captures, ...paymentEvents].map(event => event.file.fileId))] });
   }
   rows.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
