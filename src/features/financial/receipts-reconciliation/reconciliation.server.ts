@@ -10,6 +10,7 @@ import { latestPublishedDate } from "../receivables/period-review";
 import { readStonePortfolio } from "../receivables/portfolio-sync.server";
 import { readPixSalesSource } from "../sales-reconciliation/pix-source.server";
 import { listDailySalesReviewCalendar, readDailySalesReviewSnapshot } from "../sales-reconciliation/review-state.server";
+import { readStoneReceiptSnapshot } from "./stone-account-snapshot.server";
 import type { PixSourceResult } from "../sales-reconciliation/pix-source";
 import type { SalesMatchFact, SuggestedSalesReconciliationCase } from "../sales-reconciliation/types";
 import {
@@ -19,6 +20,7 @@ import {
   cardModality,
   cardSaleInstallments,
   receiptPeriodDates,
+  receiptMonthRange,
   stoneAccountRequestSchema,
   stoneDecimalCents,
   summarizeReceiptDays,
@@ -39,6 +41,8 @@ type Portfolio = { mappingId: string; rows: StonePortfolioParcel[] } | null;
 
 export type StoneAccountDependencies = {
   readStone?: (query: { stoneCode: string; referenceDate: string }, signal?: AbortSignal) => Promise<string>;
+  /** Rotina diária: lê os arquivos já guardados pela sincronização da carteira, sem nova chamada à Stone. */
+  readFile?: (stoneCode: string, referenceDate: string) => Promise<StoneFile>;
   readMapping?: (period: { kioskId: string; stoneCode: string; from: string; through: string }, workspaceId: string) => Promise<Mapping>;
   readPortfolio?: (stoneCode: string) => Promise<Portfolio>;
   readPix?: (scope: { workspaceId: string; kioskId: string; stoneCode: string; referenceDate: string }) => Promise<PixSourceResult>;
@@ -83,7 +87,7 @@ function pixEvidence(source: PixSourceResult): PixSettlementEvidence[] {
   return (source.feeEvidence ?? []).map(row => ({ ...row, soldAt: soldAt.get(row.eventId) ?? null }));
 }
 
-async function resolveScope(request: { kioskId: string; stoneCode: string }, from: string, through: string, context: Context, deps: StoneAccountDependencies) {
+async function resolveScope(request: { kioskId: string; stoneCode: string }, from: string, through: string, context: Pick<Context, "workspace_id">, deps: StoneAccountDependencies) {
   const mapping = await (deps.readMapping ?? readReceivablePeriodMapping)({ kioskId: request.kioskId, stoneCode: request.stoneCode, from, through }, context.workspace_id);
   if (mapping.workspaceId !== context.workspace_id || mapping.kioskId !== request.kioskId || !mapping.stoneCodes.includes(request.stoneCode)) {
     throw new AppError({ code: "STONE_RECEIPT_SCOPE", kind: "DATA_INTEGRITY" });
@@ -99,7 +103,7 @@ async function readStoneFiles(stoneCode: string, dates: string[], deps: StoneAcc
   for (const referenceDate of dates) {
     try {
       const scope = { stoneCode, referenceDate };
-      files.push(parseStoneAgendaXml(await readStone(scope, signal), scope));
+      files.push(deps.readFile ? await deps.readFile(stoneCode, referenceDate) : parseStoneAgendaXml(await readStone(scope, signal), scope));
     } catch (error) {
       if (!transientStoneGap(error)) throw error;
       missingDates.push(referenceDate);
@@ -109,6 +113,12 @@ async function readStoneFiles(stoneCode: string, dates: string[], deps: StoneAcc
 }
 
 async function queryMonth(request: StoneAccountMonthRequest, context: Context, deps: StoneAccountDependencies) {
+  return buildStoneAccountMonth(request, context.workspace_id, deps);
+}
+
+/** Montagem do mês sem checagem de usuário: usada pela consulta do administrador e pela rotina diária. */
+export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, workspaceId: string, deps: StoneAccountDependencies) {
+  const context = { workspace_id: workspaceId };
   const now = deps.now ?? new Date();
   const latest = latestPublishedDate(now);
   if (request.from > latest) throw new AppError({ code: "STONE_RECEIPT_NOT_PUBLISHED", kind: "VALIDATION", safeMessage: "O período ainda não foi publicado pela Stone." });
@@ -270,7 +280,16 @@ export async function queryStoneReceiptReconciliation(input: unknown, context: C
   if (!context.isDefaultAdmin) throw new AppError({ code: "STONE_RECEIPT_FORBIDDEN", kind: "AUTHORIZATION" });
   const parsed = stoneAccountRequestSchema.safeParse(input);
   if (!parsed.success) throw new AppError({ code: "STONE_RECEIPT_INPUT", kind: "VALIDATION", safeMessage: "Informe unidade, StoneCode e um período de até 31 dias." });
-  return parsed.data.view === "sale" ? querySale(parsed.data, context, deps) : queryMonth(parsed.data, context, deps);
+  if (parsed.data.view === "sale") return querySale(parsed.data, context, deps);
+  if (parsed.data.view === "saved") {
+    const request = parsed.data;
+    const range = receiptMonthRange(request.month);
+    const latest = latestPublishedDate(deps.now ?? new Date());
+    const day = range.through > latest ? latest : range.through;
+    const mapping = await resolveScope(request, day, day, context, deps);
+    return readStoneReceiptSnapshot({ workspaceId: context.workspace_id, mappingId: mapping.id, kioskId: mapping.kioskId, stoneCode: request.stoneCode, month: request.month });
+  }
+  return queryMonth(parsed.data, context, deps);
 }
 
 export type StoneAccountMonthResult = Awaited<ReturnType<typeof queryMonth>>;
