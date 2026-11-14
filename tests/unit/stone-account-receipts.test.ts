@@ -272,3 +272,17 @@ test("rotina diária: confere o mês do último arquivo e, nos 7 primeiros dias,
   assert.ok(stoneAccountRequestSchema.safeParse({ view: "saved", kioskId: "k", stoneCode: "123", month: "2026-11" }).success);
   assert.ok(!stoneAccountRequestSchema.safeParse({ view: "saved", kioskId: "k", stoneCode: "123", month: "2026-13" }).success);
 });
+
+test("antecipações: só parcelas pagas antes do vencimento, com dias, custo e taxa a.m.", async () => {
+  const { anticipationItems, anticipationWeeks, weightedMonthlyRate } = await import("../../src/features/financial/receipts-reconciliation/stone-account");
+  const { parcels } = scenario();
+  const items = anticipationItems(parcels);
+  assert.deepEqual(items.map(item => item.id), ["old-credit:1"]);
+  const [item] = items;
+  assert.equal(item.days, 7);
+  assert.equal(item.costCents, 169);
+  assert.equal(item.baseCents, 7769);
+  assert.ok(Math.abs((item.monthlyRate ?? 0) - 169 / (7769 * 7 / 30)) < 1e-12);
+  assert.ok(Math.abs((weightedMonthlyRate(items) ?? 0) - (item.monthlyRate ?? 0)) < 1e-12);
+  assert.deepEqual(anticipationWeeks(items).map(week => week.from), ["2026-11-02"]);
+});
