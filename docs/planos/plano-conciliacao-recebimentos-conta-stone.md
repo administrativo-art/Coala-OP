@@ -76,7 +76,7 @@ Situação em 2026-11-14. Chamado: `.ai-work/development-technology/2026-11-13-r
 
 1. **Publicar o que está pronto:** abas sem etapas, correções A1–A3 da aba Recebido e tela A receber com a carteira v3.
 2. **Rotina diária e resultados salvos** (feito em 2026-11-14, conferência salva em `stoneReceiptMonthSnapshots` após a sincronização da carteira): Recebido abre pronta, lendo os arquivos guardados da carteira; rota de escrita e secureRoute só para a rotina e o "Reconferir".
-3. **Antecipações (C10):** leitura dos arquivos guardados, sem gravação.
+3. **Antecipações (C10):** leitura da conferência salva, sem gravação (feito em 2026-11-14).
 4. **Decisões e reabertura:** registro das decisões, rota com `secureRoute`, permissão do financeiro e registro de quem decidiu.
 5. **Taxas (E1):** taxa atual por recorrência, histórico semanal (reconstruído desde a primeira data da carteira), mudanças, vendas a corrigir e outras cobranças.
 6. **Fechamento do mês e lançamento da despesa:** reaproveita a apropriação existente em `acquirer-fees`.
