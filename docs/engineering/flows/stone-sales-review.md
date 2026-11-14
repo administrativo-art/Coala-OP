@@ -44,6 +44,17 @@ Com `view: "sale"`, ele lê o arquivo do dia da venda, os arquivos dos dias de p
 - A tela abre com o resultado salvo (`view: "saved"`). **Reconferir agora** faz a consulta ao vivo (`view: "month"`) e não grava nada.
 - Nenhum listener ou polling.
 
+**Taxas (layout E1, 2026-11-14).** A aba Taxas monta [`StoneFeeReviewPanel`](../../../src/features/financial/receipts-reconciliation/fee-review-panel.tsx) sobre [`GET /api/financial/stone-fees`](../../../src/app/api/financial/stone-fees/route.ts) (`secureRoute`, administrador padrão, vínculo do workspace da sessão).
+
+- **Visão:** é montada a partir das conferências mensais salvas (até 6 meses) por [`fee-review.ts`](../../../src/features/financial/receipts-reconciliation/fee-review.ts). A **taxa atual** de cada grupo é a mais recorrente nos últimos 60 dias (mínimo de 5 vendas), ou a confirmada pelo operador.
+- **Exceções:** vendas fora dela, com tolerância de R$ 0,01 por parcela.
+- **Mudanças de taxa:** a taxa nova repetida em pelo menos 5 vendas ou 3 dias gera uma pergunta só.
+- **Outras cobranças:** chargebacks do mês.
+- **Histórico:** gráfico em barras, mini gráficos, mapa de calor ou curva, à escolha do operador; o cursor compara com o mês anterior e o seguinte.
+- **`POST`:** grava a decisão (aceitar, contestar, nova taxa ou confirmar) em `stoneReceiptDecisions`, com histórico em `stoneReceiptDecisionEvents` e `actorId` (`main.users`). Só grava se o item ainda existir com a mesma evidência; taxa, grupo e data vêm do servidor. Evidência diferente da decidida reabre o item.
+- **Despesa do mês:** continua no [`AcquirerFeesPanel`](../../../src/features/financial/acquirer-fees/fees-panel.tsx), com aviso quando há pendências. O lançamento não é bloqueado pelo servidor.
+- **Custo da visão:** 6 leituras de conferência salva e até 2.000 decisões por StoneCode, sem listener.
+
 A consulta ao vivo é explícita, sem listener, polling ou escrita financeira. Custo estimado por consulta mensal: até 31 leituras de arquivo Stone, 1 leitura da carteira, 31 transações Pix (até 501 linhas cada, no pior caso cerca de 15,5 mil leituras) e até 31 documentos do calendário de vendas. Cada auditoria de venda soma 1 snapshot do PDV, 1 leitura da carteira, 1 dia Pix (só no Pix) e até 14 arquivos Stone. Uso previsto: algumas consultas manuais por competência. Exportação de evidências, extrato da conta Stone e a 2ª parte (Stone → Inter) permanecem etapas posteriores.
 
 Há fontes tardias. O arquivo Stone do dia só fica publicável após as 05h do dia seguinte e o arquivo Pix é entregue de modo assíncrono. Além disso, a sincronização geral do PDV revisita os sete dias anteriores e, nos dias 2 e 7, todo o mês anterior; cupom ou correção tardia pode alterar um dia já visto. Cancelamento, estorno ou chargeback da Stone também pode aparecer em arquivo posterior e exige histórico, não simples compensação no arquivo original. O fingerprint do fechamento diário evita refazer estado idêntico e permite reabrir uma revisão quando a comparação volta a ser executada com evidência materialmente diferente.

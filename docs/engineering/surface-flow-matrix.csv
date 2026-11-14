@@ -261,6 +261,7 @@ api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivab
 api,src/app/api/financial/stone-anticipations/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-future-receivables/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-receipts/reconcile/route.ts,,docs/engineering/flows/stone-sales-review.md,Consulta autenticada e administrativa da 1ª parte dos recebimentos (venda → conta Stone); lê arquivos Stone publicados, carteira, Pix e fechamento de vendas, sem escrita financeira.
+api,src/app/api/financial/stone-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Taxas dos recebíveis Stone: GET monta a visão (taxa atual por recorrência e exceções) a partir das conferências salvas; POST grava a decisão do administrador padrão (secureRoute) em stoneReceiptDecisions, com histórico em stoneReceiptDecisionEvents e ator.
 api,src/app/api/financial/stone-mappings/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio-cron/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
