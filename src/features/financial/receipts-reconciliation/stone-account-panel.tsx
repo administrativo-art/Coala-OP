@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { MappingView } from "../agent/configuration";
 import type { StoneAccountMonthResult, StoneAccountSaleResult } from "./reconciliation.server";
+import type { StoneReceiptSavedResult } from "./stone-account-snapshot.server";
 import {
   groupReceiptWeeks,
   receiptGroupKey,
@@ -99,6 +100,26 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
     });
   }, [result, days, groups, parcels, onIndicators]);
 
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [notReady, setNotReady] = useState(false);
+  // Abre com a conferência salva pela rotina diária; "Reconferir agora" faz a consulta ao vivo.
+  useEffect(() => {
+    if (!stoneCode || !/^\d{4}-\d{2}$/.test(month)) return;
+    const controller = new AbortController();
+    let alive = true;
+    void Promise.resolve().then(() => { if (alive) { setBusy(true); setError(""); setNotReady(false); } })
+      .then(() => api<StoneReceiptSavedResult>("/api/financial/stone-receipts/reconcile", { method: "POST", json: { view: "saved", kioskId: mapping.kioskId, stoneCode, month }, signal: controller.signal }))
+      .then(saved => {
+        if (!alive) return;
+        if (saved.status === "ready" && saved.result.scope.mappingId === mapping.id && saved.result.scope.stoneCode === stoneCode) {
+          setResult(saved.result); setSavedAt(saved.savedAt);
+        } else { setResult(null); setSavedAt(null); setNotReady(true); }
+      })
+      .catch(caught => { if (alive && !controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível abrir a conferência salva."); })
+      .finally(() => { if (alive) setBusy(false); });
+    return () => { alive = false; controller.abort(); };
+  }, [api, mapping.id, mapping.kioskId, stoneCode, month]);
+
   const run = async () => {
     if (busy || !stoneCode || !/^\d{4}-\d{2}$/.test(month)) return;
     active.current?.abort();
@@ -109,7 +130,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       if (next.scope.mappingId !== mapping.id || next.scope.kioskId !== mapping.kioskId || next.scope.stoneCode !== stoneCode) {
         throw new AuthenticatedApiError("O vínculo mudou durante a consulta. Recarregue a página e tente novamente.", 409, null);
       }
-      setResult(next); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set()); setOpenWeeks(null); setBrand(null);
+      setResult(next); setSavedAt(null); setNotReady(false); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set()); setOpenWeeks(null); setBrand(null);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível conferir os recebimentos.");
     } finally { if (active.current === controller) { active.current = null; setBusy(false); } }
@@ -181,16 +202,16 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
     <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4 sm:px-[18px]">
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Competência
-          <Input aria-label="Competência dos recebimentos" type="month" value={month} onChange={event => { setMonth(event.target.value); setResult(null); }} className="w-[180px] normal-case tracking-normal" />
+          <Input aria-label="Competência dos recebimentos" type="month" value={month} onChange={event => { setMonth(event.target.value); setResult(null); setSavedAt(null); }} className="w-[180px] normal-case tracking-normal" />
         </label>
-        <Button type="button" variant="primary-page" size="md" disabled={busy || !stoneCode || !month} onClick={() => void run()}>
-          <RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Conferindo…" : "Conferir recebimentos"}
+        <Button type="button" variant="ds-secondary" size="md" disabled={busy || !stoneCode || !month} onClick={() => void run()}>
+          <RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Conferindo…" : "Reconferir agora"}
         </Button>
         {result ? <span className="ml-auto inline-flex h-7 items-center rounded-full bg-ds-ok-bg px-3 text-xs font-bold text-ds-ok">
           Arquivos Stone até {dayLabel(result.period.through)}{result.coverage.missingDates.length ? ` · faltam ${result.coverage.missingDates.length}` : ""}
         </span> : null}
       </div>
-      <p className="mt-2 text-xs text-ds-ink-muted">Lê os arquivos diários da Stone, a carteira sincronizada, o Pix e o fechamento da Conciliação de vendas. Não cria lançamentos.</p>
+      <p className="mt-2 text-xs text-ds-ink-muted">{result ? savedAt ? `Conferido automaticamente em ${new Date(savedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}. ` : "Conferido agora, ao vivo. " : ""}A conferência roda sozinha todo dia depois que a Stone publica o arquivo; “Reconferir agora” refaz na hora. Não cria lançamentos.</p>
       {error ? <p role="alert" className="mt-2 text-sm font-semibold text-ds-danger">{error}</p> : null}
     </section>
 
@@ -272,7 +293,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       </section>
 
       {result.limitations.length ? <ul className="space-y-1 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 text-xs text-ds-ink-muted">{result.limitations.map(text => <li key={text}>{text}</li>)}</ul> : null}
-    </> : !busy ? <div className="rounded-ds-card border border-dashed border-ds-border-input px-6 py-10 text-center text-sm text-ds-ink-muted">Escolha a competência e clique em <strong className="text-ds-ink">Conferir recebimentos</strong>.</div> : null}
+    </> : !busy ? <div className="rounded-ds-card border border-dashed border-ds-border-input px-6 py-10 text-center text-sm text-ds-ink-muted">{notReady ? <>Este mês ainda não foi conferido automaticamente. Clique em <strong className="text-ds-ink">Reconferir agora</strong> para conferir na hora.</> : "Escolha a competência."}</div> : null}
 
     <SidePanel open={panel !== null} onOpenChange={open => { if (!open) setPanel(null); }} className="w-[920px]"
       kicker={panel?.mode === "list" ? "Parcelas do grupo" : panel?.detail ? "Detalhe do cruzamento" : "Auditoria da venda"}
