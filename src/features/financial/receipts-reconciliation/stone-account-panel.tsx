@@ -13,12 +13,14 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { MappingView } from "../agent/configuration";
 import type { StoneAccountMonthResult, StoneAccountSaleResult } from "./reconciliation.server";
 import {
+  groupReceiptWeeks,
   receiptGroupKey,
   receiptPeriodDates,
   saleAuditChecks,
   saleAuditVerdict,
   summarizeReceiptDays,
   summarizeReceiptGroups,
+  type ReceiptDay,
   type ReceiptGroup,
   type ReceiptParcel,
   type SaleAudit,
@@ -32,6 +34,7 @@ type Panel =
   | { mode: "sale"; parcelId: string; detail: boolean; back: { title: string; parcelIds: string[] } | null };
 export type StoneAccountIndicators = { expectedCents: number; paidCents: number; feeCents: number; pendingCount: number; pdvAttentionCount: number } | null;
 
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const PENDING = new Set(["unpaid", "paid_late", "chargeback", "review", "missing_file"]);
 const th = "whitespace-nowrap border-y border-ds-divider bg-ds-muted px-[18px] py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
 const td = "border-b border-ds-divider px-[18px] py-3 align-top text-[13.5px]";
@@ -69,6 +72,8 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
   const [filter, setFilter] = useState<SourceFilter>("all");
   const [openDays, setOpenDays] = useState<Set<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [openWeeks, setOpenWeeks] = useState<Set<string> | null>(null);
+  const [brand, setBrand] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [audits, setAudits] = useState<Record<string, SaleAudit | { error: string } | "loading">>({});
   const [busy, setBusy] = useState(false);
@@ -79,6 +84,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
   const parcels = useMemo(() => (result?.parcels ?? []).filter(parcel => filter === "all" || (filter === "pix" ? parcel.source === "pix" : parcel.source === "card")), [result, filter]);
   const byId = useMemo(() => new Map((result?.parcels ?? []).map(parcel => [parcel.id, parcel])), [result]);
   const days = useMemo(() => result ? summarizeReceiptDays(parcels, receiptPeriodDates(result.period.from, result.period.through), result.coverage.missingDates).reverse() : [], [result, parcels]);
+  const weeks = useMemo(() => groupReceiptWeeks(days).reverse(), [days]);
   const groups = useMemo(() => result ? summarizeReceiptGroups(parcels, result.period.from, result.period.through, result.latestPublished) : [], [result, parcels]);
   const usualRates = useMemo(() => new Map(result ? summarizeReceiptGroups(result.parcels, result.period.from, result.period.through, result.latestPublished).map(group => [group.key, group.usualRate]) : []), [result]);
 
@@ -103,7 +109,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       if (next.scope.mappingId !== mapping.id || next.scope.kioskId !== mapping.kioskId || next.scope.stoneCode !== stoneCode) {
         throw new AuthenticatedApiError("O vínculo mudou durante a consulta. Recarregue a página e tente novamente.", 409, null);
       }
-      setResult(next); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set());
+      setResult(next); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set()); setOpenWeeks(null); setBrand(null);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível conferir os recebimentos.");
     } finally { if (active.current === controller) { active.current = null; setBusy(false); } }
@@ -126,7 +132,44 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
   const loadedAudit = audit && audit !== "loading" && !("error" in audit) ? audit : null;
   const checks = loadedAudit && selectedParcel ? saleAuditChecks(loadedAudit, usualRates.get(receiptGroupKey(selectedParcel)) ?? null) : null;
   const verdict = checks ? saleAuditVerdict(checks) : null;
-  const visibleGroups = groups.filter(group => !group.parentKey || openGroups.has(group.parentKey));
+  const renderDay = (day: ReceiptDay) => {
+    const open = openDays.has(day.date);
+    const attention = day.missingFile || (day.differenceCents !== null && day.differenceCents !== 0);
+    const dayParcels = parcels.filter(parcel => parcel.expectedDate === day.date || parcel.paidDate === day.date);
+    return <Fragment key={day.date}>
+      <tr className={`cursor-pointer [&>td]:bg-ds-input hover:[&>td]:bg-ds-muted ${open ? "[&>td]:bg-ds-accent-row" : attention ? "[&>td]:bg-ds-alert-bg/50" : ""}`} onClick={() => setOpenDays(current => toggle(current, day.date))} aria-expanded={open}>
+        <td className={`${td} pl-9`}><span className="inline-flex items-center gap-1 font-bold">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}{weekdayLabel(day.date)} {dayLabel(day.date)}</span></td>
+        <td className={`${td} text-right font-ds-mono`}>{day.parcelCount}</td>
+        <td className={`${td} text-right font-ds-mono`}>{centsLabel(day.expectedCents)}</td>
+        <td className={`${td} text-right font-ds-mono`}>{day.missingFile ? "?" : centsLabel(day.paidCents)}</td>
+        <td className={`${td} text-right font-ds-mono ${day.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{day.missingFile ? "?" : day.differenceCents ? centsLabel(day.differenceCents) : "—"}</td>
+        <td className={`${td} text-[12.5px]`}>{day.missingFile ? <StatusPill variant="warn">Arquivo Stone não recebido</StatusPill>
+          : day.reasons.length ? day.reasons.map(reason => `${reason.cents >= 0 ? "+" : "−"}${centsLabel(Math.abs(reason.cents))} ${dayReasonLabel[reason.kind]}`).join(" · ")
+            : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
+      </tr>
+      {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-16 pt-2">
+        {dayParcels.length ? <div className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} onOpen={() => openSale(parcel.id, null)} />)}</div>
+          : <p className="text-sm text-ds-ink-muted">Nenhuma parcela neste dia.</p>}
+      </td></tr> : null}
+    </Fragment>;
+  };
+  const brandOf = (group: ReceiptGroup) => group.modality === "pix" ? "Pix" : group.brand ?? "Bandeira não informada";
+  const brandOptions = groups.filter(group => !group.parentKey).reduce<Array<{ name: string; sales: number; pending: number }>>((list, group) => {
+    const name = brandOf(group);
+    const current = list.find(item => item.name === name);
+    if (current) { current.sales += group.saleCount; current.pending += group.pendingCount; } else list.push({ name, sales: group.saleCount, pending: group.pendingCount });
+    return list;
+  }, []);
+  const selectedBrand = brand && brandOptions.some(option => option.name === brand) ? brand : null;
+  const visibleGroups = selectedBrand ? groups.filter(group => brandOf(group) === selectedBrand && (!group.parentKey || openGroups.has(group.parentKey))) : [];
+  // A semana mais recente vem aberta até o usuário mexer.
+  const weekOpen = (key: string) => openWeeks ? openWeeks.has(key) : weeks[0]?.from === key;
+  const toggleWeek = (key: string) => setOpenWeeks(current => toggle(current ?? new Set(weeks[0] ? [weeks[0].from] : []), key));
+  const weekRange = (from: string, through: string) => {
+    const month = MONTHS[Number(from.slice(5, 7)) - 1];
+    const first = Number(from.slice(8, 10)), last = Number(through.slice(8, 10));
+    return first === last ? `${first} de ${month}` : `${first} a ${last} de ${month}`;
+  };
   const toggle = (set: Set<string>, value: string) => { const next = new Set(set); if (next.has(value)) next.delete(value); else next.add(value); return next; };
   const openGroup = (group: ReceiptGroup) => {
     if (group.modality === "installment" && !group.parentKey) { setOpenGroups(current => toggle(current, group.key)); return; }
@@ -154,36 +197,33 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
     {result ? <>
       <div className="flex flex-wrap items-center gap-3">
         <Segmented aria-label="Meio de pagamento" value={filter} onChange={setFilter} options={[{ value: "all", label: "Pix + cartão" }, { value: "pix", label: "Pix" }, { value: "card", label: "Cartão" }]} />
-        <span className="ml-auto flex gap-4 text-[13px] font-bold"><a className="text-ds-accent-ink hover:underline" href="#dia-a-dia">Dia a dia</a><a className="text-ds-accent-ink hover:underline" href="#por-cartao">Por cartão e parcelas</a></span>
+        <span className="ml-auto flex gap-4 text-[13px] font-bold"><a className="text-ds-accent-ink hover:underline" href="#dia-a-dia">Semana a semana</a><a className="text-ds-accent-ink hover:underline" href="#por-cartao">Por cartão e parcelas</a></span>
       </div>
 
       <section id="dia-a-dia" className="scroll-mt-24 rounded-ds-card border border-ds-border bg-ds-surface">
         <header className="px-[18px] pb-3 pt-4">
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Etapa 04 · previsto × pago</p>
-          <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Dia a dia · previsto × caiu na conta Stone</h2>
-          <p className="text-[12.5px] text-ds-ink-muted">Clique no dia para ver as parcelas; clique na parcela para a auditoria completa da venda.</p>
+          <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Semana a semana · previsto × caiu na conta Stone</h2>
+          <p className="text-[12.5px] text-ds-ink-muted">Clique na semana para ver os dias; no dia, as parcelas; na parcela, a auditoria completa da venda.</p>
         </header>
         <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
-          <thead><tr><th className={th}>Dia do pagamento</th><th className={`${th} text-right`}>Parcelas</th><th className={`${th} text-right`}>Previsto pela Stone</th><th className={`${th} text-right`}>Caiu na conta Stone</th><th className={`${th} text-right`}>Diferença</th><th className={th}>Explicação</th></tr></thead>
-          <tbody>{days.map(day => {
-            const open = openDays.has(day.date);
-            const attention = day.missingFile || (day.differenceCents !== null && day.differenceCents !== 0);
-            const dayParcels = parcels.filter(parcel => parcel.expectedDate === day.date || parcel.paidDate === day.date);
-            return <Fragment key={day.date}>
-              <tr className={`cursor-pointer hover:[&>td]:bg-ds-muted ${open ? "[&>td]:bg-ds-accent-row" : attention ? "[&>td]:bg-ds-alert-bg/50" : ""}`} onClick={() => setOpenDays(current => toggle(current, day.date))} aria-expanded={open}>
-                <td className={td}><span className="inline-flex items-center gap-1 font-extrabold">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}{weekdayLabel(day.date)} {dayLabel(day.date)}</span></td>
-                <td className={`${td} text-right font-ds-mono`}>{day.parcelCount}</td>
-                <td className={`${td} text-right font-ds-mono`}>{centsLabel(day.expectedCents)}</td>
-                <td className={`${td} text-right font-ds-mono`}>{day.missingFile ? "?" : centsLabel(day.paidCents)}</td>
-                <td className={`${td} text-right font-ds-mono ${day.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{day.missingFile ? "?" : day.differenceCents ? centsLabel(day.differenceCents) : "—"}</td>
-                <td className={`${td} text-[12.5px]`}>{day.missingFile ? <StatusPill variant="warn">Arquivo Stone não recebido</StatusPill>
-                  : day.reasons.length ? day.reasons.map(reason => `${reason.cents >= 0 ? "+" : "−"}${centsLabel(Math.abs(reason.cents))} ${dayReasonLabel[reason.kind]}`).join(" · ")
-                    : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
+          <thead><tr><th className={th}>Semana / dia do pagamento</th><th className={`${th} text-right`}>Parcelas</th><th className={`${th} text-right`}>Previsto pela Stone</th><th className={`${th} text-right`}>Caiu na conta Stone</th><th className={`${th} text-right`}>Diferença</th><th className={th}>Explicação</th></tr></thead>
+          <tbody>{weeks.map(week => {
+            const open = weekOpen(week.from);
+            const summary = [
+              week.daysWithDifference ? `${week.daysWithDifference} dia${week.daysWithDifference > 1 ? "s" : ""} com diferença` : "",
+              week.daysMissingFile ? `${week.daysMissingFile} sem arquivo` : "",
+            ].filter(Boolean).join(" · ");
+            return <Fragment key={week.from}>
+              <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggleWeek(week.from)} aria-expanded={open}>
+                <td className={`${td} py-3.5`}><span className="inline-flex items-center gap-1">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}<strong className="inline-block min-w-[92px] font-extrabold text-ds-ink">Semana {week.index}</strong><span className="border-l-2 border-ds-ink-faint pl-3 text-[12.5px] font-semibold leading-none text-ds-ink-muted">{weekRange(week.from, week.through)}</span></span></td>
+                <td className={`${td} py-3.5 text-right font-ds-mono`}>{week.parcelCount}</td>
+                <td className={`${td} py-3.5 text-right font-ds-mono`}>{centsLabel(week.expectedCents)}</td>
+                <td className={`${td} py-3.5 text-right font-ds-mono`}>{centsLabel(week.paidCents)}</td>
+                <td className={`${td} py-3.5 text-right font-ds-mono ${week.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{week.differenceCents ? centsLabel(week.differenceCents) : "—"}</td>
+                <td className={`${td} py-3.5 text-[12.5px] text-ds-ink-muted`}>{summary || (week.parcelCount ? "tudo bateu" : "sem parcelas")}</td>
               </tr>
-              {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-10 pt-2">
-                {dayParcels.length ? <div className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} onOpen={() => openSale(parcel.id, null)} />)}</div>
-                  : <p className="text-sm text-ds-ink-muted">Nenhuma parcela neste dia.</p>}
-              </td></tr> : null}
+              {open ? [...week.days].reverse().map(renderDay) : null}
             </Fragment>;
           })}</tbody>
         </table></div>
@@ -195,7 +235,16 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
           <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Por cartão e parcelas</h2>
           <p className="text-[12.5px] text-ds-ink-muted">Cada bandeira e modalidade tem sua taxa; no parcelado, a taxa muda com o número de parcelas.</p>
         </header>
-        <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
+        <div role="group" aria-label="Filtrar por bandeira" className="flex flex-wrap gap-2 px-[18px] pb-3.5">
+          {brandOptions.map(option => <button key={option.name} type="button" aria-pressed={selectedBrand === option.name} onClick={() => setBrand(selectedBrand === option.name ? null : option.name)}
+            className={`inline-flex h-[34px] items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2 ${selectedBrand === option.name ? "border-ds-accent bg-ds-accent text-white" : "border-ds-border-input bg-ds-surface text-ds-ink-2 hover:bg-ds-muted"}`}>
+            {option.name}<span className="font-ds-mono text-[11.5px] font-extrabold opacity-75">{option.sales}</span>
+            {option.pending ? <span aria-label={`${option.pending} pendência(s)`} className={`h-[7px] w-[7px] rounded-full ${selectedBrand === option.name ? "bg-white" : "bg-ds-danger"}`} /> : null}
+          </button>)}
+        </div>
+        {!selectedBrand ? <div className="mx-[18px] mb-4 rounded-ds-btn-lg border border-dashed border-ds-border-input px-4 py-7 text-center text-[13px] text-ds-ink-muted">
+          {brandOptions.length ? "Escolha uma bandeira acima para ver as taxas por modalidade e número de parcelas." : "Nenhuma venda da competência nos arquivos lidos."}
+        </div> : <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
           <thead><tr><th className={th}>Cartão</th><th className={`${th} text-right`}>Vendido (bruto)</th><th className={`${th} text-right`}>Taxa praticada</th><th className={`${th} text-right`}>Taxa (R$)</th><th className={`${th} text-right`}>Caiu na Stone</th><th className={`${th} text-right`}>A receber</th><th className={`${th} text-right`}>No prazo</th><th className={th}>Pendências</th></tr></thead>
           <tbody>{visibleGroups.length ? visibleGroups.map(group => {
             const parent = group.modality === "installment" && !group.parentKey;
@@ -215,8 +264,8 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
               <td className={`${td} text-right font-ds-mono`}>{group.onTimeRatio === null ? "—" : `${Math.round(group.onTimeRatio * 100)}%`}</td>
               <td className={td}>{group.pendingCount ? <StatusPill variant="danger">{group.pendingCount} pendente{group.pendingCount > 1 ? "s" : ""}</StatusPill> : <span className="text-ds-ink-faint">—</span>}</td>
             </tr>;
-          }) : <tr><td colSpan={8} className={`${td} text-center text-ds-ink-muted`}>Nenhuma venda da competência nos arquivos lidos.</td></tr>}</tbody>
-        </table></div>
+          }) : <tr><td colSpan={8} className={`${td} text-center text-ds-ink-muted`}>Nenhuma venda desta bandeira na competência.</td></tr>}</tbody>
+        </table></div>}
         <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">Taxa contratada: ainda não há tabela oficial por bandeira, modalidade e parcelas no sistema; a coluna mostra a taxa praticada (MDR ÷ bruto).</p>
       </section>
 
