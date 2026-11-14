@@ -67,7 +67,7 @@ export function StoneReceiptsPage() {
   const onMappingChange = (mappingId: string) => { const next = mappings.find(item => item.id === mappingId); setSelected(mappingId); setCode(next?.stoneCodes[0] ?? ""); };
 
   return <PageContainer variant="wide" surface className="space-y-6 py-6">
-    <PageHero kicker="Financeiro · Conciliação" title="Conciliação de recebimentos" subtitle="A Stone pagou na conta Stone o que vendemos no Pix e no cartão, com a taxa e no prazo certos?" actions={<HeroBackButton fallbackHref="/dashboard/financial" parentLabel="Financeiro" />}
+    <PageHero kicker="Recebíveis Stone" title={tab === "fees" ? "Taxas" : "Recebido"} subtitle={tab === "fees" ? "Quanto a Stone reteve de taxa, para contabilizar." : "A Stone pagou na conta Stone o que vendemos no Pix e no cartão, com a taxa e no prazo certos?"} actions={<HeroBackButton fallbackHref="/dashboard/financial" parentLabel="Financeiro" />}
       chips={tab === "credit" && indicators ? <>
         <HeroChip tone="info" value={centsLabel(indicators.expectedCents)} label="previsto na competência" />
         <HeroChip value={centsLabel(indicators.paidCents)} label="caiu na conta Stone" />
