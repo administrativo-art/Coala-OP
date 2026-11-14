@@ -12,6 +12,8 @@
 
 # Acompanhamento do mapa técnico
 
+2026-11-14: mapa de financeiro → `flows/payment-requests.md` → sincronização Inter e débito esperado. Correção local da baixa de boleto parcelado: valor por parcela, com atualização só da parcela identificada. Teste dirigido passou; typecheck local encontrou dependências TipTap ausentes no `node_modules` reaproveitado, fora dos arquivos alterados. O grupo segue Traçado até CI e verificação do rollout.
+
 2026-11-04: Escalas DP, alteração local de indicadores de publicação. O mapa levou ao fluxo de escalas e aos dois consumidores da barra lateral. A interface agora distingue versão publicada de rascunho e o cartão mensal exige publicação em todas as unidades acessíveis para mostrar “Publicada”. Sem mudança de dados, permissão ou API; typecheck, lint, 3.054 testes unitários, contratos, validações e build de produção passaram. O grupo continua Traçado, sem homologação visual integrada.
 
 2026-11-03: linha documental do mapa → `flows/document-central` e `modules/documents-privacy` → ArchiveExplorer, sidebar, APIs de pasta própria/RH, políticas de publicação e acesso. Pasta publicada por pessoa usa somente o titular ou uma pessoa escolhida pelo DP autorizado; nenhum backfill. Testes dirigidos e E2E local registrados no chamado; `document-central` e `employee-documents` permanecem Traçado, sem certificar produção nesta alteração.
