@@ -29,12 +29,14 @@ const steps = [
   { id: "receivables" as const, number: "01", title: "Carteira e previsões", description: "Parcelas abertas, posição Stone e previsão por período.", icon: WalletCards },
   { id: "anticipations" as const, number: "02", title: "Antecipações", description: "Pagamentos antes do vencimento e seus custos explícitos.", icon: RefreshCw },
   { id: "fees" as const, number: "03", title: "Taxas praticadas", description: "Retenções comprovadas e apropriação da despesa.", icon: Percent },
-  { id: "credit" as const, number: "04", title: "Crédito bancário", description: "Líquido Stone confirmado na conta vinculada.", icon: Landmark },
+  { id: "credit" as const, number: "04", title: "Pago na conta Stone", description: "Previsto × pago na conta Stone, por dia e por cartão, com a auditoria de cada venda.", icon: Landmark },
 ];
 
 export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: StoneReceiptFlowNavigationProps) {
-  return <nav aria-label="Etapas dos recebimentos" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-    {steps.map(step => {
+  return <nav aria-label="Etapas dos recebimentos" className="rounded-2xl border border-ds-border bg-white p-4 sm:p-5">
+    <p className="text-xs font-extrabold uppercase tracking-widest text-ds-ink-faint">Acompanhe o recebimento</p>
+    <p className="mb-4 mt-1 text-sm text-muted-foreground">Da parcela prevista ao dinheiro que entrou na conta.</p>
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{steps.map(step => {
       const Icon = step.icon;
       const active = current === step.id;
       return <Link
@@ -42,20 +44,18 @@ export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: St
         href={stoneReceiptFlowHref(step.id, mappingId, stoneCode)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group rounded-2xl border bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:border-ds-border-input hover:bg-ds-warm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2",
-          active && "border-ds-accent bg-ds-accent-row shadow-[0_10px_24px_-18px_#df2f78]"
+          "group flex items-center gap-3 rounded-xl border border-ds-border bg-ds-input px-3 py-3 transition hover:border-ds-border-input hover:bg-ds-warm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2",
+          active && "border-ds-accent bg-ds-accent-row"
         )}
       >
-        <div className="flex items-center justify-between gap-3">
-          <span className={cn("font-mono text-xs font-bold", active ? "text-ds-accent-ink" : "text-muted-foreground")}>{step.number}</span>
-          <span className={cn("grid h-9 w-9 place-items-center rounded-xl", active ? "bg-ds-accent-row text-ds-accent-ink" : "bg-muted text-muted-foreground")}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-        </div>
-        <p className="mt-4 text-sm font-extrabold tracking-tight text-ds-ink">{step.title}</p>
-        <p className="mt-1 min-h-9 text-xs leading-5 text-muted-foreground">{step.description}</p>
-        <span className={cn("mt-4 inline-flex items-center gap-1 text-xs font-bold", active ? "text-ds-accent-ink" : "text-ds-ink-muted group-hover:text-ds-accent-ink")}>
-          {active ? "Nesta etapa" : "Abrir"}<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", active ? "bg-white text-ds-accent-ink" : "bg-white text-ds-ink-muted")}><Icon className="h-4 w-4" aria-hidden="true" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Etapa {step.number}</span>
+          <span className="block text-sm font-bold text-ds-ink">{step.title}</span>
         </span>
+        <span className="sr-only">{step.description} {active ? "Etapa atual" : "Abrir etapa"}</span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-ds-accent-ink" aria-hidden="true" />
       </Link>;
-    })}
+    })}</div>
   </nav>;
 }

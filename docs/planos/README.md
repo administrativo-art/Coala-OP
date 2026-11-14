@@ -27,6 +27,7 @@
 | [Plano — Favorecidos unificados para pagamentos](plano-favorecidos-pagamentos-unificados.md) | Financeiro |
 | [Plano completo do modulo de fechamento de caixa e depositos em dinheiro](plano-fechamento-caixa-depositos.md) | Financeiro |
 | [Plano de integração Stone e conciliação de receitas — v5](plano-integracao-stone-conciliacao.md) | Financeiro |
+| [Plano — Conciliação de recebimentos, 1ª parte (venda → conta Stone)](plano-conciliacao-recebimentos-conta-stone.md) | Financeiro |
 | [Plano de provisões financeiras - rascunho para validação](plano-provisoes-financeiras-draft.md) | Financeiro |
 | [Retomada — conciliação e Coala Financeiro](plano-retomada-financeiro-2026-09-22.md) | Financeiro |
 | [Plano de Implementação: Analytics Operacional em Formulários](plano-implementacao-analytics-formularios.md) | Formulários |
