@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **566 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **567 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -319,6 +319,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/pdv-stone-review` | GET, POST | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-agenda` | GET | [src/app/api/financial/stone-agenda/route.ts](../../src/app/api/financial/stone-agenda/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/financial/stone-anticipations` | GET | [src/app/api/financial/stone-anticipations/route.ts](../../src/app/api/financial/stone-anticipations/route.ts) | [receivables-stone](flows/receivables-stone.md) |
+| `/api/financial/stone-fees` | GET, POST | [src/app/api/financial/stone-fees/route.ts](../../src/app/api/financial/stone-fees/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-future-receivables` | POST | [src/app/api/financial/stone-future-receivables/route.ts](../../src/app/api/financial/stone-future-receivables/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/financial/stone-mappings` | GET, POST | [src/app/api/financial/stone-mappings/route.ts](../../src/app/api/financial/stone-mappings/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-portfolio` | GET, POST | [src/app/api/financial/stone-portfolio/route.ts](../../src/app/api/financial/stone-portfolio/route.ts) | [receivables-stone](flows/receivables-stone.md) |
