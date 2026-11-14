@@ -96,7 +96,7 @@ export function StoneReceiptsPage() {
         <section className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-4" aria-label="Despesa do mês">
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Despesa do mês</p>
           <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Lançar as taxas como despesa</h2>
-          <p className="text-[12.5px] text-ds-ink-muted">A despesa já foi paga na origem: a Stone descontou do repasse, então não haverá outra saída no banco.{feePending ? ` Ainda há ${feePending} pendência(s) acima; o recomendado é resolvê-las antes de lançar.` : ""}</p>
+          <p className="text-[12.5px] text-ds-ink-muted">A despesa já foi paga na origem: a Stone descontou do repasse, então não haverá outra saída no banco. Taxa praticada é o que a Stone reteve; Taxa contratada não é usada como referência enquanto não houver tabela oficial: a conferência compara com a taxa atual recorrente, confirmada pelo operador.{feePending ? ` Ainda há ${feePending} pendência(s) acima; o recomendado é resolvê-las antes de lançar.` : ""}</p>
         </section>
         <AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} />
       </section> : null}
