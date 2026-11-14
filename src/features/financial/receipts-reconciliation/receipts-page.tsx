@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Landmark, Percent } from "lucide-react";
+import { Landmark } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
@@ -10,10 +10,10 @@ import { PageContainer } from "@/components/layout/page-container";
 import { PageHero } from "@/components/patterns/page-hero";
 import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { HeroChip } from "@/components/patterns/hero-chip";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { StoneAccountReceipts, type StoneAccountIndicators } from "./stone-account-panel";
+import { StoneFeeReviewPanel } from "./fee-review-panel";
 import { centsLabel } from "./stone-account-format";
 import { StoneReceiptFlowNavigation } from "./receipt-flow-navigation";
 import { StoneScopeSelector } from "./stone-scope-selector";
@@ -33,6 +33,7 @@ export function StoneReceiptsPage() {
   const [error, setError] = useState("");
   const [indicators, setIndicators] = useState<StoneAccountIndicators>(null);
   const onIndicators = useCallback((value: StoneAccountIndicators) => setIndicators(value), []);
+  const [feePending, setFeePending] = useState<number | null>(null);
   const active = useRef<AbortController | null>(null);
   const requestedMapping = searchParams.get("mapping");
   const requestedCode = searchParams.get("stoneCode");
@@ -90,7 +91,15 @@ export function StoneReceiptsPage() {
     <StoneScopeSelector mappings={mappings} mappingId={selected} stoneCode={code} busy={busy} loaded={loaded} error={error} cursor={cursor} onMappingChange={onMappingChange} onStoneCodeChange={setCode} onRefresh={() => void load()} onLoadMore={cursor ? () => void load(cursor) : undefined} />
     {mapping && code ? <>
       <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
-      {tab === "fees" ? <section className="space-y-4" aria-label="Taxas praticadas"><Card className="rounded-2xl border-ds-border bg-ds-input"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Percent className="h-4 w-4 text-ds-accent-ink" />Taxas praticadas, com contrato separado</CardTitle><CardDescription>A Taxa praticada usa apenas retenção explícita da Stone. A Taxa contratada ainda exige uma fonte oficial versionada por modalidade e vigência; por isso esta tela não aponta cobrança a maior.</CardDescription></CardHeader></Card><AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} /></section> : null}
+      {tab === "fees" ? <section className="space-y-4" aria-label="Taxas">
+        <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onPending={setFeePending} />
+        <section className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-4" aria-label="Despesa do mês">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Despesa do mês</p>
+          <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Lançar as taxas como despesa</h2>
+          <p className="text-[12.5px] text-ds-ink-muted">A despesa já foi paga na origem: a Stone descontou do repasse, então não haverá outra saída no banco. Taxa praticada é o que a Stone reteve; Taxa contratada não é usada como referência enquanto não houver tabela oficial: a conferência compara com a taxa atual recorrente, confirmada pelo operador.{feePending ? ` Ainda há ${feePending} pendência(s) acima; o recomendado é resolvê-las antes de lançar.` : ""}</p>
+        </section>
+        <AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} />
+      </section> : null}
       {tab === "credit" ? <StoneAccountReceipts key={`stone-account:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onIndicators={onIndicators} /> : null}
     </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro; a conta vinculada vem junto</p><p className="mt-1 text-sm text-muted-foreground">Depois escolha o identificador Stone. Essa seleção acompanha as etapas de recebimentos.</p></div>}
   </PageContainer>;
