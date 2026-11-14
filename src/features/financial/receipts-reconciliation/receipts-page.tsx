@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Landmark, Percent } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -9,11 +9,12 @@ import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHero } from "@/components/patterns/page-hero";
 import { HeroBackButton } from "@/components/patterns/hero-back-button";
-import { Badge } from "@/components/ui/badge";
+import { HeroChip } from "@/components/patterns/hero-chip";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
-import { StoneBankReceiptReconciliation } from "./reconciliation-panel";
+import { StoneAccountReceipts, type StoneAccountIndicators } from "./stone-account-panel";
+import { centsLabel } from "./stone-account-format";
 import { StoneReceiptFlowNavigation } from "./receipt-flow-navigation";
 import { StoneScopeSelector } from "./stone-scope-selector";
 
@@ -30,6 +31,8 @@ export function StoneReceiptsPage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [indicators, setIndicators] = useState<StoneAccountIndicators>(null);
+  const onIndicators = useCallback((value: StoneAccountIndicators) => setIndicators(value), []);
   const active = useRef<AbortController | null>(null);
   const requestedMapping = searchParams.get("mapping");
   const requestedCode = searchParams.get("stoneCode");
@@ -64,14 +67,31 @@ export function StoneReceiptsPage() {
   const onMappingChange = (mappingId: string) => { const next = mappings.find(item => item.id === mappingId); setSelected(mappingId); setCode(next?.stoneCodes[0] ?? ""); };
 
   return <PageContainer variant="wide" surface className="space-y-6 py-6">
-    <PageHero kicker="Financeiro · Conciliação" title="Conciliação de recebimentos" subtitle="Agenda, parcelas pagas, taxas retidas e confirmação do crédito bancário em fluxos separados." actions={<HeroBackButton fallbackHref="/dashboard/financial" parentLabel="Financeiro" />} />
-    <div role="note" className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-ds-alert-border bg-ds-warn-bg p-4 text-sm text-ds-alert-ink"><span>Um pagamento informado pela Stone ainda não comprova o crédito no banco. Taxas só aparecem quando a retenção é explícita; valores ausentes permanecem desconhecidos.</span><Badge variant="outline" className="border-ds-alert-border bg-white text-ds-alert-ink">Não abre contestação na Stone</Badge></div>
+    <PageHero kicker="Financeiro · Conciliação" title="Conciliação de recebimentos" subtitle="A Stone pagou na conta Stone o que vendemos no Pix e no cartão, com a taxa e no prazo certos?" actions={<HeroBackButton fallbackHref="/dashboard/financial" parentLabel="Financeiro" />}
+      chips={tab === "credit" && indicators ? <>
+        <HeroChip tone="info" value={centsLabel(indicators.expectedCents)} label="previsto na competência" />
+        <HeroChip value={centsLabel(indicators.paidCents)} label="caiu na conta Stone" />
+        <HeroChip value={centsLabel(indicators.feeCents)} label="taxas das vendas" />
+        <HeroChip tone="danger" value={indicators.pendingCount} label="parcelas pendentes" />
+        <HeroChip tone="warning" value={indicators.pdvAttentionCount} label="vendas com atenção no PDV" />
+      </> : undefined} />
+    <details className="rounded-xl border border-ds-border bg-white px-4 py-3 text-sm text-ds-ink-2">
+      <summary className="cursor-pointer font-bold">Entenda os termos desta conciliação</summary>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+        <div><dt className="font-bold">StoneCode</dt><dd>Identificador do estabelecimento na Stone.</dd></div>
+        <div><dt className="font-bold">Previsto pela Stone</dt><dd>Líquido que a Stone informou que pagaria naquele dia (PrevisionPaymentDate).</dd></div>
+        <div><dt className="font-bold">Caiu na conta Stone</dt><dd>Pagamento informado no arquivo diário da Stone. O extrato da conta Stone ainda não está no sistema.</dd></div>
+        <div><dt className="font-bold">Antecipação</dt><dd>Parcela paga antes do previsto, com desconto de antecipação.</dd></div>
+        <div><dt className="font-bold">Taxa praticada</dt><dd>MDR ÷ bruto de cada venda. A taxa contratada ainda depende de uma tabela oficial.</dd></div>
+        <div><dt className="font-bold">Cruzamentos</dt><dd>As 12 conferências de cada venda: PDV × Stone, parcelas, taxa, líquido e data de pagamento.</dd></div>
+      </dl>
+      <p className="mt-3 text-muted-foreground">A consulta não cria lançamentos. A transferência da conta Stone para o Inter é a 2ª parte da conciliação.</p>
+    </details>
     <StoneScopeSelector mappings={mappings} mappingId={selected} stoneCode={code} busy={busy} loaded={loaded} error={error} cursor={cursor} onMappingChange={onMappingChange} onStoneCodeChange={setCode} onRefresh={() => void load()} onLoadMore={cursor ? () => void load(cursor) : undefined} />
     {mapping && code ? <>
       <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
       {tab === "fees" ? <section className="space-y-4" aria-label="Taxas praticadas"><Card className="rounded-2xl border-ds-border bg-ds-input"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Percent className="h-4 w-4 text-ds-accent-ink" />Taxas praticadas, com contrato separado</CardTitle><CardDescription>A Taxa praticada usa apenas retenção explícita da Stone. A Taxa contratada ainda exige uma fonte oficial versionada por modalidade e vigência; por isso esta tela não aponta cobrança a maior.</CardDescription></CardHeader></Card><AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} /></section> : null}
-      {tab === "credit" ? <StoneBankReceiptReconciliation key={`bank-receipts:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} /> : null}
-    </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro, depois a conta e o StoneCode</p><p className="mt-1 text-sm text-muted-foreground">O mesmo vínculo será preservado entre as quatro etapas de recebimentos.</p></div>}
-    <p className="text-sm text-muted-foreground">A exportação de evidências fica prevista para a próxima etapa. Este módulo não abre contestação na Stone.</p>
+      {tab === "credit" ? <StoneAccountReceipts key={`stone-account:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onIndicators={onIndicators} /> : null}
+    </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro; a conta vinculada vem junto</p><p className="mt-1 text-sm text-muted-foreground">Depois escolha o identificador Stone. Essa seleção acompanha as etapas de recebimentos.</p></div>}
   </PageContainer>;
 }
