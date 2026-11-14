@@ -2,10 +2,42 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  expectedDebitPrincipalForExpense,
   findExpectedBankDebitGroupMatches,
   findExpectedBankDebitMatch,
+  settleExpectedDebitInstallments,
   type ExpectedBankDebitCandidate,
 } from "../../src/features/financial/payment-requests/expected-bank-debits";
+
+test("valida o principal pela parcela bancária sem confundi-lo com o total da compra", () => {
+  const expense = {
+    totalValue: 3182.3,
+    installments: [
+      { number: 1, value: 1060.66, status: "pending" },
+      { number: 2, value: 1060.66, status: "pending" },
+      { number: 3, value: 1060.98, status: "pending" },
+    ],
+  };
+  assert.equal(expectedDebitPrincipalForExpense(expense, 1), 1060.66);
+  assert.equal(expectedDebitPrincipalForExpense(expense, 3), 1060.98);
+  assert.equal(expectedDebitPrincipalForExpense(expense, null), 3182.3);
+  assert.equal(expectedDebitPrincipalForExpense({ totalValue: 5100 }, 1), 5100);
+  assert.equal(expectedDebitPrincipalForExpense({ totalValue: 5100 }, 2), null);
+  assert.equal(expectedDebitPrincipalForExpense(expense, 4), null);
+  assert.equal(expectedDebitPrincipalForExpense({ ...expense, installments: [{ number: 1, value: 1060.66, status: "paid" }] }, 1), null);
+});
+
+test("baixa somente a parcela ligada ao débito, inclusive quando é a última", () => {
+  const installments = [
+    { number: 1, value: 1060.66, status: "paid", linkedBankTransactionId: "primeiro" },
+    { number: 2, value: 1060.66, status: "paid", linkedBankTransactionId: "segundo" },
+    { number: 3, value: 1060.98, status: "pending" },
+  ];
+  const result = settleExpectedDebitInstallments(installments, 3, true, "2026-11-13", "terceiro");
+  assert.equal(result[0].linkedBankTransactionId, "primeiro");
+  assert.equal(result[1].linkedBankTransactionId, "segundo");
+  assert.deepEqual(result[2], { number: 3, value: 1060.98, status: "paid", paidAt: "2026-11-13", linkedBankTransactionId: "terceiro" });
+});
 
 const candidate = (id: string, overrides: Partial<ExpectedBankDebitCandidate> = {}): ExpectedBankDebitCandidate => ({
   id,

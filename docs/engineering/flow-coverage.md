@@ -8,6 +8,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 10/11/2026: correção de `goals`/`dp-schedules` para grupo mensal sem horário e contagem de dias/turnos da escala oficial em meta ativa e no fechamento, promovida pelo PR #797. O App Hosting concluiu rollout do SHA `46e49dc6`, e a função de metas ficou ACTIVE; o evento real após a publicação não foi ensaiado. Metas fechadas não recebem alteração retroativa.
 
+2026-11-14: o match de débito esperado de boleto parcelado valida o principal da parcela identificada e preserva os vínculos das demais na baixa. Testes unitários cobrem parcela, pagamento único e última parcela; a execução integrada e o retorno real do Inter ainda exigem conferência. `payment-requests` permanece Traçado.
+
 05/11/2026: ajuste local do Acervo publicado acrescenta organização visual auditada para DP, simplifica férias até a parcela, estabiliza carregamento e remove metadados decorativos de pastas. Testes dirigidos cobrem projeção, permissão, concorrência e preservação do canônico; E2E local e publicação permanecem gates. `document-central` e `employee-documents` continuam Traçado.
 
 03/11/2026: Acervo publicado por titular acrescentado à raiz e à cobertura de `employee-documents`/`document-central`, reutilizando APIs próprias e RH sob acesso existente. Projeção de kit assinado exercitada com sete referências e homônimos distintos; E2E local dirigido passou para árvore/pasta própria/abas retiradas e perfil comum com download canônico. Paginação DP com página filtrada vazia, cursor e unidade passou em integração; teto bruto da pasta própria e troca de titular durante Carregar mais também. Permissões e fontes conferidas no código; publicação/ACL e arquivos não mudaram.
