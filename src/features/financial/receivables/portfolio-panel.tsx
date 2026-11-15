@@ -8,7 +8,7 @@ import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import type { parseStoneWalletPosition } from "@/lib/integrations/stone/wallet-position-parser";
 import { centsLabel, rateLabel } from "../receipts-reconciliation/stone-account-format";
-import { receiptModalityLabel } from "../receipts-reconciliation/stone-account";
+import { parcelFeeRate, receiptModalityLabel } from "../receipts-reconciliation/stone-account";
 import type { StonePortfolioRow } from "./portfolio-projection";
 import {
   natureLabel,
@@ -134,7 +134,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
         <td className={td}>{itemTitle(item)}</td>
         <td className={`${td} text-right tabular-nums`}>{item.installment}/{item.installmentCount ?? "—"}</td>
         <td className={`${td} text-right tabular-nums`}>{centsLabel(item.grossCents)}</td>
-        <td className={`${td} text-right tabular-nums`}>{item.feeCents === null ? "—" : `${rateLabel(item.feeCents / item.grossCents)}`}
+        <td className={`${td} text-right tabular-nums`}>{item.feeCents === null ? "—" : rateLabel(parcelFeeRate(item))}
           {item.feeSource === "derived" ? <span className="mt-1 block"><StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill></span> : null}</td>
         <td className={`${td} text-right tabular-nums font-bold`}>{centsLabel(item.netCents)}</td>
         <td className={td}>{item.status === "review" ? <StatusPill variant="warn" title={item.reason ?? undefined}>Conferir</StatusPill> : <StatusPill variant="neutral">A receber</StatusPill>}</td>
@@ -221,7 +221,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
         <dl className="grid gap-x-4 gap-y-3 sm:grid-cols-2 text-[13px]">
           {[["Transação", "AcquirerTransactionKey", selected.transactionId], ["Vencimento", "PrevisionPaymentDate", date(selected.dueDate)],
             ["Bruto", "GrossAmount", centsLabel(selected.grossCents)], ["Líquido", "NetAmount", centsLabel(selected.netCents)],
-            ["Taxa", "MdrAmount", selected.feeCents === null ? "—" : `${centsLabel(selected.feeCents)} (${rateLabel(selected.feeCents / selected.grossCents)})${selected.feeSource === "derived" ? " · proposta" : ""}`],
+            ["Taxa", "MdrAmount", selected.feeCents === null ? "—" : `${centsLabel(selected.feeCents)} (${rateLabel(parcelFeeRate(selected))})${selected.feeSource === "derived" ? " · proposta" : selected.feeSource === "exact" ? " · do líquido exato" : ""}`],
             ["Situação", null, selected.status === "review" ? `Conferir${selected.reason ? `: ${selected.reason}` : ""}` : "A receber"]].map(([label, field, value]) =>
             <div key={label as string}><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{label}{field ? <span className="ml-1 tabular-nums font-medium normal-case tracking-normal">{field}</span> : null}</dt>
               <dd className="mt-0.5 wrap-anywhere font-semibold text-ds-ink">{value}</dd></div>)}

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { receiptGroupKey, receiptModalityLabel, usualRate, type ReceiptParcel } from "./stone-account";
+import { receiptGroupKey, receiptModalityLabel, usualRate, weightedFeeRate, type ReceiptParcel } from "./stone-account";
 
 /**
  * Conferência de taxas (aba Taxas, layout E1). Referência = "taxa atual" de cada grupo pela
@@ -45,7 +45,14 @@ const groupLabel = (parcel: ReceiptParcel) => parcel.modality === "pix" ? "Pix"
 
 type Sale = { saleId: string; groupKey: string; label: string; date: string; grossCents: number; feeCents: number; parcels: ReceiptParcel[]; derived: boolean };
 
-/** Vendas (não parcelas) com taxa conhecida, agrupadas; a taxa da venda é Σ taxa ÷ Σ bruto. */
+/**
+ * Taxa da venda: a exata (do líquido com 6 casas da Stone), ponderada pelo bruto das parcelas;
+ * em conferências antigas, sem a taxa exata, Σ taxa ÷ Σ bruto em centavos.
+ */
+export const saleRate = (sale: Sale) => weightedFeeRate(sale.parcels) ?? sale.feeCents / sale.grossCents;
+const exactSale = (sale: Sale) => sale.parcels.every(parcel => typeof parcel.feeRate === "number");
+
+/** Vendas (não parcelas) com taxa conhecida, agrupadas. */
 export function feeSales(parcels: ReceiptParcel[]): Sale[] {
   const map = new Map<string, Sale>();
   for (const parcel of parcels) {
@@ -77,7 +84,7 @@ export function feeGroups(sales: Sale[], references: Map<string, FeeReference>, 
   const keys = [...new Set(sales.map(sale => sale.groupKey))];
   return keys.map(key => {
     const window = sales.filter(sale => sale.groupKey === key && sale.date >= from && !sale.derived);
-    const suggested = window.length >= FEE_MIN_SALES ? usualRate(window.map(sale => sale.feeCents / sale.grossCents)) : null;
+    const suggested = window.length >= FEE_MIN_SALES ? usualRate(window.map(saleRate)) : null;
     const confirmed = references.get(key) ?? null;
     return {
       key, label: sales.find(sale => sale.groupKey === key)!.label, saleCount: window.length, suggestedRate: suggested,
@@ -88,7 +95,10 @@ export function feeGroups(sales: Sale[], references: Map<string, FeeReference>, 
 
 /** Taxa esperada por parcela, arredondada em centavos, como a Stone calcula o MDR. */
 const expectedFee = (sale: Sale, rate: number) => sale.parcels.reduce((sum, parcel) => sum + Math.round(parcel.grossCents * rate), 0);
-const withinTolerance = (sale: Sale, rate: number) => Math.abs(sale.feeCents - expectedFee(sale, rate)) <= FEE_TOLERANCE_CENTS * sale.parcels.length;
+/** Venda com taxa exata: confere a taxa (0,01%); sem ela, tolera o arredondamento de centavos por parcela. */
+const withinTolerance = (sale: Sale, rate: number) => exactSale(sale)
+  ? Math.abs(round4(saleRate(sale)) - rate) <= 0.00005
+  : Math.abs(sale.feeCents - expectedFee(sale, rate)) <= FEE_TOLERANCE_CENTS * sale.parcels.length;
 
 export type RateChange = { key: string; groupKey: string; label: string; from: number; to: number; since: string; saleCount: number; impactCents: number; fingerprint: string; reopened: boolean };
 export type FeeException = { key: string; saleId: string; groupKey: string; label: string; date: string; grossCents: number; chargedCents: number; expectedCents: number; differenceCents: number; reason: "above" | "below" | "derived"; fingerprint: string; reopened: boolean };
@@ -106,13 +116,13 @@ export function detectRateChanges(sales: Sale[], groups: FeeGroup[]): RateChange
     for (let index = list.length - 1; index >= 0; index--) {
       const sale = list[index];
       if (withinTolerance(sale, group.reference.rate)) break;
-      const rate = round4(sale.feeCents / sale.grossCents);
-      if (streak.length && Math.abs(round4(streak[0].feeCents / streak[0].grossCents) - rate) > 0.00005) break;
+      const rate = round4(saleRate(sale));
+      if (streak.length && Math.abs(round4(saleRate(streak[0])) - rate) > 0.00005) break;
       streak.unshift(sale);
     }
     const days = new Set(streak.map(sale => sale.date)).size;
     if (streak.length >= CHANGE_MIN_SALES || (streak.length > 1 && days >= CHANGE_MIN_DAYS)) {
-      const to = round4(streak[0].feeCents / streak[0].grossCents);
+      const to = round4(saleRate(streak[0]));
       changes.push({
         key: `${group.key}:${to}`, groupKey: group.key, label: group.label, from: group.reference.rate, to,
         since: streak[0].date, saleCount: streak.length,
@@ -126,7 +136,7 @@ export function detectRateChanges(sales: Sale[], groups: FeeGroup[]): RateChange
 
 export function feeExceptions(sales: Sale[], groups: FeeGroup[], changes: RateChange[], month: string): FeeException[] {
   const inChange = new Set(changes.flatMap(change => sales.filter(sale => sale.groupKey === change.groupKey && sale.date >= change.since
-    && Math.abs(round4(sale.feeCents / sale.grossCents) - change.to) <= 0.00005).map(sale => sale.saleId)));
+    && Math.abs(round4(saleRate(sale)) - change.to) <= 0.00005).map(sale => sale.saleId)));
   const byKey = new Map(groups.map(group => [group.key, group]));
   return sales.flatMap(sale => {
     if (!sale.date.startsWith(month) || inChange.has(sale.saleId)) return [];
@@ -171,7 +181,7 @@ export function feeHistory(salesByMonth: Array<{ month: string; sales: Sale[] }>
     key, label,
     months: salesByMonth.map(entry => {
       const list = entry.sales.filter(sale => sale.groupKey === key && sale.date.startsWith(entry.month) && !sale.derived);
-      return { month: entry.month, rate: list.length ? usualRate(list.map(sale => sale.feeCents / sale.grossCents)) : null, sales: list.length };
+      return { month: entry.month, rate: list.length ? usualRate(list.map(saleRate)) : null, sales: list.length };
     }),
   })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }

@@ -15,6 +15,7 @@ import type { StoneAccountMonthResult, StoneAccountSaleResult } from "./reconcil
 import type { StoneReceiptSavedResult } from "./stone-account-snapshot.server";
 import {
   groupReceiptWeeks,
+  parcelFeeRate,
   receiptGroupKey,
   receiptPeriodDates,
   saleAuditChecks,
@@ -68,7 +69,7 @@ function ParcelRow({ parcel, usualRate, verdict, onOpen }: { parcel: ReceiptParc
     <span className="tabular-nums font-bold text-ds-ink">{parcelNumber(parcel)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.expectedDate)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.paidDate)}</span>
-    <span className="text-right tabular-nums text-ds-ink-muted">{parcel.feeCents !== null && parcel.grossCents ? rateLabel(parcel.feeCents / parcel.grossCents) : "—"}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted">{rateLabel(parcelFeeRate(parcel))}</span>
     <span className="text-right tabular-nums font-bold text-ds-ink">{centsLabel(parcel.paidNetCents ?? parcel.expectedNetCents)}</span>
     <span className="flex gap-1">{parcel.status !== "review" ? <StatusPill variant={status.variant}>{status.label}</StatusPill> : null}{problems.map(problem => <StatusPill key={problem.label} variant={problem.variant} title={problem.hint}>{problem.label}</StatusPill>)}{verdict && verdict.tone !== "ok" && verdict.tone !== "info" ? <StatusPill variant={verdict.tone}>{verdict.label}</StatusPill> : null}</span>
   </LiftRow>;
@@ -310,7 +311,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       title={panel?.mode === "list" ? panel.title : selectedParcel ? `${parcelTitle(selectedParcel)} · ${centsLabel(loadedAudit?.stone.capturedCents ?? selectedParcel.grossCents)}` : ""}
       subtitle={panel?.mode === "list" ? `${panel.parcelIds.length} parcela(s) · clique para ver a auditoria da venda` : selectedParcel ? `Venda de ${dayLabel(selectedParcel.saleDate)}${selectedParcel.saleTime ? ` às ${selectedParcel.saleTime}` : ""} · ${mapping.kioskName} · StoneCode ${stoneCode}` : undefined}
       highlights={panel?.mode === "sale" && selectedParcel ? <>
-        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="tabular-nums text-[22px]">{selectedParcel.feeCents !== null && selectedParcel.grossCents ? rateLabel(selectedParcel.feeCents / selectedParcel.grossCents) : "—"}</span></span>
+        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="tabular-nums text-[22px]">{rateLabel(parcelFeeRate(selectedParcel))}</span></span>
         <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Líquido</small><span className="tabular-nums text-[22px]">{centsLabel(selectedParcel.paidNetCents ?? selectedParcel.expectedNetCents)}</span></span>
         {verdict ? <span className="ml-auto self-end"><StatusPill variant={verdict.tone}>{verdict.label}</StatusPill></span> : null}
       </> : undefined}>

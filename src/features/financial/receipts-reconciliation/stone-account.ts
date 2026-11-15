@@ -90,8 +90,10 @@ export type ReceiptParcel = {
   saleTime: string | null;
   grossCents: number;
   feeCents: number | null;
-  /** "derived" quando a Stone não mandou o MDR: taxa proposta = bruto − líquido − antecipação, para revisão. */
-  feeSource: "stone" | "derived" | null;
+  /** Origem da taxa; ver `FeeSource`. */
+  feeSource: FeeSource | null;
+  /** Taxa sobre o bruto sem arredondar a centavos; ausente em conferências salvas antes de 2026-11-15. */
+  feeRate?: number | null;
   anticipationCents: number | null;
   /** Líquido previsto na origem, antes de antecipação. */
   expectedNetCents: number;
@@ -202,12 +204,61 @@ function cardParcel(origin: Pick<StoneTransaction, "transactionId" | "brandCode"
   };
 }
 
-/** MDR informado pela Stone ou, se ausente, a retenção (bruto − líquido − antecipação) como taxa proposta. */
-export function resolveFee(mdr: number | null, gross: number | null, net: number | null, anticipation: number | null): { feeCents: number | null; feeSource: "stone" | "derived" | null } {
-  if (mdr !== null) return { feeCents: mdr, feeSource: "stone" };
-  if (gross === null || net === null) return { feeCents: null, feeSource: null };
-  const retained = gross - net - Math.max(0, anticipation ?? 0);
-  return retained >= 0 ? { feeCents: retained, feeSource: "derived" } : { feeCents: null, feeSource: null };
+/**
+ * Origem da taxa da parcela:
+ * - "stone": MDR informado pela Stone (MdrAmount);
+ * - "exact": sem MdrAmount, mas o líquido veio com mais de 2 casas (o layout 2.2 manda 6), então
+ *   bruto − líquido − antecipação é a taxa exata cobrada, sem arredondamento;
+ * - "derived": só há valores em centavos; a retenção é uma taxa proposta, a verificar.
+ */
+export type FeeSource = "stone" | "exact" | "derived";
+export type ResolvedFee = { feeCents: number | null; feeSource: FeeSource | null; feeRate: number | null };
+
+function stoneUnits(value: string | null | undefined): bigint | null {
+  if (typeof value !== "string" || !/^-?\d{1,15}(?:\.\d{1,12})?$/.test(value)) return null;
+  const negative = value.startsWith("-");
+  const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
+  const units = BigInt(whole) * scale + BigInt(fraction.padEnd(12, "0"));
+  return negative ? -units : units;
+}
+const unitsToCents = (units: bigint) => Number((units + centScale / BigInt(2)) / centScale);
+const RATE_PRECISION = BigInt(100_000_000);
+const unitsRate = (part: bigint, whole: bigint) => Number((part * RATE_PRECISION) / whole) / 1e8;
+
+const NO_FEE: ResolvedFee = { feeCents: null, feeSource: null, feeRate: null };
+/** Taxa da parcela a partir dos decimais do arquivo, sem arredondar antes de calcular a taxa. */
+export function resolveCardFee(values: { mdr?: string | null; gross?: string | null; net?: string | null; anticipation?: string | null }): ResolvedFee {
+  const gross = stoneUnits(values.gross);
+  if (gross === null || gross <= BigInt(0)) return NO_FEE;
+  const mdr = stoneUnits(values.mdr);
+  if (mdr !== null) return { feeCents: unitsToCents(mdr), feeSource: "stone", feeRate: unitsRate(mdr, gross) };
+  const net = stoneUnits(values.net);
+  if (net === null) return NO_FEE;
+  const anticipation = stoneUnits(values.anticipation);
+  const retained = gross - net - (anticipation !== null && anticipation > BigInt(0) ? anticipation : BigInt(0));
+  if (retained < BigInt(0)) return NO_FEE;
+  const exact = (values.net!.split(".")[1] ?? "").length > 2;
+  // Só centavos: a taxa calculada carrega o arredondamento e não serve como taxa exata.
+  return exact
+    ? { feeCents: unitsToCents(retained), feeSource: "exact", feeRate: unitsRate(retained, gross) }
+    : { feeCents: unitsToCents(retained), feeSource: "derived", feeRate: null };
+}
+
+/** Taxa da parcela: a exata (MDR ou líquido com mais de 2 casas) quando houver; senão taxa em centavos ÷ bruto. */
+export function parcelFeeRate(parcel: { feeRate?: number | null; feeCents: number | null; grossCents: number | null }) {
+  if (typeof parcel.feeRate === "number") return parcel.feeRate;
+  return parcel.feeCents !== null && parcel.grossCents ? parcel.feeCents / parcel.grossCents : null;
+}
+
+/** Taxa de um conjunto de parcelas (uma venda), ponderada pelo bruto. */
+export function weightedFeeRate(parcels: Array<{ feeRate?: number | null; feeCents: number | null; grossCents: number | null }>) {
+  let gross = 0; let weighted = 0;
+  for (const parcel of parcels) {
+    const rate = parcelFeeRate(parcel);
+    if (rate === null || !parcel.grossCents) return null;
+    gross += parcel.grossCents; weighted += rate * parcel.grossCents;
+  }
+  return gross > 0 ? weighted / gross : null;
 }
 
 function paidStatus(expected: string | null, paid: string, chargeback: boolean): ReceiptParcelStatus {
@@ -295,7 +346,7 @@ export function buildStoneAccountParcels(input: {
         const originInstallment = lookup.get(transaction.transactionId)?.transaction.installments.find(row => row.number === installment.number);
         put(cardParcel(origin, transaction.transactionId, installment.number, {
           grossCents: gross,
-          ...resolveFee(stoneDecimalCents(installment.mdrAmount ?? originInstallment?.mdrAmount), gross, net, anticipation),
+          ...resolveCardFee({ mdr: installment.mdrAmount ?? originInstallment?.mdrAmount, gross: installment.grossAmount, net: installment.netAmount, anticipation: installment.advanceRateAmount }),
           anticipationCents: anticipation,
           expectedNetCents: net + Math.max(0, anticipation ?? 0),
           expectedDate: expected,
@@ -316,7 +367,7 @@ export function buildStoneAccountParcels(input: {
       const net = stoneDecimalCents(installment.netAmount);
       if (gross === null || net === null) continue;
       put(cardParcel(transaction, transaction.transactionId, installment.number, {
-        grossCents: gross, ...resolveFee(stoneDecimalCents(installment.mdrAmount), gross, net, null), anticipationCents: null,
+        grossCents: gross, ...resolveCardFee({ mdr: installment.mdrAmount, gross: installment.grossAmount, net: installment.netAmount }), anticipationCents: null,
         expectedNetCents: net, expectedDate: installment.expectedPaymentDate, paidDate: null, paidNetCents: null,
         status: pendingStatus(installment.expectedPaymentDate, input, missing, adverse(transaction) || installment.suspendedByChargeback),
       }, null));
@@ -334,7 +385,7 @@ export function buildStoneAccountParcels(input: {
     const origin = origins.get(row.transactionId)?.transaction ?? null;
     const paidBefore = row.status === "paid" && row.paymentDate !== null && row.paymentDate < input.from;
     put(cardParcel(origin, row.transactionId, row.installment, {
-      grossCents: gross, ...resolveFee(null, gross, net, null), anticipationCents: null, expectedNetCents: net,
+      grossCents: gross, ...resolveCardFee({ gross: row.gross, net: row.net }), anticipationCents: null, expectedNetCents: net,
       expectedDate: row.dueDate,
       paidDate: paidBefore ? row.paymentDate : null,
       paidNetCents: null,
@@ -349,7 +400,8 @@ export function buildStoneAccountParcels(input: {
     put({
       id: `pix:${pix.eventId}`, saleId: pix.eventId, source: "pix", installment: 1, installmentCount: 1,
       brandCode: null, brand: null, modality: "pix", saleDate: pix.soldOn, saleTime: belemTime(pix.soldAt),
-      grossCents: pix.grossCents, feeCents: pix.feeCents, feeSource: "stone", anticipationCents: null,
+      grossCents: pix.grossCents, feeCents: pix.feeCents, // Pix: a Stone informa a taxa já em centavos; a conferência tolera esse arredondamento.
+      feeSource: "stone", feeRate: null, anticipationCents: null,
       expectedNetCents: pix.grossCents - pix.feeCents, expectedDate: pix.soldOn,
       paidDate: settled, paidNetCents: settled ? pix.grossCents - pix.feeCents : null,
       status: settled ? late ? "paid_late" : "paid" : pendingStatus(pix.soldOn, input, missing, false),
@@ -472,9 +524,8 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
     const sales = new Map<string, ReceiptParcel[]>();
     for (const row of rows) sales.set(row.saleId, [...(sales.get(row.saleId) ?? []), row]);
     const saleRates = [...sales.values()].flatMap(items => {
-      const gross = items.reduce((sum, item) => sum + item.grossCents, 0);
-      const fee = items.reduce((sum, item) => sum + (item.feeCents ?? 0), 0);
-      return gross > 0 ? [fee / gross] : [];
+      const rate = weightedFeeRate(items);
+      return rate === null ? [] : [rate];
     });
     const grossCents = rows.reduce((sum, row) => sum + row.grossCents, 0);
     const feeCents = rows.reduce((sum, row) => sum + (row.feeCents ?? 0), 0);
@@ -483,7 +534,7 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
     return {
       key, parentKey, label, modality, brand, installmentCount,
       saleCount: sales.size, grossCents, feeCents,
-      rate: grossCents > 0 ? feeCents / grossCents : null,
+      rate: weightedFeeRate(rows) ?? (grossCents > 0 ? feeCents / grossCents : null),
       rateMin: saleRates.length ? Math.min(...saleRates) : null,
       rateMax: saleRates.length ? Math.max(...saleRates) : null,
       usualRate: usualRate(saleRates),
@@ -527,7 +578,8 @@ export type SaleAuditInstallment = {
   number: number;
   grossCents: number | null;
   feeCents: number | null;
-  feeSource: "stone" | "derived" | null;
+  feeSource: FeeSource | null;
+  feeRate?: number | null;
   anticipationCents: number | null;
   netCents: number | null;
   expectedDate: string | null;
@@ -677,7 +729,7 @@ export function saleAuditChecks(audit: SaleAudit, groupUsualRate: number | null)
 
   const gross = installmentGross ?? captured;
   const fee = audit.installments.every(row => row.feeCents !== null) ? audit.installments.reduce((sum, row) => sum + (row.feeCents ?? 0), 0) : null;
-  const rate = gross && fee !== null ? fee / gross : null;
+  const rate = audit.installments.length && audit.installments.every(row => row.grossCents) ? weightedFeeRate(audit.installments) : gross && fee !== null ? fee / gross : null;
   const rateDiffers = rate !== null && groupUsualRate !== null && Math.abs(roundedRate(rate) - groupUsualRate) > 0.00005;
   const derivedFee = audit.installments.some(row => row.feeSource === "derived");
   add("Taxa conforme o grupo", "Taxa praticada × taxa mais comum no mesmo cartão e parcelas", `${percent(rate)}${derivedFee ? " (proposta)" : ""}`, groupUsualRate === null ? "sem referência" : `habitual ${percent(groupUsualRate)}`,
@@ -744,7 +796,12 @@ export function cardSaleInstallments(input: {
     return {
       number,
       grossCents,
-      ...resolveFee(stoneDecimalCents(payment?.installment.mdrAmount ?? origin?.mdrAmount), grossCents, netCents, anticipation),
+      ...resolveCardFee({
+        mdr: payment?.installment.mdrAmount ?? origin?.mdrAmount,
+        gross: payment?.installment.grossAmount ?? origin?.grossAmount ?? portfolio?.gross,
+        net: payment?.installment.netAmount ?? origin?.netAmount ?? portfolio?.net,
+        anticipation: payment?.installment.advanceRateAmount,
+      }),
       anticipationCents: anticipation,
       netCents,
       expectedDate: expected,
