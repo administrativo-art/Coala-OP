@@ -1,5 +1,11 @@
 # Caixa financeira: recebimento, análise e vínculo
 
+## Confirmação manual de guia pública — candidata local de 15/11/2026
+
+Ao conciliar uma **previsão** por `POST /api/financial/inbox/[id]/link`, a confirmação documental aceita uma linha digitável de 48 dígitos sem CNPJ do arrecadador somente quando o código é uma guia pública íntegra do segmento 5, seu valor efetivo corresponde aos centavos confirmados e o operador informa natureza da guia, arrecadador e nome/CNPJ válido do contribuinte. Divergências com valor, vencimento, competência, linha ou identidade fiscal já analisados bloqueiam a operação. Boletos e contas de consumo continuam exigindo CNPJ do favorecido. A confirmação cria a despesa real da previsão e registra o código e a identidade fiscal; não prepara nem autoriza pagamento.
+
+A CLI `link-forecast` confere a cobrança e a previsão por ID exato antes de chamar essa rota e exige confirmação explícita. Para guia sem previsão, `link-expense` exige uma despesa real já cadastrada, valor/vencimento/competência e parcela única pendente, conta, centro de referência e rateio exato quando houver. O servidor relê tudo na transação, recusa vínculo/pedido bancário anterior e código conflitante e registra hash da linha e classificação contábil no evento. Nenhum dos comandos cadastra despesa ou infere conta/centro/unidade. Para DARE sem previsão, o cadastro existente ocorre no formulário **Despesas → Novo lançamento** por SDK cliente e regras Firestore; não há comando CLI nem API de criação geral. O operador deve usar o formulário sem o parâmetro `inbox`, pois esse parâmetro tenta vincular imediatamente a mensagem ainda sem confirmação fiscal; depois usa `link-expense`. Esta candidata ainda não foi publicada nem testada contra dados reais.
+
 ## Destinação de anexos — 03/11/2026
 
 Boletos recebidos ficam exclusivamente em Cobranças. O botão **Boleto da despesa** consulta primeiro o anexo manual canônico e, sem ele, o e-mail efetivamente vinculado à despesa/parcela. O PDF só é entregue quando o código extraído do próprio arquivo corresponde ao código da cobrança confirmada; sugestão de despesa ou código no corpo do e-mail não bastam. A API exige `financial.view + expenses.view`, workspace e parcela exatos. Se não houver evidência única, a revisão permanece em Cobranças. Nenhum valor, pagamento ou anexo manual é alterado.
