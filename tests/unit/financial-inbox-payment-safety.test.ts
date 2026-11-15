@@ -93,7 +93,7 @@ test("análise isola candidatos por workspace e revalida a despesa na transaçã
   assert.match(workflow, /collection\("bankPaymentRequests"\)\s*\.where\("workspaceId", "==", message\.workspaceId\)/);
   assert.match(workflow, /targetExpenseSnapshot\.get\("workspaceId"\) !== message\.workspaceId/);
   assert.match(workflow, /expense\.workspaceId !== expectedWorkspaceId/);
-  assert.match(workflow, /forecastWorkspaceMatches\(provision, expectedWorkspaceId, verifiedTelecomIdentity\)/);
+  assert.match(workflow, /forecastWorkspaceMatches\(provision, expectedWorkspaceId, verifiedTelecomIdentity, classification\.fiscalIdentity\?\.documentKind\)/);
   assert.match(workflow, /workspaceId: expectedWorkspaceId/);
   assert.match(paymentService, /linkedExpenseSnapshot\.get\("workspaceId"\) !== input\.workspaceId/);
   assert.match(paymentRepository, /where\("workspaceId", "==", workspaceId\)/);

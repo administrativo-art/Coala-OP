@@ -742,7 +742,7 @@ export async function linkSuggestedInboxCharge(
         throw new Error("A conta e a linha telefônica confirmadas devem corresponder à previsão.");
       }
     }
-    if (!forecastWorkspaceMatches(provision, expectedWorkspaceId, verifiedTelecomIdentity)) {
+    if (!forecastWorkspaceMatches(provision, expectedWorkspaceId, verifiedTelecomIdentity, classification.fiscalIdentity?.documentKind)) {
       throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
     }
     const provisionMatch = scoreProvisionCandidate(classification, {

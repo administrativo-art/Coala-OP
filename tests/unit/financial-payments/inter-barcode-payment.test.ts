@@ -24,3 +24,11 @@ test("inclui data de pagamento somente em agendamento futuro", () => {
   assert.equal(interBarcodePaymentPayload({ ...payment, scheduledFor: "2026-10-07" }, "2026-10-06").dataPagamento, "2026-10-07");
   assert.equal("dataPagamento" in interBarcodePaymentPayload(payment, "2026-10-06"), false);
 });
+
+test("permite omitir atributo opcional sem alterar código, valor ou vencimento", () => {
+  const payload = interBarcodePaymentPayload({ ...payment, beneficiaryDocument: null }, "2026-10-06");
+  assert.equal("cpfCnpjBeneficiario" in payload, false);
+  assert.equal(payload.codBarraLinhaDigitavel, payment.code);
+  assert.equal(payload.valorPagar, "1467.98");
+  assert.equal(payload.dataVencimento, payment.dueDate);
+});

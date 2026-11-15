@@ -18,3 +18,12 @@ test("exceção de identidade de telefonia legada permanece restrita à prova da
   assert.equal(forecastWorkspaceMatches({}, WORKSPACE_ID, false), false);
   assert.equal(forecastWorkspaceMatches({}, WORKSPACE_ID, true), true);
 });
+
+test("previsão DAS legada requer série exata e guia DAS confirmada no workspace original", () => {
+  const das = { sourceType: "das_forecast", provisionSeriesKey: "das-simples-nacional" };
+  assert.equal(forecastWorkspaceMatches(das, WORKSPACE_ID, false, "das"), true);
+  assert.equal(forecastWorkspaceMatches(das, WORKSPACE_ID, false, "dare"), false);
+  assert.equal(forecastWorkspaceMatches(das, "outro-workspace", false, "das"), false);
+  assert.equal(forecastWorkspaceMatches({ ...das, provisionSeriesKey: "outro" }, WORKSPACE_ID, false, "das"), false);
+  assert.equal(forecastWorkspaceMatches({ ...das, workspaceId: "outro-workspace" }, WORKSPACE_ID, false, "das"), false);
+});
