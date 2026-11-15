@@ -18,6 +18,7 @@ import { startMemorySessionServer, tokenFromMemorySession } from "./payment-cli-
 import { readHiddenPassword, setTerminalEcho } from "./payment-cli-password";
 import { expenseBoletoSchema, validateExpenseBoleto } from "../../src/features/financial/payment-requests/expense-boleto";
 import { assertConfirmedExistingExpense, confirmFinancialInboxDocument } from "../../src/features/financial/inbox/confirmed-document";
+import { forecastAllocationsMatchConfirmedAmount, parseConfirmedAccountAllocations } from "../../src/features/financial/inbox/account-allocation-confirmation";
 import { inboxDareExpenseFingerprint, inboxDareExpenseSchema } from "../../src/features/financial/inbox/expense-create-contract";
 import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
 import type { ConfirmedInboxDocumentInput } from "../../src/features/financial/inbox/confirmed-document";
@@ -72,7 +73,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query TEXTO --view work|identified [--cursor CURSOR]
   npx tsx scripts/financial/coala-authenticated-payment.mts inspect --email EMAIL --id INBOX_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts analyze --email EMAIL --id INBOX_ID
-  npx tsx scripts/financial/coala-authenticated-payment.mts link-forecast --email EMAIL --id INBOX_ID --provision-id EXPENSE_ID --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts link-forecast --email EMAIL --id INBOX_ID --provision-id EXPENSE_ID --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] [--account-allocations-file JSON] --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts link-expense --email EMAIL --id INBOX_ID --expense-id EXPENSE_ID --account-plan-id CONTA --result-center-id CENTRO --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] [--apportionments-file JSON] --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts create-dare-expense --email EMAIL --id INBOX_ID --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts reconcile-vivo --email EMAIL --confirm-financial-actions
@@ -868,6 +869,15 @@ async function main() {
     const provisionId = requireOption("provision-id");
     if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id) || !/^[a-zA-Z0-9_-]{1,170}$/.test(provisionId)) throw new PaymentCliError("ID da cobrança ou previsão inválido.");
     const confirmation = documentConfirmationOptions();
+    const allocationsPath = option("account-allocations-file");
+    let accountAllocations: ReturnType<typeof parseConfirmedAccountAllocations> | undefined;
+    if (allocationsPath) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(await readFile(resolve(allocationsPath), "utf8")); }
+      catch { throw new PaymentCliError("Não foi possível ler o JSON de apropriações da guia."); }
+      try { accountAllocations = parseConfirmedAccountAllocations(parsed, confirmation.amountCents); }
+      catch { throw new PaymentCliError("As apropriações devem ter 2 a 20 contas distintas e somar exatamente o valor confirmado em centavos."); }
+    }
     const token = await commandToken(email);
     const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
     if (!before || before.id !== id || before.linkedExpenseId || before.paymentRequestId || !["document_pending", "pending_review", "suggestion_available"].includes(String(before.status))) {
@@ -880,9 +890,13 @@ async function main() {
       || provision.provisionCompetence !== confirmation.competence) {
       throw new PaymentCliError("A previsão não está aberta para a competência confirmada. Nenhum vínculo foi feito.");
     }
+    if (!accountAllocations && !forecastAllocationsMatchConfirmedAmount(provision, confirmation.amountCents)) {
+      throw new PaymentCliError("As apropriações da previsão não somam a guia; informe --account-allocations-file com os componentes reais. Nenhum vínculo foi feito.");
+    }
     const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ provisionExpenseId: provisionId, documentConfirmation: confirmation }),
+      body: JSON.stringify({ provisionExpenseId: provisionId, documentConfirmation: confirmation,
+        ...(accountAllocations ? { accountAllocations } : {}) }),
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o vínculo (HTTP ${response.status}). Consulte a cobrança antes de tentar novamente.`);
