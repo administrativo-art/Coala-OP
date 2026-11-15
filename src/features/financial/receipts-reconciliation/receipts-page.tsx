@@ -86,7 +86,7 @@ export function StoneReceiptsPage() {
         <div><dt className="font-bold">Previsto pela Stone</dt><dd>Líquido que a Stone informou que pagaria naquele dia (PrevisionPaymentDate).</dd></div>
         <div><dt className="font-bold">Caiu na conta Stone</dt><dd>Pagamento informado no arquivo diário da Stone. O extrato da conta Stone ainda não está no sistema.</dd></div>
         <div><dt className="font-bold">Antecipação</dt><dd>Parcela paga antes do previsto, com desconto de antecipação.</dd></div>
-        <div><dt className="font-bold">Taxa praticada</dt><dd>MDR ÷ bruto de cada venda. A taxa contratada ainda depende de uma tabela oficial.</dd></div>
+        <div><dt className="font-bold">Taxa praticada</dt><dd>Taxa ÷ bruto de cada venda: no cartão, bruto − líquido exato da Stone; no Pix, a Stone corta os centavos para baixo, então vendas pequenas pagam um pouco menos que a taxa. A taxa contratada ainda depende de uma tabela oficial.</dd></div>
         <div><dt className="font-bold">Cruzamentos</dt><dd>As 12 conferências de cada venda: PDV × Stone, parcelas, taxa, líquido e data de pagamento.</dd></div>
       </dl>
       <p className="mt-3 text-muted-foreground">A consulta não cria lançamentos. A transferência da conta Stone para o Inter é a 2ª parte da conciliação.</p>
