@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { receiptGroupKey, receiptModalityLabel, usualRate, weightedFeeRate, type ReceiptParcel } from "./stone-account";
+import { pixFeeForRate, receiptGroupKey, receiptModalityLabel, truncatedNominalRate, usualRate, weightedFeeRate, type ReceiptParcel } from "./stone-account";
 
 /**
  * Conferência de taxas (aba Taxas, layout E1). Referência = "taxa atual" de cada grupo pela
@@ -51,6 +51,9 @@ type Sale = { saleId: string; groupKey: string; label: string; date: string; gro
  */
 export const saleRate = (sale: Sale) => weightedFeeRate(sale.parcels) ?? sale.feeCents / sale.grossCents;
 const exactSale = (sale: Sale) => sale.parcels.every(parcel => typeof parcel.feeRate === "number");
+const pixSale = (sale: Sale) => sale.parcels.every(parcel => parcel.source === "pix");
+/** Taxa do grupo: Pix pela regra de corte dos centavos; cartões pela taxa mais frequente. */
+const groupRate = (list: Sale[]) => list.length && list.every(pixSale) ? truncatedNominalRate(list) : usualRate(list.map(saleRate));
 
 /** Vendas (não parcelas) com taxa conhecida, agrupadas. */
 export function feeSales(parcels: ReceiptParcel[]): Sale[] {
@@ -84,7 +87,7 @@ export function feeGroups(sales: Sale[], references: Map<string, FeeReference>, 
   const keys = [...new Set(sales.map(sale => sale.groupKey))];
   return keys.map(key => {
     const window = sales.filter(sale => sale.groupKey === key && sale.date >= from && !sale.derived);
-    const suggested = window.length >= FEE_MIN_SALES ? usualRate(window.map(saleRate)) : null;
+    const suggested = window.length >= FEE_MIN_SALES ? groupRate(window) : null;
     const confirmed = references.get(key) ?? null;
     return {
       key, label: sales.find(sale => sale.groupKey === key)!.label, saleCount: window.length, suggestedRate: suggested,
@@ -94,9 +97,12 @@ export function feeGroups(sales: Sale[], references: Map<string, FeeReference>, 
 }
 
 /** Taxa esperada por parcela, arredondada em centavos, como a Stone calcula o MDR. */
-const expectedFee = (sale: Sale, rate: number) => sale.parcels.reduce((sum, parcel) => sum + Math.round(parcel.grossCents * rate), 0);
+const expectedFee = (sale: Sale, rate: number) => sale.parcels.reduce((sum, parcel) =>
+  sum + (parcel.source === "pix" ? pixFeeForRate(parcel.grossCents, rate) : Math.round(parcel.grossCents * rate)), 0);
 /** Venda com taxa exata: confere a taxa (0,01%); sem ela, tolera o arredondamento de centavos por parcela. */
-const withinTolerance = (sale: Sale, rate: number) => exactSale(sale)
+const withinTolerance = (sale: Sale, rate: number) => pixSale(sale)
+  ? sale.feeCents === expectedFee(sale, rate)
+  : exactSale(sale)
   ? Math.abs(round4(saleRate(sale)) - rate) <= 0.00005
   : Math.abs(sale.feeCents - expectedFee(sale, rate)) <= FEE_TOLERANCE_CENTS * sale.parcels.length;
 
@@ -181,7 +187,7 @@ export function feeHistory(salesByMonth: Array<{ month: string; sales: Sale[] }>
     key, label,
     months: salesByMonth.map(entry => {
       const list = entry.sales.filter(sale => sale.groupKey === key && sale.date.startsWith(entry.month) && !sale.derived);
-      return { month: entry.month, rate: list.length ? usualRate(list.map(saleRate)) : null, sales: list.length };
+      return { month: entry.month, rate: list.length ? groupRate(list) : null, sales: list.length };
     }),
   })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }

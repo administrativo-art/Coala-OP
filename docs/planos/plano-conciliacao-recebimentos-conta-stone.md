@@ -80,7 +80,7 @@ Situação em 2026-11-14. Chamado: `.ai-work/development-technology/2026-11-13-r
 3. **Antecipações (C10):** leitura da conferência salva, sem gravação (feito em 2026-11-14).
 4. **Decisões e reabertura** (feito em 2026-11-14 para Taxas: `stoneReceiptDecisions`, `stoneReceiptDecisionEvents`, rota `stone-fees`): registro das decisões, rota com `secureRoute`, permissão do financeiro e registro de quem decidiu.
 5. **Taxas (E1)** (feito em 2026-11-14): taxa atual por recorrência, histórico semanal (reconstruído desde a primeira data da carteira), mudanças, vendas a corrigir e outras cobranças.
-6. **Fechamento do mês e lançamento da despesa:** reaproveita a apropriação existente em `acquirer-fees`. Em 2026-11-14 a tela avisa quando há pendências, mas não bloqueia o lançamento no servidor. O bloqueio e o ajuste de despesa ao reabrir ficam pendentes.
+6. **Fechamento do mês e lançamento da despesa:** feito em 2026-11-15 (`stone-fee-expenses`): uma despesa por tipo (Pix, débito, crédito) na conta "Taxas de cartão", bloqueada no servidor enquanto o mês estiver aberto ou houver pendência, com desfazer por motivo. Decisões do programador (15/11/2026): uma despesa por tipo; Pix também em "Taxas de cartão"; o painel diário `acquirer-fees` saiu da tela. Pendente: ajuste automático quando um item reabrir depois do lançamento (hoje é preciso desfazer e lançar de novo) e custo de antecipação, que não entra nesta despesa.
 
 ## Ordem de execução
 
