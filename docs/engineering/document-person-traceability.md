@@ -1,5 +1,9 @@
 # Rastreabilidade de pessoa em documentos
 
+## Caixa financeira — atores da guia DARE
+
+No banco `financial`, `financialInboxMessages.reviewedBy` e `archivedBy` identificam operadores pelo UID `main.users`. Os eventos em `financialInboxMessages/{id}/events` guardam `actorId` com o mesmo papel de ator; a consulta por ID usa collection group e aceita somente eventos sob uma cobrança do mesmo workspace. As três fontes são `live`, com permissão financeira, escopo `finance-workspace` e retenção `financial-policy`. A criação da despesa DARE grava `expenses.createdBy` e um evento de criação; a guia se refere a empresa, sem titular humano derivado de CNPJ, nome do remetente ou e-mail. Endereços de remetentes externos e texto livre da mensagem não são equivalências de identidade pessoal no inventário. `accounts` e `resultCenters` são catálogos contábeis sem pessoa. A cobertura descrita aqui é descoberta por UID dos operadores e não censo do conteúdo livre ou de remetentes externos.
+
 ## Correções residuais após revisão — 03/11/2026
 
 A continuação usa token opaco randômico, com posição privada em `privacyPersonCursorStates` no banco principal. O estado é vinculado ao ator real, ator efetivo/viewAs, workspace, referência pessoal, fonte e limite. Expira logicamente em 15 minutos; o TTL físico é eventual e exige [configuração de implantação](person-inventory-cursor-ttl.md). Registros negados nunca entram no token/DTO. Posição por ID ordenado continua válida após remoção do documento. A cada requisição as permissões e a âncora são verificadas novamente. A mesma continuação pode ser repetida até a expiração, permitindo recuperar falha da fonte ou perda da resposta; permissões revogadas não são preservadas pela cache. Troca dos vínculos, token antigo/base64 ou expirado são recusados. GET declara efeito `write` porque cria a cache de continuação; os dados das fontes permanecem somente leitura.

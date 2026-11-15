@@ -17,6 +17,10 @@ import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJso
 import { startMemorySessionServer, tokenFromMemorySession } from "./payment-cli-memory-session";
 import { readHiddenPassword, setTerminalEcho } from "./payment-cli-password";
 import { expenseBoletoSchema, validateExpenseBoleto } from "../../src/features/financial/payment-requests/expense-boleto";
+import { assertConfirmedExistingExpense, confirmFinancialInboxDocument } from "../../src/features/financial/inbox/confirmed-document";
+import { inboxDareExpenseFingerprint, inboxDareExpenseSchema } from "../../src/features/financial/inbox/expense-create-contract";
+import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
+import type { ConfirmedInboxDocumentInput } from "../../src/features/financial/inbox/confirmed-document";
 import {
   assertPurchaseSnapshot,
   purchaseCreatePayload,
@@ -41,6 +45,26 @@ function requireOption(name: string) {
   return value;
 }
 
+function documentConfirmationOptions(): ConfirmedInboxDocumentInput {
+  const fiscalKind = option("fiscal-kind");
+  if (fiscalKind && !["das", "dare", "darf", "dctfweb", "municipal_tax"].includes(fiscalKind)) throw new PaymentCliError("Natureza da guia inválida.");
+  const fiscalIdentity = fiscalKind ? {
+    documentKind: fiscalKind as "das" | "dare" | "darf" | "dctfweb" | "municipal_tax",
+    collectorName: requireOption("collector-name"),
+    taxpayerName: requireOption("taxpayer-name"),
+    taxpayerTaxId: requireOption("taxpayer-tax-id").replace(/\D/g, ""),
+  } : undefined;
+  return {
+    amountCents: Number(requireOption("amount-cents")),
+    dueDate: requireOption("due-date"),
+    competence: requireOption("competence"),
+    barcode: requireOption("barcode").replace(/\D/g, ""),
+    supplierName: requireOption("supplier-name"),
+    supplierTaxId: option("supplier-tax-id").replace(/\D/g, "") || null,
+    ...(fiscalIdentity ? { fiscalIdentity } : {}),
+  };
+}
+
 function help() {
   stdout.write(`Uso:
   npx tsx scripts/financial/coala-authenticated-payment.mts login
@@ -48,6 +72,9 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query TEXTO --view work|identified [--cursor CURSOR]
   npx tsx scripts/financial/coala-authenticated-payment.mts inspect --email EMAIL --id INBOX_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts analyze --email EMAIL --id INBOX_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts link-forecast --email EMAIL --id INBOX_ID --provision-id EXPENSE_ID --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts link-expense --email EMAIL --id INBOX_ID --expense-id EXPENSE_ID --account-plan-id CONTA --result-center-id CENTRO --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] [--apportionments-file JSON] --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts create-dare-expense --email EMAIL --id INBOX_ID --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts reconcile-vivo --email EMAIL --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts document --email EMAIL --collection expenses|bankPaymentRequests|transactions --id ID
   npx tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount|expense-supplier|expense-purchase-order|expense-due-date|expense-account|expense-account-center|expense-unit-month|expense-center-due-month --value VALOR
@@ -655,7 +682,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "session", "find", "inspect", "analyze", "link-forecast", "link-expense", "create-dare-expense", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -833,6 +860,131 @@ async function main() {
     if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da cobrança inválido.");
     const result = await coalaAnalyzeInbox(await commandToken(email), id);
     stdout.write(`${JSON.stringify(result)}\n`);
+    return;
+  }
+  if (command === "link-forecast") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente o vínculo com --confirm-financial-actions.");
+    const id = requireOption("id");
+    const provisionId = requireOption("provision-id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id) || !/^[a-zA-Z0-9_-]{1,170}$/.test(provisionId)) throw new PaymentCliError("ID da cobrança ou previsão inválido.");
+    const confirmation = documentConfirmationOptions();
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.linkedExpenseId || before.paymentRequestId || !["document_pending", "pending_review", "suggestion_available"].includes(String(before.status))) {
+      throw new PaymentCliError("A cobrança mudou ou já possui vínculo/pedido. Confira a caixa antes de prosseguir.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, confirmation); }
+    catch { throw new PaymentCliError("A confirmação documental diverge da cobrança ou do código/valor. Nenhum vínculo foi feito."); }
+    const provision = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: provisionId }))).doc as Record<string, unknown> | undefined;
+    if (!provision || provision.id !== provisionId || provision.provisionType !== "forecast" || provision.status !== "provisioned"
+      || provision.provisionCompetence !== confirmation.competence) {
+      throw new PaymentCliError("A previsão não está aberta para a competência confirmada. Nenhum vínculo foi feito.");
+    }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ provisionExpenseId: provisionId, documentConfirmation: confirmation }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o vínculo (HTTP ${response.status}). Consulte a cobrança antes de tentar novamente.`);
+    const result = await paymentCliJson<{ expenseId?: string; message?: { linkedExpenseId?: string } }>(response);
+    if (!result.expenseId || result.message?.linkedExpenseId !== result.expenseId) {
+      throw new PaymentCliError("O Coala não devolveu o vínculo esperado. Consulte a cobrança antes de tentar novamente.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, provisionId, expenseId: result.expenseId, status: "linked" })}\n`);
+    return;
+  }
+  if (command === "link-expense") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente o vínculo com --confirm-financial-actions.");
+    const id = requireOption("id");
+    const expenseId = requireOption("expense-id");
+    const accountPlanId = requireOption("account-plan-id");
+    const resultCenterId = requireOption("result-center-id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id) || !/^[a-zA-Z0-9_-]{1,170}$/.test(expenseId)
+      || !/^[a-zA-Z0-9_-]{1,180}$/.test(accountPlanId) || !/^[a-zA-Z0-9_-]{1,180}$/.test(resultCenterId)) {
+      throw new PaymentCliError("ID de cobrança, despesa, conta ou centro inválido.");
+    }
+    const apportionmentsPath = option("apportionments-file");
+    let apportionments: Array<{ resultCenter: string; percentage: number }> | undefined;
+    if (apportionmentsPath) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(await readFile(resolve(apportionmentsPath), "utf8")); }
+      catch { throw new PaymentCliError("Não foi possível ler o JSON de rateio."); }
+      if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 20
+        || parsed.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry)
+          || typeof entry.resultCenter !== "string" || !entry.resultCenter.trim()
+          || !Number.isFinite(entry.percentage) || entry.percentage <= 0 || entry.percentage > 100)
+        || Math.abs(parsed.reduce((sum, entry) => sum + entry.percentage, 0) - 100) >= 0.001) {
+        throw new PaymentCliError("Rateio inválido; informe unidades e percentuais que somem 100.");
+      }
+      apportionments = parsed.map((entry) => ({ resultCenter: entry.resultCenter.trim(), percentage: entry.percentage }));
+    }
+    const confirmation = documentConfirmationOptions();
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.paymentRequestId || before.linkedExpenseId && before.linkedExpenseId !== expenseId
+      || !["document_pending", "pending_review", "suggestion_available", "linked"].includes(String(before.status))) {
+      throw new PaymentCliError("A cobrança mudou ou possui outro vínculo/pedido. Confira a caixa antes de prosseguir.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, confirmation); }
+    catch { throw new PaymentCliError("A confirmação documental diverge da cobrança ou do código/valor. Nenhum vínculo foi feito."); }
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    if (!expense || expense.id !== expenseId) throw new PaymentCliError("Despesa não encontrada. Nenhum vínculo foi feito.");
+    try { assertConfirmedExistingExpense(expense, id, confirmation, { accountPlanId, resultCenterId, apportionments }); }
+    catch { throw new PaymentCliError("A despesa ou parcela não coincide com valor, vencimento, competência e classificação confirmados. Nenhum vínculo foi feito."); }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ expenseId, documentConfirmation: confirmation,
+        expenseAccountingConfirmation: { accountPlanId, resultCenterId, ...(apportionments ? { apportionments } : {}) } }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o vínculo (HTTP ${response.status}). Consulte a cobrança antes de tentar novamente.`);
+    const result = await paymentCliJson<{ expenseId?: string; message?: { linkedExpenseId?: string; classification?: { barcode?: string } } }>(response);
+    if (result.expenseId !== expenseId || result.message?.linkedExpenseId !== expenseId
+      || result.message?.classification?.barcode !== confirmation.barcode) {
+      throw new PaymentCliError("O Coala não devolveu o vínculo e código esperados. Consulte a cobrança antes de tentar novamente.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, expenseId, accountPlanId, resultCenterId, status: "linked" })}\n`);
+    return;
+  }
+  if (command === "create-dare-expense") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente a criação com --confirm-financial-actions.");
+    const id = requireOption("id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da cobrança inválido.");
+    let raw: unknown;
+    try { raw = JSON.parse(await readFile(resolve(requireOption("manifest")), "utf8")); }
+    catch { throw new PaymentCliError("Não foi possível ler o manifesto da despesa DARE."); }
+    const parsed = inboxDareExpenseSchema.safeParse(raw);
+    if (!parsed.success) throw new PaymentCliError("O manifesto DARE é inválido; confira PDF, guia, conta, centro e rateio.");
+    const input = parsed.data;
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.paymentRequestId
+      || before.linkedExpenseId && before.linkedExpenseId !== `inbox_${id}`) {
+      throw new PaymentCliError("A cobrança mudou ou já possui outro vínculo/pedido. Nenhuma despesa foi criada.");
+    }
+    const attachments = Array.isArray(before.attachments) ? before.attachments as Array<Record<string, unknown>> : [];
+    if (!attachments.some((attachment) => attachment.id === input.sourceAttachmentId
+      && attachment.sha256 === input.sourceAttachmentSha256 && attachment.archiveStatus === "stored")) {
+      throw new PaymentCliError("O PDF arquivado não corresponde ao manifesto. Nenhuma despesa foi criada.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, input.documentConfirmation); }
+    catch { throw new PaymentCliError("A guia e sua confirmação fiscal divergem. Nenhuma despesa foi criada."); }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/expense`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a despesa DARE (HTTP ${response.status}). Consulte a cobrança antes de repetir.`);
+    const result = await paymentCliJson<{ expenseId?: string; duplicate?: boolean }>(response);
+    const expenseId = `inbox_${id}`;
+    if (result.expenseId !== expenseId) throw new PaymentCliError("O Coala devolveu outra despesa. Consulte antes de repetir.");
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    if (!expense || expense.financialInboxMessageId !== id
+      || expense.inboxCreationFingerprint !== inboxDareExpenseFingerprint(input)
+      || expense.accountPlan !== input.accountPlanId
+      || expense.referenceResultCenterId !== input.referenceResultCenterId) {
+      throw new PaymentCliError("A despesa criada não corresponde ao manifesto. Consulte antes de continuar.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, expenseId, duplicate: result.duplicate === true, status: "pending_link" })}\n`);
     return;
   }
   if (["find", "inspect", "document"].includes(command)) {

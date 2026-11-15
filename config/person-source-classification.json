@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "nonPersonalCollections": [
+    "accounts",
+    "resultCenters",
     "stoneReceiptMonthSnapshots"
   ],
   "approvedLegacyGaps": [

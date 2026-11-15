@@ -7,12 +7,13 @@ import { calculateFinancialObligationSummary } from "@/features/financial/obliga
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
-import { classifyFinancialEmail, extractBillingIdentity, mergeBillingIdentities } from "./parser";
+import { classifyFinancialEmail, compareFiscalIdentities, extractBillingIdentity, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, scoreProvisionCandidate, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
 import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
 import {
+  assertConfirmedExistingExpense,
   confirmFinancialInboxDocument,
   supplierNamesAreCompatible,
   telecomBillingIdentitiesMatch,
@@ -954,6 +955,8 @@ export async function linkInboxChargeToExistingExpense(
   expectedWorkspaceId: string,
   installmentNumber: number | null = null,
   resolutionOnly = false,
+  documentConfirmation?: ConfirmedInboxDocumentInput,
+  expenseAccountingConfirmation?: { accountPlanId: string; resultCenterId: string; apportionments?: Array<{ resultCenter: string; percentage: number }> },
 ) {
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
@@ -969,6 +972,20 @@ export async function linkInboxChargeToExistingExpense(
     if (message.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
     const expense = expenseSnapshot.data() || {};
     if (expense.workspaceId !== expectedWorkspaceId) throw new Error("Despesa não encontrada.");
+    if (documentConfirmation && message.linkedExpenseId === expenseId
+      && message.linkedExpenseInstallmentNumber == null) {
+      confirmFinancialInboxDocument(message.classification, documentConfirmation);
+      if (!expenseAccountingConfirmation) throw new Error("Confirme a classificação contábil da despesa.");
+      assertConfirmedExistingExpense(expense, id, documentConfirmation, expenseAccountingConfirmation);
+      return { message, expenseId, duplicate: true };
+    }
+    if (documentConfirmation) {
+      if (resolutionOnly || !expenseAccountingConfirmation || installmentNumber != null) {
+        throw new Error("A confirmação documental exige despesa real única e classificação contábil confirmada.");
+      }
+      if (message.paymentRequestId) throw new Error("A cobrança já possui pedido de pagamento; confira antes de vincular.");
+      assertConfirmedExistingExpense(expense, id, documentConfirmation, expenseAccountingConfirmation);
+    }
     if (message.linkedExpenseId && message.linkedExpenseId !== expenseId) {
       throw new Error("A cobrança já está vinculada a outra despesa.");
     }
@@ -987,11 +1004,19 @@ export async function linkInboxChargeToExistingExpense(
       return { message, expenseId, duplicate: true };
     }
     if (expense.provisionType === "forecast") throw new Error("A cobrança deve ser vinculada à despesa real, não à previsão.");
-    if (["tax", "fgts", "inss_darf"].includes(message.classification.documentType)
-      && !message.classification.fiscalIdentity) {
+    const confirmedClassification = documentConfirmation
+      ? confirmFinancialInboxDocument(message.classification, documentConfirmation)
+      : message.classification;
+    if (["tax", "fgts", "inss_darf"].includes(confirmedClassification.documentType)
+      && !confirmedClassification.fiscalIdentity) {
       throw new Error("Reanalise o documento fiscal antes de vinculá-lo a uma despesa.");
     }
-    const reevaluatedSuggestion = chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
+    if (documentConfirmation && expense.fiscalIdentity
+      && !compareFiscalIdentities(confirmedClassification.fiscalIdentity,
+        expense.fiscalIdentity as FinancialInboxMessage["classification"]["fiscalIdentity"]).compatible) {
+      throw new Error("A natureza fiscal da guia diverge da despesa.");
+    }
+    const reevaluatedSuggestion = chooseExistingExpenseSuggestion(confirmedClassification, [{ id: expenseId, ...expense }]);
     const selectedAlternative = reevaluatedSuggestion.alternatives?.find((alternative) => (
       alternative.expenseId === expenseId
       && alternative.installmentNumber === installmentNumber
@@ -1038,6 +1063,15 @@ export async function linkInboxChargeToExistingExpense(
       previousObligationRef ? transaction.get(previousObligationRef) : Promise.resolve(null),
     ]);
     const obligation = obligationSnapshot.data() || {};
+    if (documentConfirmation) {
+      const barcodeHash = paymentBarcodeHash(confirmedClassification.barcode);
+      const expenseBarcodeHash = (expense.documentIdentity as { barcodeHash?: unknown } | null | undefined)?.barcodeHash;
+      const obligationBarcodeHash = (obligation.documentIdentity as { barcodeHash?: unknown } | null | undefined)?.barcodeHash;
+      if ((expenseBarcodeHash && expenseBarcodeHash !== barcodeHash)
+        || (obligationBarcodeHash && obligationBarcodeHash !== barcodeHash)) {
+        throw new Error("A guia diverge do código já registrado na despesa ou obrigação.");
+      }
+    }
     if (previousObligationSnapshot?.exists
       && String(previousObligationSnapshot.get("primaryInboxMessageId") ?? "") === id) {
       throw new Error("A cobrança principal não pode ser movida sem revisar toda a obrigação.");
@@ -1067,13 +1101,13 @@ export async function linkInboxChargeToExistingExpense(
     };
     const classificationSource = exactSuggestion?.status === "suggested" ? exactSuggestion : selectedAlternative;
     const classification = {
-      ...message.classification,
-      supplierName: message.classification.supplierName || String(expense.supplier || "") || null,
-      amountCents: message.classification.amountCents == null && Number(classificationSource?.amountCents ?? expense.totalValue) > 0
+      ...confirmedClassification,
+      supplierName: confirmedClassification.supplierName || String(expense.supplier || "") || null,
+      amountCents: confirmedClassification.amountCents == null && Number(classificationSource?.amountCents ?? expense.totalValue) > 0
         ? Math.round(Number(classificationSource?.amountCents ?? Number(expense.totalValue) * 100))
-        : message.classification.amountCents,
-      dueDate: message.classification.dueDate || classificationSource?.dueDate || expenseDateKey(expense.dueDate),
-      competence: message.classification.competence || expenseDateKey(expense.competenceDate, true),
+        : confirmedClassification.amountCents,
+      dueDate: confirmedClassification.dueDate || classificationSource?.dueDate || expenseDateKey(expense.dueDate),
+      competence: confirmedClassification.competence || expenseDateKey(expense.competenceDate, true),
     };
     const directSettlementId = String(targetInstallment?.linkedBankTransactionId ?? "").trim();
     const existingSettlement = exactSuggestion?.existingSettlement
@@ -1089,13 +1123,13 @@ export async function linkInboxChargeToExistingExpense(
         serviceType: null,
         serviceNumbers: [],
       },
-      [message.classification.billingIdentity],
+      [confirmedClassification.billingIdentity],
     );
     const documentIdentity = mergeFinancialDocumentIdentities(
       expense.documentIdentity ?? obligation.documentIdentity,
       financialDocumentIdentityFromClassification(classification, id),
     );
-    const fiscalIdentity = message.classification.fiscalIdentity
+    const fiscalIdentity = confirmedClassification.fiscalIdentity
       ?? expense.fiscalIdentity
       ?? obligation.fiscalIdentity
       ?? null;
@@ -1132,7 +1166,8 @@ export async function linkInboxChargeToExistingExpense(
       transaction.set(expenseRef, identityPatch, { merge: true });
     }
     const isNewCharge = !resolutionOnly && (
-      expense.financialInboxMessageId === id
+      Boolean(documentConfirmation)
+      || expense.financialInboxMessageId === id
       || String(expense.originModule ?? "") === "financial_inbox"
       || Boolean(expense.reconciledProvisionId)
     );
@@ -1279,6 +1314,16 @@ export async function linkInboxChargeToExistingExpense(
       statementTransactionId: existingSettlement?.transactionId ?? null,
       obligationId,
       resolutionOnly,
+      documentConfirmation: documentConfirmation ? {
+        amountCents: classification.amountCents,
+        dueDate: classification.dueDate,
+        competence: classification.competence,
+        barcodeHash: paymentBarcodeHash(classification.barcode),
+        taxpayerTaxId: classification.fiscalIdentity?.taxpayerTaxId ?? null,
+        accountPlanId: expenseAccountingConfirmation?.accountPlanId ?? null,
+        resultCenterId: expenseAccountingConfirmation?.resultCenterId ?? null,
+        apportionments: expenseAccountingConfirmation?.apportionments ?? null,
+      } : null,
     });
     if (archiveAfterHandoff) transaction.set(messageRef.collection("events").doc(), {
       type: "MESSAGE_ARCHIVED_AFTER_FINANCIAL_HANDOFF",
@@ -1295,6 +1340,7 @@ export async function linkInboxChargeToExistingExpense(
         bankState: inboxState.bankState,
         bankTransactionId: existingBankPayment?.transactionId ?? existingSettlement?.transactionId ?? null,
         resolution: persistedResolution,
+        classification: { ...classification, billingIdentity },
         ...(resolutionOnly ? {} : { linkedExpenseId: expenseId }),
         ...(archivePlan ? {
           archivedAt: now,
