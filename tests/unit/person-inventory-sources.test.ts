@@ -25,6 +25,16 @@ test('every registered source declares an exact namespace, field, role and hones
   assert.equal(sourceById('schedule-shift-subjects')?.parentCollection, 'dp_schedules');
   assert.equal(sourceById('schedule-responsibility-subjects')?.role, 'subject');
   assert.equal(sourceById('schedule-publishers')?.role, 'actor');
+  for (const id of ['financial-inbox-reviewers', 'financial-inbox-archivers', 'financial-inbox-event-actors', 'financial-expense-creators']) {
+    const source = sourceById(id);
+    assert.equal(source?.database, 'financial');
+    assert.equal(source?.role, 'actor');
+    assert.equal(source?.namespace, 'main.users');
+    assert.equal(source?.coverage, 'live');
+    assert.equal(source?.scopePolicy, 'finance-workspace');
+  }
+  assert.equal(sourceById('financial-inbox-event-actors')?.parentCollection, 'financialInboxMessages');
+  assert.equal(sourceById('financial-inbox-event-actors')?.field, 'actorId');
 });
 test('unknown permission policy denies by default', () => {
   const actor = { isDefaultAdmin: false, permissions: { dp: { collaborators: { view: true } } }, userDoc: { unitAccessScope: 'all' } } as Parameters<typeof canViewPersonSource>[0];
