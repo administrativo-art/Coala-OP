@@ -166,7 +166,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
   const limitations = [
     "Pago significa pagamento informado no arquivo diário de conciliação da Stone na conta Stone; o extrato da própria conta Stone ainda não está no sistema.",
     "A transferência do saldo da conta Stone para o Inter é a 2ª parte da conciliação e não entra nesta tela.",
-    "Taxa praticada = MDR ÷ bruto. A diferença contra a taxa atual de cada grupo é conferida na aba Taxas.",
+    "Taxa praticada: cartão = bruto − líquido exato da Stone; Pix = taxa da Stone com os centavos cortados para baixo. A diferença contra a taxa atual de cada grupo é conferida na aba Taxas.",
     ...(portfolioRows ? [] : ["Carteira Stone não sincronizada para este vínculo: a previsão de vendas anteriores ao período não aparece; só os pagamentos efetivos e as vendas do período."]),
     ...(missingDates.length ? [`Arquivos Stone indisponíveis: ${missingDates.join(", ")}. A ausência não significa ausência de pagamento.`] : []),
     ...(pixUnavailable.length ? [`Pix sem arquivo processado em ${pixUnavailable.length} dia(s): ${pixUnavailable.join(", ")}.`] : []),

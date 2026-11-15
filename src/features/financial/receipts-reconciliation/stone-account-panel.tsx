@@ -15,7 +15,6 @@ import type { StoneAccountMonthResult, StoneAccountSaleResult } from "./reconcil
 import type { StoneReceiptSavedResult } from "./stone-account-snapshot.server";
 import {
   groupReceiptWeeks,
-  parcelFeeRate,
   receiptGroupKey,
   receiptPeriodDates,
   saleAuditChecks,
@@ -27,7 +26,7 @@ import {
   type ReceiptParcel,
   type SaleAudit,
 } from "./stone-account";
-import { centsLabel, dayLabel, dayReasonLabel, parcelKind, parcelNumber, parcelProblems, parcelStatusView, parcelTitle, rateLabel, weekdayLabel } from "./stone-account-format";
+import { centsLabel, dayLabel, dayReasonLabel, parcelKind, parcelNumber, parcelProblems, parcelRateText, parcelStatusView, parcelTitle, rateLabel, weekdayLabel } from "./stone-account-format";
 import { SaleAuditDetail, SaleAuditSummary } from "./sale-audit-view";
 
 type SourceFilter = "all" | "pix" | "card";
@@ -52,7 +51,7 @@ function monthRange(month: string) {
 }
 
 // Parcela numa linha: venda, data da venda, parcela (1/1, 2/3), previsto, pago, taxa, líquido e situação.
-const PARCEL_GRID = "grid grid-cols-[minmax(170px,1.5fr)_96px_56px_64px_64px_60px_96px_minmax(150px,1.3fr)] items-center gap-3 whitespace-nowrap";
+const PARCEL_GRID = "grid grid-cols-[minmax(170px,1.5fr)_96px_56px_64px_64px_118px_96px_minmax(150px,1.3fr)] items-center gap-3 whitespace-nowrap";
 
 function ParcelHeader() {
   return <div className={`${PARCEL_GRID} border-b border-ds-divider px-[18px] py-2 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint`}>
@@ -63,13 +62,14 @@ function ParcelHeader() {
 function ParcelRow({ parcel, usualRate, verdict, onOpen }: { parcel: ReceiptParcel; usualRate: number | null; verdict?: { label: string; tone: "ok" | "danger" | "warn" | "info" }; onOpen: () => void }) {
   const status = parcelStatusView[parcel.status];
   const problems = parcelProblems(parcel, usualRate);
+  const rate = parcelRateText(parcel, usualRate);
   return <LiftRow table onClick={onOpen} className={`${PARCEL_GRID} text-[13px]`}>
     <span className="truncate font-extrabold text-ds-ink">{parcelKind(parcel)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.saleDate)} {parcel.saleTime?.slice(0, 5) ?? ""}</span>
     <span className="tabular-nums font-bold text-ds-ink">{parcelNumber(parcel)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.expectedDate)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.paidDate)}</span>
-    <span className="text-right tabular-nums text-ds-ink-muted" title={parcel.source === "pix" && usualRate !== null ? `Pix: a Stone cobra ${rateLabel(usualRate)} e corta os centavos para baixo; por isso a taxa efetiva de cada venda varia.` : undefined}>{rateLabel(parcelFeeRate(parcel))}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted" title={rate.title}>{rate.text}</span>
     <span className="text-right tabular-nums font-bold text-ds-ink">{centsLabel(parcel.paidNetCents ?? parcel.expectedNetCents)}</span>
     <span className="flex gap-1">{parcel.status !== "review" ? <StatusPill variant={status.variant}>{status.label}</StatusPill> : null}{problems.map(problem => <StatusPill key={problem.label} variant={problem.variant} title={problem.hint}>{problem.label}</StatusPill>)}{verdict && verdict.tone !== "ok" && verdict.tone !== "info" ? <StatusPill variant={verdict.tone}>{verdict.label}</StatusPill> : null}</span>
   </LiftRow>;
@@ -182,7 +182,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
             : day.differenceCents ? <StatusPill variant="warn">Diferença sem explicação</StatusPill> : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
       </tr>
       {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-16 pt-2">
-        {dayParcels.length ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[860px]"><ParcelHeader />{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} usualRate={usualRates.get(receiptGroupKey(parcel)) ?? null} onOpen={() => openSale(parcel.id, null)} />)}</div></div>
+        {dayParcels.length ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[920px]"><ParcelHeader />{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} usualRate={usualRates.get(receiptGroupKey(parcel)) ?? null} onOpen={() => openSale(parcel.id, null)} />)}</div></div>
           : <p className="text-sm text-ds-ink-muted">Nenhuma parcela neste dia.</p>}
       </td></tr> : null}
     </Fragment>;
@@ -300,7 +300,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
             </tr>;
           }) : <tr><td colSpan={8} className={`${td} text-center text-ds-ink-muted`}>Nenhuma venda desta bandeira na competência.</td></tr>}</tbody>
         </table></div>}
-        <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">Taxa praticada = MDR ÷ bruto. A conferência contra a taxa atual de cada grupo fica na aba Taxas.</p>
+        <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">Taxa praticada: no cartão, bruto − líquido exato informado pela Stone; no Pix, a taxa da Stone com os centavos cortados para baixo (a lista mostra a taxa e o valor cobrado). A conferência contra a taxa atual de cada grupo fica na aba Taxas.</p>
       </section>
 
       {result.limitations.length ? <ul className="space-y-1 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 text-xs text-ds-ink-muted">{result.limitations.map(text => <li key={text}>{text}</li>)}</ul> : null}
@@ -311,11 +311,11 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       title={panel?.mode === "list" ? panel.title : selectedParcel ? `${parcelTitle(selectedParcel)} · ${centsLabel(loadedAudit?.stone.capturedCents ?? selectedParcel.grossCents)}` : ""}
       subtitle={panel?.mode === "list" ? `${panel.parcelIds.length} parcela(s) · clique para ver a auditoria da venda` : selectedParcel ? `Venda de ${dayLabel(selectedParcel.saleDate)}${selectedParcel.saleTime ? ` às ${selectedParcel.saleTime}` : ""} · ${mapping.kioskName} · StoneCode ${stoneCode}` : undefined}
       highlights={panel?.mode === "sale" && selectedParcel ? <>
-        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="tabular-nums text-[22px]">{rateLabel(parcelFeeRate(selectedParcel))}</span></span>
+        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="tabular-nums text-[22px]" title={parcelRateText(selectedParcel, usualRates.get(receiptGroupKey(selectedParcel)) ?? null).title}>{parcelRateText(selectedParcel, usualRates.get(receiptGroupKey(selectedParcel)) ?? null).text}</span></span>
         <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Líquido</small><span className="tabular-nums text-[22px]">{centsLabel(selectedParcel.paidNetCents ?? selectedParcel.expectedNetCents)}</span></span>
         {verdict ? <span className="ml-auto self-end"><StatusPill variant={verdict.tone}>{verdict.label}</StatusPill></span> : null}
       </> : undefined}>
-      {panel?.mode === "list" ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[860px]"><ParcelHeader />
+      {panel?.mode === "list" ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[920px]"><ParcelHeader />
         {panel.parcelIds.map(id => byId.get(id)).filter((parcel): parcel is ReceiptParcel => Boolean(parcel)).sort(bySaleTime).map(parcel =>
           <ParcelRow key={parcel.id} parcel={parcel} usualRate={usualRates.get(receiptGroupKey(parcel)) ?? null} onOpen={() => openSale(parcel.id, panel)} />)}
       </div></div> : null}
