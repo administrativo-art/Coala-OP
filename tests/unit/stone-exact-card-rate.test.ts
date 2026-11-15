@@ -65,5 +65,5 @@ test("aba Taxas sugere a taxa exata e não trata as vendas como 'sem MDR'", () =
 test("conferência salva antes da mudança (sem feeRate) mantém a regra de 1 centavo", () => {
   const legacy: ReceiptParcel = { ...card("old", 700, "7.000000", "6.897800"), feeRate: undefined, feeCents: 10, feeSource: "derived" };
   assert.equal(parcelFeeRate(legacy), 10 / 700);
-  assert.equal(rateDiffersFromUsual({ ...legacy, feeSource: "exact" }, 0.0146), false);
+  assert.equal(rateDiffersFromUsual(legacy, 0.0146), false);
 });
