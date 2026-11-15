@@ -12,12 +12,12 @@ import { centsLabel, checkView, dayLabel, fullDateLabel, parcelStatusView, rateL
 function Field({ label, field, children, wide }: { label: string; field?: string; children: ReactNode; wide?: boolean }) {
   return <div className={wide ? "sm:col-span-2" : undefined}>
     <dt className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">
-      {label}{field ? <span className="ml-1 font-ds-mono text-[10.5px] font-medium normal-case tracking-normal">{field}</span> : null}
+      {label}{field ? <span className="ml-1 tabular-nums text-[10.5px] font-medium normal-case tracking-normal">{field}</span> : null}
     </dt>
     <dd className="mt-0.5 wrap-anywhere text-[13px] font-semibold text-ds-ink">{children ?? <span className="text-ds-ink-faint">não informado</span>}</dd>
   </div>;
 }
-const Mono = ({ children }: { children: ReactNode }) => <span className="font-ds-mono">{children}</span>;
+const Mono = ({ children }: { children: ReactNode }) => <span className="tabular-nums">{children}</span>;
 
 function CheckIcon({ check }: { check: AuditCheck }) {
   const view = checkView[check.result];
@@ -105,8 +105,8 @@ function InstallmentsSection({ audit }: { audit: SaleAudit }) {
           {audit.installments.map(row => <th key={row.number} scope="col" className="whitespace-nowrap px-3 py-2 text-right text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{audit.installments.length > 1 ? `Parcela ${row.number}/${audit.stone.installmentCount}` : "Pagamento"}</th>)}
         </tr></thead>
         <tbody>{ROWS.map(item => <tr key={item.label} className="border-t border-ds-divider">
-          <th scope="row" className="px-3 py-2 text-left font-normal text-ds-ink-muted">{item.label}{item.field ? <span className="block font-ds-mono text-[10.5px] text-ds-ink-faint">{item.field}</span> : null}</th>
-          {audit.installments.map(row => <td key={row.number} className={`whitespace-nowrap px-3 py-2 text-right font-semibold ${item.field ? "font-ds-mono" : ""}`}>{item.value(row)}</td>)}
+          <th scope="row" className="px-3 py-2 text-left font-normal text-ds-ink-muted">{item.label}{item.field ? <span className="block tabular-nums text-[10.5px] text-ds-ink-faint">{item.field}</span> : null}</th>
+          {audit.installments.map(row => <td key={row.number} className={`whitespace-nowrap px-3 py-2 text-right font-semibold ${item.field ? "tabular-nums" : ""}`}>{item.value(row)}</td>)}
         </tr>)}</tbody>
       </table>
     </div>
@@ -147,7 +147,7 @@ export function SaleAuditDetail({ checks, onBack }: { checks: AuditCheck[]; onBa
               {[["PDV / esperado", check.pdv], ["Stone", check.stone]].map(([label, value]) =>
                 <div key={label} className="rounded-ds-sm border border-ds-divider bg-ds-input px-2.5 py-1.5">
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{label}</p>
-                  <p className="wrap-anywhere font-ds-mono text-[12.5px] font-semibold text-ds-ink">{value}</p>
+                  <p className="wrap-anywhere tabular-nums text-[12.5px] font-semibold text-ds-ink">{value}</p>
                 </div>)}
             </div>
             {check.note ? <p className={`mt-1.5 text-xs font-semibold ${check.result === "bad" ? "text-ds-danger" : check.result === "warn" ? "text-ds-alert-ink" : "text-ds-info"}`}>{check.note}</p> : null}

@@ -32,9 +32,9 @@ function Tooltip({ series, index }: { series: FeeHistorySeries; index: number })
   const current = months[index], previous = months[index - 1], next = months[index + 1];
   return <div role="tooltip" className="pointer-events-none min-w-[220px] rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-2.5 text-[12.5px] shadow-ds-lift">
     <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint">{series.label} · {long(current.month)}</p>
-    <p className="my-0.5 font-ds-mono text-[20px] font-bold text-ds-ink">{rateLabel(current.rate)}</p>
-    <p className="flex justify-between gap-3 border-t border-ds-divider py-1"><span className="text-ds-ink-muted">{previous ? long(previous.month) : "mês anterior"}</span><span><b className="font-ds-mono">{rateLabel(previous?.rate ?? null)}</b> {previous ? <DeltaText value={delta(previous.rate, current.rate)} /> : null}</span></p>
-    <p className="flex justify-between gap-3 border-t border-ds-divider py-1"><span className="text-ds-ink-muted">{next ? long(next.month) : "próximo mês"}</span><span>{next ? <><b className="font-ds-mono">{rateLabel(next.rate)}</b> <DeltaText value={delta(current.rate, next.rate)} /></> : <b>ainda não fechou</b>}</span></p>
+    <p className="my-0.5 tabular-nums text-[20px] font-bold text-ds-ink">{rateLabel(current.rate)}</p>
+    <p className="flex justify-between gap-3 border-t border-ds-divider py-1"><span className="text-ds-ink-muted">{previous ? long(previous.month) : "mês anterior"}</span><span><b className="tabular-nums">{rateLabel(previous?.rate ?? null)}</b> {previous ? <DeltaText value={delta(previous.rate, current.rate)} /> : null}</span></p>
+    <p className="flex justify-between gap-3 border-t border-ds-divider py-1"><span className="text-ds-ink-muted">{next ? long(next.month) : "próximo mês"}</span><span>{next ? <><b className="tabular-nums">{rateLabel(next.rate)}</b> <DeltaText value={delta(current.rate, next.rate)} /></> : <b>ainda não fechou</b>}</span></p>
   </div>;
 }
 
@@ -45,14 +45,28 @@ function scale(values: number[], height: number, pad = 0.15) {
   return { min, max, y: (value: number) => height - (value - min) / (max - min) * height };
 }
 
+/** Completa a série até 6 meses (o último mês conferido e os 5 anteriores); mês sem conferência fica vazio. */
+export function padHistoryMonths(series: FeeHistorySeries[], count = 6): FeeHistorySeries[] {
+  const last = series.flatMap(item => item.months.map(month => month.month)).sort().at(-1);
+  if (!last) return series;
+  const months: string[] = [];
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5, 7)) - 1 - offset, 1));
+    months.push(date.toISOString().slice(0, 7));
+  }
+  return series.map(item => ({ ...item, months: months.map(month => item.months.find(row => row.month === month) ?? { month, rate: null, sales: 0 }) }));
+}
+
 function MainChart({ series, kind }: { series: FeeHistorySeries; kind: "bars" | "curve" }) {
   const [hover, setHover] = useState<number | null>(null);
-  const W = 960, H = 210, PX = 60, count = series.months.length;
-  const step = count > 1 ? (W - PX - 24) / (count - 1) : 0;
-  const x = (index: number) => PX + index * step;
+  const W = 960, H = 210, PX = 64, PR = 16, count = series.months.length;
+  const band = (W - PX - PR) / Math.max(count, 1);
+  const x = (index: number) => PX + band * (index + 0.5);
   const values = series.months.map(item => item.rate).filter((value): value is number => value !== null);
   if (!values.length) return <p className="px-[18px] pb-4 text-sm text-ds-ink-muted">Sem taxa nos meses conferidos.</p>;
-  const s = scale(kind === "bars" ? [...values, Math.min(...values) * 0.9] : values, H, kind === "bars" ? 0.05 : 0.15);
+  // Barras começam no zero; a curva usa a faixa dos valores para mostrar a variação.
+  const top = Math.max(Math.ceil(Math.max(...values) * 1.25 * 1000) / 1000, 0.001);
+  const s = kind === "bars" ? { min: 0, max: top, y: (value: number) => H - value / top * H } : scale(values, H, 0.25);
   const points = series.months.map((item, index) => item.rate === null ? null : [x(index), s.y(item.rate)] as const);
   let curve = "";
   points.forEach((point, index) => {
@@ -63,21 +77,23 @@ function MainChart({ series, kind }: { series: FeeHistorySeries; kind: "bars" | 
     curve += ` C${mid},${prev[1]} ${mid},${point[1]} ${point[0]},${point[1]}`;
   });
   const ticks = [s.min, (s.min + s.max) / 2, s.max];
+  const first = series.months.findIndex(item => item.rate !== null);
   return <div className="relative px-[18px] pb-2" onMouseLeave={() => setHover(null)}>
     <svg viewBox={`0 0 ${W} ${H + 30}`} className="block h-auto w-full overflow-visible" role="img" aria-label={`Taxa de ${series.label} por mês`}
-      onMouseMove={event => { const rect = event.currentTarget.getBoundingClientRect(); const index = Math.round(((event.clientX - rect.left) / rect.width * W - PX) / (step || 1)); setHover(index >= 0 && index < count ? index : null); }}>
+      onMouseMove={event => { const rect = event.currentTarget.getBoundingClientRect(); const index = Math.floor(((event.clientX - rect.left) / rect.width * W - PX) / band); setHover(index >= 0 && index < count && series.months[index].rate !== null ? index : null); }}>
       <defs><linearGradient id="fee-curve" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={BLUE} stopOpacity=".26" /><stop offset="1" stopColor={BLUE} stopOpacity="0" /></linearGradient></defs>
-      {ticks.map(value => <g key={value}><line x1={PX} x2={W - 16} y1={s.y(value)} y2={s.y(value)} stroke={GRID} /><text x={PX - 10} y={s.y(value) + 4} textAnchor="end" fontSize="11" fill={INK_FAINT} fontFamily="JetBrains Mono">{rateLabel(value)}</text></g>)}
+      {ticks.map(value => <g key={value}><line x1={PX} x2={W - PR} y1={s.y(value)} y2={s.y(value)} stroke={GRID} /><text x={PX - 10} y={s.y(value) + 4} textAnchor="end" fontSize="11" fill={INK_FAINT} style={{ fontVariantNumeric: "tabular-nums" }}>{rateLabel(value)}</text></g>)}
+      {series.months.map((item, index) => item.rate === null ? <text key={`empty-${item.month}`} x={x(index)} y={H - 10} textAnchor="middle" fontSize="11" fill={INK_FAINT}>sem conferência</text> : null)}
       {kind === "curve" ? <>
-        <path d={`${curve} V${H} H${x(0)} Z`} fill="url(#fee-curve)" />
-        <path d={curve} fill="none" stroke={BLUE} strokeWidth="2.5" />
+        {first >= 0 ? <path d={`${curve} V${H} H${x(first)} Z`} fill="url(#fee-curve)" /> : null}
+        <path d={curve} fill="none" stroke={BLUE} strokeWidth="2" />
         {series.months.map((item, index) => {
           const prev = series.months[index - 1];
           if (!prev || item.rate === null || prev.rate === null || Math.abs(item.rate - prev.rate) < 1e-9) return null;
           const y = s.y(item.rate);
           return <g key={item.month}><line x1={x(index)} x2={x(index)} y1={y} y2={y - 30} stroke="#1a1b1f" />
-            <rect x={x(index) - 2} y={y - 48} width="122" height="20" rx="6" fill={item.rate > prev.rate ? "#fde3d3" : "#dff3e8"} />
-            <text x={x(index) + 59} y={y - 34} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1b1f" fontFamily="JetBrains Mono">{rateLabel(prev.rate)}→{rateLabel(item.rate)}</text></g>;
+            <rect x={x(index) - 61} y={y - 48} width="122" height="20" rx="6" fill={item.rate > prev.rate ? "#fde3d3" : "#dff3e8"} />
+            <text x={x(index)} y={y - 34} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1b1f" style={{ fontVariantNumeric: "tabular-nums" }}>{rateLabel(prev.rate)}→{rateLabel(item.rate)}</text></g>;
         })}
         {points.map((point, index) => point ? <circle key={index} cx={point[0]} cy={point[1]} r={hover === index ? 6 : 4.5} fill={BLUE} stroke="#fff" strokeWidth="2" /> : null)}
       </> : series.months.map((item, index) => {
@@ -85,14 +101,17 @@ function MainChart({ series, kind }: { series: FeeHistorySeries; kind: "bars" | 
         const prev = series.months[index - 1]?.rate ?? null;
         const color = prev === null || Math.abs(item.rate - prev) < 1e-9 ? BLUE : item.rate > prev ? UP : DOWN;
         const near = hover === null || Math.abs(hover - index) <= 1;
-        const width = Math.min(70, step * 0.5 || 70);
-        return <g key={item.month} opacity={near ? 1 : 0.35}><rect x={x(index) - width / 2} y={s.y(item.rate)} width={width} height={H - s.y(item.rate)} rx="6" fill={color} />
-          <text x={x(index)} y={s.y(item.rate) - 8} textAnchor="middle" fontSize="12.5" fontWeight="700" fill="#1a1b1f" fontFamily="JetBrains Mono">{rateLabel(item.rate)}</text></g>;
+        const width = Math.min(56, band * 0.5);
+        const y = s.y(item.rate);
+        return <g key={item.month} opacity={near ? 1 : 0.35}>{H - y >= 4 ? <path d={`M${x(index) - width / 2},${H} V${y + 4} q0,-4 4,-4 h${width - 8} q4,0 4,4 V${H} Z`} fill={color} /> : <rect x={x(index) - width / 2} y={y} width={width} height={Math.max(H - y, 1)} fill={color} />}
+          <text x={x(index)} y={y - 8} textAnchor="middle" fontSize="12.5" fontWeight="700" fill="#1a1b1f" style={{ fontVariantNumeric: "tabular-nums" }}>{rateLabel(item.rate)}</text></g>;
       })}
+      <line x1={PX} x2={W - PR} y1={H} y2={H} stroke="#dcd9d1" />
       {hover !== null ? <line x1={x(hover)} x2={x(hover)} y1="0" y2={H} stroke="#1a1b1f" strokeDasharray="3 4" /> : null}
       {series.months.map((item, index) => <text key={item.month} x={x(index)} y={H + 22} textAnchor="middle" fontSize="12" fill={INK_FAINT}>{short(item.month)}</text>)}
     </svg>
     {hover !== null && series.months[hover] ? <div className="absolute top-2 z-10" style={{ left: `min(calc(${(x(hover) / W) * 100}% + 12px), calc(100% - 240px))` }}><Tooltip series={series} index={hover} /></div> : null}
+    {first > 0 ? <p className="mt-1 text-xs text-ds-ink-muted">Histórico começa em {long(series.months[first].month)} de {series.months[first].month.slice(0, 4)}: a conferência diária passou a ser salva neste mês.</p> : null}
   </div>;
 }
 
@@ -107,7 +126,7 @@ function Minis({ all }: { all: FeeHistorySeries[] }) {
     const s = values.length ? scale(values, H, 0.3) : null;
     return <div key={series.key} className="relative rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3.5 py-3" onMouseLeave={() => setHover(null)}>
       <p className="text-xs text-ds-ink-muted">{series.label}</p>
-      <p className="font-ds-mono text-[18px] font-bold text-ds-ink">{rateLabel(last?.rate ?? null)} <span className="text-xs"><DeltaText value={delta(prev, last?.rate ?? null)} /></span></p>
+      <p className="tabular-nums text-[18px] font-bold text-ds-ink">{rateLabel(last?.rate ?? null)} <span className="text-xs"><DeltaText value={delta(prev, last?.rate ?? null)} /></span></p>
       {s ? <svg viewBox={`0 0 ${W} ${H + 16}`} className="block h-auto w-full overflow-visible"
         onMouseMove={event => { const rect = event.currentTarget.getBoundingClientRect(); const index = Math.round((event.clientX - rect.left) / rect.width * W / (step || 1)); setHover(index >= 0 && index < series.months.length ? { key: series.key, index } : null); }}>
         <polyline points={series.months.flatMap((item, index) => item.rate === null ? [] : [`${index * step},${s.y(item.rate)}`]).join(" ")} fill="none" stroke={BLUE} strokeWidth="2" />
@@ -135,7 +154,7 @@ function Heat({ all }: { all: FeeHistorySeries[] }) {
           const before = series.months[index - 1]?.rate ?? null;
           const change = item.rate === null || before === null ? 0 : item.rate - before;
           const tone = item.rate === null ? "bg-ds-input text-ds-ink-faint" : Math.abs(change) < 1e-9 ? "bg-ds-muted text-ds-ink-muted" : change > 0 ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-ok-bg text-ds-ok";
-          return <div key={item.month} className={`relative rounded-[7px] py-2 text-center font-ds-mono text-xs font-bold ${tone}`} onMouseEnter={() => setHover(item.rate === null ? null : { key: series.key, index })}>
+          return <div key={item.month} className={`relative rounded-[7px] py-2 text-center tabular-nums text-xs font-bold ${tone}`} onMouseEnter={() => setHover(item.rate === null ? null : { key: series.key, index })}>
             {rateLabel(item.rate)}
             {hover?.key === series.key && hover.index === index ? <div className="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2"><Tooltip series={series} index={index} /></div> : null}
           </div>;
@@ -147,7 +166,8 @@ function Heat({ all }: { all: FeeHistorySeries[] }) {
 }
 
 /** Histórico de taxas: o operador escolhe Barras, Mini gráficos, Mapa de calor ou Curva; a escolha fica neste navegador. */
-export function FeeHistoryCharts({ series }: { series: FeeHistorySeries[] }) {
+export function FeeHistoryCharts({ series: raw }: { series: FeeHistorySeries[] }) {
+  const series = padHistoryMonths(raw);
   const [view, setView] = useState<View>(readView);
   const [selected, setSelected] = useState<string | null>(null);
   const chosen = series.find(item => item.key === selected) ?? series.find(item => {

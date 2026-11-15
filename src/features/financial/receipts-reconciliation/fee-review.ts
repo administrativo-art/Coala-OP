@@ -41,7 +41,7 @@ export type FeeDecisionInput = z.infer<typeof feeDecisionInputSchema>;
 const addDays = (date: string, days: number) => { const d = new Date(`${date}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 const groupLabel = (parcel: ReceiptParcel) => parcel.modality === "pix" ? "Pix"
-  : `${parcel.brand ?? "Bandeira não informada"} · ${receiptModalityLabel(parcel.modality)}${parcel.modality === "installment" ? ` ${parcel.installmentCount}x` : ""}`;
+  : `${parcel.brand ?? "Sem bandeira no arquivo"} · ${receiptModalityLabel(parcel.modality)}${parcel.modality === "installment" ? ` ${parcel.installmentCount}x` : ""}`;
 
 type Sale = { saleId: string; groupKey: string; label: string; date: string; grossCents: number; feeCents: number; parcels: ReceiptParcel[]; derived: boolean };
 

@@ -8,7 +8,7 @@ import { LiftRow } from "@/components/patterns/lift-row";
 import { Segmented } from "@/components/patterns/segmented";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MonthSelect } from "./month-select";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { MappingView } from "../agent/configuration";
 import type { StoneAccountMonthResult, StoneAccountSaleResult } from "./reconciliation.server";
@@ -26,7 +26,7 @@ import {
   type ReceiptParcel,
   type SaleAudit,
 } from "./stone-account";
-import { centsLabel, dayLabel, dayReasonLabel, parcelStatusView, parcelTitle, rateLabel, weekdayLabel } from "./stone-account-format";
+import { centsLabel, dayLabel, dayReasonLabel, parcelKind, parcelNumber, parcelProblems, parcelStatusView, parcelTitle, rateLabel, weekdayLabel } from "./stone-account-format";
 import { SaleAuditDetail, SaleAuditSummary } from "./sale-audit-view";
 
 type SourceFilter = "all" | "pix" | "card";
@@ -38,7 +38,7 @@ export type StoneAccountIndicators = { expectedCents: number; paidCents: number;
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const PENDING = new Set(["unpaid", "paid_late", "chargeback", "review", "missing_file"]);
 const th = "whitespace-nowrap border-y border-ds-divider bg-ds-muted px-[18px] py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
-const td = "border-b border-ds-divider px-[18px] py-3 align-top text-[13.5px]";
+const td = "whitespace-nowrap border-b border-ds-divider px-[18px] py-3 align-middle text-[13.5px]";
 
 function currentMonth() {
   const now = new Date(Date.now() - 8 * 3_600_000 - 86_400_000);
@@ -50,20 +50,32 @@ function monthRange(month: string) {
   return { from: `${month}-01`, through: `${month}-${String(last).padStart(2, "0")}` };
 }
 
-function ParcelRow({ parcel, verdict, onOpen }: { parcel: ReceiptParcel; verdict?: { label: string; tone: "ok" | "danger" | "warn" | "info" }; onOpen: () => void }) {
+// Parcela numa linha: venda, data da venda, parcela (1/1, 2/3), previsto, pago, taxa, líquido e situação.
+const PARCEL_GRID = "grid grid-cols-[minmax(170px,1.5fr)_96px_56px_64px_64px_60px_96px_minmax(150px,1.3fr)] items-center gap-3 whitespace-nowrap";
+
+function ParcelHeader() {
+  return <div className={`${PARCEL_GRID} border-b border-ds-divider px-[18px] py-2 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint`}>
+    <span>Venda</span><span>Data da venda</span><span>Parcela</span><span>Previsto</span><span>Pago</span><span className="text-right">Taxa</span><span className="text-right">Líquido</span><span>Situação</span>
+  </div>;
+}
+
+function ParcelRow({ parcel, usualRate, verdict, onOpen }: { parcel: ReceiptParcel; usualRate: number | null; verdict?: { label: string; tone: "ok" | "danger" | "warn" | "info" }; onOpen: () => void }) {
   const status = parcelStatusView[parcel.status];
-  return <LiftRow table onClick={onOpen} className="flex items-center justify-between gap-3">
-    <span className="min-w-0">
-      <span className="text-sm font-extrabold text-ds-ink">{parcelTitle(parcel)}</span>
-      <span className="ml-2 text-xs text-ds-ink-faint">venda <span className="font-ds-mono">{dayLabel(parcel.saleDate)} {parcel.saleTime?.slice(0, 5) ?? ""}</span></span>
-      <span className="block text-xs text-ds-ink-muted">previsto {dayLabel(parcel.expectedDate)}{parcel.paidDate ? ` · pago ${dayLabel(parcel.paidDate)}` : ""}{parcel.feeCents !== null && parcel.grossCents ? ` · taxa ${rateLabel(parcel.feeCents / parcel.grossCents)}` : ""}</span>
-    </span>
-    <span className="shrink-0 text-right">
-      <span className="font-ds-mono text-[13.5px] font-bold">{centsLabel(parcel.paidNetCents ?? parcel.expectedNetCents)}</span>
-      <span className="mt-1 flex justify-end gap-1"><StatusPill variant={status.variant}>{status.label}</StatusPill>{verdict && verdict.tone !== "ok" && verdict.tone !== "info" ? <StatusPill variant={verdict.tone}>{verdict.label}</StatusPill> : null}</span>
-    </span>
+  const problems = parcelProblems(parcel, usualRate);
+  return <LiftRow table onClick={onOpen} className={`${PARCEL_GRID} text-[13px]`}>
+    <span className="truncate font-extrabold text-ds-ink">{parcelKind(parcel)}</span>
+    <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.saleDate)} {parcel.saleTime?.slice(0, 5) ?? ""}</span>
+    <span className="tabular-nums font-bold text-ds-ink">{parcelNumber(parcel)}</span>
+    <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.expectedDate)}</span>
+    <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.paidDate)}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted">{parcel.feeCents !== null && parcel.grossCents ? rateLabel(parcel.feeCents / parcel.grossCents) : "—"}</span>
+    <span className="text-right tabular-nums font-bold text-ds-ink">{centsLabel(parcel.paidNetCents ?? parcel.expectedNetCents)}</span>
+    <span className="flex gap-1">{parcel.status !== "review" ? <StatusPill variant={status.variant}>{status.label}</StatusPill> : null}{problems.map(problem => <StatusPill key={problem.label} variant={problem.variant} title={problem.hint}>{problem.label}</StatusPill>)}{verdict && verdict.tone !== "ok" && verdict.tone !== "info" ? <StatusPill variant={verdict.tone}>{verdict.label}</StatusPill> : null}</span>
   </LiftRow>;
 }
+
+const bySaleTime = (a: ReceiptParcel, b: ReceiptParcel) =>
+  `${a.saleDate ?? ""} ${a.saleTime ?? ""}`.localeCompare(`${b.saleDate ?? ""} ${b.saleTime ?? ""}`) || a.id.localeCompare(b.id);
 
 /** Conciliação de recebimentos, 1ª parte: o que a Stone previu × o que pagou na conta Stone. */
 export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { mapping: MappingView; stoneCode: string; onIndicators: (value: StoneAccountIndicators) => void }) {
@@ -156,25 +168,25 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
   const renderDay = (day: ReceiptDay) => {
     const open = openDays.has(day.date);
     const attention = day.missingFile || (day.differenceCents !== null && day.differenceCents !== 0);
-    const dayParcels = parcels.filter(parcel => parcel.expectedDate === day.date || parcel.paidDate === day.date);
+    const dayParcels = parcels.filter(parcel => parcel.expectedDate === day.date || parcel.paidDate === day.date).sort(bySaleTime);
     return <Fragment key={day.date}>
-      <tr className={`cursor-pointer [&>td]:bg-ds-input hover:[&>td]:bg-ds-muted ${open ? "[&>td]:bg-ds-accent-row" : attention ? "[&>td]:bg-ds-alert-bg/50" : ""}`} onClick={() => setOpenDays(current => toggle(current, day.date))} aria-expanded={open}>
+      <tr className={`cursor-pointer hover:[&>td]:bg-ds-muted ${open ? "[&>td]:bg-ds-accent-row" : attention ? "[&>td]:bg-ds-alert-bg/50" : ""}`} onClick={() => setOpenDays(current => toggle(current, day.date))} aria-expanded={open}>
         <td className={`${td} pl-9`}><span className="inline-flex items-center gap-1 font-bold">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}{weekdayLabel(day.date)} {dayLabel(day.date)}</span></td>
-        <td className={`${td} text-right font-ds-mono`}>{day.parcelCount}</td>
-        <td className={`${td} text-right font-ds-mono`}>{centsLabel(day.expectedCents)}</td>
-        <td className={`${td} text-right font-ds-mono`}>{day.missingFile ? "?" : centsLabel(day.paidCents)}</td>
-        <td className={`${td} text-right font-ds-mono ${day.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{day.missingFile ? "?" : day.differenceCents ? centsLabel(day.differenceCents) : "—"}</td>
+        <td className={`${td} text-right tabular-nums`}>{day.parcelCount}</td>
+        <td className={`${td} text-right tabular-nums`}>{centsLabel(day.expectedCents)}</td>
+        <td className={`${td} text-right tabular-nums`}>{day.missingFile ? "?" : centsLabel(day.paidCents)}</td>
+        <td className={`${td} text-right tabular-nums ${day.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{day.missingFile ? "?" : day.differenceCents ? centsLabel(day.differenceCents) : "—"}</td>
         <td className={`${td} text-[12.5px]`}>{day.missingFile ? <StatusPill variant="warn">Arquivo Stone não recebido</StatusPill>
           : day.reasons.length ? day.reasons.map(reason => `${reason.cents >= 0 ? "+" : "−"}${centsLabel(Math.abs(reason.cents))} ${dayReasonLabel[reason.kind]}`).join(" · ")
             : day.differenceCents ? <StatusPill variant="warn">Diferença sem explicação</StatusPill> : day.parcelCount ? <StatusPill variant="ok">Bateu</StatusPill> : <span className="text-ds-ink-faint">sem parcelas</span>}</td>
       </tr>
       {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-16 pt-2">
-        {dayParcels.length ? <div className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} onOpen={() => openSale(parcel.id, null)} />)}</div>
+        {dayParcels.length ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[860px]"><ParcelHeader />{dayParcels.map(parcel => <ParcelRow key={parcel.id} parcel={parcel} usualRate={usualRates.get(receiptGroupKey(parcel)) ?? null} onOpen={() => openSale(parcel.id, null)} />)}</div></div>
           : <p className="text-sm text-ds-ink-muted">Nenhuma parcela neste dia.</p>}
       </td></tr> : null}
     </Fragment>;
   };
-  const brandOf = (group: ReceiptGroup) => group.modality === "pix" ? "Pix" : group.brand ?? "Bandeira não informada";
+  const brandOf = (group: ReceiptGroup) => group.modality === "pix" ? "Pix" : group.brand ?? "Sem bandeira no arquivo";
   const brandOptions = groups.filter(group => !group.parentKey).reduce<Array<{ name: string; sales: number; pending: number }>>((list, group) => {
     const name = brandOf(group);
     const current = list.find(item => item.name === name);
@@ -202,7 +214,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
     <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4 sm:px-[18px]">
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Competência
-          <Input aria-label="Competência dos recebimentos" type="month" value={month} onChange={event => { setMonth(event.target.value); setResult(null); setSavedAt(null); }} className="w-[180px] normal-case tracking-normal" />
+          <MonthSelect label="Competência dos recebimentos" value={month} onChange={value => { setMonth(value); setResult(null); setSavedAt(null); }} />
         </label>
         <Button type="button" variant="ds-secondary" size="md" disabled={busy || !stoneCode || !month} onClick={() => void run()}>
           <RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Conferindo…" : "Reconferir agora"}
@@ -228,7 +240,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
           <p className="text-[12.5px] text-ds-ink-muted">Clique na semana para ver os dias; no dia, as parcelas; na parcela, a auditoria completa da venda.</p>
         </header>
         <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
-          <thead><tr><th className={th}>Semana / dia do pagamento</th><th className={`${th} text-right`}>Parcelas</th><th className={`${th} text-right`}>Previsto pela Stone</th><th className={`${th} text-right`}>Caiu na conta Stone</th><th className={`${th} text-right`}>Diferença</th><th className={th}>Explicação</th></tr></thead>
+          <thead><tr><th className={th}>Semana / dia do pagamento</th><th className={`${th} text-right`} title="Parcelas pagas: Pix, débito e crédito à vista contam 1 (1/1); um crédito em 3x conta 1 por mês (1/3, 2/3, 3/3).">Recebimentos</th><th className={`${th} text-right`}>Previsto pela Stone</th><th className={`${th} text-right`}>Caiu na conta Stone</th><th className={`${th} text-right`}>Diferença</th><th className={th}>Explicação</th></tr></thead>
           <tbody>{weeks.map(week => {
             const open = weekOpen(week.from);
             const summary = [
@@ -238,10 +250,10 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
             return <Fragment key={week.from}>
               <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggleWeek(week.from)} aria-expanded={open}>
                 <td className={`${td} py-3.5`}><span className="inline-flex items-center gap-1">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}<strong className="inline-block min-w-[92px] font-extrabold text-ds-ink">Semana {week.index}</strong><span className="border-l-2 border-ds-ink-faint pl-3 text-[12.5px] font-semibold leading-none text-ds-ink-muted">{weekRange(week.from, week.through)}</span></span></td>
-                <td className={`${td} py-3.5 text-right font-ds-mono`}>{week.parcelCount}</td>
-                <td className={`${td} py-3.5 text-right font-ds-mono`}>{centsLabel(week.expectedCents)}</td>
-                <td className={`${td} py-3.5 text-right font-ds-mono`}>{centsLabel(week.paidCents)}</td>
-                <td className={`${td} py-3.5 text-right font-ds-mono ${week.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{week.differenceCents ? centsLabel(week.differenceCents) : "—"}</td>
+                <td className={`${td} py-3.5 text-right tabular-nums`}>{week.parcelCount}</td>
+                <td className={`${td} py-3.5 text-right tabular-nums`}>{centsLabel(week.expectedCents)}</td>
+                <td className={`${td} py-3.5 text-right tabular-nums`}>{centsLabel(week.paidCents)}</td>
+                <td className={`${td} py-3.5 text-right tabular-nums ${week.differenceCents ? "font-bold text-ds-danger" : "text-ds-ink-faint"}`}>{week.differenceCents ? centsLabel(week.differenceCents) : "—"}</td>
                 <td className={`${td} py-3.5 text-[12.5px] text-ds-ink-muted`}>{summary || (week.parcelCount ? "tudo bateu" : "sem parcelas")}</td>
               </tr>
               {open ? [...week.days].reverse().map(renderDay) : null}
@@ -259,7 +271,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
         <div role="group" aria-label="Filtrar por bandeira" className="flex flex-wrap gap-2 px-[18px] pb-3.5">
           {brandOptions.map(option => <button key={option.name} type="button" aria-pressed={selectedBrand === option.name} onClick={() => setBrand(selectedBrand === option.name ? null : option.name)}
             className={`inline-flex h-[34px] items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2 ${selectedBrand === option.name ? "border-ds-accent bg-ds-accent text-white" : "border-ds-border-input bg-ds-surface text-ds-ink-2 hover:bg-ds-muted"}`}>
-            {option.name}<span className="font-ds-mono text-[11.5px] font-extrabold opacity-75">{option.sales}</span>
+            {option.name}<span className="tabular-nums text-[11.5px] font-extrabold opacity-75">{option.sales}</span>
             {option.pending ? <span aria-label={`${option.pending} pendência(s)`} className={`h-[7px] w-[7px] rounded-full ${selectedBrand === option.name ? "bg-white" : "bg-ds-danger"}`} /> : null}
           </button>)}
         </div>
@@ -273,23 +285,21 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
             return <tr key={group.key} onClick={() => openGroup(group)} aria-expanded={parent ? openGroups.has(group.key) : undefined}
               className={`cursor-pointer hover:[&>td]:bg-ds-muted ${group.parentKey ? "[&>td]:bg-ds-input" : ""} ${parent && openGroups.has(group.key) ? "[&>td]:bg-ds-accent-row" : ""}`}>
               <td className={`${td} ${group.parentKey ? "pl-11" : ""}`}>
-                <span className="inline-flex items-center gap-1 font-extrabold">{parent ? openGroups.has(group.key) ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : null}{group.label}</span>
-                <span className="block text-xs text-ds-ink-muted">{group.saleCount} venda(s)</span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap font-extrabold">{parent ? openGroups.has(group.key) ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : null}{group.label}<span className="ml-1.5 text-xs font-normal text-ds-ink-muted">{group.saleCount} venda(s)</span></span>
               </td>
-              <td className={`${td} text-right font-ds-mono`}>{centsLabel(group.grossCents)}</td>
-              <td className={`${td} text-right`}><span className="font-ds-mono font-semibold">{rateLabel(group.rate)}</span>
-                {parent ? <span className="block text-xs text-ds-ink-faint">varia por nº de parcelas</span> : varies ? <span className="mt-1 block"><StatusPill variant="warn">! {rateLabel(group.rateMin)} a {rateLabel(group.rateMax)}</StatusPill></span> : null}</td>
-              <td className={`${td} text-right font-ds-mono`}>{centsLabel(group.feeCents)}</td>
-              <td className={`${td} text-right font-ds-mono text-ds-ok`}>{centsLabel(group.paidCents)}</td>
-              <td className={`${td} text-right font-ds-mono`}>{centsLabel(group.toReceiveCents)}</td>
-              <td className={`${td} text-right font-ds-mono`}>{group.onTimeRatio === null ? "—" : `${Math.round(group.onTimeRatio * 100)}%`}</td>
-              <td className={td}><span className="flex flex-wrap gap-1">{group.pendingCount ? <StatusPill variant="danger">{group.pendingCount} pendente{group.pendingCount > 1 ? "s" : ""}</StatusPill> : null}
+              <td className={`${td} text-right tabular-nums`}>{centsLabel(group.grossCents)}</td>
+              <td className={`${td} whitespace-nowrap text-right`}>{parent ? <span className="mr-2 text-xs text-ds-ink-faint">varia por parcelas</span> : varies ? <span className="mr-2 inline-block align-middle" title={`A taxa variou entre ${rateLabel(group.rateMin)} e ${rateLabel(group.rateMax)} no mês; confira na aba Taxas.`}><StatusPill variant="warn">{rateLabel(group.rateMin)} a {rateLabel(group.rateMax)}</StatusPill></span> : null}<span className="tabular-nums font-semibold">{rateLabel(group.rate)}</span></td>
+              <td className={`${td} text-right tabular-nums`}>{centsLabel(group.feeCents)}</td>
+              <td className={`${td} text-right tabular-nums text-ds-ok`}>{centsLabel(group.paidCents)}</td>
+              <td className={`${td} text-right tabular-nums`}>{centsLabel(group.toReceiveCents)}</td>
+              <td className={`${td} text-right tabular-nums`}>{group.onTimeRatio === null ? "—" : `${Math.round(group.onTimeRatio * 100)}%`}</td>
+              <td className={td}><span className="flex flex-nowrap gap-1 whitespace-nowrap">{group.pendingCount ? <StatusPill variant="danger">{group.pendingCount} pendente{group.pendingCount > 1 ? "s" : ""}</StatusPill> : null}
                 {group.feeToVerifyCount ? <StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa · {group.feeToVerifyCount}</StatusPill> : null}
                 {!group.pendingCount && !group.feeToVerifyCount ? <span className="text-ds-ink-faint">—</span> : null}</span></td>
             </tr>;
           }) : <tr><td colSpan={8} className={`${td} text-center text-ds-ink-muted`}>Nenhuma venda desta bandeira na competência.</td></tr>}</tbody>
         </table></div>}
-        <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">Taxa contratada: ainda não há tabela oficial por bandeira, modalidade e parcelas no sistema; a coluna mostra a taxa praticada (MDR ÷ bruto).</p>
+        <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">Taxa praticada = MDR ÷ bruto. A conferência contra a taxa atual de cada grupo fica na aba Taxas.</p>
       </section>
 
       {result.limitations.length ? <ul className="space-y-1 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 text-xs text-ds-ink-muted">{result.limitations.map(text => <li key={text}>{text}</li>)}</ul> : null}
@@ -300,14 +310,14 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
       title={panel?.mode === "list" ? panel.title : selectedParcel ? `${parcelTitle(selectedParcel)} · ${centsLabel(loadedAudit?.stone.capturedCents ?? selectedParcel.grossCents)}` : ""}
       subtitle={panel?.mode === "list" ? `${panel.parcelIds.length} parcela(s) · clique para ver a auditoria da venda` : selectedParcel ? `Venda de ${dayLabel(selectedParcel.saleDate)}${selectedParcel.saleTime ? ` às ${selectedParcel.saleTime}` : ""} · ${mapping.kioskName} · StoneCode ${stoneCode}` : undefined}
       highlights={panel?.mode === "sale" && selectedParcel ? <>
-        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="font-ds-mono text-[22px]">{selectedParcel.feeCents !== null && selectedParcel.grossCents ? rateLabel(selectedParcel.feeCents / selectedParcel.grossCents) : "—"}</span></span>
-        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Líquido</small><span className="font-ds-mono text-[22px]">{centsLabel(selectedParcel.paidNetCents ?? selectedParcel.expectedNetCents)}</span></span>
+        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Taxa</small><span className="tabular-nums text-[22px]">{selectedParcel.feeCents !== null && selectedParcel.grossCents ? rateLabel(selectedParcel.feeCents / selectedParcel.grossCents) : "—"}</span></span>
+        <span className="flex flex-col"><small className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Líquido</small><span className="tabular-nums text-[22px]">{centsLabel(selectedParcel.paidNetCents ?? selectedParcel.expectedNetCents)}</span></span>
         {verdict ? <span className="ml-auto self-end"><StatusPill variant={verdict.tone}>{verdict.label}</StatusPill></span> : null}
       </> : undefined}>
-      {panel?.mode === "list" ? <div className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">
-        {panel.parcelIds.map(id => byId.get(id)).filter((parcel): parcel is ReceiptParcel => Boolean(parcel)).map(parcel =>
-          <ParcelRow key={parcel.id} parcel={parcel} onOpen={() => openSale(parcel.id, panel)} />)}
-      </div> : null}
+      {panel?.mode === "list" ? <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[860px]"><ParcelHeader />
+        {panel.parcelIds.map(id => byId.get(id)).filter((parcel): parcel is ReceiptParcel => Boolean(parcel)).sort(bySaleTime).map(parcel =>
+          <ParcelRow key={parcel.id} parcel={parcel} usualRate={usualRates.get(receiptGroupKey(parcel)) ?? null} onOpen={() => openSale(parcel.id, panel)} />)}
+      </div></div> : null}
       {panel?.mode === "sale" ? <>
         {panel.back && !panel.detail ? <div><Button type="button" variant="ds-ghost" size="sm" onClick={() => setPanel({ mode: "list", ...panel.back! })}><ArrowLeft aria-hidden="true" className="h-4 w-4" />Voltar a {panel.back.title}</Button></div> : null}
         {audit === "loading" || audit === undefined ? <p role="status" className="text-sm text-ds-ink-muted">Lendo os arquivos da venda…</p>

@@ -46,7 +46,7 @@ const NATURE_COLOR: Record<NatureKey, string> = {
   regular: "#2a78d6", stone_anticipation: "#eb6834", warranty: "#1baf7a", ownership_assignment: "#eda100", unknown: "#5f646c",
 };
 const th = "whitespace-nowrap border-y border-ds-divider bg-ds-muted px-[18px] py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
-const td = "border-b border-ds-divider px-[18px] py-2.5 align-top text-[13.5px]";
+const td = "whitespace-nowrap border-b border-ds-divider px-[18px] py-2.5 align-middle text-[13.5px]";
 const date = (value: string | null) => value ? value.split("-").reverse().join("/") : "—";
 const short = (value: string | null) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}` : "—";
 const weekday = (value: string) => ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(`${value}T12:00:00Z`).getUTCDay()];
@@ -59,9 +59,9 @@ const addDays = (value: string, days: number) => { const d = new Date(`${value}T
 
 function Summary({ totals }: { totals: ReceivableTotals }) {
   return <span className="flex flex-wrap justify-end gap-x-5 gap-y-1 text-[12.5px] text-ds-ink-muted">
-    <span>Bruto <b className="ml-1 font-ds-mono font-bold text-ds-ink">{centsLabel(totals.grossCents)}</b></span>
-    <span>Taxa <b className="ml-1 font-ds-mono font-bold text-ds-ink">{totals.feeUnknown === totals.count ? "—" : centsLabel(totals.feeCents)}</b></span>
-    <span>Líquido <b className="ml-1 font-ds-mono font-bold text-ds-ink">{centsLabel(totals.netCents)}</b></span>
+    <span>Bruto <b className="ml-1 tabular-nums font-bold text-ds-ink">{centsLabel(totals.grossCents)}</b></span>
+    <span>Taxa <b className="ml-1 tabular-nums font-bold text-ds-ink">{totals.feeUnknown === totals.count ? "—" : centsLabel(totals.feeCents)}</b></span>
+    <span>Líquido <b className="ml-1 tabular-nums font-bold text-ds-ink">{centsLabel(totals.netCents)}</b></span>
   </span>;
 }
 
@@ -119,7 +119,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
     const key = `${month}:${week.from}`;
     const open = openWeeks.has(key);
     return <Fragment key={key}>
-      <tr className="cursor-pointer [&>td]:bg-ds-muted hover:[&>td]:bg-ds-seg/60" onClick={() => toggle(key)} aria-expanded={open}>
+      <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggle(key)} aria-expanded={open}>
         <td colSpan={4} className={`${td} py-3`}><span className="inline-flex items-center gap-1">
           {open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}
           <strong className="inline-block min-w-[150px] font-extrabold text-ds-ink">Semana de {Number(week.from.slice(8))} {MONTHS[Number(week.from.slice(5, 7)) - 1]}</strong>
@@ -129,14 +129,14 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
         <td colSpan={4} className={`${td} py-3`}><Summary totals={week.totals} /></td>
       </tr>
       {open ? week.items.map(item => <tr key={item.id} className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => setSelected(item)}>
-        <td className={`${td} pl-11 font-ds-mono`}>{weekday(item.dueDate)} {short(item.dueDate)}</td>
-        <td className={`${td} font-ds-mono`}>{short(item.saleDate)}</td>
+        <td className={`${td} pl-11 tabular-nums`}>{weekday(item.dueDate)} {short(item.dueDate)}</td>
+        <td className={`${td} tabular-nums`}>{short(item.saleDate)}</td>
         <td className={td}>{itemTitle(item)}</td>
-        <td className={`${td} text-right font-ds-mono`}>{item.installment}/{item.installmentCount ?? "—"}</td>
-        <td className={`${td} text-right font-ds-mono`}>{centsLabel(item.grossCents)}</td>
-        <td className={`${td} text-right font-ds-mono`}>{item.feeCents === null ? "—" : `${rateLabel(item.feeCents / item.grossCents)}`}
+        <td className={`${td} text-right tabular-nums`}>{item.installment}/{item.installmentCount ?? "—"}</td>
+        <td className={`${td} text-right tabular-nums`}>{centsLabel(item.grossCents)}</td>
+        <td className={`${td} text-right tabular-nums`}>{item.feeCents === null ? "—" : `${rateLabel(item.feeCents / item.grossCents)}`}
           {item.feeSource === "derived" ? <span className="mt-1 block"><StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill></span> : null}</td>
-        <td className={`${td} text-right font-ds-mono font-bold`}>{centsLabel(item.netCents)}</td>
+        <td className={`${td} text-right tabular-nums font-bold`}>{centsLabel(item.netCents)}</td>
         <td className={td}>{item.status === "review" ? <StatusPill variant="warn" title={item.reason ?? undefined}>Conferir</StatusPill> : <StatusPill variant="neutral">A receber</StatusPill>}</td>
       </tr>) : null}
     </Fragment>;
@@ -176,7 +176,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
               {natures.map(item => <button key={item.key} type="button" onClick={() => setNature(item.key)}
                 className="rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 text-left transition-colors hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
                 <span className="flex items-center gap-1.5 text-[13px] text-ds-ink-2"><i aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: NATURE_COLOR[item.key] }} />{natureLabel[item.key]}</span>
-                <span className="mt-1 block font-ds-mono text-[19px] font-bold text-ds-ink">{centsLabel(item.cents)}</span>
+                <span className="mt-1 block tabular-nums text-[19px] font-bold text-ds-ink">{centsLabel(item.cents)}</span>
                 <span className="block text-xs text-ds-ink-muted">{Math.round(item.cents / natureTotal * 100)}% da posição · ver detalhe</span>
               </button>)}
             </div>
@@ -208,7 +208,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
       {selectedNature ? <PanelSection title="Por bandeira e produto" aside={`${selectedNature.rows.length} linha(s)`}>
         {selectedNature.rows.length ? <ul className="divide-y divide-ds-divider">{selectedNature.rows.map(row => <li key={`${row.label}:${row.category}`} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
           <span><span className="font-semibold text-ds-ink">{row.label}</span><span className="block text-xs text-ds-ink-faint">{row.category}</span></span>
-          <span className="font-ds-mono font-bold">{centsLabel(row.cents)}</span></li>)}</ul>
+          <span className="tabular-nums font-bold">{centsLabel(row.cents)}</span></li>)}</ul>
           : <p className="text-sm text-ds-ink-muted">Nada informado nesta natureza.</p>}
         <p className="text-xs text-ds-ink-muted">A Stone informa o total por arranjo; não diz quais parcelas da tabela compõem este valor.</p>
       </PanelSection> : null}
@@ -223,7 +223,7 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
             ["Bruto", "GrossAmount", centsLabel(selected.grossCents)], ["Líquido", "NetAmount", centsLabel(selected.netCents)],
             ["Taxa", "MdrAmount", selected.feeCents === null ? "—" : `${centsLabel(selected.feeCents)} (${rateLabel(selected.feeCents / selected.grossCents)})${selected.feeSource === "derived" ? " · proposta" : ""}`],
             ["Situação", null, selected.status === "review" ? `Conferir${selected.reason ? `: ${selected.reason}` : ""}` : "A receber"]].map(([label, field, value]) =>
-            <div key={label as string}><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{label}{field ? <span className="ml-1 font-ds-mono font-medium normal-case tracking-normal">{field}</span> : null}</dt>
+            <div key={label as string}><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{label}{field ? <span className="ml-1 tabular-nums font-medium normal-case tracking-normal">{field}</span> : null}</dt>
               <dd className="mt-0.5 wrap-anywhere font-semibold text-ds-ink">{value}</dd></div>)}
         </dl>
         {selected.feeSource === "derived" ? <p className="text-xs font-semibold text-ds-alert-ink">Verificar taxa: a Stone não mandou o MDR desta parcela. Taxa proposta = bruto − líquido.</p> : null}

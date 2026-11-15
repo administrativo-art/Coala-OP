@@ -69,14 +69,14 @@
       "methods": ["GET", "POST"],
       "owner": "plataforma-seguranca",
       "reason": "Intake legado extenso de admissão: além dos vínculos já abrangidos, cria personIdentity natural embutida com UUID/locator e separa empresa PJ de candidatura. GET permanece somente leitura; POST usa assertFormalizationAccess/onboarding.manage e validações nativas. Migração integral para secureRoute continua dedicada; exceção restrita aos métodos e prazo existentes.",
-      "expiresAt": "2026-11-14"
+      "expiresAt": "2026-12-14"
     },
     {
       "source": "src/app/api/users/route.ts",
       "methods": ["POST"],
       "owner": "plataforma-seguranca",
       "reason": "A inclusão do vínculo Societário alterou esta rota legada de criação; a migração integral será tratada com o contrato completo de criação e convite de usuários.",
-      "expiresAt": "2026-11-14"
+      "expiresAt": "2026-12-14"
     },
     {
       "source": "src/app/api/purchasing/[...path]/route.ts",

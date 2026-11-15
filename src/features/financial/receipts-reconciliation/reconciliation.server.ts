@@ -7,7 +7,7 @@ import { parseStoneAgendaXml } from "@/lib/integrations/stone/agenda-parser";
 import { stoneBrandName } from "@/lib/integrations/stone/stone-codes";
 import { readReceivablePeriodMapping } from "../receivables/mapping.server";
 import { latestPublishedDate } from "../receivables/period-review";
-import { readStonePortfolio } from "../receivables/portfolio-sync.server";
+import { readDay as readCachedStoneDay, readStonePortfolio } from "../receivables/portfolio-sync.server";
 import { readPixSalesSource } from "../sales-reconciliation/pix-source.server";
 import { listDailySalesReviewCalendar, readDailySalesReviewSnapshot } from "../sales-reconciliation/review-state.server";
 import { readStoneReceiptSnapshot } from "./stone-account-snapshot.server";
@@ -19,6 +19,7 @@ import {
   buildStoneAccountParcels,
   cardModality,
   cardSaleInstallments,
+  missingOriginDates,
   receiptPeriodDates,
   receiptMonthRange,
   stoneAccountRequestSchema,
@@ -112,6 +113,16 @@ async function readStoneFiles(stoneCode: string, dates: string[], deps: StoneAcc
   return { files, missingDates };
 }
 
+/** Arquivos só de consulta de origem: cache primeiro; dia indisponível fica sem origem (a parcela segue "Conferir"). */
+async function readOriginFiles(stoneCode: string, dates: string[], deps: StoneAccountDependencies) {
+  const read = deps.readFile ?? readCachedStoneDay;
+  const files: StoneFile[] = [];
+  for (const referenceDate of dates) {
+    try { files.push(await read(stoneCode, referenceDate)); } catch (error) { if (!transientStoneGap(error)) throw error; }
+  }
+  return files;
+}
+
 async function queryMonth(request: StoneAccountMonthRequest, context: Context, deps: StoneAccountDependencies) {
   return buildStoneAccountMonth(request, context.workspace_id, deps);
 }
@@ -127,6 +138,8 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
   const dates = receiptPeriodDates(request.from, through);
   const signal = AbortSignal.timeout(110_000);
   const { files, missingDates } = await readStoneFiles(request.stoneCode, dates, deps, signal);
+  // Vendas de meses anteriores pagas no período: a captura (bandeira, previsão, MDR) está no arquivo do dia da venda.
+  const originFiles = await readOriginFiles(request.stoneCode, missingOriginDates(files, request.from), deps);
   const portfolio = await (deps.readPortfolio ?? readPortfolioRows)(request.stoneCode);
   const portfolioRows = portfolio && portfolio.mappingId === mapping.id ? portfolio.rows : null;
   const readPix = deps.readPix ?? readPixSalesSource;
@@ -139,7 +152,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
     referenceDate: through, from: request.from, through,
   });
   const built = buildStoneAccountParcels({
-    from: request.from, through, latestPublished: latest, files, missingDates, portfolio: portfolioRows,
+    from: request.from, through, latestPublished: latest, files, missingDates, portfolio: portfolioRows, originFiles,
     pix: pixSources.flatMap(row => pixEvidence(row.source)),
   });
   if (built.parcels.length > MAX_RECEIPT_PARCELS) {
@@ -153,7 +166,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
   const limitations = [
     "Pago significa pagamento informado no arquivo diário de conciliação da Stone na conta Stone; o extrato da própria conta Stone ainda não está no sistema.",
     "A transferência do saldo da conta Stone para o Inter é a 2ª parte da conciliação e não entra nesta tela.",
-    "Taxa praticada = MDR ÷ bruto. Sem tabela de taxas contratadas, diferença de taxa é ponto a conferir, não cobrança a maior.",
+    "Taxa praticada = MDR ÷ bruto. A diferença contra a taxa atual de cada grupo é conferida na aba Taxas.",
     ...(portfolioRows ? [] : ["Carteira Stone não sincronizada para este vínculo: a previsão de vendas anteriores ao período não aparece; só os pagamentos efetivos e as vendas do período."]),
     ...(missingDates.length ? [`Arquivos Stone indisponíveis: ${missingDates.join(", ")}. A ausência não significa ausência de pagamento.`] : []),
     ...(pixUnavailable.length ? [`Pix sem arquivo processado em ${pixUnavailable.length} dia(s): ${pixUnavailable.join(", ")}.`] : []),
