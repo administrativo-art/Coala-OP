@@ -49,3 +49,23 @@ test("saída minimiza mensagens e explicita cobertura parcial", () => {
   assert.equal(output.nextCursor, "next");
   assert.equal(output.searchTruncated, true);
 });
+
+test("leitura por ID preserva os campos de guarda do rateio da despesa DARE", () => {
+  const doc = { id: "inbox_dare", accountPlan: "dare-icms-antecipado", resultCenterId: null,
+    isApportioned: true, referenceResultCenterId: "renascenca", financialInboxMessageId: "dare",
+    apportionments: [{ resultCenter: "Tirirical", percentage: 33.34 }], privateNote: "omitida" };
+  const summary = summarizePaymentRead("document", { doc }).doc;
+  assert.equal(summary?.isApportioned, true);
+  assert.equal(summary?.referenceResultCenterId, "renascenca");
+  assert.equal(summary?.financialInboxMessageId, "dare");
+  assert.equal(summary?.resultCenterId, null);
+  assert.equal(Object.hasOwn(summary ?? {}, "privateNote"), false);
+});
+
+test("leitura de previsão mantém apropriações para comparação com guia real", () => {
+  const summary = summarizePaymentRead("document", { doc: { id: "forecast_das", hasAccountAllocations: true,
+    accountAllocations: [{ accountPlanId: "irpj", amount: 100 }], hidden: "omitido" } }).doc;
+  assert.equal(summary?.hasAccountAllocations, true);
+  assert.deepEqual(summary?.accountAllocations, [{ accountPlanId: "irpj", amount: 100 }]);
+  assert.equal(Object.hasOwn(summary ?? {}, "hidden"), false);
+});
