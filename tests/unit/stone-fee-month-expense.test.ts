@@ -67,3 +67,12 @@ test("ação de lançar recusa campos extras e impressão digital fora do format
   assert.equal(feeExpenseActionSchema.safeParse({ action: "cancel", kioskId: "k", stoneCode: "1", month: "2026-10", reason: "ok" }).success, false);
   assert.equal(feeExpenseActionSchema.safeParse({ action: "cancel", kioskId: "k", stoneCode: "1", month: "2026-10", reason: "valor errado", amount: 1 }).success, false);
 });
+
+test("coluna Taxa do Pix: taxa atual e valor cobrado quando segue a regra de corte", async () => {
+  const { parcelRateText } = await import("../../src/features/financial/receipts-reconciliation/stone-account-format");
+  const small = parcelRateText(pix("s", 200, 1), 0.0075);
+  assert.match(small.text, /^0,75% · R\$\s0,01$/);
+  assert.match(small.title ?? "", /efetiva 0,50%/);
+  assert.equal(parcelRateText(pix("x", 1000, 9), 0.0075).text, "0,90%");
+  assert.equal(parcelRateText(pix("n", 1000, 7), null).text, "0,70%");
+});

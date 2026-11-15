@@ -98,3 +98,16 @@ export function rateDiffersFromUsual(parcel: Pick<ReceiptParcel, "source" | "fee
   if (typeof parcel.feeRate === "number") return Math.abs(Math.round(parcel.feeRate * 10_000) / 10_000 - usualRate) > 0.00005;
   return Math.abs(parcel.feeCents - Math.round(parcel.grossCents * usualRate)) > 1;
 }
+
+/**
+ * Texto da coluna Taxa. Pix dentro da regra de corte: a taxa atual do grupo e o valor cobrado
+ * ("0,75% · R$ 0,01"), porque a taxa efetiva de venda pequena (0,50%) parece divergência sem ser.
+ * Demais casos e Pix fora da regra: a taxa efetiva da venda.
+ */
+export function parcelRateText(parcel: ReceiptParcel, usualRate: number | null) {
+  if (parcel.source === "pix" && usualRate !== null && parcel.feeCents !== null && !rateDiffersFromUsual(parcel, usualRate)) {
+    return { text: `${rateLabel(usualRate)} · ${centsLabel(parcel.feeCents)}`,
+      title: `Taxa ${rateLabel(usualRate)}; a Stone cobrou ${centsLabel(parcel.feeCents)} porque corta os centavos para baixo (efetiva ${rateLabel(parcelFeeRate(parcel))}).` };
+  }
+  return { text: rateLabel(parcelFeeRate(parcel)), title: undefined };
+}
