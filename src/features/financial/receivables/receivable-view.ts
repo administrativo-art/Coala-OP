@@ -1,5 +1,5 @@
 import { stoneBrandName } from "@/lib/integrations/stone/stone-codes";
-import { cardModality, resolveFee, stoneDecimalCents, type ReceiptModality } from "../receipts-reconciliation/stone-account";
+import { cardModality, resolveCardFee, stoneDecimalCents, type FeeSource, type ReceiptModality } from "../receipts-reconciliation/stone-account";
 import type { StonePortfolioRow } from "./portfolio-projection";
 import { walletTypeLabels } from "./wallet-position-labels";
 
@@ -19,7 +19,8 @@ export type ReceivableItem = {
   grossCents: number;
   netCents: number;
   feeCents: number | null;
-  feeSource: "stone" | "derived" | null;
+  feeSource: FeeSource | null;
+  feeRate: number | null;
   brand: string | null;
   modality: ReceiptModality | null;
   status: "open" | "review";
@@ -43,7 +44,7 @@ export function receivableItems(rows: StonePortfolioRow[]): ReceivableItem[] {
       grossCents: gross,
       netCents: net,
       // Carteira antiga (sem os campos da captura): taxa e cartão ficam desconhecidos até a próxima sincronização.
-      ...(known ? resolveFee(stoneDecimalCents(row.mdr ?? null), gross, net, null) : { feeCents: null, feeSource: null }),
+      ...(known ? resolveCardFee({ mdr: row.mdr ?? null, gross: row.gross, net: row.net }) : { feeCents: null, feeSource: null, feeRate: null }),
       brand: known ? stoneBrandName(row.brandCode) : null,
       modality: known ? cardModality({ accountTypeCode: row.accountTypeCode ?? null, installmentCount: row.installmentCount ?? null }) : null,
       status: row.status,

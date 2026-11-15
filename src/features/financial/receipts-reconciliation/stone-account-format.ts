@@ -1,5 +1,5 @@
 import type { StatusPillVariant } from "@/components/ui/status-pill";
-import type { AuditCheckResult, ReceiptDay, ReceiptParcel, ReceiptParcelStatus } from "./stone-account";
+import { parcelFeeRate, type AuditCheckResult, type ReceiptDay, type ReceiptParcel, type ReceiptParcelStatus } from "./stone-account";
 
 export const centsLabel = (cents: number | null | undefined) => cents === null || cents === undefined ? "—"
   : (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -81,9 +81,18 @@ export function parcelProblems(parcel: ReceiptParcel, usualRate: number | null):
       hint: "Dois arquivos da Stone trazem valores diferentes para a mesma parcela, ou a carteira a marcou para revisão." });
   }
   if (parcel.feeSource === "derived") list.push({ label: "Taxa sem MDR", variant: "warn",
-    hint: "A Stone não mandou o MDR; a taxa foi calculada como bruto − líquido − antecipação." });
-  else if (parcel.feeCents !== null && usualRate !== null && parcel.grossCents > 0
-    && Math.abs(parcel.feeCents - Math.round(parcel.grossCents * usualRate)) > 1) list.push({ label: "Taxa fora da atual", variant: "warn",
-    hint: `Cobrado ${rateLabel(parcel.feeCents / parcel.grossCents)}; a taxa atual do grupo é ${rateLabel(usualRate)}. Decida na aba Taxas.` });
+    hint: "A Stone não mandou o MDR e o líquido veio só em centavos; a taxa foi calculada como bruto − líquido − antecipação." });
+  else if (rateDiffersFromUsual(parcel, usualRate)) list.push({ label: "Taxa fora da atual", variant: "warn",
+    hint: `Cobrado ${rateLabel(parcelFeeRate(parcel))}; a taxa atual do grupo é ${rateLabel(usualRate)}. Decida na aba Taxas.` });
   return list;
+}
+
+/**
+ * Taxa exata (líquido com 6 casas): difere quando não arredonda à mesma taxa de 0,01% do grupo.
+ * Sem a taxa exata (conferência antiga ou só centavos): tolera 1 centavo de arredondamento.
+ */
+export function rateDiffersFromUsual(parcel: Pick<ReceiptParcel, "feeRate" | "feeCents" | "grossCents">, usualRate: number | null) {
+  if (usualRate === null || parcel.feeCents === null || parcel.grossCents <= 0) return false;
+  if (typeof parcel.feeRate === "number") return Math.abs(Math.round(parcel.feeRate * 10_000) / 10_000 - usualRate) > 0.00005;
+  return Math.abs(parcel.feeCents - Math.round(parcel.grossCents * usualRate)) > 1;
 }

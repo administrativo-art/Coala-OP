@@ -6,7 +6,7 @@ import { PanelSection } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { stoneAccountTypeName, stoneFeeTypeName } from "@/lib/integrations/stone/stone-codes";
-import { belemTime, matchBasisLabel, pdvChannelLabel, pdvStatusLabel, type AuditCheck, type SaleAudit } from "./stone-account";
+import { belemTime, matchBasisLabel, parcelFeeRate, pdvChannelLabel, pdvStatusLabel, type AuditCheck, type SaleAudit } from "./stone-account";
 import { centsLabel, checkView, dayLabel, fullDateLabel, parcelStatusView, rateLabel, stoneLocalDateTimeLabel } from "./stone-account-format";
 
 function Field({ label, field, children, wide }: { label: string; field?: string; children: ReactNode; wide?: boolean }) {
@@ -80,7 +80,7 @@ function StoneSaleSection({ audit }: { audit: SaleAudit }) {
 const ROWS: Array<{ label: string; field: string | null; value: (row: SaleAudit["installments"][number]) => ReactNode }> = [
   { label: "Situação", field: null, value: row => <StatusPill variant={parcelStatusView[row.status].variant}>{parcelStatusView[row.status].label}</StatusPill> },
   { label: "Bruto", field: "GrossAmount", value: row => centsLabel(row.grossCents) },
-  { label: "Taxa", field: "MdrAmount", value: row => <>{centsLabel(row.feeCents)}{row.feeCents !== null && row.grossCents ? <span className="text-ds-ink-faint"> ({rateLabel(row.feeCents / row.grossCents)})</span> : null}{row.feeSource === "derived" ? <span className="mt-1 block"><StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill></span> : null}</> },
+  { label: "Taxa", field: "MdrAmount", value: row => <>{centsLabel(row.feeCents)}{parcelFeeRate(row) !== null ? <span className="text-ds-ink-faint"> ({rateLabel(parcelFeeRate(row))})</span> : null}{row.feeSource === "exact" ? <span className="mt-1 block text-xs text-ds-ink-faint">Calculada do líquido exato da Stone</span> : null}{row.feeSource === "derived" ? <span className="mt-1 block"><StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill></span> : null}</> },
   { label: "Antecipação", field: "AdvanceRateAmount", value: row => row.anticipationCents ? centsLabel(row.anticipationCents) : "—" },
   { label: "Líquido", field: "NetAmount", value: row => <strong>{centsLabel(row.netCents)}</strong> },
   { label: "Previsto", field: "PrevisionPaymentDate", value: row => fullDateLabel(row.expectedDate) },
