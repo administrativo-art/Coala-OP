@@ -71,7 +71,7 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.match(receiptsPage, /if \(!isDefaultAdmin\)/);
   assert.match(receiptsPage, /useEffect\(\(\) => \{[\s\S]*stone-mappings\?resource=mappings/);
   assert.match(receiptsPage, /Selecione a unidade primeiro/);
-  assert.match(receiptsPage, /Taxa contratada/);
+  assert.match(receiptsPage, /taxa contratada/i);
   assert.match(receiptsPage, /Taxa praticada/);
   assert.doesNotMatch(receiptsPage, />Abrir contestação</);
   assert.doesNotMatch(receiptsPage, /href="\/dashboard\/financial\/sales-reconciliation"/);

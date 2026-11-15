@@ -1,5 +1,5 @@
 import type { StatusPillVariant } from "@/components/ui/status-pill";
-import { parcelFeeRate, type AuditCheckResult, type ReceiptDay, type ReceiptParcel, type ReceiptParcelStatus } from "./stone-account";
+import { parcelFeeRate, pixFeeForRate, type AuditCheckResult, type ReceiptDay, type ReceiptParcel, type ReceiptParcelStatus } from "./stone-account";
 
 export const centsLabel = (cents: number | null | undefined) => cents === null || cents === undefined ? "—"
   : (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -91,8 +91,10 @@ export function parcelProblems(parcel: ReceiptParcel, usualRate: number | null):
  * Taxa exata (líquido com 6 casas): difere quando não arredonda à mesma taxa de 0,01% do grupo.
  * Sem a taxa exata (conferência antiga ou só centavos): tolera 1 centavo de arredondamento.
  */
-export function rateDiffersFromUsual(parcel: Pick<ReceiptParcel, "feeRate" | "feeCents" | "grossCents">, usualRate: number | null) {
+export function rateDiffersFromUsual(parcel: Pick<ReceiptParcel, "source" | "feeRate" | "feeCents" | "grossCents">, usualRate: number | null) {
   if (usualRate === null || parcel.feeCents === null || parcel.grossCents <= 0) return false;
+  // Pix: taxa nominal com centavos cortados para baixo; confere o valor cobrado exato.
+  if (parcel.source === "pix") return parcel.feeCents !== pixFeeForRate(parcel.grossCents, usualRate);
   if (typeof parcel.feeRate === "number") return Math.abs(Math.round(parcel.feeRate * 10_000) / 10_000 - usualRate) > 0.00005;
   return Math.abs(parcel.feeCents - Math.round(parcel.grossCents * usualRate)) > 1;
 }

@@ -10,7 +10,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { PageHero } from "@/components/patterns/page-hero";
 import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { HeroChip } from "@/components/patterns/hero-chip";
-import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
+import { StoneFeeMonthExpensePanel } from "./fee-month-expense-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { StoneAccountReceipts, type StoneAccountIndicators } from "./stone-account-panel";
 import { StoneFeeReviewPanel } from "./fee-review-panel";
@@ -33,7 +33,10 @@ export function StoneReceiptsPage() {
   const [error, setError] = useState("");
   const [indicators, setIndicators] = useState<StoneAccountIndicators>(null);
   const onIndicators = useCallback((value: StoneAccountIndicators) => setIndicators(value), []);
-  const [feePending, setFeePending] = useState<number | null>(null);
+  // A despesa do mês acompanha o mês e as decisões da aba Taxas (recarrega a cada mudança da visão).
+  const [feeMonth, setFeeMonth] = useState("");
+  const [feeVersion, setFeeVersion] = useState(0);
+  const onFeeViewChange = useCallback(() => setFeeVersion(value => value + 1), []);
   const active = useRef<AbortController | null>(null);
   const requestedMapping = searchParams.get("mapping");
   const requestedCode = searchParams.get("stoneCode");
@@ -92,13 +95,8 @@ export function StoneReceiptsPage() {
     {mapping && code ? <>
       <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
       {tab === "fees" ? <section className="space-y-4" aria-label="Taxas">
-        <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onPending={setFeePending} />
-        <section className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-4" aria-label="Despesa do mês">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Despesa do mês</p>
-          <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Lançar as taxas como despesa</h2>
-          <p className="text-[12.5px] text-ds-ink-muted">A despesa já foi paga na origem: a Stone descontou do repasse, então não haverá outra saída no banco. Taxa praticada é o que a Stone reteve; Taxa contratada não é usada como referência enquanto não houver tabela oficial: a conferência compara com a taxa atual recorrente, confirmada pelo operador.{feePending ? ` Ainda há ${feePending} pendência(s) acima; o recomendado é resolvê-las antes de lançar.` : ""}</p>
-        </section>
-        <AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} />
+        <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onPending={onFeeViewChange} onMonthChange={setFeeMonth} />
+        <StoneFeeMonthExpensePanel key={`fee-expense:${mapping.id}:${code}`} kioskId={mapping.kioskId} stoneCode={code} month={feeMonth} refreshKey={feeVersion} />
       </section> : null}
       {tab === "credit" ? <StoneAccountReceipts key={`stone-account:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onIndicators={onIndicators} /> : null}
     </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro; a conta vinculada vem junto</p><p className="mt-1 text-sm text-muted-foreground">Depois escolha o identificador Stone. Essa seleção acompanha as etapas de recebimentos.</p></div>}

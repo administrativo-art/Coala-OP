@@ -192,8 +192,11 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
             : month === ALL ? months.map(value => {
               const list = items.filter(item => receivableMonth(item.dueDate) === value);
               return <Fragment key={value}>
-                <tr><td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-surface py-3 font-extrabold capitalize text-ds-ink`}>{monthName(value)}</td>
-                  <td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-surface py-3`}><Summary totals={receivableTotals(list)} /></td></tr>
+                {/* Faixa do mês: fundo neutro do sistema, nome maior e contagem; as semanas seguem brancas. */}
+                <tr><td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`}>
+                    <span className="text-[16px] font-extrabold capitalize text-ds-ink">{monthName(value)}</span>
+                    <span className="ml-3 text-xs font-semibold text-ds-ink-muted">{list.length} parcela{list.length > 1 ? "s" : ""}</span></td>
+                  <td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`}><Summary totals={receivableTotals(list)} /></td></tr>
                 {weekRows(list)}
               </Fragment>;
             }) : weekRows(shown)}</tbody>
