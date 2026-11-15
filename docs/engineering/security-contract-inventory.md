@@ -3,9 +3,9 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **567**
-- Totalmente contratados: **238**
+- Totalmente contratados: **240**
 - Legados congelados: **317**
-- Exceções temporárias: **12**
+- Exceções temporárias: **10**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -392,7 +392,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/login-access` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/hr/login-access/route.ts](../../src/app/api/hr/login-access/route.ts) |
 | `/api/hr/login-access/audit` | GET | `LEGACY_BASELINE` | [src/app/api/hr/login-access/audit/route.ts](../../src/app/api/hr/login-access/audit/route.ts) |
 | `/api/hr/navigation` | GET | `LEGACY_BASELINE` | [src/app/api/hr/navigation/route.ts](../../src/app/api/hr/navigation/route.ts) |
-| `/api/hr/onboarding` | GET, POST | `EXCEPTION` | [src/app/api/hr/onboarding/route.ts](../../src/app/api/hr/onboarding/route.ts) |
+| `/api/hr/onboarding` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/hr/onboarding/route.ts](../../src/app/api/hr/onboarding/route.ts) |
 | `/api/hr/onboarding/[id]` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/hr/onboarding/[id]/route.ts](../../src/app/api/hr/onboarding/[id]/route.ts) |
 | `/api/hr/onboarding/[id]/accountant-form` | POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/accountant-form/route.tsx](../../src/app/api/hr/onboarding/[id]/accountant-form/route.tsx) |
 | `/api/hr/onboarding/[id]/accountant-workflow` | GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts](../../src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts) |
@@ -569,7 +569,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/uniforms/terms/[id]` | GET | `LEGACY_BASELINE` | [src/app/api/uniforms/terms/[id]/route.ts](../../src/app/api/uniforms/terms/[id]/route.ts) |
 | `/api/uploads/operations` | POST ✓ | `CONTRACTED` | [src/app/api/uploads/operations/route.ts](../../src/app/api/uploads/operations/route.ts) |
 | `/api/user-notifications` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/user-notifications/route.ts](../../src/app/api/user-notifications/route.ts) |
-| `/api/users` | POST | `EXCEPTION` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
+| `/api/users` | POST ✓ | `CONTRACTED` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
 | `/api/users/[userId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
 | `/api/users/[userId]/assets` | GET ✓ | `CONTRACTED` | [src/app/api/users/[userId]/assets/route.ts](../../src/app/api/users/[userId]/assets/route.ts) |
 | `/api/users/[userId]/contract-changes` | GET ✓ | `CONTRACTED` | [src/app/api/users/[userId]/contract-changes/route.ts](../../src/app/api/users/[userId]/contract-changes/route.ts) |

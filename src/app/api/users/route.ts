@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireUser } from "@/lib/auth-server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
 import { renderFirstAccessEmail } from "@/lib/email/first-access-template";
 import { createFirstAccessLink } from "@/lib/first-access-links";
@@ -11,6 +11,10 @@ import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
 import { ensureEmployeeDocumentFolderProfile } from "@/lib/hr/employee-document-folder-profile.server";
+import { AppError } from "@/lib/observability/app-error";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { canAccessUnit, canDelegateUnitAccess } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
@@ -108,12 +112,58 @@ function emailHash(email: string) {
   return createHash("sha256").update(email).digest("hex");
 }
 
-export async function POST(request: NextRequest) {
-  let createdUserId: string | null = null;
-  try {
-    const actor = await requireUser(request);
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type CreateUserInput = {
+  email: string;
+  username: string;
+  profileId: string;
+  rawUserData: Record<string, unknown>;
+};
+type CreateUserResource = { profileId: string; isDefaultAdmin: boolean };
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "users.create",
+  version: 1,
+  surface: { method: "POST", path: "/api/users" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "user-management-create" },
+  resourceScope: { kind: "custom", strategy: "delegated-unit-access" },
+  input: { kind: "none" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+function rejectCreate(code: string, kind: "VALIDATION" | "AUTHORIZATION", safeMessage: string): never {
+  throw new AppError({ code, kind, safeMessage });
+}
+
+/**
+ * Autentica, exige settings.manageUsers (ou admin padrão), valida o corpo, confere que as unidades
+ * pedidas estão no escopo do ator e que só o admin padrão atribui perfil de admin padrão.
+ */
+const enforcer = defineSecurityEnforcer<
+  NextRequest,
+  StaticRouteContext,
+  unknown,
+  ServerUserContext,
+  CreateUserInput,
+  CreateUserResource
+>({
+  id: "user-management-create-v1",
+  guarantees: [
+    "authenticated-user",
+    "active-user",
+    "authorization:user-management-create",
+    "scope:delegated-unit-access",
+  ],
+  async enforce({ request }) {
+    const actor = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "USER_CREATE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+    });
     if (!actor.isDefaultAdmin && actor.permissions.settings.manageUsers !== true) {
-      return NextResponse.json({ error: "Sem permissão para criar usuários." }, { status: 403 });
+      rejectCreate("USER_CREATE_FORBIDDEN", "AUTHORIZATION", "Sem permissão para criar usuários.");
     }
 
     const body = record(await request.json().catch(() => null));
@@ -121,34 +171,48 @@ export async function POST(request: NextRequest) {
     const username = text(body.username, 180);
     const profileId = text(body.profileId, 160);
     if (!email || !email.includes("@") || username.length < 3 || !profileId) {
-      return NextResponse.json({ error: "Informe nome, e-mail e perfil válidos." }, { status: 400 });
+      rejectCreate("USER_CREATE_INPUT_INVALID", "VALIDATION", "Informe nome, e-mail e perfil válidos.");
     }
     const rawUserData = record(body.userData);
     if (!isEmploymentRelationshipType(rawUserData.employmentRelationshipType)) {
-      return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, Aprendiz, PJ, Estágio ou Societário." }, { status: 400 });
+      rejectCreate("USER_CREATE_RELATIONSHIP_INVALID", "VALIDATION", "Selecione o tipo de vínculo: CLT, Aprendiz, PJ, Estágio ou Societário.");
     }
     const requestedFinancialUnitId = text(rawUserData.unitId);
     if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })
       || (requestedFinancialUnitId && !canAccessUnit(actor.userDoc, requestedFinancialUnitId, { isDefaultAdmin: actor.isDefaultAdmin }))) {
-      return NextResponse.json(
-        { error: "As unidades operacionais, a referência financeira e o escopo do novo usuário devem estar no seu próprio escopo de unidades." },
-        { status: 403 },
+      rejectCreate(
+        "USER_CREATE_UNIT_FORBIDDEN",
+        "AUTHORIZATION",
+        "As unidades operacionais, a referência financeira e o escopo do novo usuário devem estar no seu próprio escopo de unidades.",
       );
     }
 
     const profileSnapshot = await dbAdmin.collection("profiles").doc(profileId).get();
     if (!profileSnapshot.exists) {
-      return NextResponse.json({ error: "Perfil de permissão não encontrado." }, { status: 400 });
+      rejectCreate("USER_CREATE_PROFILE_NOT_FOUND", "VALIDATION", "Perfil de permissão não encontrado.");
     }
     const isDefaultAdmin = profileSnapshot.get("isDefaultAdmin") === true;
     if (isDefaultAdmin && !actor.isDefaultAdmin) {
-      return NextResponse.json({ error: "Somente o administrador padrão pode atribuir esse perfil." }, { status: 403 });
+      rejectCreate("USER_CREATE_ADMIN_PROFILE_FORBIDDEN", "AUTHORIZATION", "Somente o administrador padrão pode atribuir esse perfil.");
     }
 
+    return {
+      actor,
+      input: { email, username, profileId, rawUserData },
+      resource: { profileId, isDefaultAdmin },
+    };
+  },
+});
+
+export const POST = secureRoute({ contract, enforcer }, async ({ request, security }) => {
+  const { actor, input: { email, username, profileId, rawUserData }, resource: { isDefaultAdmin } } = security;
+  let createdUserId: string | null = null;
+  try {
     try {
       await authAdmin.getUserByEmail(email);
-      return NextResponse.json({ error: "Já existe um usuário com este e-mail." }, { status: 409 });
+      throw new AppError({ code: "USER_CREATE_EMAIL_EXISTS", kind: "CONFLICT", safeMessage: "Já existe um usuário com este e-mail." });
     } catch (error) {
+      if (error instanceof AppError) throw error;
       const code = typeof error === "object" && error && "code" in error
         ? String((error as { code?: unknown }).code ?? "")
         : "";
@@ -299,7 +363,12 @@ export async function POST(request: NextRequest) {
         hrDbAdmin.collection("employeeDocumentFolderProfiles").doc(createdUserId).delete(),
       ]);
     }
-    const message = error instanceof Error ? error.message : "Falha ao criar usuário.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const providerCode = typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+    if (providerCode.startsWith("auth/")) {
+      throw new AppError({ code: "USER_CREATE_AUTH_PROVIDER_REJECTED", kind: "VALIDATION", safeMessage: "O acesso não pôde ser criado com esses dados. Confira o e-mail e tente novamente.", cause: error });
+    }
+    throw error;
   }
-}
+});
