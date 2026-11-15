@@ -88,7 +88,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `employee-documents` | 6 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — aba Colaborador do Acervo (pasta completa para quem gerencia, publicada para o titular, envio com IA e visibilidade) e publicação com teste de integração |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
-| `financial-inbox` | 3 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote, confirmação manual e retomada após recusa bancária cobertos localmente; verificação integrada pendente |
+| `financial-inbox` | 3 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — triagem determinística, separação de ruído/descarte, guarda de IA, arquivamento em lote, confirmação manual de boleto e guia pública para previsão e retomada após recusa bancária cobertos localmente; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
 | `forms` | 6 | Traçado | [Modelos, execução e tarefas](flows/forms.md) — percurso complementado; verificação integrada pendente |
 | `goals` | 6 | Traçado | [Metas](flows/goals.md) — percurso complementado; verificação integrada pendente |

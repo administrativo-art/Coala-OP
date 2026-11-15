@@ -22,7 +22,15 @@ const schema = z.object({
     competence: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
     barcode: z.string().regex(/^(?:\d{47}|\d{48})$/),
     supplierName: z.string().trim().min(1).max(200),
-    supplierTaxId: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14)),
+    supplierTaxId: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14)).nullable().optional(),
+    fiscalIdentity: z.object({
+      documentKind: z.enum(["das", "darf", "dctfweb", "dare", "municipal_tax"]),
+      collectorName: z.string().trim().min(3).max(200),
+      taxpayerName: z.string().trim().min(3).max(200),
+      taxpayerTaxId: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14)),
+      documentNumber: z.string().trim().min(1).max(80).optional(),
+      revenueCodes: z.array(z.string().trim().regex(/^\d{3,10}$/)).max(20).optional(),
+    }).strict().optional(),
     customerAccount: z.string().trim().min(5).max(24).optional(),
     serviceNumbers: z.array(z.string().trim().min(10).max(24)).min(1).max(20).optional(),
     serviceType: z.enum(["mobile", "landline"]).optional(),
@@ -31,13 +39,23 @@ const schema = z.object({
     accountPlanId: z.string().trim().min(1).max(180),
     amountCents: z.number().int().positive(),
   }).strict()).min(2).max(20).optional(),
+  expenseAccountingConfirmation: z.object({
+    accountPlanId: z.string().trim().min(1).max(180),
+    resultCenterId: z.string().trim().min(1).max(180),
+    apportionments: z.array(z.object({
+      resultCenter: z.string().trim().min(1).max(180),
+      percentage: z.number().positive().max(100),
+    }).strict()).min(2).max(20).refine((rows) => Math.abs(rows.reduce((sum, row) => sum + row.percentage, 0) - 100) < 0.001).optional(),
+  }).strict().optional(),
 }).strict().refine((input) => input.resolutionOnly !== true || Boolean(input.expenseId), {
   message: "A identificação sem vínculo exige uma despesa existente.",
 }).refine((input) => !input.expenseId || !input.accountAllocations, {
   message: "A apropriação informada só pode ser aplicada ao conciliar uma previsão.",
-}).refine((input) => !input.expenseId || (!input.provisionExpenseId && !input.documentConfirmation), {
-  message: "A confirmação documental só pode ser aplicada ao conciliar uma previsão.",
-}).refine((input) => Boolean(input.provisionExpenseId) === Boolean(input.documentConfirmation), {
+}).refine((input) => !input.expenseId || !input.provisionExpenseId, {
+  message: "A previsão não pode ser informada com uma despesa real.",
+}).refine((input) => Boolean(input.expenseAccountingConfirmation) === Boolean(input.expenseId && input.documentConfirmation), {
+  message: "O vínculo documental com despesa real exige confirmação da classificação contábil.",
+}).refine((input) => Boolean(input.provisionExpenseId) === Boolean(!input.expenseId && input.documentConfirmation), {
   message: "A previsão e a confirmação documental devem ser informadas juntas.",
 }).refine((input) => input.resolutionOnly !== true || (!input.provisionExpenseId && !input.documentConfirmation), {
   message: "A identificação sem vínculo não aceita confirmação documental.",
@@ -120,6 +138,8 @@ export const POST = secureRoute({ contract, enforcer,
           actor.workspace_id,
           input.installmentNumber ?? null,
           input.resolutionOnly === true,
+          input.documentConfirmation,
+          input.expenseAccountingConfirmation,
         )
       : await linkSuggestedInboxCharge(
           id,
