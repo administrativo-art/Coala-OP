@@ -69,7 +69,7 @@ function ParcelRow({ parcel, usualRate, verdict, onOpen }: { parcel: ReceiptParc
     <span className="tabular-nums font-bold text-ds-ink">{parcelNumber(parcel)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.expectedDate)}</span>
     <span className="tabular-nums text-ds-ink-muted">{dayLabel(parcel.paidDate)}</span>
-    <span className="text-right tabular-nums text-ds-ink-muted">{rateLabel(parcelFeeRate(parcel))}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted" title={parcel.source === "pix" && usualRate !== null ? `Pix: a Stone cobra ${rateLabel(usualRate)} e corta os centavos para baixo; por isso a taxa efetiva de cada venda varia.` : undefined}>{rateLabel(parcelFeeRate(parcel))}</span>
     <span className="text-right tabular-nums font-bold text-ds-ink">{centsLabel(parcel.paidNetCents ?? parcel.expectedNetCents)}</span>
     <span className="flex gap-1">{parcel.status !== "review" ? <StatusPill variant={status.variant}>{status.label}</StatusPill> : null}{problems.map(problem => <StatusPill key={problem.label} variant={problem.variant} title={problem.hint}>{problem.label}</StatusPill>)}{verdict && verdict.tone !== "ok" && verdict.tone !== "info" ? <StatusPill variant={verdict.tone}>{verdict.label}</StatusPill> : null}</span>
   </LiftRow>;
