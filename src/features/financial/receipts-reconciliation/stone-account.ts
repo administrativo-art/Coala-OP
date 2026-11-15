@@ -194,7 +194,7 @@ function cardParcel(origin: Pick<StoneTransaction, "transactionId" | "brandCode"
     installment,
     installmentCount: origin?.installmentCount ?? 1,
     brandCode: origin?.brandCode ?? null,
-    brand: origin ? stoneBrandName(origin.brandCode) : null,
+    brand: origin?.brandCode ? stoneBrandName(origin.brandCode) : null,
     modality: origin ? cardModality(origin) : "other",
     saleDate: captureDate(origin?.captureLocalDateTime ?? null) ?? fallbackSaleDate,
     saleTime: captureTime(origin?.captureLocalDateTime ?? null),
@@ -218,12 +218,30 @@ function paidStatus(expected: string | null, paid: string, chargeback: boolean):
   return "paid";
 }
 
+/** Datas de captura que faltam para explicar pagamentos do período (venda capturada antes do primeiro arquivo lido). */
+export function missingOriginDates(files: StoneFile[], from: string, maxDays = 400, maxDates = 60) {
+  const captured = new Set<string>();
+  for (const file of files) for (const transaction of file.transactions) {
+    if (transaction.sourceSection === "FinancialTransactions" && transaction.events.Captures > 0) captured.add(transaction.transactionId);
+  }
+  const floor = addDays(from, -maxDays);
+  const dates = new Set<string>();
+  for (const file of files) for (const transaction of file.transactions) {
+    if (transaction.sourceSection !== "FinancialTransactionsAccounts" || transaction.events.Payments <= 0 || captured.has(transaction.transactionId)) continue;
+    const date = captureDate(transaction.captureLocalDateTime);
+    if (date && date < from && date >= floor) dates.add(date);
+  }
+  return [...dates].sort().reverse().slice(0, maxDates);
+}
+
 /** Monta as parcelas do período a partir das fontes já lidas e validadas pelo servidor. */
 export function buildStoneAccountParcels(input: {
   from: string; through: string; latestPublished: string;
   files: StoneFile[]; missingDates: string[];
   portfolio: StonePortfolioParcel[] | null;
   pix: PixSettlementEvidence[];
+  /** Arquivos de dias anteriores ao período, lidos só para achar a captura de vendas pagas no período (bandeira, previsão, MDR). */
+  originFiles?: StoneFile[];
 }) {
   const parcels = new Map<string, ReceiptParcel>();
   const conflicts = new Set<string>();
@@ -246,11 +264,19 @@ export function buildStoneAccountParcels(input: {
       }
     }
   }
+  // Captura de vendas de meses anteriores: só consulta, não gera parcelas pendentes.
+  const lookup = new Map(origins);
+  for (const file of input.originFiles ?? []) {
+    for (const transaction of file.transactions) {
+      if (transaction.sourceSection === "FinancialTransactions" && transaction.events.Captures > 0 && transaction.installments.length
+        && !lookup.has(transaction.transactionId)) lookup.set(transaction.transactionId, { transaction, file });
+    }
+  }
 
   const portfolioById = new Map((input.portfolio ?? []).map(row => [`${row.transactionId}:${row.installment}`, row]));
   // O arquivo do dia do pagamento nem sempre traz a data prevista: buscar na captura ou na carteira.
   const originExpected = (transactionId: string, number: number) =>
-    origins.get(transactionId)?.transaction.installments.find(row => row.number === number)?.expectedPaymentDate
+    lookup.get(transactionId)?.transaction.installments.find(row => row.number === number)?.expectedPaymentDate
     ?? portfolioById.get(`${transactionId}:${number}`)?.dueDate ?? null;
 
   // Pagamentos efetivos na conta Stone: evento Payments no dia do arquivo.
@@ -265,8 +291,8 @@ export function buildStoneAccountParcels(input: {
         const anticipation = stoneDecimalCents(installment.advanceRateAmount);
         const expected = installment.advancedReceivableOriginalPaymentDate ?? installment.originalPaymentDate ?? installment.expectedPaymentDate
           ?? originExpected(transaction.transactionId, installment.number);
-        const origin = origins.get(transaction.transactionId)?.transaction ?? transaction;
-        const originInstallment = origins.get(transaction.transactionId)?.transaction.installments.find(row => row.number === installment.number);
+        const origin = lookup.get(transaction.transactionId)?.transaction ?? transaction;
+        const originInstallment = lookup.get(transaction.transactionId)?.transaction.installments.find(row => row.number === installment.number);
         put(cardParcel(origin, transaction.transactionId, installment.number, {
           grossCents: gross,
           ...resolveFee(stoneDecimalCents(installment.mdrAmount ?? originInstallment?.mdrAmount), gross, net, anticipation),
@@ -423,7 +449,7 @@ export function groupReceiptWeeks(days: ReceiptDay[]): ReceiptWeek[] {
 }
 
 const MODALITY_LABEL: Record<ReceiptModality, string> = {
-  pix: "Pix", debit: "Débito", credit: "Crédito à vista", installment: "Crédito parcelado", other: "Outro produto",
+  pix: "Pix", debit: "Débito", credit: "Crédito à vista", installment: "Crédito parcelado", other: "Tipo não informado",
 };
 export const receiptModalityLabel = (modality: ReceiptModality) => MODALITY_LABEL[modality];
 const MODALITY_ORDER: ReceiptModality[] = ["pix", "debit", "credit", "installment", "other"];
@@ -472,10 +498,10 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
   const groups: ReceiptGroup[] = [];
   const pix = cohort.filter(row => row.modality === "pix");
   if (pix.length) groups.push(build("pix", null, "Pix", "pix", null, null, pix));
-  const brands = [...new Set(cohort.filter(row => row.source === "card").map(row => row.brand ?? "Bandeira não informada"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const brands = [...new Set(cohort.filter(row => row.source === "card").map(row => row.brand ?? "Sem bandeira no arquivo"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   for (const brand of brands) {
     for (const modality of MODALITY_ORDER.slice(1)) {
-      const rows = cohort.filter(row => row.source === "card" && (row.brand ?? "Bandeira não informada") === brand && row.modality === modality);
+      const rows = cohort.filter(row => row.source === "card" && (row.brand ?? "Sem bandeira no arquivo") === brand && row.modality === modality);
       if (!rows.length) continue;
       const key = `${brand}|${modality}`;
       groups.push(build(key, null, `${brand} · ${MODALITY_LABEL[modality]}`, modality, brand, null, rows));
@@ -491,7 +517,7 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
 /** Grupo usado para comparar a taxa de uma venda: bandeira, modalidade e, no parcelado, nº de parcelas. */
 export function receiptGroupKey(parcel: Pick<ReceiptParcel, "modality" | "brand" | "installmentCount" | "source">) {
   if (parcel.modality === "pix") return "pix";
-  const base = `${parcel.brand ?? "Bandeira não informada"}|${parcel.modality}`;
+  const base = `${parcel.brand ?? "Sem bandeira no arquivo"}|${parcel.modality}`;
   return parcel.modality === "installment" ? `${base}|${parcel.installmentCount}` : base;
 }
 

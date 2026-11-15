@@ -47,9 +47,43 @@ export const checkView: Record<AuditCheckResult, { symbol: string; className: st
   wait: { symbol: "◷", className: "bg-ds-info-bg text-ds-info", label: "em andamento" },
 };
 
+/** Bandeira e modalidade, sem o número da parcela (a parcela tem coluna própria). */
+export function parcelKind(parcel: ReceiptParcel) {
+  if (parcel.source === "pix") return "Pix";
+  const modality = parcel.modality === "debit" ? "débito" : parcel.modality === "credit" ? "crédito à vista"
+    : parcel.modality === "installment" ? "crédito parcelado" : "tipo não informado";
+  return `${parcel.brand ?? "Cartão sem bandeira"} ${modality}`;
+}
+/** Parcela no formato número/total: Pix e à vista = 1/1; crédito em 3x = 1/3, 2/3, 3/3. */
+export const parcelNumber = (parcel: Pick<ReceiptParcel, "installment" | "installmentCount">) => `${parcel.installment}/${Math.max(parcel.installmentCount, parcel.installment)}`;
+
 export function parcelTitle(parcel: ReceiptParcel) {
   if (parcel.source === "pix") return "Pix";
   const modality = parcel.modality === "debit" ? "débito" : parcel.modality === "credit" ? "crédito à vista"
-    : parcel.modality === "installment" ? "crédito parcelado" : "outro produto";
+    : parcel.modality === "installment" ? "crédito parcelado" : "tipo não informado";
   return `${parcel.brand ?? "Cartão"} ${modality}${parcel.installmentCount > 1 ? ` ${parcel.installment}/${parcel.installmentCount}` : ""}`;
+}
+
+export type ParcelProblem = { label: string; hint: string; variant: StatusPillVariant };
+
+/**
+ * O que precisa ser conferido numa parcela, com nome curto para a tabela e explicação para o cursor.
+ * Substitui o genérico "Conferir": cada pendência diz qual é o problema.
+ */
+export function parcelProblems(parcel: ReceiptParcel, usualRate: number | null): ParcelProblem[] {
+  const list: ParcelProblem[] = [];
+  if (parcel.status === "review") {
+    if (!parcel.expectedDate && parcel.paidDate) list.push({ label: "Venda não localizada", variant: "warn",
+      hint: "A Stone pagou, mas a venda de origem não está nos arquivos lidos; sem ela não há data prevista nem bandeira." });
+    else if (!parcel.expectedDate) list.push({ label: "Sem data prevista", variant: "warn",
+      hint: "A Stone não informou quando esta parcela será paga." });
+    else list.push({ label: "Dados divergentes", variant: "warn",
+      hint: "Dois arquivos da Stone trazem valores diferentes para a mesma parcela, ou a carteira a marcou para revisão." });
+  }
+  if (parcel.feeSource === "derived") list.push({ label: "Taxa sem MDR", variant: "warn",
+    hint: "A Stone não mandou o MDR; a taxa foi calculada como bruto − líquido − antecipação." });
+  else if (parcel.feeCents !== null && usualRate !== null && parcel.grossCents > 0
+    && Math.abs(parcel.feeCents - Math.round(parcel.grossCents * usualRate)) > 1) list.push({ label: "Taxa fora da atual", variant: "warn",
+    hint: `Cobrado ${rateLabel(parcel.feeCents / parcel.grossCents)}; a taxa atual do grupo é ${rateLabel(usualRate)}. Decida na aba Taxas.` });
+  return list;
 }

@@ -4,6 +4,7 @@ import { parseStoneAgendaXml } from "../../src/lib/integrations/stone/agenda-par
 import { stoneAccountKind, stoneBrandName } from "../../src/lib/integrations/stone/stone-codes";
 import {
   buildStoneAccountParcels,
+  missingOriginDates,
   groupReceiptWeeks,
   cardSaleInstallments,
   receiptGroupKey,
@@ -16,6 +17,7 @@ import {
   usualRate,
   type SaleAudit,
 } from "../../src/features/financial/receipts-reconciliation/stone-account";
+import { parcelProblems } from "../../src/features/financial/receipts-reconciliation/stone-account-format";
 
 const events = (values: Partial<Record<string, number>> = {}) => `<Events>${["Captures", "Payments", "Cancellations", "CancellationCharges", "Chargebacks", "ChargebackRefunds"]
   .map(name => `<${name}>${values[name] ?? 0}</${name}>`).join("")}</Events>`;
@@ -285,4 +287,34 @@ test("antecipações: só parcelas pagas antes do vencimento, com dias, custo e 
   assert.ok(Math.abs((item.monthlyRate ?? 0) - 169 / (7769 * 7 / 30)) < 1e-12);
   assert.ok(Math.abs((weightedMonthlyRate(items) ?? 0) - (item.monthlyRate ?? 0)) < 1e-12);
   assert.deepEqual(anticipationWeeks(items).map(week => week.from), ["2026-11-02"]);
+});
+
+test("venda de mês anterior paga no período: a captura antiga dá bandeira e previsão; sem ela, 'Venda não localizada'", () => {
+  // O pagamento da Stone não traz bandeira nem tipo de conta: só a captura (no arquivo do dia da venda) traz.
+  const payment = transaction("october-credit", { capture: "20261007151700", events: { Payments: 1 },
+    installments: [{ n: 1, gross: "21.00", net: "20.53", payment: "20261106", paymentId: "p-oct" }] })
+    .replace(/<AccountType>[^<]*<\/AccountType><BrandId>[^<]*<\/BrandId>/, "");
+  const capture = transaction("october-credit", { capture: "20261007151700", brand: "2", account: "2", captured: "21.00",
+    installments: [{ n: 1, gross: "21.00", net: "20.53", mdr: "0.47", prevision: "20261106" }] });
+  const month = [file("2026-11-06", "", payment)];
+  assert.deepEqual(missingOriginDates(month, "2026-11-01"), ["2026-10-07"]);
+
+  const without = buildStoneAccountParcels({ from: "2026-11-01", through: "2026-11-06", latestPublished: "2026-11-06",
+    files: month, missingDates: [], portfolio: null, pix: [] }).parcels[0];
+  assert.equal(without.status, "review");
+  assert.equal(without.brand, null);
+  assert.deepEqual(parcelProblems(without, null).map(problem => problem.label), ["Venda não localizada", "Taxa sem MDR"]);
+
+  const built = buildStoneAccountParcels({ from: "2026-11-01", through: "2026-11-06", latestPublished: "2026-11-06",
+    files: month, missingDates: [], portfolio: null, pix: [], originFiles: [file("2026-10-07", capture)] });
+  // A captura antiga só explica o pagamento: não cria parcela pendente de outubro.
+  assert.equal(built.parcels.length, 1);
+  const parcel = built.parcels[0];
+  assert.equal(parcel.brand, "Mastercard");
+  assert.equal(parcel.modality, "credit");
+  assert.equal(parcel.expectedDate, "2026-11-06");
+  assert.equal(parcel.status, "paid");
+  assert.equal(parcel.feeSource, "stone");
+  assert.deepEqual(parcelProblems(parcel, 0.0224).map(problem => problem.label), []);
+  assert.deepEqual(parcelProblems(parcel, 0.0199).map(problem => problem.label), ["Taxa fora da atual"]);
 });
