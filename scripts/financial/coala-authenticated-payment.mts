@@ -17,7 +17,7 @@ import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJso
 import { startMemorySessionServer, tokenFromMemorySession } from "./payment-cli-memory-session";
 import { readHiddenPassword, setTerminalEcho } from "./payment-cli-password";
 import { expenseBoletoSchema, validateExpenseBoleto } from "../../src/features/financial/payment-requests/expense-boleto";
-import { assertConfirmedExistingExpense, confirmFinancialInboxDocument } from "../../src/features/financial/inbox/confirmed-document";
+import { assertConfirmedExistingExpense, confirmFinancialInboxDocument, supplierNamesAreCompatible } from "../../src/features/financial/inbox/confirmed-document";
 import { forecastAllocationsMatchConfirmedAmount, parseConfirmedAccountAllocations } from "../../src/features/financial/inbox/account-allocation-confirmation";
 import { inboxDareExpenseFingerprint, inboxDareExpenseSchema } from "../../src/features/financial/inbox/expense-create-contract";
 import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
@@ -889,6 +889,9 @@ async function main() {
     if (!provision || provision.id !== provisionId || provision.provisionType !== "forecast" || provision.status !== "provisioned"
       || provision.provisionCompetence !== confirmation.competence) {
       throw new PaymentCliError("A previsão não está aberta para a competência confirmada. Nenhum vínculo foi feito.");
+    }
+    if (!supplierNamesAreCompatible(confirmation.supplierName, provision.supplier)) {
+      throw new PaymentCliError("O fornecedor confirmado não corresponde à previsão. Confira o nome na guia antes do vínculo; nenhum vínculo foi feito.");
     }
     if (!accountAllocations && !forecastAllocationsMatchConfirmedAmount(provision, confirmation.amountCents)) {
       throw new PaymentCliError("As apropriações da previsão não somam a guia; informe --account-allocations-file com os componentes reais. Nenhum vínculo foi feito.");

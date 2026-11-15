@@ -5,6 +5,7 @@ import {
   canCreateCorrectedPaymentRequest,
   canRetryDefinitivelyRejectedPayment,
   hasFreshClearBankPreflight,
+  omitRejectedBeneficiaryDocument,
   paymentSubmissionAttemptCount,
 } from "../../../src/features/financial/payment-requests/submission-retry";
 
@@ -51,4 +52,18 @@ test("bloqueia retomada de resultado ambíguo ou já identificado no banco", () 
   assert.equal(canRetryDefinitivelyRejectedPayment({ ...rejected, lastError: { code: "INTER_REQUEST_FAILED" } }), false);
   assert.equal(canRetryDefinitivelyRejectedPayment({ ...rejected, interRequestId: "bank_1" }), false);
   assert.equal(canRetryDefinitivelyRejectedPayment({ ...rejected, status: "ready_to_submit" }), false);
+});
+
+test("omite CNPJ opcional apenas no retry da caixa após recusa explícita do Inter", () => {
+  const request = {
+    ...rejected,
+    sourceType: "financial_inbox",
+    paymentRail: "barcode",
+    lastError: { code: "INTER_HTTP_400", details: '{"detail":"CPF/CNPJ do beneficiário incorreto! Acerte o dado informado ou remova o atributo enviado."}' },
+  };
+  assert.equal(omitRejectedBeneficiaryDocument(request), true);
+  assert.equal(omitRejectedBeneficiaryDocument({ ...request, sourceType: "expense_boleto" }), false);
+  assert.equal(omitRejectedBeneficiaryDocument({ ...request, submissionAttemptCount: 2 }), false);
+  assert.equal(omitRejectedBeneficiaryDocument({ ...request, interRequestId: "bank_1" }), false);
+  assert.equal(omitRejectedBeneficiaryDocument({ ...request, lastError: { code: "INTER_HTTP_400", details: "CPF/CNPJ incorreto" } }), false);
 });

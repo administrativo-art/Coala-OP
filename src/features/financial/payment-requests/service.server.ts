@@ -39,7 +39,7 @@ import {
 } from "./barcode-amounts";
 import { comparePaymentReceiverToSnapshot, findExactPixReceiverDocument } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
-import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, hasFreshClearBankPreflight, paymentSubmissionAttemptCount } from "./submission-retry";
+import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, hasFreshClearBankPreflight, omitRejectedBeneficiaryDocument, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
 import {
   FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
@@ -1263,6 +1263,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       throw new Error(`A solicitação está em ${current.status} e não pode ser enviada ao banco.`);
     }
     const retryingDefinitiveRejection = canRetryDefinitivelyRejectedPayment(current);
+    const omitBeneficiaryDocumentOnRetry = omitRejectedBeneficiaryDocument(current);
     if (current.status === "failed" && !retryingDefinitiveRejection) {
       throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
     }
@@ -1468,8 +1469,9 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       at: submissionStartedAt,
       actorId: actor === "system" ? "system" : actor.uid,
       actorEmail: actor === "system" ? null : actor.email ?? null,
+      ...(omitBeneficiaryDocumentOnRetry ? { beneficiaryDocumentOmittedAfterInterRejection: true } : {}),
     });
-    return { ...current, ...patch } as BankPaymentRequest;
+    return { ...current, ...patch, omitBeneficiaryDocumentOnRetry } as BankPaymentRequest & { omitBeneficiaryDocumentOnRetry: boolean };
   });
   try {
     if (pending.paymentRail === "barcode") {
@@ -1503,7 +1505,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           amount: pending.requestedSettlementAmount ?? pending.amount,
           dueDate: pending.barcodeSnapshot.dueDate,
           scheduledFor: pending.barcodeSnapshot.scheduledFor,
-          beneficiaryDocument: pending.barcodeSnapshot.beneficiaryDocument,
+          beneficiaryDocument: pending.omitBeneficiaryDocumentOnRetry ? null : pending.barcodeSnapshot.beneficiaryDocument,
         });
       const interRequestId = String(result.codigoTransacao ?? "");
       if (!interRequestId) throw new Error("O Banco Inter não retornou o código da transação.");
