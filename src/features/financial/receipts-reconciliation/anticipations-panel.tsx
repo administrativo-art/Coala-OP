@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MonthSelect } from "./month-select";
 import type { MappingView } from "../agent/configuration";
 import type { StoneAccountMonthResult } from "./reconciliation.server";
 import type { StoneReceiptSavedResult } from "./stone-account-snapshot.server";
@@ -14,7 +14,7 @@ import { centsLabel, dayLabel, rateLabel } from "./stone-account-format";
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const th = "whitespace-nowrap border-y border-ds-divider bg-ds-muted px-[18px] py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
-const td = "border-b border-ds-divider px-[18px] py-2.5 align-top text-[13.5px]";
+const td = "whitespace-nowrap border-b border-ds-divider px-[18px] py-2.5 align-middle text-[13.5px]";
 const currentMonth = () => new Date(Date.now() - 8 * 3_600_000 - 86_400_000).toISOString().slice(0, 7);
 
 /**
@@ -73,7 +73,7 @@ export function StoneAnticipationsTable({ mapping, stoneCode }: { mapping: Mappi
         <p className="text-[12.5px] text-ds-ink-muted">Custo {centsLabel(totalCost)} · taxa efetiva {rateLabel(weightedMonthlyRate(items))} a.m.{savedAt ? ` · conferido automaticamente em ${new Date(savedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : result ? " · conferido agora" : ""}</p>
       </div>
       <label className="ml-auto grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Mês do pagamento
-        <Input aria-label="Mês do pagamento das antecipações" type="month" value={month} onChange={event => { setMonth(event.target.value); setResult(null); setOpenWeeks(new Set()); }} className="w-[170px] normal-case tracking-normal" />
+        <MonthSelect label="Mês do pagamento das antecipações" value={month} onChange={value => { setMonth(value); setResult(null); setOpenWeeks(new Set()); }} />
       </label>
       <Button type="button" variant="ds-secondary" size="md" disabled={busy} onClick={() => void reconfer()}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Conferindo…" : "Reconferir agora"}</Button>
     </header>
@@ -84,22 +84,22 @@ export function StoneAnticipationsTable({ mapping, stoneCode }: { mapping: Mappi
       <tbody>{weeks.length ? weeks.map(week => {
         const open = openWeeks.has(week.from);
         return <Fragment key={week.from}>
-          <tr className="cursor-pointer [&>td]:bg-ds-muted hover:[&>td]:bg-ds-seg/60" onClick={() => toggle(week.from)} aria-expanded={open}>
+          <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggle(week.from)} aria-expanded={open}>
             <td colSpan={4} className={`${td} py-3`}><span className="inline-flex items-center gap-1">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}
               <strong className="inline-block min-w-[150px] font-extrabold text-ds-ink">Semana de {Number(week.from.slice(8))} {MONTHS[Number(week.from.slice(5, 7)) - 1]}</strong>
               <span className="border-l-2 border-ds-ink-faint pl-3 text-[12.5px] font-semibold leading-none text-ds-ink-muted">{week.items.length} parcela(s)</span></span></td>
-            <td className={`${td} py-3 text-right font-ds-mono font-bold`}>{centsLabel(week.baseCents)}</td>
-            <td className={`${td} py-3 text-right font-ds-mono`}>{centsLabel(week.costCents)}</td>
-            <td className={`${td} py-3 text-right font-ds-mono`}>{rateLabel(week.monthlyRate)}</td>
+            <td className={`${td} py-3 text-right tabular-nums font-bold`}>{centsLabel(week.baseCents)}</td>
+            <td className={`${td} py-3 text-right tabular-nums`}>{centsLabel(week.costCents)}</td>
+            <td className={`${td} py-3 text-right tabular-nums`}>{rateLabel(week.monthlyRate)}</td>
           </tr>
           {open ? week.items.map(item => <tr key={item.id}>
-            <td className={`${td} pl-11 font-ds-mono`}>{dayLabel(item.paidDate)}</td>
-            <td className={`${td} font-ds-mono`}>{dayLabel(item.originalDate)}</td>
+            <td className={`${td} pl-11 tabular-nums`}>{dayLabel(item.paidDate)}</td>
+            <td className={`${td} tabular-nums`}>{dayLabel(item.originalDate)}</td>
             <td className={td}>{item.brand ?? "Cartão"} · {receiptModalityLabel(item.modality)}{item.installmentCount > 1 ? ` ${item.installment}/${item.installmentCount}` : ""}</td>
-            <td className={`${td} text-right font-ds-mono`}>{item.days}</td>
-            <td className={`${td} text-right font-ds-mono`}>{centsLabel(item.baseCents)}</td>
-            <td className={`${td} text-right font-ds-mono`}>{centsLabel(item.costCents)}</td>
-            <td className={`${td} text-right font-ds-mono`}>{rateLabel(item.monthlyRate)}</td>
+            <td className={`${td} text-right tabular-nums`}>{item.days}</td>
+            <td className={`${td} text-right tabular-nums`}>{centsLabel(item.baseCents)}</td>
+            <td className={`${td} text-right tabular-nums`}>{centsLabel(item.costCents)}</td>
+            <td className={`${td} text-right tabular-nums`}>{rateLabel(item.monthlyRate)}</td>
           </tr>) : null}
         </Fragment>;
       }) : <tr><td colSpan={7} className={`${td} py-8 text-center text-ds-ink-muted`}>Nenhuma parcela antecipada neste mês.</td></tr>}</tbody>

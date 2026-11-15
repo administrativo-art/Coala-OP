@@ -70,7 +70,8 @@ async function readSource(stoneCode: string) {
 
 /** One read per day. Completed days are cached, so regular runs call Stone only
  * for newly published files and never consume the rate limit on every page view. */
-async function readDay(stoneCode: string, referenceDate: string) {
+/** Lê o arquivo diário da Stone pelo cache imutável (stonePortfolioFiles); busca e guarda na primeira vez. */
+export async function readDay(stoneCode: string, referenceDate: string) {
   const ref = financialDbAdmin.collection(fileCollection).doc(fileId(stoneCode, referenceDate));
   const cached = await ref.get();
   let xml: string;
