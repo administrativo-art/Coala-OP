@@ -26,6 +26,8 @@ import {
 } from "./automation-settings.server";
 import { shouldAttemptFinancialInboxDocumentAi, triageFinancialInboxMessage } from "./triage-policy";
 import { canCommitFinancialInboxAnalysis } from "./analysis-commit-policy";
+import { forecastAllocationsMatchConfirmedAmount } from "./account-allocation-confirmation";
+import { forecastWorkspaceMatches } from "./forecast-workspace";
 import {
   automaticReminderResolutionPatch,
   discardedFinancialInboxResolution,
@@ -711,6 +713,9 @@ export async function linkSuggestedInboxCharge(
     if (provision.provisionCompetence !== classification.competence) {
       throw new Error("A competência da cobrança diverge do provisionamento.");
     }
+    if (!validatedAccountAllocations && !forecastAllocationsMatchConfirmedAmount(provision, classification.amountCents)) {
+      throw new Error("A apropriação da previsão não soma o valor confirmado; informe os componentes reais da guia.");
+    }
     if (["tax", "fgts", "inss_darf"].includes(classification.documentType)
       && !classification.fiscalIdentity) {
       throw new Error("Reanalise o documento fiscal antes de vincular a cobrança à previsão.");
@@ -737,8 +742,7 @@ export async function linkSuggestedInboxCharge(
         throw new Error("A conta e a linha telefônica confirmadas devem corresponder à previsão.");
       }
     }
-    if (provision.workspaceId !== expectedWorkspaceId
-      && !(provision.workspaceId == null && verifiedTelecomIdentity)) {
+    if (!forecastWorkspaceMatches(provision, expectedWorkspaceId, verifiedTelecomIdentity)) {
       throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
     }
     const provisionMatch = scoreProvisionCandidate(classification, {
@@ -922,6 +926,7 @@ export async function linkSuggestedInboxCharge(
         accountPlanName: allocation.accountPlanName,
         amount: allocation.amount,
       })) ?? null,
+      accountAllocationsReplaced: Boolean(validatedAccountAllocations),
     });
     return {
       message: { ...message, classification, linkedExpenseId: actualRef.id, linkedProvisionId: provisionId },
