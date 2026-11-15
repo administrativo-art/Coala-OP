@@ -244,6 +244,26 @@ export function resolveCardFee(values: { mdr?: string | null; gross?: string | n
     : { feeCents: unitsToCents(retained), feeSource: "derived", feeRate: null };
 }
 
+/**
+ * Pix: o arquivo traz a taxa em centavos inteiros; a Stone aplica a taxa nominal sobre o bruto e corta
+ * os centavos para baixo (nov/2026: 583 de 583 vendas a 0,75%). Por isso a taxa efetiva de cada venda
+ * varia (R$ 5,00 → R$ 0,03 = 0,60%) sem que a taxa contratada tenha mudado.
+ */
+export function pixFeeForRate(grossCents: number, rate: number) {
+  return Math.floor((grossCents * Math.round(rate * 10_000)) / 10_000);
+}
+/** Taxa nominal (grade de 0,01%, até 5%) que explica o maior número de vendas pela regra de corte; desempata pela menor. */
+export function truncatedNominalRate(rows: Array<{ grossCents: number; feeCents: number | null }>) {
+  const valid = rows.filter(row => row.feeCents !== null && row.grossCents > 0);
+  let best: number | null = null; let bestCount = 0;
+  for (let basisPoints = 0; basisPoints <= 500; basisPoints++) {
+    const rate = basisPoints / 10_000;
+    const count = valid.filter(row => pixFeeForRate(row.grossCents, rate) === row.feeCents).length;
+    if (count > bestCount) { best = rate; bestCount = count; }
+  }
+  return best;
+}
+
 /** Taxa da parcela: a exata (MDR ou líquido com mais de 2 casas) quando houver; senão taxa em centavos ÷ bruto. */
 export function parcelFeeRate(parcel: { feeRate?: number | null; feeCents: number | null; grossCents: number | null }) {
   if (typeof parcel.feeRate === "number") return parcel.feeRate;
@@ -548,7 +568,10 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
   };
   const groups: ReceiptGroup[] = [];
   const pix = cohort.filter(row => row.modality === "pix");
-  if (pix.length) groups.push(build("pix", null, "Pix", "pix", null, null, pix));
+  if (pix.length) {
+    const group = build("pix", null, "Pix", "pix", null, null, pix);
+    groups.push({ ...group, usualRate: truncatedNominalRate(pix) ?? group.usualRate });
+  }
   const brands = [...new Set(cohort.filter(row => row.source === "card").map(row => row.brand ?? "Sem bandeira no arquivo"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   for (const brand of brands) {
     for (const modality of MODALITY_ORDER.slice(1)) {
@@ -730,7 +753,9 @@ export function saleAuditChecks(audit: SaleAudit, groupUsualRate: number | null)
   const gross = installmentGross ?? captured;
   const fee = audit.installments.every(row => row.feeCents !== null) ? audit.installments.reduce((sum, row) => sum + (row.feeCents ?? 0), 0) : null;
   const rate = audit.installments.length && audit.installments.every(row => row.grossCents) ? weightedFeeRate(audit.installments) : gross && fee !== null ? fee / gross : null;
-  const rateDiffers = rate !== null && groupUsualRate !== null && Math.abs(roundedRate(rate) - groupUsualRate) > 0.00005;
+  const rateDiffers = audit.source === "pix"
+    ? groupUsualRate !== null && gross !== null && fee !== null && fee !== pixFeeForRate(gross, groupUsualRate)
+    : rate !== null && groupUsualRate !== null && Math.abs(roundedRate(rate) - groupUsualRate) > 0.00005;
   const derivedFee = audit.installments.some(row => row.feeSource === "derived");
   add("Taxa conforme o grupo", "Taxa praticada × taxa mais comum no mesmo cartão e parcelas", `${percent(rate)}${derivedFee ? " (proposta)" : ""}`, groupUsualRate === null ? "sem referência" : `habitual ${percent(groupUsualRate)}`,
     rate === null || derivedFee ? "warn" : groupUsualRate === null ? "wait" : rateDiffers ? "warn" : "ok",

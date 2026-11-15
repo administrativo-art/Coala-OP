@@ -38,7 +38,7 @@ function Card({ kick, title, sub, aside, children, open, onToggle }: { kick: str
  * Taxas (layout E1): mudanças de taxa a confirmar, vendas a corrigir, outras cobranças, histórico,
  * taxas atuais e decisões. Referência = taxa atual por recorrência confirmada pelo operador, não o contrato.
  */
-export function StoneFeeReviewPanel({ mapping, stoneCode, onPending }: { mapping: MappingView; stoneCode: string; onPending?: (count: number | null) => void }) {
+export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChange }: { mapping: MappingView; stoneCode: string; onPending?: (count: number | null) => void; onMonthChange?: (month: string) => void }) {
   const api = useAuthenticatedApi();
   const [month, setMonth] = useState(currentMonth);
   const [view, setView] = useState<FeeReviewView | null>(null);
@@ -66,6 +66,7 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending }: { mapping
     return () => { alive = false; controller.abort(); };
   }, [load, month]);
   useEffect(() => { onPending?.(view ? view.pendingCount : null); }, [view, onPending]);
+  useEffect(() => { onMonthChange?.(month); }, [month, onMonthChange]);
 
   const decide = async (input: Omit<FeeDecisionInput, "kioskId" | "stoneCode" | "month">) => {
     if (saving) return;

@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **568**
-- Totalmente contratados: **241**
+- Arquivos de rota: **569**
+- Totalmente contratados: **242**
 - Legados congelados: **317**
 - Exceções temporárias: **10**
 - Violações: **0**
@@ -297,6 +297,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/pdv-stone-review` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) |
 | `/api/financial/stone-agenda` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-agenda/route.ts](../../src/app/api/financial/stone-agenda/route.ts) |
 | `/api/financial/stone-anticipations` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-anticipations/route.ts](../../src/app/api/financial/stone-anticipations/route.ts) |
+| `/api/financial/stone-fee-expenses` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/stone-fee-expenses/route.ts](../../src/app/api/financial/stone-fee-expenses/route.ts) |
 | `/api/financial/stone-fees` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/stone-fees/route.ts](../../src/app/api/financial/stone-fees/route.ts) |
 | `/api/financial/stone-future-receivables` | POST | `LEGACY_BASELINE` | [src/app/api/financial/stone-future-receivables/route.ts](../../src/app/api/financial/stone-future-receivables/route.ts) |
 | `/api/financial/stone-mappings` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/stone-mappings/route.ts](../../src/app/api/financial/stone-mappings/route.ts) |
