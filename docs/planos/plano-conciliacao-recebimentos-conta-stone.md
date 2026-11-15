@@ -26,6 +26,7 @@ Situação em 2026-11-14. Chamado: `.ai-work/development-technology/2026-11-13-r
 - 2026-11-14 · A rota existente (`POST /api/financial/stone-receipts/reconcile`) passa a aceitar `view: "month" | "sale"`, sem alterar o arquivo da rota. Consulta somente leitura, restrita ao administrador padrão, como antes.
 
 - 2026-11-14 · As quatro telas de recebíveis Stone são conferências independentes, não etapas. A navegação passa a abas sem numeração: A receber, Antecipações, Taxas e Recebido.
+- 2026-11-15 · Os cartões não trazem `MdrAmount`, mas o líquido vem com 6 casas: a taxa passa a ser calculada exata (bruto − líquido − antecipação, sem arredondar), e **Verificar taxa** fica só para líquido em centavos. Novembro: débito 1,46% e crédito à vista 2,22%.
 - 2026-11-14 · Sem MDR no arquivo, a tela propõe a taxa (bruto − líquido − antecipação) e marca **Verificar taxa**. Em análise com o programador: confirmação pelo operador, possivelmente por grupo, com exceção por venda e registro de quem confirmou. Exige uma rota de escrita com `secureRoute`, permissão e auditoria.
 - 2026-11-14 · Problemas observados com dados reais (Quiosque Tirirical, novembro):
   - pagos sem data prevista (corrigido com a data da captura ou da carteira);
