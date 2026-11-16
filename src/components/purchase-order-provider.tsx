@@ -159,7 +159,7 @@ export interface PurchaseOrderContextType {
   createPurchase: (payload: CreatePurchasePayload) => Promise<string | null>;
   updateOrder: (orderId: string, edits: OrderEdits) => Promise<void>;
   updateOrderItem: (orderId: string, itemId: string, edits: OrderItemEdits) => Promise<void>;
-  confirmOrder: (orderId: string) => Promise<void>;
+  confirmOrder: (orderId: string, similarExpenseApproval?: { candidateIds: string[]; reason: string }) => Promise<void>;
   markReceivedElsewhere: (orderId: string, notes?: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
   revertOrderStage: (orderId: string, reason: string) => Promise<{
@@ -167,6 +167,20 @@ export interface PurchaseOrderContextType {
     warning?: string;
   }>;
   fetchOrderItems: (orderId: string) => Promise<PurchaseOrderItem[]>;
+}
+
+export type SimilarPurchaseExpense = {
+  id: string;
+  purchaseOrderId: string;
+  supplier: string;
+  amount: number;
+  status: string;
+};
+
+export class SimilarExpenseApprovalRequired extends Error {
+  constructor(readonly candidates: SimilarPurchaseExpense[]) {
+    super('Há despesas semelhantes. Confira os registros antes de confirmar o pedido.');
+  }
 }
 
 export const PurchaseOrderContext = createContext<PurchaseOrderContextType | undefined>(undefined);
@@ -279,7 +293,7 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
   );
 
   const confirmOrder = useCallback(
-    async (orderId: string) => {
+    async (orderId: string, similarExpenseApproval?: { candidateIds: string[]; reason: string }) => {
       if (!firebaseUser) throw new Error('Usuário não autenticado.');
 
       const token = await firebaseUser.getIdToken();
@@ -287,11 +301,16 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ similarExpenseApproval }),
       });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
+        if (err.code === 'SIMILAR_EXPENSE_APPROVAL_REQUIRED' && Array.isArray(err.candidates)) {
+          throw new SimilarExpenseApprovalRequired(err.candidates);
+        }
         throw new Error(err.error || 'Falha ao confirmar o pedido.');
       }
 
