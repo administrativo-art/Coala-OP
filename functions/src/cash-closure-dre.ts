@@ -21,6 +21,9 @@ export type CashClosureDreSummary = {
   dreRevenueTotalCents: number | null;
   dreCashShortageTotalCents: number | null;
   dreCashSurplusTotalCents: number | null;
+  /** Only days with a complete, current per-operator cash-difference source. */
+  dreCashShortageKnownCents?: number | null;
+  dreCashSurplusKnownCents?: number | null;
   dreCoverage: {
     closureCount: number;
     revenueClosureCount: number;
@@ -95,6 +98,8 @@ export function summarizeCashClosureDre(closures: CashClosureDreSource[]): CashC
     dreRevenueTotalCents: hasRows && revenueRows.length === closures.length ? revenue.amountCents : null,
     dreCashShortageTotalCents: hasRows && cashRows.length === closures.length ? cash.shortageCents : null,
     dreCashSurplusTotalCents: hasRows && cashRows.length === closures.length ? cash.surplusCents : null,
+    dreCashShortageKnownCents: hasRows && cashRows.length > 0 ? cash.shortageCents : null,
+    dreCashSurplusKnownCents: hasRows && cashRows.length > 0 ? cash.surplusCents : null,
     dreCoverage: {
       closureCount: closures.length,
       revenueClosureCount: revenueRows.length,
