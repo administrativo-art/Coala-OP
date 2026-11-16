@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 115.
+Arquivos locais percorridos: 119.
 
 Chamadas candidatas encontradas:
 
@@ -127,6 +127,7 @@ Chamadas candidatas encontradas:
 - `/api/financial/budgets/cash-projections` — interface [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx); rota candidata [`src/app/api/financial/budgets/cash-projections/route.ts`](../../src/app/api/financial/budgets/cash-projections/route.ts)
 - `/api/financial/budgets/centers` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/centers/route.ts`](../../src/app/api/financial/budgets/centers/route.ts)
 - `/api/financial/budgets/person-references` — interface [`src/features/financial/components/settings/budget-api.ts`](../../src/features/financial/components/settings/budget-api.ts); rota candidata [`src/app/api/financial/budgets/person-references/route.ts`](../../src/app/api/financial/budgets/person-references/route.ts)
+- `/api/financial/cash-flow-study` — interface [`src/features/financial/cash-flow-study/cash-flow-study-view.tsx`](../../src/features/financial/cash-flow-study/cash-flow-study-view.tsx); rota candidata [`src/app/api/financial/cash-flow-study/route.ts`](../../src/app/api/financial/cash-flow-study/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/management-analysis` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/management-analysis/route.ts`](../../src/app/api/financial/management-analysis/route.ts)
 - `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
