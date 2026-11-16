@@ -22,6 +22,7 @@ export type DreRevenueSelection = {
   revenueSource: "cash_closure" | "unavailable";
   revenueCoverage: DreCoverageStatus;
   cashDifferenceCoverage: DreCoverageStatus;
+  cashDifferenceProvisional: boolean | null;
   coveredDates: string[];
   /** Coverage concerns observed source data, never monthly closing/finalization. */
   pendingOperatorCount: number | null;
@@ -39,6 +40,8 @@ export function aggregateDreRevenue(rows: readonly DreRevenueSelection[]) {
     revenueCents: sum("revenueCents"),
     cashShortageCents: sum("cashShortageCents"),
     cashSurplusCents: sum("cashSurplusCents"),
+    cashDifferenceProvisional: rows.some(row => row.cashDifferenceProvisional === null)
+      ? null : rows.some(row => row.cashDifferenceProvisional),
     pendingOperatorCount: rows.some(row => row.pendingOperatorCount === null)
       ? null : rows.reduce((value, row) => value + row.pendingOperatorCount!, 0),
     issues: [...new Set(rows.flatMap(row => row.issues))],
@@ -60,6 +63,7 @@ export function selectDreRevenue(input: {
   const result: DreRevenueSelection = {
     revenueCents: null, cashShortageCents: null, cashSurplusCents: null,
     revenueSource: "unavailable", revenueCoverage: "unavailable", cashDifferenceCoverage: "unavailable",
+    cashDifferenceProvisional: null,
     coveredDates: [], pendingOperatorCount: null, issues: [],
   };
   const finish = () => {
@@ -91,6 +95,12 @@ export function selectDreRevenue(input: {
   result.coveredDates = [...dates];
   result.pendingOperatorCount = isCents(coverage.pendingOperatorCount) && coverage.pendingOperatorCount >= 0
     ? coverage.pendingOperatorCount : null;
+  const fallbackCount = coverage.pdvFallbackOperatorCount;
+  result.cashDifferenceProvisional = isCents(fallbackCount) && fallbackCount >= 0
+    && result.pendingOperatorCount !== null && fallbackCount === result.pendingOperatorCount
+    ? fallbackCount > 0 : null;
+  if (result.cashDifferenceProvisional === null) result.issues.push("unknown_cash_difference_source_coverage");
+  else if (result.cashDifferenceProvisional) result.issues.push("pdv_count_provisional");
   if (result.pendingOperatorCount === null) result.issues.push("unknown_operator_finalization_coverage");
   else if (result.pendingOperatorCount > 0) result.issues.push("operators_pending_finalization");
   if ((coverage.staleCashDifferenceClosureCount ?? 0) > 0) result.issues.push("pdv_changed_after_approval");
@@ -102,6 +112,7 @@ export function selectDreRevenue(input: {
   const revenueComplete = knownDaysCovered && covers(coverage.revenueDates, coverage.revenueClosureCount)
     && isCents(row.dreRevenueTotalCents);
   const cashComplete = knownDaysCovered && !(coverage.staleCashDifferenceClosureCount ?? 0)
+    && result.cashDifferenceProvisional !== null
     && covers(coverage.cashDifferenceDates, coverage.cashDifferenceClosureCount)
     && isCents(row.dreCashShortageTotalCents) && row.dreCashShortageTotalCents >= 0
     && isCents(row.dreCashSurplusTotalCents) && row.dreCashSurplusTotalCents >= 0;

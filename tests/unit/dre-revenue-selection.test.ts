@@ -27,7 +27,8 @@ const sales: DreSalesUnitMonthSummary = { ...base, revenue: 999, cmv: 20, dates:
 function summary(): DreClosureUnitMonthSummary {
   return { ...base, id: "month", closureCount: 1, expectedTotalCents: 9_000, differenceTotalCents: -1_000,
     ...summarizeCashClosureDre([{ date: "2026-09-30", pdvSales: { version: 1, amountCents: 10_000 },
-      finalizedCashDifferences: { version: 1, shortageCents: 1_000, surplusCents: 0 }, operatorCount: 2, finalizedOperatorCount: 1 }]) };
+      dreSelectedCashDifferences: { version: 1, shortageCents: 1_000, surplusCents: 0 },
+      drePdvFallbackOperatorCount: 1, operatorCount: 2, finalizedOperatorCount: 1 }]) };
 }
 function select(closureSummaries = [summary()], salesSummaries = [sales]) {
   return selectDreRevenue({ ...base, closureSummaries, salesSummaries });
@@ -40,6 +41,7 @@ test("selects one integral source, separate shortage, and warns about open opera
   assert.equal(value.cashSurplusCents, 0);
   assert.equal(value.revenueCoverage, "complete");
   assert.equal(value.pendingOperatorCount, 1);
+  assert.equal(value.cashDifferenceProvisional, true);
   assert.ok(value.issues.includes("operators_pending_finalization"));
   assert.ok(!value.issues.includes("sales_reports_not_integral_payment_source"));
   assert.deepEqual(value.coveredDates, ["2026-09-30"]);
@@ -47,7 +49,7 @@ test("selects one integral source, separate shortage, and warns about open opera
 
 test("missing/legacy/unknown version summaries never use adjusted expected plus differences or item revenue", () => {
   const legacy = summary(); delete legacy.dreVersion;
-  for (const summaries of [[], [legacy], [{ ...summary(), dreVersion: 99 as 1 }]]) {
+  for (const summaries of [[], [legacy], [{ ...summary(), dreVersion: 99 as 2 }]]) {
     const value = select(summaries);
     assert.equal(value.revenueCents, null);
     assert.equal(value.cashShortageCents, null);
