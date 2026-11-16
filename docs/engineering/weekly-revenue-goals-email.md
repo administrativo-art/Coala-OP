@@ -31,6 +31,7 @@ Enviar uma leitura executiva do desempenho comercial com três perguntas em orde
 - **Mês até o dia anterior:** do primeiro dia do mês até D-1.
 - **Histórico:** últimos seis meses disponíveis, respeitando a cobertura real de cada unidade.
 - **Consolidado geral:** soma das unidades elegíveis, sem preencher dias ausentes com zero.
+- Nos cartões do consolidado, os dias corridos aparecem separados da cobertura: cada relatório diário de uma unidade conta uma vez. Com três unidades, sete dias de semana geram até 21 relatórios, e 15 dias do mês geram até 45.
 
 ### Comparadores
 
