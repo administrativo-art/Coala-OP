@@ -4,8 +4,8 @@ O responsável confirmou que ninguém utiliza o app antigo e autorizou sua remo�
 
 ## Instalação inicial
 
-1. Integrar/publicar backend, metadados e APK somente após autorização específica; alterações atuais são locais.
-2. Baixar pela página `/app`, botão "Baixar Coala Go"; caminho publicado `/app/CoalaGo.apk`, versão 0.3.25/code30.
+1. Integrar/publicar backend, metadados e APK somente após autorização específica para o release.
+2. Baixar pela página `/app`, botão "Baixar Coala Go"; caminho publicado `/app/CoalaGo.apk`, versão 0.3.43/code48.
 3. Instalar em aparelho piloto Android8+ e fazer login com conta de homologação autorizada.
 4. Conferir permissões, fotos, contagem, recebimento, compra/revisão/offline, escala, metas e Signage. Ensaiar câmera, biometria e reinício sem perda da fila.
 5. Homologar a [verificação de hardware e assinatura do APK direto](android-direct-apk-attestation.md): o cadastro Firebase não comprova a instalação. Decisão de 27/10/2026 elimina publicação em loja; a autorização offline continua exigindo passe verificado no servidor.
