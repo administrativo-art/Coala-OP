@@ -215,12 +215,17 @@ export async function readStonePortfolio(stoneCode: string) {
     stale: snapshot.get("asOf") !== latestAvailableDate };
 }
 
-export async function syncEnabledStonePortfolios(now = new Date()) {
+/** Carteiras Stone habilitadas do workspace (no máximo 20). */
+export async function listEnabledStonePortfolioSources() {
   const sources = await financialDbAdmin.collection(sourceCollection)
     .where("enabled", "==", true).limit(21).get();
   if (sources.size > 20) throw new AppError({ code: "STONE_PORTFOLIO_SOURCE_LIMIT", kind: "EXPECTED_BUSINESS" });
-  const enabled = sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
+  return sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
     .filter(source => source.workspaceId === WORKSPACE_ID);
+}
+
+export async function syncEnabledStonePortfolios(now = new Date()) {
+  const enabled = await listEnabledStonePortfolioSources();
   const results = [];
   for (const source of enabled) results.push(await syncStonePortfolio(source.stoneCode, now));
   // Depois da carteira, confere e salva o "Recebido" do mês com os mesmos arquivos guardados.
