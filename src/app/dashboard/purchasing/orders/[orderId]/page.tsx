@@ -56,6 +56,7 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import { useProducts } from "@/hooks/use-products";
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
+import { SimilarExpenseApprovalRequired, type SimilarPurchaseExpense } from "@/components/purchase-order-provider";
 import { usePurchaseReceipts } from "@/hooks/use-purchase-receipts";
 import { useQuotationItems } from "@/hooks/use-quotation-items";
 import { getContentPurchaseUnitLabel } from "@/lib/purchasing-units";
@@ -311,6 +312,9 @@ export default function PurchaseOrderPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [similarExpenses, setSimilarExpenses] = useState<SimilarPurchaseExpense[]>([]);
+  const [similarExpenseReason, setSimilarExpenseReason] = useState("");
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
   const [revertReason, setRevertReason] = useState("");
   const [reversionError, setReversionError] = useState<string | null>(null);
@@ -381,6 +385,7 @@ export default function PurchaseOrderPage() {
         order.linkedExpenseId ||
         order.archivedLinkedExpenseId ||
         order.financialExpenseArchivedAt ||
+        order.financialSupersededByOrderId ||
         syncingExpense
       ) {
         return;
@@ -776,9 +781,21 @@ export default function PurchaseOrderPage() {
   const handleConfirmOrder = async () => {
     if (!order) return;
     setConfirming(true);
+    setConfirmationError(null);
     try {
-      await confirmOrder(order.id);
+      await confirmOrder(order.id, similarExpenses.length > 0 ? {
+        candidateIds: similarExpenses.map((expense) => expense.id),
+        reason: similarExpenseReason.trim(),
+      } : undefined);
+      setSimilarExpenses([]);
+      setSimilarExpenseReason("");
       setActionPanel(null);
+    } catch (error) {
+      if (error instanceof SimilarExpenseApprovalRequired) {
+        setSimilarExpenses(error.candidates);
+      } else {
+        setConfirmationError(error instanceof Error ? error.message : "Falha ao confirmar o pedido.");
+      }
     } finally {
       setConfirming(false);
     }
@@ -1017,7 +1034,12 @@ export default function PurchaseOrderPage() {
               ) : null}
               {canConfirmOrder ? (
                 <Button
-                  onClick={() => setActionPanel("confirm")}
+                  onClick={() => {
+                    setSimilarExpenses([]);
+                    setSimilarExpenseReason("");
+                    setConfirmationError(null);
+                    setActionPanel("confirm");
+                  }}
                   disabled={!isReadyForConfirmation}
                   title={
                     !isReadyForConfirmation
@@ -1738,6 +1760,22 @@ export default function PurchaseOrderPage() {
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto bg-[#f6f6f7] px-5 py-5 sm:px-6">
+                  {similarExpenses.length > 0 && (
+                    <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                      <p className="font-semibold">Possível despesa duplicada</p>
+                      <p className="mt-1">Confira os registros abaixo. Se esta for uma compra diferente, informe o motivo para autorizar a nova despesa.</p>
+                      <ul className="mt-3 space-y-2">
+                        {similarExpenses.map((expense) => (
+                          <li key={expense.id} className="rounded border border-amber-200 bg-white p-2">
+                            {expense.supplier} · {fmt(expense.amount)} · pedido {expense.purchaseOrderId} · {expense.status}
+                          </li>
+                        ))}
+                      </ul>
+                      <Label htmlFor="similar-expense-reason" className="mt-4 block">Motivo para manter a nova despesa</Label>
+                      <Textarea id="similar-expense-reason" value={similarExpenseReason} onChange={(event) => setSimilarExpenseReason(event.target.value)} className="mt-2 bg-white" />
+                    </div>
+                  )}
+                  {confirmationError && <p role="alert" className="mb-4 text-sm text-red-700">{confirmationError}</p>}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <ActionSummaryItem
                       label="Fornecedor"
@@ -1801,7 +1839,7 @@ export default function PurchaseOrderPage() {
                   <Button
                     className="rounded-[9px] bg-violet-600 hover:bg-violet-700"
                     onClick={handleConfirmOrder}
-                    disabled={confirming}
+                    disabled={confirming || (similarExpenses.length > 0 && similarExpenseReason.trim().length < 10)}
                   >
                     {confirming ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

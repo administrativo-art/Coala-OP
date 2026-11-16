@@ -46,6 +46,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -689,6 +690,26 @@ export function DrePage() {
             </Button>
           </div>
 
+          {!loading && !sourceError && metrics.revenueSource.issues.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-xs text-amber-800" aria-label="Ver fontes e contagens da DRE">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {metrics.revenueSource.units.some(unit => unit.revenueCents === null || unit.cashShortageCents === null)
+                    ? "Conferir fontes" : "Contagens provisórias"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto text-sm">
+                <p className="font-semibold">Fontes da DRE</p>
+                <p className="text-muted-foreground">Faltas e sobras usam a contagem finalizada pelo Financeiro. Enquanto ela estiver pendente, usam a contagem do PDV como valor provisório.</p>
+                {metrics.revenueSource.units.filter(unit => unit.issues.length > 0).map(unit => (
+                  <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: {unit.revenueCents === null ? "receita indisponível; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.cashDifferenceProvisional ? "contagens provisórias do PDV; " : ""}{unit.pendingOperatorCount === null ? "cobertura a conferir" : `${unit.pendingOperatorCount} contagem(ns) aguardando conferência financeira`}.</p>
+                ))}
+                <Link className="inline-block underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Unit filter */}
           <Select value={unitFilter} onValueChange={setUnitFilter}>
             <SelectTrigger className="w-48">
@@ -756,19 +777,9 @@ export function DrePage() {
       </div>
 
       {!sourceError && <BudgetPlanningComparisonCard rows={budgetPlanning} month={selectedMonth} unitId={unitFilter} />}
-      {!loading && !sourceError && metrics.revenueSource.issues.length > 0 && (
-        <div role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <p><strong>DRE parcial — confira as fontes.</strong> Vendas vêm integralmente do PDV. Faltas e sobras vêm apenas das contagens finalizadas, na competência de origem.</p>
-          {metrics.revenueSource.units.filter(unit => unit.issues.length > 0).map(unit => (
-            <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: {unit.revenueCents === null ? "receita integral não comprovada; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.pendingOperatorCount === null ? "finalizações sem cobertura comprovada" : `${unit.pendingOperatorCount} contagem(ns) pendente(s)`}.</p>
-          ))}
-          <p>Dados ausentes ou resumos antigos não são zero. Revise a sincronização/conferência na origem; atualizar esta tela apenas relê os dados. Esta cobertura não representa fechamento mensal.</p>
-          <Link className="underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
-        </div>
-      )}
       {!loading && !sourceError && (
         <Card>
-          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV. Diferenças ainda baseadas na contagem do Caixa são provisórias.</CardDescription></CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-3">
             <KpiCard label="Vendas integrais do PDV" value={formatCurrency(metrics.revBruta)} />
             <KpiCard label="(−) Faltas de caixa" value={formatCurrency(metrics.cashShortage)} color="text-rose-700" />

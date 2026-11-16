@@ -2689,6 +2689,9 @@ export type PurchaseOrder = {
   archivedLinkedExpenseId?: string;
   financialArchiveRunId?: string;
   financialExpenseArchivedAt?: string;
+  financialSupersededByOrderId?: string;
+  financialSupersededAt?: string;
+  financialSupersededReason?: string;
   createdAt: string;
   createdBy: string; // userId
   confirmedAt?: string;

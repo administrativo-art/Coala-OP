@@ -68,12 +68,47 @@ const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPA
 const MAX_ORDER_ITEMS_PER_OPERATION = 100;
 const MAX_LINKED_RECORDS_PER_ORDER = 4;
 const MAX_EXPENSES_PER_ORDER = 20;
+const MAX_SIMILAR_EXPENSE_SCAN = 100;
+class SimilarExpenseScanLimitError extends Error {}
 // Operações de confirmação/retrocesso são manuais e sem polling. Cada execução
 // lê no máximo 101 itens, 5 recebimentos, 5 financeiros e 21 despesas para
 // detectar truncamento antes de qualquer transição de estado.
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function comparableSupplier(value: unknown): string {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+async function findSimilarPurchaseExpenses(orderId: string, supplierName: string, totalValue: number) {
+  const supplier = comparableSupplier(supplierName);
+  if (supplier.length < 5 || !Number.isFinite(totalValue) || totalValue <= 0) return [];
+  const amount = Math.round(totalValue * 100) / 100;
+  const snapshot = await financialDbAdmin.collection('expenses')
+    .where('totalValue', '>=', amount - 0.005)
+    .where('totalValue', '<=', amount + 0.005)
+    .limit(MAX_SIMILAR_EXPENSE_SCAN + 1).get();
+  if (snapshot.size > MAX_SIMILAR_EXPENSE_SCAN) {
+    throw new SimilarExpenseScanLimitError();
+  }
+  return snapshot.docs.filter((doc) => {
+    const expense = doc.data();
+    const otherSupplier = comparableSupplier(expense.supplier);
+    return expense.purchaseOrderId !== orderId
+      && expense.status !== 'cancelled'
+      && expense.originModule === 'purchasing'
+      && otherSupplier.length >= 5
+      && (otherSupplier.includes(supplier) || supplier.includes(otherSupplier));
+  }).map((doc) => ({
+    id: doc.id,
+    purchaseOrderId: String(doc.data().purchaseOrderId ?? ''),
+    supplier: String(doc.data().supplier ?? ''),
+    amount: Number(doc.data().totalValue ?? 0),
+    status: String(doc.data().status ?? ''),
+  })).sort((left, right) => left.id.localeCompare(right.id));
 }
 
 class PurchaseOrderNotFoundError extends Error {}
@@ -515,7 +550,7 @@ async function lookupBarcode(rawBarcode: string | null) {
 }
 
 async function internalSyncExpense(orderId: string, orderData: any, uid: string) {
-  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt) {
+  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt || orderData.financialSupersededByOrderId) {
     return null;
   }
 
@@ -1150,11 +1185,42 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       return jsonError('Remova a taxa de serviço dos itens para evitar cobrança duplicada.');
     }
 
+    let similarExpenses;
+    try {
+      similarExpenses = await findSimilarPurchaseExpenses(id, String(order.supplierName ?? ''), totalEstimated);
+    } catch (error) {
+      if (error instanceof SimilarExpenseScanLimitError) {
+        return jsonError('Há muitas despesas do mesmo valor para verificar. Solicite revisão financeira antes de confirmar.', 409);
+      }
+      throw error;
+    }
+    const approval = body.similarExpenseApproval;
+    if (similarExpenses.length > 0) {
+      const expectedIds = similarExpenses.map((item) => item.id);
+      const approvedIds = Array.isArray(approval?.candidateIds)
+        ? approval.candidateIds.filter((value: unknown): value is string => typeof value === 'string').sort()
+        : [];
+      const reason = typeof approval?.reason === 'string' ? approval.reason.trim() : '';
+      if (JSON.stringify(expectedIds) !== JSON.stringify(approvedIds) || reason.length < 10) {
+        return NextResponse.json({
+          code: 'SIMILAR_EXPENSE_APPROVAL_REQUIRED',
+          error: 'Há despesas semelhantes. Confira os registros e informe o motivo para confirmar esta nova obrigação.',
+          candidates: similarExpenses,
+        }, { status: 409 });
+      }
+    }
+
     batch.update(orderRef, { 
       status: 'confirmed', 
       totalEstimated,
       confirmedAt: now,
       confirmedBy: decoded.uid,
+      ...(similarExpenses.length > 0 ? { similarExpenseApproval: {
+        candidateIds: similarExpenses.map((item) => item.id),
+        reason: approval.reason.trim(),
+        approvedBy: decoded.uid,
+        approvedAt: now,
+      } } : {}),
       financialReversalStatus: FieldValue.delete(),
       financialReversalError: FieldValue.delete(),
       updatedAt: now,
@@ -1334,7 +1400,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         if (!orderSnap.exists) throw new PurchaseOrderNotFoundError();
 
         const order = orderSnap.data() as Record<string, any>;
-        if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
+        if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt || order.financialSupersededByOrderId) {
           throw new PurchaseStageReversionBlockedError(
             'O vínculo financeiro deste pedido já foi arquivado e não pode ser retrocedido por este fluxo.',
           );
@@ -2537,6 +2603,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
 
     const order = orderSnap.data() as Record<string, any>;
+    if (order.financialSupersededByOrderId) {
+      return jsonError(`A obrigação financeira deste pedido foi substituída pelo pedido ${order.financialSupersededByOrderId}.`, 409);
+    }
     if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
       return jsonError('A despesa anterior deste pedido foi arquivada na virada financeira de 01/08/2026.', 409);
     }
