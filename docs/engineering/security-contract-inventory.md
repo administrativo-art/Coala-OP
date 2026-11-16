@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **569**
-- Totalmente contratados: **242**
+- Arquivos de rota: **570**
+- Totalmente contratados: **243**
 - Legados congelados: **317**
 - Exceções temporárias: **10**
 - Violações: **0**
@@ -255,6 +255,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/cash-deposits/inter/webhook` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-deposits/inter/webhook/route.ts](../../src/app/api/financial/cash-deposits/inter/webhook/route.ts) |
 | `/api/financial/cash-deposits/reports` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/reports/route.ts](../../src/app/api/financial/cash-deposits/reports/route.ts) |
 | `/api/financial/cash-deposits/reports/export` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/reports/export/route.ts](../../src/app/api/financial/cash-deposits/reports/export/route.ts) |
+| `/api/financial/cash-flow-study` | GET ✓ | `CONTRACTED` | [src/app/api/financial/cash-flow-study/route.ts](../../src/app/api/financial/cash-flow-study/route.ts) |
 | `/api/financial/data` | GET | `LEGACY_BASELINE` | [src/app/api/financial/data/route.ts](../../src/app/api/financial/data/route.ts) |
 | `/api/financial/document-counterparties` | GET ✓ | `CONTRACTED` | [src/app/api/financial/document-counterparties/route.ts](../../src/app/api/financial/document-counterparties/route.ts) |
 | `/api/financial/dre/cmv-closure` | POST | `LEGACY_BASELINE` | [src/app/api/financial/dre/cmv-closure/route.ts](../../src/app/api/financial/dre/cmv-closure/route.ts) |
