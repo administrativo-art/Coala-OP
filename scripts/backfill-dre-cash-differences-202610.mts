@@ -5,6 +5,7 @@
  *
  * node --import tsx scripts/backfill-dre-cash-differences-202610.mts --workspace=ID --kiosk=ID
  * node --import tsx scripts/backfill-dre-cash-differences-202610.mts --workspace=ID --kiosk=ID --apply --plan=SHA256 --backup=/private/tmp/dre-october-ID.json
+ * node --import tsx scripts/backfill-dre-cash-differences-202610.mts --workspace=ID --kiosk=ID --apply --refresh-summary --plan=SHA256 --backup=/private/tmp/dre-october-refresh-ID.json
  * node --import tsx scripts/backfill-dre-cash-differences-202610.mts --workspace=ID --kiosk=ID --verify
  */
 import { createHash } from "node:crypto";
@@ -26,6 +27,7 @@ const workspaceId = option("workspace")?.trim();
 const kioskId = option("kiosk")?.trim();
 const apply = args.includes("--apply");
 const verify = args.includes("--verify");
+const refreshSummary = args.includes("--refresh-summary");
 const expectedPlan = option("plan");
 const backupPath = option("backup");
 if (!workspaceId || !kioskId || !/^[A-Za-z0-9_-]{1,100}$/.test(workspaceId)
@@ -33,6 +35,7 @@ if (!workspaceId || !kioskId || !/^[A-Za-z0-9_-]{1,100}$/.test(workspaceId)
   throw new Error("Informe --workspace e --kiosk (IDs explícitos, até 100 caracteres). Outubro de 2026 é fixo.");
 }
 if (apply && verify) throw new Error("Escolha somente --apply ou --verify.");
+if (refreshSummary && !apply) throw new Error("--refresh-summary exige --apply.");
 if (apply && (!expectedPlan || !/^[a-f0-9]{64}$/.test(expectedPlan) || !backupPath)) {
   throw new Error("--apply exige --plan=<SHA256 do dry-run> e --backup=<caminho local privado>.");
 }
@@ -127,6 +130,8 @@ if (verify) {
     && value.dreRevenueTotalCents === monthly.dreRevenueTotalCents
     && value.dreCashShortageTotalCents === monthly.dreCashShortageTotalCents
     && value.dreCashSurplusTotalCents === monthly.dreCashSurplusTotalCents
+    && value.dreCashShortageKnownCents === monthly.dreCashShortageKnownCents
+    && value.dreCashSurplusKnownCents === monthly.dreCashSurplusKnownCents
     && isDeepStrictEqual(value.dreCoverage, monthly.dreCoverage)
     && plans.every(row => !row.changed);
   process.stdout.write(`${JSON.stringify({ mode: "VERIFY", matches, ...report }, null, 2)}\n`);
@@ -146,6 +151,18 @@ if (verify) {
         throw new Error(`Fechamento ${planned.id} mudou; interrompido após as escritas anteriores. Reexecute o dry-run.`);
       }
       transaction.update(closureCollection.doc(planned.id), planned.patch);
+    });
+  }
+  if (refreshSummary && plans.every(row => !row.changed)) {
+    const planned = plans[0];
+    await financialDbAdmin.runTransaction(async transaction => {
+      const fresh = planClosure(await readClosure(closureCollection.doc(planned.id), transaction));
+      if (!isDeepStrictEqual(fresh.revisions, planned.revisions)) {
+        throw new Error(`Fechamento ${planned.id} mudou; reexecute o dry-run.`);
+      }
+      transaction.update(closureCollection.doc(planned.id), {
+        dreCashDifferenceSummaryRefreshAt: new Date().toISOString(),
+      });
     });
   }
   process.stdout.write(`${JSON.stringify({ mode: "APPLIED_TRIGGER_PENDING", backupPath,

@@ -623,6 +623,9 @@ export function DrePage() {
         ];
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
+      ["Cobertura das diferenças de caixa", `${metrics.revenueSource.cashDifferenceCoveredDays}/${metrics.revenueSource.cashDifferenceTotalDays} dias`,
+        metrics.revenueSource.cashDifferenceCoverage === "complete" && !metrics.revenueSource.cashDifferenceProvisional
+          ? "Completa" : "Resultado provisório: somente diferenças comprovadas"],
       [],
       ["Indicador", "Valor", "% Receita Líquida"],
       ["Receita Bruta", formatCurrency(revBruta), pct(revBruta, recLiq)],
@@ -695,14 +698,16 @@ export function DrePage() {
                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-xs text-amber-800" aria-label="Ver fontes e contagens da DRE">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   {metrics.revenueSource.units.some(unit => unit.revenueCents === null || unit.cashShortageCents === null)
-                    ? "Conferir fontes" : "Contagens provisórias"}
+                    ? "Conferir fontes" : metrics.revenueSource.cashDifferenceCoverage !== "complete"
+                      ? `Caixa ${metrics.revenueSource.cashDifferenceCoveredDays}/${metrics.revenueSource.cashDifferenceTotalDays} dias`
+                      : "Contagens provisórias"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto text-sm">
                 <p className="font-semibold">Fontes da DRE</p>
-                <p className="text-muted-foreground">Faltas e sobras usam a contagem finalizada pelo Financeiro. Enquanto ela estiver pendente, usam a contagem do PDV como valor provisório.</p>
+                <p className="text-muted-foreground">Faltas e sobras somam somente os dias com diferenças comprovadas: {metrics.revenueSource.cashDifferenceCoveredDays}/{metrics.revenueSource.cashDifferenceTotalDays} dias. O resultado é provisório enquanto houver dias ou contagens pendentes. A contagem financeira finalizada prevalece por operador; antes dela, usa-se a contagem do PDV.</p>
                 {metrics.revenueSource.units.filter(unit => unit.issues.length > 0).map(unit => (
-                  <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: {unit.revenueCents === null ? "receita indisponível; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.cashDifferenceProvisional ? "contagens provisórias do PDV; " : ""}{unit.pendingOperatorCount === null ? "cobertura a conferir" : `${unit.pendingOperatorCount} contagem(ns) aguardando conferência financeira`}.</p>
+                  <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: caixa {unit.cashDifferenceCoveredDays}/{unit.cashDifferenceTotalDays} dias; {unit.revenueCents === null ? "receita indisponível; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.cashDifferenceProvisional ? "valor provisório; " : ""}{unit.pendingOperatorCount === null ? "cobertura a conferir" : `${unit.pendingOperatorCount} contagem(ns) aguardando conferência financeira`}.</p>
                 ))}
                 <Link className="inline-block underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
               </PopoverContent>
@@ -778,7 +783,8 @@ export function DrePage() {
       {!sourceError && <BudgetPlanningComparisonCard rows={budgetPlanning} month={selectedMonth} unitId={unitFilter} />}
       {!loading && !sourceError && (
         <Card>
-          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV. Diferenças ainda baseadas na contagem do Caixa são provisórias.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV. Diferenças de dias ou contagens pendentes ficam fora da soma; o resultado é provisório.</CardDescription></CardHeader>
+          {metrics.revenueSource.cashDifferenceCoverage !== "complete" && <p className="px-6 text-xs font-semibold text-amber-800" role="status">Diferenças comprovadas: {metrics.revenueSource.cashDifferenceCoveredDays}/{metrics.revenueSource.cashDifferenceTotalDays} dias · resultado provisório</p>}
           <CardContent className="grid gap-3 sm:grid-cols-3">
             <KpiCard label="Vendas integrais do PDV" value={formatCurrency(metrics.revBruta)} />
             <KpiCard label="(−) Faltas de caixa" value={formatCurrency(metrics.cashShortage)} color="text-rose-700" />
