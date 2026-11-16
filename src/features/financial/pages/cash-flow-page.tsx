@@ -35,6 +35,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  CashFlowTabStrip, EntriesTab, HealthTab, MoneyTab, StudyGaps, StudyHeroChips, StudyHeroControls, StudyLoading, WeeksTab,
+  useCashFlowStudy, useStudyWeeks, type CashFlowTab,
+} from "@/features/financial/cash-flow-study/cash-flow-study-view";
+import type { Scenario } from "@/features/financial/cash-flow-study/model";
 
 type Movement = {
   source?: "expense" | "expense_forecast" | "budget_residual" | "budget_scenario" | "project_residual";
@@ -105,6 +110,13 @@ export function CashFlowPage() {
   const [budgetCenterId, setBudgetCenterId] = useState("");
   const [budgetProjections, setBudgetProjections] = useState<BudgetCashProjectionPayload>({ projections: [], conflictCount: 0, issueCount: 0 });
   const budgetRequestVersion = useRef(0);
+  // Estudo de 13 semanas: só o administrador padrão (a rota revalida no servidor).
+  const showStudy = Boolean(isDefaultAdmin);
+  const [tab, setTab] = useState<CashFlowTab>(showStudy ? "weeks" : "movements");
+  const [scenario, setScenario] = useState<Scenario>("expected");
+  const study = useCashFlowStudy(showStudy);
+  const studyWeeks = useStudyWeeks(study.data, scenario);
+  const studyTab = showStudy && tab !== "movements";
   const { data: accountsData } = useFinancialCollection<Account>(financialCollection("bankAccounts"));
   const { data: transactionsData, loading: loadingTransactions } = useFinancialCollection<Transaction>(financialCollection("transactions"));
   const { data: paymentsData, loading: loadingPayments } = useFinancialCollection<any>(financialCollection("payments"));
@@ -370,24 +382,24 @@ export function CashFlowPage() {
   const loading = loadingTransactions || loadingPayments || loadingExpenses || loadingAccountPlans;
 
   return (
-    <PageContainer variant="compact" surface className="space-y-6 pb-10">
+    <PageContainer variant="default" surface className="space-y-6 pb-10">
       <PageHero
         kicker="Financeiro"
         title="Fluxo de caixa"
-        subtitle="Visão global do realizado, das contas a pagar e do saldo projetado."
+        subtitle={studyTab ? "Realizado, a receber e projeção das próximas 13 semanas." : "Visão global do realizado, das contas a pagar e do saldo projetado."}
         actions={<>
-          <Button variant="on-dark-secondary" size="md" onClick={exportCsv} disabled={filteredMovements.length === 0}>
+          {!studyTab && <Button variant="on-dark-secondary" size="md" onClick={exportCsv} disabled={filteredMovements.length === 0}>
             <Download className="mr-2 h-4 w-4" /> Exportar CSV
-          </Button>
+          </Button>}
           {permissions.financial?.cashFlow?.create && <Button variant="primary-page" size="md" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button>}
         </>}
-        chips={<>
+        chips={studyTab ? <StudyHeroChips data={study.data} weeks={studyWeeks} /> : <>
           <HeroChip value={formatCurrency(totals.realizedBalance)} label="Saldo realizado" />
           <HeroChip value={formatCurrency(totals.accountsPayable)} label="A pagar" tone="warning" />
           <HeroChip value={formatCurrency(totals.projectedBalance)} label="Projetado" tone={totals.projectedBalance >= 0 ? "info" : "danger"} />
         </>}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        {studyTab ? <StudyHeroControls data={study.data} scenario={scenario} onScenario={setScenario} loading={study.loading} onReload={() => void study.reload()} /> : <div className="flex flex-wrap items-center gap-2">
           <Select value={accountFilter} onValueChange={setAccountFilter}>
             <SelectTrigger aria-label="Conta" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><Wallet className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -402,8 +414,19 @@ export function CashFlowPage() {
           <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap text-[13px] font-bold text-ds-on-dark-2">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker scheme-dark" value={endingMonth} onChange={(event) => {
             if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setEndingMonth(event.target.value);
           }} /></div>
-        </div>
+        </div>}
       </PageHero>
+
+      {showStudy && <CashFlowTabStrip value={tab} onChange={setTab} />}
+      {studyTab && (!study.data ? <StudyLoading error={study.error} onRetry={() => void study.reload()} /> : <>
+        {tab === "weeks" && <WeeksTab data={study.data} weeks={studyWeeks} scenario={scenario} />}
+        {tab === "entries" && <EntriesTab data={study.data} scenario={scenario} />}
+        {tab === "money" && <MoneyTab data={study.data} />}
+        {tab === "health" && <HealthTab data={study.data} />}
+        <StudyGaps data={study.data} />
+      </>)}
+
+      {!studyTab && <>
 
       {(budgetError || !budgetScopeReady || budgetLoading) && <p role="status" className="rounded-xl border border-ds-alert-border bg-ds-warn-bg p-3 text-sm text-ds-alert-ink">{budgetError || (budgetLoading ? "Atualizando planejamento…" : "Selecione abaixo um centro autorizado para incluir o planejamento por orçamento.")} O saldo projetado fica incompleto até essa conferência.</p>}
       {budgetProjections.conflictCount > 0 && <p className="text-sm text-ds-warn">Há {budgetProjections.conflictCount} linha(s) com provisão antiga. Mantivemos a fonte antiga e suspendemos a nova projeção para evitar duplicidade. A conversão depende de prévia e confirmação.</p>}
@@ -560,6 +583,8 @@ export function CashFlowPage() {
           )}
         </CardContent>
       </Card>
+
+      </>}
 
       {permissions.financial?.cashFlow?.create && <NewTransactionDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </PageContainer>
