@@ -69,6 +69,7 @@ const MAX_ORDER_ITEMS_PER_OPERATION = 100;
 const MAX_LINKED_RECORDS_PER_ORDER = 4;
 const MAX_EXPENSES_PER_ORDER = 20;
 const MAX_SIMILAR_EXPENSE_SCAN = 100;
+class SimilarExpenseScanLimitError extends Error {}
 // Operações de confirmação/retrocesso são manuais e sem polling. Cada execução
 // lê no máximo 101 itens, 5 recebimentos, 5 financeiros e 21 despesas para
 // detectar truncamento antes de qualquer transição de estado.
@@ -91,7 +92,7 @@ async function findSimilarPurchaseExpenses(orderId: string, supplierName: string
     .where('totalValue', '<=', amount + 0.005)
     .limit(MAX_SIMILAR_EXPENSE_SCAN + 1).get();
   if (snapshot.size > MAX_SIMILAR_EXPENSE_SCAN) {
-    throw new Error('SIMILAR_EXPENSE_SCAN_LIMIT');
+    throw new SimilarExpenseScanLimitError();
   }
   return snapshot.docs.filter((doc) => {
     const expense = doc.data();
@@ -1188,7 +1189,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     try {
       similarExpenses = await findSimilarPurchaseExpenses(id, String(order.supplierName ?? ''), totalEstimated);
     } catch (error) {
-      if (error instanceof Error && error.message === 'SIMILAR_EXPENSE_SCAN_LIMIT') {
+      if (error instanceof SimilarExpenseScanLimitError) {
         return jsonError('Há muitas despesas do mesmo valor para verificar. Solicite revisão financeira antes de confirmar.', 409);
       }
       throw error;
