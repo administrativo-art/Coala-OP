@@ -207,7 +207,6 @@ export function DrePage() {
   }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
 
   useEffect(() => {
-    if (cmvCriterion !== "stock_movement") return;
     if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) return;
     let cancelled = false;
     setLoadingStockCmv(true);
@@ -228,7 +227,7 @@ export function DrePage() {
       if (!cancelled) setLoadingStockCmv(false);
     });
     return () => { cancelled = true; };
-  }, [api, cmvCriterion, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
+  }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
 
   const loading = loadingAccounts
     || loadingResultCenters
@@ -820,6 +819,7 @@ export function DrePage() {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
             <p className="text-sm font-semibold">Critério dos insumos na DRE</p>
+            <p className="mt-1 text-xs text-muted-foreground">Os dois cálculos são apresentados para comparação. A seleção define qual valor entra na DRE.</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {cmvCriterion === "composition"
                 ? "Enquanto aberto, o CMV usa as vendas e os custos atuais das fichas. Após a confirmação do fechamento mensal, usa o valor congelado daquela unidade e competência."
@@ -834,15 +834,15 @@ export function DrePage() {
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Movimentação</p>
               <p className="mt-0.5 font-mono text-sm font-bold">
-                {loadingStockCmv && cmvCriterion === "stock_movement"
+                {loadingStockCmv
                   ? "Calculando…"
-                  : stockCmvAvailableForSelectedMonth ? formatCurrency(selectedStockBreakdown.totalCmv) : "Selecione para calcular"}
+                  : stockCmvError ? "Indisponível" : stockCmvAvailableForSelectedMonth ? formatCurrency(selectedStockBreakdown.totalCmv) : "Calculando…"}
               </p>
             </div>
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Diferença</p>
               <p className={`mt-0.5 font-mono text-sm font-bold ${selectedStockCmvDifference > 0 ? "text-rose-600" : selectedStockCmvDifference < 0 ? "text-emerald-600" : ""}`}>
-                {stockCmvAvailableForSelectedMonth
+                {!loadingStockCmv && !stockCmvError && stockCmvAvailableForSelectedMonth
                   ? `${selectedStockCmvDifference > 0 ? "+" : ""}${formatCurrency(selectedStockCmvDifference)}`
                   : "—"}
               </p>

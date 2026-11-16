@@ -6,7 +6,7 @@
 
 ## Entrada e percurso
 
-A [página DRE](../../../src/app/dashboard/financial/dre/page.tsx) monta [`DrePage`](../../../src/features/financial/pages/dre-page.tsx). O cliente busca contas e centros de resultado pela coleção financeira e pede dados de unidades/períodos a [`GET /api/financial/dre/source-data`](../../../src/app/api/financial/dre/source-data/route.ts). Quando o critério de CMV é movimentação de estoque, também chama [`GET /api/financial/dre/stock-cmv`](../../../src/app/api/financial/dre/stock-cmv/route.ts). As duas rotas limitam a 20 unidades e seis competências, exigem permissão DRE e verificam o acesso a cada unidade. A rota de fontes também omite detalhes de despesas para quem não possui `financial.expenses.view`.
+A [página DRE](../../../src/app/dashboard/financial/dre/page.tsx) monta [`DrePage`](../../../src/features/financial/pages/dre-page.tsx). O cliente busca contas e centros de resultado pela coleção financeira e pede dados de unidades/períodos a [`GET /api/financial/dre/source-data`](../../../src/app/api/financial/dre/source-data/route.ts). Para mostrar os dois critérios e a diferença sem seleção prévia, também chama [`GET /api/financial/dre/stock-cmv`](../../../src/app/api/financial/dre/stock-cmv/route.ts). As duas rotas limitam a 20 unidades e seis competências, exigem permissão DRE e verificam o acesso a cada unidade. A rota de fontes também omite detalhes de despesas para quem não possui `financial.expenses.view`.
 
 | Indicador/fonte | Origem observada |
 | --- | --- |
@@ -77,3 +77,5 @@ Limites por consulta: 5.000 fichas, 20.000 itens de composição e 10.000 insumo
 Testes: [cálculo/schema](../../../tests/unit/product-composition-cmv.test.ts), [integração](../../../tests/integration/dre-cmv-closure.test.mjs), [HTTP autenticado](../../../tests/e2e-api/financial-reconciliation.test.mts) e [isolamento por regras](../../../tests/security/firestore.rules.test.mjs). A implementação local não certifica dados reais nem homologação visual.
 
 O futuro fechamento financeiro mensal deve reutilizar este serviço e referenciar sua revisão, conforme [plano de fechamento, seção 7.5.1](../../planos/plano-integracao-stone-conciliacao.md#751-cmv-no-fechamento-financeiro-mensal). Ainda não existe fechamento geral nem coordenação implantada entre seus estados e o CMV.
+
+A comparação de CMV carrega composição e movimentação na abertura e na mudança de competência. Trocar o critério usa os dados já carregados e altera apenas o valor aplicado na DRE; não dispara nova consulta. O cálculo por movimentação mantém limite de 20 unidades e seis competências, sem polling.
