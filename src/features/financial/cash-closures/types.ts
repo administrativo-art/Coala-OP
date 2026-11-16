@@ -186,6 +186,9 @@ export type CashDepositPeriodPolicy = {
 export type CashClosure = {
   pdvSales?: PdvSalesSource;
   finalizedCashDifferences?: CashDifferences;
+  /** One source per operator: finalized Finance count, otherwise cashier's PDV count. */
+  dreSelectedCashDifferences?: CashDifferences | null;
+  drePdvFallbackOperatorCount?: number | null;
   id: string;
   workspaceId: string;
   kioskId: string;
@@ -246,6 +249,7 @@ export type CashClosure = {
 export type CashClosureOperator = {
   pdvSales?: PdvSalesSource;
   cashDifferences?: CashDifferences;
+  pdvCashDifferences?: CashDifferences;
   id: string;
   closureId: string;
   workspaceId: string;
