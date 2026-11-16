@@ -55,6 +55,7 @@ Recorrência, rateio, provisão e exclusão precisam preservar os vínculos de o
 ## Exclusão e vínculos preservados pelo chamador
 
 `handleDelete` na [página de despesas](../../../src/features/financial/pages/expenses-page.tsx) bloqueia na interface despesas de origem `purchasing`, encaminhando o cancelamento ao pedido. Nos demais casos chama `deleteDoc` de `expenses` e atualiza a lista. Esse handler não estorna pagamento nem exclui obrigação/transação vinculada. A autorização efetiva da remoção é a regra financeira; testar registros pagos/vinculados e acesso direto antes de alterar essa operação.
+Quando um pedido já recebido é substituído apenas financeiramente, a reparação cancela a despesa e o acompanhamento financeiro antigos, preserva as entradas de estoque e grava `financialSupersededByOrderId` no pedido antigo. A sincronização de compra reconhece esse marcador e não recria a obrigação. A detecção de despesas semelhantes na confirmação de novos pedidos exige motivo e aprovação explícita do operador antes da gravação; ver [recebimento de compras](purchasing-order-receipt.md).
 
 ## Evidências da etapa 2
 
