@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, LayoutDashboard, RefreshCw, Table2, UsersRound } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCw } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -28,8 +28,11 @@ import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/fi
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { CmvClosingPanel } from "@/features/financial/components/dre/cmv-closing-panel";
 import type { DreCmvPeriod } from "@/features/financial/dre/cmv-closure";
-import { BudgetPlanningComparisonCard } from "@/features/financial/components/dre/budget-planning-comparison";
-import type { BudgetPlanningComparison } from "@/features/financial/budgets/projection-view";
+import { DreCashCard, DreCmvCard } from "@/features/financial/components/dre/dre-insights";
+import { DreSourcesPanel, DreSourcesTrigger, type DreSourceIssue } from "@/features/financial/components/dre/dre-sources-panel";
+import { dreHorizontalVariation, dreRevenueComposition, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
+import { PageHero } from "@/components/patterns/page-hero";
+import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,10 +46,8 @@ import type {
 } from "@/features/financial/dre/stock-cmv";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,16 +59,6 @@ function pct(value: number, base: number) {
 // NaN propagates unavailable inputs only inside this view's arithmetic; never persisted/exported.
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? currency(value) : "Indisponível";
-}
-
-function KpiCard({ label, value, sub, color = "" }: { label: string; value: string; sub?: string; color?: string }) {
-  return (
-    <div className="rounded-xl border bg-background p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={`mt-1 font-mono text-xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
-    </div>
-  );
 }
 
 function dreMonthKeysEndingAt(monthKey: string) {
@@ -131,7 +122,8 @@ export function DrePage() {
   });
   const [unitFilter, setUnitFilter] = useState("all");
   const [cmvCriterion, setCmvCriterion] = useState<DreCmvCriterion>("composition");
-  const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
+  const [viewMode, setViewMode] = useState<"classic" | "dashboard" | "people">("classic");
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [expandedDreRows, setExpandedDreRows] = useState<Record<string, boolean>>({});
   const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
   const canExportPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.export === true;
@@ -140,14 +132,13 @@ export function DrePage() {
     && permissions.financial?.expenses?.edit === true;
 
   useEffect(() => {
-    if (!canViewPersonnelCosts && viewMode === "people") setViewMode("dashboard");
+    if (!canViewPersonnelCosts && viewMode === "people") setViewMode("classic");
   }, [canViewPersonnelCosts, viewMode]);
 
   const { data: accounts, loading: loadingAccounts } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
   const [expenses, setExpenses] = useState<FinancialExpenseDreDocument[]>([]);
-  const [budgetPlanning, setBudgetPlanning] = useState<BudgetPlanningComparison[]>([]);
   const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
   const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<DreClosureUnitMonthSummary[]>([]);
   const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
@@ -165,7 +156,6 @@ export function DrePage() {
       setSalesSummaries([]);
       setClosureRevenueSummaries([]);
       setExpenses([]);
-      setBudgetPlanning([]);
       setMissingSimulationIds([]);
       setCmvPeriods([]);
       setCmvCapabilities({ canClose: false, canReopen: false });
@@ -176,7 +166,6 @@ export function DrePage() {
     let cancelled = false;
     setLoadingSource(true);
     setSourceError(null);
-    setBudgetPlanning([]);
     const params = new URLSearchParams();
     kiosks.slice(0, 20).forEach((kiosk) => params.append("kioskId", kiosk.id));
     dreMonthKeysEndingAt(selectedMonth).forEach((period) => params.append("period", period));
@@ -187,7 +176,6 @@ export function DrePage() {
       setSalesSummaries(payload.salesSummaries ?? []);
       setClosureRevenueSummaries(payload.closureSummaries ?? []);
       setExpenses(payload.expenses ?? []);
-      setBudgetPlanning(payload.budgetPlanning ?? []);
       setMissingSimulationIds(payload.missingSimulationIds ?? []);
       setCmvPeriods(payload.cmvPeriods ?? []);
       setCmvCapabilities(payload.cmvCapabilities ?? { canClose: false, canReopen: false });
@@ -457,7 +445,6 @@ export function DrePage() {
   const stockCmvAvailableForSelectedMonth = stockCmvPayload?.periods.includes(selectedMonth) === true;
   const selectedStockBreakdown = metrics.stockCmvBreakdown;
   const selectedCompositionCmv = getCompositionCmv(selectedMonth);
-  const selectedStockCmvDifference = selectedStockBreakdown.totalCmv - selectedCompositionCmv;
   const selectedStockHasNoMovements = cmvCriterion === "stock_movement"
     && !loadingStockCmv
     && !stockCmvError
@@ -659,633 +646,573 @@ export function DrePage() {
     a.click();
   }
 
+  // ── comparação e pendências ─────────────────────────────────────────────────
+
+  type DreMetrics = ReturnType<typeof getDreMetrics>;
+  const previousMonthKey = previousDreMonthKey(selectedMonth, FINANCIAL_DRE_START_MONTH_KEY);
+  const previousMetrics = useMemo(
+    () => (previousMonthKey ? getDreMetrics(previousMonthKey) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [accounts, previousMonthKey, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
+  );
+  const shortMonthLabel = (monthKey: string) => {
+    const [y, m] = monthKey.split("-").map(Number);
+    return format(new Date(y, m - 1, 1), "MMM/yy", { locale: ptBR });
+  };
+
+  const sourceIssues: DreSourceIssue[] = [];
+  if (!loading && !sourceError && metrics.revenueSource.issues.length > 0) {
+    sourceIssues.push({
+      id: "revenue",
+      tone: "warning",
+      title: metrics.revenueSource.units.some((unit) => unit.revenueCents === null || unit.cashShortageCents === null)
+        ? "Vendas ou caixa a conferir"
+        : `Caixa comprovado em ${metrics.revenueSource.cashDifferenceCoveredDays} de ${metrics.revenueSource.cashDifferenceTotalDays} dias`,
+      body: (
+        <>
+          <p>Faltas e sobras somam somente os dias com diferenças comprovadas. O resultado é provisório enquanto houver dias ou contagens pendentes.</p>
+          <ul className="list-disc space-y-1 pl-4">
+            {metrics.revenueSource.units.filter((unit) => unit.issues.length > 0).map((unit) => (
+              <li key={unit.kioskId}>
+                <strong>{kioskNameById[unit.kioskId] ?? unit.kioskId}</strong>: caixa {unit.cashDifferenceCoveredDays}/{unit.cashDifferenceTotalDays} dias
+                {unit.revenueCents === null ? "; receita indisponível" : ""}
+                {unit.cashShortageCents === null ? "; diferenças de caixa indisponíveis" : ""}
+                {unit.cashDifferenceProvisional ? "; valor provisório" : ""}
+                {unit.pendingOperatorCount === null ? "; cobertura a conferir" : `; ${unit.pendingOperatorCount} contagem(ns) aguardando conferência financeira`}.
+              </li>
+            ))}
+          </ul>
+          <Link className="font-bold text-ds-accent-ink underline-offset-2 hover:underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
+        </>
+      ),
+    });
+  }
+  if (!sourceError && cmvCriterion === "composition" && incompleteCmvPeriods.length > 0) {
+    sourceIssues.push({ id: "cmv-incomplete", tone: "warning", blocksExport: true, title: "CMV incompleto", body: <p>Confira os relatórios de vendas, as fichas, os ingredientes e seus custos em {incompleteCmvPeriods.map((row) => kioskNameById[row.kioskId] ?? row.kioskId).join(", ")}. Custo ausente não é zero. Fechamento e exportação ficam bloqueados até a correção.</p> });
+  }
+  if (!sourceError && cmvCriterion === "composition" && changedCmvPeriods.length > 0) {
+    sourceIssues.push({ id: "cmv-changed", tone: "warning", blocksExport: true, title: "Vendas alteradas após o fechamento do CMV", body: <p>{changedCmvPeriods.map((row) => kioskNameById[row.kioskId] ?? row.kioskId).join(", ")}: o custo congelado foi preservado. Reabra para conferir e fechar novamente; resultado e exportação permanecem pendentes.</p> });
+  }
+  if (!sourceError && cmvCriterion === "stock_movement" && stockCmvError) {
+    sourceIssues.push({ id: "stock-error", tone: "danger", blocksExport: true, title: "O CMV por movimentação não pôde ser calculado", body: <p>{stockCmvError}</p> });
+  }
+  if (!sourceError && cmvCriterion === "stock_movement" && !stockCmvError && stockValuationIssueCount > 0) {
+    sourceIssues.push({ id: "stock-valuation", tone: "warning", blocksExport: true, title: "Valorização do estoque incompleta", body: <p>{stockUnpricedMovementCount} movimentação(ões) dos últimos seis meses ficaram sem custo{selectedStockBreakdown.unpricedMovementCount > 0 ? `; ${selectedStockBreakdown.unpricedMovementCount} estão no filtro atual` : ""}. A exportação foi bloqueada até a correção dos cadastros.</p> });
+  }
+  if (!sourceError && selectedStockHasNoMovements) {
+    sourceIssues.push({ id: "stock-empty", tone: "warning", blocksExport: true, title: "Não há saídas de estoque no filtro atual", body: <p>O CMV por movimentação ficou zerado e a exportação foi bloqueada.</p> });
+  }
+  if (!sourceError && expenseContractIssues.length > 0) {
+    sourceIssues.push({
+      id: "expenses",
+      tone: "warning",
+      blocksExport: true,
+      title: `${expenseContractIssueGroups.length} ${expenseContractIssueGroups.length === 1 ? "despesa pendente" : "despesas pendentes"} de integridade`,
+      body: (
+        <>
+          <p>{expenseContractIssues.length === 1 ? "1 inconsistência contábil impede" : `${expenseContractIssues.length} inconsistências contábeis impedem`} considerar a DRE fechada. A exportação fica bloqueada até a correção.</p>
+          <div className="divide-y divide-ds-alert-border overflow-hidden rounded-ds-sm border border-ds-alert-border bg-ds-surface">
+            {expenseContractIssueGroups.map(({ expenseId, expense, issues, isPersonnelExpense }) => {
+              const canIdentifyExpense = canViewExpenseDetails && (!isPersonnelExpense || canViewPersonnelCosts);
+              const title = canIdentifyExpense ? expense?.description || expense?.supplier || "Despesa sem descrição" : "Despesa com inconsistência";
+              const showSupplier = Boolean(canIdentifyExpense && expense?.description && expense.supplier && expense.supplier !== expense.description);
+              return (
+                <div key={expenseId} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ds-ink">{title}</p>
+                    {showSupplier ? <p className="truncate text-xs text-ds-ink-muted">{expense?.supplier}</p> : null}
+                    <p className="mt-0.5 text-xs text-ds-ink-2">{issues.map((issue) => expenseIssueLabel(issue, !isPersonnelExpense || canViewPersonnelCosts)).join(" · ")}</p>
+                  </div>
+                  {canIdentifyExpense && canEditExpenses ? (
+                    <Button asChild variant="outline" size="sm" className="h-8 shrink-0">
+                      <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(expenseId)}`}>Corrigir <ExternalLink className="ml-1.5 h-3.5 w-3.5" /></Link>
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ),
+    });
+  }
+
   // ── render ───────────────────────────────────────────────────────────────────
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
   }
 
-  return (
-    <PageContainer variant="wide" surface className="space-y-6">
-      {metrics.revenueSource.costOnlyUnit && <p className="rounded-xl border p-4 text-sm text-muted-foreground">Esta unidade não possui origem de vendas no PDV. Suas despesas continuam incluídas na DRE; receita e resultado isolado não são apurados neste filtro.</p>}
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">DRE</h1>
-          <p className="text-muted-foreground">Demonstrativo gerencial com comparação do CMV por composição ou movimentação de estoque.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Month nav */}
-          <div className="flex items-center gap-1 rounded-xl border bg-background px-1 shadow-xs">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(-1)} disabled={selectedMonth <= FINANCIAL_DRE_START_MONTH_KEY}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <input
-              type="month"
-              min={FINANCIAL_DRE_START_MONTH_KEY}
-              value={selectedMonth}
-              onChange={(e) => e.target.value && setSelectedMonth(e.target.value < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : e.target.value)}
-              className="w-36 bg-transparent py-1.5 text-center text-sm font-medium focus:outline-hidden"
-            />
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(1)} disabled={isFutureMonth}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+  const exportDisabled = loading || Boolean(sourceError)
+    || (viewMode !== "people" && !Number.isFinite(metrics.lucroLiq))
+    || Boolean(stockCmvError && cmvCriterion === "stock_movement")
+    || cmvIntegrityIssue
+    || expenseContractIssues.length > 0;
+  const isProvisional = sourceIssues.length > 0 || !Number.isFinite(metrics.lucroLiq);
+  const unitLabel = unitFilter !== "all" ? kioskNameById[unitFilter] ?? unitFilter : "Todas as unidades";
+  const viewOptions: Array<{ value: typeof viewMode; label: string }> = [
+    { value: "classic", label: "Clássica" },
+    { value: "dashboard", label: "Painel" },
+    ...(canViewPersonnelCosts ? [{ value: "people" as const, label: "Por colaborador" }] : []),
+  ];
+  const heroSelect = "h-9 w-auto min-w-44 gap-2 rounded-full border-white/10 bg-white/5 px-3.5 text-[13px] font-bold text-ds-on-dark";
 
-          {!loading && !sourceError && metrics.revenueSource.issues.length > 0 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-xs text-amber-800" aria-label="Ver fontes e contagens da DRE">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {metrics.revenueSource.units.some(unit => unit.revenueCents === null || unit.cashShortageCents === null)
-                    ? "Conferir fontes" : metrics.revenueSource.cashDifferenceCoverage !== "complete"
-                      ? `Caixa ${metrics.revenueSource.cashDifferenceCoveredDays}/${metrics.revenueSource.cashDifferenceTotalDays} dias`
-                      : "Contagens provisórias"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto text-sm">
-                <p className="font-semibold">Fontes da DRE</p>
-                <p className="text-muted-foreground">Faltas e sobras somam somente os dias com diferenças comprovadas: {metrics.revenueSource.cashDifferenceCoveredDays}/{metrics.revenueSource.cashDifferenceTotalDays} dias. O resultado é provisório enquanto houver dias ou contagens pendentes. A contagem financeira finalizada prevalece por operador; antes dela, usa-se a contagem do PDV.</p>
-                {metrics.revenueSource.units.filter(unit => unit.issues.length > 0).map(unit => (
-                  <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: caixa {unit.cashDifferenceCoveredDays}/{unit.cashDifferenceTotalDays} dias; {unit.revenueCents === null ? "receita indisponível; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.cashDifferenceProvisional ? "valor provisório; " : ""}{unit.pendingOperatorCount === null ? "cobertura a conferir" : `${unit.pendingOperatorCount} contagem(ns) aguardando conferência financeira`}.</p>
-                ))}
-                <Link className="inline-block underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
-              </PopoverContent>
-            </Popover>
-          )}
-
-          {/* Unit filter */}
-          <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as unidades</SelectItem>
-              {kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={cmvCriterion} onValueChange={(value) => setCmvCriterion(value as DreCmvCriterion)}>
-            <SelectTrigger className="w-56" aria-label="Critério do CMV">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="composition">CMV pela composição</SelectItem>
-              <SelectItem value="stock_movement">CMV pela movimentação</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Atualizar DRE"
-            title="Atualizar DRE"
-            onClick={() => setSourceReloadToken((current) => current + 1)}
-            disabled={loadingSource}
-          >
-            <RefreshCw className={`h-4 w-4 ${loadingSource ? "animate-spin" : ""}`} />
-          </Button>
-
-          {/* View toggle */}
-          <div className="flex rounded-xl border bg-background p-1 shadow-xs">
-            <button type="button" onClick={() => setViewMode("dashboard")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "dashboard" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
-              <LayoutDashboard className="h-3.5 w-3.5" /> Resumo
-            </button>
-            <button type="button" onClick={() => setViewMode("classic")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "classic" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
-              <Table2 className="h-3.5 w-3.5" /> DRE Clássica
-            </button>
-            {canViewPersonnelCosts ? (
-              <button type="button" onClick={() => setViewMode("people")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "people" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
-                <UsersRound className="h-3.5 w-3.5" /> Por colaborador
-              </button>
-            ) : null}
-          </div>
-
-          {(viewMode !== "people" || canExportPersonnelCosts) ? (
-            <Button
-              variant="outline"
-              onClick={exportCsv}
-              disabled={loading || Boolean(sourceError)
-                || (viewMode !== "people" && !Number.isFinite(metrics.lucroLiq))
-                || Boolean(stockCmvError && cmvCriterion === "stock_movement")
-                || cmvIntegrityIssue
-                || expenseContractIssues.length > 0}
-            >
-              <Download className="mr-2 h-4 w-4" /> Exportar
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {!sourceError && <BudgetPlanningComparisonCard rows={budgetPlanning} month={selectedMonth} unitId={unitFilter} />}
-      {!loading && !sourceError && (
-        <Card>
-          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV. Diferenças de dias ou contagens pendentes ficam fora da soma; o resultado é provisório.</CardDescription></CardHeader>
-          {metrics.revenueSource.cashDifferenceCoverage !== "complete" && <p className="px-6 text-xs font-semibold text-amber-800" role="status">Diferenças comprovadas: {metrics.revenueSource.cashDifferenceCoveredDays}/{metrics.revenueSource.cashDifferenceTotalDays} dias · resultado provisório</p>}
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <KpiCard label="Vendas integrais do PDV" value={formatCurrency(metrics.revBruta)} />
-            <KpiCard label="(−) Faltas de caixa" value={formatCurrency(metrics.cashShortage)} color="text-rose-700" />
-            <KpiCard label="(+) Sobras de caixa" value={formatCurrency(metrics.cashSurplus)} color="text-emerald-700" />
-          </CardContent>
-        </Card>
-      )}
-      {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
-      {!sourceError && cmvCriterion === "composition" && incompleteCmvPeriods.length > 0 && <div role="alert" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> Confira os relatórios de vendas, as fichas, os ingredientes e seus custos em {incompleteCmvPeriods.map(row => kioskNameById[row.kioskId] ?? row.kioskId).join(", ")}. Custo ausente não é zero. Fechamento e exportação ficam bloqueados até a correção.</span></div>}
-      {!sourceError && cmvCriterion === "composition" && changedCmvPeriods.length > 0 && <div role="alert" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Vendas alteradas após o fechamento do CMV.</strong> {changedCmvPeriods.map(row => kioskNameById[row.kioskId] ?? row.kioskId).join(", ")}: o custo congelado foi preservado. Reabra para conferir e fechar novamente; resultado e exportação permanecem pendentes.</span></div>}
-      {!sourceError && cmvCriterion === "stock_movement" && stockCmvError && (
-        <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <span><strong>O CMV por movimentação não pôde ser calculado.</strong> {stockCmvError}</span>
-        </div>
-      )}
-      {!sourceError && cmvCriterion === "stock_movement" && !stockCmvError && stockValuationIssueCount > 0 && (
-        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <span>
-            <strong>Valorização do estoque incompleta.</strong>{" "}
-            {stockUnpricedMovementCount} movimentação(ões) dos últimos seis meses ficaram sem custo
-            {selectedStockBreakdown.unpricedMovementCount > 0
-              ? `; ${selectedStockBreakdown.unpricedMovementCount} estão no filtro atual`
-              : ""}.
-            A exportação foi bloqueada até a correção dos cadastros.
-          </span>
-        </div>
-      )}
-      {!sourceError && selectedStockHasNoMovements && (
-        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <span><strong>Não há saídas de estoque no filtro atual.</strong> O CMV por movimentação ficou zerado e a exportação foi bloqueada.</span>
-        </div>
-      )}
-
-      <div className="rounded-xl border bg-background p-4 shadow-xs">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
-            <p className="text-sm font-semibold">Critério dos insumos na DRE</p>
-            <p className="mt-1 text-xs text-muted-foreground">Os dois cálculos são apresentados para comparação. A seleção define qual valor entra na DRE.</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {cmvCriterion === "composition"
-                ? "Enquanto aberto, o CMV usa as vendas e os custos atuais das fichas. Após a confirmação do fechamento mensal, usa o valor congelado daquela unidade e competência."
-                : "A DRE usa consumo, perdas e ajustes negativos registrados no estoque. Transferências e movimentos estornados não entram."}
-            </p>
-          </div>
-          <div className="grid min-w-0 gap-3 sm:grid-cols-3 lg:min-w-[560px]">
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Composição</p>
-              <p className="mt-0.5 font-mono text-sm font-bold">{formatCurrency(selectedCompositionCmv)}</p>
-            </div>
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Movimentação</p>
-              <p className="mt-0.5 font-mono text-sm font-bold">
-                {loadingStockCmv
-                  ? "Calculando…"
-                  : stockCmvError ? "Indisponível" : stockCmvAvailableForSelectedMonth ? formatCurrency(selectedStockBreakdown.totalCmv) : "Calculando…"}
-              </p>
-            </div>
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Diferença</p>
-              <p className={`mt-0.5 font-mono text-sm font-bold ${selectedStockCmvDifference > 0 ? "text-rose-600" : selectedStockCmvDifference < 0 ? "text-emerald-600" : ""}`}>
-                {!loadingStockCmv && !stockCmvError && stockCmvAvailableForSelectedMonth
-                  ? `${selectedStockCmvDifference > 0 ? "+" : ""}${formatCurrency(selectedStockCmvDifference)}`
-                  : "—"}
-              </p>
-            </div>
-          </div>
-        </div>
-        {cmvCriterion === "composition" && !sourceError && <CmvClosingPanel
+  const cashCard = (
+    <DreCashCard
+      revenue={metrics.revBruta}
+      shortage={metrics.cashShortage}
+      surplus={metrics.cashSurplus}
+      coveredDays={metrics.revenueSource.cashDifferenceCoveredDays}
+      totalDays={metrics.revenueSource.cashDifferenceTotalDays}
+      coverageComplete={metrics.revenueSource.cashDifferenceCoverage === "complete"}
+      provisional={Boolean(metrics.revenueSource.cashDifferenceProvisional)}
+    />
+  );
+  const cmvCard = (
+    <DreCmvCard
+      criterion={cmvCriterion}
+      onCriterionChange={setCmvCriterion}
+      compositionCmv={selectedCompositionCmv}
+      stock={{
+        loading: loadingStockCmv,
+        error: stockCmvError,
+        available: stockCmvAvailableForSelectedMonth,
+        total: selectedStockBreakdown.totalCmv,
+        consumption: selectedStockBreakdown.consumptionCmv,
+        losses: selectedStockBreakdown.lossesCmv,
+        adjustments: selectedStockBreakdown.adjustmentsCmv,
+      }}
+    >
+      {cmvCriterion === "composition" && !sourceError ? (
+        <CmvClosingPanel
           key={`${selectedMonth}:${unitFilter}`} entries={selectedCmvPeriods} month={selectedMonth}
           unitName={selectedKioskId ? (kioskNameById[selectedKioskId] ?? selectedKioskId) : null}
           capabilities={cmvCapabilities} disabled={loadingSource}
-          onUpdated={() => setSourceReloadToken(current => current + 1)}
-        />}
-        {cmvCriterion === "stock_movement" && stockCmvPayload && !loadingStockCmv ? (
-          <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
-            Estimativa gerencial pelo último custo efetivo disponível na data de cada saída:{" "}
-            {formatCurrency(selectedStockBreakdown.consumptionCmv)} de consumo,{" "}
-            {formatCurrency(selectedStockBreakdown.lossesCmv)} de perdas e{" "}
-            {formatCurrency(selectedStockBreakdown.adjustmentsCmv)} de ajustes negativos.
-          </p>
-        ) : null}
-      </div>
-      {!sourceError && expenseContractIssues.length > 0 && (
-        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p>
-              <strong>Despesas pendentes de integridade.</strong>{" "}
-              {expenseContractIssueGroups.length === 1
-                ? "1 despesa tem"
-                : `${expenseContractIssueGroups.length} despesas têm`}{" "}
-              {expenseContractIssues.length === 1
-                ? "1 inconsistência contábil"
-                : `${expenseContractIssues.length} inconsistências contábeis`}{" "}
-              e {expenseContractIssueGroups.length === 1 ? "impede" : "impedem"} considerar a DRE fechada.
-            </p>
-            <div className="mt-3 max-h-56 divide-y divide-amber-200 overflow-y-auto rounded-lg border border-amber-200 bg-white/60">
-              {expenseContractIssueGroups.map(({ expenseId, expense, issues, isPersonnelExpense }) => {
-                const canIdentifyExpense = canViewExpenseDetails
-                  && (!isPersonnelExpense || canViewPersonnelCosts);
-                const title = canIdentifyExpense
-                  ? expense?.description || expense?.supplier || "Despesa sem descrição"
-                  : "Despesa com inconsistência";
-                const showSupplier = Boolean(
-                  canIdentifyExpense
-                  && expense?.description
-                  && expense.supplier
-                  && expense.supplier !== expense.description,
-                );
-                return (
-                  <div key={expenseId} className="flex items-start justify-between gap-4 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-amber-950">{title}</p>
-                      {showSupplier ? <p className="truncate text-xs text-amber-900/75">{expense?.supplier}</p> : null}
-                      <p className="mt-0.5 text-xs text-amber-900">
-                        {issues.map((issue) => expenseIssueLabel(
-                          issue,
-                          !isPersonnelExpense || canViewPersonnelCosts,
-                        )).join(" · ")}
-                      </p>
-                    </div>
-                    {canIdentifyExpense && canEditExpenses ? (
-                      <Button asChild variant="outline" size="sm" className="h-8 shrink-0 border-amber-300 bg-white/70">
-                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(expenseId)}`}>
-                          Corrigir <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                );
-              })}
+          onUpdated={() => setSourceReloadToken((current) => current + 1)}
+        />
+      ) : null}
+    </DreCmvCard>
+  );
+
+  return (
+    <PageContainer variant="wide" surface className="space-y-5">
+      <PageHero
+        kicker="Financeiro · Resultado"
+        title="DRE"
+        subtitle={`${unitLabel} · ${selectedMonthLabel}`}
+        actions={(
+          <>
+            <Button variant="on-dark-icon" size="icon" aria-label="Atualizar DRE" title="Atualizar DRE" onClick={() => setSourceReloadToken((current) => current + 1)} disabled={loadingSource}>
+              <RefreshCw className={cn("h-4 w-4", loadingSource && "animate-spin")} />
+            </Button>
+            {(viewMode !== "people" || canExportPersonnelCosts) ? (
+              <Button variant="on-dark-secondary" onClick={exportCsv} disabled={exportDisabled} title={exportDisabled ? "Exportação bloqueada enquanto houver pendências ou valores indisponíveis" : undefined}>
+                <Download className="mr-2 h-4 w-4" /> Exportar CSV
+              </Button>
+            ) : null}
+          </>
+        )}
+        chips={(
+          <>
+            <div className="inline-flex h-9 items-center gap-0.5 rounded-full bg-white/5 px-1 ring-1 ring-inset ring-white/10">
+              <button type="button" aria-label="Mês anterior" className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-40" onClick={() => navigateMonth(-1)} disabled={selectedMonth <= FINANCIAL_DRE_START_MONTH_KEY}>
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <input
+                type="month"
+                aria-label="Competência"
+                min={FINANCIAL_DRE_START_MONTH_KEY}
+                value={selectedMonth}
+                onChange={(e) => e.target.value && setSelectedMonth(e.target.value < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : e.target.value)}
+                className="w-36 bg-transparent text-center text-[13px] font-bold text-ds-on-dark [color-scheme:dark] focus:outline-hidden"
+              />
+              <button type="button" aria-label="Próximo mês" className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-40" onClick={() => navigateMonth(1)} disabled={isFutureMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-            <p className="mt-2 text-xs text-amber-900">
-              A exportação foi bloqueada até que essas despesas sejam corrigidas.
-            </p>
-          </div>
-        </div>
+            <Select value={unitFilter} onValueChange={setUnitFilter}>
+              <SelectTrigger className={heroSelect} aria-label="Unidade"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as unidades</SelectItem>
+                {kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={cmvCriterion} onValueChange={(value) => setCmvCriterion(value as DreCmvCriterion)}>
+              <SelectTrigger className={heroSelect} aria-label="Critério do CMV"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="composition">CMV pela composição</SelectItem>
+                <SelectItem value="stock_movement">CMV pela movimentação</SelectItem>
+              </SelectContent>
+            </Select>
+            <DreSourcesTrigger issues={sourceIssues} onOpen={() => setSourcesOpen(true)} />
+            <div role="radiogroup" aria-label="Visualização" className="ml-auto inline-flex rounded-ds-md bg-white/8 p-[3px]">
+              {viewOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={viewMode === option.value}
+                  onClick={() => setViewMode(option.value)}
+                  className={cn(
+                    "h-8 whitespace-nowrap rounded-ds-sm px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                    viewMode === option.value ? "bg-ds-on-dark text-ds-ink" : "text-ds-on-dark-2 hover:text-ds-on-dark",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      />
+
+      <DreSourcesPanel open={sourcesOpen} onOpenChange={setSourcesOpen} issues={sourceIssues} />
+
+      {metrics.revenueSource.costOnlyUnit && <p className="rounded-ds-card border border-ds-border bg-ds-surface p-4 text-sm text-ds-ink-muted">Esta unidade não possui origem de vendas no PDV. Suas despesas continuam incluídas na DRE; receita e resultado isolado não são apurados neste filtro.</p>}
+      {sourceError && <div role="alert" className="flex gap-3 rounded-ds-card border border-ds-confirm-border bg-ds-danger-bg p-4 text-sm text-ds-confirm-ink"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
+
+      {/* ── DRE CLÁSSICA ────────────────────────────────────────────────────── */}
+      {viewMode === "classic" && (
+        <>
+          <section className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface" aria-labelledby="dre-statement-title">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ds-border px-5 py-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 id="dre-statement-title" className="text-[17px] font-extrabold">Demonstrativo de resultado · {selectedMonthLabel}</h2>
+                  {!loading && isProvisional ? <span className="rounded-full bg-ds-warn-bg px-2.5 py-0.5 text-[12px] font-bold text-ds-alert-ink">Parcial</span> : null}
+                </div>
+                <p className="text-[13px] text-ds-ink-muted">
+                  {unitLabel} · competência · CMV {cmvCriterion === "stock_movement" ? "pela movimentação do estoque" : "pela composição"} · valores em R$
+                  {!hasDreCategories && " · Mapeie os planos de contas nas configurações financeiras para categorizar automaticamente."}
+                </p>
+              </div>
+            </div>
+            {loading ? (
+              <div className="space-y-2 p-6">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            ) : (() => {
+              type Kind = "cost" | "result";
+              type Row =
+                | { type: "section"; label: string }
+                | { type: "line"; label: string; get: (m: DreMetrics) => number; kind: Kind; muted?: boolean; detailsKey?: string; waitingLabel?: string }
+                | { type: "subtotal"; label: string; get: (m: DreMetrics) => number; final?: boolean };
+              const either = (get: (m: DreMetrics) => number) => get(metrics) > 0 || (previousMetrics ? get(previousMetrics) > 0 : false);
+              const rows: Row[] = [
+                { type: "section", label: "Receita" },
+                { type: "line", label: "Receita bruta (vendas integrais do PDV)", get: (m) => m.revBruta, kind: "result" },
+                { type: "line", label: "(−) Impostos e deduções", get: (m) => m.impostos, kind: "cost", detailsKey: "impostos_deducoes" },
+                { type: "subtotal", label: "= Receita líquida", get: (m) => m.recLiq },
+                { type: "section", label: "Custo da mercadoria vendida" },
+                ...(cmvCriterion === "stock_movement"
+                  ? [
+                      { type: "line" as const, label: "(−) Consumo pela movimentação de estoque", get: (m: DreMetrics) => m.stockCmvBreakdown.consumptionCmv, kind: "cost" as const },
+                      ...(either((m) => m.stockCmvBreakdown.lossesCmv) ? [{ type: "line" as const, label: "(−) Perdas e descartes", get: (m: DreMetrics) => m.stockCmvBreakdown.lossesCmv, kind: "cost" as const }] : []),
+                      ...(either((m) => m.stockCmvBreakdown.adjustmentsCmv) ? [{ type: "line" as const, label: "(−) Ajustes negativos de estoque", get: (m: DreMetrics) => m.stockCmvBreakdown.adjustmentsCmv, kind: "cost" as const }] : []),
+                    ]
+                  : [{ type: "line" as const, label: "(−) CMV pela composição (PDV + fichas)", get: (m: DreMetrics) => m.cmv, kind: "cost" as const }]),
+                { type: "subtotal", label: "= Margem bruta", get: (m) => m.margBruta },
+                { type: "section", label: "Custos variáveis" },
+                { type: "line", label: "(−) Insumos e fretes de aquisição", get: (m) => m.custVar, kind: "cost", detailsKey: "custos_variaveis" },
+                { type: "subtotal", label: "= Margem de contribuição", get: (m) => m.margContr },
+                { type: "section", label: "Despesas operacionais" },
+                { type: "line", label: "(−) Pessoal", get: (m) => m.pessoal, kind: "cost", detailsKey: "pessoal" },
+                { type: "line", label: "(−) Despesas operacionais", get: (m) => m.despOp, kind: "cost", detailsKey: "despesas_operacionais" },
+                { type: "line", label: "(−) Ocupação", get: (m) => m.ocupacao, kind: "cost", detailsKey: "ocupacao" },
+                ...(either((m) => m.semCategoria) ? [{ type: "line" as const, label: "(−) Não classificado", get: (m: DreMetrics) => m.semCategoria, kind: "cost" as const, muted: true, detailsKey: "null" }] : []),
+                { type: "line", label: "(−) Faltas de caixa", get: (m) => m.cashShortage, kind: "cost", waitingLabel: "Aguardando" },
+                { type: "line", label: "(+) Sobras de caixa", get: (m) => m.cashSurplus, kind: "result", waitingLabel: "Aguardando" },
+                { type: "subtotal", label: "= EBIT (resultado operacional)", get: (m) => m.resOp },
+                { type: "section", label: "Resultado financeiro e impostos" },
+                ...(either((m) => m.recFin) ? [{ type: "line" as const, label: "(+) Receita financeira", get: (m: DreMetrics) => m.recFin, kind: "result" as const, detailsKey: "receita_financeira" }] : []),
+                { type: "line", label: "(−) Despesas financeiras", get: (m) => m.despFin, kind: "cost", detailsKey: "despesas_financeiras" },
+                ...(either((m) => m.recNaoOp) ? [{ type: "line" as const, label: "(+) Receita não operacional", get: (m: DreMetrics) => m.recNaoOp, kind: "result" as const, detailsKey: "receita_nao_operacional" }] : []),
+                ...(either((m) => m.despNaoOp) ? [{ type: "line" as const, label: "(−) Despesa não operacional", get: (m: DreMetrics) => m.despNaoOp, kind: "cost" as const, detailsKey: "despesa_nao_operacional" }] : []),
+                { type: "subtotal", label: "= LAIR", get: (m) => m.lair },
+                { type: "line", label: "(−) IR / CSLL", get: (m) => m.irCsll, kind: "cost", detailsKey: "impostos_resultado" },
+                { type: "subtotal", label: "= Lucro líquido", get: (m) => m.lucroLiq, final: true },
+              ];
+              const amount = (value: number, negative: boolean) => (negative && value !== 0 ? `−${currency(Math.abs(value))}` : currency(value)).replace("R$", "").trim();
+              const ah = (value: number, previous: number | null, kind: Kind) => {
+                const variation = dreHorizontalVariation(value, previous);
+                if (variation === null) return <span className="text-ds-ink-faint">—</span>;
+                const tone = dreVariationTone(variation, kind);
+                return (
+                  <span className={cn(tone === "good" && "text-ds-ok", tone === "bad" && "text-ds-danger", tone === "neutral" && "text-ds-ink-muted")}>
+                    {variation > 0 ? "+" : ""}{variation.toFixed(1).replace(".", ",")}
+                  </span>
+                );
+              };
+              const av = (value: number) => (Number.isFinite(value) && Number.isFinite(metrics.recLiq) && metrics.recLiq > 0 ? ((value / metrics.recLiq) * 100).toFixed(1).replace(".", ",") : "—");
+              const previousLabel = previousMonthKey ? shortMonthLabel(previousMonthKey) : null;
+              const cols = previousLabel ? 6 : 4;
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead>
+                      <tr className="border-b border-ds-border bg-ds-muted text-[11px] font-semibold uppercase tracking-wider text-ds-ink-muted">
+                        <th className="w-10" aria-hidden />
+                        <th className="py-2.5 pr-4 text-left">Conta</th>
+                        <th className="px-4 py-2.5 text-right">{shortMonthLabel(selectedMonth)}</th>
+                        <th className="px-4 py-2.5 text-right" title="Análise vertical: % da receita líquida">AV %</th>
+                        {previousLabel ? <th className="px-4 py-2.5 text-right">{previousLabel}</th> : null}
+                        {previousLabel ? <th className="px-4 py-2.5 pr-5 text-right" title={`Análise horizontal: variação contra ${previousLabel}`}>AH %</th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, i) => {
+                        if (row.type === "section") return (
+                          <tr key={i}><td colSpan={cols} className="px-5 pb-1 pt-4 text-[10.5px] font-bold uppercase tracking-widest text-ds-ink-faint">{row.label}</td></tr>
+                        );
+                        const value = row.get(metrics);
+                        const previous = previousMetrics ? row.get(previousMetrics) : null;
+                        if (row.type === "subtotal") {
+                          const finalRow = row.final;
+                          const pending = !Number.isFinite(value);
+                          return (
+                            <tr key={i} className={cn("border-b border-ds-divider font-bold", finalRow ? "bg-ds-dark text-ds-on-dark" : "bg-ds-muted")}>
+                              <td />
+                              <td className="py-3 pr-4">{row.label}</td>
+                              <td className={cn("px-4 py-3 text-right font-ds-mono", pending ? (finalRow ? "text-ds-warn" : "text-ds-alert-ink") : value < 0 && !finalRow ? "text-ds-danger" : "")}>{pending ? "Pendente" : amount(value, false)}</td>
+                              <td className="px-4 py-3 text-right font-ds-mono text-[13px]">{av(value)}</td>
+                              {previousLabel ? <td className={cn("px-4 py-3 text-right font-ds-mono text-[13px]", finalRow ? "text-ds-on-dark-sub" : "text-ds-ink-muted")}>{previous !== null && Number.isFinite(previous) ? amount(previous, false) : "—"}</td> : null}
+                              {previousLabel ? <td className="px-4 py-3 pr-5 text-right font-ds-mono text-[13px]">{ah(value, previous, "result")}</td> : null}
+                            </tr>
+                          );
+                        }
+                        const negative = row.label.startsWith("(−)");
+                        const waiting = !Number.isFinite(value);
+                        const detailsKey = row.detailsKey;
+                        const details = detailsKey ? metrics.expenseDetailsByPosition[detailsKey] ?? [] : [];
+                        const accountGroups = groupDreExpenseDetailsByAccount(details);
+                        const expenseCount = new Set(details.map((detail) => detail.expenseId)).size;
+                        const canExpandDetails = expenseCount > 0 && canViewExpenseDetails && (detailsKey !== "pessoal" || canViewPersonnelCosts);
+                        const isExpanded = Boolean(detailsKey && expandedDreRows[detailsKey] && canExpandDetails);
+                        const detailRegionId = detailsKey ? `dre-expense-details-${detailsKey}` : undefined;
+                        return (
+                          <Fragment key={i}>
+                            <tr className={cn("border-b border-ds-divider transition-colors hover:bg-ds-warm", row.muted && "opacity-60", isExpanded && "bg-ds-accent-soft")}>
+                              <td className="pl-3">
+                                {canExpandDetails && detailsKey ? (
+                                  <button
+                                    type="button"
+                                    className="grid h-7 w-7 place-items-center rounded-ds-sm text-ds-ink-muted hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                                    aria-expanded={isExpanded}
+                                    aria-controls={detailRegionId}
+                                    aria-label={`${isExpanded ? "Recolher" : "Expandir"} ${row.label}`}
+                                    onClick={() => setExpandedDreRows((current) => ({ ...current, [detailsKey]: !current[detailsKey] }))}
+                                  >
+                                    <ChevronDown className={cn("h-4 w-4 transition-transform", !isExpanded && "-rotate-90")} />
+                                  </button>
+                                ) : null}
+                              </td>
+                              <td className="py-2.5 pr-4 pl-3 text-ds-ink-2">
+                                <span className={cn(isExpanded && "font-semibold text-ds-accent-ink")}>{row.label}</span>
+                                {canExpandDetails ? <span className="ml-2 rounded-full bg-ds-muted px-2 py-0.5 text-[10.5px] font-medium text-ds-ink-muted">{expenseCount} {expenseCount === 1 ? "despesa" : "despesas"}</span> : null}
+                              </td>
+                              <td className={cn("px-4 py-2.5 text-right font-ds-mono text-[13px]", waiting && "text-ds-ink-muted")}>{waiting ? row.waitingLabel ?? "Indisponível" : amount(value, negative)}</td>
+                              <td className="px-4 py-2.5 text-right font-ds-mono text-[13px] text-ds-ink-muted">{av(value)}</td>
+                              {previousLabel ? <td className="px-4 py-2.5 text-right font-ds-mono text-[13px] text-ds-ink-muted">{previous !== null && Number.isFinite(previous) ? amount(previous, negative) : "—"}</td> : null}
+                              {previousLabel ? <td className="px-4 py-2.5 pr-5 text-right font-ds-mono text-[13px]">{ah(value, previous, row.kind)}</td> : null}
+                            </tr>
+                            {isExpanded ? (
+                              <tr className="border-b border-ds-divider bg-ds-warm">
+                                <td colSpan={cols} className="px-5 py-4 pl-12">
+                                  <div id={detailRegionId} role="region" aria-label={`Lançamentos de ${row.label}`} className="overflow-hidden rounded-ds-md border border-ds-border bg-ds-surface">
+                                    <Accordion type="multiple">
+                                      {accountGroups.map((group) => (
+                                        <AccordionItem key={group.accountPlanId} value={`${detailsKey}:${group.accountPlanId}`} className="last:border-b-0">
+                                          <AccordionTrigger className="gap-3 bg-ds-muted px-4 py-3 text-left hover:no-underline">
+                                            <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-1">
+                                              <span className="min-w-0">
+                                                <span className="block truncate text-sm font-semibold text-ds-ink">{group.accountPlanName}</span>
+                                                <span className="mt-0.5 block text-[10.5px] font-normal text-ds-ink-muted">{group.expenses.length} {group.expenses.length === 1 ? "despesa" : "despesas"}</span>
+                                              </span>
+                                              <span className="whitespace-nowrap font-ds-mono text-xs font-semibold text-ds-ink">{currency(group.totalAmount)}</span>
+                                            </span>
+                                          </AccordionTrigger>
+                                          <AccordionContent className="border-t border-ds-divider pb-0">
+                                            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-ds-divider bg-ds-warm px-4 py-2 text-[10.5px] font-semibold uppercase tracking-wider text-ds-ink-muted">
+                                              <span>Despesa</span>
+                                              <span className="text-right">Valor nesta linha</span>
+                                            </div>
+                                            <div className="divide-y divide-ds-divider">
+                                              {group.expenses.map((detail) => {
+                                                const title = detail.description || detail.supplier || "Despesa sem descrição";
+                                                const showSupplier = Boolean(detail.description && detail.supplier && detail.supplier !== detail.description);
+                                                const references = dreExpenseDetailReferences(detail);
+                                                return (
+                                                  <div key={detail.expenseId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+                                                    <div className="min-w-0">
+                                                      <p className="truncate font-medium text-ds-ink">{title}</p>
+                                                      {showSupplier ? <p className="truncate text-xs text-ds-ink-muted">{detail.supplier}</p> : null}
+                                                      {references.length > 0 ? <p className="mt-0.5 truncate text-xs text-ds-ink-muted">{references.join(" · ")}</p> : null}
+                                                    </div>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                      <span className="whitespace-nowrap font-ds-mono text-xs font-semibold">{currency(detail.amount)}</span>
+                                                      {canEditExpenses ? (
+                                                        <Button asChild variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Abrir despesa">
+                                                          <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(detail.expenseId)}`}>
+                                                            <ExternalLink className="h-3.5 w-3.5" />
+                                                            <span className="sr-only">Abrir {title}</span>
+                                                          </Link>
+                                                        </Button>
+                                                      ) : null}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </AccordionContent>
+                                        </AccordionItem>
+                                      ))}
+                                    </Accordion>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-ds-border bg-ds-warm px-5 py-3 text-[12.5px] text-ds-ink-2">
+                    <span><strong>AV</strong> = % da receita líquida</span>
+                    {previousLabel ? <span><strong>AH</strong> = variação contra {previousLabel}</span> : null}
+                    <span>Ponto de equilíbrio: <strong className="font-ds-mono">{formatCurrency(metrics.pe)}</strong></span>
+                    {!Number.isFinite(metrics.lucroLiq) ? <span>Valores aguardando conferência não são zero: os subtotais dependentes ficam pendentes e a exportação é bloqueada.</span> : null}
+                  </div>
+                </div>
+              );
+            })()}
+          </section>
+          {!loading && !sourceError ? <div className="grid gap-4 lg:grid-cols-2">{cashCard}{cmvCard}</div> : null}
+        </>
       )}
 
-      {/* ── DASHBOARD ───────────────────────────────────────────────────────── */}
-      {viewMode === "dashboard" && (
-        <>
-          {/* Top KPIs: monetários */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {loading ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />) : (<>
-              <KpiCard label="Receita Líquida" value={formatCurrency(metrics.recLiq)} color="text-emerald-600" />
-              <KpiCard label="Margem Bruta" value={formatCurrency(metrics.margBruta)} sub={pct(metrics.margBruta, metrics.recLiq)} color="text-blue-600" />
-              <KpiCard label="Margem de Contribuição" value={formatCurrency(metrics.margContr)} sub={pct(metrics.margContr, metrics.recLiq)} color="text-violet-600" />
-              <KpiCard label="Resultado Operacional" value={formatCurrency(metrics.resOp)} sub={pct(metrics.resOp, metrics.recLiq)} color={metrics.resOp >= 0 ? "text-primary" : "text-rose-600"} />
-              <KpiCard label="Lucro Líquido" value={formatCurrency(metrics.lucroLiq)} sub={pct(metrics.lucroLiq, metrics.recLiq)} color={metrics.lucroLiq >= 0 ? "text-emerald-700" : "text-rose-600"} />
-            </>)}
-          </div>
+      {/* ── PAINEL ──────────────────────────────────────────────────────────── */}
+      {viewMode === "dashboard" && (() => {
+        const variationText = (value: number, previous: number | null | undefined) => {
+          const variation = dreHorizontalVariation(value, previous ?? null);
+          return variation === null ? null : `${variation > 0 ? "+" : ""}${variation.toFixed(1).replace(".", ",")}% vs ${previousMonthKey ? shortMonthLabel(previousMonthKey) : "mês anterior"}`;
+        };
+        const tiles: Array<{ label: string; value: string; sub: string | null; dark?: boolean; pending?: boolean }> = [
+          { label: "Receita líquida", value: Number.isFinite(metrics.recLiq) ? currency(metrics.recLiq) : "Indisponível", sub: variationText(metrics.recLiq, previousMetrics?.recLiq) },
+          { label: cmvCriterion === "stock_movement" ? "CMV (movimentação)" : "CMV (composição)", value: pct(metrics.cmv, metrics.recLiq), sub: Number.isFinite(metrics.cmv) ? currency(metrics.cmv) : "Indisponível" },
+          { label: "Margem bruta", value: pct(metrics.margBruta, metrics.recLiq), sub: Number.isFinite(metrics.margBruta) ? currency(metrics.margBruta) : null },
+          { label: "Margem de contribuição", value: pct(metrics.margContr, metrics.recLiq), sub: Number.isFinite(metrics.margContr) ? currency(metrics.margContr) : null },
+          { label: "Ponto de equilíbrio", value: formatCurrency(metrics.pe), sub: "custos fixos ÷ margem de contribuição" },
+          Number.isFinite(metrics.lucroLiq)
+            ? { label: "Lucro líquido", value: currency(metrics.lucroLiq), sub: `${pct(metrics.lucroLiq, metrics.recLiq)} da receita líquida`, dark: true }
+            : { label: "Lucro líquido", value: "Pendente", sub: "falta conferir as fontes", dark: true, pending: true },
+        ];
+        const composition = dreRevenueComposition(metrics.recLiq, [
+          { key: "cmv", label: "CMV", value: metrics.cmv },
+          { key: "pessoal", label: "Pessoal", value: metrics.pessoal },
+          { key: "ocupacao", label: "Ocupação", value: metrics.ocupacao },
+          { key: "despOp", label: "Despesas operacionais", value: metrics.despOp + metrics.semCategoria },
+          { key: "custVar", label: "Insumos e fretes", value: metrics.custVar },
+          { key: "outros", label: "Financeiro, caixa e IR", value: Math.max(0, metrics.despFin + metrics.despNaoOp + metrics.irCsll + metrics.cashShortage - metrics.cashSurplus - metrics.recFin - metrics.recNaoOp) },
+        ]);
+        const sliceClass: Record<string, string> = {
+          cmv: "bg-ds-ink", pessoal: "bg-ds-accent", ocupacao: "bg-ds-accent-ink", despOp: "bg-ds-ink-faint", custVar: "bg-ds-border-input", outros: "bg-ds-seg", remainder: "bg-ds-ok",
+        };
+        const maxPlan = Math.max(...topExpensePlans.map((row) => row.value), 1);
+        return (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              {loading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-ds-card" />) : tiles.map((tile) => (
+                <div key={tile.label} className={cn("rounded-ds-card border p-4", tile.dark ? "border-ds-dark bg-ds-dark text-ds-on-dark" : "border-ds-border bg-ds-surface")}>
+                  <p className={cn("text-[11px] font-semibold uppercase tracking-wider", tile.dark ? "text-ds-on-dark-muted" : "text-ds-ink-muted")}>{tile.label}</p>
+                  <p className={cn("mt-1.5 font-ds-mono text-[21px] font-bold", tile.pending && "text-ds-warn")}>{tile.value}</p>
+                  {tile.sub ? <p className={cn("mt-0.5 text-[12px]", tile.dark ? "text-ds-on-dark-2" : "text-ds-ink-muted")}>{tile.sub}</p> : null}
+                </div>
+              ))}
+            </div>
 
-          {/* Secondary KPIs: percentuais */}
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-            {loading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (<>
-              <KpiCard label={cmvCriterion === "stock_movement" ? "CMV estoque %" : "CMV composição %"} value={pct(metrics.cmv, metrics.recLiq)} sub={formatCurrency(metrics.cmv)} color="text-amber-600" />
-              <KpiCard label="Pessoal %" value={pct(metrics.pessoal, metrics.recLiq)} sub={formatCurrency(metrics.pessoal)} color="text-blue-700" />
-              <KpiCard label="Operacional %" value={pct(metrics.despOp, metrics.recLiq)} sub={formatCurrency(metrics.despOp)} color="text-purple-700" />
-              <KpiCard label="Ocupação %" value={pct(metrics.ocupacao, metrics.recLiq)} sub={formatCurrency(metrics.ocupacao)} color="text-slate-700" />
-              <KpiCard label="Desp. Financeiras %" value={pct(metrics.despFin, metrics.recLiq)} sub={formatCurrency(metrics.despFin)} color="text-rose-700" />
-              <KpiCard label="Ponto de Equilíbrio" value={formatCurrency(metrics.pe)} sub="custos fixos / margem contr. %" color="text-orange-700" />
-            </>)}
-          </div>
-
-          {/* Chart + top plans */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Evolução — últimos 6 meses</CardTitle>
-                <CardDescription>Receita, CMV, despesas fixas e resultado líquido{unitFilter !== "all" ? ` · ${kioskNameById[unitFilter] ?? unitFilter}` : ""}.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[320px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+              <section className="rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="dre-evolution-title">
+                <h2 id="dre-evolution-title" className="text-[15px] font-extrabold">Evolução — últimos 6 meses</h2>
+                <p className="text-[12.5px] text-ds-ink-muted">Receita, CMV, despesas fixas e lucro líquido · {unitLabel}</p>
+                <div className="mt-3 h-[300px]">
                   {loading ? <Skeleton className="h-full w-full" /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                         <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${v / 1000}k`} />
+                        <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`} width={64} />
                         <Tooltip formatter={(value: number) => formatCurrency(value)} />
                         <Legend />
-                        <Area type="monotone" dataKey="receita" name="Receita bruta" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.1} />
-                        <Area type="monotone" dataKey="cmv" name={cmvCriterion === "stock_movement" ? "CMV estoque" : "CMV composição"} stroke="#d97706" fill="#d97706" fillOpacity={0.1} />
-                        <Area type="monotone" dataKey="despesas" name="Despesas fixas" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.1} />
-                        <Area type="monotone" dataKey="resultado" name="Lucro líquido" stroke="hsl(var(--chart-3))" fill="hsl(var(--chart-3))" fillOpacity={0.14} />
+                        <Area type="monotone" dataKey="receita" name="Receita bruta" stroke="var(--ds-ink-muted)" fill="var(--ds-ink-muted)" fillOpacity={0.08} />
+                        <Area type="monotone" dataKey="cmv" name={cmvCriterion === "stock_movement" ? "CMV estoque" : "CMV composição"} stroke="var(--ds-ink)" fill="var(--ds-ink)" fillOpacity={0.06} />
+                        <Area type="monotone" dataKey="despesas" name="Despesas fixas" stroke="var(--ds-accent-ink)" fill="var(--ds-accent-ink)" fillOpacity={0.06} />
+                        <Area type="monotone" dataKey="resultado" name="Lucro líquido" stroke="var(--ds-accent)" fill="var(--ds-accent)" fillOpacity={0.14} strokeWidth={2.5} />
                       </AreaChart>
                     </ResponsiveContainer>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </section>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Top planos de despesa</CardTitle>
-                <CardDescription>Provisionado em {selectedMonthLabel}.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {topExpensePlans.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhum dado disponível.</p>
-                  ) : topExpensePlans.map((row) => (
-                    <div key={row.name} className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="max-w-[180px] truncate text-sm">{row.name}</span>
-                      <span className="font-mono text-sm font-semibold">{formatCurrency(row.value)}</span>
+              <section className="flex flex-col gap-3 rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="dre-composition-title">
+                <div>
+                  <h2 id="dre-composition-title" className="text-[15px] font-extrabold">Para onde vai cada R$ 100 vendidos</h2>
+                  <p className="text-[12.5px] text-ds-ink-muted">% da receita líquida · {selectedMonthLabel}</p>
+                </div>
+                {composition ? (
+                  <>
+                    <div className="flex h-8 overflow-hidden rounded-ds-sm" role="img" aria-label={composition.map((slice) => `${slice.label} ${slice.share.toFixed(1)}%`).join(", ")}>
+                      {composition.map((slice) => <span key={slice.key} className={cn("h-full", slice.key === "remainder" && slice.value < 0 ? "bg-ds-danger" : sliceClass[slice.key])} style={{ width: `${Math.min(slice.share, 100)}%` }} />)}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12.5px] text-ds-ink-2">
+                      {composition.map((slice) => (
+                        <span key={slice.key} className={cn("flex items-center gap-1.5", slice.key === "remainder" && (slice.value >= 0 ? "font-bold text-ds-ok" : "font-bold text-ds-danger"))}>
+                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-[3px]", slice.key === "remainder" && slice.value < 0 ? "bg-ds-danger" : sliceClass[slice.key])} />
+                          {slice.label}
+                          <span className="ml-auto font-ds-mono">{slice.share.toFixed(1).replace(".", ",")}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="rounded-ds-md border border-dashed border-ds-border-input bg-ds-input p-3 text-[13px] text-ds-ink-muted">Disponível quando todas as fontes do mês estiverem conferidas.</p>
+                )}
+                <div className="mt-1 border-t border-ds-divider pt-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ds-ink-muted">Maiores planos de despesa</p>
+                  {topExpensePlans.length === 0 ? <p className="text-[13px] text-ds-ink-muted">Nenhuma despesa no mês.</p> : (
+                    <div className="flex flex-col gap-2">
+                      {topExpensePlans.map((row) => (
+                        <div key={row.name} className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)_auto] items-center gap-2.5 text-[13px]">
+                          <span className="truncate">{row.name}</span>
+                          <span className="h-3 overflow-hidden rounded-[3px] bg-ds-muted"><span className="block h-full rounded-[3px] bg-ds-accent" style={{ width: `${(row.value / maxPlan) * 100}%` }} /></span>
+                          <span className="font-ds-mono text-[12.5px]">{currency(row.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            {unitFilter === "all" && cmvByUnit.length > 0 ? (
+              <section className="rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="dre-cmv-unit-title">
+                <h2 id="dre-cmv-unit-title" className="text-[15px] font-extrabold">CMV por unidade</h2>
+                <p className="text-[12.5px] text-ds-ink-muted">{cmvCriterion === "stock_movement" ? "Consumo, perdas e ajustes negativos valorizados na data de cada saída" : "PDV + composição dos produtos"} · {selectedMonthLabel}</p>
+                <div className="mt-3 grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+                  {cmvByUnit.map((row) => (
+                    <div key={row.kioskId}>
+                      <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                        <span className="truncate font-semibold">{row.name}</span>
+                        <span className="font-ds-mono">{currency(row.cmv)}</span>
+                      </div>
+                      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ds-muted"><div className="h-full rounded-full bg-ds-ink" style={{ width: `${metrics.cmv > 0 ? (row.cmv / metrics.cmv) * 100 : 0}%` }} /></div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </section>
+            ) : null}
 
-          {/* CMV por unidade */}
-          {unitFilter === "all" && cmvByUnit.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>CMV por unidade</CardTitle>
-                <CardDescription>
-                  {cmvCriterion === "stock_movement"
-                    ? "Consumo, perdas e ajustes negativos valorizados na data de cada saída"
-                    : "Calculado via PDV + composição dos produtos"}{" "}
-                  — {selectedMonthLabel}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {cmvByUnit.map((row) => {
-                    const barWidth = metrics.cmv > 0 ? (row.cmv / metrics.cmv) * 100 : 0;
-                    return (
-                      <div key={row.kioskId} className="rounded-lg border p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">{row.name}</span>
-                          <div className="flex shrink-0 items-center gap-3">
-                            <span className="text-xs text-muted-foreground">{pct(row.cmv, metrics.recLiq)} receita líq.</span>
-                            <span className="font-mono text-sm font-semibold text-amber-700">{formatCurrency(row.cmv)}</span>
-                          </div>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${barWidth}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
-
-      {/* ── DRE CLÁSSICA ────────────────────────────────────────────────────── */}
-      {viewMode === "classic" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>DRE — {selectedMonthLabel}</CardTitle>
-            <CardDescription>
-              {unitFilter !== "all" ? kioskNameById[unitFilter] ?? unitFilter : "Todas as unidades"}
-              {!hasDreCategories && " · Mapeie os planos de contas nas configurações financeiras para categorizar automaticamente."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="space-y-2 p-6">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : (() => {
-              const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
-
-              type Row =
-                | { type: "section"; label: string }
-                | { type: "line"; label: string; value: number; negative?: boolean; muted?: boolean; detailsKey?: string }
-                | { type: "subtotal"; label: string; value: number; variant: "blue" | "violet" | "green" | "rose" | "slate" }
-                | { type: "kpi"; label: string; value: string }
-                | { type: "divider" };
-
-              const rows: Row[] = [
-                { type: "section", label: "RECEITA" },
-                { type: "line", label: "Receita Bruta", value: revBruta },
-                { type: "line", label: "(-) Impostos e deduções", value: impostos, negative: true, detailsKey: "impostos_deducoes" },
-                { type: "subtotal", label: "= RECEITA LÍQUIDA", value: recLiq, variant: "blue" },
-                { type: "divider" },
-                { type: "section", label: "CUSTO DE MERCADORIA VENDIDA" },
-                ...(cmvCriterion === "stock_movement"
-                  ? [
-                      { type: "line" as const, label: "(-) Consumo pela movimentação de estoque", value: stockCmvBreakdown.consumptionCmv, negative: true },
-                      ...(stockCmvBreakdown.lossesCmv > 0
-                        ? [{ type: "line" as const, label: "(-) Perdas e descartes", value: stockCmvBreakdown.lossesCmv, negative: true }]
-                        : []),
-                      ...(stockCmvBreakdown.adjustmentsCmv > 0
-                        ? [{ type: "line" as const, label: "(-) Ajustes negativos de estoque", value: stockCmvBreakdown.adjustmentsCmv, negative: true }]
-                        : []),
-                    ]
-                  : [{ type: "line" as const, label: "(-) CMV (PDV + composição automática)", value: cmv, negative: true }]),
-                { type: "subtotal", label: "= MARGEM BRUTA", value: margBruta, variant: "blue" },
-                { type: "kpi", label: "Margem Bruta %", value: pct(margBruta, recLiq) },
-                { type: "divider" },
-                { type: "section", label: "CUSTOS VARIÁVEIS" },
-                { type: "line", label: "(-) Insumos e fretes de aquisição", value: custVar, negative: true, detailsKey: "custos_variaveis" },
-                { type: "subtotal", label: "= MARGEM DE CONTRIBUIÇÃO", value: margContr, variant: "violet" },
-                { type: "kpi", label: "Margem de Contribuição %", value: pct(margContr, recLiq) },
-                { type: "kpi", label: "Ponto de Equilíbrio", value: formatCurrency(pe) },
-                { type: "divider" },
-                { type: "section", label: "DESPESAS OPERACIONAIS" },
-                { type: "line", label: "(-) Pessoal", value: pessoal, negative: true, detailsKey: "pessoal" },
-                { type: "line", label: "(-) Despesas operacionais", value: despOp, negative: true, detailsKey: "despesas_operacionais" },
-                { type: "line", label: "(-) Ocupação", value: ocupacao, negative: true, detailsKey: "ocupacao" },
-                ...(semCategoria > 0 ? [{ type: "line" as const, label: "(-) Não classificado", value: semCategoria, negative: true, muted: true, detailsKey: "null" }] : []),
-                { type: "line", label: "(-) Faltas de caixa", value: metrics.cashShortage, negative: true },
-                { type: "line", label: "(+) Sobras de caixa", value: metrics.cashSurplus },
-                { type: "subtotal", label: "= EBIT (Resultado Operacional)", value: resOp, variant: resOp >= 0 ? "green" : "rose" },
-                { type: "kpi", label: "Margem Operacional %", value: pct(resOp, recLiq) },
-                { type: "divider" },
-                { type: "section", label: "RESULTADO FINANCEIRO" },
-                ...(recFin > 0 ? [{ type: "line" as const, label: "(+) Receita financeira", value: recFin, detailsKey: "receita_financeira" }] : []),
-                { type: "line", label: "(-) Despesas financeiras", value: despFin, negative: true, detailsKey: "despesas_financeiras" },
-                ...(recNaoOp > 0 ? [{ type: "line" as const, label: "(+) Receita não operacional", value: recNaoOp, detailsKey: "receita_nao_operacional" }] : []),
-                ...(despNaoOp > 0 ? [{ type: "line" as const, label: "(-) Despesa não operacional", value: despNaoOp, negative: true, detailsKey: "despesa_nao_operacional" }] : []),
-                { type: "subtotal", label: "= LAIR", value: lair, variant: lair >= 0 ? "slate" : "rose" },
-                { type: "divider" },
-                { type: "section", label: "IR / CSLL" },
-                { type: "line", label: "(-) IR / CSLL", value: irCsll, negative: true, detailsKey: "impostos_resultado" },
-                { type: "subtotal", label: "= LUCRO LÍQUIDO", value: lucroLiq, variant: lucroLiq >= 0 ? "green" : "rose" },
-                { type: "kpi", label: "Margem Líquida %", value: pct(lucroLiq, recLiq) },
-              ];
-
-              const variantClasses = {
-                blue: "bg-blue-50/70 font-semibold",
-                violet: "bg-violet-50/70 font-semibold",
-                green: "bg-emerald-50/70 font-semibold",
-                rose: "bg-rose-50/70 font-semibold",
-                slate: "bg-slate-50/70 font-semibold",
-              };
-              const variantTextClasses = {
-                blue: "text-blue-700",
-                violet: "text-violet-700",
-                green: "text-emerald-700",
-                rose: "text-rose-700",
-                slate: "text-slate-700",
-              };
-
-              return (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Descrição</th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Valor</th>
-                      <th className="w-24 px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">% RL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, i) => {
-                      if (row.type === "divider") return <tr key={i}><td colSpan={3} className="h-px bg-border/60" /></tr>;
-                      if (row.type === "section") return (
-                        <tr key={i} className="bg-muted/20">
-                          <td colSpan={3} className="px-6 py-2 text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground">{row.label}</td>
-                        </tr>
-                      );
-                      if (row.type === "kpi") return (
-                        <tr key={i} className="border-b border-dashed border-border/40 bg-muted/5">
-                          <td className="px-6 py-2 pl-10 text-xs text-muted-foreground italic">{row.label}</td>
-                          <td colSpan={2} className="px-6 py-2 text-right text-xs font-semibold text-muted-foreground">{row.value}</td>
-                        </tr>
-                      );
-                      if (row.type === "subtotal") {
-                        const isNeg = row.value < 0;
-                        return (
-                          <tr key={i} className={`border-b ${variantClasses[row.variant]}`}>
-                            <td className={`px-6 py-3 font-semibold ${variantTextClasses[row.variant]}`}>{row.label}</td>
-                            <td className={`px-6 py-3 text-right font-mono font-bold ${isNeg ? "text-rose-700" : variantTextClasses[row.variant]}`}>{formatCurrency(row.value)}</td>
-                            <td className={`px-6 py-3 text-right font-medium ${variantTextClasses[row.variant]}`}>{pct(Math.abs(row.value), recLiq)}</td>
-                          </tr>
-                        );
-                      }
-                      // line
-                      const detailsKey = row.detailsKey;
-                      const details = detailsKey ? metrics.expenseDetailsByPosition[detailsKey] ?? [] : [];
-                      const accountGroups = groupDreExpenseDetailsByAccount(details);
-                      const expenseCount = new Set(details.map((detail) => detail.expenseId)).size;
-                      const canExpandDetails = expenseCount > 0
-                        && canViewExpenseDetails
-                        && (detailsKey !== "pessoal" || canViewPersonnelCosts);
-                      const isExpanded = Boolean(detailsKey && expandedDreRows[detailsKey] && canExpandDetails);
-                      const detailRegionId = detailsKey ? `dre-expense-details-${detailsKey}` : undefined;
-                      return (
-                        <Fragment key={i}>
-                          <tr className={`border-b border-border/40 transition-colors hover:bg-muted/20 ${row.muted ? "opacity-60" : ""}`}>
-                            <td className="p-0 text-muted-foreground">
-                              {canExpandDetails && detailsKey ? (
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-2 px-6 py-2.5 pl-10 text-left hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                                  aria-expanded={isExpanded}
-                                  aria-controls={detailRegionId}
-                                  onClick={() => setExpandedDreRows((current) => ({
-                                    ...current,
-                                    [detailsKey]: !current[detailsKey],
-                                  }))}
-                                >
-                                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                                  <span>{row.label}</span>
-                                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                    {expenseCount} {expenseCount === 1 ? "despesa" : "despesas"}
-                                  </span>
-                                </button>
-                              ) : (
-                                <div className="px-6 py-2.5 pl-10">{row.label}</div>
-                              )}
-                            </td>
-                            <td className={`px-6 py-2.5 text-right font-mono font-medium ${row.negative ? "text-rose-600" : "text-emerald-600"}`}>
-                              {row.negative ? `(${formatCurrency(row.value)})` : formatCurrency(row.value)}
-                            </td>
-                            <td className="px-6 py-2.5 text-right text-muted-foreground">{pct(row.value, recLiq)}</td>
-                          </tr>
-                          {isExpanded ? (
-                            <tr className="border-b border-border/40 bg-muted/10">
-                              <td colSpan={3} className="px-6 py-4 pl-10">
-                                <div
-                                  id={detailRegionId}
-                                  role="region"
-                                  aria-label={`Lançamentos de ${row.label}`}
-                                  className="overflow-hidden rounded-lg border bg-background"
-                                >
-                                  <Accordion type="multiple">
-                                    {accountGroups.map((group) => (
-                                      <AccordionItem
-                                        key={group.accountPlanId}
-                                        value={`${detailsKey}:${group.accountPlanId}`}
-                                        className="last:border-b-0"
-                                      >
-                                        <AccordionTrigger className="gap-3 bg-muted/20 px-4 py-3 text-left hover:no-underline">
-                                          <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-1">
-                                            <span className="min-w-0">
-                                              <span className="block truncate text-sm font-semibold text-foreground">{group.accountPlanName}</span>
-                                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
-                                                {group.expenses.length} {group.expenses.length === 1 ? "despesa" : "despesas"}
-                                              </span>
-                                            </span>
-                                            <span className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">
-                                              {formatCurrency(group.totalAmount)}
-                                            </span>
-                                          </span>
-                                        </AccordionTrigger>
-                                        <AccordionContent className="border-t pb-0">
-                                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b bg-muted/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                            <span>Despesa</span>
-                                            <span className="text-right">Valor nesta linha</span>
-                                          </div>
-                                          <div className="divide-y divide-border/60">
-                                            {group.expenses.map((detail) => {
-                                              const title = detail.description || detail.supplier || "Despesa sem descrição";
-                                              const showSupplier = Boolean(detail.description && detail.supplier && detail.supplier !== detail.description);
-                                              const references = dreExpenseDetailReferences(detail);
-                                              return (
-                                                <div
-                                                  key={detail.expenseId}
-                                                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
-                                                >
-                                                  <div className="min-w-0">
-                                                    <p className="truncate font-medium text-foreground">{title}</p>
-                                                    {showSupplier ? (
-                                                      <p className="truncate text-xs text-muted-foreground">{detail.supplier}</p>
-                                                    ) : null}
-                                                    {references.length > 0 ? (
-                                                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{references.join(" · ")}</p>
-                                                    ) : null}
-                                                  </div>
-                                                  <div className="flex items-center justify-end gap-2">
-                                                    <span className="whitespace-nowrap font-mono text-xs font-semibold">{formatCurrency(detail.amount)}</span>
-                                                    {canEditExpenses ? (
-                                                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Abrir despesa">
-                                                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(detail.expenseId)}`}>
-                                                          <ExternalLink className="h-3.5 w-3.5" />
-                                                          <span className="sr-only">Abrir {title}</span>
-                                                        </Link>
-                                                      </Button>
-                                                    ) : null}
-                                                  </div>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        </AccordionContent>
-                                      </AccordionItem>
-                                    ))}
-                                  </Accordion>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
+            {!loading && !sourceError ? <div className="grid gap-4 lg:grid-cols-2">{cmvCard}{cashCard}</div> : null}
+          </>
+        );
+      })()}
 
       {viewMode === "people" && canViewPersonnelCosts && (
         <DrePeopleView
