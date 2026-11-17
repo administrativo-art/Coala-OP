@@ -222,11 +222,28 @@ test("item cancellation without proof that it preceded payment remains a status 
   assert.equal(result.cases[0].reviewStatus, "attention_required");
 });
 
-test("Stone payment events do not duplicate captured revenue", () => {
+test("Stone settlements are retained as evidence without duplicating sales or creating an issue", () => {
   const payment = sale().replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
   const result = review([coupon()], file(sale(), payment));
   assert.equal(result.stoneSales.length, 1);
-  assert.equal(result.issues[0].reason, "non_capture_event");
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.stoneEvents.length, 2);
+  assert.equal(result.stoneEvents[1].sourceSection, "FinancialTransactionsAccounts");
+  assert.equal(result.stoneEvents[1].events.Payments, 1);
+});
+
+test("ambiguous non-capture events remain issues", () => {
+  const payment = sale("other").replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
+  const scenarios = [
+    file(sale(), payment.replace("<Payments>1", "<Payments>0")),
+    file(sale(), payment.replace("<Captures>0", "<Captures>1")),
+    file(sale() + payment),
+  ];
+  for (const xml of scenarios) {
+    const result = review([coupon()], xml);
+    assert.equal(result.stoneSales.length, 1);
+    assert.deepEqual(result.issues.map(issue => issue.reason), ["non_capture_event"]);
+  }
 });
 
 test("Stone cancellation in either section blocks the original capture and preserves an issue", () => {
@@ -237,7 +254,8 @@ test("Stone cancellation in either section blocks the original capture and prese
     ["ChargebackRefunds", "chargeback_refund_event"],
   ] as const;
   for (const [event, reason] of adverseEvents) {
-    const cancelled = sale().replace("<Captures>1", "<Captures>0").replace(`<${event}>0`, `<${event}>1`);
+    const cancelled = sale().replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1")
+      .replace(`<${event}>0`, `<${event}>1`);
     const result = review([coupon()], file(sale(), cancelled));
     assert.equal(result.stoneSales.length, 0);
     assert.equal(result.issues.length, 1);

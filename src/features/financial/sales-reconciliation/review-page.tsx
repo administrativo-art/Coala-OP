@@ -736,7 +736,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           </div> : null}
 
           {coverageTab === "events" ? <>
-            <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Decimais originais da fonte, sem arredondamento.</p>
+            <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Valores decimais da fonte, sem arredondamento. Pagamentos regulares da Stone aparecem aqui como informação de liquidação.</p>
             <div className="max-h-[360px] overflow-auto rounded-xl border border-ds-border"><div className="min-w-[760px]">
               <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-ds-ink-faint">
                 <span>Seção</span><span>Transação</span><span className="text-right">Bruto original</span><span className="text-right">Cancelado original</span><span>Contadores</span>
