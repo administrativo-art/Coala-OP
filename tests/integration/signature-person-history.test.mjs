@@ -129,7 +129,7 @@ test('generator indexes explicitly selected HR parties without owner anchor and 
 
 test('integration adapter and PJ route persist organization context and actors without inventing human owner or signer IDs', async (t) => {
   const { createIntegrationActionAdapter } = await import('../../src/features/hr/integration/runtime-actions.server.ts');
-  const { PATCH } = await import('../../src/app/api/hr/onboarding/[id]/pj-workflow/route.ts');
+  const { GET, PATCH } = await import('../../src/app/api/hr/onboarding/[id]/pj-workflow/route.ts');
   const { NextRequest } = await import('next/server');
   const { authAdmin } = await import('../../src/lib/firebase-admin.ts');
   const uid = 'review-producer-actor', profileId = 'review-producer-admin';
@@ -167,6 +167,15 @@ test('integration adapter and PJ route persist organization context and actors w
   const login = await originalFetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${uid}@example.test`, password: 'synthetic-emulator-password', returnSecureToken: true }) });
   assert.equal(login.ok, true);
   const token = (await login.json()).idToken;
+  const url = 'http://localhost/api/hr/onboarding/review-producer-pj/pj-workflow';
+  const routeContext = { params: Promise.resolve({ id: processRef.id }) };
+  const requestsBeforeDeniedCalls = (await hrDbAdmin.collection('hrSignatureRequests').where('onboardingId', '==', processRef.id).get()).size;
+  assert.equal((await GET(new NextRequest(url), routeContext)).status, 401);
+  assert.equal((await PATCH(new NextRequest(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'send_contract' }) }), routeContext)).status, 401);
+  assert.equal((await PATCH(new NextRequest(url, { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'send_contract', unexpected: true }) }), routeContext)).status, 400);
+  assert.equal((await hrDbAdmin.collection('hrSignatureRequests').where('onboardingId', '==', processRef.id).get()).size, requestsBeforeDeniedCalls);
   const response = await PATCH(new NextRequest('http://localhost/api/hr/onboarding/review-producer-pj/pj-workflow', { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send_contract' }) }), { params: Promise.resolve({ id: processRef.id }) });
   const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body));
   const sent = await hrDbAdmin.collection('hrSignatureRequests').where('onboardingId', '==', processRef.id).get();
