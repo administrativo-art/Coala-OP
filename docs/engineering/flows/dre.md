@@ -43,6 +43,22 @@ O [contrato puro](../../../functions/src/cash-closure-dre.ts) é compartilhado p
 
 ### Recuperação explícita do histórico
 
+**Fundo na diferença financeira (17/11/2026):** o esperado do malote é o bruto menos os suprimentos validamente classificados como `Fundo de caixa`, pelo helper `financeExpectedCentsForLine`, também usado na agregação DRE por operador. Bruto R$135 − fundo R$40, malote R$95 → falta zero. Suprimento comum ou sem classificação permanece integral; o PDV provisório continua usando a declaração bruta do Caixa. Faltas/sobras, cobertura, vendas, status e depósitos permanecem independentes.
+
+A publicação não recupera projeções antigas automaticamente. A CLI [`rebuild-dre-cash-projections.mts`](../../../scripts/rebuild-dre-cash-projections.mts) faz dry-run por projeto/workspace/unidade/competência explícitos. Exige `--project` e compara projeto e banco reais do SDK com o destino solicitado antes de ler ou escrever; divergência aborta. Projeto e banco `coala-financeiro` entram no hash do plano, relatório e backup. Lê no máximo dias do mês + sentinela, 350 linhas e 50 operadores por dia. Atualiza apenas `cashDifferences` do operador e `finalizedCashDifferences`, `dreSelectedCashDifferences`, `drePdvFallbackOperatorCount` do fechamento. `dreCashProjectionRebuiltAt` dispara o gatilho mensal existente; a CLI não escreve o resumo mensal. Nenhuma contagem, venda, classificação, status, alerta de fonte alterada ou depósito é alterado. Cobertura de operadores divergente/legada bloqueia; não cria nem remove operadores.
+
+Após publicação e autorização dos dados reais, executar por unidade/mês:
+
+```sh
+node --import tsx scripts/rebuild-dre-cash-projections.mts --project=PROJECT_ID --workspace=ID --kiosk=ID --period=YYYY-MM
+# Conferir projeção/plano SHA256 antes de aplicar.
+node --import tsx scripts/rebuild-dre-cash-projections.mts --project=PROJECT_ID --workspace=ID --kiosk=ID --period=YYYY-MM --apply --plan=SHA256 --backup=/private/tmp/dre-ID-YYYY-MM.json
+# Após a conclusão do gatilho:
+node --import tsx scripts/rebuild-dre-cash-projections.mts --project=PROJECT_ID --workspace=ID --kiosk=ID --period=YYYY-MM --verify
+```
+
+O hash inclui revisões; cada transação relê o dia e subcoleções. Mudança concorrente interrompe, preservando dias anteriores já aplicados; refazer dry-run para retomar. Backup exclusivo `0600` antecede escritas. Projeção já correta não escreve. `--verify` confere operadores, fechamento e resumo; falha requer acompanhar/investigar o gatilho antes de anunciar recuperação. Reversão usa somente os campos derivados do backup, após conferir revisões atuais, e recompõe o mês; nunca restaura contagens/fontes. O [teste em emulador](../../../tests/integration/dre-cash-projection-rebuild.test.mjs) cobre dry-run sem escrita, projeto ausente/divergente, plano inválido, revisão alterada antes da aplicação, backup, escrita limitada e idempotência. O resumo mensal no teste é simulado: não comprova o gatilho real nem concorrência durante a transação; `--verify` real após rollout continua obrigatório. Não classifica pendências nem completa dias sem fonte.
+
 Reutilizar **Sincronizar PDV** do fechamento existente, por unidade/dia, após autorização de dados reais e preflight das despesas/classificações já existentes. Não inferir vendas pelo contado. Legado com evidência explícita e sem alertas pode ser normalizado em memória, mas resumo sem campos novos permanece indisponível até atualização autorizada. Fonte indisponível continua pendente.
 
 Após mudança em fonte aprovada: reabrir operadores necessários, revisar/vincular sangrias aos gastos existentes, conferir e finalizar. `approvedSourceHash` de **todos** deve atestar a fonte atual antes de liberar diferenças. Origem removida/alterada exige desfazer vínculo com motivo; cancelar despesa criada ou restaurar a vinculada, com auditoria. Não mudar depósitos/contagens automaticamente. Este caminho existente substitui a proposta inicial de novo script de backfill.
