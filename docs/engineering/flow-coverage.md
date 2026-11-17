@@ -157,3 +157,5 @@ Ajuste documental de férias (29/10/2026): histórico interno com decisões pres
 2026-11-03 — Correção após revisão do inventário pessoal: escopos nativos REP-P/financeiro, origem de jornada RH, participantes cadastrados e histórico congelado de assinatura; CI modular/aliases e workspace bruto coerente. Testemunhas dirigidas em emulador/provider fake, sem ampliar cobertura histórica. [Guia e limites](document-person-traceability.md); aguarda novo passe independente.
 
 2026-11-03 — Passe residual de rastreabilidade: paginação opaca persistente com TTL/cache/budget, fontes nativas sem unitId corrigidas, classificações comprovadas pelo recibo oficial pai, autorização de partes/seleção RH no servidor, patrimônio atual/legado/histórico e sentinel21 documental. Estado local, sem implantação/censo global; [guia](document-person-traceability.md).
+
+Exportação DRE mensal/12meses em17/11/2026: [fluxo](flows/dre.md#relatórios-mensal-e-de-12-meses--17112026); secureRoute, PDF/XLSX transitórios e núcleo compartilhado, QA sintética local; produção não executada.

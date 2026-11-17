@@ -4,6 +4,7 @@
 
 | Plano | Área |
 | --- | --- |
+| [Exportação da DRE](plano-exportacao-dre.md) | Financeiro, PDF timbrado e Excel |
 | [Rastreabilidade por pessoa](plano-rastreabilidade-pessoa.md) | Privacidade, Pessoas, documentos e integrações |
 | [Destinação dos arquivos de Cobranças](plano-destinacao-documental-cobrancas.md) | Financeiro, Patrimônio e Documentos |
 | [Armazenamento documental único](plano-armazenamento-documental-unico.md) | PDF assinado compartilhado por Acervo/processo, integridade e limpeza histórica separada |

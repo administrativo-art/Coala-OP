@@ -151,3 +151,7 @@ A janela não autoriza a migração. A execução real continua exigindo escopo/
 2026-11-15 — Despesa do mês das taxas Stone: `stoneFeeMonthExpenses` (banco financeiro) guarda em `actorId` quem lançou e em `cancelledBy` quem desfez (UIDs `main.users`); `stoneFeeMonthExpenseEvents` guarda o histórico com `actorId`. São atores, sem titular pessoal: o item é a taxa do mês de um StoneCode. Registradas como `stone-fee-month-expense-actors`, `stone-fee-month-expense-cancel-actors` e `stone-fee-month-expense-event-actors`.
 
 2026-11-15 — Estudo de fluxo de caixa: a rota `GET /api/financial/cash-flow-study` lê `transactions` da conta Inter (só valores, datas e direção). O campo de ator `createdBy` das movimentações manuais (UID `main.users`) passa a ser registrado como `financial-transaction-creators`; não há titular pessoal. Fechamentos e lotes de depósito são lidos pelas funções já existentes (`listCashClosures`, `listCashDepositBatches`).
+
+## DRE agregada
+
+Relatório DRE tem unidade/competência, sem titular humano. O ator autenticado autoriza DRE e escopo das unidades; sua identidade não é inserida no PDF/Excel. Nenhum nome, CPF, UID pessoal, fornecedor individual ou descrição de lançamento é exportado; despesas principais por conta respeitam permissões de despesas/pessoal. Não resolver pessoa por nome nem criar vínculo ao colaborador. Prévia usa dados fictícios, exportação real é transitória sem instância no acervo/publicação/assinatura. Ver [trilha da DRE](document-trails.md#dre-mensal-e12meses).

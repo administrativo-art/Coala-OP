@@ -24,6 +24,7 @@ import {
   groupDreExpenseDetailsByAccount,
 } from "@/features/financial/lib/dre-expense-details";
 import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
+import { DreExportMenu } from "@/features/financial/components/dre/dre-export-menu";
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { CmvClosingPanel } from "@/features/financial/components/dre/cmv-closing-panel";
 import type { DreCmvPeriod } from "@/features/financial/dre/cmv-closure";
@@ -39,7 +40,8 @@ import {
   type DreChartUnit,
 } from "@/features/financial/dre/dre-chart-data";
 import { DreSourcesPanel, DreSourcesTrigger, type DreSourceIssue } from "@/features/financial/components/dre/dre-sources-panel";
-import { dreHorizontalVariation, dreRevenueComposition, dreResultState, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
+import { dreHorizontalVariation, dreRevenueComposition, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
+import { calculateDreMetrics } from "@/features/financial/dre/metrics";
 import { PageHero } from "@/components/patterns/page-hero";
 import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
@@ -362,77 +364,9 @@ export function DrePage() {
           resultCenter: scope.unitName,
           resultCenterNames: resultCenterNameMap,
         });
-    const expenseAt = (position: string | null) => expenseCalculation.totalsByPosition[position ?? "null"] ?? 0;
-    const revenueSource = getRevenue(monthKey, scope);
-    const revBruta = (revenueSource.revenueCents ?? NaN) / 100;
-    const cashShortage = (revenueSource.cashShortageCents ?? NaN) / 100;
-    const cashSurplus = (revenueSource.cashSurplusCents ?? NaN) / 100;
-    const impostos = expenseAt("impostos_deducoes");
-    const recLiq = revBruta - impostos;
-
-    const stockCmvBreakdown = getStockCmvBreakdown(monthKey, scope);
-    const compositionCmv = getCompositionCmv(monthKey, scope);
-    const cmv = cmvCriterion === "stock_movement"
-      ? stockCmvBreakdown.totalCmv
-      : compositionCmv;
-    const cmvForResult = cmvCriterion === "composition" && getCompositionPeriods(monthKey, scope).some(row => row.sourceChanged) ? NaN : cmv;
-    const margBruta = recLiq - cmvForResult;
-
-    const custVar = expenseAt("custos_variaveis");
-    const margContr = margBruta - custVar;
-
-    const pessoal = expenseAt("pessoal");
-    const despOp = expenseAt("despesas_operacionais");
-    const ocupacao = expenseAt("ocupacao");
-    const semCategoria = expenseAt(null);
-    const totalFixos = pessoal + despOp + ocupacao + semCategoria;
-    const resOp = margContr - totalFixos - cashShortage + cashSurplus;
-
-    const recFin = expenseAt("receita_financeira");
-    const despFin = expenseAt("despesas_financeiras");
-    const recNaoOp = expenseAt("receita_nao_operacional");
-    const despNaoOp = expenseAt("despesa_nao_operacional");
-    const lair = resOp + recFin - despFin + recNaoOp - despNaoOp;
-    const irCsll = expenseAt("impostos_resultado");
-    const lucroLiq = lair - irCsll;
-    const resultState = dreResultState({ result: lucroLiq, cash: revenueSource,
-      compositionOpen: cmvCriterion === "composition" && getCompositionPeriods(monthKey, scope).some(row => row.status !== "closed") });
-
-    const margContPct = !Number.isFinite(recLiq) ? NaN : recLiq > 0 ? margContr / recLiq : 0;
-    const pe = !Number.isFinite(margContPct) ? NaN : margContPct > 0 ? totalFixos / margContPct : 0;
-
-    return {
-      revenueSource,
-      cashShortage,
-      cashSurplus,
-      revBruta,
-      impostos,
-      recLiq,
-      cmv,
-      compositionCmv,
-      stockCmvBreakdown,
-      custVar,
-      margBruta,
-      margContr,
-      pessoal,
-      despOp,
-      ocupacao,
-      semCategoria,
-      totalFixos,
-      resOp,
-      recFin,
-      despFin,
-      recNaoOp,
-      despNaoOp,
-      lair,
-      irCsll,
-      lucroLiq,
-      resultState,
-      pe,
-      margContPct,
-      expenseDetailsByPosition: expenseCalculation.detailsByPosition,
-      expenseIssues: expenseCalculation.issues,
-    };
+    return calculateDreMetrics({ expenseCalculation, revenueSource: getRevenue(monthKey, scope),
+      stockCmvBreakdown: getStockCmvBreakdown(monthKey, scope), compositionCmv: getCompositionCmv(monthKey, scope),
+      cmvCriterion, compositionPeriods: getCompositionPeriods(monthKey, scope) });
   }
 
   // ── per-month data ───────────────────────────────────────────────────────────
@@ -871,9 +805,10 @@ export function DrePage() {
             <Button variant="on-dark-icon" size="icon" aria-label="Atualizar DRE" title="Atualizar DRE" onClick={() => setSourceReloadToken((current) => current + 1)} disabled={loadingSource}>
               <RefreshCw className={cn("h-4 w-4", loadingSource && "animate-spin")} />
             </Button>
+            <DreExportMenu month={selectedMonth} kioskIds={selectedKioskId ? [selectedKioskId] : kiosks.map(k => k.id)} disabled={loadingSource} />
             {(viewMode !== "people" || canExportPersonnelCosts) ? (
               <Button variant="on-dark-secondary" onClick={exportCsv} disabled={exportDisabled} title={exportDisabled ? "Exportação bloqueada enquanto houver pendências ou valores indisponíveis" : undefined}>
-                <Download className="mr-2 h-4 w-4" /> Exportar CSV
+                <Download className="mr-2 h-4 w-4" /> CSV
               </Button>
             ) : null}
           </>
