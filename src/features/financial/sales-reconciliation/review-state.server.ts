@@ -7,6 +7,7 @@ import type { DailySalesResult } from "./query";
 import {
   buildDailySalesReviewTransition,
   dailySalesReviewId,
+  dailySalesRefundScopeId,
   dailySalesReviewIdentityId,
   dailySalesSourceFingerprint,
   type DailySalesApiResult,
@@ -17,6 +18,13 @@ import type { DailySalesCalendarRecord } from "./review-calendar";
 
 export const SALES_REVIEW_COLLECTION = "dailySalesReviews";
 export const SALES_REVIEW_SNAPSHOT_COLLECTION = "dailySalesReviewSnapshots";
+const REFUND_WATCH_DELAY_MS = 24 * 60 * 60 * 1000;
+
+export function salesRefundWatchDates(identity: Omit<DailySalesReviewIdentity, "referenceDate">) {
+  return financialDbAdmin.collection("dailySalesRefundWatches")
+    .doc(dailySalesRefundScopeId(identity)).collection("pixRefundReviewDates");
+}
+
 const SNAPSHOT_VERSION = 1 as const;
 const MAX_SNAPSHOT_BYTES = 850_000;
 const MAX_RAW_SNAPSHOT_BYTES = 8_000_000;
@@ -104,12 +112,14 @@ function calendarRecord(record: DailySalesReviewRecord, id: string): DailySalesC
   };
 }
 
-export async function saveDailySalesReview(result: DailySalesResult, actorId: string, now = new Date()) {
+export async function saveDailySalesReview(result: DailySalesResult, actorId: string, now = new Date(),
+  refundRecheck?: { expectedRevision: number; expectedCollectedAt: string; retainWatch: boolean }) {
   const id = dailySalesReviewId(result);
   const ref = financialDbAdmin.collection(SALES_REVIEW_COLLECTION).doc(id);
   const snapshotRef = financialDbAdmin.collection(SALES_REVIEW_SNAPSHOT_COLLECTION).doc(id);
   return financialDbAdmin.runTransaction(async transaction => {
-    const snapshot = await transaction.get(ref);
+    const watchRef = salesRefundWatchDates({ ...result.scope, mappingId: result.mappingId }).doc(result.scope.referenceDate);
+    const [snapshot, watch] = await Promise.all([transaction.get(ref), transaction.get(watchRef)]);
     let previous: DailySalesReviewRecord | undefined;
     if (snapshot.exists) {
       const parsed = recordSchema.safeParse(snapshot.data());
@@ -118,26 +128,45 @@ export async function saveDailySalesReview(result: DailySalesResult, actorId: st
       if (previous.workspaceId !== result.scope.workspaceId || previous.kioskId !== result.scope.kioskId
         || previous.mappingId !== result.mappingId || previous.stoneCode !== result.scope.stoneCode
         || previous.referenceDate !== result.scope.referenceDate) invalidStoredReview();
-      if (previous.sourceFingerprint !== dailySalesSourceFingerprint(result)
+      if (!refundRecheck && previous.sourceFingerprint !== dailySalesSourceFingerprint(result)
         && Date.parse(previous.collectedAt) >= Date.parse(result.collectedAt)) {
         throw new AppError({ code: "SALES_REVIEW_STALE_OBSERVATION", kind: "CONFLICT",
           safeMessage: "Uma conferência igual ou mais recente já foi registrada. As fontes serão consultadas novamente." });
       }
     }
+    if (refundRecheck && (previous?.revision !== refundRecheck.expectedRevision
+      || previous.collectedAt !== refundRecheck.expectedCollectedAt || previous.collectedAt !== result.collectedAt)) {
+      throw new AppError({ code: "SALES_REVIEW_STALE_OBSERVATION", kind: "CONFLICT",
+        safeMessage: "Uma nova revisão foi registrada durante a verificação de devoluções." });
+    }
     const transition = buildDailySalesReviewTransition({
       result, actorId, now: now.toISOString(), previous,
     });
+    const needsWatch = result.cases.some(row => row.pixRefundCheck) && (refundRecheck?.retainWatch ?? true);
+    if (needsWatch && (!watch.exists || refundRecheck)) {
+      transaction.set(watchRef, { nextCheckAt: new Date(now.getTime() + REFUND_WATCH_DELAY_MS).toISOString() });
+    } else if (!needsWatch && watch.exists) transaction.delete(watchRef);
     if (!transition.write && previous?.snapshotVersion === SNAPSHOT_VERSION) return transition.view;
     const encoded = encodeSnapshot(result, transition.view, now.toISOString());
+    if (!encoded && needsWatch) {
+      throw new AppError({ code: "SALES_REVIEW_REFUND_SNAPSHOT_REQUIRED", kind: "DATA_INTEGRITY",
+        safeMessage: "A conferência de devoluções exige um snapshot que possa ser revisto pela rotina automática." });
+    }
     const next = transition.write ? (encoded ? withSnapshot(transition.next) : transition.next)
       : encoded && previous ? withSnapshot(previous) : previous;
     if (!next) invalidStoredReview();
     if (transition.write) {
       transaction.set(ref, next);
+      const pixRefundProof = result.cases.flatMap(row => row.pixRefundCheck ? [row.pixRefundCheck] : []);
       transaction.create(ref.collection("revisions").doc(String(next.revision)), {
         ...next,
         previousRevision: previous?.revision ?? 0,
         sourceChanged: transition.view.sourceChanged,
+        ...(pixRefundProof.length ? {
+          pixRefundProof: pixRefundProof.map(proof => ({
+            state: proof.state, checkedThrough: proof.checkedThrough, complete: proof.complete, eventCount: proof.events.length,
+          })),
+        } : {}),
       });
     } else if (encoded) transaction.update(ref, { snapshotVersion: SNAPSHOT_VERSION });
     if (encoded) transaction.set(snapshotRef, encoded);

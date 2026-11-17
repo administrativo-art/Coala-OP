@@ -97,3 +97,58 @@ test("an older concurrent observation cannot overwrite a newer changed source", 
   assert.equal((await root.get()).get("status"), "closed");
   assert.equal((await root.collection("revisions").get()).size, 1);
 });
+
+test("Pix refund watch reopens a stored case using the exact monthly projection and preserves collection time", async () => {
+  const { result, root } = await fixture("refund-watch");
+  const { checkSalesPixRefunds } = await import("../../src/features/financial/sales-reconciliation/pix-refund-review.ts");
+  const { readPixRefundChecks, writePixRefundProjection } = await import("../../src/features/financial/sales-reconciliation/pix-refunds.server.ts");
+  const { refreshDuePixRefundReviews } = await import("../../src/features/financial/sales-reconciliation/pix-refund-automation.server.ts");
+  const { salesRefundWatchDates } = await import("../../src/features/financial/sales-reconciliation/review-state.server.ts");
+  const { suggestSalesReconciliationCases } = await import("../../src/features/financial/sales-reconciliation/matching.ts");
+  const { pixRefundKey, pixRefundMonthId } = await import("../../src/lib/integrations/stone/pix-refunds.ts");
+  const document = "12345678901";
+  const previousDocument = process.env.STONE_CONCILIATION_DOCUMENT;
+  process.env.STONE_CONCILIATION_DOCUMENT = document;
+  const e2e = "pix-immutable-id";
+  const sourceHash = "a".repeat(64);
+  const saleDate = result.scope.referenceDate;
+  const later = "2026-09-21";
+  const future = "2026-09-22";
+  const scope = { ...result.scope, mappingId: result.mappingId };
+  const reference = referenceDate => ({ workspaceId: scope.workspaceId, document, referenceDate });
+  const write = (referenceDate, day) => db.runTransaction(tx => writePixRefundProjection(tx, reference(referenceDate), day));
+  roots.push(db.collection("stonePixRefundMonths").doc(pixRefundMonthId(scope.workspaceId, document, saleDate.slice(0, 7))),
+    salesRefundWatchDates(scope).doc(saleDate));
+  try {
+    await write(saleDate, { sourceHash, complete: true, events: {} });
+    await write(later, { sourceHash, complete: true, events: {} });
+    const pdvFacts = [{ ...result.pdvFacts[0], channel: "pix", status: "partial_cancellation", identifiers: { nsu: "event-sale" } }];
+    const stoneSales = [{ ...result.stoneSales[0], channel: "pix", identifiers: { providerTransactionId: e2e, providerEventId: "event-sale" } }];
+    const input = { ...result, pdvFacts, stoneSales, pix: { status: "available", coverage: "complete", excludedCount: 0,
+      fileId: "sale-file", sourceHash }, cases: suggestSalesReconciliationCases({ pdvFacts, stoneSales }) };
+    const original = { ...input, cases: await checkSalesPixRefunds(input, readPixRefundChecks, { through: saleDate, saleSourceHash: sourceHash }) };
+    assert.equal(original.cases[0].pixRefundCheck.state, "clear");
+    assert.equal((await saveDailySalesReview(original, "test", new Date("2026-09-22T12:00:00Z"))).status, "closed");
+    assert.deepEqual(await refreshDuePixRefundReviews(scope, later, new Date("2026-09-23T12:00:00Z")), { checked: 1, retry: 0 });
+    assert.equal((await root.get()).get("revision"), 1, "coverage-only cutoff does not create another revision");
+
+    await write(future, { sourceHash, complete: true, events: {
+      [pixRefundKey(e2e)]: [{ stoneCode: scope.stoneCode, referenceDate: future, eventId: "event-refund", refundId: "r1",
+        occurredAt: "2026-09-22T13:00:00Z", amountCents: 100, state: "confirmed" }],
+    } });
+    assert.deepEqual(await refreshDuePixRefundReviews(scope, future, new Date("2026-09-24T12:00:00Z")), { checked: 1, retry: 0 });
+    const reopened = await readDailySalesReviewSnapshot(scope);
+    assert.equal(reopened.review.status, "attention_required");
+    assert.equal(reopened.review.revision, 2);
+    assert.equal(reopened.review.reopenedReason, "source_changed");
+    assert.equal(reopened.collectedAt, result.collectedAt);
+    assert.equal(reopened.cases[0].pixRefundCheck.events[0].refundId, "r1");
+    assert.equal((await root.collection("revisions").get()).size, 2);
+    await assert.rejects(saveDailySalesReview(original, "stale-test", new Date("2026-09-24T13:00:00Z"), {
+      expectedRevision: 1, expectedCollectedAt: original.collectedAt, retainWatch: true,
+    }), error => error.code === "SALES_REVIEW_STALE_OBSERVATION");
+  } finally {
+    if (previousDocument === undefined) delete process.env.STONE_CONCILIATION_DOCUMENT;
+    else process.env.STONE_CONCILIATION_DOCUMENT = previousDocument;
+  }
+});
