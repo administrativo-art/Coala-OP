@@ -89,3 +89,5 @@ A [rota audit](../../../src/app/api/financial/cash-closures/[closureId]/audit/ro
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+Nos cartões de competências da unidade, abaixo dos dias sincronizados, o indicador `X/Y dias fechados` usa `approvedCount` como numerador (dias com conferência financeira finalizada) e a quantidade de dias do mês como denominador. Dias parcialmente conferidos não entram no numerador; não há nova consulta nem confusão com cobertura provisória da DRE.
