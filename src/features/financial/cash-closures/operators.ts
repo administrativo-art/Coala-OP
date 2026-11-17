@@ -6,6 +6,7 @@ import type {
   CashClosureStatus,
 } from "./types";
 import { isCents, linePdvSalesSource, pdvSalesCents, sumCashDifferences, sumPdvSales } from "./dre-contract";
+import { financeExpectedCentsForLine } from "./supply-classification";
 
 function documentIdPart(value: string) {
   return value.trim().replaceAll("/", "%2F");
@@ -39,7 +40,7 @@ function aggregateOperatorLines(lines: CashClosureLine[]) {
   }));
   const cashDifferences = sumCashDifferences(lines.filter(line => line.channel === "cash").map(line => {
     const difference = isCents(line.countedCents) && isCents(line.expectedCents)
-      ? line.countedCents - line.expectedCents : null;
+      ? line.countedCents - financeExpectedCentsForLine(line) : null;
     return { version: 1 as const,
       shortageCents: difference === null ? null : Math.max(0, -difference),
       surplusCents: difference === null ? null : Math.max(0, difference) };
