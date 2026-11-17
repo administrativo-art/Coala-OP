@@ -19,6 +19,8 @@ As consultas paginam e têm limites explícitos: 5.000 relatórios ou despesas p
 
 ## Dados, permissão e impacto
 
+**Apresentação (16/11/2026):** a página tem três visualizações no painel escuro: **Clássica** (padrão), **Painel** e **Por colaborador** (com permissão de pessoal). A Clássica mostra o demonstrativo com análise vertical (% da receita líquida), o mês anterior e a análise horizontal, calculados por [`dre-statement.ts`](../../../src/features/financial/lib/dre-statement.ts); valor indisponível aparece como "Aguardando"/"Pendente", nunca como zero. As pendências das fontes (receita/caixa, CMV incompleto ou alterado, estoque e integridade de despesas) ficam reunidas no painel lateral "Conferir fontes" ([componente](../../../src/features/financial/components/dre/dre-sources-panel.tsx)); a exportação continua bloqueada pelas mesmas condições. Caixa em espécie e critério do CMV são [cartões próprios](../../../src/features/financial/components/dre/dre-insights.tsx) presentes nas duas visualizações.
+
 **Inferência de impacto:** alteração em vendas, competência de despesa, fechamento de caixa, movimentos ou custo efetivo pode mudar indicadores sem tocar na página DRE. Por isso, investigação de divergência deve começar pela fonte indicada na linha correspondente e conferir o filtro de unidade, período, classificação e critério de CMV. A [página](../../../src/features/financial/pages/dre-page.tsx) combina os resultados e cálculos de despesas; diferenças entre CMV de simulação e de saída de estoque são esperadas quando os critérios selecionados não são os mesmos.
 
 ## Verificação e limites
@@ -55,7 +57,7 @@ A [verificação por grupo](../flow-verification.md) aponta testes disponíveis 
 
 ## Comparativo de orçamento pessoal
 
-[Source-data](../../../src/features/financial/dre/source-data.server.ts) inclui `budgetPlanning`, exibido separadamente pela [página](../../../src/features/financial/pages/dre-page.tsx) e pelo [quadro](../../../src/features/financial/components/dre/budget-planning-comparison.tsx). [Projeções](../../../src/features/financial/budgets/projections.server.ts) consultam orçamentos com composição em centros inteiramente autorizados, comparam orçado/comprometido/residual e informam conflitos. Sem permissão de pessoal, substituem nomes nominais. Não criam despesas nem alteram o cálculo contábil. Ver [orçamentos](financial-budgets.md).
+[Source-data](../../../src/features/financial/dre/source-data.server.ts) inclui `budgetPlanning`. Desde 16/11/2026 a [página](../../../src/features/financial/pages/dre-page.tsx) não exibe mais o [quadro](../../../src/features/financial/components/dre/budget-planning-comparison.tsx) de orçado × documentos: a comparação vai para outro local ainda a definir, e o campo continua no payload até essa mudança (lacuna registrada). [Projeções](../../../src/features/financial/budgets/projections.server.ts) consultam orçamentos com composição em centros inteiramente autorizados, comparam orçado/comprometido/residual e informam conflitos. Sem permissão de pessoal, substituem nomes nominais. Não criam despesas nem alteram o cálculo contábil. Ver [orçamentos](financial-budgets.md).
 
 
 ## CMV atual e fechamento manual — 2026-09-27
