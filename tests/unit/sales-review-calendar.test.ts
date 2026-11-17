@@ -37,6 +37,28 @@ test("year view starts in January and includes the current month before its firs
   assert.equal(months[9].days[0].state, "not_available");
 });
 
+test("year view keeps only months that intersect the mapping without counting inactive days", () => {
+  const months = buildSalesReviewYear({ year: 2026, publishedThrough: "2026-11-16",
+    validFrom: "2026-07-15", validTo: "2026-09-07",
+    records: [record("2026-06-30", "closed"), record("2026-07-14", "closed"),
+      record("2026-07-15", "closed"), record("2026-09-08", "closed")] });
+  assert.deepEqual(months.map(month => month.key), ["2026-07", "2026-08", "2026-09"]);
+  assert.deepEqual(months.map(month => month.eligibleCount), [17, 31, 7]);
+  assert.deepEqual(months.map(month => month.reviewedCount), [1, 0, 0]);
+  assert.equal(months[0].days[13].state, "outside_scope");
+  assert.equal(months[2].days[7].state, "outside_scope");
+});
+
+test("year view is empty for expired or future mappings and keeps unpublished valid days", () => {
+  const input = { year: 2026, records: [], publishedThrough: "2026-09-30", calendarThrough: "2026-10-01" };
+  assert.deepEqual(buildSalesReviewYear({ ...input, validFrom: "2025-01-01", validTo: "2025-12-31" }), []);
+  assert.deepEqual(buildSalesReviewYear({ ...input, validFrom: "2026-11-01" }), []);
+  const [october] = buildSalesReviewYear({ ...input, validFrom: "2026-10-01" });
+  assert.equal(october.key, "2026-10");
+  assert.equal(october.eligibleCount, 0);
+  assert.equal(october.days[0].state, "not_available");
+});
+
 test("automation prioritizes one recent day and advances a bounded backfill", () => {
   const plan = buildSalesReviewAutomationPlan({
     state: initialSalesReviewAutomationState(2026), currentDate: "2026-10-01", publishedThrough: "2026-09-30",
