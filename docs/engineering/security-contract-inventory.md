@@ -3,9 +3,9 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **570**
-- Totalmente contratados: **243**
+- Totalmente contratados: **245**
 - Legados congelados: **317**
-- Exceções temporárias: **10**
+- Exceções temporárias: **8**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -370,7 +370,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/departments` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/departments/route.ts](../../src/app/api/hr/departments/route.ts) |
 | `/api/hr/departments/[departmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/departments/[departmentId]/route.ts](../../src/app/api/hr/departments/[departmentId]/route.ts) |
 | `/api/hr/employee-document-folder-profile` | GET ✓ | `CONTRACTED` | [src/app/api/hr/employee-document-folder-profile/route.ts](../../src/app/api/hr/employee-document-folder-profile/route.ts) |
-| `/api/hr/employee-documents` | DELETE, GET, PATCH, POST | `EXCEPTION` | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) |
+| `/api/hr/employee-documents` | DELETE ✓, GET ✓, PATCH ✓, POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/route.ts](../../src/app/api/hr/employee-documents/route.ts) |
 | `/api/hr/employee-documents/access` | POST ✓ | `CONTRACTED` | [src/app/api/hr/employee-documents/access/route.ts](../../src/app/api/hr/employee-documents/access/route.ts) |
 | `/api/hr/employee-documents/analyze-upload` | POST | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/analyze-upload/route.ts](../../src/app/api/hr/employee-documents/analyze-upload/route.ts) |
 | `/api/hr/employee-documents/batches` | GET | `LEGACY_BASELINE` | [src/app/api/hr/employee-documents/batches/route.ts](../../src/app/api/hr/employee-documents/batches/route.ts) |
@@ -402,7 +402,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/onboarding/[id]/aso-guide` | POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/aso-guide/route.tsx](../../src/app/api/hr/onboarding/[id]/aso-guide/route.tsx) |
 | `/api/hr/onboarding/[id]/aso-workflow` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/aso-workflow/route.ts](../../src/app/api/hr/onboarding/[id]/aso-workflow/route.ts) |
 | `/api/hr/onboarding/[id]/integration` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/integration/route.ts](../../src/app/api/hr/onboarding/[id]/integration/route.ts) |
-| `/api/hr/onboarding/[id]/pj-workflow` | GET, PATCH | `EXCEPTION` | [src/app/api/hr/onboarding/[id]/pj-workflow/route.ts](../../src/app/api/hr/onboarding/[id]/pj-workflow/route.ts) |
+| `/api/hr/onboarding/[id]/pj-workflow` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/hr/onboarding/[id]/pj-workflow/route.ts](../../src/app/api/hr/onboarding/[id]/pj-workflow/route.ts) |
 | `/api/hr/onboarding/[id]/probation` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/probation/route.ts](../../src/app/api/hr/onboarding/[id]/probation/route.ts) |
 | `/api/hr/onboarding/[id]/signature-documents` | GET, POST | `EXCEPTION` | [src/app/api/hr/onboarding/[id]/signature-documents/route.ts](../../src/app/api/hr/onboarding/[id]/signature-documents/route.ts) |
 | `/api/hr/onboarding/[id]/training` | PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/training/route.ts](../../src/app/api/hr/onboarding/[id]/training/route.ts) |
