@@ -12,6 +12,7 @@ import type { CashClosure, CashClosureMonthlySummary } from "../types";
 import {
   aggregateMonthlySummaries,
   monthDayStatuses,
+  monthlySummarySalesCents,
   monthKey,
   trailingMonths,
   unitMonthStats,
@@ -24,6 +25,17 @@ type Unit = { id: string; name: string; pdvFilialId: string | null };
 function signedBRL(cents: number) {
   if (cents === 0) return formatBRL(0);
   return `${cents > 0 ? "+" : "−"}${formatBRL(Math.abs(cents))}`;
+}
+
+function percent(part: number, total: number) {
+  return `${((part / total) * 100).toFixed(1).replace(".", ",")}%`;
+}
+
+/** Vendas da unidade no mês; "—" quando o resumo não tem a venda de todos os dias. */
+function salesLabel(summary: CashClosureMonthlySummary | undefined) {
+  if (!summary) return formatBRL(0);
+  const sales = monthlySummarySalesCents(summary);
+  return sales === null ? "—" : formatBRL(sales);
 }
 
 function shortMonth(year: number, month: number) {
@@ -115,8 +127,14 @@ export function CashClosuresAnalysisTab({
   return (
     <div className="flex flex-col gap-5">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Kpi label="Vendas no PDV" value={formatBRL(current.expectedCents)} sub="esperado para conferência" />
-        <Kpi label="Conferido" value={formatBRL(current.countedCents)} sub={current.expectedCents > 0 ? `${((current.countedCents / current.expectedCents) * 100).toFixed(1).replace(".", ",")}% do esperado` : undefined} />
+        <Kpi
+          label="Vendas no PDV"
+          value={formatBRL(current.salesCents)}
+          sub={current.salesMissingUnits > 0
+            ? `parcial · ${current.salesMissingUnits} ${current.salesMissingUnits === 1 ? "unidade" : "unidades"} sem venda apurada`
+            : "cupons do mês, sem suprimentos e sangrias"}
+        />
+        <Kpi label="Conferido" value={formatBRL(current.countedCents)} sub={current.salesMissingUnits === 0 && current.salesCents > 0 ? `${percent(current.countedCents, current.salesCents)} das vendas` : undefined} />
         <Kpi label="Diferença final" value={signedBRL(current.differenceCents)} tone={current.differenceCents < 0 ? "text-ds-danger" : current.differenceCents > 0 ? "text-ds-ok" : undefined} sub="faltas e sobras dos dias aprovados" />
         <Kpi label="Dias fechados" value={`${current.approvedDays} de ${current.elapsedDays}`} sub={current.pendingDays > 0 ? <strong className="text-ds-alert-ink">{current.pendingDays} pendentes até ontem</strong> : "tudo fechado até ontem"}>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-ds-muted"><div className="h-full rounded-full bg-ds-ok" style={{ width: `${current.elapsedDays ? (current.approvedDays / current.elapsedDays) * 100 : 0}%` }} /></div>
@@ -170,7 +188,7 @@ export function CashClosuresAnalysisTab({
                       </td>
                     ) : null}
                     <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]">{stats ? `${stats.closed}/${stats.elapsed}` : `${unitAggregate.approvedDays}/${unitAggregate.elapsedDays}`}</td>
-                    <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]">{formatBRL(summary?.expectedTotalCents ?? 0)}</td>
+                    <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]">{salesLabel(summary)}</td>
                     <td className={cn("px-3 py-2.5 text-right font-ds-mono text-[13px]", difference < 0 && "text-ds-danger", difference > 0 && "text-ds-ok")}>{signedBRL(difference)}</td>
                     <td className="px-3 py-2.5">
                       <span className={cn("whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold",
@@ -220,7 +238,7 @@ export function CashClosuresAnalysisTab({
                           <span className="min-w-14 font-ds-mono text-[12px] text-ds-ink-2">{aggregate.approvedDays}/{aggregate.elapsedDays}</span>
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]">{formatBRL(aggregate.expectedCents)}</td>
+                      <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]" title={aggregate.salesMissingUnits > 0 ? "Parcial: há unidade sem venda apurada neste mês" : undefined}>{formatBRL(aggregate.salesCents)}{aggregate.salesMissingUnits > 0 ? <span className="ml-1 text-ds-alert-ink">*</span> : null}</td>
                       <td className="px-3 py-2.5 text-right font-ds-mono text-[13px]">{formatBRL(aggregate.countedCents)}</td>
                       <td className={cn("px-3 py-2.5 text-right font-ds-mono text-[13px]", aggregate.differenceCents < 0 && "text-ds-danger", aggregate.differenceCents > 0 && "text-ds-ok")}>{signedBRL(aggregate.differenceCents)}</td>
                       <td className="px-3 py-2.5">

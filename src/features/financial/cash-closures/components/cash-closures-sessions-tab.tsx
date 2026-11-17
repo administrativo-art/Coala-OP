@@ -40,12 +40,15 @@ export function CashClosuresSessionsTab({
   summariesByUnit,
   summariesLoading,
   today,
+  scopeKioskIds = null,
 }: {
   sessions: CashCountingSession[];
   units: Array<{ id: string; name: string }>;
   summariesByUnit: Array<{ kioskId: string; summaries: CashClosureMonthlySummary[] }>;
   summariesLoading: boolean;
   today: string;
+  /** Quiosques do recorte (regional/quiosque escolhidos); `null` mostra todos. Uma sessão com quiosques fora do recorte mostra só os do recorte. */
+  scopeKioskIds?: Set<string> | null;
 }) {
   const active = filterCashCountingSessions(sessions, "active");
   const history = [...filterCashCountingSessions(sessions, "completed"), ...filterCashCountingSessions(sessions, "cancelled")]
@@ -58,14 +61,15 @@ export function CashClosuresSessionsTab({
   return (
     <div className="flex flex-col gap-5">
       {active.map((session) => {
-        const cards = sessionKioskCards(session);
+        const allCards = sessionKioskCards(session);
+        const cards = scopeKioskIds ? allCards.filter((card) => scopeKioskIds.has(card.kioskId)) : allCards;
         return (
           <section key={session.id} className="flex flex-col gap-3 rounded-ds-card-lg border border-ds-accent-soft bg-ds-accent-soft/60 p-4" aria-label="Sessão de contagem em andamento">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="rounded-full bg-ds-accent px-2.5 py-1 text-[12px] font-bold text-white">Sessão em andamento</span>
                 <span className="text-[13.5px] text-ds-ink-2">
-                  aberta em {dateTime(session.openedAt)} · Responsável: {session.openedByName} · {cards.length} {cards.length === 1 ? "quiosque" : "quiosques"} · <strong>{SESSION_STEP[session.status]}</strong>
+                  aberta em {dateTime(session.openedAt)} · Responsável: {session.openedByName} · {cards.length} {cards.length === 1 ? "quiosque" : "quiosques"}{cards.length < allCards.length ? ` de ${allCards.length} da sessão` : ""} · <strong>{SESSION_STEP[session.status]}</strong>
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-3">

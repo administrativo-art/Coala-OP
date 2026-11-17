@@ -17,7 +17,8 @@ import { CashControlNavigation } from "./cash-control-navigation";
 import { formatBRL } from "../money";
 import { formatClosureMonthLabel, shiftClosureDate, todayInClosureTimezone } from "../date";
 import { CASH_CLOSURE_CHANNELS, type CashClosure, type CashClosureChannel, type CashClosureMonthlySummary } from "../types";
-import { aggregateMonthlySummaries, monthDayStatuses, trailingMonths, unitMonthStats } from "../analysis";
+import { aggregateMonthlySummaries, monthDayStatuses, monthlySummarySalesCents, trailingMonths, unitMonthStats } from "../analysis";
+import { pdvSalesCents } from "../../../../../functions/src/cash-closure-dre";
 import { DAY_STATUS_META, DayStatusLegend } from "./cash-closure-day-strip";
 
 const CHANNEL_LABELS: Record<CashClosureChannel, string> = {
@@ -110,6 +111,7 @@ export function CashClosureMonthsPage({ kioskId }: { kioskId: string }) {
     return { year, month, summary, aggregate };
   }).filter((item) => item.summary || (item.year === todayYear && item.month === todayMonth));
   const difference = currentSummary?.differenceTotalCents ?? 0;
+  const currentSales = currentSummary ? monthlySummarySalesCents(currentSummary) : 0;
   const approved = monthClosures.filter((closure) => closure.status === "approved");
   const channels = CASH_CLOSURE_CHANNELS.map((channel) => ({
     channel,
@@ -134,7 +136,7 @@ export function CashClosureMonthsPage({ kioskId }: { kioskId: string }) {
     {loading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
-          { label: "Vendas no PDV", value: formatBRL(currentSummary?.expectedTotalCents ?? 0), sub: `${formatClosureMonthLabel(todayYear, todayMonth).toLocaleLowerCase("pt-BR")}` },
+          { label: "Vendas no PDV", value: currentSales === null ? "—" : formatBRL(currentSales), sub: currentSales === null ? "venda incompleta no resumo do mês" : `${formatClosureMonthLabel(todayYear, todayMonth).toLocaleLowerCase("pt-BR")} · sem suprimentos e sangrias` },
           { label: "Conferido", value: formatBRL(currentSummary?.countedTotalCents ?? 0), sub: `${currentAggregate.approvedDays} dias aprovados` },
           { label: "Diferença final", value: signed(difference), sub: dayStats ? (dayStats.differenceDays ? `${dayStats.differenceDays} ${dayStats.differenceDays === 1 ? "dia" : "dias"} com diferença` : "sem diferença") : "dias aprovados", tone: difference < 0 ? "text-ds-danger" : difference > 0 ? "text-ds-ok" : "" },
           { label: "Falta fechar", value: olderPending ? `${pendingNow} + ${olderPending}` : String(pendingNow), sub: olderPending ? "este mês + meses anteriores" : pendingNow ? "dias até ontem" : "tudo fechado até ontem", tone: pendingNow + olderPending > 0 ? "text-ds-alert-ink" : "text-ds-ok" },
@@ -182,7 +184,7 @@ export function CashClosureMonthsPage({ kioskId }: { kioskId: string }) {
               const label = day.status === "difference" && day.closure ? `Diferença ${signed(day.closure.differenceTotalCents)}` : day.status === "future" ? "" : meta.label;
               const content = <>
                 <span className="flex justify-between text-[13px] font-bold"><span>{day.day}</span>{day.status === "today" ? <span className="text-[10px] font-extrabold text-ds-accent-ink">HOJE</span> : null}</span>
-                <span>{day.closure ? <span className="block font-ds-mono text-[11.5px] font-bold">{formatBRL(day.closure.expectedTotalCents)}</span> : null}<span className={cn("block truncate text-[11px] font-bold", meta.ink)}>{label}</span></span>
+                <span>{day.closure && pdvSalesCents(day.closure.pdvSales) !== null ? <span className="block font-ds-mono text-[11.5px] font-bold">{formatBRL(pdvSalesCents(day.closure.pdvSales)!)}</span> : null}<span className={cn("block truncate text-[11px] font-bold", meta.ink)}>{label}</span></span>
               </>;
               const className = cn("flex min-h-20 flex-col justify-between rounded-ds-md p-2 text-left", meta.soft);
               return day.status === "future"
