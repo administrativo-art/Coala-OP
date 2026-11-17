@@ -32,7 +32,8 @@ const ALL_UNITS = "__all__";
 const TAB_PARAM = "aba";
 
 /**
- * Fechamento do caixa em duas telas: Sessões de contagem (trabalho) e Análise (consulta por regional).
+ * Fechamento do caixa em duas telas: Sessões de contagem (trabalho) e Análise (consulta).
+ * Os filtros de regional (quando há mais de uma) e de quiosque valem para as duas telas.
  * A contagem acontece só dentro de uma sessão; a Análise não tem ação de contagem.
  */
 export function CashClosuresOverviewPage() {
@@ -49,6 +50,7 @@ export function CashClosuresOverviewPage() {
   const [tab, setTab] = useState<Tab>("sessions");
   const [period, setPeriod] = useState({ year: todayYear, month: todayMonth });
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [kioskId, setKioskId] = useState<string>(ALL_UNITS);
   const [units, setUnits] = useState<UnitItem[]>([]);
   const [sessions, setSessions] = useState<CashCountingSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,11 +115,33 @@ export function CashClosuresOverviewPage() {
       .filter((group) => group.kioskIds.length > 0);
   }, [groups, units]);
   const selectedGroupId = groupId ?? (unitGroups.length > 1 ? unitGroups[0].id : ALL_UNITS);
-  const scopedUnits = useMemo(() => {
+  const groupUnits = useMemo(() => {
     if (selectedGroupId === ALL_UNITS) return units;
     const group = unitGroups.find((item) => item.id === selectedGroupId);
     return group ? units.filter((unit) => group.kioskIds.includes(unit.id)) : units;
   }, [selectedGroupId, unitGroups, units]);
+  // Só quiosques com PDV geram fechamento; o filtro lista apenas esses.
+  const kioskOptions = useMemo(() => groupUnits.filter((unit) => unit.pdvFilialId), [groupUnits]);
+  const selectedKioskId = kioskOptions.some((unit) => unit.id === kioskId) ? kioskId : ALL_UNITS;
+  const scopedUnits = useMemo(
+    () => (selectedKioskId === ALL_UNITS ? groupUnits : groupUnits.filter((unit) => unit.id === selectedKioskId)),
+    [groupUnits, selectedKioskId],
+  );
+  const isScoped = selectedGroupId !== ALL_UNITS || selectedKioskId !== ALL_UNITS;
+  const changeGroup = useCallback((next: string) => {
+    setGroupId(next);
+    setKioskId(ALL_UNITS);
+  }, []);
+
+  const scopedUnitIds = useMemo(() => new Set(scopedUnits.map((unit) => unit.id)), [scopedUnits]);
+  const scopedSessions = useMemo(
+    () => sessions.filter((session) => session.kioskIds.some((id) => scopedUnitIds.has(id))),
+    [scopedUnitIds, sessions],
+  );
+  const scopedSummaries = useMemo(
+    () => summariesByUnit.filter((entry) => scopedUnitIds.has(entry.kioskId)),
+    [scopedUnitIds, summariesByUnit],
+  );
 
   const scopedPdvIds = useMemo(() => scopedUnits.filter((unit) => unit.pdvFilialId).map((unit) => unit.id).join(","), [scopedUnits]);
   useEffect(() => {
@@ -138,7 +162,7 @@ export function CashClosuresOverviewPage() {
     return () => { cancelled = true; };
   }, [api, canViewClosures, effectiveTab, firebaseUser, period.month, period.year, reloadToken, scopedPdvIds, toast]);
 
-  const activeSessions = useMemo(() => filterCashCountingSessions(sessions, "active"), [sessions]);
+  const activeSessions = useMemo(() => filterCashCountingSessions(scopedSessions, "active"), [scopedSessions]);
   const sessionScopeKeys = useMemo(() => activeSessionScopeKeys(activeSessions), [activeSessions]);
 
   function shiftMonth(delta: number) {
@@ -190,15 +214,17 @@ export function CashClosuresOverviewPage() {
             ) : null}
           </>
         )}
-        chips={effectiveTab === "analysis" ? (
+        chips={(
           <>
+            {effectiveTab === "analysis" ? (
             <div className="inline-flex h-9 items-center gap-0.5 rounded-full bg-white/5 px-1 ring-1 ring-inset ring-white/10">
               <button type="button" aria-label="Mês anterior" onClick={() => shiftMonth(-1)} className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10"><ChevronLeft className="h-4 w-4" /></button>
               <span className="min-w-36 text-center text-[13px] font-bold text-ds-on-dark">{formatClosureMonthLabel(period.year, period.month).toLocaleLowerCase("pt-BR")}</span>
               <button type="button" aria-label="Próximo mês" onClick={() => shiftMonth(1)} disabled={isCurrentMonth} className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
             </div>
+            ) : null}
             {unitGroups.length > 1 ? (
-              <Select value={selectedGroupId} onValueChange={setGroupId}>
+              <Select value={selectedGroupId} onValueChange={changeGroup}>
                 <SelectTrigger aria-label="Regional" className="h-9 w-auto min-w-52 gap-2 rounded-full border-white/10 bg-white/5 px-3.5 text-[13px] font-bold text-ds-on-dark">
                   <SelectValue />
                 </SelectTrigger>
@@ -208,17 +234,29 @@ export function CashClosuresOverviewPage() {
                 </SelectContent>
               </Select>
             ) : null}
+            {kioskOptions.length > 1 ? (
+              <Select value={selectedKioskId} onValueChange={setKioskId}>
+                <SelectTrigger aria-label="Quiosque" className="h-9 w-auto min-w-52 gap-2 rounded-full border-white/10 bg-white/5 px-3.5 text-[13px] font-bold text-ds-on-dark">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_UNITS}>Todos os quiosques · {kioskOptions.length}</SelectItem>
+                  {kioskOptions.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : null}
           </>
-        ) : null}
+        )}
       />
 
       {effectiveTab === "sessions" ? (
         <CashClosuresSessionsTab
-          sessions={sessions}
-          units={units}
-          summariesByUnit={summariesByUnit}
+          sessions={scopedSessions}
+          units={scopedUnits}
+          summariesByUnit={scopedSummaries}
           summariesLoading={summariesLoading}
           today={today}
+          scopeKioskIds={isScoped ? scopedUnitIds : null}
         />
       ) : (
         <CashClosuresAnalysisTab
