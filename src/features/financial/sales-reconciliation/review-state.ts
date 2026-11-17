@@ -68,6 +68,10 @@ export type DailySalesReviewIdentity = {
   referenceDate: string;
 };
 
+export function dailySalesRefundScopeId(identity: Omit<DailySalesReviewIdentity, "referenceDate">) {
+  return digest([identity.workspaceId, identity.kioskId, identity.mappingId, identity.stoneCode]);
+}
+
 export function dailySalesReviewIdentityId(identity: DailySalesReviewIdentity) {
   return digest([identity.workspaceId, identity.kioskId, identity.mappingId,
     identity.stoneCode, identity.referenceDate]);
@@ -97,7 +101,9 @@ export function dailySalesSourceFingerprint(result: DailySalesResult) {
     uncomparedPdvFacts: sorted(result.uncomparedPdvFacts),
     issues: sorted(result.issues),
     stoneEvents: sorted(result.stoneEvents),
-    cases: sorted(result.cases),
+    cases: sorted(result.cases.map(row => row.pixRefundCheck
+      ? { ...row, pixRefundCheck: { state: row.pixRefundCheck.state, complete: row.pixRefundCheck.complete, events: row.pixRefundCheck.events } }
+      : row)),
   });
 }
 

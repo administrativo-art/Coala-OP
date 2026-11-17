@@ -58,3 +58,48 @@ test("persiste o pedido por data, aguarda o webhook e reaproveita o arquivo proc
   });
   assert.equal(calls, 1);
 });
+
+test("reemite somente o arquivo legado com hash e vínculo autorizados", async t => {
+  const { pixRefundKey } = await import("../../src/lib/integrations/stone/pix-refunds.ts");
+  const document = process.env.STONE_CONCILIATION_DOCUMENT;
+  const mappingId = "refund-backfill-test";
+  const kioskId = "refund-test-unit";
+  const stoneCode = "123";
+  const now = new Date("2026-10-01T12:00:00Z");
+  const from = "2026-09-10";
+  const through = "2026-09-12";
+  const plannedDates = [from, "2026-09-11", through];
+  const baseline = "a".repeat(64);
+  const planRef = db.collection("stonePixRefundBackfills").doc(WORKSPACE_ID);
+  const mappingRef = db.collection("stoneMerchantMappings").doc(mappingId);
+  const allDates = [...plannedDates, "2026-09-30"];
+  const fileRefs = allDates.map(date => db.collection("stonePixConciliationFiles").doc(stonePixFileId(document, date)));
+  const requestRefs = allDates.map(date => db.collection("stonePixConciliationRequests").doc(stonePixFileId(document, date)));
+  t.after(async () => Promise.all([planRef, mappingRef, ...fileRefs, ...requestRefs].map(ref => ref.delete())));
+  await mappingRef.set({ workspaceId: WORKSPACE_ID, kioskId, accountId: "account", stoneCodes: [stoneCode],
+    terminalIds: [], status: "active", validFrom: from, validTo: null });
+  await planRef.set({ version: 1, workspaceId: WORKSPACE_ID, mappingId, kioskId, stoneCode, from, through,
+    expiresAt: "2026-10-02T12:00:00Z", documentKey: pixRefundKey(document),
+    files: Object.fromEntries(plannedDates.map(date => [date, baseline])) });
+  await Promise.all(fileRefs.map((ref, index) => ref.set({
+    workspaceId: WORKSPACE_ID, document, referenceDate: allDates[index], status: "processed", schemaVersion: 1,
+    sourceHash: index === 1 ? "b".repeat(64) : baseline,
+    ...(index === 2 ? { refundLayoutSupported: true } : {}),
+  })));
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async url => {
+    calls.push(new URL(url).pathname.split("/").at(-1));
+    return new Response(null, { status: 202 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  assert.deepEqual((await requestMissingStonePixFiles(now)).refundBackfill, {
+    considered: 3, requested: 1, waiting: 1, processed: 1, failed: 0,
+  });
+  assert.deepEqual(calls, [from]);
+  assert.deepEqual((await requestMissingStonePixFiles(now)).refundBackfill, {
+    considered: 3, requested: 0, waiting: 2, processed: 1, failed: 0,
+  });
+  assert.deepEqual(calls, [from]);
+});

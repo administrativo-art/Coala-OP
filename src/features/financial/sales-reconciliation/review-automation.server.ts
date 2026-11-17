@@ -8,6 +8,7 @@ import { financialDateKey } from "../lib/financial-dates";
 import { latestPublishedDate } from "../receivables/period-review";
 import { listAutomatedSalesReviewMappings } from "./mapping.server";
 import { buildSalesReviewAutomationPlan, initialSalesReviewAutomationState, type SalesReviewAutomationState } from "./review-automation";
+import { refreshDuePixRefundReviews } from "./pix-refund-automation.server";
 import { collectDailySalesReview } from "./review-service.server";
 
 const AUTOMATION_COLLECTION = "dailySalesReviewAutomation";
@@ -99,6 +100,8 @@ export async function runAutomatedSalesReviews(options: { now?: Date; signal?: A
     maxDates: MAX_DATES_PER_RUN,
   });
   options.signal?.throwIfAborted();
+  const refunds = await refreshDuePixRefundReviews({ workspaceId: scope.workspaceId, kioskId: scope.mapping.kioskId,
+    mappingId: scope.mapping.id, stoneCode: scope.stoneCode }, publishedThrough, now, options.signal);
   const results = await runBounded(plan.dates, CONCURRENCY, async referenceDate => {
     options.signal?.throwIfAborted();
     const requestSignal = options.signal
@@ -121,6 +124,7 @@ export async function runAutomatedSalesReviews(options: { now?: Date; signal?: A
     processedScope: { workspaceId: scope.workspaceId, mappingId: scope.mapping.id,
       kioskId: scope.mapping.kioskId, stoneCode: scope.stoneCode },
     processedDates: plan.dates,
+    refunds,
     statuses: results.map(result => ({ referenceDate: result.scope.referenceDate, status: result.review.status,
       revision: result.review.revision, sourceChanged: result.review.sourceChanged })),
     backfillActive: plan.backfillActive,

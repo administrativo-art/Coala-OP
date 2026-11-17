@@ -91,6 +91,13 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
 }) {
   const attention = isAttention(row);
   const different = row.differenceAmountCents !== 0;
+  const refundCheck = row.pixRefundCheck;
+  const cutoff = refundCheck?.checkedThrough.split("-").reverse().join("/");
+  const pdvStatus = facts.get(row.pdvFactIds[0])?.status;
+  const confirmedRefunds = refundCheck?.events.filter(event => event.state === "confirmed") ?? [];
+  const confirmedCents = confirmedRefunds.reduce((sum, event) => sum + (event.amountCents ?? 0), 0);
+  const refundTotalLabel = confirmedCents === row.stoneGrossAmountCents ? "Devolução integral confirmada"
+    : confirmedCents < row.stoneGrossAmountCents ? "Devolução parcial confirmada" : "Soma confirmada acima do valor da venda";
   const navButton = "flex h-7 w-7 items-center justify-center rounded-lg border border-ds-border bg-white text-ds-ink-muted hover:bg-ds-input disabled:opacity-40";
   return <aside aria-label="Evidências do caso" className="sticky top-4 overflow-hidden rounded-2xl border border-ds-border bg-white shadow-[0_10px_30px_rgba(0,0,0,.06)]">
     <div className="flex items-center justify-between gap-2.5 border-b border-ds-divider bg-ds-input px-3.5 py-3">
@@ -121,6 +128,21 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
           <p className="mt-[3px] font-mono text-[13px] font-bold tabular-nums">{money(row.differenceAmountCents)}</p>
         </div>
       </div>
+      {refundCheck ? <div className="space-y-1.5 rounded-xl border border-ds-border bg-ds-input px-3 py-2.5 text-[11.5px]">
+        <p className="font-bold">Devoluções Pix na Stone</p>
+        <p className="text-ds-ink-2">PDV {pdvStatus ? saleStatuses[pdvStatus].toLowerCase() : "cancelado"} · Stone aprovado</p>
+        {refundCheck.state === "clear" ? <p className="text-ds-ok">Sem devolução encontrada até {cutoff}.</p> : null}
+        {!refundCheck.complete ? <p className="text-ds-warn">A verificação tem cobertura incompleta até {cutoff}.</p> : null}
+        {confirmedCents > 0 ? <p className="font-semibold text-ds-ink-2">{refundTotalLabel} · {money(confirmedCents)}</p> : null}
+        {refundCheck.events.length ? <ul className="space-y-1.5 text-ds-ink-2">
+          {refundCheck.events.map(event => <li key={JSON.stringify(event)}>
+            <span className="font-semibold">{event.state === "confirmed" ? "Devolução confirmada" : "Evento de devolução a verificar"}</span>
+            {event.amountCents !== null ? ` · ${money(event.amountCents)}` : null}
+            {event.occurredAt ? ` · ${new Date(event.occurredAt).toLocaleDateString("pt-BR", { timeZone: "America/Belem" })}` : null}
+            {event.refundId ? <span className="block break-all font-mono text-ds-ink-faint">{event.refundId}</span> : null}
+          </li>)}
+        </ul> : null}
+      </div> : null}
       <Side title={`PDV · ${row.pdvFactIds.length} pagamento(s)`} emptyLabel="Não localizado no PDV deste recorte" ids={row.pdvFactIds} facts={facts} />
       <Side title={`Stone · ${row.stoneSaleIds.length} captura(s)`} emptyLabel="Não localizado na fonte Stone consultada" ids={row.stoneSaleIds} facts={facts} />
       <p className="text-[11px] text-ds-ink-faint">↑ ↓ navegam entre os casos do filtro · Esc fecha</p>

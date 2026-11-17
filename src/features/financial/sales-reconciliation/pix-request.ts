@@ -54,12 +54,15 @@ export async function syncStonePixRequests(input: {
   startDate: string;
   now: Date;
   repository: StonePixRequestRepository;
+  targeted?: { dates: readonly string[]; maxRequests: number };
   requestFile: (input: { document: string; referenceDate: string }) => Promise<{ status: number }>;
 }) {
-  const dates = stonePixRequestDates(input.now, input.startDate);
-  const result = { considered: dates.length, requested: 0, waiting: 0, processed: 0, failed: 0 };
+  const dates = input.targeted?.dates ?? stonePixRequestDates(input.now, input.startDate);
+  const result = { considered: 0, requested: 0, waiting: 0, processed: 0, failed: 0 };
   let lastError: unknown = null;
   for (const referenceDate of dates) {
+    if (input.targeted && result.requested + result.failed >= input.targeted.maxRequests) break;
+    result.considered += 1;
     const reservation = await input.repository.reserve({
       document: input.document, referenceDate, now: input.now,
     });

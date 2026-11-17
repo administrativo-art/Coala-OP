@@ -2,7 +2,11 @@
   "schemaVersion": 1,
   "nonPersonalCollections": [
     "accounts",
+    "dailySalesRefundWatches",
+    "pixRefundReviewDates",
     "resultCenters",
+    "stonePixRefundBackfills",
+    "stonePixRefundMonths",
     "stoneReceiptMonthSnapshots"
   ],
   "approvedLegacyGaps": [

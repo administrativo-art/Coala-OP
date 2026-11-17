@@ -1,6 +1,11 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { financialAgentIdentifier } from "../agent/contracts";
+import { latestPublishedDate } from "../receivables/period-review";
+import { readSalesReviewCalendarBinding } from "./mapping.server";
+import { pixRefundDates, pixRefundKey } from "@/lib/integrations/stone/pix-refunds";
 import { FieldValue } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { AppError } from "@/lib/observability/app-error";
@@ -21,6 +26,20 @@ import {
 const REQUEST_LEASE_MS = 10 * 60_000;
 const WEBHOOK_WAIT_MS = 2 * 60 * 60_000;
 const FAILED_RETRY_MS = 6 * 60 * 60_000;
+const MAX_BACKFILL_FILES = 62;
+const MAX_BACKFILL_REQUESTS_PER_RUN = 8;
+const backfillSchema = z.object({
+  version: z.literal(1),
+  workspaceId: financialAgentIdentifier,
+  mappingId: financialAgentIdentifier,
+  kioskId: financialAgentIdentifier,
+  stoneCode: z.string().regex(/^[1-9]\d{0,19}$/),
+  from: z.string().refine(isStonePixRequestDate),
+  through: z.string().refine(isStonePixRequestDate),
+  expiresAt: z.string().datetime(),
+  documentKey: z.string().regex(/^e[a-f0-9]{64}$/),
+  files: z.record(z.string().regex(/^[a-f0-9]{64}$/)),
+}).strict();
 
 function configuredDocument() {
   const document = process.env.STONE_CONCILIATION_DOCUMENT?.replace(/\D/g, "") ?? "";
@@ -38,7 +57,7 @@ function configuredStartDate() {
   return value;
 }
 
-function repository(): StonePixRequestRepository {
+function repository(expectedFiles?: Record<string, string>): StonePixRequestRepository {
   return {
     async reserve({ document, referenceDate, now }) {
       const fileId = stonePixFileId(document, referenceDate);
@@ -47,12 +66,16 @@ function repository(): StonePixRequestRepository {
       return financialDbAdmin.runTransaction(async tx => {
         const file = await tx.get(fileRef);
         const request = await tx.get(requestRef);
-        if (file.get("workspaceId") === WORKSPACE_ID
+        const sameFile = file.get("workspaceId") === WORKSPACE_ID
           && file.get("document") === document
           && file.get("referenceDate") === referenceDate
-          && file.get("status") === "processed"
-          && file.get("schemaVersion") === STONE_PIX_FILE_SCHEMA_VERSION) {
+          && file.get("schemaVersion") === STONE_PIX_FILE_SCHEMA_VERSION;
+        if (sameFile && file.get("status") === "processed"
+          && (!expectedFiles || typeof file.get("refundLayoutSupported") === "boolean")) {
           return { status: "processed" as const };
+        }
+        if (expectedFiles && (!sameFile || file.get("sourceHash") !== expectedFiles[referenceDate])) {
+          return { status: "waiting" as const };
         }
         const waitUntil = Number(request.get("nextRetryAt") ?? request.get("leaseExpiresAt") ?? 0);
         if (["requesting", "requested"].includes(String(request.get("status"))) && waitUntil > now.getTime()) {
@@ -113,15 +136,38 @@ function repository(): StonePixRequestRepository {
   };
 }
 
+async function readRefundBackfill(document: string, now: Date) {
+  const request = await financialDbAdmin.collection("stonePixRefundBackfills").doc(WORKSPACE_ID).get();
+  if (!request.exists) return null;
+  const parsed = backfillSchema.safeParse(request.data());
+  if (!parsed.success) throw new AppError({ code: "STONE_PIX_REFUND_BACKFILL_INVALID", kind: "DATA_INTEGRITY" });
+  const plan = parsed.data;
+  if (Date.parse(plan.expiresAt) <= now.getTime()) return null;
+  const dates = pixRefundDates(plan.from, plan.through);
+  if (!dates || dates.length > MAX_BACKFILL_FILES || plan.through > latestPublishedDate(now)
+    || Object.keys(plan.files).length !== dates.length || dates.some(date => !plan.files[date])
+    || plan.workspaceId !== WORKSPACE_ID || plan.documentKey !== pixRefundKey(document)) {
+    throw new AppError({ code: "STONE_PIX_REFUND_BACKFILL_SCOPE_INVALID", kind: "DATA_INTEGRITY" });
+  }
+  const binding = await readSalesReviewCalendarBinding(plan, WORKSPACE_ID);
+  if (binding.status !== "active" || plan.from < binding.validFrom || (binding.validTo && plan.through > binding.validTo)) {
+    throw new AppError({ code: "STONE_PIX_REFUND_BACKFILL_BINDING_INVALID", kind: "DATA_INTEGRITY" });
+  }
+  return { plan, dates };
+}
+
 export async function requestMissingStonePixFiles(now = new Date()) {
   const document = configuredDocument();
-  return syncStonePixRequests({
-    document,
-    startDate: configuredStartDate(),
-    now,
-    repository: repository(),
-    requestFile: input => requestStonePixFile(input, {
-      apiKey: process.env.STONE_CONCILIATION_API_KEY,
-    }),
+  const startDate = configuredStartDate();
+  const requestFile = (input: { document: string; referenceDate: string }) => requestStonePixFile(input, {
+    apiKey: process.env.STONE_CONCILIATION_API_KEY,
   });
+  const normal = await syncStonePixRequests({ document, startDate, now, repository: repository(), requestFile });
+  const backfill = await readRefundBackfill(document, now);
+  if (!backfill) return normal;
+  const result = await syncStonePixRequests({
+    document, startDate, now, repository: repository(backfill.plan.files), requestFile,
+    targeted: { dates: backfill.dates, maxRequests: MAX_BACKFILL_REQUESTS_PER_RUN },
+  });
+  return { ...normal, refundBackfill: result };
 }

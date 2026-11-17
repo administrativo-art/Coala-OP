@@ -145,7 +145,12 @@ export const addDays = (key: string, delta: number) => {
 export const isAttention = (row: SuggestedSalesReconciliationCase) => row.reviewStatus === "attention_required";
 export const isMultiset = (row: SuggestedSalesReconciliationCase) => row.kind === "matched" && row.matchBasis === "daily_amount_multiset";
 export const caseBadgeLabel = (row: SuggestedSalesReconciliationCase) => isMultiset(row) ? "Conjunto diário conferido" : kinds[row.kind];
-export const caseReason = (row: SuggestedSalesReconciliationCase) => isMultiset(row) ? multisetReason : caseReasons[row.kind];
+export function caseReason(row: SuggestedSalesReconciliationCase) {
+  if (row.pixRefundCheck?.state === "clear") return "O pagamento aprovado pela Stone tem o mesmo valor do PDV e a verificação de devoluções está completa.";
+  if (row.pixRefundCheck?.state === "events_found") return "Há evidência de devolução Pix na Stone para esta transação.";
+  if (row.pixRefundCheck?.state === "incomplete") return "A confirmação depende de completar a verificação de devoluções Pix na Stone.";
+  return isMultiset(row) ? multisetReason : caseReasons[row.kind];
+}
 export const caseTime = (row: SuggestedSalesReconciliationCase, facts: Map<string, SalesMatchFact>) => {
   const fact = facts.get(row.pdvFactIds[0] ?? "") ?? facts.get(row.stoneSaleIds[0] ?? "");
   return fact ? new Date(fact.soldAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
