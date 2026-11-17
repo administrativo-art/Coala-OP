@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **571**
-- Totalmente contratados: **246**
-- Legados congelados: **317**
+- Totalmente contratados: **247**
+- Legados congelados: **316**
 - Exceções temporárias: **8**
 - Violações: **0**
 
@@ -197,7 +197,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/vacations/[vacationId]/notice` | GET | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/notice/route.ts](../../src/app/api/dp/vacations/[vacationId]/notice/route.ts) |
 | `/api/dp/vacations/[vacationId]/receipt-documents/[documentId]` | GET | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts](../../src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts) |
 | `/api/financial/accounts` | DELETE, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/financial/accounts/route.ts](../../src/app/api/financial/accounts/route.ts) |
-| `/api/financial/acquirer-fees` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/acquirer-fees/route.ts](../../src/app/api/financial/acquirer-fees/route.ts) |
+| `/api/financial/acquirer-fees` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/acquirer-fees/route.ts](../../src/app/api/financial/acquirer-fees/route.ts) |
 | `/api/financial/agent` | POST | `LEGACY_BASELINE` | [src/app/api/financial/agent/route.ts](../../src/app/api/financial/agent/route.ts) |
 | `/api/financial/analysis-routines` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/route.ts](../../src/app/api/financial/analysis-routines/route.ts) |
 | `/api/financial/analysis-routines/scheduler` | POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/scheduler/route.ts](../../src/app/api/financial/analysis-routines/scheduler/route.ts) |

@@ -159,3 +159,6 @@ Ajuste documental de férias (29/10/2026): histórico interno com decisões pres
 2026-11-03 — Passe residual de rastreabilidade: paginação opaca persistente com TTL/cache/budget, fontes nativas sem unitId corrigidas, classificações comprovadas pelo recibo oficial pai, autorização de partes/seleção RH no servidor, patrimônio atual/legado/histórico e sentinel21 documental. Estado local, sem implantação/censo global; [guia](document-person-traceability.md).
 
 Exportação DRE mensal/12meses em17/11/2026: [fluxo](flows/dre.md#relatórios-mensal-e-de-12-meses--17112026); secureRoute, PDF/XLSX transitórios e núcleo compartilhado, QA sintética local; produção não executada.
+
+
+Atualização local de17/11/2026 — taxas por venda conciliada: [fluxo](flows/stone-sales-review.md#taxas-por-venda-conciliada--implementação-local-17112026), secureRoute e transações com claims/CAS, provisão antes do crédito, guarda de segundo pagamento e avisos comuns DRE. Runner dirigido no emulador demo; resultados e limites constam do registro da tarefa. Nenhuma homologação externa, publicação ou escrita real foi realizada. Não altera a contagem histórica de grupos.

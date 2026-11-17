@@ -11,8 +11,9 @@ export function dreResultState(input: {
     issues: readonly string[];
   };
   compositionOpen: boolean;
+  feeReasons?: string[];
 }) {
-  const reasons: string[] = [];
+  const reasons: string[] = [...new Set(input.feeReasons ?? [])];
   const cash = input.cash;
   if (cash.cashDifferenceCoverage !== "complete") reasons.push(`Caixa comprovado em ${cash.cashDifferenceCoveredDays}/${cash.cashDifferenceTotalDays} dias.`);
   if (cash.pendingOperatorCount === null) reasons.push("Conferência financeira do caixa a confirmar.");

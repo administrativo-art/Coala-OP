@@ -73,6 +73,6 @@ export async function queryFeeEvidence(raw: unknown, context: FeeContext, deps: 
   });
   return { request, batches, pending: [...new Set([...pending, ...evidence.pending])], mapping,
     pixSource: request.source === "pix" && pix.fileId && pix.sourceHash ? { fileId: pix.fileId, sourceHash: pix.sourceHash } : null,
-    paymentFileId: payment?.fileId ?? null, originalFileIds: originals.map(file => file.fileId).sort() };
+    paymentFile: payment, originalFiles: originals, paymentFileId: payment?.fileId ?? null, originalFileIds: originals.map(file => file.fileId).sort() };
 }
 export type FeeEvidence = Awaited<ReturnType<typeof queryFeeEvidence>>;

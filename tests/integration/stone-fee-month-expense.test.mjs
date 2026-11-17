@@ -53,59 +53,22 @@ async function confirmGroups() {
   }
 }
 
-test("taxas do mês: bloqueia pendência, lança uma despesa por tipo, é idempotente e desfaz com motivo", { timeout: 120_000 }, async () => {
-  await cleanup();
-  await db.collection("accounts").doc(FEE_ACCOUNTS.mdr).set({ name: "Taxas de cartão", active: true, isGroup: false, is_dre_account: true, dre_position: "despesas_financeiras", workspaceId: WORKSPACE_ID });
-  await db.collection("resultCenters").doc(centerId).set({ name: "Centro da unidade", active: true, unitIds: [scope.kioskId], workspaceId: WORKSPACE_ID });
-  const result = { scope: { workspaceId: WORKSPACE_ID, mappingId: scope.mappingId, kioskId: scope.kioskId, stoneCode: scope.stoneCode },
-    period: { from: "2026-10-01", through: "2026-10-31" }, latestPublished: "2026-10-31", collectedAt: "2026-11-01T09:00:00.000Z", parcels };
-  await saveStoneReceiptSnapshot({ ...scope, month }, result, now);
-
-  // Sem taxa atual confirmada: bloqueado e nada é gravado.
-  const blocked = await service.feeMonthExpenseStatus(scope, month, now);
-  assert.match(blocked.plan.blockers.join(" "), /Confirme a taxa atual/);
-  await assert.rejects(service.launchFeeMonthExpense(scope, { month, fingerprint: blocked.plan.fingerprint, resultCenterId: centerId }, actor, now), code("STONE_FEE_EXPENSE_BLOCKED"));
-
-  await confirmGroups();
-  const status = await service.feeMonthExpenseStatus(scope, month, now);
-  assert.deepEqual(status.plan.blockers, []);
-  assert.deepEqual(status.plan.items.map(item => [item.kind, item.amountCents]), [["pix", 10], ["debit", 29], ["credit", 111]]);
-  assert.deepEqual(status.centers, [{ id: centerId, name: "Centro da unidade" }]);
-
-  await assert.rejects(service.launchFeeMonthExpense(scope, { month, fingerprint: "2026-10|pix:1", resultCenterId: centerId }, actor, now), code("STONE_FEE_EXPENSE_STALE"));
-
-  // Lançamento manual do mesmo valor, mês e centro impede duplicar.
-  const manual = db.collection("expenses").doc(`${prefix}-manual`);
-  await manual.set({ workspaceId: WORKSPACE_ID, competenceMonth: month, resultCenterId: centerId, totalValue: 0.29, status: "pending" });
-  await assert.rejects(service.launchFeeMonthExpense(scope, { month, fingerprint: status.plan.fingerprint, resultCenterId: centerId }, actor, now), code("STONE_FEE_EXPENSE_MANUAL_CANDIDATE"));
-  await manual.delete();
-
-  const launched = await service.launchFeeMonthExpense(scope, { month, fingerprint: status.plan.fingerprint, resultCenterId: centerId }, actor, now);
-  assert.equal(launched.idempotent, false);
-  assert.equal(launched.record.items.length, 3);
-  for (const item of launched.record.items) {
-    const expense = (await db.collection("expenses").doc(item.expenseId).get()).data();
-    assert.equal(expense.status, "paid");
-    assert.equal(expense.totalValue, item.amountCents / 100);
-    assert.equal(expense.accountId, FEE_ACCOUNTS.mdr);
-    assert.equal(expense.resultCenterId, centerId);
-    assert.equal(expense.competenceMonth, month);
-    assert.equal(expense.sourceSettlement.kind, "stone_fee_month");
-    assert.equal(expense.createdBy, actor.uid);
-  }
-  const again = await service.launchFeeMonthExpense(scope, { month, fingerprint: status.plan.fingerprint, resultCenterId: centerId }, actor, now);
-  assert.equal(again.idempotent, true);
-  assert.equal((await db.collection("expenses").where("kioskId", "==", scope.kioskId).get()).size, 3);
-
-  const cancelled = await service.cancelFeeMonthExpense(scope, { month, reason: "Teste de desfazer" }, actor, now);
-  assert.equal(cancelled.record.active, false);
-  for (const item of launched.record.items) assert.equal((await db.collection("expenses").doc(item.expenseId).get()).get("status"), "cancelled");
-
-  // Depois de desfazer, um novo lançamento gera a revisão 2 com despesas novas.
-  const relaunched = await service.launchFeeMonthExpense(scope, { month, fingerprint: status.plan.fingerprint, resultCenterId: centerId }, actor, now);
-  assert.equal(relaunched.record.revision, 2);
-  assert.ok(relaunched.record.items.every(item => item.expenseId.endsWith("_r2")));
-  const events = await db.collection("stoneFeeMonthExpenseEvents").where("stoneCode", "==", scope.stoneCode).get();
-  assert.deepEqual(events.docs.map(doc => doc.get("type")).sort(), ["cancelled", "launched", "launched"]);
-  assert.ok(events.docs.every(doc => doc.get("actorId") === actor.uid && doc.get("actorNamespace") === "main.users"));
+test("histórico mensal preserva consulta/cancelamento; novos lançamentos exigem conciliação por venda", { timeout:120_000 }, async()=>{
+ await cleanup();
+ await db.collection("accounts").doc(FEE_ACCOUNTS.mdr).set({name:"Taxa legada",active:true,isGroup:false,is_dre_account:true,dre_position:"despesas_financeiras",workspaceId:WORKSPACE_ID});
+ await db.collection("resultCenters").doc(centerId).set({name:"Centro da unidade",active:true,unitIds:[scope.kioskId],workspaceId:WORKSPACE_ID});
+ const result={scope:{workspaceId:WORKSPACE_ID,mappingId:scope.mappingId,kioskId:scope.kioskId,stoneCode:scope.stoneCode},period:{from:"2026-10-01",through:"2026-10-31"},latestPublished:"2026-10-31",collectedAt:"2026-11-01T09:00:00.000Z",parcels};
+ await saveStoneReceiptSnapshot({...scope,month},result,now); await confirmGroups();
+ const status=await service.feeMonthExpenseStatus(scope,month,now);
+ assert.deepEqual(status.plan.items.map(i=>[i.kind,i.amountCents]),[["pix",10],["debit",29],["credit",111]]);
+ await assert.rejects(service.launchFeeMonthExpense(scope,{month,fingerprint:status.plan.fingerprint,resultCenterId:centerId},actor,now),code("STONE_FEE_EXPENSE_RECOGNITION_REQUIRED"));
+ const {createHash}=await import("node:crypto");
+ const {sourceExpenseGuard}=await import("../../src/features/financial/cash-closures/withdrawal-classification.ts");
+ const items=[];
+ for(const item of status.plan.items){const expenseId=`${prefix}-legacy-${item.kind}`; const expense={workspaceId:WORKSPACE_ID,kioskId:scope.kioskId,status:"paid",totalValue:item.amountCents/100,competenceMonth:month,resultCenterId:centerId,sourceSettlement:{kind:"acquirer_fee",sourceId:"legacy-month"}}; await db.collection("expenses").doc(expenseId).set(expense); items.push({kind:item.kind,amountCents:item.amountCents,expenseId,expenseGuard:sourceExpenseGuard(expense)});}
+ const rid=createHash("sha256").update(`${scope.workspaceId}:${scope.stoneCode}:${month}`).digest("hex");
+ await db.collection("stoneFeeMonthExpenses").doc(rid).set({...scope,month,active:true,revision:1,fingerprint:status.plan.fingerprint,items,accountPlanId:FEE_ACCOUNTS.mdr,resultCenterId:centerId,resultCenterName:"Centro da unidade",actorId:actor.uid,actorNamespace:"main.users",launchedAt:now.toISOString(),cancelledAt:null,cancelReason:null,cancelledBy:null});
+ assert.equal((await service.feeMonthExpenseStatus(scope,month,now)).record.active,true);
+ const cancelled=await service.cancelFeeMonthExpense(scope,{month,reason:"revisar pela venda conciliada"},actor,now); assert.equal(cancelled.record.active,false);
+ for(const item of items)assert.equal((await db.collection("expenses").doc(item.expenseId).get()).get("status"),"cancelled");
 });

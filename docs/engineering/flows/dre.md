@@ -137,3 +137,8 @@ Conciliação preserva por unidade revisão, fingerprints de snapshot/fichas e v
 ## Escopo da visão por colaborador — 17/11/2026
 
 Referências financeiras explicitamente tipadas pelo namespace `external:` são beneficiários externos e não entram em `buildDrePersonAnalysis`, tanto na tela quanto no CSV por colaborador que consome o mesmo resultado. Nenhum lançamento ou total contábil geral é alterado; não há nova aba de externos. Colaborador com rubrica informativa permanece. Nome livre não determina vínculo e referências legadas sem essa tipagem não são apagadas por inferência. O filtro também cobre o fallback de folha caso uma referência `external:` chegue por ele. Não certifica cadastro RH de referências legadas desconhecidas.
+
+
+### Taxas por venda conciliada — implementação local 17/11/2026
+
+MDR/PIX reconhecidos por origem em `custos_variaveis` entram na competência da venda e reduzem contribuição; antecipação segregada permanece em despesas financeiras. `normalizeFinancialExpenseForDre` preserva somente indicadores server-owned de estimativa/incompletude da retenção, que seguem até o cálculo compartilhado e avisos da tela/PDF/XLSX. DRE não espera liquidação para incluir provisão. Cobertura integral mensal das taxas ainda não é certificada: o aviso não transforma receita/CMV conhecidos em indisponíveis nem trata ausência de despesa como taxa zero. Não houve alteração de dados/categorias históricos. [Fluxo e limites](stone-sales-review.md#taxas-por-venda-conciliada--implementação-local-17112026).
