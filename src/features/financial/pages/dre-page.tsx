@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, Info, RefreshCw } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -57,6 +57,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip as HelpTooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,42 @@ function pct(value: number, base: number) {
 // NaN propagates unavailable inputs only inside this view's arithmetic; never persisted/exported.
 function formatCurrency(value: number) {
   return Number.isFinite(value) ? currency(value) : "Indisponível";
+}
+
+function NetRevenueInfo({ gross, deductions, net }: { gross: number; deductions: number; net: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <TooltipProvider delayDuration={100}>
+      <HelpTooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Como é calculada a receita líquida"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ds-ink-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent"
+            onClick={(event) => {
+              // Keep the standard hover/focus behavior and allow tapping the explanation.
+              event.preventDefault();
+              setOpen((current) => !current);
+            }}
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent side="top" align="start" collisionPadding={16} className="w-80 max-w-[calc(100vw-32px)] space-y-2 whitespace-normal p-3 text-xs leading-relaxed">
+            <p className="font-semibold">Cálculo da receita líquida</p>
+            {Number.isFinite(gross) && Number.isFinite(deductions) && Number.isFinite(net) ? <dl className="space-y-1">
+              <div className="flex justify-between gap-3"><dt>Vendas no PDV</dt><dd className="font-ds-mono">{formatCurrency(gross)}</dd></div>
+              <div className="flex justify-between gap-3"><dt>− Impostos e deduções</dt><dd className="font-ds-mono">{formatCurrency(deductions)}</dd></div>
+              <div className="flex justify-between gap-3 border-t pt-1 font-semibold"><dt>= Receita líquida</dt><dd className="font-ds-mono">{formatCurrency(net)}</dd></div>
+            </dl> : <p>Valores indisponíveis enquanto as fontes estão sendo conferidas.</p>}
+            <p>Os impostos entram pela competência selecionada, mesmo com pagamento pendente.</p>
+            <p>Faltas e sobras de caixa entram depois, no resultado operacional.</p>
+          </TooltipContent>
+        </TooltipPortal>
+      </HelpTooltip>
+    </TooltipProvider>
+  );
 }
 
 function dreMonthKeysEndingAt(monthKey: string) {
@@ -1156,8 +1193,8 @@ export function DrePage() {
           const variation = dreHorizontalVariation(value, previous ?? null);
           return variation === null ? null : `${variation > 0 ? "+" : ""}${variation.toFixed(1).replace(".", ",")}% vs ${previousMonthKey ? shortMonthLabel(previousMonthKey) : "mês anterior"}`;
         };
-        const tiles: Array<{ label: string; value: string; sub: string | null; dark?: boolean; pending?: boolean }> = [
-          { label: "Receita líquida", value: Number.isFinite(metrics.recLiq) ? currency(metrics.recLiq) : "Indisponível", sub: variationText(metrics.recLiq, previousMetrics?.recLiq) },
+        const tiles: Array<{ label: string; value: string; sub: string | null; dark?: boolean; pending?: boolean; netRevenueInfo?: boolean }> = [
+          { label: "Receita líquida", value: Number.isFinite(metrics.recLiq) ? currency(metrics.recLiq) : "Indisponível", sub: variationText(metrics.recLiq, previousMetrics?.recLiq), netRevenueInfo: true },
           { label: cmvCriterion === "stock_movement" ? "CMV (movimentação)" : "CMV (composição)", value: pct(metrics.cmv, metrics.recLiq), sub: Number.isFinite(metrics.cmv) ? currency(metrics.cmv) : "Indisponível" },
           { label: "Margem bruta", value: pct(metrics.margBruta, metrics.recLiq), sub: Number.isFinite(metrics.margBruta) ? currency(metrics.margBruta) : null },
           { label: "Margem de contribuição", value: pct(metrics.margContr, metrics.recLiq), sub: Number.isFinite(metrics.margContr) ? currency(metrics.margContr) : null },
@@ -1183,7 +1220,10 @@ export function DrePage() {
             <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
               {loading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-ds-card" />) : tiles.map((tile) => (
                 <div key={tile.label} className={cn("rounded-ds-card border p-4", tile.dark ? "border-ds-dark bg-ds-dark text-ds-on-dark" : "border-ds-border bg-ds-surface")}>
-                  <p className={cn("text-[11px] font-semibold uppercase tracking-wider", tile.dark ? "text-ds-on-dark-muted" : "text-ds-ink-muted")}>{tile.label}</p>
+                  <div className="flex min-h-6 items-center gap-1">
+                    <p className={cn("text-[11px] font-semibold uppercase tracking-wider", tile.dark ? "text-ds-on-dark-muted" : "text-ds-ink-muted")}>{tile.label}</p>
+                    {tile.netRevenueInfo ? <NetRevenueInfo gross={metrics.revBruta} deductions={metrics.impostos} net={metrics.recLiq} /> : null}
+                  </div>
                   <p className={cn("mt-1.5 font-ds-mono text-[21px] font-bold", tile.pending && "text-ds-warn")}>{tile.value}</p>
                   {tile.sub ? <p className={cn("mt-0.5 text-[12px]", tile.dark ? "text-ds-on-dark-2" : "text-ds-ink-muted")}>{tile.sub}</p> : null}
                 </div>
