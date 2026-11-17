@@ -117,7 +117,7 @@ export function StudyHeroChips({ data, weeks }: { data: CashFlowStudyPayload | n
   const last = weeks.at(-1);
   return (
     <>
-      <HeroChip value={data.startBalanceCents === null ? "indisponível" : thousands(data.startBalanceCents)} label="No Inter hoje" />
+      <HeroChip value={data.startBalanceCents === null ? "indisponível" : brl(data.startBalanceCents)} label="No Inter hoje" />
       <HeroChip value={thousands(onTheWay)} label="A caminho" tone="info" />
       <HeroChip value={critical ? day(critical.start) : "nenhuma"} label="Primeira semana abaixo do mínimo" tone={critical ? "warning" : "neutral"} />
       {last ? <HeroChip value={thousands(last.closingCents)} label={`Saldo em ${day(last.end)}`} tone={last.closingCents < 0 ? "danger" : "neutral"} /> : null}
@@ -412,7 +412,7 @@ export function MoneyTab({ data }: { data: CashFlowStudyPayload }) {
               <Kicker className={dark ? "text-ds-on-dark-muted" : undefined}>{text.kicker}</Kicker>
               <span className="text-[14px] font-extrabold">{text.title}</span>
               <span className={cn("mt-1.5 font-ds-mono text-[24px] font-bold tracking-[-0.03em]", !dark && !stage.cents && "text-ds-indicator-zero")}>
-                {stage.cents === null ? "—" : thousands(stage.cents)}
+                {stage.cents === null ? "—" : stage.key === "inter" ? brl(stage.cents) : thousands(stage.cents)}
               </span>
               <span className={cn("text-[12px]", dark ? "text-ds-on-dark-2" : "text-ds-ink-muted")}>
                 {dark ? (data.balanceAt ? `saldo pela API do Inter às ${new Date(data.balanceAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : text.empty)
@@ -424,7 +424,7 @@ export function MoneyTab({ data }: { data: CashFlowStudyPayload }) {
         })}
       </div>
       <p className="text-[12.5px] text-ds-ink-muted">
-        {thousands(onTheWay)} já vendidos e ainda a caminho{data.startBalanceCents !== null ? `, além de ${thousands(data.startBalanceCents)} no Inter` : ""}. Cada etapa sai dos fechamentos do PDV, dos lotes e boletos de depósito e da carteira Stone.
+        {thousands(onTheWay)} já vendidos e ainda a caminho{data.startBalanceCents !== null ? `, além de ${brl(data.startBalanceCents)} no Inter` : ""}. Cada etapa sai dos fechamentos do PDV, dos lotes e boletos de depósito e da carteira Stone.
       </p>
       <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card title="Dinheiro em espécie por unidade" description="Prazo = da venda (meio do período do lote) até o boleto cair no Inter. Sem 4 lotes pagos, usa 24 dias.">
