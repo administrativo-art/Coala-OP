@@ -219,7 +219,8 @@ export function reviewDailySales(input: { scope: DailySalesScope; pdvCoupons: un
       reference: JSON.stringify([file.fileId, row.sourceSection, row.transactionId]), reason });
     const adverseReasons = adverseReasonsById.get(row.transactionId);
     if (adverseReasons) continue;
-    // Account movements/payment events must never be imported as new sales.
+    // Regular settlement stays in stoneEvents for audit, without blocking the sales review.
+    if (row.sourceSection === "FinancialTransactionsAccounts" && row.events.Captures === 0 && row.events.Payments > 0) continue;
     if (row.sourceSection !== "FinancialTransactions" || row.events.Captures === 0) { issue("non_capture_event"); continue; }
     const channel = row.accountTypeCode === "1" || row.accountTypeCode === "3" ? "debit_card"
       : row.accountTypeCode === "2" || row.accountTypeCode === "4" ? "credit_card" : null;
