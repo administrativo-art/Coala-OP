@@ -60,11 +60,10 @@ function MiniDay({ day, href }: { day: SalesReviewCalendarDay; href: string }) {
 
 function MonthCard({ month, monthHref, dayHref }: { month: SalesReviewMonth; monthHref: string; dayHref: (date: string) => string }) {
   const pending = month.counts.attention_required + month.counts.awaiting_source + month.counts.reopened;
-  const outsideScope = month.days.every(day => day.state === "outside_scope");
   const monthName = monthLabel(month.year, month.month);
   const badge = pending ? `${pending} pendente${pending === 1 ? "" : "s"}`
     : month.counts.not_reviewed ? `${month.counts.not_reviewed} a verificar`
-      : !month.eligibleCount ? outsideScope ? "Fora da vigência" : "Aguardando dados"
+      : !month.eligibleCount ? "Aguardando dados"
         : "Mês fechado";
   return <article className="flex min-w-0 flex-col gap-3 rounded-2xl border border-ds-border bg-ds-surface p-3 shadow-xs">
     <header className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
@@ -176,6 +175,11 @@ export function SalesReviewCalendarView({ months, selectedMonth, loading, error,
   </div>;
   if (loading) return <div aria-live="polite" className="grid min-h-72 place-items-center rounded-[20px] border border-ds-border bg-white"><span className="inline-flex items-center gap-2 text-sm font-bold text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin text-ds-accent-ink" />Carregando calendário…</span></div>;
   if (error) return <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-ds-confirm-border bg-ds-danger-bg px-5 py-4 text-ds-confirm-ink"><div><p className="text-sm font-black">Não foi possível carregar o calendário</p><p className="mt-1 text-xs">{error}</p></div><button type="button" onClick={onRetry} className="inline-flex h-9 items-center gap-2 rounded-xl border border-ds-confirm-border bg-white px-3 text-xs font-black"><RefreshCw className="h-3.5 w-3.5" />Tentar novamente</button></div>;
+  if (!months.length) return <section className="rounded-2xl border border-ds-border bg-ds-surface px-6 py-12 text-center">
+    <CalendarDays aria-hidden="true" className="mx-auto size-6 text-ds-ink-muted" />
+    <h2 className="mt-3 text-base font-extrabold text-ds-ink">Nenhum mês dentro da vigência</h2>
+    <p className="mt-1 text-sm text-ds-ink-muted">A vigência deste vínculo não abrange o período exibido no calendário.</p>
+  </section>;
   const month = selectedMonth ? months.find(item => item.key === selectedMonth) ?? null : null;
   if (selectedMonth && month) {
     const index = months.findIndex(item => item.key === selectedMonth);
