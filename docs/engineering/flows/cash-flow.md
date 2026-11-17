@@ -28,6 +28,8 @@ Para o administrador padrão, a página abre em abas: **Próximas semanas**, **E
 
 O [modelo](../../../src/features/financial/cash-flow-study/model.ts) monta as entradas e saídas por data: boleto emitido em emissão + 3 dias; lote aberto ou fechamento aprovado sem lote em hoje + 10; espécie de dia não fechado em venda + prazo médio da unidade (24 dias até 4 lotes pagos); parcelas Stone no vencimento, líquidas; vendas futuras pela média de 90 dias por dia da semana (Pix D+0, débito D+1, crédito D+30, líquidas das taxas praticadas); despesas no vencimento (vencidas contam hoje). O cenário (pessimista −15%, otimista +10%) altera só as vendas projetadas e é recalculado na tela. Mínimo de caixa = 2 semanas de saídas médias dos meses fechados. Regras e pendências: [plano](../../planos/plano-estudo-fluxo-caixa.md). Testes: [`cash-flow-study.test.ts`](../../../tests/unit/cash-flow-study.test.ts).
 
+O saldo disponível do Inter aparece em reais e centavos no indicador “No Inter hoje”, no cartão “No Inter” e no resumo de “Onde está o dinheiro”. A apresentação usa os centavos recebidos da API, sem abreviação em milhares; saldo indisponível continua explícito.
+
 **Limites:** a liquidação Stone conta como entrada no vencimento (a transferência Stone → Inter não está modelada); a aba Saúde soma toda entrada e saída da conta Inter, inclusive transferências; despesas recorrentes ainda não lançadas não entram.
 
 ## Dados, dependências e impacto
