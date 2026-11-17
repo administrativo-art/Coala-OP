@@ -569,7 +569,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 43.
+Arquivos locais percorridos: 46.
 
 Chamadas candidatas encontradas:
 
