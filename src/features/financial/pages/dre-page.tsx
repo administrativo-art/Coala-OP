@@ -2,7 +2,6 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, Info, RefreshCw } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -29,6 +28,16 @@ import { DrePeopleView } from "@/features/financial/components/dre/dre-people-vi
 import { CmvClosingPanel } from "@/features/financial/components/dre/cmv-closing-panel";
 import type { DreCmvPeriod } from "@/features/financial/dre/cmv-closure";
 import { DreCashCard, DreCmvCard } from "@/features/financial/components/dre/dre-insights";
+import { DreChartExplorer } from "@/features/financial/components/dre/dre-chart-explorer";
+import {
+  daysInMonthKey,
+  dreBreakEvenSeries,
+  dreMonthComparison,
+  dreWaterfallSteps,
+  finiteOrNull,
+  type DreChartMonth,
+  type DreChartUnit,
+} from "@/features/financial/dre/dre-chart-data";
 import { DreSourcesPanel, DreSourcesTrigger, type DreSourceIssue } from "@/features/financial/components/dre/dre-sources-panel";
 import { dreHorizontalVariation, dreRevenueComposition, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
 import { PageHero } from "@/components/patterns/page-hero";
@@ -302,7 +311,11 @@ export function DrePage() {
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
-  function getRevenue(monthKey: string) {
+  type DreScope = { kioskId: string | null; unitName: string | null };
+  const selectedScope: DreScope = { kioskId: selectedKioskId, unitName: selectedUnitName };
+
+  function getRevenue(monthKey: string, scope: DreScope = selectedScope) {
+    const selectedKioskId = scope.kioskId;
     const [year, month] = monthKey.split("-").map(Number);
     const pdvUnitIds = dreRevenueUnitIds(kiosks, closureRevenueSummaries, salesSummaries);
     const unitIds = selectedKioskId
@@ -314,13 +327,15 @@ export function DrePage() {
       costOnlyUnit: !!selectedKioskId && !pdvUnitIds.includes(selectedKioskId) };
   }
 
-  function getCompositionPeriods(monthKey: string) {
+  function getCompositionPeriods(monthKey: string, scope: DreScope = selectedScope) {
+    const selectedKioskId = scope.kioskId;
     const unitIds = selectedKioskId ? [selectedKioskId] : dreRevenueUnitIds(kiosks, closureRevenueSummaries, salesSummaries);
     return cmvPeriods.filter(row => row.period === monthKey && unitIds.includes(row.kioskId));
   }
 
-  function getCompositionCmv(monthKey: string): number {
-    const periods = getCompositionPeriods(monthKey);
+  function getCompositionCmv(monthKey: string, scope: DreScope = selectedScope): number {
+    const selectedKioskId = scope.kioskId;
+    const periods = getCompositionPeriods(monthKey, scope);
     if (periods.length) return periods.some(row => !row.complete || row.totalCmv === null)
       ? NaN : periods.reduce((sum, row) => sum + row.totalCmv!, 0);
     const [y, m] = monthKey.split("-").map(Number);
@@ -331,7 +346,8 @@ export function DrePage() {
     }, 0);
   }
 
-  function getStockCmvBreakdown(monthKey: string) {
+  function getStockCmvBreakdown(monthKey: string, scope: DreScope = selectedScope) {
+    const selectedKioskId = scope.kioskId;
     const empty = {
       consumptionCmv: 0,
       lossesCmv: 0,
@@ -361,7 +377,7 @@ export function DrePage() {
     }, empty);
   }
 
-  function getDreMetrics(monthKey: string) {
+  function getDreMetrics(monthKey: string, scope: DreScope = selectedScope) {
     const expenseCalculation = monthKey < FINANCIAL_DRE_START_MONTH_KEY
       ? { totalsByPosition: {}, detailsByPosition: {}, issues: [] }
       : calculateDreExpenses({
@@ -372,22 +388,23 @@ export function DrePage() {
             isDreAccount: account.is_dre_account !== false,
           }])),
           monthKey,
-          resultCenter: selectedUnitName,
+          resultCenter: scope.unitName,
           resultCenterNames: resultCenterNameMap,
         });
     const expenseAt = (position: string | null) => expenseCalculation.totalsByPosition[position ?? "null"] ?? 0;
-    const revenueSource = getRevenue(monthKey);
+    const revenueSource = getRevenue(monthKey, scope);
     const revBruta = (revenueSource.revenueCents ?? NaN) / 100;
     const cashShortage = (revenueSource.cashShortageCents ?? NaN) / 100;
     const cashSurplus = (revenueSource.cashSurplusCents ?? NaN) / 100;
     const impostos = expenseAt("impostos_deducoes");
     const recLiq = revBruta - impostos;
 
-    const stockCmvBreakdown = getStockCmvBreakdown(monthKey);
+    const stockCmvBreakdown = getStockCmvBreakdown(monthKey, scope);
+    const compositionCmv = getCompositionCmv(monthKey, scope);
     const cmv = cmvCriterion === "stock_movement"
       ? stockCmvBreakdown.totalCmv
-      : getCompositionCmv(monthKey);
-    const cmvForResult = cmvCriterion === "composition" && getCompositionPeriods(monthKey).some(row => row.sourceChanged) ? NaN : cmv;
+      : compositionCmv;
+    const cmvForResult = cmvCriterion === "composition" && getCompositionPeriods(monthKey, scope).some(row => row.sourceChanged) ? NaN : cmv;
     const margBruta = recLiq - cmvForResult;
 
     const custVar = expenseAt("custos_variaveis");
@@ -419,6 +436,7 @@ export function DrePage() {
       impostos,
       recLiq,
       cmv,
+      compositionCmv,
       stockCmvBreakdown,
       custVar,
       margBruta,
@@ -453,17 +471,21 @@ export function DrePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo((): DreChartMonth[] => {
     return chartMonthKeys.map((key) => {
-      const { revBruta, cmv, margBruta, margContr, resOp, lucroLiq, totalFixos } = getDreMetrics(key);
+      const row = getDreMetrics(key);
       const [y, m] = key.split("-").map(Number);
       return {
-        month: format(new Date(y, m - 1, 1), "MMM/yy", { locale: ptBR }),
-        receita: Number.isFinite(revBruta) ? revBruta : null,
-        cmv,
-        margBruta: Number.isFinite(margBruta) ? margBruta : null,
-        despesas: totalFixos,
-        resultado: Number.isFinite(lucroLiq) ? lucroLiq : null,
+        key,
+        label: format(new Date(y, m - 1, 1), "MMM/yy", { locale: ptBR }),
+        revBruta: finiteOrNull(row.revBruta),
+        recLiq: finiteOrNull(row.recLiq),
+        cmv: finiteOrNull(row.cmv),
+        cmvComposition: finiteOrNull(row.compositionCmv),
+        cmvStock: stockCmvPayload?.periods.includes(key) ? row.stockCmvBreakdown.totalCmv : null,
+        totalFixos: row.totalFixos,
+        margContr: finiteOrNull(row.margContr),
+        lucroLiq: finiteOrNull(row.lucroLiq),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -576,6 +598,46 @@ export function DrePage() {
       .map((summary) => ({ ...summary, name: kioskNameById[summary.kioskId] || summary.kioskId }))
       .sort((left, right) => right.cmv - left.cmv);
   }, [cmvCriterion, salesSummaries, selectedMonth, kioskNameById, stockCmvPayload]);
+
+  const chartUnits = useMemo((): DreChartUnit[] => {
+    if (selectedKioskId) return [];
+    return dreRevenueUnitIds(kiosks, closureRevenueSummaries, salesSummaries).map((kioskId) => {
+      const row = getDreMetrics(selectedMonth, {
+        kioskId,
+        unitName: resultCenterNameByKioskId[kioskId] ?? kioskNameById[kioskId] ?? null,
+      });
+      return {
+        kioskId,
+        name: kioskNameById[kioskId] ?? kioskId,
+        revenue: finiteOrNull(row.recLiq),
+        cmv: finiteOrNull(row.cmv),
+        margContr: finiteOrNull(row.margContr),
+        fixed: row.totalFixos,
+        lucro: finiteOrNull(row.lucroLiq),
+      };
+    }).filter((unit) => (unit.revenue ?? 0) > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, kioskNameById, resultCenterNameByKioskId, resultCenterNameMap, salesSummaries, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
+
+  const dailySales = useMemo(() => {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const days = daysInMonthKey(selectedMonth);
+    const units = salesSummaries
+      .filter((summary) => summary.year === y && summary.month === m && (!selectedKioskId || summary.kioskId === selectedKioskId))
+      .filter((summary) => summary.dailyRevenue && Object.keys(summary.dailyRevenue).length > 0)
+      .map((summary) => ({
+        kioskId: summary.kioskId,
+        name: kioskNameById[summary.kioskId] ?? summary.kioskId,
+        values: Array.from({ length: days }, (_, index) => summary.dailyRevenue?.[`${selectedMonth}-${String(index + 1).padStart(2, "0")}`] ?? 0),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+    const total: Record<string, number> = {};
+    units.forEach((unit) => unit.values.forEach((value, index) => {
+      const date = `${selectedMonth}-${String(index + 1).padStart(2, "0")}`;
+      total[date] = (total[date] ?? 0) + value;
+    }));
+    return { days, units, total };
+  }, [kioskNameById, salesSummaries, selectedKioskId, selectedMonth]);
 
   const hasDreCategories = useMemo(
     () => (accounts || []).length > 0,
@@ -1169,27 +1231,26 @@ export function DrePage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-              <section className="rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="dre-evolution-title">
-                <h2 id="dre-evolution-title" className="text-[15px] font-extrabold">Evolução — últimos 6 meses</h2>
-                <p className="text-[12.5px] text-ds-ink-muted">Receita, CMV, despesas fixas e lucro líquido · {unitLabel}</p>
-                <div className="mt-3 h-[300px]">
-                  {loading ? <Skeleton className="h-full w-full" /> : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
-                        <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`} width={64} />
-                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                        <Legend />
-                        <Area type="monotone" dataKey="receita" name="Receita bruta" stroke="var(--ds-ink-muted)" fill="var(--ds-ink-muted)" fillOpacity={0.08} />
-                        <Area type="monotone" dataKey="cmv" name={cmvCriterion === "stock_movement" ? "CMV estoque" : "CMV composição"} stroke="var(--ds-ink)" fill="var(--ds-ink)" fillOpacity={0.06} />
-                        <Area type="monotone" dataKey="despesas" name="Despesas fixas" stroke="var(--ds-accent-ink)" fill="var(--ds-accent-ink)" fillOpacity={0.06} />
-                        <Area type="monotone" dataKey="resultado" name="Lucro líquido" stroke="var(--ds-accent)" fill="var(--ds-accent)" fillOpacity={0.14} strokeWidth={2.5} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </section>
+              <DreChartExplorer
+                loading={loading}
+                unitLabel={unitLabel}
+                monthLabel={shortMonthLabel(selectedMonth)}
+                previousMonthLabel={previousMonthKey ? shortMonthLabel(previousMonthKey) : null}
+                cmvLabel={cmvCriterion === "stock_movement" ? "CMV estoque" : "CMV composição"}
+                allUnits={unitFilter === "all"}
+                months={chartData}
+                waterfall={dreWaterfallSteps(metrics)}
+                units={chartUnits}
+                expensePlans={topExpensePlans}
+                breakEven={dreBreakEvenSeries({
+                  monthKey: selectedMonth,
+                  dailyRevenue: dailySales.total,
+                  margContr: metrics.margContr,
+                  totalFixos: metrics.totalFixos,
+                })}
+                comparison={previousMetrics ? dreMonthComparison(metrics, previousMetrics) : null}
+                daily={dailySales}
+              />
 
               <section className="flex flex-col gap-3 rounded-ds-card border border-ds-border bg-ds-surface p-5" aria-labelledby="dre-composition-title">
                 <div>
