@@ -4,6 +4,7 @@ import { fetchStoneAgendaXml } from "@/lib/integrations/stone/agenda-transport";
 import { queryDailySales } from "./query";
 import { readSalesReviewBinding } from "./mapping.server";
 import { readPixSalesSource } from "./pix-source.server";
+import { readPixRefundChecks } from "./pix-refunds.server";
 import { saveDailySalesReview } from "./review-state.server";
 
 export async function collectDailySalesReview(input: unknown, context: { isDefaultAdmin: boolean; workspace_id: string },
@@ -12,6 +13,7 @@ export async function collectDailySalesReview(input: unknown, context: { isDefau
     signal,
     resolveBinding: readSalesReviewBinding,
     readPix: readPixSalesSource,
+    readPixRefundChecks,
     readPdv: query => fetchPdvCouponsReadOnly(query, { signal, credentials: {
       company: process.env.PDVLEGAL_COD_EMPRESA,
       token: process.env.PDVLEGAL_TOKEN,

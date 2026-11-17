@@ -351,6 +351,7 @@ export function summarizeStonePixTransactions(
 export function parseStonePixCsv(csv: string): {
   transactions: StonePixTransaction[];
   summary: StonePixSummary;
+  refundCoverageSupported: boolean;
 } {
   const result = Papa.parse<Record<string, unknown>>(csv, {
     header: true,
@@ -380,7 +381,12 @@ export function parseStonePixCsv(csv: string): {
       }
     }
   }
-  return { transactions, summary: summarizeStonePixTransactions(transactions) };
+  const fields = new Set(result.meta.fields);
+  const refundCoverageSupported = [
+    "id", "status", "payment_method", "pix_transaction__e2e_id", "pix_transaction__canceled_amount",
+    "pix_transaction__detail__operation", "pix_transaction__detail__refund_id",
+  ].every(field => fields.has(field));
+  return { transactions, summary: summarizeStonePixTransactions(transactions), refundCoverageSupported };
 }
 
 export function stonePixFileId(document: string, referenceDate: string): string {

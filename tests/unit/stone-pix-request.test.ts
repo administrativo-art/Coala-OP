@@ -99,3 +99,27 @@ test("transporte Pix rejeita credencial, data e respostas externas inválidas", 
     fetcher: async () => new Response(null, { status: 401 }),
   }), { code: "STONE_PIX_REQUEST_CREDENTIAL_REJECTED" });
 });
+
+test("solicitação histórica percorre datas exatas e limita apenas novos pedidos", async () => {
+  const dates = ["2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23"];
+  const visited: string[] = [];
+  const sent: string[] = [];
+  const repository: StonePixRequestRepository = {
+    reserve: async ({ referenceDate }) => {
+      visited.push(referenceDate);
+      if (referenceDate === dates[0]) return { status: "processed" };
+      if (referenceDate === dates[1]) return { status: "waiting" };
+      return { status: "reserved", leaseId: referenceDate, attempt: 1 };
+    },
+    accepted: async () => undefined,
+    failed: async () => assert.fail("unexpected request failure"),
+  };
+  const result = await syncStonePixRequests({
+    document: "12345678000199", startDate: "2026-11-01", now: new Date("2026-11-17T12:00:00Z"),
+    repository, targeted: { dates, maxRequests: 1 },
+    requestFile: async ({ referenceDate }) => { sent.push(referenceDate); return { status: 202 }; },
+  });
+  assert.deepEqual(visited, dates.slice(0, 3));
+  assert.deepEqual(sent, [dates[2]]);
+  assert.deepEqual(result, { considered: 3, requested: 1, waiting: 1, processed: 1, failed: 0 });
+});
