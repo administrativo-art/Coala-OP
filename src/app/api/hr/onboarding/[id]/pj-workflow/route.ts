@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { renderToBuffer } from 'react-pdf-renderer-server';
 import { getStorage } from 'firebase-admin/storage';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { PjServiceContractPdf, type PjContractData } from '@/features/hr/onboarding-pj/contract-pdf';
 import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
@@ -20,6 +21,12 @@ import { fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import type { IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type { OnboardingDocument, PjOnboardingWorkflow } from '@/types';
+import type { HrAccess } from '@/features/hr/lib/server-access';
+import { AppError } from '@/lib/observability/app-error';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { secureRoute } from '@/lib/security/secure-route.server';
+import { rethrowServerAuthenticationFailure } from '@/lib/server-authentication-failure';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,13 +145,88 @@ function validateContractData(data: PjContractData) {
   }
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return error('Sem permissão para acessar o fluxo PJ.', 403);
-  try {
-    const { id } = await context.params;
-    const { process, workflow } = await loadProcess(id);
-    const asset = request.nextUrl.searchParams.get('asset');
+type RouteContext = { params: Promise<{ id: string }> };
+type PjResource = Awaited<ReturnType<typeof loadProcess>> & { id: string };
+const path = '/api/hr/onboarding/[id]/pj-workflow' as const;
+const idSchema = z.string().trim().min(1).max(250).refine(value => !value.includes('/'));
+const getInputSchema = z.object({ asset: z.enum(['contract', 'signed_contract']).nullable() }).strict();
+const patchInputSchema = z.object({
+  action: z.enum(['set_document_status', 'request_corrections', 'approve_registration',
+    'save_contract_settings', 'generate_contract', 'approve_contract', 'send_contract',
+    'reconcile_contract', 'submit_finance', 'finance_return', 'finance_approve', 'save_access', 'activate']),
+  documentId: z.unknown().optional(), status: z.unknown().optional(), note: z.unknown().optional(),
+  message: z.unknown().optional(), documentIds: z.unknown().optional(),
+  contractorRepresentative: z.unknown().optional(), signatureCity: z.unknown().optional(), forumCity: z.unknown().optional(),
+  userName: z.unknown().optional(), userCpf: z.unknown().optional(), profileId: z.unknown().optional(),
+  unitIds: z.unknown().optional(), pdvRequired: z.unknown().optional(), pdvUnitId: z.unknown().optional(),
+  pdvProfileId: z.unknown().optional(),
+}).strict();
+const getContract = defineSecurityContract({ schemaVersion: 1, id: 'hr.onboarding.pj-workflow.read', version: 1,
+  surface: { method: 'GET', path }, exposure: 'authenticated', identity: { kind: 'active-user' },
+  authorization: { kind: 'custom', strategy: 'formalization-manage' },
+  resourceScope: { kind: 'custom', strategy: 'pj-onboarding-process' },
+  input: { kind: 'schema', schema: 'hr.onboarding.pj-workflow.query', unknownFields: 'reject' },
+  effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized' });
+const patchContract = defineSecurityContract({ schemaVersion: 1, id: 'hr.onboarding.pj-workflow.update', version: 1,
+  surface: { method: 'PATCH', path }, exposure: 'authenticated', identity: { kind: 'active-user' },
+  authorization: { kind: 'custom', strategy: 'formalization-manage' },
+  resourceScope: { kind: 'custom', strategy: 'pj-onboarding-process' },
+  input: { kind: 'schema', schema: 'hr.onboarding.pj-workflow.action', unknownFields: 'reject' },
+  effects: { mode: 'external', audit: 'server-authoritative' }, errorExposure: 'sanitized' });
+async function formalizationActor(request: NextRequest) {
+  try { return await assertFormalizationAccess(request, 'onboarding.manage'); }
+  catch (cause) {
+    if (cause instanceof Error && cause.message.startsWith('Sem permissão')) {
+      throw new AppError({ code: 'PJ_WORKFLOW_FORBIDDEN', kind: 'AUTHORIZATION' });
+    }
+    rethrowServerAuthenticationFailure(cause);
+  }
+}
+async function pjResource(context: RouteContext): Promise<PjResource> {
+  const parsed = idSchema.safeParse((await context.params).id);
+  if (!parsed.success) throw new AppError({ code: 'PJ_WORKFLOW_ID_INVALID', kind: 'VALIDATION' });
+  try { return { id: parsed.data, ...await loadProcess(parsed.data) }; }
+  catch (cause) {
+    if (cause instanceof Error && cause.message === 'Integração PJ não encontrada.') {
+      throw new AppError({ code: 'PJ_WORKFLOW_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: cause.message });
+    }
+    if (cause instanceof Error && ['Este fluxo está disponível somente para contratação PJ.',
+      'O fluxo PJ desta integração está incompleto.'].includes(cause.message)) {
+      throw new AppError({ code: 'PJ_WORKFLOW_STATE_INVALID', kind: 'VALIDATION', safeMessage: cause.message });
+    }
+    throw cause;
+  }
+}
+const getEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, HrAccess,
+  z.infer<typeof getInputSchema>, PjResource>({
+  id: 'pj-workflow-read-v1', guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-manage',
+    'scope:pj-onboarding-process', 'input-validated', 'fields-allowlisted'],
+  async enforce({ request, routeContext }) {
+    const actor = await formalizationActor(request);
+    if ([...request.nextUrl.searchParams.keys()].some(key => key !== 'asset')) {
+      throw new AppError({ code: 'PJ_WORKFLOW_QUERY_INVALID', kind: 'VALIDATION' });
+    }
+    const parsed = getInputSchema.safeParse({ asset: request.nextUrl.searchParams.get('asset') });
+    if (!parsed.success) throw new AppError({ code: 'PJ_WORKFLOW_QUERY_INVALID', kind: 'VALIDATION' });
+    return { actor, input: parsed.data, resource: await pjResource(routeContext) };
+  },
+});
+const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, HrAccess,
+  z.infer<typeof patchInputSchema>, PjResource>({
+  id: 'pj-workflow-update-v1', guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-manage',
+    'scope:pj-onboarding-process', 'input-validated', 'fields-allowlisted'],
+  async enforce({ request, routeContext }) {
+    const actor = await formalizationActor(request);
+    if (request.nextUrl.searchParams.size) throw new AppError({ code: 'PJ_WORKFLOW_QUERY_INVALID', kind: 'VALIDATION' });
+    const parsed = patchInputSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) throw new AppError({ code: 'PJ_WORKFLOW_ACTION_INVALID', kind: 'VALIDATION', safeMessage: 'Ação inválida.' });
+    return { actor, input: parsed.data, resource: await pjResource(routeContext) };
+  },
+});
+
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
+    const { id, process, workflow } = security.resource;
+    const { asset } = security.input;
     if (!asset) return NextResponse.json(serializeHrValue({ id, ...process }));
     const path = asset === 'signed_contract' ? workflow.contract?.signedStoragePath : workflow.contract?.storagePath;
     if (!path) return error('Arquivo ainda não disponível.', 404);
@@ -157,19 +239,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         'Cache-Control': 'private, no-store',
       },
     });
-  } catch (cause) {
-    return error(cause instanceof Error ? cause.message : 'Falha ao carregar o fluxo PJ.', 400);
-  }
-}
+});
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return error('Sem permissão para gerenciar o fluxo PJ.', 403);
-  const { id } = await context.params;
-  const body = record(await request.json().catch(() => null));
-  const action = text(body.action, 80);
+export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnforcer }, async ({ security }) => {
+  const access = security.actor;
+  const { id, ref, process, workflow } = security.resource;
+  const body = security.input;
+  const { action } = body;
   try {
-    const { ref, process, workflow } = await loadProcess(id);
     const now = new Date().toISOString();
     let nextWorkflow = structuredClone(workflow);
     const update: Record<string, unknown> = { updatedAt: now };
@@ -450,7 +527,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       update.publicToken = null;
       update.publicTokenClosedAt = now;
     } else {
-      return error('Ação inválida.');
+      throw new AppError({ code: 'PJ_WORKFLOW_ACTION_INVALID', kind: 'VALIDATION', safeMessage: 'Ação inválida.' });
     }
 
     update.pjWorkflow = nextWorkflow;
@@ -466,6 +543,28 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const saved = await ref.get();
     return NextResponse.json({ process: { id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) } });
   } catch (cause) {
-    return error(cause instanceof Error ? cause.message : 'Falha ao atualizar o fluxo PJ.', 400);
+    if (cause instanceof AppError) throw cause;
+    const message = cause instanceof Error ? cause.message : '';
+    if ([
+      'Os documentos só podem ser conferidos na etapa 3.', 'Documento ou situação inválida.',
+      'O documento não possui arquivo para conferência.', 'A devolutiva só pode ser enviada na etapa 3.',
+      'Explique o que a prestadora precisa corrigir.', 'A aprovação cadastral só pode ocorrer na etapa 3.',
+      'O contrato só pode ser preparado na etapa 4.', 'Preencha nome, e-mail, cargo, qualificação e CPF do representante da contratante.',
+      'Informe a cidade de assinatura e o foro.', 'A minuta só pode ser gerada na etapa 4.',
+      'Preencha todos os dados do contrato e dos dois representantes.', 'Informe CPF válido para os dois representantes.',
+      'Gere e confira a minuta antes de aprová-la.', 'A minuta precisa estar aprovada antes do envio.',
+      'Os dois signatários precisam de e-mails válidos.', 'O cadastro não está aguardando análise financeira.',
+      'Informe o motivo da devolução.', 'Envie o cadastro ao Financeiro antes de aprová-lo.',
+      'Os acessos só podem ser configurados na etapa 7.', 'Informe usuário, CPF, perfil e ao menos uma unidade.',
+      'Perfil de acesso inválido para a prestadora.', 'Uma das unidades selecionadas não está disponível.',
+      'Selecione uma unidade liberada e um perfil para o PDV Legal.',
+      'A unidade selecionada não possui filial do PDV Legal vinculada.', 'Perfil do PDV Legal não encontrado.',
+      'Crie e envie o acesso antes de ativar a prestadora.',
+      'A prestadora ainda não concluiu o primeiro acesso ao Coala One.',
+      'O primeiro acesso ao PDV Legal ainda não foi concluído.',
+    ].includes(message) || message.startsWith('Cadastro incompleto:') || message.startsWith('Aprove os documentos obrigatórios:')) {
+      throw new AppError({ code: 'PJ_WORKFLOW_BUSINESS_RULE', kind: 'VALIDATION', safeMessage: message });
+    }
+    throw cause;
   }
-}
+});
