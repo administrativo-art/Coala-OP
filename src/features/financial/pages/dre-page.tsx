@@ -39,7 +39,7 @@ import {
   type DreChartUnit,
 } from "@/features/financial/dre/dre-chart-data";
 import { DreSourcesPanel, DreSourcesTrigger, type DreSourceIssue } from "@/features/financial/components/dre/dre-sources-panel";
-import { dreHorizontalVariation, dreRevenueComposition, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
+import { dreHorizontalVariation, dreRevenueComposition, dreResultState, dreVariationTone, previousDreMonthKey } from "@/features/financial/lib/dre-statement";
 import { PageHero } from "@/components/patterns/page-hero";
 import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
@@ -53,6 +53,7 @@ import type {
   DreCmvCriterion,
   DreStockCmvPayload,
 } from "@/features/financial/dre/stock-cmv";
+import { selectDreStockCmv } from "@/features/financial/dre/stock-cmv";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -304,10 +305,6 @@ export function DrePage() {
     ? null
     : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
-  const stockCmvByUnitMonth = useMemo(() => new Map((stockCmvPayload?.stockSummaries ?? []).map((summary) => [
-    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
-    summary,
-  ])), [stockCmvPayload]);
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
@@ -347,34 +344,8 @@ export function DrePage() {
   }
 
   function getStockCmvBreakdown(monthKey: string, scope: DreScope = selectedScope) {
-    const selectedKioskId = scope.kioskId;
-    const empty = {
-      consumptionCmv: 0,
-      lossesCmv: 0,
-      adjustmentsCmv: 0,
-      totalCmv: 0,
-      movementCount: 0,
-      unpricedMovementCount: 0,
-      movementDays: 0,
-    };
-    const unitIds = selectedKioskId
-      ? [selectedKioskId]
-      : Array.from(new Set([
-          ...kiosks.map((kiosk) => kiosk.id),
-          ...(stockCmvPayload?.stockSummaries ?? []).map((summary) => summary.kioskId),
-        ]));
-    return unitIds.reduce((total, kioskId) => {
-      const summary = stockCmvByUnitMonth.get(`${kioskId}:${monthKey}`);
-      if (!summary) return total;
-      total.consumptionCmv += summary.consumptionCmv;
-      total.lossesCmv += summary.lossesCmv;
-      total.adjustmentsCmv += summary.adjustmentsCmv;
-      total.totalCmv += summary.totalCmv;
-      total.movementCount += summary.movementCount;
-      total.unpricedMovementCount += summary.unpricedMovementCount;
-      total.movementDays = Math.max(total.movementDays, summary.movementDays);
-      return total;
-    }, empty);
+    return selectDreStockCmv({ payload: stockCmvPayload, monthKey, sourceError: Boolean(stockCmvError), loading: loadingStockCmv,
+      kioskIds: scope.kioskId ? [scope.kioskId] : kiosks.map(kiosk => kiosk.id) });
   }
 
   function getDreMetrics(monthKey: string, scope: DreScope = selectedScope) {
@@ -424,6 +395,8 @@ export function DrePage() {
     const lair = resOp + recFin - despFin + recNaoOp - despNaoOp;
     const irCsll = expenseAt("impostos_resultado");
     const lucroLiq = lair - irCsll;
+    const resultState = dreResultState({ result: lucroLiq, cash: revenueSource,
+      compositionOpen: cmvCriterion === "composition" && getCompositionPeriods(monthKey, scope).some(row => row.status !== "closed") });
 
     const margContPct = !Number.isFinite(recLiq) ? NaN : recLiq > 0 ? margContr / recLiq : 0;
     const pe = !Number.isFinite(margContPct) ? NaN : margContPct > 0 ? totalFixos / margContPct : 0;
@@ -454,6 +427,7 @@ export function DrePage() {
       lair,
       irCsll,
       lucroLiq,
+      resultState,
       pe,
       margContPct,
       expenseDetailsByPosition: expenseCalculation.detailsByPosition,
@@ -482,38 +456,29 @@ export function DrePage() {
         recLiq: finiteOrNull(row.recLiq),
         cmv: finiteOrNull(row.cmv),
         cmvComposition: finiteOrNull(row.compositionCmv),
-        cmvStock: stockCmvPayload?.periods.includes(key) ? row.stockCmvBreakdown.totalCmv : null,
+        cmvStock: finiteOrNull(row.stockCmvBreakdown.totalCmv),
         totalFixos: row.totalFixos,
         margContr: finiteOrNull(row.margContr),
         lucroLiq: finiteOrNull(row.lucroLiq),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, chartMonthKeys, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
+  }, [accounts, chartMonthKeys, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, loadingStockCmv, stockCmvError, stockCmvPayload]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
+    [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, loadingStockCmv, stockCmvError, stockCmvPayload]
   );
-  const stockValuationIssueCount = (stockCmvPayload?.missingProductIds.length ?? 0)
-    + (stockCmvPayload?.missingBaseProductIds.length ?? 0)
-    + (stockCmvPayload?.unpricedBaseProductIds.length ?? 0);
-  const stockUnpricedMovementCount = (stockCmvPayload?.stockSummaries ?? [])
-    .reduce((total, summary) => total + summary.unpricedMovementCount, 0);
-  const stockCmvAvailableForSelectedMonth = stockCmvPayload?.periods.includes(selectedMonth) === true;
   const selectedStockBreakdown = metrics.stockCmvBreakdown;
   const selectedCompositionCmv = getCompositionCmv(selectedMonth);
-  const selectedStockHasNoMovements = cmvCriterion === "stock_movement"
-    && !loadingStockCmv
-    && !stockCmvError
-    && selectedStockBreakdown.movementCount === 0;
+  const stockCmvAvailableForSelectedMonth = selectedStockBreakdown.coverage === "complete";
   const selectedCmvPeriods = getCompositionPeriods(selectedMonth);
   const incompleteCmvPeriods = selectedCmvPeriods.filter(row => !row.complete);
   const changedCmvPeriods = selectedCmvPeriods.filter(row => row.sourceChanged);
   const cmvIntegrityIssue = cmvCriterion === "composition"
     ? incompleteCmvPeriods.length > 0 || changedCmvPeriods.length > 0 || (!selectedCmvPeriods.length && missingSimulationIds.length > 0)
-    : stockValuationIssueCount > 0 || selectedStockHasNoMovements;
+    : selectedStockBreakdown.coverage !== "complete";
   const expenseContractIssues = metrics.expenseIssues;
   const expenseContractIssueGroups = useMemo(() => {
     const expensesById = new Map(expenses.map((expense) => [expense.id, expense]));
@@ -590,14 +555,15 @@ export function DrePage() {
     const summaries: Array<{ kioskId: string; cmv: number }> = cmvCriterion === "stock_movement"
       ? (stockCmvPayload?.stockSummaries ?? [])
           .filter((summary) => summary.year === y && summary.month === m && summary.totalCmv > 0)
-          .map((summary) => ({ kioskId: summary.kioskId, cmv: summary.totalCmv }))
+          .map((summary) => ({ kioskId: summary.kioskId, cmv: getStockCmvBreakdown(selectedMonth, { kioskId: summary.kioskId, unitName: null }).totalCmv }))
+          .filter(summary => Number.isFinite(summary.cmv))
       : salesSummaries
           .filter((summary) => summary.year === y && summary.month === m && summary.cmv > 0)
           .map((summary) => ({ kioskId: summary.kioskId, cmv: summary.cmv }));
     return summaries
       .map((summary) => ({ ...summary, name: kioskNameById[summary.kioskId] || summary.kioskId }))
       .sort((left, right) => right.cmv - left.cmv);
-  }, [cmvCriterion, salesSummaries, selectedMonth, kioskNameById, stockCmvPayload]);
+  }, [cmvCriterion, salesSummaries, selectedMonth, kioskNameById, loadingStockCmv, stockCmvError, stockCmvPayload]);
 
   const chartUnits = useMemo((): DreChartUnit[] => {
     if (selectedKioskId) return [];
@@ -617,7 +583,7 @@ export function DrePage() {
       };
     }).filter((unit) => (unit.revenue ?? 0) > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, kioskNameById, resultCenterNameByKioskId, resultCenterNameMap, salesSummaries, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
+  }, [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, kioskNameById, resultCenterNameByKioskId, resultCenterNameMap, salesSummaries, selectedKioskId, loadingStockCmv, stockCmvError, stockCmvPayload]);
 
   const dailySales = useMemo(() => {
     const [y, m] = selectedMonth.split("-").map(Number);
@@ -709,6 +675,7 @@ export function DrePage() {
         ];
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
+      ["Situação do resultado", metrics.resultState.status === "provisional" ? "Provisório" : "Sem pendências de cálculo", metrics.resultState.reasons.join(" ")],
       ["Cobertura das diferenças de caixa", `${metrics.revenueSource.cashDifferenceCoveredDays}/${metrics.revenueSource.cashDifferenceTotalDays} dias`,
         metrics.revenueSource.cashDifferenceCoverage === "complete" && !metrics.revenueSource.cashDifferenceProvisional
           ? "Completa" : "Resultado provisório: somente diferenças comprovadas"],
@@ -752,7 +719,7 @@ export function DrePage() {
   const previousMetrics = useMemo(
     () => (previousMonthKey ? getDreMetrics(previousMonthKey) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, previousMonthKey, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
+    [accounts, previousMonthKey, closureRevenueSummaries, cmvCriterion, cmvPeriods, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, loadingStockCmv, stockCmvError, stockCmvPayload]
   );
   const shortMonthLabel = (monthKey: string) => {
     const [y, m] = monthKey.split("-").map(Number);
@@ -795,11 +762,11 @@ export function DrePage() {
   if (!sourceError && cmvCriterion === "stock_movement" && stockCmvError) {
     sourceIssues.push({ id: "stock-error", tone: "danger", blocksExport: true, title: "O CMV por movimentação não pôde ser calculado", body: <p>{stockCmvError}</p> });
   }
-  if (!sourceError && cmvCriterion === "stock_movement" && !stockCmvError && stockValuationIssueCount > 0) {
-    sourceIssues.push({ id: "stock-valuation", tone: "warning", blocksExport: true, title: "Valorização do estoque incompleta", body: <p>{stockUnpricedMovementCount} movimentação(ões) dos últimos seis meses ficaram sem custo{selectedStockBreakdown.unpricedMovementCount > 0 ? `; ${selectedStockBreakdown.unpricedMovementCount} estão no filtro atual` : ""}. A exportação foi bloqueada até a correção dos cadastros.</p> });
+  if (!sourceError && cmvCriterion === "stock_movement" && !loadingStockCmv && !stockCmvError && selectedStockBreakdown.coverage !== "complete") {
+    sourceIssues.push({ id: "stock-coverage", tone: "warning", blocksExport: true, title: "CMV por estoque indisponível no filtro atual", body: <p>{selectedStockBreakdown.unpricedMovementCount > 0 ? `${selectedStockBreakdown.unpricedMovementCount} movimentação(ões) estão sem custo. ` : "A fonte não comprova a cobertura de todas as unidades e da competência selecionada. "}CMV e resultados dependentes permanecem indisponíveis; ausência de fonte não é zero.</p> });
   }
-  if (!sourceError && selectedStockHasNoMovements) {
-    sourceIssues.push({ id: "stock-empty", tone: "warning", blocksExport: true, title: "Não há saídas de estoque no filtro atual", body: <p>O CMV por movimentação ficou zerado e a exportação foi bloqueada.</p> });
+  if (!sourceError && cmvCriterion === "composition" && selectedCmvPeriods.some(row => row.status !== "closed")) {
+    sourceIssues.push({ id: "cmv-open", tone: "warning", title: "CMV por composição em aberto", body: <p>O resultado é provisório: as fichas e os custos atuais podem mudar até a confirmação do fechamento do CMV.</p> });
   }
   if (!sourceError && expenseContractIssues.length > 0) {
     sourceIssues.push({
@@ -847,7 +814,7 @@ export function DrePage() {
     || Boolean(stockCmvError && cmvCriterion === "stock_movement")
     || cmvIntegrityIssue
     || expenseContractIssues.length > 0;
-  const isProvisional = sourceIssues.length > 0 || !Number.isFinite(metrics.lucroLiq);
+  const isProvisional = sourceIssues.length > 0 || metrics.resultState.status !== "complete";
   const unitLabel = unitFilter !== "all" ? kioskNameById[unitFilter] ?? unitFilter : "Todas as unidades";
   const viewOptions: Array<{ value: typeof viewMode; label: string }> = [
     { value: "classic", label: "Clássica" },
@@ -971,6 +938,13 @@ export function DrePage() {
       {sourceError && <div role="alert" className="flex gap-3 rounded-ds-card border border-ds-confirm-border bg-ds-danger-bg p-4 text-sm text-ds-confirm-ink"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
 
       {/* ── DRE CLÁSSICA ────────────────────────────────────────────────────── */}
+      {!loading && !sourceError && viewMode !== "people" && metrics.resultState.status === "provisional" ? (
+        <div role="status" className="rounded-ds-card border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-sm text-ds-alert-ink">
+          <p className="font-semibold">Resultado provisório</p>
+          <p className="mt-1">{metrics.resultState.reasons.join(" ")}</p>
+        </div>
+      ) : null}
+
       {viewMode === "classic" && (
         <>
           <section className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface" aria-labelledby="dre-statement-title">
@@ -978,7 +952,7 @@ export function DrePage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h2 id="dre-statement-title" className="text-[17px] font-extrabold">Demonstrativo de resultado · {selectedMonthLabel}</h2>
-                  {!loading && isProvisional ? <span className="rounded-full bg-ds-warn-bg px-2.5 py-0.5 text-[12px] font-bold text-ds-alert-ink">Parcial</span> : null}
+                  {!loading && isProvisional ? <span className="rounded-full bg-ds-warn-bg px-2.5 py-0.5 text-[12px] font-bold text-ds-alert-ink">{metrics.resultState.status === "unavailable" ? "Indisponível" : "Provisório"}</span> : null}
                 </div>
                 <p className="text-[13px] text-ds-ink-muted">
                   {unitLabel} · competência · CMV {cmvCriterion === "stock_movement" ? "pela movimentação do estoque" : "pela composição"} · valores em R$
@@ -1200,7 +1174,7 @@ export function DrePage() {
           { label: "Margem de contribuição", value: pct(metrics.margContr, metrics.recLiq), sub: Number.isFinite(metrics.margContr) ? currency(metrics.margContr) : null },
           { label: "Ponto de equilíbrio", value: formatCurrency(metrics.pe), sub: "custos fixos ÷ margem de contribuição" },
           Number.isFinite(metrics.lucroLiq)
-            ? { label: "Lucro líquido", value: currency(metrics.lucroLiq), sub: `${pct(metrics.lucroLiq, metrics.recLiq)} da receita líquida`, dark: true }
+            ? { label: "Lucro líquido", value: currency(metrics.lucroLiq), sub: `${metrics.resultState.status === "provisional" ? "Provisório · " : ""}${pct(metrics.lucroLiq, metrics.recLiq)} da receita líquida`, dark: true }
             : { label: "Lucro líquido", value: "Pendente", sub: "falta conferir as fontes", dark: true, pending: true },
         ];
         const composition = dreRevenueComposition(metrics.recLiq, [

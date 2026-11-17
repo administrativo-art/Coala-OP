@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   isDreStockOutflowMovement,
   summarizeDreStockMovements,
+  selectDreStockCmv,
+  type DreStockCmvPayload,
 } from "../../src/features/financial/dre/stock-cmv";
 import type { BaseProduct, EffectiveCostEntry, MovementRecord, Product } from "../../src/types";
 
@@ -155,4 +157,38 @@ test("usa o custo inicial como fallback e sinaliza movimentos sem cadastro ou cu
   assert.equal(result.stockSummaries[0].unpricedMovementCount, 2);
   assert.deepEqual(result.missingProductIds, ["missing-product"]);
   assert.deepEqual(result.unpricedBaseProductIds, ["base-no-cost"]);
+});
+
+function payloadForSelection(): DreStockCmvPayload {
+  return { kioskIds: ["a", "b"], periods: ["2026-09", "2026-10"], stockSummaries: [],
+    missingProductIds: [], missingBaseProductIds: [], unpricedBaseProductIds: [],
+    stats: { movementDocuments: 0, productDocuments: 0, baseProductDocuments: 0, effectiveCostDocuments: 0 } };
+}
+
+test("CMV ausente, erro, carregamento ou escopo não consultado permanecem indisponíveis; zero consultado é válido", () => {
+  const payload = payloadForSelection();
+  const base = { payload, monthKey: "2026-10", kioskIds: ["a"] };
+  for (const input of [{ ...base, payload: null }, { ...base, sourceError: true }, { ...base, loading: true },
+    { ...base, monthKey: "2026-08" }, { ...base, kioskIds: ["c"] }, { ...base, payload: { ...payload, kioskIds: undefined } as unknown as DreStockCmvPayload }]) {
+    const result = selectDreStockCmv(input);
+    assert.equal(result.coverage, "unavailable");
+    assert.equal(Number.isNaN(result.totalCmv), true);
+    assert.equal(Number.isNaN(1000 - result.totalCmv - 200), true);
+  }
+  const knownZero = selectDreStockCmv(base);
+  assert.equal(knownZero.coverage, "complete");
+  assert.equal(knownZero.totalCmv, 0);
+});
+
+test("valorização incompleta bloqueia só mês/unidades afetados, sem somar duplicatas ou parcial como total", () => {
+  const payload = payloadForSelection();
+  const row = { kioskId: "a", year: 2026, month: 10, consumptionCmv: 80, lossesCmv: 5, adjustmentsCmv: 15,
+    totalCmv: 100, movementCount: 2, unpricedMovementCount: 1, movementDays: 1 };
+  payload.stockSummaries = [row, { ...row, kioskId: "b", unpricedMovementCount: 0 }];
+  assert.equal(selectDreStockCmv({ payload, monthKey: "2026-10", kioskIds: ["a", "b"] }).coverage, "incomplete");
+  assert.equal(Number.isNaN(selectDreStockCmv({ payload, monthKey: "2026-10", kioskIds: ["a", "b"] }).totalCmv), true);
+  assert.equal(selectDreStockCmv({ payload, monthKey: "2026-10", kioskIds: ["b"] }).totalCmv, 100);
+  assert.equal(selectDreStockCmv({ payload, monthKey: "2026-09", kioskIds: ["a"] }).totalCmv, 0);
+  payload.stockSummaries.push({ ...row, kioskId: "b", unpricedMovementCount: 0 });
+  assert.equal(selectDreStockCmv({ payload, monthKey: "2026-10", kioskIds: ["b"] }).coverage, "unavailable");
 });

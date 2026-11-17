@@ -1,5 +1,29 @@
 import { format, subMonths } from "date-fns";
 
+export function dreResultState(input: {
+  result: number;
+  cash: {
+    cashDifferenceCoverage: "complete" | "incomplete" | "unavailable";
+    cashDifferenceProvisional: boolean | null;
+    cashDifferenceCoveredDays: number;
+    cashDifferenceTotalDays: number;
+    pendingOperatorCount: number | null;
+    issues: readonly string[];
+  };
+  compositionOpen: boolean;
+}) {
+  const reasons: string[] = [];
+  const cash = input.cash;
+  if (cash.cashDifferenceCoverage !== "complete") reasons.push(`Caixa comprovado em ${cash.cashDifferenceCoveredDays}/${cash.cashDifferenceTotalDays} dias.`);
+  if (cash.pendingOperatorCount === null) reasons.push("Conferência financeira do caixa a confirmar.");
+  else if (cash.pendingOperatorCount > 0) reasons.push(`${cash.pendingOperatorCount} contagem(ns) aguardando conferência financeira.`);
+  else if (cash.cashDifferenceProvisional) reasons.push("Contagens provisórias informadas no PDV.");
+  if (cash.issues.includes("pdv_changed_after_approval")) reasons.push("Há fonte do PDV alterada após a aprovação.");
+  if (input.compositionOpen) reasons.push("CMV por composição em aberto, com custos atuais.");
+  if (!Number.isFinite(input.result)) return { status: "unavailable" as const, reasons: ["Há fontes indisponíveis para calcular o resultado.", ...reasons] };
+  return { status: reasons.length ? "provisional" as const : "complete" as const, reasons };
+}
+
 /** Competência anterior no formato `yyyy-MM`, ou `null` quando antecede o início da DRE. */
 export function previousDreMonthKey(monthKey: string, startMonthKey: string): string | null {
   const [year, month] = monthKey.split("-").map(Number);

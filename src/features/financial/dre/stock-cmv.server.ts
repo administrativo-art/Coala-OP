@@ -179,6 +179,7 @@ export async function getDreStockCmv(input: {
   });
 
   return {
+    kioskIds: [...new Set(input.kioskIds)].sort(),
     periods: [...input.periods].sort(),
     ...summaries,
     stats: {
