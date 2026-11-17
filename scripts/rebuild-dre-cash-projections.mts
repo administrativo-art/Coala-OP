@@ -57,7 +57,12 @@ function project(read: ReadSet) {
   // Preserve every operational field and the PDV source; replace only the derived Finance cash differences.
   const operators = existing.map(operator => ({ ...operator,
     cashDifferences: rebuilt.operators.find(item => item.id === operator.id)!.cashDifferences }));
-  const aggregate = withCashClosureOperatorAggregate(closure, operators, closure.updatedAt);
+  // Older repairs saved only the closure selection. Recover a missing operator projection
+  // from the already persisted PDV lines for this calculation only; never persist that field.
+  const selectionOperators = operators.map(operator => ({ ...operator,
+    pdvCashDifferences: operator.pdvCashDifferences
+      ?? rebuilt.operators.find(item => item.id === operator.id)!.pdvCashDifferences }));
+  const aggregate = withCashClosureOperatorAggregate(closure, selectionOperators, closure.updatedAt);
   const patch = { finalizedCashDifferences: aggregate.finalizedCashDifferences,
     dreSelectedCashDifferences: aggregate.dreSelectedCashDifferences,
     drePdvFallbackOperatorCount: aggregate.drePdvFallbackOperatorCount };
