@@ -125,7 +125,7 @@ export function buildSalesReviewYear(input: Omit<Parameters<typeof buildSalesRev
 
 export const salesReviewDayLabels: Record<SalesReviewDayState, string> = {
   closed: "Fechado",
-  attention_required: "Com divergência",
+  attention_required: "Requer atenção",
   awaiting_source: "Aguardando fonte",
   reopened: "Reaberto por informação tardia",
   not_reviewed: "Não verificado",
