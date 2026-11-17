@@ -1,4 +1,5 @@
 import type { CashCountingSession } from "@/features/financial/cash-counting-sessions/types";
+import { CASH_CLOSURE_DRE_VERSION } from "../../../../functions/src/cash-closure-dre";
 import type { CashClosure, CashClosureMonthlySummary } from "./types";
 
 /** Situação de um dia de fechamento na análise (somente leitura). */
@@ -82,7 +83,12 @@ export type MonthAggregate = {
   elapsedDays: number;
   approvedDays: number;
   pendingDays: number;
+  /** Esperado para conferência: vendas + suprimentos − sangrias (inclui o fundo de caixa de cada dia). */
   expectedCents: number;
+  /** Vendas dos cupons do PDV, sem suprimentos nem sangrias; soma só as unidades com venda apurada. */
+  salesCents: number;
+  /** Unidades com fechamentos no mês, mas sem venda apurada no resumo (então `salesCents` é parcial). */
+  salesMissingUnits: number;
   countedCents: number;
   differenceCents: number;
   countedCashCents: number;
@@ -90,6 +96,16 @@ export type MonthAggregate = {
   issuedCashCents: number;
   paidCashCents: number;
 };
+
+/**
+ * Vendas do PDV de um resumo mensal (cupons, sem suprimentos e sangrias). É o mesmo total que a DRE e as metas usam.
+ * `null` quando o resumo não tem a venda de todos os dias (sincronização com erro ou resumo antigo).
+ */
+export function monthlySummarySalesCents(summary: Pick<CashClosureMonthlySummary, "closureCount" | "dreVersion" | "dreRevenueTotalCents">): number | null {
+  if (summary.closureCount === 0) return 0;
+  const value = summary.dreRevenueTotalCents;
+  return summary.dreVersion === CASH_CLOSURE_DRE_VERSION && Number.isSafeInteger(value) && value! >= 0 ? value! : null;
+}
 
 /**
  * Soma os resumos mensais das unidades do recorte, mês a mês.
@@ -104,7 +120,7 @@ export function aggregateMonthlySummaries(
     const elapsed = elapsedDays(year, month, today);
     const aggregate: MonthAggregate = {
       key: monthKey(year, month), year, month, unitCount: summariesByUnit.length, elapsedDays: elapsed * summariesByUnit.length,
-      approvedDays: 0, pendingDays: 0, expectedCents: 0, countedCents: 0, differenceCents: 0,
+      approvedDays: 0, pendingDays: 0, expectedCents: 0, salesCents: 0, salesMissingUnits: 0, countedCents: 0, differenceCents: 0,
       countedCashCents: 0, allocatedCashCents: 0, issuedCashCents: 0, paidCashCents: 0,
     };
     for (const unit of summariesByUnit) {
@@ -114,6 +130,9 @@ export function aggregateMonthlySummaries(
       aggregate.pendingDays += Math.max(elapsed - approved, 0);
       if (!summary) continue;
       aggregate.expectedCents += summary.expectedTotalCents ?? 0;
+      const sales = monthlySummarySalesCents(summary);
+      if (sales === null) aggregate.salesMissingUnits++;
+      else aggregate.salesCents += sales;
       aggregate.countedCents += summary.countedTotalCents ?? 0;
       aggregate.differenceCents += summary.differenceTotalCents ?? 0;
       aggregate.countedCashCents += summary.countedCashCents ?? 0;

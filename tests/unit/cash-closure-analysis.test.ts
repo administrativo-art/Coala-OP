@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   activeSessionScopeKeys,
   aggregateMonthlySummaries,
+  monthlySummarySalesCents,
   closureDayStatus,
   elapsedDays,
   monthDayStatuses,
@@ -97,4 +98,24 @@ test("dias aguardando contagem excluem meses já cobertos por sessão ativa", ()
     scopeKeys,
   );
   assert.deepEqual(waiting, [{ kioskId: "a", months: [{ year: 2026, month: 10, pendingDays: 3 }], pendingDays: 3 }]);
+});
+
+test("vendas do mês usam os cupons do PDV, sem suprimentos e sangrias, e marcam resumo incompleto", () => {
+  // Outubro/2026 real do João Paulo: esperado inclui R$ 2.080,00 de suprimentos e − R$ 132,23 de sangrias.
+  const complete = summary(2026, 10, 31, { closureCount: 31, expectedTotalCents: 2_298_777, dreVersion: 2, dreRevenueTotalCents: 2_104_000 });
+  const incomplete = summary(2026, 10, 31, { closureCount: 31, expectedTotalCents: 1_426_195, dreVersion: 2, dreRevenueTotalCents: null });
+  const legacy = summary(2026, 10, 31, { closureCount: 31, dreRevenueTotalCents: 5_000 });
+  assert.equal(monthlySummarySalesCents(complete), 2_104_000);
+  assert.equal(monthlySummarySalesCents(incomplete), null);
+  assert.equal(monthlySummarySalesCents(legacy), null);
+  assert.equal(monthlySummarySalesCents(summary(2026, 10, 0, { closureCount: 0, dreRevenueTotalCents: null })), 0);
+
+  const [october] = aggregateMonthlySummaries(
+    [{ kioskId: "a", summaries: [complete] }, { kioskId: "b", summaries: [incomplete] }],
+    [{ year: 2026, month: 10 }],
+    "2026-11-17",
+  );
+  assert.equal(october.salesCents, 2_104_000);
+  assert.equal(october.salesMissingUnits, 1);
+  assert.equal(october.expectedCents, 3_724_972);
 });
