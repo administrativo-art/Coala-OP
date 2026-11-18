@@ -348,8 +348,8 @@ function ShiftDialog({
     }
     if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
       toast({
-        title: 'Existe um DSR confirmado nesta data.',
-        description: 'Remova o DSR e aguarde a confirmação do Bizneo antes de atribuir o turno.',
+        title: 'Existe um DSR nesta data.',
+        description: 'Remova o DSR antes de atribuir o turno.',
         variant: 'destructive',
       });
       return;
@@ -599,7 +599,7 @@ function ShiftDialog({
   );
 }
 
-/** Escolha da pessoa no dia: DSR (publicado no Bizneo como folga) ou ausência (abre o pedido com a pessoa e a data). */
+/** Escolha da pessoa para adicionar o DSR ao rascunho ou abrir um pedido de ausência. */
 function ManualDayOffDialog({
   open,
   onOpenChange,
@@ -640,11 +640,11 @@ function ManualDayOffDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{absence ? 'Lançar ausência' : 'Lançar DSR'}</DialogTitle>
+          <DialogTitle>{absence ? 'Lançar ausência' : 'Adicionar DSR ao rascunho'}</DialogTitle>
           <DialogDescription>
             {absence
               ? 'Escolha a pessoa e preencha o tipo de ausência em seguida. O efeito no ponto vem da configuração do tipo.'
-              : 'O descanso semanal remunerado será registrado no Coala One e publicado no Bizneo como folga.'}
+              : 'O DSR ficará no rascunho e será enviado ao Bizneo após a publicação da escala.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -673,7 +673,7 @@ function ManualDayOffDialog({
           <p className="text-xs text-muted-foreground">
             {absence
               ? 'Abono, atestado, falta e débito no banco são tipos de ausência; o DSR é lançado à parte.'
-              : 'Se existir um turno de trabalho nessa data, remova ou substitua o turno antes de lançar o DSR.'}
+              : 'Se houver um turno para a pessoa nesse dia, remova ou substitua o turno no rascunho antes de adicionar o DSR.'}
           </p>
         </div>
 
@@ -683,7 +683,7 @@ function ManualDayOffDialog({
           </Button>
           <Button type="button" disabled={!userId || submitting} onClick={() => void handleConfirm()}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {absence ? 'Continuar' : 'Confirmar DSR'}
+            {absence ? 'Continuar' : 'Adicionar ao rascunho'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -940,13 +940,14 @@ function DayOffBadge({
   const needsRetry = hasFailed || isPendingRetry;
   const canAction = canPublish && !isPublished && !isPublishing && !isRemoving && !removalFailed;
   const canRemoveAction = canRemove && explicit && !isPublishing && !isRemoving;
-  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar DSR';
+  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Adicionar ao rascunho';
   // Toda folga da escala é o DSR (decisão do programador, 20/10/2026); outro abono é ausência.
   let badgeLabel = 'DSR';
   if (isRemoving) badgeLabel = 'Removendo';
   else if (removalFailed) badgeLabel = 'Falha ao remover';
   else if (isPublishing) badgeLabel = 'Enviando';
   else if (!explicit) badgeLabel = canAction ? actionLabel : 'DSR previsto';
+  else if (shift?.dayOffDraft) badgeLabel = 'DSR no rascunho';
   else if (isPublished) badgeLabel = 'DSR confirmado';
   else if (hasFailed) badgeLabel = 'Falha no Bizneo';
   else if (isPendingRetry) badgeLabel = 'Envio pendente';
@@ -1005,7 +1006,7 @@ function DayOffBadge({
             type="button"
             onClick={onRemove}
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label={removalFailed ? `Tentar remover novamente o DSR de ${user.username}` : `Remover DSR de ${user.username}`}
+            aria-label={removalFailed ? `Tentar remover novamente o DSR de ${user.username}` : shift?.dayOffDraft ? `Remover DSR de ${user.username} do rascunho` : `Remover DSR de ${user.username}`}
             title={removalFailed ? 'Tentar remover novamente' : 'Remover DSR'}
           >
             <Trash2 className="h-3 w-3" />
@@ -1526,6 +1527,28 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     setCoverageDemands(normalizeDPCoverageDemands(publication.draftCoverageDemands ?? publication.coverageDemands));
   }, [publication.coverageDemands, publication.draftCoverageDemands, publication.id]);
 
+  async function editDraftDayOff(params: { userId: string; unitId: string; date: string }, action: 'add' | 'remove') {
+    const key = `${params.userId}::${params.date}`;
+    if (publishingDayOffKey) return false;
+    setPublishingDayOffKey(key);
+    try {
+      await api(`/api/dp/schedules/${encodeURIComponent(schedule.id)}/draft-shifts/day-off`, {
+        method: 'PATCH',
+        json: { ...params, action, expectedDraftVersion: draftVersion },
+        fallbackError: 'Falha ao atualizar o DSR no rascunho.',
+      });
+      notifyDPScheduleShiftsChanged(schedule.id);
+      toast({ title: action === 'add' ? 'DSR adicionado ao rascunho.' : 'DSR removido do rascunho.' });
+      return true;
+    } catch (caught) {
+      toast({ title: 'Não foi possível atualizar o DSR no rascunho.',
+        description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
+      return false;
+    } finally {
+      setPublishingDayOffKey(null);
+    }
+  }
+
   async function handlePublishDayOff(params: {
     scheduleId?: string;
     userId: string;
@@ -1604,18 +1627,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     if (!canPublish || publishing) return;
     setPublishing(true);
     try {
-      if (journeyValidation?.status === 'blocked') {
-        throw new Error(`Revise os repousos e as jornadas antes de publicar: ${journeyValidation.issues.filter((issue) => issue.blocking).slice(0, 3).map((issue) => issue.message).join(' ')}`);
-      }
       const currentDraft = await fetchDraftScheduleShifts(schedule.id);
       if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
-      await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
+      const result = await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
       const fresh = await fetchSchedule(schedule.id);
       setPublication(fresh);
       setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
       await reloadShifts();
       notifyDPScheduleShiftsChanged(schedule.id);
-      toast({ title: 'Escala publicada.', description: 'Os demais módulos passam a usar a versão publicada.' });
+      toast({ title: 'Escala publicada.', description: result.dayOffSyncCount ? 'Os DSRs desta publicação serão enviados ao Bizneo.' : 'Os demais módulos passam a usar a versão publicada.' });
     } catch (caught) {
       toast({ title: 'Não foi possível publicar a escala.', description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
     } finally { setPublishing(false); }
@@ -2997,7 +3017,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         const shouldRetry = shift?.bizneoSyncStatus === 'failed'
                           || shift?.bizneoSyncStatus === 'publishing'
                           || shift?.bizneoSyncStatus === 'pending';
-                        const source = !explicit ? 'predicted' as const : shouldRetry ? 'retry' as const : 'manual' as const;
+                        const source = shouldRetry ? 'retry' as const : 'manual' as const;
                         return (
                           <DayOffBadge
                             key={`${date}-${unit.id}-${userId}-${explicit ? 'explicit' : 'predicted'}`}
@@ -3005,19 +3025,25 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             shift={shift}
                             user={user}
                             contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
-                            canPublish={canPublishDayOff}
-                            canRemove={canPublishDayOff && explicit}
+                            canPublish={canPublishDayOff && !shift?.dayOffDraft && (explicit || canEdit)}
+                            canRemove={canPublishDayOff && explicit && Boolean(shift?.dayOffDraft || shift?.bizneoOperationId)}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
                             removing={removingDayOffKey === `${userId}::${date}`}
-                            onPublish={() => void handlePublishDayOff({
-                              scheduleId: shift?.scheduleId,
-                              userId,
-                              unitId: shift?.unitId ?? unit.id,
-                              date,
-                              source,
-                            })}
+                            onPublish={() => !explicit
+                              ? void editDraftDayOff({ userId, unitId: unit.id, date }, 'add')
+                              : void handlePublishDayOff({
+                                scheduleId: shift?.scheduleId,
+                                userId,
+                                unitId: shift?.unitId ?? unit.id,
+                                date,
+                                source,
+                              })}
                             onRemove={() => {
                               if (!shift) return;
+                              if (shift.dayOffDraft) {
+                                void editDraftDayOff({ userId, unitId: shift.unitId, date }, 'remove');
+                                return;
+                              }
                               setDayOffRemovalTarget({ shift, userName: user.username, unitName: sourceUnitName });
                             }}
                             conflictsWithWork={workDayOffConflictKeys.has(`${userId}::${date}`)}
@@ -3031,7 +3057,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           statusLabel={candidate.statusLabel}
                         />
                       ));
-                      const canAddDayOff = canPublishDayOff;
+                      const canAddDayOff = canEdit && canPublishDayOff;
                       const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
                         <DayLaunchMenu
                           canShift={canEdit}
@@ -3278,12 +3304,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         date={manualDayOffDialog?.date ?? ''}
         unit={activeUnits.find((unit) => unit.id === manualDayOffDialog?.unitId)}
         users={manualDayOffUsers}
-        onConfirm={(userId) => handlePublishDayOff({
+        onConfirm={(userId) => editDraftDayOff({
           userId,
           unitId: manualDayOffDialog?.unitId ?? '',
           date: manualDayOffDialog?.date ?? '',
-          source: 'manual',
-        })}
+        }, 'add')}
       />
 
       <ShiftDialog

@@ -18,6 +18,9 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
   const date = '2027-12-12';
   const schedule = dbAdmin.collection('dp_schedules').doc(`${workspaceId}-schedule`);
   const revisionId = 'rev-1';
+  const indexKey = `${userId}:2027-12`;
+  const legacyIndexId = createHash('sha256').update(JSON.stringify(indexKey)).digest('hex');
+  const currentIndexId = createHash('sha256').update(indexKey).digest('hex');
   const officialWork = { id: 'official-work', scheduleId: schedule.id, unitId, userId,
     date: '2027-12-13', type: 'work', startTime: '09:00', endTime: '17:00' };
   const context = { decoded: { uid: `${workspaceId}-admin` }, userDoc: { username: 'Admin' },
@@ -53,7 +56,7 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
       schedule.collection('revisions').doc(revisionId).collection('people').doc(userId).set({ shifts: [officialWork] }),
       schedule.collection('shifts').doc('stale-work').set({ scheduleId: schedule.id, unitId, userId,
         date, type: 'work', startTime: '09:00', endTime: '17:00' }),
-      dbAdmin.collection('dp_personScheduleIndex').doc(createHash('sha256').update(`${userId}:2027-12`).digest('hex'))
+      dbAdmin.collection('dp_personScheduleIndex').doc(legacyIndexId)
         .set({ userId, competence: '2027-12', scheduleIds: [schedule.id] }),
       dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Unidade teste' }),
       dbAdmin.collection('users').doc(userId).set({ username: 'Colaboradora', isActive: true,
@@ -91,7 +94,8 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
     await Promise.all(logs.docs.map((doc) => doc.ref.delete()));
     await Promise.all([
       dbAdmin.collection('dp_bizneo_day_off_operations').doc(operationId).delete(),
-      dbAdmin.collection('dp_personScheduleIndex').doc(createHash('sha256').update(`${userId}:2027-12`).digest('hex')).delete(),
+      dbAdmin.collection('dp_personScheduleIndex').doc(legacyIndexId).delete(),
+      dbAdmin.collection('dp_personScheduleIndex').doc(currentIndexId).delete(),
       schedule.collection('operationalOverlays').doc(revisionId).collection('entries').doc(shiftId).delete(),
       schedule.collection('operationalOverlays').doc(revisionId).collection('people').doc(userId).delete(),
       schedule.collection('revisions').doc(revisionId).collection('entries').doc(officialWork.id).delete(),

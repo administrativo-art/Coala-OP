@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **573**
-- Totalmente contratados: **250**
+- Arquivos de rota: **574**
+- Totalmente contratados: **251**
 - Legados congelados: **315**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -139,6 +139,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/day-offs` | DELETE, POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts](../../src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts) |
 | `/api/dp/schedules/[scheduleId]/draft-shifts` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts](../../src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts) |
+| `/api/dp/schedules/[scheduleId]/draft-shifts/day-off` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts](../../src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts) |
 | `/api/dp/schedules/[scheduleId]/external-candidates` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts](../../src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts) |
 | `/api/dp/schedules/[scheduleId]/journey-validation` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts](../../src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts) |
 | `/api/dp/schedules/[scheduleId]/publish` | POST ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/publish/route.ts](../../src/app/api/dp/schedules/[scheduleId]/publish/route.ts) |

@@ -4159,6 +4159,7 @@ export type DPShift = {
   originUnitId?: string;
   exceptionReason?: string;
   countsTowardGoals?: boolean;
+  dayOffDraft?: boolean;
   dayOffSource?: 'predicted' | 'manual';
   dayOffConfirmedAt?: Timestamp;
   dayOffConfirmedBy?: string;
