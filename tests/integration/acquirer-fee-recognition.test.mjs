@@ -235,3 +235,88 @@ test("arquivo PIX com CPF mantém lacuna pessoal indisponível sem consultar doc
  const result=await collectPersonSource({actor:{...actor,userDoc:{unitAccessScope:"all"},permissions:{}},sourceId:"stone-pix-file-owner-identity-gap",ref:{namespace:"main.users",id:uid},limit:25,sourceDb});assert.equal(result.status,"unavailable");assert.deepEqual(result.items,[]);assert.equal(calls,0);assert.match(result.reason,/CPF/);
  const denied=await collectPersonSource({actor:{...actor,isDefaultAdmin:false,userDoc:{},permissions:{}},sourceId:"stone-pix-file-owner-identity-gap",ref:{namespace:"main.users",id:uid},limit:25,sourceDb});assert.equal(denied.status,"restricted");assert.equal(calls,0);
 });
+
+const {readConfirmedRateReferences}=await import("../../src/features/financial/receipts-reconciliation/confirmed-rate-reference.server.ts");
+const rateRecord=(f,extra={})=>({workspaceId:WORKSPACE_ID,mappingId:f.request.mappingId,kioskId:f.request.kioskId,stoneCode:f.request.stoneCode,kind:"group_rate",decision:"confirmed",groupKey:"Sem bandeira no arquivo|credit",rate:.03,since:"2026-10-01",actorId:actor.decoded.uid,actorNamespace:"main.users",decidedAt:"2026-10-02T00:00:00Z",revision:1,...extra});
+async function rate(f,id,extra={}){const ref=own(db.collection("stoneReceiptDecisions").doc(`confirmed-${id}`));await ref.set(rateRecord(f,extra));return ref;}
+test("referência de Recebimentos alimenta reconhecimento sem contratos paralelos, Stone prevalece e revisão ajusta delta sem duplicar",async()=>{
+ const f=await fixture("confirmed-reference",{fee:null});await rate(f,"sale");const preview=await previewSaleFees(f.request,actor,f.deps);assert.equal(preview.batches[0].amountCents,300);assert.equal(preview.batches[0].measurement,"estimated");assert.equal(preview.batches[0].members[0].rateReference.decisionId,"confirmed-sale");assert.equal(preview.batches[0].members[0].rateReference.actorId,undefined);
+ const batch=preview.batches[0],action={action:"recognize_sale",batchId:batch.id,fingerprint:batch.fingerprint,resultCenterId:f.center,expectedRevision:0,confirmedNoManualExpense:true};
+ const made=await f.call(action);const expenseId=made.record.expenseId;assert.equal((await db.collection("expenses").doc(expenseId).get()).get("status"),"provisioned");
+ const again=await f.call(action);assert.equal(again.idempotent,true);
+ f.setCapture(file(f.merchant,f.request.referenceDate,{fee:"2.50",net:"97.50"}));const updated=await previewSaleFees(f.request,actor,f.deps);assert.equal(updated.batches[0].measurement,"assessed");
+ const revised=await f.call({...action,action:"revise_sale",fingerprint:updated.batches[0].fingerprint,expectedRevision:made.record.revision,reason:"MDR explícito Stone"});assert.equal(revised.record.expenseId,expenseId);assert.equal((await db.collection("expenses").doc(expenseId).get()).get("totalValue"),2.5);
+});
+test("vínculo diferente e sugestão não elegíveis, legado unívoco recuperado, vigência futura não altera outubro e CAS bloqueia prévia antiga",async()=>{
+ const f=await fixture("reference-scope",{fee:null});const ref=await rate(f,"other-mapping",{mappingId:"another"});assert.equal((await previewSaleFees(f.request,actor,f.deps)).batches.length,0);
+ await ref.set(rateRecord(f,{decision:"suggested"}));assert.equal((await previewSaleFees(f.request,actor,f.deps)).batches.length,0);
+ await ref.set(rateRecord(f,{mappingId:null,kioskId:null}));const before=await previewSaleFees(f.request,actor,f.deps);assert.equal(before.batches[0].amountCents,300);
+ await rate(f,"future",{since:"2026-11-01",rate:.02});assert.equal((await previewSaleFees(f.request,actor,f.deps)).batches[0].amountCents,300);
+ await ref.update({rate:.025,revision:2,decidedAt:"2026-10-03T00:00:00Z"});await assert.rejects(f.call({action:"recognize_sale",batchId:before.batches[0].id,fingerprint:before.batches[0].fingerprint,resultCenterId:f.center,expectedRevision:0,confirmedNoManualExpense:true}),code("FEE_RECOGNITION_STALE_PREVIEW"));
+ const scope={workspaceId:WORKSPACE_ID,...f.request};const sources=await readConfirmedRateReferences(scope);assert.equal(sources.references.some(r=>r.rate===.025),true);
+ const conflict=own(db.collection("stoneMerchantMappings").doc("reference-ambiguous"));await conflict.set({...((await f.mappingRef.get()).data()),id:conflict.id});assert.equal((await readConfirmedRateReferences(scope)).unresolved,1);await conflict.delete();
+});
+test("rotaTaxas exige autenticação/escopo e confirmação explícita, preserva histórico e comparação sem vendas atuais",async()=>{
+ const f=await fixture("rate-route"),uid="confirmed-rate-route-admin",email=`${uid}@example.test`,password="synthetic-fixture-password";
+ const route=await import("../../src/app/api/financial/stone-fees/route.ts");const {saveStoneReceiptSnapshot}=await import("../../src/features/financial/receipts-reconciliation/stone-account-snapshot.server.ts");
+ await authAdmin.createUser({uid,email,password});await authAdmin.setCustomUserClaims(uid,{profileId:uid,sessionVersion:0});await own(dbAdmin.collection("profiles").doc(uid)).set({isDefaultAdmin:true,permissions:{}});await own(dbAdmin.collection("users").doc(uid)).set({username:"Teste",email,profileId:uid,isActive:true,sessionVersion:0,profileCompliance:{status:"complete",policyVersion:1}});
+ try{
+ const signed=await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,returnSecureToken:true})});const token=(await signed.json()).idToken;assert.ok(token);
+ const scope={workspaceId:WORKSPACE_ID,mappingId:f.request.mappingId,kioskId:f.request.kioskId,stoneCode:f.request.stoneCode},month="2026-10";
+ const parcels=Array.from({length:5},(_,n)=>({id:`r${n}`,saleId:`r${n}`,source:"card",installment:1,installmentCount:1,brandCode:"1",brand:"Visa",modality:"credit",saleDate:"2026-10-05",grossCents:10000,feeCents:300,feeSource:"stone",feeRate:.03,anticipationCents:null,expectedNetCents:9700,expectedDate:"2026-11-04",paidDate:null,paidNetCents:null,status:"awaiting"}));
+ await saveStoneReceiptSnapshot({...scope,month},{scope,period:{from:"2026-10-01",through:"2026-10-31"},latestPublished:"2026-10-31",collectedAt:"2026-11-01T09:00:00Z",parcels});
+ const identity={kioskId:scope.kioskId,stoneCode:scope.stoneCode,month};const get=async(extra={},auth=token)=>route.GET(new NextRequest(`http://localhost/api/financial/stone-fees?${new URLSearchParams({...identity,...extra})}`,{headers:auth?{Authorization:`Bearer ${auth}`}:{}}));
+ assert.equal((await get({},null)).status,401);assert.equal((await get({view:"references"},null)).status,401);assert.equal((await get({kioskId:"another"})).status>=400,true);
+ const badge=await get({view:"alert_count"});assert.equal(badge.status,200);assert.equal(typeof (await badge.json()).pendingCount,"number");
+ const first=await get();assert.equal(first.status,200);const view=await first.json();assert.equal(view.groups[0].reference.status,"suggested");
+ const body={...identity,kind:"group_rate",itemKey:view.groups[0].key,decision:"confirmed",fingerprint:`group:${view.groups[0].reference.rate}`};const post=b=>route.POST(new NextRequest("http://localhost/api/financial/stone-fees",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(b)}));
+ assert.equal((await post(body)).status,400);assert.equal((await post({...body,kind:"sale_fee",decision:"new_rate",effectiveFrom:"2026-11-01"})).status,400);assert.equal((await post({...body,effectiveFrom:"2026-02-30"})).status,400);const confirmations=await Promise.all([post({...body,effectiveFrom:"2026-10-01"}),post({...body,effectiveFrom:"2026-10-01"})]);assert.deepEqual(confirmations.map(r=>r.status).sort(),[200,409]);
+ const refs=await readConfirmedRateReferences(scope);assert.equal(refs.references[0].actorId,uid);assert.equal(refs.references[0].since,"2026-10-01");
+ assert.equal((await post({...body,effectiveFrom:"2026-10-01"})).status,409);
+ const events=await db.collection("stoneReceiptDecisionEvents").where("stoneCode","==",scope.stoneCode).get();assert.equal(events.size,1);assert.equal(events.docs[0].get("actorNamespace"),"main.users");events.docs.forEach(d=>own(d.ref));
+ const decisions=await db.collection("stoneReceiptDecisions").where("stoneCode","==",scope.stoneCode).get();decisions.docs.forEach(d=>own(d.ref));const snapshots=await db.collection("stoneReceiptMonthSnapshots").where("stoneCode","==",scope.stoneCode).get();snapshots.docs.forEach(d=>own(d.ref));
+ // Read comparison over explicit bounded pages; no November snapshot is required to display October's confirmed reference.
+ let offset=0,found=false;for(let page=0;page<50;page++){const response=await get({view:"references",month:"2026-11",offset:String(offset)});assert.equal(response.status,200);const data=await response.json();const row=data.rows.find(r=>r.mappingId===scope.mappingId);if(row){assert.equal(row.references[0].rate,.03);found=true;}if(data.nextOffset===null)break;offset=data.nextOffset;}
+ assert.equal(found,true);
+ }finally{await authAdmin.deleteUser(uid);}
+});
+
+async function saveFeeMonthFixture(f,feeCents=300){
+ const {saveStoneReceiptSnapshot}=await import("../../src/features/financial/receipts-reconciliation/stone-account-snapshot.server.ts");
+ const scope={workspaceId:WORKSPACE_ID,mappingId:f.request.mappingId,kioskId:f.request.kioskId,stoneCode:f.request.stoneCode};
+ const parcels=Array.from({length:5},(_,n)=>({id:`internal-${n}`,saleId:`internal-${n}`,source:"card",installment:1,installmentCount:1,brandCode:"1",brand:"Visa",modality:"credit",saleDate:"2026-10-10",grossCents:10000,feeCents,feeSource:"stone",feeRate:feeCents/10000,anticipationCents:null,expectedNetCents:10000-feeCents,expectedDate:"2026-11-09",paidDate:null,paidNetCents:null,status:"awaiting"}));
+ await saveStoneReceiptSnapshot({...scope,month:"2026-10"},{scope,period:{from:"2026-10-01",through:"2026-10-31"},latestPublished:"2026-10-31",collectedAt:"2026-11-01T09:00:00Z",parcels});
+ const snapshots=await db.collection("stoneReceiptMonthSnapshots").where("stoneCode","==",scope.stoneCode).get();snapshots.docs.forEach(d=>own(d.ref));return scope;
+}
+test("R1 interno: ausência→presença de referência após prévia contratual bloqueia transação",async()=>{
+ const f=await fixture("reference-appears-during-action",{fee:null});
+ const contract={id:"legacy-rate",version:1,approvedAt:"2026-09-01T00:00:00Z",validFrom:"2026-10-01",validThrough:null,source:"cards",brandCode:null,accountTypeCode:null,minInstallments:1,maxInstallments:1,rateBasisPoints:300,fixedCents:0,rounding:"round"};
+ await f.mappingRef.update({feeRecognitionPolicy:{...f.policy,contracts:[contract]}});
+ const preview=await previewSaleFees(f.request,actor,f.deps),batch=preview.batches[0];assert.equal(batch.members[0].basis,"contract");
+ const original=db.runTransaction;let injected=false;
+ db.runTransaction=async function(update,...args){if(!injected){injected=true;await rate(f,"reference-internal-new",{rate:.02});}return original.call(this,update,...args);};
+ try{await assert.rejects(f.call({action:"recognize_sale",batchId:batch.id,fingerprint:batch.fingerprint,resultCenterId:f.center,expectedRevision:0,confirmedNoManualExpense:true}),code("FEE_RECOGNITION_REFERENCE_CHANGED"));assert.equal(injected,true);assert.equal((await db.collection("financialAcquirerFeeBatches").doc(batch.id).get()).exists,false);}finally{db.runTransaction=original;}
+});
+test("R2: confirmar4% emnovembro não resolve divergência deoutubro vigente3%",async()=>{
+ const f=await fixture("future-does-not-resolve-history");const scope=await saveFeeMonthFixture(f,400);await rate(f,"historical-three",{groupKey:"Visa|credit"});
+ const {buildFeeReview,saveFeeDecision}=await import("../../src/features/financial/receipts-reconciliation/fee-review.server.ts");const before=await buildFeeReview(scope,"2026-10");assert.equal(before.changes.length,1);const change=before.changes[0];
+ await saveFeeDecision(scope,{kioskId:scope.kioskId,stoneCode:scope.stoneCode,month:"2026-10",kind:"rate_change",itemKey:change.key,decision:"new_rate",fingerprint:change.fingerprint,effectiveFrom:"2026-11-01"},actor.decoded.uid);
+ const after=await buildFeeReview(scope,"2026-10");assert.equal(after.pendingCount,1);assert.equal(after.changes[0].impactCents,500);assert.equal(after.groups[0].reference.rate,.03);
+ const history=await readConfirmedRateReferences(scope);assert.deepEqual(history.references.map(r=>[r.rate,r.since]),[[.03,"2026-10-01"],[.04,"2026-11-01"]]);
+ for(const name of ["stoneReceiptDecisions","stoneReceiptDecisionEvents"]){const rows=await db.collection(name).where("stoneCode","==",scope.stoneCode).get();rows.docs.forEach(d=>own(d.ref));}
+});
+test("R3 interno: mapping muda após validar início mas antes baseline; transação resolve data novamente",async()=>{
+ const f=await fixture("effective-scope-internal");const scope=await saveFeeMonthFixture(f);
+ const {buildFeeReview,saveFeeDecision}=await import("../../src/features/financial/receipts-reconciliation/fee-review.server.ts");const before=await buildFeeReview(scope,"2026-10");const group=before.groups[0];
+ const prototype=Object.getPrototypeOf(db.collection("stoneMerchantMappings").where("workspaceId","==",WORKSPACE_ID));const original=prototype.get;let injected=false;
+ prototype.get=async function(...args){const result=await original.apply(this,args);if(!injected && result.docs?.some(d=>d.id===scope.mappingId)){injected=true;await f.mappingRef.update({validFrom:"2026-10-15"});}return result;};
+ try{await assert.rejects(saveFeeDecision(scope,{kioskId:scope.kioskId,stoneCode:scope.stoneCode,month:"2026-10",kind:"group_rate",itemKey:group.key,decision:"confirmed",fingerprint:`group:${group.reference.rate}`,effectiveFrom:"2026-10-01"},actor.decoded.uid),code("FINANCIAL_AGENT_MAPPING_REQUIRED"));assert.equal(injected,true);}finally{prototype.get=original;}
+ const decisions=await db.collection("stoneReceiptDecisions").where("stoneCode","==",scope.stoneCode).get();assert.equal(decisions.empty,true);
+});
+test("R5: vínculo inválido participa da cobertura como indisponível, sem dados de outro workspace",async()=>{
+ const invalid=own(db.collection("stoneMerchantMappings").doc("invalid-rate-comparison"));await invalid.set({workspaceId:WORKSPACE_ID,kioskId:"unproved",stoneCodes:["9999"]});
+ const foreign=own(db.collection("stoneMerchantMappings").doc("foreign-rate-comparison"));await foreign.set({workspaceId:"another",kioskName:"must-not-leak"});
+ const {compareConfirmedRates}=await import("../../src/features/financial/receipts-reconciliation/fee-reference-comparison.server.ts");let offset=0,found=false;
+ for(let page=0;page<50;page++){const data=await compareConfirmedRates(WORKSPACE_ID,"2026-10-31",offset);assert.ok(data.invalidMappingCount>=1);assert.equal(JSON.stringify(data).includes("must-not-leak"),false);const row=data.rows.find(r=>r.mappingId===invalid.id);if(row){found=true;assert.equal(row.status,"unavailable");assert.equal(row.kioskId,null);assert.equal(row.stoneCode,null);}if(data.nextOffset===null)break;offset=data.nextOffset;}
+ assert.equal(found,true);
+});

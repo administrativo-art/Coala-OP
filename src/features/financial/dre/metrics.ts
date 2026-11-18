@@ -47,7 +47,7 @@ export function calculateDreMetrics<T extends ReturnType<typeof aggregateDreReve
     const lucroLiq = lair - irCsll;
     const resultState = dreResultState({ result: lucroLiq, cash: revenueSource,
       feeReasons: [...(revBruta > 0 ? ["Cobertura integral das taxas de cartão/PIX ainda não certificada nesta DRE; ausência de lançamento não comprova taxa zero."] : []), ...Object.values(expenseCalculation.detailsByPosition).flat().flatMap(line => [
-        ...(line.feeRecognition?.estimated ? ["Há taxas de vendas estimadas por contrato; sujeitas à apuração na adquirente."] : []),
+        ...(line.feeRecognition?.estimated ? ["Há taxas de vendas estimadas por referência confirmada ou contrato; sujeitas à apuração na adquirente."] : []),
         ...(line.feeRecognition?.incomplete ? ["Há componentes de taxas pendentes de conciliação/apuração; pendência não representa custo zero."] : []),
       ])],
       compositionOpen: cmvCriterion === "composition" && compositionPeriods.some(row => row.status !== "closed") });

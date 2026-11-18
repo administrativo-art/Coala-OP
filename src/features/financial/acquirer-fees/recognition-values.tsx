@@ -8,5 +8,5 @@ export function RecognitionValues({ capture, record }: { capture: FeeRecognition
  const shown=record?.active?record.batch:capture;
  const received=record?.active&&record.state==="received"&&shown.members.every(m=>m.paidNetDecimal!==null);
  const net=received?feeTotalCents(shown.members.map(m=>m.paidNetDecimal!)):shown.expectedNetCents;
- return <><td className="p-2">{shown.kind.toUpperCase()} · {shown.measurement==="estimated"?"Estimada":"Apurada"}<br />{record?recognitionStateLabels[record.state]:"Ainda não reconhecida"}</td><td>{centsLabel(shown.grossCents)}</td><td>{centsLabel(shown.amountCents)}</td><td>{centsLabel(net)}<br /><span className="text-xs">{received?"Liquidado na adquirente":"Previsto"}</span></td><td>{shown.dueOn}</td></>;
+ return <><td className="p-2">{shown.kind.toUpperCase()} · {shown.measurement==="estimated"?"Estimada":"Apurada"}<br />{shown.members.some(m=>m.basis==="confirmed_reference") ? "Referência confirmada em Recebimentos · estimativa" : null}<br />{record?recognitionStateLabels[record.state]:"Ainda não reconhecida"}</td><td>{centsLabel(shown.grossCents)}</td><td>{centsLabel(shown.amountCents)}</td><td>{centsLabel(net)}<br /><span className="text-xs">{received?"Liquidado na adquirente":"Previsto"}</span></td><td>{shown.dueOn}</td></>;
 }
