@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { stoneReceiptFlowHref } from "../receipts-reconciliation/receipt-flow-navigation";
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, Info, RefreshCw } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -877,7 +878,7 @@ export function DrePage() {
         <div role="status" className="rounded-ds-card border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-sm text-ds-alert-ink">
           <p className="font-semibold">Resultado provisório</p>
           <p className="mt-1">{metrics.resultState.reasons.join(" ")}</p>
-          <a href={`/dashboard/financial/stone-receipts?tab=fees&month=${selectedMonth}${selectedKioskId ? `&kiosk=${encodeURIComponent(selectedKioskId)}` : ""}`} className="mt-2 inline-block font-semibold underline">Conferir taxas pendentes e estimadas em Recebimentos → Taxas</a>
+          <Link href={stoneReceiptFlowHref("fees",undefined,undefined,{month:selectedMonth,kioskId:selectedKioskId})} className="mt-2 inline-block font-semibold underline">Conferir taxas pendentes e estimadas em Recebimentos → Taxas</Link>
         </div>
       ) : null}
 

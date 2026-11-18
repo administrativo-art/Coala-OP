@@ -11,19 +11,22 @@ type StoneReceiptFlowNavigationProps = {
   stoneCode?: string;
 };
 
-function withScope(pathname: string, mappingId?: string, stoneCode?: string, tab?: "fees" | "credit") {
+type ReceiptNavigationContext={month?:string;kioskId?:string|null};
+function withScope(pathname: string, mappingId?: string, stoneCode?: string, tab?: "fees" | "credit", context?: ReceiptNavigationContext) {
   const query = new URLSearchParams();
   if (mappingId) query.set("mapping", mappingId);
   if (stoneCode) query.set("stoneCode", stoneCode);
   if (tab) query.set("tab", tab);
+  if (context?.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(context.month)) query.set("month",context.month);
+  if (context?.kioskId) query.set("kiosk",context.kioskId);
   const text = query.toString();
   return text ? `${pathname}?${text}` : pathname;
 }
 
-export function stoneReceiptFlowHref(step: StoneReceiptFlowStep, mappingId?: string, stoneCode?: string) {
+export function stoneReceiptFlowHref(step: StoneReceiptFlowStep, mappingId?: string, stoneCode?: string, context?: ReceiptNavigationContext) {
   if (step === "receivables") return withScope("/dashboard/financial/cash-flow/receivables", mappingId, stoneCode);
   if (step === "anticipations") return withScope("/dashboard/financial/stone-anticipations", mappingId, stoneCode);
-  return withScope("/dashboard/financial/stone-receipts", mappingId, stoneCode, step);
+  return withScope("/dashboard/financial/stone-receipts", mappingId, stoneCode, step, context);
 }
 
 const tabs = [
