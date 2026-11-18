@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 122.
+Arquivos locais percorridos: 131.
 
 Chamadas candidatas encontradas:
 
@@ -124,7 +124,6 @@ Chamadas candidatas encontradas:
 - `/api/financial/analysis-routines` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/analysis-routines/route.ts`](../../src/app/api/financial/analysis-routines/route.ts)
 - `/api/financial/budgets` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/route.ts`](../../src/app/api/financial/budgets/route.ts)
 - `/api/financial/budgets/` — interface [`src/features/financial/components/settings/budget-coverage-editor.tsx`](../../src/features/financial/components/settings/budget-coverage-editor.tsx); rota candidata [`src/app/api/financial/budgets/[id]/route.ts`](../../src/app/api/financial/budgets/%5Bid%5D/route.ts)
-- `/api/financial/budgets/cash-projections` — interface [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx); rota candidata [`src/app/api/financial/budgets/cash-projections/route.ts`](../../src/app/api/financial/budgets/cash-projections/route.ts)
 - `/api/financial/budgets/centers` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/centers/route.ts`](../../src/app/api/financial/budgets/centers/route.ts)
 - `/api/financial/budgets/person-references` — interface [`src/features/financial/components/settings/budget-api.ts`](../../src/features/financial/components/settings/budget-api.ts); rota candidata [`src/app/api/financial/budgets/person-references/route.ts`](../../src/app/api/financial/budgets/person-references/route.ts)
 - `/api/financial/cash-flow-study` — interface [`src/features/financial/cash-flow-study/cash-flow-study-view.tsx`](../../src/features/financial/cash-flow-study/cash-flow-study-view.tsx); rota candidata [`src/app/api/financial/cash-flow-study/route.ts`](../../src/app/api/financial/cash-flow-study/route.ts)
@@ -639,7 +638,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 114.
+Arquivos locais percorridos: 115.
 
 Chamadas candidatas encontradas:
 
