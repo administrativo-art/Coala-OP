@@ -5,7 +5,7 @@ Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboa
 Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, componentes e regras próprios, descritos em [Aplicativo Coala Go](app.md).
 
 ## Princípios
-- Um título por tela antes do primeiro item. Departamento vira menu; subseções ficam na mesma linha do título.
+- Um título por tela antes do primeiro item. O caminho da página fica na faixa preta superior. No corpo, o cabeçalho dá contexto à operação e, quando houver retorno, o botão mostra o nome do destino. [Decisão 0009](decisoes/0009-caminho-global-e-retorno.md).
 - Tudo que **filtra** a lista fica no painel escuro do topo. Tudo que **age** sobre um item fica no painel lateral.
 - Uma ação principal por área.
 - A navegação lateral é flutuante, recolhida por padrão e expande ao passar o cursor; o nome do sistema ("Coala One", "Coala Pulse") é a única parte animada da marca.
@@ -13,7 +13,13 @@ Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, c
 - Código novo não usa `alert()`, `confirm()` ou `prompt()`: erro fica junto do campo e confirmação é inline.
 - Status é só leitura na lista; a troca acontece no painel ou no modal, com o motivo dos bloqueios.
 - Listas tabulares novas ou ajustadas abrem por título/nome crescente e permitem inverter a ordem; seguir [Listas e linhas](listas.md).
-- Toda data apresentada ao usuário segue o padrão brasileiro `DD/MM/AAAA`. ISO (`AAAA-MM-DD`) é formato interno e fica restrito a armazenamento, APIs e integrações; nunca deve aparecer em textos, trilhas, tabelas, painéis ou documentos visíveis.
+- Apresente datas completas no padrão brasileiro descrito em [Datas e horários](#datas-e-horários).
+
+## Datas e horários
+
+Use `DD/MM/AAAA` para datas completas e `DD/MM/AAAA, HH:mm` quando o horário fizer parte da informação. Use o fuso do negócio adotado pelo módulo, como `America/Belem` para horários de operação em Belém. Uma data civil já representa um dia e deve ser formatada sem conversão de fuso. Calendários e séries podem usar `DD/MM` quando o ano já estiver claro. Para competências, use “mês de AAAA”.
+
+Preserve ISO nos dados de origem, armazenamento, APIs, integrações, identificadores, logs técnicos e valores exigidos por campos nativos de data. Formate os textos visíveis na apresentação, como **Vendas de 17/09/2026**.
 
 ## Índice
 - [Estrutura de página e navegação](estrutura-e-navegacao.md)

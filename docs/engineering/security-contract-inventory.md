@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **572**
-- Totalmente contratados: **249**
+- Arquivos de rota: **573**
+- Totalmente contratados: **250**
 - Legados congelados: **315**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -452,6 +452,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/integrations/pdvlegal/filiais` | GET | `LEGACY_BASELINE` | [src/app/api/integrations/pdvlegal/filiais/route.ts](../../src/app/api/integrations/pdvlegal/filiais/route.ts) |
 | `/api/integrations/pdvlegal/inspect` | GET | `LEGACY_BASELINE` | [src/app/api/integrations/pdvlegal/inspect/route.ts](../../src/app/api/integrations/pdvlegal/inspect/route.ts) |
 | `/api/integrations/pdvlegal/sync` | GET | `LEGACY_BASELINE` | [src/app/api/integrations/pdvlegal/sync/route.ts](../../src/app/api/integrations/pdvlegal/sync/route.ts) |
+| `/api/jobs/acquirer-fees/auto` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/acquirer-fees/auto/route.ts](../../src/app/api/jobs/acquirer-fees/auto/route.ts) |
 | `/api/jobs/assets/maintenance-materialize` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/assets/maintenance-materialize/route.ts](../../src/app/api/jobs/assets/maintenance-materialize/route.ts) |
 | `/api/jobs/cash-closures/daily-sync` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/cash-closures/daily-sync/route.ts](../../src/app/api/jobs/cash-closures/daily-sync/route.ts) |
 | `/api/jobs/cash-deposits/reconcile` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/cash-deposits/reconcile/route.ts](../../src/app/api/jobs/cash-deposits/reconcile/route.ts) |
