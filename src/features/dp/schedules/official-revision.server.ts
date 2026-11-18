@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHash } from 'node:crypto';
+import { indexedPersonScheduleIds, personScheduleIndexRefs } from './person-schedule-index.server';
 import type { DocumentData, DocumentSnapshot, Firestore, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
@@ -50,10 +50,7 @@ function dateRange(schedule: Record<string, unknown>) {
 function between(date: unknown, from: string, through: string) {
   return typeof date === 'string' && date >= from && date <= through;
 }
-function personIndexRef(db: Firestore, userId: string, competence: string) {
-  const hash = createHash('sha256').update(`${userId}:${competence}`).digest('hex');
-  return db.collection('dp_personScheduleIndex').doc(hash);
-}
+
 
 /** Caller must authorize schedule/unit access before returning these rows to a client. */
 export async function readOfficialScheduleShifts(params: {
@@ -178,12 +175,9 @@ export async function readOfficialPersonMonth(params: { userId: string; competen
   const db = params.db ?? dbAdmin;
   const userId = pathId(params.userId);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(params.competence)) failure('DP_OFFICIAL_PERIOD_INVALID', 'Competência inválida.');
-  const index = await personIndexRef(db, userId, params.competence).get();
-  if (!index.exists) return { shifts: [] as OfficialShift[], indexed: false };
-  if (index.get('userId') !== userId || index.get('competence') !== params.competence) failure('DP_OFFICIAL_INDEX_INVALID', 'O índice de escalas está inconsistente.');
-  const scheduleIds = index.get('scheduleIds');
-  if (!Array.isArray(scheduleIds) || scheduleIds.length > MAX_CANDIDATE_SCHEDULES
-    || scheduleIds.some((id) => typeof id !== 'string' || !id || id.includes('/'))) failure('DP_OFFICIAL_INDEX_INVALID', 'O índice de escalas está inconsistente.');
+  const indexes = await db.getAll(...personScheduleIndexRefs(db, userId, params.competence));
+  if (indexes.every((index) => !index.exists)) return { shifts: [] as OfficialShift[], indexed: false };
+  const scheduleIds = indexedPersonScheduleIds(indexes, userId, params.competence, MAX_CANDIDATE_SCHEDULES);
   const results = await Promise.all(scheduleIds.map((scheduleId: string) => readOfficialScheduleShifts({ scheduleId, userId, from: params.from, through: params.through, db })));
   return { indexed: true, shifts: results.flatMap((result) => result.shifts) };
 }
