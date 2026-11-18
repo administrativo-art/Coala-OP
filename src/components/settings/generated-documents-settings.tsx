@@ -20,6 +20,7 @@ const generatedTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter(
 function originLabel(template: SystemDocumentTemplate) {
   if (template.id === "system-receipt-standard") return "Gerador de documentos";
   if (template.id.includes("transportation-voucher-reactivation")) return "Solicitações do colaborador";
+  if (template.sourceModule === "financial") return "Financeiro → DRE → Exportar";
   if (template.sourceModule === "uniforms") return "Uniformes";
   if (template.sourceModule === "assets") return "Patrimônio";
   if (template.sourceModule === "time_recording") return "Registro de ponto";
@@ -42,6 +43,7 @@ function signatureLabel(template: SystemDocumentTemplate) {
 }
 
 function collaboratorBindingLabel(template: SystemDocumentTemplate) {
+  if (template.sourceModule === "financial") return "Não se aplica; relatório empresarial agregado";
   if (template.id.includes("transportation-voucher-reactivation")) return "Colaborador da solicitação";
   if (template.sourceModule === "uniforms") return "Colaborador do movimento de uniforme";
   if (template.sourceModule === "assets") return "Colaborador que recebe a posse do patrimônio";

@@ -44,3 +44,7 @@ O catálogo de modelos permanece único; a correção de identidade não cria no
 ## Documento livre do editor
 
 `system-editor-document` ("Documento livre (editor)", categoria Documentos) registra o documento em branco redigido no editor (`renderer: editor_html`, PDF a partir de HTML). É `contextual` (`sourceModule: documents`): `direct` o listaria no gerador DOCX legado, onde não funciona. As instâncias ficam em `editorDocuments` (não em `generatedDocuments`). No 1º corte é avulso (sem titular), sem assinatura (`signatureScope: none`), com `coala-letterhead-v2`, `variables: []` (campos dinâmicos do catálogo de variáveis) e publicação ao colaborador restrita. A retenção `fiscal_generation_date_pending` é **provisória, pendente de validação jurídica pelo DEV**: `employment_plus_5y` depende do fim do vínculo, inexistente sem titular, e esta política não fixa prazo de descarte. Não declara conformidade. Ver [guia do fluxo](flows/document-generation.md#documento-livre-do-editor-catálogo-e-montagem-05112026).
+
+## Relatório gerencial de DRE
+
+`system-financial-dre-report` v1 é contextual, origem Financeiro→DRE, PDF A4 no timbre oficial v2. `renderer:dre_report`, `signatureScope:none`, sem titular humano, sem assinatura/publicação/Storage e sem instância persistida. Metadado `manual_review` do catálogo não cria retenção ou descarte de arquivo transitório. Prévia é fictícia; geração real exige DRE/unidades. Excel é exportação transitória da mesma fonte, sem assinatura/modelo de documento pessoal. Ver [DRE](flows/dre.md#relatórios-mensal-e-de-12-meses--17112026).

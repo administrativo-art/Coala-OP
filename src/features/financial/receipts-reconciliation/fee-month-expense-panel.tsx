@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SaleFeeRecognitionPanel } from "../acquirer-fees/recognition-panel";
 import { StatusPill } from "@/components/ui/status-pill";
 import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,13 +13,12 @@ import { monthLongLabel } from "./month-select";
 import { centsLabel } from "./stone-account-format";
 
 /**
- * Passo 6: lança as taxas Stone do mês (Pix, débito, crédito) como despesas já pagas na origem.
+ * Histórico e cancelamento do lançamento mensal legado. Novas apurações são por venda.
  * O servidor recalcula tudo e recusa se houver pendência ou se os valores mudaram desde a tela.
  */
-export function StoneFeeMonthExpensePanel({ kioskId, stoneCode, month, refreshKey }: { kioskId: string; stoneCode: string; month: string; refreshKey: number | null }) {
+export function StoneFeeMonthExpensePanel({ mappingId, kioskId, stoneCode, month, refreshKey }: { mappingId: string; kioskId: string; stoneCode: string; month: string; refreshKey: number | null }) {
   const api = useAuthenticatedApi();
   const [status, setStatus] = useState<FeeExpenseStatus | null>(null);
-  const [center, setCenter] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
@@ -35,7 +34,7 @@ export function StoneFeeMonthExpensePanel({ kioskId, stoneCode, month, refreshKe
     let alive = true;
     void Promise.resolve().then(() => { if (alive) { setBusy(true); setError(""); } })
       .then(() => load(controller.signal))
-      .then(next => { if (!alive) return; setStatus(next); setCenter(current => current || (next.centers.length === 1 ? next.centers[0].id : "")); })
+      .then(next => { if (!alive) return; setStatus(next); })
       .catch(caught => { if (alive && !controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível abrir a despesa do mês."); })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; controller.abort(); };
@@ -54,14 +53,13 @@ export function StoneFeeMonthExpensePanel({ kioskId, stoneCode, month, refreshKe
   const plan = status?.plan;
   const record = status?.record?.active ? status.record : null;
   const blocked = Boolean(plan?.blockers.length);
-  const canLaunch = Boolean(plan && !record && !blocked && center && !saving);
 
-  return <section className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-4" aria-label="Despesa do mês">
+  return <><SaleFeeRecognitionPanel mappingId={mappingId} kioskId={kioskId} stoneCode={stoneCode} month={month} /><section className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-4" aria-label="Despesa do mês">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Despesa do mês · {monthLongLabel(month)}</p>
-        <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Lançar as taxas como despesa</h2>
-        <p className="mt-1 max-w-3xl text-[12.5px] text-ds-ink-muted">Uma despesa por tipo em {status?.accountName ?? "Taxas de cartão"}, competência do mês da venda, já paga: a Stone descontou do repasse, então não haverá outra saída no banco.</p>
+        <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">Histórico do lançamento mensal anterior</h2>
+        <p className="mt-1 max-w-3xl text-[12.5px] text-ds-ink-muted">Novas apurações usam a venda conciliada na seção acima. Lançamentos anteriores podem ser consultados e desfeitos com revisão.</p>
       </div>
       {record ? <StatusPill variant="ok">Lançado</StatusPill> : plan ? <StatusPill variant={blocked ? "warn" : "info"}>{blocked ? "Aguardando" : "Pronto para lançar"}</StatusPill> : null}
     </div>
@@ -86,17 +84,6 @@ export function StoneFeeMonthExpensePanel({ kioskId, stoneCode, month, refreshKe
       {plan.blockers.map(text => <li key={text}>{text}</li>)}
     </ul> : null}
 
-    {plan && !record && !blocked ? <div className="mt-3 flex flex-wrap items-end gap-3">
-      {status && status.centers.length > 1 ? <label className="grid gap-1.5 text-[12px] font-bold text-ds-ink-2">Centro de resultado
-        <Select value={center || undefined} onValueChange={setCenter}>
-          <SelectTrigger aria-label="Centro de resultado" className="w-[260px]"><SelectValue placeholder="Escolha o centro" /></SelectTrigger>
-          <SelectContent>{status.centers.map(item => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent>
-        </Select></label>
-        : status?.centers.length === 1 ? <p className="text-[12.5px] text-ds-ink-muted">Centro de resultado: <strong className="text-ds-ink">{status.centers[0].name}</strong></p>
-          : <p className="text-[12.5px] text-ds-danger">A unidade não tem centro de resultado exclusivo ativo.</p>}
-      <Button type="button" variant="primary-page" size="md" disabled={!canLaunch} onClick={() => void post({ action: "launch", fingerprint: plan.fingerprint, resultCenterId: center }, "Taxas lançadas como despesa paga. Nenhum pagamento ou débito bancário foi criado.")}>
-        {saving ? "Lançando…" : `Lançar ${centsLabel(plan.totalCents)}`}</Button>
-    </div> : null}
 
     {record ? <div className="mt-3 space-y-2">
       <p className="text-[12.5px] text-ds-ink-muted">Lançado em {new Date(record.launchedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · centro {record.resultCenterName}.</p>
@@ -111,5 +98,5 @@ export function StoneFeeMonthExpensePanel({ kioskId, stoneCode, month, refreshKe
     {status?.record && !status.record.active ? <p className="mt-2 text-xs text-ds-ink-faint">Lançamento anterior desfeito em {status.record.cancelledAt ? new Date(status.record.cancelledAt).toLocaleDateString("pt-BR") : "—"}: {status.record.cancelReason}</p> : null}
     {error ? <p role="alert" className="mt-2 text-sm font-semibold text-ds-danger">{error}</p> : null}
     {message ? <p role="status" className="mt-2 text-sm font-semibold text-ds-ok">{message}</p> : null}
-  </section>;
+  </section></>;
 }

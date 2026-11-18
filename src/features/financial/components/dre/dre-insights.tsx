@@ -117,7 +117,7 @@ export function DreCmvCard({ criterion, onCriterionChange, compositionCmv, stock
       value: "stock_movement",
       title: "Pela movimentação",
       hint: "Saídas reais do estoque",
-      amount: stock.loading ? "Calculando…" : stock.error ? "Indisponível" : stockReady ? (money(stock.total) ?? "Indisponível") : "Calculando…",
+      amount: stock.loading ? "Calculando…" : stockReady ? (money(stock.total) ?? "Indisponível") : "Indisponível",
     },
   ];
   return (
