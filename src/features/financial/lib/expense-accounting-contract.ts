@@ -49,6 +49,7 @@ export type FinancialExpenseDreDocument = {
     serviceNumbers: string[];
   } | null;
   cardChargeDate?: string | null;
+  feeRecognition?: { estimated: boolean; incomplete: boolean } | null;
 };
 
 type ExpenseCompetenceSource = {
@@ -236,6 +237,7 @@ export function normalizeFinancialExpenseForDre(
     supplierId: text(expense.supplierId) || null,
     billingIdentity: normalizeBillingIdentity(expense.billingIdentity),
     cardChargeDate: dateKeyFromDateValue(expense.cardChargeDate),
+    feeRecognition: record(expense.sourceSettlement).kind === "acquirer_fee" ? { estimated: record(expense.sourceSettlement).estimated === true, incomplete: record(expense.sourceSettlement).sourceIncomplete === true } : null,
   };
 }
 

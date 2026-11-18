@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   dreHorizontalVariation,
+  dreResultState,
   dreRevenueComposition,
   dreVariationTone,
   previousDreMonthKey,
@@ -46,4 +47,25 @@ test("composição da receita só existe com todos os valores disponíveis", () 
   const loss = dreRevenueComposition(100, [{ key: "cmv", label: "CMV", value: 130 }]);
   assert.equal(loss?.at(-1)?.label, "Falta");
   assert.equal(loss?.at(-1)?.share, 30);
+});
+
+test("resultado conhecido é provisório por caixa parcial, contagem pendente, fonte alterada ou composição aberta", () => {
+  const cash: Parameters<typeof dreResultState>[0]["cash"] = { cashDifferenceCoverage: "complete", cashDifferenceCoveredDays: 93, cashDifferenceTotalDays: 93,
+    cashDifferenceProvisional: false, pendingOperatorCount: 0, issues: [] as string[] };
+  assert.equal(dreResultState({ result: 100, cash, compositionOpen: false }).status, "complete");
+  const scenarios: Array<typeof cash> = [
+    { ...cash, cashDifferenceCoverage: "incomplete", cashDifferenceCoveredDays: 87 },
+    { ...cash, pendingOperatorCount: 11 },
+    { ...cash, pendingOperatorCount: null },
+    { ...cash, cashDifferenceProvisional: true },
+    { ...cash, issues: ["pdv_changed_after_approval"] },
+  ];
+  for (const current of scenarios) {
+    const result = dreResultState({ result: 100, cash: current, compositionOpen: false });
+    assert.equal(result.status, "provisional");
+    assert.ok(result.reasons.length > 0);
+  }
+  assert.equal(dreResultState({ result: 100, cash, compositionOpen: true }).status, "provisional");
+  assert.equal(dreResultState({ result: NaN, cash, compositionOpen: true }).status, "unavailable");
+  assert.equal(dreResultState({ result: 0, cash, compositionOpen: false }).status, "complete");
 });

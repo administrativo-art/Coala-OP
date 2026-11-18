@@ -96,7 +96,7 @@ export function StoneReceiptsPage() {
       <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
       {tab === "fees" ? <section className="space-y-4" aria-label="Taxas">
         <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onPending={onFeeViewChange} onMonthChange={setFeeMonth} />
-        <StoneFeeMonthExpensePanel key={`fee-expense:${mapping.id}:${code}`} kioskId={mapping.kioskId} stoneCode={code} month={feeMonth} refreshKey={feeVersion} />
+        <StoneFeeMonthExpensePanel key={`fee-expense:${mapping.id}:${code}`} mappingId={mapping.id} kioskId={mapping.kioskId} stoneCode={code} month={feeMonth} refreshKey={feeVersion} />
       </section> : null}
       {tab === "credit" ? <StoneAccountReceipts key={`stone-account:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onIndicators={onIndicators} /> : null}
     </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro; a conta vinculada vem junto</p><p className="mt-1 text-sm text-muted-foreground">Depois escolha o identificador Stone. Essa seleção acompanha as etapas de recebimentos.</p></div>}

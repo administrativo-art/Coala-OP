@@ -1,7 +1,7 @@
 import { AppError } from "@/lib/observability/app-error";
 import { calculateFinancialObligationSummary } from "../obligations/calculations";
 
-/** Server-owned evidence of an already executed, non-bank settlement. */
+/** Server-owned retention/settlement evidence; an acquirer receivable may await settlement. */
 export type SourceSettlement = {
   version: 1;
   kind: "cash_withdrawal" | "acquirer_fee";
@@ -9,7 +9,11 @@ export type SourceSettlement = {
   fingerprint: string;
   amountCents: number;
   competenceMonth: string;
-  settledOn: string;
+  settledOn: string | null;
+  phase?: "receivable" | "partial" | "settled";
+  expectedOn?: string;
+  estimated?: boolean;
+  sourceIncomplete?: boolean;
   workspaceId: string;
   unitId: string;
 };
@@ -18,7 +22,7 @@ export function assertExpenseAllowsNewPayment(expense: Record<string, unknown>) 
   // Even malformed evidence must not reopen a settled expense for payment.
   if (Object.prototype.hasOwnProperty.call(expense, "sourceSettlement")) {
     throw new AppError({ code: "EXPENSE_SETTLED_AT_SOURCE", kind: "CONFLICT",
-      safeMessage: "Esta despesa já foi quitada na origem. Corrija o vínculo na origem antes de registrar outro pagamento." });
+      safeMessage: "Esta despesa está vinculada à retenção na origem/recebível. Confira a origem; não há um segundo pagamento bancário." });
   }
 }
 
