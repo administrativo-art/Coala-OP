@@ -58,7 +58,18 @@ function total(facts: SalesMatchFact[]) {
   return facts.reduce((sum, fact) => sum + fact.grossAmountCents, 0);
 }
 
-function statusesAreCompatible(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
+function statusesAreCompatible(
+  pdv: SalesMatchFact[], stone: SalesMatchFact[],
+) {
+  const adjustedCards = pdv.filter(fact => fact.channel !== "pix" && fact.adjustment);
+  if (adjustedCards.length) {
+    if (pdv.length !== 1 || stone.length !== 1) return false;
+    const adjustment = adjustedCards[0].adjustment!;
+    const cancelledAt = adjustment.lastCancellationAt && timestampMillis(adjustment.lastCancellationAt);
+    const capturedAt = timestampMillis(stone[0].soldAt);
+    if (!adjustment.finalizedAfterCancellation || typeof cancelledAt !== "number" || capturedAt === null
+      || cancelledAt >= capturedAt) return false;
+  }
   const pdvStatuses = [...new Set(pdv.map((fact) => fact.status))].sort();
   const stoneStatuses = [...new Set(stone.map((fact) => fact.status))].sort();
 
@@ -98,14 +109,17 @@ function buildCase(
   else if (!statusesAreCompatible(pdv, stone)) kind = "status_mismatch";
   else kind = "matched";
 
+  const voucherDifference = kind === "matched" && basis === "provider_transaction_id"
+    && pdv[0]?.channel === "credit_card" && stone[0]?.channel === "voucher";
   return {
+    ...(voucherDifference ? { paymentMethodDifference: { pdv: "credit_card" as const, stone: "voucher" as const } } : {}),
     deterministicKey: deterministicKey(pdv, stone),
     workspaceId,
     kioskId: kioskIds.length === 1 ? kioskIds[0] : null,
     kioskIds: kioskIds.sort(),
     period: businessDate.slice(0, 7),
     businessDate,
-    channel: all[0]?.channel ?? "pix",
+    channel: voucherDifference ? "voucher" : all[0]?.channel ?? "pix",
     pdvFactIds: pdv.map((fact) => fact.id).sort(),
     stoneSaleIds: stone.map((fact) => fact.id).sort(),
     pdvGrossAmountCents,
@@ -133,7 +147,7 @@ function identifiersConflict(left: SalesMatchFact, right: SalesMatchFact) {
 }
 
 function candidateEdge(left: SalesMatchFact, right: SalesMatchFact, windowMs: number) {
-  if (identifiersConflict(left, right)) return false;
+  if (left.channel === "voucher" || right.channel === "voucher" || identifiersConflict(left, right)) return false;
   if (left.workspaceId !== right.workspaceId) return false;
   if (!left.kioskId || left.kioskId !== right.kioskId) return false;
   if (left.businessDate !== right.businessDate || left.channel !== right.channel) return false;
@@ -143,7 +157,7 @@ function candidateEdge(left: SalesMatchFact, right: SalesMatchFact, windowMs: nu
 }
 
 function dailyScopeKey(fact: SalesMatchFact) {
-  return fact.kioskId
+  return fact.kioskId && fact.channel !== "voucher"
     ? JSON.stringify([fact.workspaceId, fact.kioskId, fact.businessDate, fact.channel])
     : null;
 }
@@ -241,10 +255,22 @@ export function suggestSalesReconciliationCases(input: {
     }
   }
 
-  matchByKey("provider_transaction_id", providerKey);
-  matchByKey("provider_event_id", providerEventKey);
-  matchByKey("nsu_authorization_terminal", authorizationKey);
-  matchByKey("merchant_order", merchantOrderKey);
+  // Voucher pode estar rotulado como crédito no PDV. A exceção vale só para
+  // o ID da adquirente confirmado no mesmo vínculo e dia, sem heurísticas.
+  const voucherKey = (fact: SalesMatchFact) => {
+    const id = normalizedId(fact.identifiers.providerTransactionId);
+    return id && fact.kioskId ? JSON.stringify([fact.workspaceId, fact.kioskId, fact.businessDate, id]) : null;
+  };
+  const voucherKeys = new Set(input.stoneSales.filter(fact => fact.channel === "voucher").map(voucherKey));
+  matchByKey("provider_transaction_id", fact => {
+    if (fact.channel === "pix" || (fact.source === "pdv" && fact.channel === "debit_card")) return null;
+    const key = voucherKey(fact);
+    return key && voucherKeys.has(key) ? key : null;
+  });
+  matchByKey("provider_transaction_id", fact => fact.channel === "voucher" ? null : providerKey(fact));
+  matchByKey("provider_event_id", fact => fact.channel === "voucher" ? null : providerEventKey(fact));
+  matchByKey("nsu_authorization_terminal", fact => fact.channel === "voucher" ? null : authorizationKey(fact));
+  matchByKey("merchant_order", fact => fact.channel === "voucher" ? null : merchantOrderKey(fact));
 
   let matchedUnique = true;
   while (matchedUnique) {

@@ -318,3 +318,12 @@ test("venda de mês anterior paga no período: a captura antiga dá bandeira e p
   assert.deepEqual(parcelProblems(parcel, 0.0224).map(problem => problem.label), []);
   assert.deepEqual(parcelProblems(parcel, 0.0199).map(problem => problem.label), ["Taxa fora da atual"]);
 });
+
+test("auditoria de recebimento preserva voucher Stone e crédito do PDV como meios distintos", () => {
+  const base = audit();
+  const checks = saleAuditChecks(audit({ stone: { ...base.stone, accountTypeCode: "5", modality: "other" } }), 0.0289);
+  const methods = checks.find(check => check.title === "Mesmo meio de pagamento");
+  assert.equal(methods?.result, "bad");
+  assert.match(JSON.stringify(methods), /Voucher/);
+  assert.match(JSON.stringify(methods), /Crédito/);
+});

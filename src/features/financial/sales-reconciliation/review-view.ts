@@ -13,12 +13,13 @@ export type CaseFilter = "attention" | "all" | "auto" | "resolved";
 export type ChannelFilter = "all" | ReconciliationSalesChannel;
 export type KindFilter = "all" | Exclude<SalesReconciliationCaseKind, "matched">;
 
-export const channelOrder: ReconciliationSalesChannel[] = ["pix", "debit_card", "credit_card"];
+export const channelOrder: ReconciliationSalesChannel[] = ["pix", "debit_card", "credit_card", "voucher"];
 
 export const channels: Record<ReconciliationSalesChannel, string> = {
   pix: "Pix",
   debit_card: "Débito",
   credit_card: "Crédito",
+  voucher: "Voucher",
 };
 
 export const kinds: Record<SalesReconciliationCaseKind, string> = {
@@ -145,8 +146,10 @@ export const addDays = (key: string, delta: number) => {
 export const isAttention = (row: SuggestedSalesReconciliationCase) => row.reviewStatus === "attention_required";
 export const isMultiset = (row: SuggestedSalesReconciliationCase) => row.kind === "matched" && row.matchBasis === "daily_amount_multiset";
 export const caseBadgeLabel = (row: SuggestedSalesReconciliationCase) => row.reviewStatus === "resolved_without_link"
-  ? "Resolvida sem vínculo" : isMultiset(row) ? "Conjunto diário conferido" : kinds[row.kind];
+  ? "Resolvida sem vínculo" : row.paymentMethodDifference ? "Pagamento localizado"
+    : isMultiset(row) ? "Conjunto diário conferido" : kinds[row.kind];
 export function caseReason(row: SuggestedSalesReconciliationCase) {
+  if (row.paymentMethodDifference) return "Pagamento localizado — PDV: crédito · Stone: voucher.";
   if (row.reviewStatus === "resolved_without_link") return "Pagamento confirmado na Stone, sem vínculo com venda do PDV.";
   if (row.pixRefundCheck?.state === "clear") return "O pagamento aprovado pela Stone tem o mesmo valor do PDV e a verificação de devoluções está completa.";
   if (row.pixRefundCheck?.state === "events_found") return "Há evidência de devolução Pix na Stone para esta transação.";
