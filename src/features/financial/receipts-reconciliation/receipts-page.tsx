@@ -13,6 +13,7 @@ import { HeroChip } from "@/components/patterns/hero-chip";
 import { StoneFeeMonthExpensePanel } from "./fee-month-expense-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { StoneAccountReceipts, type StoneAccountIndicators } from "./stone-account-panel";
+import { FeeReferenceComparisonPanel } from "./fee-reference-comparison-panel";
 import { StoneFeeReviewPanel } from "./fee-review-panel";
 import { centsLabel } from "./stone-account-format";
 import { StoneReceiptFlowNavigation } from "./receipt-flow-navigation";
@@ -36,16 +37,28 @@ export function StoneReceiptsPage() {
   // A despesa do mês acompanha o mês e as decisões da aba Taxas (recarrega a cada mudança da visão).
   const [feeMonth, setFeeMonth] = useState("");
   const [feeVersion, setFeeVersion] = useState(0);
-  const onFeeViewChange = useCallback(() => setFeeVersion(value => value + 1), []);
+  const [feePending,setFeePending]=useState<number|null>(null);
+  const onFeeViewChange = useCallback((count:number|null) => {setFeeVersion(value=>value+1);setFeePending(count);}, []);
   const active = useRef<AbortController | null>(null);
   const requestedMapping = searchParams.get("mapping");
   const requestedCode = searchParams.get("stoneCode");
+  const requestedKiosk=searchParams.get("kiosk");
   const tab: ReceiptTab = searchParams.get("tab") === "fees" ? "fees" : "credit";
+
+  useEffect(()=>{
+    if(tab!=="credit" || !selected || !code) return;
+    const scope=mappings.find(m=>m.id===selected);if(!scope)return;
+    const controller=new AbortController();void Promise.resolve().then(()=>{if(!controller.signal.aborted)setFeePending(null);});
+    const month=searchParams.get("month")??new Date(Date.now()-86_400_000).toISOString().slice(0,7);
+    const query=new URLSearchParams({view:"alert_count",kioskId:scope.kioskId,stoneCode:code,month});
+    void api<{pendingCount:number;ready:boolean}>(`/api/financial/stone-fees?${query}`,{signal:controller.signal}).then(result=>{if(!controller.signal.aborted)setFeePending(result.ready?result.pendingCount:null);}).catch(()=>{});
+    return ()=>controller.abort();
+  },[api,tab,selected,code,mappings,searchParams]);
 
   const applyMappings = (items: MappingView[], nextCursor: string | null, append = false) => {
     const nextItems = append ? [...new Map([...mappings, ...items].map(item => [item.id, item])).values()] : items;
     setMappings(nextItems); setCursor(nextCursor); setLoaded(true);
-    const mapping = nextItems.find(item => item.id === requestedMapping) ?? (nextItems.length === 1 ? nextItems[0] : null);
+    const mapping = nextItems.find(item => item.id === requestedMapping) ?? nextItems.find(item=>item.kioskId===requestedKiosk) ?? ((!requestedMapping && !requestedKiosk && (tab==="fees" || nextItems.length === 1)) ? nextItems[0] : null);
     if (mapping) { setSelected(mapping.id); setCode(mapping.stoneCodes.includes(requestedCode ?? "") ? requestedCode ?? "" : mapping.stoneCodes[0] ?? ""); }
   };
   const load = async (next?: string, endpoint = "/api/financial/stone-mappings?resource=mappings") => {
@@ -93,9 +106,10 @@ export function StoneReceiptsPage() {
     </details>
     <StoneScopeSelector mappings={mappings} mappingId={selected} stoneCode={code} busy={busy} loaded={loaded} error={error} cursor={cursor} onMappingChange={onMappingChange} onStoneCodeChange={setCode} onRefresh={() => void load()} onLoadMore={cursor ? () => void load(cursor) : undefined} />
     {mapping && code ? <>
-      <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
+      <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} feePending={feePending} />
       {tab === "fees" ? <section className="space-y-4" aria-label="Taxas">
-        <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onPending={onFeeViewChange} onMonthChange={setFeeMonth} />
+        <StoneFeeReviewPanel key={`fees-review:${mapping.id}:${code}:${searchParams.get("month")??""}`} mapping={mapping} stoneCode={code} initialMonth={searchParams.get("month")??undefined} onPending={onFeeViewChange} onMonthChange={setFeeMonth} />
+        <FeeReferenceComparisonPanel key={`rates:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} month={feeMonth} version={feeVersion} />
         <StoneFeeMonthExpensePanel key={`fee-expense:${mapping.id}:${code}`} mappingId={mapping.id} kioskId={mapping.kioskId} stoneCode={code} month={feeMonth} refreshKey={feeVersion} />
       </section> : null}
       {tab === "credit" ? <StoneAccountReceipts key={`stone-account:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} onIndicators={onIndicators} /> : null}

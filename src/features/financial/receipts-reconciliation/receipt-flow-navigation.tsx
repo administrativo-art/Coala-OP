@@ -6,6 +6,7 @@ export type StoneReceiptFlowStep = "receivables" | "anticipations" | "fees" | "c
 
 type StoneReceiptFlowNavigationProps = {
   current: StoneReceiptFlowStep;
+  feePending?: number | null;
   mappingId?: string;
   stoneCode?: string;
 };
@@ -36,7 +37,7 @@ const tabs = [
  * Quatro conferências independentes sobre os mesmos arquivos da Stone (não são etapas em sequência).
  * Abas de contexto na faixa clara acima do conteúdo (docs/design/estrutura-e-navegacao.md).
  */
-export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: StoneReceiptFlowNavigationProps) {
+export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode, feePending }: StoneReceiptFlowNavigationProps) {
   const active = tabs.find(tab => tab.id === current);
   return <nav aria-label="Recebíveis Stone" className="space-y-2">
     <div className="flex max-w-full overflow-x-auto"><div className="inline-flex rounded-ds-md bg-ds-seg p-[3px]">{tabs.map(tab => {
@@ -52,7 +53,7 @@ export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: St
           selected ? "bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink",
         )}
       >
-        <Icon aria-hidden="true" className={cn("h-4 w-4", selected ? "text-ds-accent-ink" : "")} />{tab.title}
+        <Icon aria-hidden="true" className={cn("h-4 w-4", selected ? "text-ds-accent-ink" : "")} />{tab.title}{tab.id==="fees" && feePending!==undefined ? <span aria-label={feePending===null?"Alertas de taxas ainda não apurados":`${feePending} alertas de taxas`} className="rounded-full bg-ds-warn-bg px-2 text-xs">{feePending??"—"}</span> : null}
       </Link>;
     })}</div></div>
     {active ? <p className="text-[12.5px] text-ds-ink-muted">{active.description}</p> : null}
