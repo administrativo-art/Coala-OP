@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
-import { CASH_OPERATION_LABEL, type CashOperation } from "./cash-stages";
+import { CASH_OPERATION_LABEL, CASH_PENDING_FROM, pendingCashOperations, type CashOperation } from "./cash-stages";
 import { brl, Card, dmy } from "./study-ui";
 
 /** Operational evidence is deliberately separate from cash-flow entries and their totals. */
@@ -12,7 +12,7 @@ export function CashOperationsPanel({ operations }: { operations: CashOperation[
   const [history, setHistory] = useState(false);
   const [all, setAll] = useState(false);
   const received = operations.filter(operation => operation.stage === "received");
-  const pending = operations.filter(operation => operation.stage !== "received");
+  const pending = pendingCashOperations(operations);
   const rows = history ? received : pending;
   if (!operations.length) return null;
   return <Card title="Numerário: acompanhamento operacional" description="Estas pendências e referências históricas não somam entradas nem saldo previsto. Contagem e venda não comprovam crédito bancário. Moedas devolvidas ao fundo não geram nova entrada.">
@@ -21,6 +21,7 @@ export function CashOperationsPanel({ operations }: { operations: CashOperation[
       <Button aria-pressed={history} variant={history ? "primary-modal" : "ds-secondary"} size="sm" onClick={() => { setHistory(true); setAll(false); }}>Recebidos · {received.length}</Button>
       <Button asChild variant="ds-ghost" size="sm"><Link href="/dashboard/financial/cash-deposits">Ver depósitos</Link></Button>
     </div>
+    <p className="px-5 pb-3 text-xs text-ds-ink-muted">Pendências desde {dmy(CASH_PENDING_FROM)}. <Link href="/dashboard/financial/cash-closures" className="font-bold text-ds-accent-ink underline">Consultar períodos anteriores nos fechamentos</Link>.</p>
     <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
       <thead className="bg-ds-muted text-xs text-ds-ink-muted"><tr><th className="px-5 py-2">Unidade / origem</th><th className="px-4 py-2">Situação</th><th className="px-4 py-2">Referência do PDV</th><th className="px-4 py-2">Conferência</th></tr></thead>
       <tbody>{(all ? rows : rows.slice(0, 12)).map(operation => <tr key={operation.id} className="border-t border-ds-divider align-top">

@@ -19,6 +19,12 @@ export type CashOperation = {
   finalizedOperators: number; allocatedOperators: number; receivedOperators: number; totalOperators: number | null;
   remainingCents: null; outsideDepositPolicy: boolean;
 };
+/** Explicit display scope agreed on 18/11/2026; source records and legitimate receivables remain untouched. */
+export const CASH_PENDING_FROM = "2026-10-01";
+export function pendingCashOperations(operations: CashOperation[]): CashOperation[] {
+  return operations.filter(operation => operation.stage !== "received" && operation.originDate >= CASH_PENDING_FROM);
+}
+
 export const CASH_OPERATION_LABEL: Record<CashOperationStage, string> = {
   awaiting_count: "Aguardando contagem", partial: "Contagem parcial", counted: "Contado, sem malote",
   in_batch: "Incluído em malote", received: "Recebido por boleto", excluded: "Fora do fluxo de depósitos", unavailable: "Conferir vínculo",
