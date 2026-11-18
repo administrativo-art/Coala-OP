@@ -672,7 +672,7 @@ const BASIS: Record<SuggestedSalesReconciliationCase["matchBasis"], string> = {
   unmatched: "sem par",
 };
 const CONFIDENCE = { high: "alta", medium: "média", none: "nenhuma" } as const;
-const CHANNEL: Record<SalesMatchFact["channel"], string> = { pix: "Pix", debit_card: "Débito", credit_card: "Crédito" };
+const CHANNEL: Record<SalesMatchFact["channel"], string> = { pix: "Pix", debit_card: "Débito", credit_card: "Crédito", voucher: "Voucher" };
 const PDV_STATUS: Record<SalesMatchFact["status"], string> = {
   approved: "Aprovada", pending: "Finalizada", partial_cancellation: "Cancelamento parcial", cancelled: "Cancelada", refunded: "Estornada", chargeback: "Chargeback",
 };
@@ -722,9 +722,10 @@ export function saleAuditChecks(audit: SaleAudit, groupUsualRate: number | null)
     couponGross === null || captured === null ? recorded ? "bad" : "wait" : couponGross === captured ? "ok" : "bad",
     couponGross !== null && captured !== null && couponGross !== captured ? `Diferença de ${money(captured - couponGross)}.` : null);
 
-  const stoneChannel = audit.source === "pix" ? "pix" : stoneAccountKind(audit.stone.accountTypeCode) === "debit" ? "debit_card" : "credit_card";
+  const stoneChannel = audit.source === "pix" ? "pix" : audit.stone.accountTypeCode === "5" ? "voucher"
+    : stoneAccountKind(audit.stone.accountTypeCode) === "debit" ? "debit_card" : "credit_card";
   add("Mesmo meio de pagamento", "Meio do PDV × tipo de conta na Stone", coupon ? CHANNEL[coupon.channel] : "—",
-    audit.source === "pix" ? "Pix" : MODALITY_LABEL[audit.stone.modality],
+    stoneChannel === "pix" || stoneChannel === "voucher" ? CHANNEL[stoneChannel] : MODALITY_LABEL[audit.stone.modality],
     !coupon ? recorded ? "bad" : "wait" : coupon.channel === stoneChannel ? "ok" : "bad");
 
   const minutes = coupon ? minutesBetween(coupon.soldAt, audit.stone.captureLocalDateTime) : null;
