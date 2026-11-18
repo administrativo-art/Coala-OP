@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FinancialAccessGuard } from "../components/financial-access-guard";
 import { BudgetDetails } from "../components/settings/budget-details";
+import { BudgetPaceSummary } from "../components/budget-comparison-summary";
 import { budgetRequest } from "../components/settings/budget-api";
 import { budgetComparisonTotals, canViewBudgetComparison } from "../budgets/comparison";
 import type { FinancialBudgetSummary } from "../budgets/types";
@@ -66,6 +67,7 @@ function BudgetComparisonContent() {
   useEffect(() => { void refresh(); return () => { requestVersion.current++; }; }, [refresh]);
   const visible = loadedScope === scope && !loading ? budgets.filter((budget) => budget.active) : [];
   const totals = budgetComparisonTotals(visible);
+  const today = financialDateKey(new Date())!;
 
   const expensesHref = `${FINANCIAL_ROUTES.expenses}?competence=${month}`;
 
@@ -87,11 +89,12 @@ function BudgetComparisonContent() {
     {(error || catalogError) && <p role="alert" className="rounded-[14px] border border-red-200 bg-red-50 p-4 text-red-700">{catalogError || error}</p>}
     {loading && !catalogError ? <p role="status">Carregando comparação…</p> : !error && !catalogError && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
-        ["Previsto no orçamento", totals.planned], ["Valor em despesas", totals.committed], ["Diferença orçamentária", totals.difference], ["Compra ainda esperada", totals.expected],
+        ["Previsto no orçamento", totals.planned], ["Já em despesas", totals.committed], ["Compra ainda esperada", totals.expected], ["Livre", totals.free],
       ].map(([label, value]) => <Card key={String(label)} className="rounded-[18px] border-[#e3e1dc] shadow-xs"><CardContent className="p-4"><p className="text-[13px] font-bold text-muted-foreground">{label}</p><p className="mt-1 font-mono text-xl font-semibold">{typeof value === "number" ? formatCurrency(value / 100) : "Não definida"}</p></CardContent></Card>)}</div>
       <p className="rounded-[14px] bg-white/60 px-4 py-3 text-sm text-muted-foreground">{totals.documentCount} documento(s) distinto(s). O valor em despesas considera boletos abertos e pagos; pagar não soma esse valor novamente. A compra ainda esperada considera os encerramentos confirmados.</p>
       {!visible.length && <p className="rounded-[18px] border border-[#e3e1dc] bg-white p-10 text-center text-muted-foreground shadow-xs">{ready && !center ? "Nenhum centro autorizado disponível." : "Nenhum orçamento ativo nesta competência e centro."}</p>}
       {visible.map((budget) => <Card key={budget.id} className="rounded-[18px] border-[#e3e1dc] shadow-xs"><CardHeader><CardTitle className="text-base font-bold">{budget.name}</CardTitle><p className="text-sm text-muted-foreground">{budget.resultCenterName || "Todos os centros"}</p></CardHeader><CardContent>
+        <BudgetPaceSummary budget={budget} today={today} />
         <div className="grid gap-3 sm:grid-cols-3">{[["Previsto", budget.budgetedAmountCents], ["Valor em despesas", budget.consumedAmountCents], ["Diferença", budget.balanceAmountCents]].map(([label, value]) => <div key={String(label)}><p className="text-xs text-muted-foreground">{label}</p><strong className="font-mono">{formatCurrency(Number(value) / 100)}</strong></div>)}</div>
         {budget.issues.length > 0 && <p role="status" className="mt-3 text-sm text-amber-700">{budget.issues.join(" ")}</p>}
         <BudgetDetails budget={budget} accounts={[]} canManage={false} canViewPersonnel={canViewPersonnel} canEditPersonnel={false} canViewExpenses={canViewExpenses} defaultOpen onSaved={refresh} />
