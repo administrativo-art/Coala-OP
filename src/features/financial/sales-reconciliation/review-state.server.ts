@@ -3,6 +3,11 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { z } from "zod";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { AppError } from "@/lib/observability/app-error";
+import { latestPublishedDate } from "../receivables/period-review";
+import { readPixRefundChecks } from "./pix-refunds.server";
+import { readPixSalesSource } from "./pix-source.server";
+import { unlinkedCaseCandidate } from "./unlinked-evidence.server";
+import { applyUnlinkedResolutions, type UnlinkedResolution, type UnlinkedResolutionActor } from "./unlinked-resolution";
 import type { DailySalesResult } from "./query";
 import {
   buildDailySalesReviewTransition,
@@ -29,9 +34,28 @@ const SNAPSHOT_VERSION = 1 as const;
 const MAX_SNAPSHOT_BYTES = 850_000;
 const MAX_RAW_SNAPSHOT_BYTES = 8_000_000;
 
+const MAX_UNLINKED_RESOLUTIONS = 20;
+export const unlinkedJustificationSchema = z.string().trim().min(12).max(500);
+const unlinkedActorSchema = z.discriminatedUnion("namespace", [
+  z.object({ namespace: z.literal("main.users"), id: z.string().min(1).max(128) }).strict(),
+  z.object({ namespace: z.literal("system"), id: z.string().min(1).max(128),
+    authorizationReference: z.string().min(1).max(180) }).strict(),
+]);
+const unlinkedResolutionSchema = z.object({
+  caseKey: z.string().min(1).max(1000),
+  evidenceKey: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  justification: unlinkedJustificationSchema,
+  actor: unlinkedActorSchema,
+  decidedAt: z.string().datetime(),
+  checkedThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  decidedRevision: z.number().int().positive(),
+}).strict();
+
 const summarySchema = z.object({
   pdvAmountCents: z.number().int(), stoneAmountCents: z.number().int(),
   autoCheckedCount: z.number().int().nonnegative(), attentionCount: z.number().int().nonnegative(),
+  resolvedWithoutLinkCount: z.number().int().nonnegative().optional(),
   sourceIssueCount: z.number().int().nonnegative(), uncomparedPdvCount: z.number().int().nonnegative(),
 }).strict();
 const recordSchema = z.object({
@@ -46,6 +70,7 @@ const recordSchema = z.object({
   closedAt: z.string().datetime().nullable(), closedBy: z.string().min(1).max(180).nullable(),
   reopenedAt: z.string().datetime().nullable(), reopenedReason: z.literal("source_changed").nullable(),
   snapshotVersion: z.literal(SNAPSHOT_VERSION).optional(),
+  activeUnlinkedResolutions: z.array(unlinkedResolutionSchema).max(MAX_UNLINKED_RESOLUTIONS).optional(),
 }).strict();
 
 const snapshotSchema = z.object({
@@ -112,8 +137,68 @@ function calendarRecord(record: DailySalesReviewRecord, id: string): DailySalesC
   };
 }
 
+function rejectUnlinked(message: string): never {
+  throw new AppError({ code: "SALES_REVIEW_UNLINKED_NOT_ELIGIBLE", kind: "CONFLICT", safeMessage: message });
+}
+
+type UnlinkedDecision = { caseKey: string; justification: string; actor: UnlinkedResolutionActor };
+
+function sameUnlinkedActor(a: UnlinkedResolutionActor, b: UnlinkedResolutionActor) {
+  return a.namespace === b.namespace && a.id === b.id
+    && (a.namespace !== "system" || (b.namespace === "system" && a.authorizationReference === b.authorizationReference));
+}
+
+async function maintainUnlinkedResolutions(transaction: FirebaseFirestore.Transaction, result: DailySalesResult,
+  previous: DailySalesReviewRecord | undefined, now: Date, decision?: UnlinkedDecision) {
+  const saved = previous?.activeUnlinkedResolutions ?? [];
+  const candidates = saved.flatMap(proof => {
+    const row = unlinkedCaseCandidate(result, proof.caseKey);
+    return row?.evidenceKey === proof.evidenceKey ? [{proof, ...row}] : [];
+  });
+  const checkThrough = latestPublishedDate(now);
+  const active: UnlinkedResolution[] = [];
+  for (const sourceHash of new Set(candidates.map(row => row.proof.sourceHash))) {
+    const group = candidates.filter(row => row.proof.sourceHash === sourceHash);
+    const checks = await readPixRefundChecks({ scope: result.scope, through: checkThrough,
+      saleSourceHash: sourceHash, e2eIds: group.map(row => row.e2eId) }, transaction);
+    active.push(...group.filter(row => checks.get(row.e2eId)?.state === "clear").map(row => row.proof));
+  }
+  if (!decision) return active;
+  const savedDecision = saved.find(proof => proof.caseKey === decision.caseKey);
+  if (savedDecision) {
+    if (active.includes(savedDecision) && savedDecision.justification === decision.justification
+      && sameUnlinkedActor(savedDecision.actor, decision.actor)) return active;
+    rejectUnlinked("A resolução deste Pix mudou. Recarregue a conferência.");
+  }
+  if (!previous || active.length >= MAX_UNLINKED_RESOLUTIONS) rejectUnlinked("A revisão não permite registrar outra resolução.");
+  const candidate = unlinkedCaseCandidate(result, decision.caseKey);
+  if (!candidate) rejectUnlinked("O caso precisa ser um Pix aprovado na Stone, sem venda vinculada no PDV.");
+  const pix = await readPixSalesSource(result.scope, transaction);
+  const fresh = unlinkedCaseCandidate({ ...result, pix, stoneSales: pix.facts }, decision.caseKey);
+  if (!pix.sourceHash || fresh?.evidenceKey !== candidate.evidenceKey) {
+    rejectUnlinked("O arquivo Pix mudou. Reconsulte a data antes de registrar a resolução.");
+  }
+  const checks = await readPixRefundChecks({ scope: result.scope, through: checkThrough,
+    saleSourceHash: pix.sourceHash, e2eIds: [candidate.e2eId] }, transaction);
+  const check = checks.get(candidate.e2eId);
+  if (!check?.complete || check.state !== "clear" || check.events.length !== 0) {
+    rejectUnlinked("A resolução exige uma verificação completa, sem devolução Pix registrada na Stone.");
+  }
+  active.push({
+    caseKey: decision.caseKey,
+    evidenceKey: candidate.evidenceKey,
+    sourceHash: pix.sourceHash,
+    justification: unlinkedJustificationSchema.parse(decision.justification),
+    actor: unlinkedActorSchema.parse(decision.actor),
+    decidedAt: now.toISOString(),
+    checkedThrough: check.checkedThrough,
+    decidedRevision: previous.revision + 1,
+  });
+  return active;
+}
+
 export async function saveDailySalesReview(result: DailySalesResult, actorId: string, now = new Date(),
-  refundRecheck?: { expectedRevision: number; expectedCollectedAt: string; retainWatch: boolean }) {
+  refundRecheck?: { expectedRevision: number; expectedCollectedAt: string; retainWatch: boolean; unlinkedDecision?: UnlinkedDecision }) {
   const id = dailySalesReviewId(result);
   const ref = financialDbAdmin.collection(SALES_REVIEW_COLLECTION).doc(id);
   const snapshotRef = financialDbAdmin.collection(SALES_REVIEW_SNAPSHOT_COLLECTION).doc(id);
@@ -134,20 +219,29 @@ export async function saveDailySalesReview(result: DailySalesResult, actorId: st
           safeMessage: "Uma conferência igual ou mais recente já foi registrada. As fontes serão consultadas novamente." });
       }
     }
-    if (refundRecheck && (previous?.revision !== refundRecheck.expectedRevision
-      || previous.collectedAt !== refundRecheck.expectedCollectedAt || previous.collectedAt !== result.collectedAt)) {
+    const decision = refundRecheck?.unlinkedDecision;
+    const replay = decision && previous?.activeUnlinkedResolutions?.find(proof => proof.caseKey === decision.caseKey
+      && proof.decidedRevision === previous?.revision
+      && proof.decidedRevision === refundRecheck!.expectedRevision + 1
+      && proof.justification === decision.justification
+      && sameUnlinkedActor(proof.actor, decision.actor));
+    if (refundRecheck && ((!replay && previous?.revision !== refundRecheck.expectedRevision)
+      || previous?.collectedAt !== refundRecheck.expectedCollectedAt || previous.collectedAt !== result.collectedAt
+      || (decision && previous.sourceFingerprint !== dailySalesSourceFingerprint(result)))) {
       throw new AppError({ code: "SALES_REVIEW_STALE_OBSERVATION", kind: "CONFLICT",
         safeMessage: "Uma nova revisão foi registrada durante a verificação de devoluções." });
     }
+    const activeUnlinkedResolutions = await maintainUnlinkedResolutions(transaction, result, previous, now, decision);
+    const resolvedResult = { ...result, cases: applyUnlinkedResolutions(result.cases, activeUnlinkedResolutions) };
     const transition = buildDailySalesReviewTransition({
-      result, actorId, now: now.toISOString(), previous,
+      result: resolvedResult, actorId, now: now.toISOString(), previous, activeUnlinkedResolutions,
     });
-    const needsWatch = result.cases.some(row => row.pixRefundCheck) && (refundRecheck?.retainWatch ?? true);
-    if (needsWatch && (!watch.exists || refundRecheck)) {
+    const needsWatch = (activeUnlinkedResolutions.length > 0 || result.cases.some(row => row.pixRefundCheck)) && (refundRecheck?.retainWatch ?? true);
+    if (needsWatch && (!watch.exists || (refundRecheck && !decision))) {
       transaction.set(watchRef, { nextCheckAt: new Date(now.getTime() + REFUND_WATCH_DELAY_MS).toISOString() });
     } else if (!needsWatch && watch.exists) transaction.delete(watchRef);
     if (!transition.write && previous?.snapshotVersion === SNAPSHOT_VERSION) return transition.view;
-    const encoded = encodeSnapshot(result, transition.view, now.toISOString());
+    const encoded = encodeSnapshot(resolvedResult, transition.view, now.toISOString());
     if (!encoded && needsWatch) {
       throw new AppError({ code: "SALES_REVIEW_REFUND_SNAPSHOT_REQUIRED", kind: "DATA_INTEGRITY",
         safeMessage: "A conferência de devoluções exige um snapshot que possa ser revisto pela rotina automática." });
@@ -157,9 +251,23 @@ export async function saveDailySalesReview(result: DailySalesResult, actorId: st
     if (!next) invalidStoredReview();
     if (transition.write) {
       transaction.set(ref, next);
+      const recordedDecision = decision && activeUnlinkedResolutions.find(proof => proof.caseKey === decision.caseKey
+        && proof.decidedRevision === next.revision);
+      if (recordedDecision) {
+        transaction.create(financialDbAdmin.collection("dailySalesUnlinkedResolutionAudits").doc(`${id}-${next.revision}`), {
+          workspaceId: next.workspaceId, kioskId: next.kioskId, mappingId: next.mappingId,
+          stoneCode: next.stoneCode, referenceDate: next.referenceDate, reviewId: id, revision: next.revision,
+          caseKey: recordedDecision.caseKey, decidedAt: recordedDecision.decidedAt, actor: recordedDecision.actor,
+          ...(recordedDecision.actor.namespace === "main.users" ? { actorUserId: recordedDecision.actor.id } : {}),
+        });
+      }
       const pixRefundProof = result.cases.flatMap(row => row.pixRefundCheck ? [row.pixRefundCheck] : []);
+      const invalidatedUnlinkedCases = (previous?.activeUnlinkedResolutions ?? [])
+        .filter(proof => !activeUnlinkedResolutions.some(active => active.caseKey === proof.caseKey))
+        .map(proof => ({ caseKey: proof.caseKey, decidedRevision: proof.decidedRevision }));
       transaction.create(ref.collection("revisions").doc(String(next.revision)), {
         ...next,
+        ...(invalidatedUnlinkedCases.length ? { invalidatedUnlinkedCases } : {}),
         previousRevision: previous?.revision ?? 0,
         sourceChanged: transition.view.sourceChanged,
         ...(pixRefundProof.length ? {

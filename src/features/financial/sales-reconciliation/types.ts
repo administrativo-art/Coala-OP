@@ -1,3 +1,4 @@
+import type { UnlinkedResolution } from "./unlinked-resolution";
 import type { PixRefundCheck } from "@/lib/integrations/stone/pix-refunds";
 export type ReconciliationSalesChannel = "pix" | "debit_card" | "credit_card";
 
@@ -81,5 +82,6 @@ export type SuggestedSalesReconciliationCase = {
   matchBasis: SalesReconciliationMatchBasis;
   confidence: "high" | "medium" | "none";
   pixRefundCheck?: PixRefundCheck;
-  reviewStatus: "auto_checked" | "attention_required";
+  reviewStatus: "auto_checked" | "attention_required" | "resolved_without_link";
+  unlinkedResolution?: UnlinkedResolution;
 };

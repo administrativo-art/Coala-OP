@@ -259,6 +259,7 @@ api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineerin
 api,src/app/api/financial/payment-requests/adopt-inter/route.ts,,docs/engineering/flows/payment-requests.md,Vincula agendamento DDA ja existente no Inter a despesa ou provisao com conferencia bancaria e auditoria; nao envia pagamento.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts,,docs/engineering/flows/stone-sales-review.md,Registra a resolução auditada de um Pix Stone sem vínculo.
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-anticipations/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-future-receivables/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
