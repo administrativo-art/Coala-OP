@@ -209,3 +209,29 @@ test("R1 limite operacional não declara origem vinculada como manual nem ignora
  await assert.rejects(f.call(f.recognize),code("FEE_RECOGNITION_MANUAL_SCAN_LIMIT"));
  assert.equal((await db.collection("financialAcquirerFeeBatches").doc(f.batch.id).get()).exists,false);
 });
+
+test("inventário encontra atores por ID/namespace e escopo exato, sem titular por nome/beneficiário ou eventos de outro pai",async()=>{
+ const {collectPersonSource}=await import("../../src/features/privacy/person-inventory.server.ts");
+ const uid="recognition-trace-actor",other="recognition-trace-other";await own(dbAdmin.collection("users").doc(uid)).set({workspaceId:WORKSPACE_ID,username:"Nome igual",unitAccessScope:"all"});await own(dbAdmin.collection("users").doc(other)).set({workspaceId:WORKSPACE_ID,username:"Nome igual",unitAccessScope:"all"});
+ const context={...actor,userDoc:{unitAccessScope:"all"},permissions:{}};
+ const specs=[["financial-bank-account-creators","bankAccounts","createdBy"],["financial-stone-mapping-creators","stoneMerchantMappings","createdBy"],["financial-stone-mapping-editors","stoneMerchantMappings","updatedBy"],["financial-daily-sales-reviewers","dailySalesReviews","reviewedBy"],["financial-daily-sales-closers","dailySalesReviews","closedBy"],["financial-source-settlement-updaters","financialSourceSettlements","updatedBy"]];
+ for(const [sourceId,collection,field]of specs){
+  const id=`trace-${sourceId}`,scope=collection==="financialSourceSettlements"?{source:{workspaceId:WORKSPACE_ID}}:{workspaceId:WORKSPACE_ID};
+  await own(db.collection(collection).doc(id)).set({...scope,[field]:uid,employeeId:other,beneficiaryId:other});await own(db.collection(collection).doc(`${id}-foreign`)).set({...scope,workspaceId:"foreign",...(collection==="financialSourceSettlements"?{source:{workspaceId:"foreign"}}:{}),[field]:uid});await own(db.collection(collection).doc(`${id}-name-only`)).set({...scope,[field]:other,actorName:"Nome igual"});
+  const result=await collectPersonSource({actor:context,sourceId,ref:{namespace:"main.users",id:uid},limit:25});assert.deepEqual(result.items.map(i=>i.id),[id],sourceId);assert.equal(result.items[0].role,"actor");assert.equal(JSON.stringify(result).includes("beneficiaryId"),false);
+ }
+ for(const [sourceId,parent]of [["financial-acquirer-fee-event-actors","financialAcquirerFeeBatches"],["financial-stone-mapping-event-actors","stoneMerchantMappings"]]){
+  const root=own(db.collection(parent).doc(`trace-${sourceId}`));await root.set({workspaceId:WORKSPACE_ID});await root.collection("events").doc("actor-event").set({actorId:uid,subjectId:other});
+  const alien=own(db.collection(parent).doc(`trace-${sourceId}-foreign`));await alien.set({workspaceId:"foreign"});await alien.collection("events").doc("actor-event").set({actorId:uid});
+  const unrelated=own(db.collection("unrelatedTraceParent").doc(sourceId));await unrelated.set({workspaceId:WORKSPACE_ID});await unrelated.collection("events").doc("intruder").set({actorId:uid});
+  const result=await collectPersonSource({actor:context,sourceId,ref:{namespace:"main.users",id:uid},limit:25});assert.deepEqual(result.items.map(i=>i.recordPath),[`${parent}/${root.id}/events/actor-event`],sourceId);
+ }
+});
+
+test("arquivo PIX com CPF mantém lacuna pessoal indisponível sem consultar documento nem inferir identidade",async()=>{
+ const {collectPersonSource}=await import("../../src/features/privacy/person-inventory.server.ts");const uid="recognition-pix-gap-person";
+ await own(dbAdmin.collection("users").doc(uid)).set({workspaceId:WORKSPACE_ID,unitAccessScope:"all",cpf:"00000000000"});await own(db.collection("stonePixConciliationFiles").doc("recognition-pix-gap-file")).set({workspaceId:WORKSPACE_ID,document:"00000000000"});
+ let calls=0;const sourceDb={collection(){calls++;throw new Error("não pode consultar CPF/arquivo sem identidade");},collectionGroup(){calls++;throw new Error("não pode consultar grupo");}};
+ const result=await collectPersonSource({actor:{...actor,userDoc:{unitAccessScope:"all"},permissions:{}},sourceId:"stone-pix-file-owner-identity-gap",ref:{namespace:"main.users",id:uid},limit:25,sourceDb});assert.equal(result.status,"unavailable");assert.deepEqual(result.items,[]);assert.equal(calls,0);assert.match(result.reason,/CPF/);
+ const denied=await collectPersonSource({actor:{...actor,isDefaultAdmin:false,userDoc:{},permissions:{}},sourceId:"stone-pix-file-owner-identity-gap",ref:{namespace:"main.users",id:uid},limit:25,sourceDb});assert.equal(denied.status,"restricted");assert.equal(calls,0);
+});

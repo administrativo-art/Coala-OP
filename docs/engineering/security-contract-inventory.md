@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **571**
-- Totalmente contratados: **247**
-- Legados congelados: **316**
+- Totalmente contratados: **248**
+- Legados congelados: **315**
 - Exceções temporárias: **8**
 - Violações: **0**
 
@@ -582,4 +582,4 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/webhooks/inter/banking` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) |
 | `/api/webhooks/inter/cobranca` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) |
 | `/api/webhooks/resend` | POST | `LEGACY_BASELINE` | [src/app/api/webhooks/resend/route.ts](../../src/app/api/webhooks/resend/route.ts) |
-| `/api/webhooks/stone/conciliation` | GET, POST | `LEGACY_BASELINE` | [src/app/api/webhooks/stone/conciliation/route.ts](../../src/app/api/webhooks/stone/conciliation/route.ts) |
+| `/api/webhooks/stone/conciliation` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/webhooks/stone/conciliation/route.ts](../../src/app/api/webhooks/stone/conciliation/route.ts) |

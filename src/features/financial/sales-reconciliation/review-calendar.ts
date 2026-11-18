@@ -120,12 +120,13 @@ export function buildSalesReviewMonth(input: {
 export function buildSalesReviewYear(input: Omit<Parameters<typeof buildSalesReviewMonth>[0], "month"> & { calendarThrough?: string }) {
   const { calendarThrough, ...monthInput } = input;
   const lastMonth = Number((calendarThrough ?? input.publishedThrough).slice(5, 7));
-  return Array.from({ length: lastMonth }, (_, index) => buildSalesReviewMonth({ ...monthInput, month: index + 1 }));
+  return Array.from({ length: lastMonth }, (_, index) => buildSalesReviewMonth({ ...monthInput, month: index + 1 }))
+    .filter(month => month.counts.outside_scope < month.days.length);
 }
 
 export const salesReviewDayLabels: Record<SalesReviewDayState, string> = {
   closed: "Fechado",
-  attention_required: "Com divergência",
+  attention_required: "Requer atenção",
   awaiting_source: "Aguardando fonte",
   reopened: "Reaberto por informação tardia",
   not_reviewed: "Não verificado",

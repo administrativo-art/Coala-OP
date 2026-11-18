@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHero } from "@/components/patterns/page-hero";
 import { HeroBackButton } from "@/components/patterns/hero-back-button";
-import { HeroChip } from "@/components/patterns/hero-chip";
+import { Button } from "@/components/ui/button";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import type { DailySalesApiResult } from "./review-state";
 import { buildSalesReviewYear, type DailySalesCalendarRecord, type SalesReviewCalendarResponse } from "./review-calendar";
@@ -381,15 +383,114 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
     { id: "limits", label: "Limitações", dot: false },
   ];
 
-  return <PageContainer variant={date ? "wide" : "fluid"} surface className="space-y-4 py-6">
+  const scopeLabel = date ? label : "mb-1 block text-xs font-bold text-ds-on-dark-sub";
+  const scopeField = date ? field : "h-[42px] w-full rounded-ds-btn border border-white/10 bg-white/[.07] px-3 text-[13px] font-semibold text-ds-on-dark focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker disabled:opacity-55";
+  const scopeControls = <>
+    <div className={cn("grid items-end gap-3", date ? "md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" : "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:max-w-xl")}>
+      <div ref={unitRef} className="relative min-w-0">
+        <p className={scopeLabel}>Unidade / conta</p>
+        <button type="button" aria-label="Vínculo oficial" aria-haspopup="listbox" aria-expanded={unitOpen} disabled={busy}
+          onClick={() => setUnitOpen(value => !value)}
+          className={cn(scopeField, "flex items-center justify-between gap-2.5 text-left", unitOpen && "ring-2 ring-ds-accent-kicker")}>
+          <span className="flex min-w-0 flex-col items-start gap-0.5">
+            <span className={cn("max-w-full truncate text-[13.5px]", mapping ? "font-bold" : "font-medium")}>
+              {catalogBusy ? "Carregando vínculos…" : mapping ? mappingLabel : mappings.length ? "Selecione" : "Nenhum vínculo carregado"}
+            </span>
+            {date ? <span className="max-w-full truncate text-[11px] font-normal text-ds-ink-faint">
+              {mapping ? `${mapping.stoneCodes.length} StoneCode(s)` : `${mappings.length} vínculo(s) oficial(is)`}
+            </span> : null}
+          </span>
+          <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0", date ? "text-ds-ink-faint" : "text-ds-on-dark-sub")} />
+        </button>
+        {unitOpen && !busy ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-ds-btn-lg border border-ds-border bg-ds-surface text-ds-ink shadow-ds-menu">
+          <div className="flex items-center justify-between border-b border-ds-divider px-3.5 pb-2 pt-2.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Vínculos oficiais · {mappings.length}</span>
+            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 text-xs font-bold text-ds-accent"><RefreshCw className="h-3 w-3" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</button>
+          </div>
+          <div role="listbox" aria-label="Vínculos oficiais" className="max-h-[290px] overflow-auto p-1.5">
+            {mappings.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === selected}
+              onClick={() => {
+                const nextCode = item.stoneCodes[0] ?? "";
+                setSelected(item.id); setCode(nextCode); setDate(""); setMonth(""); setUnitOpen(false); clear();
+                router.push(selectionHref({ mappingId: item.id, stoneCode: nextCode }));
+              }}
+              className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-ds-accent-row", item.id === selected && "bg-ds-accent-row")}>
+              <span className="flex min-w-0 flex-col items-start gap-0.5">
+                <span className="text-[13px] font-bold">{item.kioskName}</span>
+                <span className="text-[11px] text-ds-ink-faint">{item.accountName} · {item.stoneCodes.length} StoneCode(s)</span>
+              </span>
+              <Check aria-hidden="true" className={cn("h-4 w-4 text-ds-accent", item.id === selected ? "opacity-100" : "opacity-0")} />
+            </button>)}
+          </div>
+          {cursor ? <button type="button" onClick={() => void load(cursor)} className="h-10 w-full border-t border-ds-divider bg-ds-input text-[12.5px] font-bold text-ds-ink-muted">Mais vínculos</button> : null}
+        </div> : null}
+      </div>
+
+      <div className="min-w-0">
+        <label htmlFor="sales-review-stone-code" className={scopeLabel}>StoneCode</label>
+        <Select disabled={busy || !mapping} value={code} onValueChange={nextCode => {
+          setCode(nextCode); setDate(""); setMonth(""); clear();
+          router.push(selectionHref({ mappingId: mapping?.id ?? "", stoneCode: nextCode }));
+        }}>
+          <SelectTrigger id="sales-review-stone-code" className={cn(scopeField, !date && "pr-12 focus:border-ds-accent-kicker focus:bg-white/10 focus:ring-ds-accent-kicker")}>
+            <SelectValue placeholder={mapping ? "Selecione" : "Selecione a unidade primeiro"} />
+          </SelectTrigger>
+          <SelectContent>
+            {mapping?.stoneCodes.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {date ? <div className="min-w-0">
+        <p className={label}>Dia das vendas</p>
+        <div className="flex h-[50px] overflow-hidden rounded-xl border border-ds-border bg-ds-input">
+          <button type="button" aria-label="Dia anterior" disabled={busy || !date} onClick={() => changeDate(addDays(date, -1))}
+            className="flex w-[38px] items-center justify-center border-r border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
+          <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={publishedThrough}
+            onChange={event => changeDate(event.target.value)}
+            className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-hidden" />
+          <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
+            className="flex w-[38px] items-center justify-center border-l border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
+        </div>
+      </div> : null}
+
+      {date ? <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
+        error ? "border-ds-confirm-border bg-ds-danger-bg text-ds-danger" : "border-ds-border bg-ds-input", !error && result ? "text-ds-ok" : !error && "text-ds-ink-faint")}>
+        {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-ds-accent" /> : null}
+        <span className="flex-1">{statusLabel}</span>
+        {mapping && code && date ? <button type="button" aria-label="Reconsultar fontes" title="Reconsultar fontes" disabled={busy}
+          onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-ds-ink-muted hover:bg-ds-muted disabled:opacity-40">
+          <RefreshCw className={cn("h-3.5 w-3.5", reviewBusy && "animate-spin")} />
+        </button> : null}
+      </div> : null}
+    </div>
+    {mapping || date ? <div className={cn("flex flex-col justify-between gap-1 text-xs sm:flex-row sm:gap-4", date ? "mt-3" : "mt-2 text-ds-on-dark-sub")}>
+      {mapping ? <span>Vigência do vínculo: {formatDateKey(mapping.validFrom)} {mapping.validTo ? `a ${formatDateKey(mapping.validTo)}` : "em diante"}.</span> : null}
+      {date ? <span className="text-ds-ink-faint sm:text-right">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte.</span> : null}
+    </div> : null}
+  </>;
+
+  return <PageContainer variant={date ? "wide" : "default"} surface className="space-y-4 py-6">
     <PageHero
+      compact={!date}
       kicker="Financeiro · Conciliação"
       title="Conciliação de vendas"
-      subtitle={date ? "Evidências detalhadas do PDV e da Stone para o dia selecionado." : "Acompanhe o fechamento automático de cada dia e priorize somente as pendências."}
-      actions={<><HeroChip value="◉" label="Conciliação automática" /><HeroBackButton fallbackHref={date ? selectionHref({ nextMonth: date.slice(0, 7) }) : "/dashboard/financial"} parentLabel={date ? "Calendário" : "Financeiro"} /></>}
-    />
+      subtitle={date ? "Evidências detalhadas do PDV e da Stone para o dia selecionado." : undefined}
+      actions={date ? <HeroBackButton fallbackHref={selectionHref({ nextMonth: date.slice(0, 7) })} parentLabel="Calendário" /> : <>
+        <InfoPopover title="Conciliação de vendas" className="border-white/10 bg-transparent text-ds-on-dark-sub hover:text-ds-on-dark">
+          <p>Pares compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente. Dias ainda sem conferência aparecem como não verificados.</p>
+          <p>A conferência não confirma recebimento no banco nem lança valores no financeiro.</p>
+        </InfoPopover>
+        <Button type="button" variant="on-dark-secondary" size="md" disabled={calendarBusy || !mapping || !code}
+          onClick={() => setCalendarRefreshVersion(value => value + 1)}>
+          <RefreshCw aria-hidden="true" className={cn("h-4 w-4", calendarBusy && "animate-spin")} />Atualizar calendário
+        </Button>
+      </>}
+    >
+      {!date ? <div>{scopeControls}</div> : null}
+    </PageHero>
 
-    <div role="note" className="flex items-start gap-2.5 rounded-xl border border-ds-border bg-ds-info-bg px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-ds-info">
+    {date ? <div role="note" className="flex items-start gap-2.5 rounded-xl border border-ds-border bg-ds-info-bg px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-ds-info">
       <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <p className="min-w-0 flex-1">
         Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente.
@@ -397,96 +498,9 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           : " Esta conferência não confirma recebimento no banco."}
       </p>
       <button type="button" aria-expanded={howOpen} onClick={() => setHowOpen(value => !value)} className="shrink-0 text-xs font-bold text-ds-info">{howOpen ? "Menos" : "Como funciona"}</button>
-    </div>
+    </div> : null}
 
-    <Panel className="p-4 sm:px-[18px]">
-      <div className={cn("grid items-end gap-3 md:grid-cols-2", date ? "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" : "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(280px,.9fr)]")}>
-        <div ref={unitRef} className="relative min-w-0">
-          <p className={label}>Unidade / conta</p>
-          <button type="button" aria-label="Vínculo oficial" aria-haspopup="listbox" aria-expanded={unitOpen} disabled={busy}
-            onClick={() => setUnitOpen(value => !value)}
-            className={cn(field, "flex items-center justify-between gap-2.5 text-left", unitOpen && "border-ds-accent shadow-[0_0_0_3px_rgba(219,39,119,.12)]")}>
-            <span className="flex min-w-0 flex-col items-start gap-0.5">
-              <span className={cn("max-w-full truncate text-[13.5px]", mapping ? "font-bold" : "font-medium text-ds-ink-faint")}>
-                {catalogBusy ? "Carregando vínculos…" : mapping ? mappingLabel : mappings.length ? "Selecione" : "Nenhum vínculo carregado"}
-              </span>
-              <span className="max-w-full truncate text-[11px] font-normal text-ds-ink-faint">
-                {mapping ? `${mapping.stoneCodes.length} StoneCode(s)` : `${mappings.length} vínculo(s) oficial(is)`}
-              </span>
-            </span>
-            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ds-ink-faint" />
-          </button>
-          {unitOpen && !busy ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px] border border-ds-border bg-white shadow-[0_18px_40px_rgba(0,0,0,.14)]">
-            <div className="flex items-center justify-between border-b border-ds-divider px-3.5 pb-2 pt-2.5">
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Vínculos oficiais · {mappings.length}</span>
-              <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 text-xs font-bold text-ds-accent"><RefreshCw className="h-3 w-3" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</button>
-            </div>
-            <div role="listbox" aria-label="Vínculos oficiais" className="max-h-[290px] overflow-auto p-1.5">
-              {mappings.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === selected}
-                onClick={() => {
-                  const nextCode = item.stoneCodes[0] ?? "";
-                  setSelected(item.id); setCode(nextCode); setDate(""); setMonth(""); setUnitOpen(false); clear();
-                  router.push(selectionHref({ mappingId: item.id, stoneCode: nextCode }));
-                }}
-                className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-ds-accent-row", item.id === selected && "bg-ds-accent-row")}>
-                <span className="flex min-w-0 flex-col items-start gap-0.5">
-                  <span className="text-[13px] font-bold">{item.kioskName}</span>
-                  <span className="text-[11px] text-ds-ink-faint">{item.accountName} · {item.stoneCodes.length} StoneCode(s)</span>
-                </span>
-                <Check aria-hidden="true" className={cn("h-4 w-4 text-ds-accent", item.id === selected ? "opacity-100" : "opacity-0")} />
-              </button>)}
-            </div>
-            {cursor ? <button type="button" onClick={() => void load(cursor)} className="h-10 w-full border-t border-ds-divider bg-ds-input text-[12.5px] font-bold text-ds-ink-muted">Mais vínculos</button> : null}
-          </div> : null}
-        </div>
-
-        <div className="min-w-0">
-          <p className={label}>StoneCode</p>
-          <select aria-label="StoneCode" className={cn(field, "cursor-pointer")} disabled={busy || !mapping} value={code}
-            onChange={event => {
-              const nextCode = event.target.value;
-              setCode(nextCode); setDate(""); setMonth(""); clear();
-              router.push(selectionHref({ mappingId: mapping?.id ?? "", stoneCode: nextCode }));
-            }}>
-            <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
-            {mapping?.stoneCodes.map(item => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </div>
-
-        {date ? <div className="min-w-0">
-          <p className={label}>Dia das vendas</p>
-          <div className="flex h-[50px] overflow-hidden rounded-xl border border-ds-border bg-ds-input">
-            <button type="button" aria-label="Dia anterior" disabled={busy || !date} onClick={() => changeDate(addDays(date, -1))}
-              className="flex w-[38px] items-center justify-center border-r border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
-            <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={publishedThrough}
-              onChange={event => changeDate(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-hidden" />
-            <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
-              className="flex w-[38px] items-center justify-center border-l border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
-          </div>
-        </div> : null}
-
-        {date ? <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
-          error ? "border-ds-confirm-border bg-ds-danger-bg text-ds-danger" : "border-ds-border bg-ds-input", !error && result ? "text-ds-ok" : !error && "text-ds-ink-faint")}>
-          {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-ds-accent" /> : null}
-          <span className="flex-1">{statusLabel}</span>
-          {mapping && code && date ? <button type="button" aria-label="Reconsultar fontes" title="Reconsultar fontes" disabled={busy}
-            onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-ds-ink-muted hover:bg-ds-muted disabled:opacity-40">
-            <RefreshCw className={cn("h-3.5 w-3.5", reviewBusy && "animate-spin")} />
-          </button> : null}
-        </div> : <div role="status" aria-live="polite" className="flex h-[50px] min-w-0 items-center justify-between gap-3 rounded-xl border border-ds-border bg-ds-input px-3.5">
-          <div className="min-w-0"><p className="truncate text-[12.5px] font-extrabold text-ds-ink-2">{month ? `Calendário de ${formatDateKey(`${month}-01`).replace(/^01\//, "")}` : `Janeiro a ${formatDateKey(`${calendarToday.slice(0, 7)}-01`).replace(/^01\//, "")}`}</p><p className="mt-0.5 truncate text-[10.5px] text-ds-ink-faint">Atualização automática · sem ação manual</p></div>
-          <button type="button" aria-label="Atualizar calendário" title="Atualizar calendário" disabled={calendarBusy || !mapping || !code}
-            onClick={() => setCalendarRefreshVersion(value => value + 1)} className="rounded-lg border border-ds-border bg-white p-2 text-ds-ink-muted hover:bg-ds-muted disabled:opacity-40">
-            <RefreshCw className={cn("h-3.5 w-3.5", calendarBusy && "animate-spin")} />
-          </button>
-        </div>}
-      </div>
-      <div className="mt-3 flex flex-col justify-between gap-1 text-[11.5px] leading-normal sm:flex-row sm:gap-4">
-        <span className="text-ds-ink-2">{mapping ? `Vigência do vínculo: ${formatDateKey(mapping.validFrom)} a ${mapping.validTo ? formatDateKey(mapping.validTo) : "sem data final"}.` : ""}</span>
-        <span className="text-ds-ink-faint sm:text-right">{date ? "Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte." : "O calendário não presume fechamento: dias sem revisão ficam como não verificados até o backfill automático processá-los."}</span>
-      </div>
-    </Panel>
+    {date ? <Panel className="p-4 sm:px-[18px]">{scopeControls}</Panel> : null}
 
     {loaded && !mappings.length && !busy ? <div role="status" className="flex items-center justify-between gap-4 rounded-[14px] border border-ds-alert-border bg-ds-warn-bg px-[18px] py-4">
       <span className="text-[13px] text-ds-alert-ink">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</span>
@@ -736,7 +750,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           </div> : null}
 
           {coverageTab === "events" ? <>
-            <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Decimais originais da fonte, sem arredondamento.</p>
+            <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Valores decimais da fonte, sem arredondamento. Pagamentos regulares da Stone aparecem aqui como informação de liquidação.</p>
             <div className="max-h-[360px] overflow-auto rounded-xl border border-ds-border"><div className="min-w-[760px]">
               <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-ds-ink-faint">
                 <span>Seção</span><span>Transação</span><span className="text-right">Bruto original</span><span className="text-right">Cancelado original</span><span>Contadores</span>
