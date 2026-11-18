@@ -27,16 +27,17 @@ export async function readPixRefundChecks(input: {
   through: string;
   e2eIds: readonly string[];
   saleSourceHash: string | null;
-}) {
+}, transaction?: FirebaseFirestore.Transaction) {
   const doc = process.env.STONE_CONCILIATION_DOCUMENT?.replace(/\D/g, "") ?? "";
   const dates = pixRefundDates(input.scope.referenceDate, input.through);
   const months = new Map<string, PixRefundMonth>();
   if (dates && /^(?:\d{11}|\d{14})$/.test(doc) && input.e2eIds.length > 0) {
     const keys = [...new Set(dates.map(date => date.slice(0, 7)))];
     const refs = keys.map(month => monthRef(input.scope.workspaceId, doc, month));
-    const snapshots = await financialDbAdmin.runTransaction(tx => tx.getAll(...refs, {
+    const read = (tx: FirebaseFirestore.Transaction) => tx.getAll(...refs, {
       fieldMask: ["days", ...input.e2eIds.map(id => "events." + pixRefundKey(id))],
-    }), { readOnly: true });
+    });
+    const snapshots = transaction ? await read(transaction) : await financialDbAdmin.runTransaction(read, { readOnly: true });
     snapshots.forEach((snapshot, index) => {
       if (snapshot.exists) months.set(keys[index], snapshot.data() as PixRefundMonth);
     });

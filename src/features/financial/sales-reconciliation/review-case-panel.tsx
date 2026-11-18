@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SalesMatchFact, SuggestedSalesReconciliationCase } from "./types";
 import {
-  bases, caseBadgeLabel, caseReason, caseTime, channels, confidences, factLabel, isAttention, money,
+  bases, caseBadgeLabel, caseReason, caseTime, formatDateKey, channels, confidences, factLabel, isAttention, money,
   providerTransactionLabels, saleStatuses,
 } from "./review-view";
 
@@ -80,7 +81,7 @@ function Side({ title, emptyLabel, ids, facts }: { title: string; emptyLabel: st
   </div>;
 }
 
-export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, onClose }: {
+export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, onClose, onResolve, resolverName }: {
   row: SuggestedSalesReconciliationCase;
   facts: Map<string, SalesMatchFact>;
   position: number;
@@ -88,8 +89,22 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  resolverName?: string;
+  onResolve?: (justification: string) => Promise<void>;
 }) {
+  const [writing, setWriting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [justification, setJustification] = useState("");
+  const [resolutionError, setResolutionError] = useState("");
   const attention = isAttention(row);
+  async function submitResolution() {
+    if (writing || !onResolve || justification.trim().length < 12) return;
+    setWriting(true);
+    setResolutionError("");
+    try { await onResolve(justification.trim()); }
+    catch (error) { setResolutionError(error instanceof Error ? error.message : "Não foi possível resolver o caso."); }
+    finally { setWriting(false); }
+  }
   const different = row.differenceAmountCents !== 0;
   const refundCheck = row.pixRefundCheck;
   const cutoff = refundCheck?.checkedThrough.split("-").reverse().join("/");
@@ -145,6 +160,29 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
       </div> : null}
       <Side title={`PDV · ${row.pdvFactIds.length} pagamento(s)`} emptyLabel="Não localizado no PDV deste recorte" ids={row.pdvFactIds} facts={facts} />
       <Side title={`Stone · ${row.stoneSaleIds.length} captura(s)`} emptyLabel="Não localizado na fonte Stone consultada" ids={row.stoneSaleIds} facts={facts} />
+      {row.unlinkedResolution ? <div className="space-y-1.5 rounded-xl border border-ds-border bg-ds-input px-3 py-2.5 text-[11.5px]">
+        <p className="font-bold">Justificativa</p>
+        <p className="break-words text-ds-ink-2">{row.unlinkedResolution.justification}</p>
+        <p className="break-words text-ds-ink-muted" title={row.unlinkedResolution.actor.id}>{row.unlinkedResolution.actor.namespace === "system"
+          ? "Operação autorizada" : resolverName ? `Responsável · ${resolverName}` : "Responsável registrado"}</p>
+        <p className="text-ds-ink-muted">Sem devolução encontrada até {formatDateKey(row.unlinkedResolution.checkedThrough)}.</p>
+      </div> : onResolve ? <div className="space-y-2">
+        {editing ? <>
+          <p className="text-xs text-ds-ink-2">Registre o Pix de {money(row.stoneGrossAmountCents)} na Stone como resolvido sem venda vinculada no PDV.</p>
+          <label className="block text-xs font-semibold">
+            Justificativa
+            <textarea className="mt-1.5 block w-full rounded-lg border border-ds-border bg-ds-input px-2.5 py-2 text-sm"
+              value={justification} onChange={event => setJustification(event.target.value)} maxLength={500} rows={3} disabled={writing} />
+          </label>
+          {resolutionError ? <p role="alert" className="text-xs text-ds-danger">{resolutionError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={writing || justification.trim().length < 12} onClick={() => void submitResolution()}>
+              {writing ? "Registrando…" : "Confirmar resolução"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={writing} onClick={() => setEditing(false)}>Cancelar</Button>
+          </div>
+        </> : <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>Resolver sem vínculo</Button>}
+      </div> : null}
       <p className="text-[11px] text-ds-ink-faint">↑ ↓ navegam entre os casos do filtro · Esc fecha</p>
     </div>
   </aside>;
