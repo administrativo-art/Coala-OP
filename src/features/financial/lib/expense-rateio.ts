@@ -26,6 +26,7 @@ type ExpenseLike = {
   isApportioned?: boolean;
   resultCenter?: string | null;
   apportionments?: Array<{ resultCenter?: string; percentage?: number }> | null;
+  accountAllocations?: Array<{ accountPlanId?: string; amount?: number }> | null;
   hasPersonAllocations?: boolean;
   personAllocations?: Array<{ resultCenter?: string | null; amount?: number | null }> | null;
 };
@@ -179,7 +180,7 @@ export function expenseValueForResultCenter(
   expense: ExpenseLike,
   resultCenter?: string | null,
   namesById: ResultCenterNameMap = {}
-) {
+): number {
   const totalValue = Number(expense.totalValue) || 0;
   if (!resultCenter) return totalValue;
   if (expense.hasPersonAllocations === true && Array.isArray(expense.personAllocations)) {
@@ -192,9 +193,43 @@ export function expenseValueForResultCenter(
     return resolveResultCenterName(expense.resultCenter, namesById) === resultCenter ? totalValue : 0;
   }
 
-  const percentage = (expense.apportionments || [])
-    .filter((item) => resolveResultCenterName(item.resultCenter, namesById) === resultCenter)
-    .reduce((sum, item) => sum + (Number(item.percentage) || 0), 0);
-
-  return Number(((totalValue * percentage) / 100).toFixed(2));
+  const weights = new Map<string, number>();
+  const tieKeys = new Map<string, string>();
+  const participants = expense.apportionments || [];
+  const legacyValue = () => Number((totalValue * participants
+    .filter(item => resolveResultCenterName(item.resultCenter, namesById) === resultCenter)
+    .reduce((sum, item) => sum + (Number(item.percentage) || 0), 0) / 100).toFixed(2));
+  for (const item of participants) {
+    const center = resolveResultCenterName(item.resultCenter, namesById);
+    const percentage = Number(item.percentage);
+    if (!center || !Number.isFinite(percentage) || percentage < 0) return legacyValue();
+    weights.set(center, (weights.get(center) ?? 0) + percentage);
+    const key = item.resultCenter!.trim();
+    if (!tieKeys.has(center) || key < tieKeys.get(center)!) tieKeys.set(center, key);
+  }
+  const totalPercentage = [...weights.values()].reduce((sum, value) => sum + value, 0);
+  // Do not repair an invalid policy by silently normalizing its weights.
+  if (Math.abs(totalPercentage - 100) > 0.001) return legacyValue();
+  const accountAmounts = (expense.accountAllocations ?? [])
+    .filter(item => item.accountPlanId?.trim() && Number.isFinite(item.amount) && Number(item.amount) > 0)
+    .map(item => Number(item.amount));
+  // Other financial views must use the same per-account distribution as the DRE.
+  if (accountAmounts.length > 0 && accountAmounts.reduce((sum, value) => sum + Math.round(value * 100), 0) === Math.round(totalValue * 100)) {
+    return accountAmounts.reduce((sum, value) => sum + Math.round(expenseValueForResultCenter(
+      { ...expense, totalValue: value, accountAllocations: undefined }, resultCenter, namesById,
+    ) * 100), 0) / 100;
+  }
+  const cents = Math.round(totalValue * 100);
+  if (!Number.isSafeInteger(cents)) return legacyValue();
+  const shares = [...weights].map(([center, percentage]) => {
+    const raw = Math.abs(cents) * percentage / totalPercentage;
+    return { center, key: tieKeys.get(center)!, cents: Math.floor(raw), remainder: raw - Math.floor(raw) };
+  });
+  const remaining = Math.abs(cents) - shares.reduce((sum, share) => sum + share.cents, 0);
+  shares.sort((a, b) => Math.abs(a.remainder - b.remainder) > 1e-9
+    ? b.remainder - a.remainder : a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  for (let index = 0; index < remaining; index++) shares[index % shares.length].cents++;
+  const selected = resolveResultCenterName(resultCenter, namesById);
+  const selectedCents = shares.find(share => share.center === selected)?.cents ?? 0;
+  return selectedCents === 0 ? 0 : Math.sign(cents) * selectedCents / 100;
 }

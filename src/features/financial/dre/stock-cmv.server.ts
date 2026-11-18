@@ -1,4 +1,5 @@
 import "server-only";
+import { buildStockReconciliationInput, type StockReconciliationInput } from "./cmv-reconciliation";
 
 import { FieldPath } from "firebase-admin/firestore";
 
@@ -123,7 +124,8 @@ export async function getDreStockCmv(input: {
   workspaceId: string;
   kioskIds: string[];
   periods: string[];
-}): Promise<DreStockCmvPayload> {
+  reconciliationPeriod?: string;
+}): Promise<DreStockCmvPayload & { reconciliationInput?: StockReconciliationInput }> {
   if (input.kioskIds.length < 1 || input.kioskIds.length > 20) {
     throw new DreStockCmvLimitError("movements");
   }
@@ -179,6 +181,8 @@ export async function getDreStockCmv(input: {
   });
 
   return {
+    kioskIds: [...new Set(input.kioskIds)].sort(),
+    ...(input.reconciliationPeriod ? { reconciliationInput: buildStockReconciliationInput(movements.filter(m => financialMonthKey(m.timestamp) === input.reconciliationPeriod), { productsById, baseProductsById, effectiveCostsByBaseProductId }) } : {}),
     periods: [...input.periods].sort(),
     ...summaries,
     stats: {

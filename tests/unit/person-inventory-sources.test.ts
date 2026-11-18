@@ -67,3 +67,21 @@ test('record ACL uses native execution fields, every adjustment unit, and no fin
   const financial = { ...actor, permissions: { financial: { view: true, personnelCosts: { view: true }, paymentRequests: { view: true } } } } as typeof actor;
   assert.equal(canViewPersonRecord(financial, sourceById('financial-vacation-payments')!, { workspaceId: 'w', unitId: 'result-center-B' }), true);
 });
+
+test('atores financeiros da cadeia DRE têm fonte exata e não são sujeitos/beneficiários',()=>{
+ const fields={"financial-bank-account-creators":["bankAccounts","createdBy"],"financial-stone-mapping-creators":["stoneMerchantMappings","createdBy"],"financial-stone-mapping-editors":["stoneMerchantMappings","updatedBy"],"financial-daily-sales-reviewers":["dailySalesReviews","reviewedBy"],"financial-daily-sales-closers":["dailySalesReviews","closedBy"],"financial-source-settlement-updaters":["financialSourceSettlements","updatedBy"]};
+ for(const [id,[collection,field]] of Object.entries(fields)){const source=sourceById(id);assert.equal(source?.collection,collection);assert.equal(source?.field,field);assert.equal(source?.namespace,"main.users");assert.equal(source?.role,"actor");assert.equal(source?.coverage,"live");assert.equal(source?.permissionPolicy,"financial");assert.equal(source?.scopePolicy,"finance-workspace");}
+ for(const [id,parent] of [["financial-acquirer-fee-event-actors","financialAcquirerFeeBatches"],["financial-stone-mapping-event-actors","stoneMerchantMappings"]]){const source=sourceById(id);assert.equal(source?.parentCollection,parent);assert.equal(source?.field,"actorId");assert.equal(source?.role,"actor");assert.equal(source?.scopePolicy,"record-workspace");}
+});
+
+test('claim financeiro com workspace aninhado prova o tenant sem aceitar root conflitante ou origem ausente',()=>{
+ const source=sourceById("financial-source-settlement-updaters")!;const actor={isDefaultAdmin:true,workspace_id:"coala",permissions:{},userDoc:{}} as Parameters<typeof canViewPersonRecord>[0];
+ assert.equal(canViewPersonRecord(actor,source,{source:{workspaceId:"coala"},updatedBy:"actor"}),true);
+ assert.equal(canViewPersonRecord(actor,source,{source:{workspaceId:"foreign"}}),false);
+ assert.equal(canViewPersonRecord(actor,source,{workspaceId:"foreign",source:{workspaceId:"coala"}}),false);
+ assert.equal(canViewPersonRecord(actor,source,{workspaceId:"coala"}),false);
+});
+
+test('cabeçalho PIX que admite CPF é pessoal com lacuna explícita, sem equivalência por documento',()=>{
+ const source=sourceById("stone-pix-file-owner-identity-gap");assert.equal(source?.collection,"stonePixConciliationFiles");assert.equal(source?.field,"document");assert.equal(source?.role,"subject");assert.equal(source?.coverage,"legacy_gap");assert.equal(source?.namespace,"subjectKeys");assert.match(source?.reason??"",/CPF.*não há ID imutável/);assert.equal(source?.permissionPolicy,"financial");
+});

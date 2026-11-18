@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 120.
+Arquivos locais percorridos: 122.
 
 Chamadas candidatas encontradas:
 
@@ -569,12 +569,13 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 49.
+Arquivos locais percorridos: 54.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/dre/cmv-closure` — interface [`src/features/financial/components/dre/cmv-closing-panel.tsx`](../../src/features/financial/components/dre/cmv-closing-panel.tsx); rota candidata [`src/app/api/financial/dre/cmv-closure/route.ts`](../../src/app/api/financial/dre/cmv-closure/route.ts)
+- `/api/financial/dre/export` — interface [`src/features/financial/components/dre/dre-export-menu.tsx`](../../src/features/financial/components/dre/dre-export-menu.tsx); rota candidata [`src/app/api/financial/dre/export/route.ts`](../../src/app/api/financial/dre/export/route.ts)
 - `/api/financial/dre/source-data` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/source-data/route.ts`](../../src/app/api/financial/dre/source-data/route.ts)
 - `/api/financial/dre/stock-cmv` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/stock-cmv/route.ts`](../../src/app/api/financial/dre/stock-cmv/route.ts)
 
@@ -1595,6 +1596,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-editor-document/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-financial-dre-report/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
@@ -2154,10 +2156,11 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 55.
+Arquivos locais percorridos: 62.
 
 Chamadas candidatas encontradas:
 
+- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/recognition-panel.tsx`](../../src/features/financial/acquirer-fees/recognition-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
 - `/api/financial/stone-fee-expenses` — interface [`src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx); rota candidata [`src/app/api/financial/stone-fee-expenses/route.ts`](../../src/app/api/financial/stone-fee-expenses/route.ts)
 - `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/fee-review-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-review-panel.tsx); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)

@@ -71,7 +71,7 @@ async function storedRecords(request: FeeRequest, context: FeeContext) {
   const snapshot = await records.where("workspaceId", "==", context.workspace_id).where("unitId", "==", request.kioskId)
     .where("stoneCode", "==", request.stoneCode).where("referenceDate", "==", request.referenceDate).where("source", "==", request.source).limit(101).get();
   if (snapshot.size > 100) fail("HISTORY_LIMIT", "Histórico do dia excede 100 grupos; revisão administrativa necessária.");
-  return snapshot.docs.map(doc => view(doc.data() as RecordData));
+  return snapshot.docs.filter(doc => doc.get("schemaVersion") !== 2).map(doc => view(doc.data() as RecordData));
 }
 export async function listFeeRecords(raw: unknown, context: FeeContext) {
   assertFeeAdmin(context);
@@ -102,9 +102,11 @@ export async function executeFeeAction(raw: unknown, context: FeeContext, deps: 
   const parsed = feeActionSchema.safeParse(raw);
   if (!parsed.success) throw new AppError({ code: "ACQUIRER_FEE_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Dados da operação inválidos." });
   const input = parsed.data;
+  if (["create", "link"].includes(input.action)) fail("RECOGNITION_REQUIRED", "Use a prévia por data de venda conciliada. O lançamento legado não comprova competência/recebimento.");
   if (input.action === "cancel") return db.runTransaction(async tx => {
     const ref = records.doc(input.batchId), snapshot = await tx.get(ref);
     if (!snapshot.exists) fail("NOT_FOUND", "Registro não encontrado.");
+    if (snapshot.get("schemaVersion") === 2) fail("RECOGNITION_REQUIRED", "Reverta a apuração por venda pelo fluxo atual com controle de revisão.");
     const current = snapshot.data() as RecordData;
     assertRecordScope(current, input.request, context);
     if (!current.active) return { record: view(current), idempotent: true };
