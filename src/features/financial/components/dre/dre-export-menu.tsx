@@ -18,5 +18,5 @@ export function DreExportMenu({ month, kioskIds, disabled }: { month: string; ki
   return <div className="flex flex-col items-end gap-1"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="on-dark-secondary" disabled={disabled || busy || !kioskIds.length} aria-label="Exportar relatório da DRE"><Download className="mr-2 h-4 w-4" />{busy ? "Gerando relatório…" : "Exportar"}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>CMV por movimentação de estoque</DropdownMenuLabel>
     <DropdownMenuItem onSelect={() => void download("monthly", "pdf")}>Mensal · PDF timbrado</DropdownMenuItem><DropdownMenuItem onSelect={() => void download("monthly", "xlsx")}>Mensal · Excel</DropdownMenuItem><DropdownMenuSeparator />
     <DropdownMenuItem onSelect={() => void download("twelve_months", "pdf")}>12 meses até {formatDrePeriod(month)} · PDF timbrado</DropdownMenuItem><DropdownMenuItem onSelect={() => void download("twelve_months", "xlsx")}>12 meses até {formatDrePeriod(month)} · Excel</DropdownMenuItem>
-  </DropdownMenuContent></DropdownMenu>{error && <p role="alert" className="max-w-80 text-sm text-ds-danger-ink">{error}</p>}</div>;
+  </DropdownMenuContent></DropdownMenu>{error && <p role="alert" className="max-w-80 text-sm text-ds-danger">{error}</p>}</div>;
 }
