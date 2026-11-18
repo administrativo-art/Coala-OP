@@ -45,7 +45,7 @@ export function fetchDraftScheduleShifts(scheduleId: string) {
 }
 
 export function publishDraftSchedule(scheduleId: string, expectedDraftVersion: number) {
-  return authenticatedApiRequest<{ publicationStatus: 'published'; publicationVersion: number; shiftCount: number }>(
+  return authenticatedApiRequest<{ publicationStatus: 'published'; publicationVersion: number; shiftCount: number; dayOffSyncCount: number }>(
     `/api/dp/schedules/${encodeURIComponent(scheduleId)}/publish`,
     { method: 'POST', json: { expectedDraftVersion }, getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
   );

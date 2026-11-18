@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { personScheduleIndexRefs } from './person-schedule-index.server';
+
 import { createHash } from 'node:crypto';
 import { FieldValue, Timestamp, type DocumentData, type DocumentReference } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -41,9 +43,6 @@ function pathId(value: string) {
 }
 function digest(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
-function candidateId(userId: string, competence: string) {
-  return digest(`${userId}:${competence}`);
 }
 
 /**
@@ -104,7 +103,7 @@ export async function prepareScheduleRevision(input: PreparedRevision, onChunk?:
   for (let offset = 0; offset < sortedCandidates.length; offset += 50) {
     const candidates = sortedCandidates.slice(offset, offset + 50);
     const indexRefs = candidates.map(({ userId, competence }) =>
-      dbAdmin.collection('dp_personScheduleIndex').doc(candidateId(pathId(userId), competence)));
+      personScheduleIndexRefs(dbAdmin, pathId(userId), competence)[0]);
     await dbAdmin.runTransaction(async (tx) => {
       const documents = await tx.getAll(...indexRefs);
       documents.forEach((document, index) => {

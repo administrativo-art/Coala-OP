@@ -1,10 +1,12 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { after, NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { publishDayOff } from '@/features/dp/day-offs/service.server';
 import { publishSchedule } from '@/features/dp/schedules/publication-service.server';
 import { bulkWorkShiftRouteSchema } from '@/features/dp/shifts/schemas';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
+import { reportSystemError } from '@/lib/observability/reporter';
 import { defineSecurityContract } from '@/lib/security/route-contract';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
 import { secureRoute } from '@/lib/security/secure-route.server';
@@ -45,7 +47,26 @@ const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Serv
   },
 });
 
-export const POST = secureRoute({ contract, enforcer }, async ({ security, observation }) =>
-  NextResponse.json(await publishSchedule(security.actor, security.resource.scheduleId,
-    observation.requestId, security.input.expectedDraftVersion),
-  { headers: { 'Cache-Control': 'private, no-store' } }));
+export const POST = secureRoute({ contract, enforcer }, async ({ security, observation }) => {
+  const { scheduleId } = security.resource;
+  const { dayOffsToSync, ...result } = await publishSchedule(security.actor, scheduleId,
+    observation.requestId, security.input.expectedDraftVersion);
+  if (dayOffsToSync.length) {
+    after(async () => {
+      for (const input of dayOffsToSync) {
+        try {
+          await publishDayOff({ context: security.actor, scheduleId, input, requestId: observation.requestId });
+        } catch (error) {
+          // A revisão guarda o DSR pendente. O mesmo serviço permite retomar o envio pela grade.
+          reportSystemError({
+            error, source: 'api-dp', operation: 'sync-published-schedule-day-off',
+            routeOrJob: '/api/dp/schedules/[scheduleId]/publish',
+            requestId: observation.requestId, metadata: { scheduleId },
+          });
+        }
+      }
+    });
+  }
+  return NextResponse.json({ ...result, dayOffSyncCount: dayOffsToSync.length },
+    { headers: { 'Cache-Control': 'private, no-store' } });
+});

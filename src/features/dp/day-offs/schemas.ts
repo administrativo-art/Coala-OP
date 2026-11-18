@@ -21,6 +21,13 @@ export const removeDayOffSchema = z.object({
   date: isoDateSchema,
 });
 
+export const draftDayOffSchema = publishDayOffSchema.omit({ source: true }).extend({
+  action: z.enum(['add', 'remove']),
+  expectedDraftVersion: z.number().int().nonnegative(),
+}).strict();
+
+export type DraftDayOffInput = z.infer<typeof draftDayOffSchema>;
+
 export const dayOffRouteSchema = z.object({
   scheduleId: z.string().trim().min(1).max(180),
 });

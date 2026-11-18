@@ -109,6 +109,7 @@ api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual ou exclusao transacional e auditada; ambos revalidam permissao e unidade.
 api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura do rascunho e descarte explicito de conflitos para editores com acesso a unidade.
+api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts,,docs/engineering/flows/dp-schedules.md,Adiciona ou remove DSR do rascunho com controle de versao e permissao para a unidade.
 api,src/app/api/dp/schedules/[scheduleId]/publish/route.ts,,docs/engineering/flows/dp-schedules.md,Publicacao do rascunho com permissao propria e ativacao atomica da revisao oficial.
 api,src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts,,docs/engineering/flows/dp-schedules.md,Busca prefixada e limitada de pessoas externas; exige permissao especifica e acesso a unidade da escala; retorna projecao minima.
 api,src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
