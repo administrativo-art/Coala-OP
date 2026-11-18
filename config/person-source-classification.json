@@ -17,7 +17,9 @@
     "editor-content-versions",
     "financial-expense-payment-records",
     "stone-pix-file-owner-identity-gap",
-    "stone-portfolio-raw-xml-identity-gap"
+    "stone-portfolio-raw-xml-identity-gap",
+    "financial-cash-counting-session-openers",
+    "financial-inter-charge-creators"
   ],
   "dynamicCollectionReaders": [
     {
