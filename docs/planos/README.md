@@ -4,6 +4,7 @@
 
 | Plano | Área |
 | --- | --- |
+| [Resolução de Pix Stone sem vínculo](plano-resolucao-pix-stone-sem-vinculo.md) | Financeiro, Conciliação de vendas |
 | [Taxas de vendas conciliadas na DRE](plano-taxas-vendas-conciliadas-dre.md) | Financeiro, conciliação, competência e recebíveis |
 | [Exportação da DRE](plano-exportacao-dre.md) | Financeiro, PDF timbrado e Excel |
 | [Verificação de devoluções Pix na Stone](plano-verificacao-devolucoes-pix-stone.md) | Financeiro, Conciliação de vendas |

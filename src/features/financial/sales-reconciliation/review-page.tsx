@@ -68,7 +68,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
   calendarToday: string;
   publishedThrough: string;
 }) {
-  const { isDefaultAdmin } = useAuth();
+  const { isDefaultAdmin, users, authenticatedUser } = useAuth();
   const api = useAuthenticatedApi();
   const router = useRouter();
   const year = Number(calendarToday.slice(0, 4));
@@ -210,7 +210,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
         throw new AuthenticatedApiError("A resposta não corresponde à seleção. Recarregue os vínculos e consulte novamente.", 409, null);
       }
       setResult(data);
-      setCaseFilter(data.review.status === "closed" ? "auto" : "attention");
+      setCaseFilter(data.review.status === "closed" ? data.review.summary.resolvedWithoutLinkCount ? "all" : "auto" : "attention");
       setCoverageTab(data.pix.status === "available" ? "issues" : "pix");
     }).catch(caught => {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível consultar. Tente novamente.");
@@ -368,7 +368,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
   const currentIssuePage = Math.min(issuePage, issuePages - 1);
   const reviewStatus = result?.review.status;
   const verdictTone = reviewStatus === "closed" ? "ok" : reviewStatus === "awaiting_source" ? "warn" : "bad";
-  const verdictTitle = reviewStatus === "closed" ? reviewStatuses.closed
+  const verdictTitle = reviewStatus === "closed" ? result?.review.summary.resolvedWithoutLinkCount ? "Dia fechado" : reviewStatuses.closed
     : totals.attention ? `${totals.attention} divergência(s) para revisar`
       : result ? reviewStatuses[result.review.status] : "";
   const mappingLabel = mapping ? `${mapping.kioskName} — ${mapping.accountName}` : "";
@@ -548,15 +548,17 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               verdictTone === "ok" ? "bg-ds-ok-bg text-ds-ok" : verdictTone === "warn" ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-danger-bg text-ds-danger")}>{verdictTone === "ok" ? "✓" : verdictTone === "warn" ? "…" : "⚠"}</span>
             <div className="min-w-0">
               <p className="text-[17px] font-extrabold tracking-tight">{verdictTitle}</p>
-              <p className="mt-0.5 text-[12.5px] text-ds-ink-muted">{totals.auto} de {totals.list.length} casos conferidos automaticamente</p>
+              <p className="mt-0.5 text-[12.5px] text-ds-ink-muted">{totals.resolved ? `${totals.auto + totals.resolved} de ${totals.list.length} casos sem pendência`
+                : `${totals.auto} de ${totals.list.length} casos conferidos automaticamente`}</p>
             </div>
           </div>
           <div className="mt-3.5 flex h-2 overflow-hidden rounded-full bg-ds-muted" aria-hidden="true">
-            <div className="bg-ds-ok" style={{ width: `${totals.list.length ? totals.auto / totals.list.length * 100 : 0}%` }} />
+            <div className="bg-ds-ok" style={{ width: `${totals.list.length ? (totals.auto + totals.resolved) / totals.list.length * 100 : 0}%` }} />
             <div className="bg-ds-danger" style={{ width: `${totals.list.length ? totals.attention / totals.list.length * 100 : 0}%` }} />
           </div>
           <div className="mt-[9px] flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ds-ink-muted">
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ds-ok" />{totals.auto} conferidas automaticamente</span>
+            {totals.resolved ? <span>{totals.resolved} resolvida(s) sem vínculo</span> : null}
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ds-danger" />{totals.attention} divergências</span>
             <button type="button" onClick={() => goCoverage("issues")} className="ml-auto font-bold text-ds-warn">{issues.length} apontamento(s) de fonte →</button>
           </div>
@@ -581,7 +583,8 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
             const pixOff = value === "pix" && pixPending;
             const chip = pixOff ? { tone: "warn" as const, text: "Não comparado" }
               : item.attention ? { tone: "bad" as const, text: `${item.attention} divergência(s)` }
-                : item.auto ? { tone: "ok" as const, text: `${item.auto} conferida(s)` }
+                : item.resolved ? { tone: "ok" as const, text: `${item.resolved} sem vínculo` }
+                  : item.auto ? { tone: "ok" as const, text: `${item.auto} conferida(s)` }
                   : { tone: "muted" as const, text: "Sem vendas" };
             return <button key={value} type="button" aria-pressed={active} onClick={() => pickChannel(value)}
               className={cn("block w-full rounded-[14px] border bg-white px-[15px] py-[13px] text-left", active ? "border-[1.5px] border-ds-accent shadow-[0_0_0_3px_rgba(219,39,119,.1)]" : "border-ds-border hover:border-ds-border-input")}>
@@ -614,10 +617,11 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               {formatDateKey(result.scope.referenceDate)} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · consulta {new Date(result.collectedAt).toLocaleString("pt-BR")}
             </p>
             <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
-              <div role="group" aria-label="Filtrar situação" className="flex gap-[3px] rounded-[11px] bg-ds-muted p-[3px]">
+              <div role="group" aria-label="Filtrar situação" className="flex flex-wrap gap-[3px] rounded-[11px] bg-ds-muted p-[3px]">
                 {([
                   { id: "attention", icon: "⚠ ", text: "Divergências", count: view.attention.length, tone: "bg-ds-danger-bg text-ds-danger" },
                   { id: "all", icon: "", text: "Todas", count: view.inChannel.length, tone: "bg-ds-muted text-ds-ink-muted" },
+                  { id: "resolved", icon: "", text: "Resolvidas sem vínculo", count: view.resolved, tone: "bg-ds-ok-bg text-ds-ok" },
                   { id: "auto", icon: "✓ ", text: "Conferidas", count: view.auto, tone: "bg-ds-ok-bg text-ds-ok" },
                 ] as const).map(tab => <button key={tab.id} type="button" aria-pressed={caseFilter === tab.id} onClick={() => pickCaseFilter(tab.id)}
                   className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-ds-ink shadow-xs" : "text-ds-ink-faint")}>
@@ -685,15 +689,33 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
             {channel === "pix" && pixPending ? <>
               <p className="mt-[5px] text-xs text-ds-ink-faint">{uncompared.length} pagamento(s) Pix do PDV ({money(uncomparedSum)}) aguardam o arquivo da fonte Pix.</p>
               <button type="button" onClick={() => goCoverage("pix")} className="mt-3.5 h-[34px] rounded-[10px] border border-ds-border bg-white px-3.5 text-xs font-bold text-ds-ink-2">Ver fonte Pix</button>
-            </> : caseFilter === "attention" && view.auto ? <>
-              <p className="mt-[5px] text-xs text-ds-ink-faint">Todas as vendas deste recorte foram conferidas automaticamente.</p>
+            </> : caseFilter === "attention" && view.resolved ? <button type="button" onClick={() => pickCaseFilter("resolved")}
+              className="mt-3.5 h-[34px] rounded-[10px] border border-ds-border bg-white px-3.5 text-xs font-bold text-ds-ink-2">
+              Ver resoluções sem vínculo ({view.resolved})
+            </button> : caseFilter === "attention" && view.auto ? <>
+              <p className="mt-[5px] text-xs text-ds-ink-faint">Este recorte tem vendas conferidas automaticamente.</p>
               <button type="button" onClick={() => pickCaseFilter("auto")} className="mt-3.5 h-[34px] rounded-[10px] border border-ds-border bg-white px-3.5 text-xs font-bold text-ds-ink-2">Ver conferidas ({view.auto})</button>
             </> : null}
           </div>}
         </Panel>
 
-        {detail ? <CaseDetailPanel row={detail} facts={facts} position={detailIndex} total={rows.length}
-          onPrev={() => moveDetail(-1)} onNext={() => moveDetail(1)} onClose={() => setDetailKey(null)} /> : null}
+        {detail ? <CaseDetailPanel key={detail.deterministicKey} row={detail} facts={facts} position={detailIndex} total={rows.length}
+          onPrev={() => moveDetail(-1)} onNext={() => moveDetail(1)} onClose={() => setDetailKey(null)}
+          resolverName={detail.unlinkedResolution ? [...users, authenticatedUser]
+            .find(user => user?.id === detail.unlinkedResolution?.actor.id)?.username : undefined}
+          onResolve={detail.kind === "stone_only" && detail.channel === "pix" && detail.reviewStatus === "attention_required"
+            && detail.stoneSaleIds.length === 1 && facts.get(detail.stoneSaleIds[0])?.status === "approved"
+            && result.pix.coverage === "complete" ? async justification => {
+              const updated = await api<DailySalesApiResult>("/api/financial/pdv-stone-review/unlinked-resolution", {
+                method: "POST",
+                json: { kioskId: result.scope.kioskId, mappingId: result.mappingId,
+                  stoneCode: result.scope.stoneCode, referenceDate: result.scope.referenceDate,
+                  expectedRevision: result.review.revision, caseKey: detail.deterministicKey, justification },
+              });
+              setResult(previous => previous?.review.id === updated.review.id && previous.review.revision <= updated.review.revision
+                ? updated : previous);
+              setCalendarRefreshVersion(version => version + 1);
+            } : undefined} /> : null}
       </div>
 
       <Panel className="scroll-mt-4 overflow-hidden" id="cobertura-fontes">
