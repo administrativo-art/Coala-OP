@@ -5,14 +5,14 @@ import { CalendarDays, ChevronRight } from "lucide-react";
 import { Segmented } from "@/components/patterns/segmented";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
-import { daysBetween, type StudyEntry } from "./model";
+import { daysBetween, formatStudyDate as dmy, type StudyEntry } from "./model";
 import { isProjection, type Granularity, type PeriodRow } from "./periods";
 
 export const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 export const thousands = (cents: number) => `${cents < 0 ? "−" : ""}R$ ${(Math.abs(cents) / 100_000).toFixed(1).replace(".", ",")} mil`;
 export const axisThousands = (cents: number) => `${cents < 0 ? "−" : ""}${Math.round(Math.abs(cents) / 100_000)} mil`;
 export const dm = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
-export const dmy = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
+export { dmy };
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const MONTH = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 export const weekdayOf = (date: string) => WEEKDAY[new Date(`${date}T00:00:00Z`).getUTCDay()];

@@ -50,6 +50,7 @@ test("boleto emitido cai 3 dias após a emissão; vencido conta hoje e fica marc
   assert.equal(b1.date, "2026-11-16");
   assert.equal(b1.certainty, "guaranteed");
   assert.equal(b1.stage, "boleto");
+  assert.equal(b1.detail, "Espécie · vendas de 01/09/2026 a 21/09/2026");
   assert.equal(b1.lateFrom, undefined, "no prazo não é atrasado");
   assert.equal(b2.date, TODAY, "boleto atrasado conta hoje");
   assert.equal(b2.lateFrom, "2026-11-04", "e guarda a data em que devia ter caído");
@@ -79,6 +80,7 @@ test("espécie de dia sem contagem usa o prazo padrão até a unidade ter 4 lote
   assert.equal(entry.date, addDays("2026-11-14", DEFAULT_CASH_LAG_DAYS));
   assert.equal(entry.stage, "cash_open");
   assert.equal(entry.sinceDate, "2026-11-14");
+  assert.equal(entry.detail, "Vendas de 14/11/2026");
   assert.match(entry.label, /aguardando contagem/);
   // 4 lotes pagos, meio do período em 11/09 e pagamento em 28/09 = 17 dias.
   const paid = ["p1", "p2", "p3", "p4"].map(id => batch(id));

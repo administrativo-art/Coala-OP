@@ -39,3 +39,11 @@ Os prefixos `ds-` preservam as variantes shadcn preexistentes `secondary`, `ghos
 - **Desabilitado explica**: se depende de permissão ou de dado faltando, mostrar o motivo perto do botão.
 - **Hover**: preenchidos escurecem; contornados ganham fundo #f6f4ef; links sublinham. Botões não animam escala.
 - **Menu ▾**: um aberto por vez; fecha ao escolher ou ao clicar fora.
+
+## Voltar para um destino
+
+Use um botão retangular arredondado, com fundo claro, borda cinza e sombra discreta. A seta para a esquerda e o nome do destino ficam juntos no mesmo botão. Exemplo aprovado: **← Painel do colaborador**. Use `Button` como base, com os tokens do design, e respeite o tamanho mínimo de toque.
+
+Para navegação de página, prefira o nome do destino ao rótulo genérico **Voltar** ou à seta isolada. O clique leva ao destino que o botão anuncia, com os parâmetros do contexto quando necessários. Use **Voltar** apenas quando o destino depende da origem e essa origem interna puder ser verificada. A regra do botão em etapas de formulário continua descrita acima.
+
+Veja [Cabeçalho e retorno](estrutura-e-navegacao.md#cabeçalho-e-retorno) e a [decisão 0009](decisoes/0009-caminho-global-e-retorno.md).

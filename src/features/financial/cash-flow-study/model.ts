@@ -122,6 +122,12 @@ export type StudyResult = {
 
 // ---------- datas (YYYY-MM-DD, sem fuso) ----------
 const DAY = 86_400_000;
+/** Formata uma data civil sem convertê-la em instante nem usar o fuso do navegador. */
+export function formatStudyDate(date: string) {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  return parts ? `${parts[3]}/${parts[2]}/${parts[1]}` : "—";
+}
+
 const toTime = (date: string) => Date.parse(`${date}T00:00:00Z`);
 export const addDays = (date: string, days: number) => new Date(toTime(date) + days * DAY).toISOString().slice(0, 10);
 export const daysBetween = (from: string, to: string) => Math.round((toTime(to) - toTime(from)) / DAY);
@@ -391,12 +397,12 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
       row.eta = row.eta && row.eta < date ? row.eta : date;
       if (inHorizon(date)) entries.push({ id: `batch:${batch.id}`, date, direction: "in", source: "deposit_boleto", certainty: "guaranteed", stage: "boleto", unit: owner, sinceDate: issuedOn,
         ...(expected < today ? { lateFrom: expected } : {}),
-        label: `Boleto de depósito · ${batch.kioskName}`, detail: `Espécie · vendas de ${batch.periodStartDate} a ${batch.periodEndDate}`, amountCents: batch.totalCents });
+        label: `Boleto de depósito · ${batch.kioskName}`, detail: `Espécie · vendas de ${formatStudyDate(batch.periodStartDate)} a ${formatStudyDate(batch.periodEndDate)}`, amountCents: batch.totalCents });
     } else if (COUNTED_BATCH.has(batch.status)) {
       const date = addDays(today, COUNTED_TO_BANK_DAYS);
       unit(batch.kioskId, batch.kioskName).countedCents += batch.totalCents;
       if (inHorizon(date)) entries.push({ id: `batch:${batch.id}`, date, direction: "in", source: "deposit_counted", certainty: "guaranteed", stage: "counted", unit: owner, sinceDate: batch.periodEndDate,
-        label: `Espécie contado, sem boleto · ${batch.kioskName}`, detail: `Lote de ${batch.periodStartDate} a ${batch.periodEndDate}`, amountCents: batch.totalCents });
+        label: `Espécie contado, sem boleto · ${batch.kioskName}`, detail: `Lote de ${formatStudyDate(batch.periodStartDate)} a ${formatStudyDate(batch.periodEndDate)}`, amountCents: batch.totalCents });
     }
   }
 
@@ -410,14 +416,14 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
       const date = addDays(today, COUNTED_TO_BANK_DAYS);
       unit(closure.kioskId, closure.kioskName).countedCents += closure.depositEligibleCents;
       if (inHorizon(date)) entries.push({ id: `closure:${closure.kioskId}:${closure.date}`, date, direction: "in", source: "deposit_counted", certainty: "guaranteed", stage: "counted", unit: owner, sinceDate: closure.date,
-        label: `Espécie contado, sem lote · ${closure.kioskName}`, detail: `Fechamento de ${closure.date}`, amountCents: closure.depositEligibleCents });
+        label: `Espécie contado, sem lote · ${closure.kioskName}`, detail: `Fechamento de ${formatStudyDate(closure.date)}`, amountCents: closure.depositEligibleCents });
     } else if (OPEN_CLOSURE.has(closure.status) && (closure.byChannelCents.cash ?? 0) > 0) {
       const row = unit(closure.kioskId, closure.kioskName);
       const cents = closure.byChannelCents.cash;
       const date = clampToToday(addDays(closure.date, row.lagDays ?? DEFAULT_CASH_LAG_DAYS), today);
       row.openCents += cents;
       if (inHorizon(date)) entries.push({ id: `closure:${closure.kioskId}:${closure.date}`, date, direction: "in", source: "cash_open", certainty: "guaranteed", stage: "cash_open", unit: owner, sinceDate: closure.date,
-        label: `Espécie aguardando contagem · ${closure.kioskName}`, detail: `Vendas de ${closure.date}`, amountCents: cents });
+        label: `Espécie aguardando contagem · ${closure.kioskName}`, detail: `Vendas de ${formatStudyDate(closure.date)}`, amountCents: cents });
     }
   }
 
@@ -458,7 +464,7 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
     if (!inHorizon(date)) continue;
     entries.push({ id: `expense:${expense.id}`, date, direction: "out", source: expense.provisioned ? "expense_forecast" : "expense",
       certainty: expense.provisioned ? "provisioned" : "payable", label: expense.description,
-      detail: [expense.supplier, overdue ? `vencida em ${expense.date}` : null].filter(Boolean).join(" · "), amountCents: expense.amountCents, overdue });
+      detail: [expense.supplier, overdue ? `vencida em ${formatStudyDate(expense.date)}` : null].filter(Boolean).join(" · "), amountCents: expense.amountCents, overdue });
   }
   if (undated) gaps.push(`${undated} despesa(s) aberta(s) sem vencimento nem competência ficaram fora da projeção.`);
 
