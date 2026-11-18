@@ -1,3 +1,5 @@
+import { appendPersistedPayments } from "./payment-followup.server";
+import { readPersistedReceiptDay,readPersistedPaymentPage } from "./payment-cache.server";
 import "server-only";
 
 import { z } from "zod";
@@ -41,6 +43,8 @@ type Calendar = Awaited<ReturnType<typeof listDailySalesReviewCalendar>>;
 type Portfolio = { mappingId: string; rows: StonePortfolioParcel[] } | null;
 
 export type StoneAccountDependencies = {
+  readPaymentPage?:typeof readPersistedPaymentPage;
+  readPersistedFile?:typeof readPersistedReceiptDay;
   readStone?: (query: { stoneCode: string; referenceDate: string }, signal?: AbortSignal) => Promise<string>;
   /** Rotina diária: lê os arquivos já guardados pela sincronização da carteira, sem nova chamada à Stone. */
   readFile?: (stoneCode: string, referenceDate: string) => Promise<StoneFile>;
@@ -114,6 +118,12 @@ async function readStoneFiles(stoneCode: string, dates: string[], deps: StoneAcc
 }
 
 /** Arquivos só de consulta de origem: cache primeiro; dia indisponível fica sem origem (a parcela segue "Conferir"). */
+function persistedFileReader(workspaceId:string,deps:StoneAccountDependencies){return async(stoneCode:string,date:string)=>{
+ const file=await (deps.readPersistedFile??readPersistedReceiptDay)({workspaceId,stoneCode},date);
+ if(!file)throw new AppError({code:"STONE_AGENDA_UNAVAILABLE",kind:"TRANSIENT_EXTERNAL",retryable:true,safeMessage:"Arquivo diário ainda não armazenado."});
+ return file;
+};}
+
 async function readOriginFiles(stoneCode: string, dates: string[], deps: StoneAccountDependencies) {
   const read = deps.readFile ?? readCachedStoneDay;
   const files: StoneFile[] = [];
@@ -124,14 +134,16 @@ async function readOriginFiles(stoneCode: string, dates: string[], deps: StoneAc
 }
 
 async function queryMonth(request: StoneAccountMonthRequest, context: Context, deps: StoneAccountDependencies) {
-  return buildStoneAccountMonth(request, context.workspace_id, deps);
+  return buildStoneAccountMonth(request, context.workspace_id, {...deps,readFile:persistedFileReader(context.workspace_id,deps)});
 }
 
 /** Montagem do mês sem checagem de usuário: usada pela consulta do administrador e pela rotina diária. */
 export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, workspaceId: string, deps: StoneAccountDependencies) {
   const context = { workspace_id: workspaceId };
   const now = deps.now ?? new Date();
-  const latest = latestPublishedDate(now);
+  const latestAvailable = latestPublishedDate(now);
+  const latest = request.paymentAsOf??latestAvailable;
+  if(latest>latestAvailable)throw new AppError({code:"STONE_RECEIPT_PAYMENT_ASOF",kind:"VALIDATION"});
   if (request.from > latest) throw new AppError({ code: "STONE_RECEIPT_NOT_PUBLISHED", kind: "VALIDATION", safeMessage: "O período ainda não foi publicado pela Stone." });
   const through = request.through > latest ? latest : request.through;
   const mapping = await resolveScope(request, request.from, through, context, deps);
@@ -141,7 +153,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
   // Vendas de meses anteriores pagas no período: a captura (bandeira, previsão, MDR) está no arquivo do dia da venda.
   const originFiles = await readOriginFiles(request.stoneCode, missingOriginDates(files, request.from), deps);
   const portfolio = await (deps.readPortfolio ?? readPortfolioRows)(request.stoneCode);
-  const portfolioRows = portfolio && portfolio.mappingId === mapping.id ? portfolio.rows : null;
+  const portfolioRows = portfolio && portfolio.mappingId === mapping.id ? portfolio.rows.filter(row=>!row.paymentDate||row.paymentDate<=latest) : null;
   const readPix = deps.readPix ?? readPixSalesSource;
   const pixSources = [] as Array<{ date: string; source: PixSourceResult }>;
   for (const referenceDate of dates) {
@@ -173,7 +185,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
     ...(pixPartial.length ? [`Pix com cobertura parcial em ${pixPartial.join(", ")}: registros sem evidência suficiente ficaram de fora.`] : []),
     ...(built.conflictCount ? [`${built.conflictCount} parcela(s) com informações conflitantes entre arquivos ficaram para conferência.`] : []),
   ];
-  return {
+  const base = {
     view: "month" as const,
     period: { from: request.from, through, requestedThrough: request.through },
     latestPublished: latest,
@@ -195,6 +207,7 @@ export async function buildStoneAccountMonth(request: StoneAccountMonthRequest, 
     limitations,
     writesPerformed: false as const,
   };
+  return appendPersistedPayments(base,request,latestAvailable,deps.readPaymentPage);
 }
 
 function pdvSide(snapshot: DailySalesSnapshot, match: (fact: SalesMatchFact) => boolean): SaleAudit["pdv"] {
@@ -246,18 +259,23 @@ async function querySale(request: StoneAccountSaleRequest, context: Context, dep
   }
 
   const signal = AbortSignal.timeout(110_000);
-  const originRead = await readStoneFiles(request.stoneCode, [request.saleDate], deps, signal);
+  const cachedDeps={...deps,readFile:persistedFileReader(context.workspace_id,deps)};
+  const originRead = await readStoneFiles(request.stoneCode, [request.saleDate], cachedDeps, signal);
   const originFile = originRead.files[0] ?? null;
   const origin = originFile?.transactions.find(row => row.sourceSection === "FinancialTransactions" && row.transactionId === request.saleId) ?? null;
   const portfolio = await (deps.readPortfolio ?? readPortfolioRows)(request.stoneCode);
   const portfolioRows = portfolio && portfolio.mappingId === mapping.id ? portfolio.rows.filter(row => row.transactionId === request.saleId) : [];
   if (!origin && !portfolioRows.length) throw new AppError({ code: "STONE_RECEIPT_SALE_NOT_FOUND", kind: "EXPECTED_BUSINESS", safeMessage: "Venda não encontrada no arquivo Stone do dia." });
   // Arquivos dos dias de pagamento: data paga pela carteira ou, sem ela, a data prevista.
-  const paymentDates = [...new Set([
-    ...portfolioRows.flatMap(row => row.paymentDate ? [row.paymentDate] : []),
-    ...(origin?.installments ?? []).flatMap(row => row.expectedPaymentDate && row.expectedPaymentDate <= latest ? [row.expectedPaymentDate] : []),
-  ])].filter(date => date > request.saleDate || date === request.saleDate).sort().slice(0, MAX_SALE_PAYMENT_FILES);
-  const paymentRead = await readStoneFiles(request.stoneCode, paymentDates, deps, signal);
+  if([...(request.paymentEvidenceDateHints??[]),...(request.paymentDateHint?[request.paymentDateHint]:[])].some(date=>date<request.saleDate||date>latest))throw new AppError({code:"STONE_RECEIPT_PAYMENT_HINT",kind:"VALIDATION"});
+  // A proven date from the list is only a lookup hint; acceptance still requires this transaction/parcel's actual Payments event.
+  const paymentDates=[...new Set([
+    ...(request.paymentEvidenceDateHints??[]),
+    ...(request.paymentDateHint?[request.paymentDateHint]:[]),
+    ...portfolioRows.flatMap(row=>row.paymentDate&&row.paymentDate<=latest?[row.paymentDate]:[]),
+    ...(origin?.installments??[]).flatMap(row=>row.expectedPaymentDate&&row.expectedPaymentDate<=latest?[row.expectedPaymentDate]:[]),
+  ])].filter(date=>date>=request.saleDate).slice(0,MAX_SALE_PAYMENT_FILES);
+  const paymentRead=await readStoneFiles(request.stoneCode,paymentDates,cachedDeps,signal);
   const payments = paymentRead.files.flatMap(file => file.transactions
     .filter(row => row.sourceSection === "FinancialTransactionsAccounts" && row.transactionId === request.saleId && row.events.Payments > 0)
     .flatMap(transaction => transaction.installments
@@ -280,7 +298,8 @@ async function querySale(request: StoneAccountSaleRequest, context: Context, dep
       originFile: originFile ? { id: originFile.fileId, referenceDate: originFile.referenceDate, generatedAt: originFile.generatedAtProvider } : null,
     },
     installments: cardSaleInstallments({ origin, payments, portfolio: portfolioRows, latestPublished: latest,
-      missingDates: [...originRead.missingDates, ...paymentRead.missingDates] }),
+      adverseTransactions:paymentRead.files.flatMap(f=>f.transactions.filter(tx=>tx.transactionId===request.saleId)),
+      missingDates: [...originRead.missingDates, ...paymentRead.missingDates] }).map(row=>row.status==="unpaid"||request.paymentConflictHint?{...row,status:"review" as const}:row),
     pdv: pdvSide(snapshot, fact => fact.channel !== "pix" && (fact.id === request.saleId || fact.identifiers.providerTransactionId === request.saleId)),
   } };
 }
@@ -300,7 +319,19 @@ export async function queryStoneReceiptReconciliation(input: unknown, context: C
     const latest = latestPublishedDate(deps.now ?? new Date());
     const day = range.through > latest ? latest : range.through;
     const mapping = await resolveScope(request, day, day, context, deps);
-    return readStoneReceiptSnapshot({ workspaceId: context.workspace_id, mappingId: mapping.id, kioskId: mapping.kioskId, stoneCode: request.stoneCode, month: request.month });
+    const saved=await readStoneReceiptSnapshot({ workspaceId: context.workspace_id, mappingId: mapping.id, kioskId: mapping.kioskId, stoneCode: request.stoneCode, month: request.month });
+    if(saved.status==="ready" && saved.result.period.through===range.through && saved.result.coverage.stone==="complete" && (!request.paymentAsOf||(saved.result.latestPublished<=request.paymentAsOf&&saved.result.parcels.every(p=>!p.paidDate||p.paidDate<=request.paymentAsOf!)))) {
+      const result=await appendPersistedPayments(saved.result,request,latest,deps.readPaymentPage);
+      return {...saved,result,cacheReadAt:(deps.now??new Date()).toISOString()};
+    }
+    // Missing/historical snapshots are reconstructed from persisted files only. Never call a producer on page load.
+    const readFile=async(stoneCode:string,date:string)=>{
+      const file=await (deps.readPersistedFile??readPersistedReceiptDay)({workspaceId:context.workspace_id,stoneCode},date);
+      if(!file)throw new AppError({code:"STONE_AGENDA_UNAVAILABLE",kind:"TRANSIENT_EXTERNAL",retryable:true,safeMessage:"Arquivo diário ainda não armazenado."});
+      return file;
+    };
+    const result=await buildStoneAccountMonth({view:"month",kioskId:request.kioskId,stoneCode:request.stoneCode,...range,paymentAsOf:request.paymentAsOf,paymentCursor:request.paymentCursor,paymentCohort:request.paymentCohort},context.workspace_id,{...deps,readFile});
+    return {view:"saved" as const,status:"ready" as const,month:request.month,savedAt:saved.status==="ready"?saved.savedAt:null,cacheReadAt:(deps.now??new Date()).toISOString(),result};
   }
   return queryMonth(parsed.data, context, deps);
 }
