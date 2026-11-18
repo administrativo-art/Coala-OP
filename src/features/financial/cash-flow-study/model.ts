@@ -50,10 +50,10 @@ export type StudyStoneParcel = { dueDate: string; grossCents: number; netCents: 
 export type StudyCategory = { id: string | null; name: string };
 export type StudyExpense = {
   id: string; description: string; supplier: string | null; date: string | null; amountCents: number; provisioned: boolean;
-  category: StudyCategory | null; excludeFromRecurringCoverage?: boolean;
+  category: StudyCategory | null; excludeFromRecurringCoverage?: boolean; cardStatement?: boolean;
 };
 /** Movimento realizado da conta. `transfer` = entre contas próprias: muda o saldo, não conta como entrada nem saída. */
-export type StudyRealized = { date: string; direction: "in" | "out"; amountCents: number; category: StudyCategory | null; transfer: boolean; cardPayment?: boolean };
+export type StudyRealized = { date: string; direction: "in" | "out"; amountCents: number; category: StudyCategory | null; transfer: boolean; cardPayment?: boolean; unmatchedCardPayment?: boolean };
 export type StudyAccount = { id: string; name: string; kind: "operating" | "reserve"; cents: number | null; at: string | null };
 
 export type StudyInputs = {
@@ -373,6 +373,10 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
   const inHorizon = (date: string) => date <= horizonEnd;
   const entries: StudyEntry[] = [];
   const gaps: string[] = [];
+  if (input.realized.some(row => row.direction === "out" && row.unmatchedCardPayment && row.date <= today)
+    && input.expenses.some(expense => expense.cardStatement && expense.amountCents > 0 && expense.date && expense.date <= horizonEnd)) {
+    gaps.push("Há pagamentos de cartão sem conciliação de fatura no realizado e faturas a pagar ou previstas no estudo. Pode haver duplicidade: confira em Despesas/Faturas; nenhum débito foi associado nem abatido automaticamente.");
+  }
   const lag = cashLagByUnit(input.batches);
 
   const units = new Map<string, StudyUnit>();

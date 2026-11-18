@@ -88,9 +88,9 @@ export function buildCardCashForecast(input: {
     if (!total || due > input.horizonEnd) continue;
     expenses.push({ id: `card-statement:${id}`, description: `Fatura do cartão · ${text(data.paymentMethodLabel) || "cartão de crédito"}`,
       supplier: data.status === "closed" ? "Fatura fechada" : "Fatura aberta · total informado", date: due, amountCents: total,
-      provisioned: data.status !== "closed", category: null, excludeFromRecurringCoverage: true });
+      provisioned: data.status !== "closed", category: null, excludeFromRecurringCoverage: true, cardStatement: true });
   }
-  for (const [key, group] of future) expenses.push({ id: `card-cycle:${key}`, description: `Fatura prevista · ${group.label}`, supplier: "Parcelas futuras registradas · fatura ainda não disponível", date: group.due, amountCents: group.total, provisioned: true, category: null, excludeFromRecurringCoverage: true });
+  for (const [key, group] of future) expenses.push({ id: `card-cycle:${key}`, description: `Fatura prevista · ${group.label}`, supplier: "Parcelas futuras registradas · fatura ainda não disponível", date: group.due, amountCents: group.total, provisioned: true, category: null, excludeFromRecurringCoverage: true, cardStatement: true });
   if (legacy) gaps.push(`${legacy} parcela(s) antiga(s) de cartão sem fatura confiável: conferir conciliação em Despesas/Faturas; não somadas como saída vencida.`);
   if (unresolved) gaps.push(`${unresolved} vínculo(s)/valor(es) de cartão indisponíveis ou ambíguos: conferir faturas; saída não presumida.`);
   if (future.size) gaps.push("Faturas previstas usam apenas parcelas futuras registradas; compras ainda não lançadas não estão incluídas.");

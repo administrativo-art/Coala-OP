@@ -77,7 +77,9 @@ export function toStudyRealized(row: Row, names?: ReadonlyMap<string, string>): 
   const amount = typeof row.amount === "number" ? Math.round(Math.abs(row.amount) * 100) : 0;
   const direction = row.direction === "in" || row.direction === "out" ? row.direction : null;
   const transfer = row.type === "transfer_in" || row.type === "transfer_out";
-  return date && amount > 0 && direction ? { date, direction, amountCents: amount, transfer, cardPayment: Boolean(text(row.cardStatementId)), category: transfer ? null : toStudyCategory(row.accountPlanId, row.accountPlanName, names) } : null;
+  const cardPayment = direction === "out" && (Boolean(text(row.cardStatementId)) || row.type === "card_statement_payment");
+  const unmatchedCardPayment = cardPayment && (!text(row.cardStatementId) || row.awaitingCardStatementReconciliation === true);
+  return date && amount > 0 && direction ? { date, direction, amountCents: amount, transfer, cardPayment, unmatchedCardPayment, category: transfer ? null : toStudyCategory(row.accountPlanId, row.accountPlanName, names) } : null;
 }
 
 async function loadStone(): Promise<{ parcels: StudyStoneParcel[]; issue: string | null }> {

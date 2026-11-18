@@ -84,3 +84,20 @@ test('cartão: fatura ausente de outro instrumento não suprime ciclos futuros c
  const purchases=[{id:'good-other-account',data:{status:'pending',plannedPaymentMethodType:'credit_card',plannedBankAccountId:'reliable',plannedPaymentMethodId:'card',installments:[{number:1,status:'pending',value:195.11,dueDate:'2026-12-12'}]}},{id:'broken-other-account',data:{status:'pending',plannedPaymentMethodType:'credit_card',plannedBankAccountId:'unrelated',plannedPaymentMethodId:'card',cardStatementId:'missing-reference-for-other-card',installments:[{number:1,status:'pending',value:20,dueDate:'2026-12-12'}]}}];
  const result=await loadStudyCardForecast(purchases,'2026-11-18');assert.equal(result.complete,false);assert.equal(result.expenses.find(x=>x.id.startsWith('card-cycle:'))?.amountCents,19511);assert.equal(result.expenses.filter(x=>x.id.startsWith('card-cycle:')).length,1);assert.match(result.gaps.join(' '),/Cobertura/);
 });
+
+test('cartão: três débitos históricos e um atual importados sem ID não geram nem abatem média, mas preservam realizado e fatura',async()=>{
+ const {toStudyRealized}=await import('../../src/features/financial/cash-flow-study/cash-flow-study.server.ts');
+ const {buildCashFlowStudy,projectRecurringOutflows}=await import('../../src/features/financial/cash-flow-study/model.ts');
+ const imported=['2026-08-12','2026-09-12','2026-10-12','2026-11-12'].map(date=>toStudyRealized({date,amount:100,direction:'out',type:'card_statement_payment',awaitingCardStatementReconciliation:true,accountPlanId:null,accountPlanName:null}));
+ assert.ok(imported.every(row=>row.cardPayment&&row.unmatchedCardPayment));
+ assert.equal(projectRecurringOutflows({today:'2026-11-18',realized:imported,expenses:[]},'2026-12-31').length,0);
+ const history=['2026-08-10','2026-09-10','2026-10-10'].map(date=>toStudyRealized({date,amount:100,direction:'out'}));
+ const expected=projectRecurringOutflows({today:'2026-11-18',realized:history,expenses:[]},'2026-12-31');
+ assert.deepEqual(projectRecurringOutflows({today:'2026-11-18',realized:[...history,...imported],expenses:[]},'2026-12-31'),expected);
+ const expense={id:'card-statement:unmatched',description:'Fatura fechada específica',supplier:null,date:'2026-11-20',amountCents:10000,provisioned:false,category:null,excludeFromRecurringCoverage:true,cardStatement:true};
+ const result=buildCashFlowStudy({today:'2026-11-18',accounts:[],closures:[],batches:[],stone:[],realized:imported,expenses:[expense]});
+ assert.equal(result.entries.find(row=>row.id==='expense:card-statement:unmatched').amountCents,10000);assert.match(result.gaps.join(' '),/Pode haver duplicidade/);
+ assert.equal(result.health.months.find(row=>row.month==='2026-11').outCents,10000);
+ const linked=toStudyRealized({date:'2026-11-12',amount:100,direction:'out',type:'card_statement_payment',cardStatementId:'known'});assert.equal(linked.cardPayment,true);assert.equal(linked.unmatchedCardPayment,false);
+ assert.equal(toStudyRealized({date:'2026-11-12',amount:100,direction:'out',type:'ordinary'}).cardPayment,false);
+});
