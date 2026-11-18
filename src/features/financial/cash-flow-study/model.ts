@@ -1,3 +1,4 @@
+import { buildCashOperations, isConfirmedCashBoleto, isForecastCashBoleto, type CashOperation, type StudyCashEvidence } from "./cash-stages";
 /**
  * Estudo de fluxo de caixa: cálculo puro, sem acesso a banco, compartilhado entre servidor (montagem)
  * e tela (recorte por período). Regras em docs/planos/plano-estudo-fluxo-caixa.md.
@@ -38,10 +39,12 @@ export type StudyClosure = {
   kioskId: string; kioskName: string; date: string; status: string;
   byChannelCents: Record<SalesChannel, number>;
   depositStatus: string; depositEligibleCents: number;
+  operatorCount?: number; countedCashCents?: number; cashDepositPolicy?: string;
 };
 export type StudyBatch = {
   id: string; kioskId: string; kioskName: string; status: string; totalCents: number;
   periodStartDate: string; periodEndDate: string; issuedAt: string | null; paidAt: string | null;
+  workspaceId?: string; countingSessionId?: string | null; interCobrancaId?: string | null; kioskIds?: string[];
 };
 export type StudyStoneParcel = { dueDate: string; grossCents: number; netCents: number; feeCents: number | null };
 export type StudyCategory = { id: string | null; name: string };
@@ -61,6 +64,7 @@ export type StudyInputs = {
   closures: StudyClosure[];
   expenses: StudyExpense[];
   realized: StudyRealized[];
+  cashEvidence?: StudyCashEvidence;
 };
 
 export type EntrySource = "deposit_boleto" | "deposit_counted" | "cash_open" | "stone" | "sales_projected" | "expense" | "expense_forecast" | "expense_recurring";
@@ -115,6 +119,7 @@ export type StudyResult = {
   balanceAt: string | null;
   minimumCents: number | null;
   entries: StudyEntry[];
+  cashOperations: CashOperation[];
   units: StudyUnit[];
   health: StudyHealth;
   gaps: string[];
@@ -183,9 +188,7 @@ export function cashLagByUnit(batches: StudyBatch[]) {
   };
 }
 
-const OPEN_CLOSURE = new Set(["not_synced", "draft", "pending_review", "reopened", "sync_error"]);
 const BOLETO_BATCH = new Set(["issuing", "issued"]);
-const COUNTED_BATCH = new Set(["open", "locked", "failed"]);
 
 // ---------- média de vendas por dia da semana ----------
 /** Média por dia da semana dos 90 dias anteriores a `asOf` (exclusivo). */
@@ -385,9 +388,9 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
 
   // Espécie com boleto emitido ou ainda sem boleto (lotes).
   for (const batch of input.batches) {
-    if (batch.totalCents <= 0) continue;
+    if (batch.totalCents <= 0 || isConfirmedCashBoleto(batch, input.cashEvidence)) continue;
     const owner = { id: batch.kioskId, name: batch.kioskName };
-    if (BOLETO_BATCH.has(batch.status)) {
+    if (BOLETO_BATCH.has(batch.status) && isForecastCashBoleto(batch, input.cashEvidence)) {
       const issuedOn = (batch.issuedAt ?? today).slice(0, 10);
       const expected = addDays(issuedOn, BOLETO_TO_BANK_DAYS);
       const date = clampToToday(expected, today);
@@ -398,34 +401,12 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
       if (inHorizon(date)) entries.push({ id: `batch:${batch.id}`, date, direction: "in", source: "deposit_boleto", certainty: "guaranteed", stage: "boleto", unit: owner, sinceDate: issuedOn,
         ...(expected < today ? { lateFrom: expected } : {}),
         label: `Boleto de depósito · ${batch.kioskName}`, detail: `Espécie · vendas de ${formatStudyDate(batch.periodStartDate)} a ${formatStudyDate(batch.periodEndDate)}`, amountCents: batch.totalCents });
-    } else if (COUNTED_BATCH.has(batch.status)) {
-      const date = addDays(today, COUNTED_TO_BANK_DAYS);
-      unit(batch.kioskId, batch.kioskName).countedCents += batch.totalCents;
-      if (inHorizon(date)) entries.push({ id: `batch:${batch.id}`, date, direction: "in", source: "deposit_counted", certainty: "guaranteed", stage: "counted", unit: owner, sinceDate: batch.periodEndDate,
-        label: `Espécie contado, sem boleto · ${batch.kioskName}`, detail: `Lote de ${formatStudyDate(batch.periodStartDate)} a ${formatStudyDate(batch.periodEndDate)}`, amountCents: batch.totalCents });
     }
   }
 
-  // Fechamentos: espécie aprovado e não alocado (contado) ou vendido e ainda aguardando a contagem.
-  const closedDates = new Set<string>();
-  for (const closure of input.closures) {
-    closedDates.add(closure.date);
-    if (closure.date > today) continue;
-    const owner = { id: closure.kioskId, name: closure.kioskName };
-    if (closure.status === "approved" && closure.depositStatus === "not_allocated" && closure.depositEligibleCents > 0) {
-      const date = addDays(today, COUNTED_TO_BANK_DAYS);
-      unit(closure.kioskId, closure.kioskName).countedCents += closure.depositEligibleCents;
-      if (inHorizon(date)) entries.push({ id: `closure:${closure.kioskId}:${closure.date}`, date, direction: "in", source: "deposit_counted", certainty: "guaranteed", stage: "counted", unit: owner, sinceDate: closure.date,
-        label: `Espécie contado, sem lote · ${closure.kioskName}`, detail: `Fechamento de ${formatStudyDate(closure.date)}`, amountCents: closure.depositEligibleCents });
-    } else if (OPEN_CLOSURE.has(closure.status) && (closure.byChannelCents.cash ?? 0) > 0) {
-      const row = unit(closure.kioskId, closure.kioskName);
-      const cents = closure.byChannelCents.cash;
-      const date = clampToToday(addDays(closure.date, row.lagDays ?? DEFAULT_CASH_LAG_DAYS), today);
-      row.openCents += cents;
-      if (inHorizon(date)) entries.push({ id: `closure:${closure.kioskId}:${closure.date}`, date, direction: "in", source: "cash_open", certainty: "guaranteed", stage: "cash_open", unit: owner, sinceDate: closure.date,
-        label: `Espécie aguardando contagem · ${closure.kioskName}`, detail: `Vendas de ${formatStudyDate(closure.date)}`, amountCents: cents });
-    }
-  }
+  // Numerário sem boleto não é crédito bancário previsto. Sua origem e estágio ficam no quadro operacional.
+  const cashOperations = buildCashOperations(input.closures, input.batches, input.cashEvidence);
+  const closedDates = new Set(input.closures.map(closure => closure.date));
 
   // Carteira Stone: parcelas abertas no vencimento, líquidas.
   for (const parcel of input.stone) {
@@ -485,6 +466,7 @@ export function buildCashFlowStudy(input: StudyInputs): StudyResult {
 
   return {
     asOf: today, horizonEnd, accounts: input.accounts, startBalanceCents, reserveCents, balanceAt, minimumCents,
+    cashOperations,
     entries: mergeStoneEntries(entries).sort((a, b) => a.date.localeCompare(b.date) || a.direction.localeCompare(b.direction) || b.amountCents - a.amountCents),
     units: [...units.values()].sort((a, b) => a.kioskName.localeCompare(b.kioskName, "pt-BR")),
     health, gaps,

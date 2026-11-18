@@ -1,5 +1,6 @@
 "use client";
 
+import { CashOperationsPanel } from "./cash-operations-panel";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownLeft } from "lucide-react";
@@ -135,6 +136,7 @@ export function EntriesTab({ data, controls }: { data: CashFlowStudyPayload; con
   return (
     <div className="space-y-[18px]">
       <ProjectionBar projection={projection} onChange={controls.setProjection} />
+      <CashOperationsPanel operations={data.cashOperations ?? []} />
       <TileRow>
         <FilterTile kicker={projection ? "Tudo" : "Já vendido"} title={projection ? "Tudo o que entra" : "Fora da conta"} value={thousands(summary.total.cents)} line={`${summary.total.count} lançamentos`} active={stage === "all"} onClick={() => setStage("all")} />
         {summary.stuck.count > 0 ? <FilterTile kicker="Pendências" title="Precisa de ação" value={thousands(summary.stuck.cents)} line={`${summary.stuck.count} itens · até ${summary.stuck.oldestDays} dias`} tone="danger" alert active={stage === "action"} onClick={() => setStage(stage === "action" ? "all" : "action")} /> : null}
