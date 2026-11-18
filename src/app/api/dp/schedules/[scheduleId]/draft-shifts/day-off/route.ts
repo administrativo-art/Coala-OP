@@ -20,7 +20,7 @@ const contract = defineSecurityContract({
   surface: { method: 'PATCH', path: '/api/dp/schedules/[scheduleId]/draft-shifts/day-off' },
   exposure: 'authenticated', identity: { kind: 'active-user' },
   authorization: { kind: 'permission', action: 'dp.schedules.publish-bizneo' },
-  resourceScope: { kind: 'unit' }, input: { kind: 'schema', schema: 'dp.schedule.draftDayOff', unknownFields: 'reject' },
+  resourceScope: { kind: 'unit' }, input: { kind: 'schema', schema: 'dp.schedule.draft-day-off', unknownFields: 'reject' },
   effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
 
