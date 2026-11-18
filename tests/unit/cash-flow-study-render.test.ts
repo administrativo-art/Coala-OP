@@ -1,3 +1,5 @@
+import { CashOperationsPanel } from "../../src/features/financial/cash-flow-study/cash-operations-panel";
+import type { CashOperation } from "../../src/features/financial/cash-flow-study/cash-stages";
 import { issuedCashEvidence } from "../helpers/cash-flow-study-fixtures";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -148,4 +150,15 @@ test("Orçamento × despesas: o card mostra o ritmo, o livre e a curva", () => {
   assert.match(calm, /No ritmo/);
   assert.match(calm, /livre/);
   assert.match(calm, /Ainda é esperada compra/);
+});
+
+test("quadro oculta parcial de setembro, mantém outubro e acesso ao histórico", () => {
+ const base = { unitId: "demo", unitName: "Unidade demonstração", stage: "partial" as const, referenceCents: 10000, finalizedOperators: 1, allocatedOperators: 0, receivedOperators: 0, totalOperators: 2, remainingCents: null, outsideDepositPolicy: false };
+ const operations: CashOperation[] = [{ ...base, id: "old", originDate: "2026-09-30" }, { ...base, id: "current", originDate: "2026-10-01" }, { ...base, id: "paid-history", originDate: "2026-09-29", stage: "received", finalizedOperators: 2, allocatedOperators: 2, receivedOperators: 2 }];
+ const html = renderToStaticMarkup(createElement(CashOperationsPanel, { operations }));
+ assert.doesNotMatch(html, /Vendas de 30\/09\/2026/);
+ assert.match(html, /Vendas de 01\/10\/2026/);
+ assert.match(html, /Pendências · 1/); assert.match(html, /Recebidos · 1/);
+ assert.match(html, /href="\/dashboard\/financial\/cash-closures"/);
+ assert.equal(operations.length, 3, "dados anteriores preservados");
 });

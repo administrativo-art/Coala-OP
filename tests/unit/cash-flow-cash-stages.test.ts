@@ -78,3 +78,20 @@ test("somente cobrança ativa ainda a receber confirma previsão; cancelada/manu
   for(const projection of [false,true])assert.equal(buildPeriodRows(result,{range:{from:"2026-11-18",to:"2026-11-18"},granularity:"day",projection,includeReserve:false})[0].closingCents,100);
  }
 });
+
+test("corte de pendências por origem:30/09 fora e01/10 dentro nas trêsunidades e em todos os estágios pendentes",async()=>{
+ const {pendingCashOperations,CASH_PENDING_FROM}=await import('../../src/features/financial/cash-flow-study/cash-stages');
+ assert.equal(CASH_PENDING_FROM,'2026-10-01');
+ const stages=['awaiting_count','partial','counted','in_batch','excluded','unavailable'] as const;
+ const operations=['tirirical','joao-paulo','automovel'].flatMap(unit=>stages.flatMap(stage=>['2026-09-30','2026-10-01'].map(originDate=>({id:`${unit}:${stage}:${originDate}`,unitId:unit,unitName:unit,originDate,stage,referenceCents:10000,finalizedOperators:stage==='partial'?1:0,allocatedOperators:0,receivedOperators:0,totalOperators:2,remainingCents:null,outsideDepositPolicy:false}))));
+ const visible=pendingCashOperations(operations);assert.equal(visible.length,18);assert.ok(visible.every(row=>row.originDate==='2026-10-01'));assert.equal(visible.filter(row=>row.stage==='partial').length,3);assert.equal(operations.length,36,'dados de origem preservados');
+});
+
+test("corte operacional não esconde boleto/Stone antigos legítimos nem altera saldo e fontes",async()=>{
+ const {pendingCashOperations}=await import('../../src/features/financial/cash-flow-study/cash-stages');
+ const c=closure('k',1,'draft',{cashDepositPolicy:'standard'}),old={...c,date:'2026-09-30'},b={...batch('legacy','s','k'),periodStartDate:'2026-09-01',periodEndDate:'2026-09-30',issuedAt:'2026-09-30T12:00:00Z'};
+ const e=evidence([],[b]);e.bills[0]={...e.bills[0],status:'issued',situacao:'ATRASADO',valorTotalRecebidoCents:0};
+ const input={today:'2026-11-18',accounts:[{id:'bank',name:'bank',kind:'operating' as const,cents:12345,at:null}],closures:[old,c],batches:[b],cashEvidence:e,expenses:[],stone:[{dueDate:'2026-09-30',grossCents:1000,netCents:950,feeCents:50}],realized:[]};
+ const result=buildCashFlowStudy(input);assert.equal(pendingCashOperations(result.cashOperations).length,1);assert.equal(result.startBalanceCents,12345);assert.equal(input.closures.length,2);
+ assert.ok(result.entries.some(row=>row.source==='deposit_boleto'));assert.ok(result.entries.some(row=>row.source==='stone'));assert.equal(result.entries.some(row=>row.source==='cash_open'||row.source==='deposit_counted'),false);
+});
