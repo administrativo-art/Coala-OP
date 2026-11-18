@@ -237,7 +237,7 @@ export async function saveDailySalesReview(result: DailySalesResult, actorId: st
       result: resolvedResult, actorId, now: now.toISOString(), previous, activeUnlinkedResolutions,
     });
     const needsWatch = (activeUnlinkedResolutions.length > 0 || result.cases.some(row => row.pixRefundCheck)) && (refundRecheck?.retainWatch ?? true);
-    if (needsWatch && (!watch.exists || refundRecheck)) {
+    if (needsWatch && (!watch.exists || (refundRecheck && !decision))) {
       transaction.set(watchRef, { nextCheckAt: new Date(now.getTime() + REFUND_WATCH_DELAY_MS).toISOString() });
     } else if (!needsWatch && watch.exists) transaction.delete(watchRef);
     if (!transition.write && previous?.snapshotVersion === SNAPSHOT_VERSION) return transition.view;

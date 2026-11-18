@@ -213,6 +213,10 @@ test("resolução Pix sem vínculo preserva fontes, é idempotente na revisão o
   const [first, retry] = await Promise.all([resolveUnlinkedPix(input,binding,actor,now),resolveUnlinkedPix(input,binding,actor,now)]);
   assert.equal(first.review.revision, 2);
   assert.equal(retry.review.revision, 2);
+  const watch = salesRefundWatchDates(scope).doc(scope.referenceDate);
+  const beforeRetry = await watch.get();
+  assert.equal((await resolveUnlinkedPix(input,binding,actor,new Date("2026-09-22T12:01:00Z"))).review.revision,2);
+  assert.ok((await watch.get()).updateTime.isEqual(beforeRetry.updateTime));
   assert.equal(first.review.status, "closed");
   assert.equal(first.review.summary.autoCheckedCount, 1);
   assert.equal(first.review.summary.resolvedWithoutLinkCount, 1);
