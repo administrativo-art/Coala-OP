@@ -60,6 +60,7 @@ import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { bankStatementsHref } from "@/features/financial/lib/reconciliation-navigation";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { buildExpenseLifecycleData } from "@/features/financial/lib/cash-flow-analysis";
 import {
   expenseReferencesResultCenter,
   expenseValueForResultCenter,
@@ -546,6 +547,8 @@ export function ExpensesPage() {
       .map((value) => ({ value, label: breadcrumbByName.get(value) || value }))
       .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
   }, [accountPlanMap, accountPlans, consolidatedExpenses]);
+  // Provisionado × pago dos últimos 7 meses, na faixa do período (mesmas despesas já carregadas; sem nova leitura).
+  const competenceTimeline = useMemo(() => buildExpenseLifecycleData(expensesData ?? [], 7), [expensesData]);
   const competenceOptions = useMemo(
     () => {
       const rollingPastMonths = Array.from({ length: 13 }, (_, offset) =>
@@ -1324,6 +1327,14 @@ export function ExpensesPage() {
         auditActive={statusFilter === "pending_audit"}
         onAuditClick={() => setStatusFilter("pending_audit")}
         periodLabel={activePeriodLabel}
+        competences={competenceTimeline}
+        selectedCompetence={competenceMonth}
+        onCompetenceSelect={(competence) => {
+          setCompetenceMonth(competence);
+          setPeriodPreset("custom");
+          setDateFrom("");
+          setDateTo("");
+        }}
       />
 
       {searchParams.get("expense") && (

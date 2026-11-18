@@ -1,215 +1,92 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { endOfMonth, format, subMonths } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { CalendarRange, CircleDollarSign, Download, Plus, RefreshCw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { format } from "date-fns";
+import { Download, Plus, Wallet } from "lucide-react";
 import { NewTransactionDialog } from "@/features/financial/components/cash-flow/new-transaction-dialog";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { MovementsTab } from "@/features/financial/components/cash-flow/movements-tab";
+import {
+  autoPastGranularity, movementsInRange, PAST_PRESETS, pastPresetRange, summarizeMovements, type CashMovement, type PastPreset,
+} from "@/features/financial/components/cash-flow/movements-model";
+import { RangePicker, type PickerPreset } from "@/features/financial/components/cash-flow/range-picker";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
-import { buildCashFlowCsv, buildExpenseLifecycleData, cashFlowPeriod } from "@/features/financial/lib/cash-flow-analysis";
+import { buildCashFlowCsv } from "@/features/financial/lib/cash-flow-analysis";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import type { Account } from "@/features/financial/types/account";
 import type { Transaction } from "@/features/financial/types/transaction";
 import { useAuth } from "@/hooks/use-auth";
-import { auth } from "@/lib/firebase";
-import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
-import { financialDateKey } from "@/features/financial/lib/financial-dates";
-import type { FinancialBudgetSummary } from "@/features/financial/budgets/types";
-import { budgetScenarioAmount, cashForecastTotals, selectProjectCashProjections, type BudgetCashProjectionPayload } from "@/features/financial/budgets/projection-view";
-import { expenseAccountAllocations } from "@/features/financial/lib/expense-account-allocations";
-import { allowedBudgetCenters, type BudgetCenterOption } from "@/features/financial/components/settings/budget-ui-model";
-import { resolveUnitAccess } from "@/lib/unit-access";
-import { expenseCashForecastAmount } from "@/features/financial/lib/expense-display-state";
 import { PageHero } from "@/components/patterns/page-hero";
 import { HeroChip } from "@/components/patterns/hero-chip";
 import { PageContainer } from "@/components/layout/page-container";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import {
-  CashFlowTabStrip, EntriesTab, HealthTab, MoneyTab, StudyGaps, StudyHeroChips, StudyHeroControls, StudyLoading, WeeksTab,
-  useCashFlowStudy, useStudyWeeks, type CashFlowTab,
+  CashFlowTabStrip, StudyGaps, StudyHeroChips, StudyHeroControls, StudyLoading, useCashFlowStudy, useStudyControls, type CashFlowTab,
 } from "@/features/financial/cash-flow-study/cash-flow-study-view";
-import type { Scenario } from "@/features/financial/cash-flow-study/model";
-
-type Movement = {
-  source?: "expense" | "expense_forecast" | "budget_residual" | "budget_scenario" | "project_residual";
-  id: string;
-  date: Date;
-  description: string;
-  accountId?: string;
-  accountName?: string;
-  accountPlanId?: string;
-  accountPlanName?: string;
-  supplier?: string;
-  expenseId?: string;
-  competenceDate?: Date | null;
-  dueDate?: Date | null;
-  direction: "in" | "out";
-  status: "realized" | "forecast";
-  amount: number;
-};
-
-const PERIOD_OPTIONS = [
-  { value: "1", label: "1 mês" },
-  { value: "3", label: "3 meses" },
-  { value: "6", label: "6 meses" },
-  { value: "12", label: "12 meses" },
-];
-
-function Kpi({ label, value, detail, tone, icon: Icon }: {
-  label: string;
-  value: number;
-  detail: string;
-  tone: "neutral" | "positive" | "negative" | "warning";
-  icon: typeof Wallet;
-}) {
-  const toneClass = {
-    neutral: "border-ds-border bg-white text-ds-ink-2",
-    positive: "border-ds-border bg-ds-ok-bg text-ds-ok",
-    negative: "border-ds-confirm-border bg-ds-danger-bg text-ds-danger",
-    warning: "border-ds-alert-border bg-ds-warn-bg text-ds-warn",
-  }[tone];
-  return (
-    <Card className={cn("rounded-ds-card shadow-none", toneClass)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</CardTitle>
-        <Icon className="h-4 w-4" />
-      </CardHeader>
-      <CardContent>
-        <p className="font-mono text-xl font-bold tracking-tight">{formatCurrency(value)}</p>
-        <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
-}
+import { EntriesTab } from "@/features/financial/cash-flow-study/entries-tab";
+import { HealthTab } from "@/features/financial/cash-flow-study/health-tab";
+import { addMonths } from "@/features/financial/cash-flow-study/model";
+import type { Granularity, StudyRange } from "@/features/financial/cash-flow-study/periods";
+import { dm, dmy } from "@/features/financial/cash-flow-study/study-ui";
+import { WeeksTab } from "@/features/financial/cash-flow-study/weeks-tab";
 
 export function CashFlowPage() {
-  const { permissions, user, isDefaultAdmin } = useAuth();
+  const { permissions, isDefaultAdmin } = useAuth();
   const [accountFilter, setAccountFilter] = useState("all");
-  const [period, setPeriod] = useState("3");
-  const [endingMonth, setEndingMonth] = useState(() => financialDateKey(new Date())!.slice(0, 7));
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [directionFilter, setDirectionFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedBudgetId, setSelectedBudgetId] = useState("");
-  const [monthlyBudgets, setMonthlyBudgets] = useState<FinancialBudgetSummary[]>([]);
-  const [budgetError, setBudgetError] = useState<string | null>(null);
-  const [budgetLoading, setBudgetLoading] = useState(false);
-  const [includeBudgetScenario, setIncludeBudgetScenario] = useState(false);
-  const [budgetCenters, setBudgetCenters] = useState<BudgetCenterOption[]>([]);
-  const [budgetCenterId, setBudgetCenterId] = useState("");
-  const [budgetProjections, setBudgetProjections] = useState<BudgetCashProjectionPayload>({ projections: [], conflictCount: 0, issueCount: 0 });
-  const budgetRequestVersion = useRef(0);
-  // Estudo de 13 semanas: só o administrador padrão (a rota revalida no servidor).
+  // O estudo (projeção) é só do administrador padrão (a rota revalida no servidor); os demais veem as Movimentações.
   const showStudy = Boolean(isDefaultAdmin);
   const [tab, setTab] = useState<CashFlowTab>(showStudy ? "weeks" : "movements");
-  const [scenario, setScenario] = useState<Scenario>("expected");
   const study = useCashFlowStudy(showStudy);
-  const studyWeeks = useStudyWeeks(study.data, scenario);
+  const controls = useStudyControls(study.data);
   const studyTab = showStudy && tab !== "movements";
+  const today = controls.today;
+
+  // Período das Movimentações: só o passado, até hoje.
+  const [movPreset, setMovPreset] = useState<PastPreset>("current_month");
+  const [movCustom, setMovCustom] = useState<StudyRange | null>(null);
+  const [movGranularity, setMovGranularity] = useState<Granularity | null>(null);
+  const movRange = useMemo<StudyRange>(() => (movPreset === "custom" && movCustom ? movCustom : pastPresetRange(movPreset === "custom" ? "current_month" : movPreset, today)), [movCustom, movPreset, today]);
+  const movGranularityValue = movGranularity ?? autoPastGranularity(movRange);
+  const applyMovRange = useCallback((value: { preset: string; from: string; to: string }) => {
+    const known = PAST_PRESETS.find(option => option.value === value.preset);
+    setMovPreset(known ? known.value : "custom");
+    setMovCustom(known ? null : { from: value.from, to: value.to });
+    setMovGranularity(null);
+  }, []);
+
   const { data: accountsData } = useFinancialCollection<Account>(financialCollection("bankAccounts"));
   const { data: transactionsData, loading: loadingTransactions } = useFinancialCollection<Transaction>(financialCollection("transactions"));
   const { data: paymentsData, loading: loadingPayments } = useFinancialCollection<any>(financialCollection("payments"));
   const { data: expensesData, loading: loadingExpenses } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: accountPlansData, loading: loadingAccountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
-
   const canView = Boolean(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow);
-  const budgetMonth = endingMonth;
-  const months = Number.parseInt(period, 10);
-  const { referenceDate, periodStart, periodEnd } = useMemo(() => cashFlowPeriod(endingMonth, months), [endingMonth, months]);
-  const from = financialDateKey(periodStart)!;
-  const to = financialDateKey(periodEnd)!;
-  const allBudgetUnits = Boolean(user && resolveUnitAccess(user, { isDefaultAdmin }).allUnits);
-  const visibleBudgetCenters = useMemo(() => user ? allowedBudgetCenters(budgetCenters, user, isDefaultAdmin) : [], [budgetCenters, user, isDefaultAdmin]);
-  const budgetScopeReady = allBudgetUnits || visibleBudgetCenters.some((center) => center.id === budgetCenterId);
-  useEffect(() => {
-    if (!canView) return;
-    let current = true;
-    void authenticatedApiRequest<{ docs: BudgetCenterOption[] }>("/api/financial/data?path=resultCenters", { getIdToken: async () => auth.currentUser?.getIdToken() })
-      .then((result) => { if (current) setBudgetCenters(result.docs); })
-      .catch(() => { if (current) setBudgetError("Não foi possível carregar os centros do planejamento."); });
-    return () => { current = false; };
-  }, [canView]);
-  const refreshBudgets = useCallback(async () => {
-    const version = ++budgetRequestVersion.current;
-    setMonthlyBudgets([]); setBudgetProjections({ projections: [], conflictCount: 0, issueCount: 0 });
-    if (!canView || !budgetScopeReady) { setBudgetLoading(false); return; }
-    setBudgetLoading(true);
-    try {
-      const scope = budgetCenterId ? `&resultCenterId=${encodeURIComponent(budgetCenterId)}` : "";
-      const options = { getIdToken: async () => auth.currentUser?.getIdToken(), fallbackError: "Falha ao carregar o planejamento." };
-      const [result, projections] = await Promise.all([
-        authenticatedApiRequest<{ budgets: FinancialBudgetSummary[] }>(`/api/financial/budgets?month=${budgetMonth}${scope}`, options),
-        authenticatedApiRequest<BudgetCashProjectionPayload>(`/api/financial/budgets/cash-projections?from=${from}&to=${to}${scope}`, options),
-      ]);
-      if (version !== budgetRequestVersion.current) return;
-      setMonthlyBudgets(result.budgets.filter((budget) => budget.active));
-      setBudgetProjections(projections);
-      setBudgetError(null);
-    } catch (cause) {
-      if (version === budgetRequestVersion.current) setBudgetError(cause instanceof Error ? cause.message : "Falha ao carregar orçamentos.");
-    } finally { if (version === budgetRequestVersion.current) setBudgetLoading(false); }
-  }, [budgetMonth, canView, budgetScopeReady, budgetCenterId, from, to]);
-  useEffect(() => {
-    void refreshBudgets();
-    return () => { budgetRequestVersion.current += 1; };
-  }, [refreshBudgets]);
-  const selectedBudget = monthlyBudgets.find((budget) => budget.id === selectedBudgetId) ?? monthlyBudgets[0];
   const accounts = accountsData || [];
-  const expenseMap = useMemo(
-    () => new Map((expensesData || []).map((expense) => [expense.id, expense])),
-    [expensesData]
-  );
-  const accountPlanMap = useMemo(
-    () => new Map((accountPlansData || []).map((plan) => [plan.id, plan.name])),
-    [accountPlansData]
-  );
+  const expenseMap = useMemo(() => new Map((expensesData || []).map(expense => [expense.id, expense])), [expensesData]);
+  const accountPlanMap = useMemo(() => new Map((accountPlansData || []).map(plan => [plan.id, plan.name])), [accountPlansData]);
 
-  const realizedMovements = useMemo<Movement[]>(() => {
+  // Movimentos realizados: transações do banco e pagamentos ainda sem confirmação bancária. Transferências entre contas ficam de fora.
+  const realizedMovements = useMemo<CashMovement[]>(() => {
+    const periodStart = new Date(`${movRange.from}T00:00:00`);
+    const periodEnd = new Date(`${movRange.to}T23:59:59`);
     const expensesConfirmedByTransactions = new Set(
       (transactionsData || [])
         .filter((transaction: any) => transaction.reversed !== true && transaction.auditStatus !== "reversed")
-        .flatMap((transaction: any) => [
-          transaction.expenseId,
-          transaction.linkedExpenseId,
-          ...(Array.isArray(transaction.splitExpenseIds) ? transaction.splitExpenseIds : []),
-        ])
+        .flatMap((transaction: any) => [transaction.expenseId, transaction.linkedExpenseId, ...(Array.isArray(transaction.splitExpenseIds) ? transaction.splitExpenseIds : [])])
         .filter(Boolean),
     );
-    const paymentTransactions = (paymentsData || []).flatMap((payment) => {
-      const confirmedByBank =
-        payment.status === "MATCHED" ||
-        payment.reconciliationStatus === "MATCHED" ||
-        Boolean(payment.bankTransactionId || payment.linkedBankTransactionId);
+    const paymentTransactions = (paymentsData || []).flatMap(payment => {
+      const confirmedByBank = payment.status === "MATCHED" || payment.reconciliationStatus === "MATCHED" || Boolean(payment.bankTransactionId || payment.linkedBankTransactionId);
       if (confirmedByBank || expensesConfirmedByTransactions.has(payment.expenseId)) return [];
       return (payment.splits || []).map((split: any, splitIndex: number) => ({
-        id: `payment-${payment.id}-${splitIndex}`,
-        type: "expense_payment",
-        direction: "out",
-        accountId: split.accountId,
-        accountName: split.accountName,
-        paymentMethodLabel: split.paymentMethodLabel,
-        amount: Number(split.amount) || 0,
-        date: payment.paidAt,
-        description: payment.description,
-        expenseId: payment.expenseId,
-        createdBy: payment.createdBy,
-        createdAt: payment.createdAt,
-        paymentEvidenceStatus: payment.status || "REPORTED",
+        id: `payment-${payment.id}-${splitIndex}`, type: "expense_payment", direction: "out", accountId: split.accountId, accountName: split.accountName,
+        paymentMethodLabel: split.paymentMethodLabel, amount: Number(split.amount) || 0, date: payment.paidAt, description: payment.description,
+        expenseId: payment.expenseId, createdBy: payment.createdBy, createdAt: payment.createdAt, paymentEvidenceStatus: payment.status || "REPORTED",
       }));
     });
-
-    return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction: any) => {
+    return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction: any): CashMovement[] => {
       if (transaction.reversed === true || transaction.auditStatus === "reversed") return [];
       const date = toDate(transaction.date);
       if (!date || date < periodStart || date > periodEnd) return [];
@@ -220,152 +97,22 @@ export function CashFlowPage() {
       const accountPlanId = transaction.accountPlanId || expense?.accountId || expense?.accountPlan;
       return [{
         id: transaction.id.startsWith?.("payment-") ? transaction.id : `realized-${transaction.id}`,
-        date,
-        description: transaction.description || expense?.description || "Movimentação financeira",
-        accountId: transaction.accountId,
-        accountName: transaction.accountName,
-        accountPlanId,
-        accountPlanName:
-          transaction.accountPlanName ||
-          expense?.accountPlanName ||
-          accountPlanMap.get(accountPlanId) ||
-          undefined,
-        supplier: transaction.supplier || expense?.supplier || undefined,
-        expenseId,
-        competenceDate: toDate(transaction.competenceDate) || toDate(expense?.competenceDate),
-        dueDate: toDate(expense?.dueDate),
-        direction,
-        status: "realized" as const,
-        amount: Number(transaction.amount) || 0,
+        date, description: transaction.description || expense?.description || "Movimentação financeira",
+        accountId: transaction.accountId, accountName: transaction.accountName, accountPlanId,
+        accountPlanName: transaction.accountPlanName || expense?.accountPlanName || accountPlanMap.get(accountPlanId) || undefined,
+        supplier: transaction.supplier || expense?.supplier || undefined, expenseId,
+        competenceDate: toDate(transaction.competenceDate) || toDate(expense?.competenceDate), dueDate: toDate(expense?.dueDate),
+        direction, status: "realized" as const, amount: Number(transaction.amount) || 0,
       }];
     });
-  }, [accountPlanMap, expenseMap, paymentsData, periodEnd, periodStart, transactionsData]);
+  }, [accountPlanMap, expenseMap, movRange, paymentsData, transactionsData]);
 
-  const projectForecastSelection = useMemo(() => {
-    const legacyAccounts = (expensesData ?? []).filter((expense) => {
-      if (expense.provisionType !== "forecast" || ["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return false;
-      const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
-      return date && date >= periodStart && date <= periodEnd;
-    }).flatMap((expense) => expenseAccountAllocations(expense).map((part) => part.accountPlanId));
-    return selectProjectCashProjections(budgetProjections.projectProjections ?? [], legacyAccounts);
-  }, [budgetProjections.projectProjections, expensesData, periodStart, periodEnd]);
-
-  const forecastMovements = useMemo<Movement[]>(() => {
-    const expenseForecast = (expensesData || []).flatMap((expense): Movement[] => {
-      if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return [];
-      const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
-      if (!date || date < periodStart || date > periodEnd) return [];
-      const outstanding = expenseCashForecastAmount(expense);
-      if (outstanding <= 0) return [];
-      return [{
-        id: `forecast-${expense.id}`,
-        source: expense.provisionType === "forecast" ? "expense_forecast" : "expense",
-        date,
-        description: expense.description || "Despesa prevista",
-        accountId: expense.bankAccountId || expense.paymentAccountId,
-        accountName: expense.bankAccountName || expense.paymentAccountName,
-        accountPlanId: expense.accountId || expense.accountPlan,
-        accountPlanName:
-          expense.accountPlanName ||
-          accountPlanMap.get(expense.accountId || expense.accountPlan) ||
-          undefined,
-        supplier: expense.supplier || undefined,
-        expenseId: expense.id,
-        competenceDate: toDate(expense.competenceDate),
-        dueDate: toDate(expense.dueDate),
-        direction: "out" as const,
-        status: "forecast" as const,
-        amount: outstanding,
-      }];
-    });
-    const residual: Movement[] = budgetProjections.projections.map((projection) => ({
-      id: `budget-residual-${projection.id}`, source: "budget_residual", date: new Date(`${projection.date}T12:00:00`),
-      description: `Compra planejada: ${projection.description} · ${projection.resultCenterName}${projection.requiresReview ? " · a conferir" : ""}`,
-      accountPlanId: projection.accountPlanId, competenceDate: new Date(`${projection.competenceMonth}-01T12:00:00`),
-      direction: "out", status: "forecast", amount: projection.amountCents / 100,
-    }));
-    const projectResidual: Movement[] = projectForecastSelection.projections.map((projection) => ({
-      id: `project-residual-${projection.id}`, source: "project_residual", date: new Date(`${projection.date}T12:00:00`),
-      description: `Estimativa do projeto: ${projection.description}${projection.requiresReview ? " · revisar data/cobertura" : ""}`,
-      direction: "out", status: "forecast", amount: projection.amountCents / 100,
-    }));
-    if (!includeBudgetScenario) return [...expenseForecast, ...residual, ...projectResidual];
-    const budgetForecast: Movement[] = monthlyBudgets.filter((budget) => budgetScenarioAmount(budget) > 0
-      && !budget.accountPlanIds.some((id) => projectForecastSelection.accountPlanIds.includes(id)))
-      .map((budget) => ({
-        id: `budget-scenario-${budget.id}`,
-        source: "budget_scenario",
-        date: endOfMonth(referenceDate),
-        description: `Estimativa adicional do orçamento: ${budget.name}`,
-        direction: "out" as const,
-        status: "forecast" as const,
-        amount: budgetScenarioAmount(budget) / 100,
-      }));
-    return [...expenseForecast, ...residual, ...projectResidual, ...budgetForecast];
-  }, [accountPlanMap, expensesData, includeBudgetScenario, monthlyBudgets, periodEnd, periodStart, referenceDate, budgetProjections, projectForecastSelection]);
-
-  const allMovements = useMemo(
-    () => [...realizedMovements, ...forecastMovements].sort((left, right) => right.date.getTime() - left.date.getTime()),
-    [forecastMovements, realizedMovements]
-  );
-
-  const scopedRealized = useMemo(
-    () => realizedMovements.filter((movement) => accountFilter === "all" || movement.accountId === accountFilter),
-    [accountFilter, realizedMovements]
-  );
-  const scopedForecast = useMemo(
-    () => forecastMovements.filter((movement) => accountFilter === "all" || movement.accountId === accountFilter),
-    [accountFilter, forecastMovements]
-  );
-
-  const filteredMovements = useMemo(() => allMovements.filter((movement) => {
-    const matchesAccount = accountFilter === "all" || movement.accountId === accountFilter;
-    const matchesStatus = statusFilter === "all" || movement.status === statusFilter;
-    const matchesDirection = directionFilter === "all" || movement.direction === directionFilter;
-    return matchesAccount && matchesStatus && matchesDirection;
-  }), [accountFilter, allMovements, directionFilter, statusFilter]);
-
-  const totals = useMemo(() => {
-    const realizedIncome = scopedRealized.filter((item) => item.direction === "in").reduce((sum, item) => sum + item.amount, 0);
-    const realizedOutcome = scopedRealized.filter((item) => item.direction === "out").reduce((sum, item) => sum + item.amount, 0);
-    const { payable: accountsPayable, planning: plannedPurchases, scenario: budgetScenarioAmount } = cashForecastTotals(scopedForecast);
-    const realizedBalance = realizedIncome - realizedOutcome;
-    return { realizedIncome, realizedOutcome, accountsPayable, plannedPurchases, budgetScenarioAmount, realizedBalance,
-      projectedBalance: realizedBalance - accountsPayable - plannedPurchases - budgetScenarioAmount };
-  }, [scopedForecast, scopedRealized]);
-
-  const chartData = useMemo(() => {
-    const map: Record<string, { key: string; month: string; income: number; outcome: number; forecast: number; balance: number }> = {};
-    for (let index = months - 1; index >= 0; index -= 1) {
-      const date = subMonths(referenceDate, index);
-      const key = format(date, "yyyy-MM");
-      map[key] = { key, month: format(date, "MMM/yy", { locale: ptBR }), income: 0, outcome: 0, forecast: 0, balance: 0 };
-    }
-    scopedRealized.forEach((movement) => {
-      const bucket = map[format(movement.date, "yyyy-MM")];
-      if (!bucket) return;
-      if (movement.direction === "in") bucket.income += movement.amount;
-      else bucket.outcome += movement.amount;
-    });
-    scopedForecast.forEach((movement) => {
-      const bucket = map[format(movement.date, "yyyy-MM")];
-      if (bucket) bucket.forecast += movement.amount;
-    });
-    let balance = 0;
-    return Object.values(map).map((bucket) => {
-      balance += bucket.income - bucket.outcome - bucket.forecast;
-      return { ...bucket, balance };
-    });
-  }, [months, referenceDate, scopedForecast, scopedRealized]);
-
-  const expenseLifecycleData = useMemo(
-    () => buildExpenseLifecycleData(expensesData || [], months, referenceDate),
-    [expensesData, months, referenceDate]
-  );
+  const scopedMovements = useMemo(() => movementsInRange(realizedMovements, movRange, accountFilter), [accountFilter, movRange, realizedMovements]);
+  const movSummary = useMemo(() => summarizeMovements(scopedMovements), [scopedMovements]);
 
   function exportCsv() {
-    if (filteredMovements.length === 0) return;
-    const csv = buildCashFlowCsv(filteredMovements);
+    if (scopedMovements.length === 0) return;
+    const csv = buildCashFlowCsv([...scopedMovements].sort((left, right) => right.date.getTime() - left.date.getTime()));
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -375,217 +122,52 @@ export function CashFlowPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
-  if (!canView) {
-    return <FinancialAccessGuard title="Fluxo de caixa" description="Seu perfil não possui permissão para consultar o fluxo de caixa." />;
-  }
+  if (!canView) return <FinancialAccessGuard title="Fluxo de caixa" description="Seu perfil não possui permissão para consultar o fluxo de caixa." />;
 
   const loading = loadingTransactions || loadingPayments || loadingExpenses || loadingAccountPlans;
+  const pastPresets: PickerPreset[] = PAST_PRESETS.map(option => ({ value: option.value, label: option.label, range: pastPresetRange(option.value, today) }));
+  const movLabel = movPreset === "custom" ? `${dm(movRange.from)} a ${dmy(movRange.to)}` : `${PAST_PRESETS.find(option => option.value === movPreset)?.label} · ${dm(movRange.from)} a ${dm(movRange.to)}`;
+  const subtitle = studyTab
+    ? tab === "health" ? "Indicadores dos meses fechados e das últimas semanas." : `Realizado, a receber e projeção ${controls.range.from === today ? "de hoje" : `de ${dmy(controls.range.from)}`} até ${dmy(controls.range.to)}.`
+    : `O que já entrou e saiu das contas de ${dmy(movRange.from)} a ${dmy(movRange.to)}.`;
 
   return (
     <PageContainer variant="default" surface className="space-y-6 pb-10">
       <PageHero
         kicker="Financeiro"
         title="Fluxo de caixa"
-        subtitle={studyTab ? "Realizado, a receber e projeção das próximas 13 semanas." : "Visão global do realizado, das contas a pagar e do saldo projetado."}
+        subtitle={subtitle}
         actions={<>
-          {!studyTab && <Button variant="on-dark-secondary" size="md" onClick={exportCsv} disabled={filteredMovements.length === 0}>
-            <Download className="mr-2 h-4 w-4" /> Exportar CSV
-          </Button>}
+          {!studyTab && <Button variant="on-dark-secondary" size="md" onClick={exportCsv} disabled={scopedMovements.length === 0}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button>}
           {permissions.financial?.cashFlow?.create && <Button variant="primary-page" size="md" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button>}
         </>}
-        chips={studyTab ? <StudyHeroChips data={study.data} weeks={studyWeeks} /> : <>
-          <HeroChip value={formatCurrency(totals.realizedBalance)} label="Saldo realizado" />
-          <HeroChip value={formatCurrency(totals.accountsPayable)} label="A pagar" tone="warning" />
-          <HeroChip value={formatCurrency(totals.projectedBalance)} label="Projetado" tone={totals.projectedBalance >= 0 ? "info" : "danger"} />
+        chips={studyTab ? <StudyHeroChips data={study.data} controls={controls} /> : <>
+          <HeroChip value={formatCurrency(movSummary.resultAmount)} label="Resultado do período" tone={movSummary.resultAmount >= 0 ? "info" : "danger"} />
+          <HeroChip value={formatCurrency(movSummary.inAmount)} label="Entrou" />
+          <HeroChip value={formatCurrency(movSummary.outAmount)} label="Saiu" tone="warning" />
         </>}
       >
-        {studyTab ? <StudyHeroControls data={study.data} scenario={scenario} onScenario={setScenario} loading={study.loading} onReload={() => void study.reload()} /> : <div className="flex flex-wrap items-center gap-2">
-          <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger aria-label="Conta" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><Wallet className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as contas</SelectItem>
-              {accounts.filter((account) => account.active).map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger aria-label="Período" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
-            <SelectContent>{PERIOD_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-          </Select>
-          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap text-[13px] font-bold text-ds-on-dark-2">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker scheme-dark" value={endingMonth} onChange={(event) => {
-            if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setEndingMonth(event.target.value);
-          }} /></div>
-        </div>}
+        {studyTab ? <StudyHeroControls data={study.data} controls={controls} showPeriod={tab !== "health"} loading={study.loading} onReload={() => void study.reload()} /> : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger aria-label="Conta" className="h-10 w-44 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><Wallet className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as contas</SelectItem>
+                {accounts.filter(account => account.active).map(account => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <RangePicker value={{ preset: movPreset, ...movRange }} presets={pastPresets} minDate={`${addMonths(today.slice(0, 7), -24)}-01`} maxDate={today} label={movLabel} onApply={applyMovRange} />
+          </div>
+        )}
       </PageHero>
-
       {showStudy && <CashFlowTabStrip value={tab} onChange={setTab} />}
       {studyTab && (!study.data ? <StudyLoading error={study.error} onRetry={() => void study.reload()} /> : <>
-        {tab === "weeks" && <WeeksTab data={study.data} weeks={studyWeeks} scenario={scenario} />}
-        {tab === "entries" && <EntriesTab data={study.data} scenario={scenario} />}
-        {tab === "money" && <MoneyTab data={study.data} />}
+        {tab === "weeks" && <WeeksTab data={study.data} controls={controls} />}
+        {tab === "entries" && <EntriesTab data={study.data} controls={controls} />}
         {tab === "health" && <HealthTab data={study.data} />}
         <StudyGaps data={study.data} />
       </>)}
-
-      {!studyTab && <>
-
-      {(budgetError || !budgetScopeReady || budgetLoading) && <p role="status" className="rounded-xl border border-ds-alert-border bg-ds-warn-bg p-3 text-sm text-ds-alert-ink">{budgetError || (budgetLoading ? "Atualizando planejamento…" : "Selecione abaixo um centro autorizado para incluir o planejamento por orçamento.")} O saldo projetado fica incompleto até essa conferência.</p>}
-      {budgetProjections.conflictCount > 0 && <p className="text-sm text-ds-warn">Há {budgetProjections.conflictCount} linha(s) com provisão antiga. Mantivemos a fonte antiga e suspendemos a nova projeção para evitar duplicidade. A conversão depende de prévia e confirmação.</p>}
-      {budgetProjections.issueCount > 0 && <p className="text-sm text-ds-warn">Há classificações ou coberturas a conferir nos orçamentos.</p>}
-      {(budgetProjections.projectIssues ?? []).map((issue, index) => <p key={`${index}:${issue}`} role="status" className="text-sm text-ds-warn">{issue}</p>)}
-      {!!budgetProjections.projectIssues?.length && <p className="text-sm text-ds-warn">O planejamento dos projetos precisa de conferência; o saldo projetado pode estar incompleto.</p>}
-      {projectForecastSelection.conflictCount > 0 && <p role="status" className="text-sm text-ds-warn">Há {projectForecastSelection.conflictCount} projeto(s) com provisões avulsas nas mesmas contas e intervalo. Mantivemos as provisões e suspendemos a previsão desses projetos para evitar duplicidade. Confira os vínculos antes de usar o saldo projetado.</p>}
-      {(budgetProjections.projectProjections?.length ?? 0) > 0 && <p className="text-sm text-muted-foreground">O planejamento inclui o saldo ainda esperado dos projetos, sem criar contas a pagar. Disponível em “Todas as contas” e “Todos os centros”. Envelopes mensais nas mesmas contas não são somados à simulação para evitar sobreposição.</p>}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Kpi label="Saldo realizado" value={totals.realizedBalance} detail="Entradas menos saídas realizadas" tone="neutral" icon={Wallet} />
-        <Kpi label="Entradas realizadas" value={totals.realizedIncome} detail="Recebimentos do período" tone="positive" icon={TrendingUp} />
-        <Kpi label="Saídas realizadas" value={totals.realizedOutcome} detail="Pagamentos do período" tone="negative" icon={TrendingDown} />
-        <Kpi label="Contas a pagar" value={totals.accountsPayable} detail="Despesas abertas no período" tone="warning" icon={CircleDollarSign} />
-        <Kpi label="Compras planejadas" value={totals.plannedPurchases} detail="Provisões e expectativas; não são novas dívidas" tone="warning" icon={CalendarRange} />
-        <Kpi label="Saldo projetado" value={totals.projectedBalance} detail={includeBudgetScenario ? "Inclui simulação dos orçamentos" : "Saldo realizado menos previsões"} tone={totals.projectedBalance >= 0 ? "positive" : "negative"} icon={Wallet} />
-      </div>
-
-      <Card className="rounded-ds-card border-ds-border shadow-none">
-        <CardHeader>
-          <CardTitle>Realizado × previsto</CardTitle>
-          <CardDescription>Entradas, saídas, compromissos futuros e evolução acumulada no mesmo gráfico.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[320px] w-full">
-            {loading ? <Skeleton className="h-full w-full" /> : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.12} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Legend />
-                  <Bar dataKey="income" name="Entradas realizadas" fill="var(--ds-ok)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="outcome" name="Saídas realizadas" fill="var(--ds-danger)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="forecast" name="Saídas previstas" fill="var(--ds-warn)" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="balance" name="Saldo projetado acumulado" stroke="var(--ds-modal-accent)" strokeWidth={3} dot={{ r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-ds-card border-ds-border shadow-none">
-        <CardHeader>
-          <CardTitle>Despesas provisionadas × pagas</CardTitle>
-          <CardDescription>
-            Leitura por competência. O provisionado representa todas as despesas válidas; o pago mostra a parcela já liquidada.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[280px] w-full">
-            {loading ? <Skeleton className="h-full w-full" /> : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={expenseLifecycleData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.12} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Legend />
-                  <Bar dataKey="provisioned" name="Provisionado" fill="var(--ds-warn)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="paid" name="Pago" fill="var(--ds-ok)" radius={[4, 4, 0, 0]} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-ds-card border-ds-border shadow-none">
-        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div><CardTitle>Orçamento da categoria</CardTitle><CardDescription>Limite do mês por competência. A linha tracejada é a referência fixa; a linha sólida mostra o disponível após as despesas.</CardDescription></div>
-          <div className="flex w-full gap-2 sm:w-auto">
-          {monthlyBudgets.length > 0 && <Select value={selectedBudget?.id} onValueChange={setSelectedBudgetId}>
-            <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Selecione um orçamento" /></SelectTrigger>
-            <SelectContent>{monthlyBudgets.map((budget) => <SelectItem key={budget.id} value={budget.id}>{budget.name}</SelectItem>)}</SelectContent>
-          </Select>}
-          <Button variant="outline" size="icon" aria-label="Atualizar orçamento" disabled={budgetLoading} onClick={() => void refreshBudgets()}><RefreshCw className={cn("h-4 w-4", budgetLoading && "animate-spin")} /></Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 space-y-2"><p className="text-sm font-medium">Escopo do planejamento por orçamento</p>
-            <Select value={budgetCenterId || (allBudgetUnits ? "all" : undefined)} onValueChange={(value) => setBudgetCenterId(value === "all" ? "" : value)}><SelectTrigger aria-label="Centro do planejamento"><SelectValue placeholder="Escolha um centro" /></SelectTrigger><SelectContent>
-              {allBudgetUnits && <SelectItem value="all">Todos os centros</SelectItem>}{visibleBudgetCenters.map((center) => <SelectItem key={center.id} value={center.id}>{center.name}</SelectItem>)}
-            </SelectContent></Select>
-            <p className="text-xs text-muted-foreground">Este filtro afeta somente orçamentos. As despesas mantêm os filtros gerais. Compras planejadas sem conta bancária definida aparecem apenas em “Todas as contas”.</p>
-          </div>
-          <label className="mb-4 flex items-start gap-2 rounded-xl border bg-muted/20 p-3 text-sm">
-            <Checkbox checked={includeBudgetScenario} onCheckedChange={(checked) => setIncludeBudgetScenario(checked === true)} disabled={accountFilter !== "all"} />
-            <span><strong>Simular envelopes sem composição pessoal</strong><span className="block text-xs text-muted-foreground">Inclui o saldo livre dos demais envelopes no último dia do mês. Orçamentos por colaborador já entram pela compra ainda prevista e sua data, sem nova soma aqui. As despesas mantêm suas datas. Disponível apenas em “Todas as contas”.</span></span>
-          </label>
-          {budgetError ? <p className="text-sm text-ds-warn">{budgetError}</p> : !selectedBudget
-            ? <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhum orçamento ativo para {budgetMonth}.</p>
-            : <><div className="mb-5 grid gap-3 sm:grid-cols-3">
-                {[["Orçado", selectedBudget.budgetedAmountCents], ["Comprometido", selectedBudget.consumedAmountCents], ["Disponível", selectedBudget.balanceAmountCents]].map(([label, cents]) =>
-                  <div key={label} className="rounded-xl border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="font-mono text-lg font-bold">{formatCurrency(Number(cents) / 100)}</p></div>)}
-              </div><div className="h-[280px] w-full"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={selectedBudget.curve} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.12} />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 100000)}k`} />
-                <Tooltip formatter={(value: number) => formatCurrency(value / 100)} />
-                <Legend />
-                <Line type="linear" dataKey="plannedBalanceCents" name="Referência planejada" stroke="var(--ds-ink-faint)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                <Line type="stepAfter" dataKey="actualBalanceCents" name="Disponível após despesas" stroke="var(--ds-info)" strokeWidth={3} dot={false} connectNulls={false} />
-              </ComposedChart></ResponsiveContainer></div>
-              <p className="mt-3 text-xs text-muted-foreground">Este saldo é do orçamento da categoria. Ele não representa o saldo bancário.</p></>}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-ds-card border-ds-border shadow-none">
-        <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <CardTitle>Movimentações</CardTitle>
-            <CardDescription>Uma linha do tempo única para valores realizados e previstos.</CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 shrink-0 gap-2 [&>span]:whitespace-nowrap"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="realized">Realizados</SelectItem><SelectItem value="forecast">Previstos</SelectItem></SelectContent>
-            </Select>
-            <Select value={directionFilter} onValueChange={setDirectionFilter}>
-              <SelectTrigger className="w-44 shrink-0 gap-2 [&>span]:whitespace-nowrap"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Entradas e saídas</SelectItem><SelectItem value="in">Entradas</SelectItem><SelectItem value="out">Saídas</SelectItem></SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? <Skeleton className="h-48 w-full" /> : filteredMovements.length === 0 ? (
-            <div className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">Nenhuma movimentação encontrada para os filtros selecionados.</div>
-          ) : (
-            <div className="divide-y rounded-xl border">
-              {filteredMovements.slice(0, 50).map((movement) => (
-                <div key={movement.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[100px_minmax(0,1fr)_120px_140px] sm:items-center">
-                  <div>
-                    <p className="text-xs font-medium">{format(movement.date, "dd/MM/yyyy")}</p>
-                    <p className="text-[10px] text-muted-foreground">Movimentação</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{movement.description}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {[movement.supplier, movement.accountPlanName].filter(Boolean).join(" · ") || "Sem plano de contas informado"}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {movement.accountName || (movement.status === "forecast" ? "Conta financeira a definir" : "Sem conta financeira")}
-                      {movement.competenceDate ? ` · Competência ${format(movement.competenceDate, "MM/yyyy")}` : ""}
-                      {movement.dueDate ? ` · Venc. ${format(movement.dueDate, "dd/MM/yyyy")}` : ""}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className={cn("w-fit", movement.status === "realized" ? "border-ds-border bg-ds-ok-bg text-ds-ok" : "border-ds-alert-border bg-ds-warn-bg text-ds-warn")}>{movement.status === "realized" ? "Realizado" : "Previsto"}</Badge>
-                  <span className={cn("text-right font-mono text-sm font-bold", movement.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{movement.direction === "in" ? "+" : "-"}{formatCurrency(movement.amount)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      </>}
-
+      {!studyTab && <MovementsTab movements={scopedMovements} range={movRange} granularity={movGranularityValue} onGranularity={setMovGranularity} loading={loading} today={today} />}
       {permissions.financial?.cashFlow?.create && <NewTransactionDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </PageContainer>
   );
