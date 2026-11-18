@@ -1,3 +1,4 @@
+import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { randomUUID } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -78,6 +79,7 @@ export async function createPaymentRequest(input: {
   description: string;
   scheduledFor?: string | null;
 }, actor: PaymentActor): Promise<PixBankPaymentRequest> {
+  if (input.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(input.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   const existing = await findPaymentRequestBySource(input.sourceType, input.sourceId, WORKSPACE_ID);
   if (existing) {
     if (existing.paymentRail === "barcode" || existing.paymentRail === "pix_copy_paste") {
@@ -94,6 +96,7 @@ export async function createPaymentRequest(input: {
       const expenseRef = financialDbAdmin.collection("expenses").doc(existing.expenseId);
       const expense = await expenseRef.get();
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      assertExpenseAllowsNewPayment(expense.data()!);
       const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
       if (linkedRequestId && linkedRequestId !== existing.id) {
         throw new Error("A despesa já possui outra solicitação bancária.");
@@ -183,6 +186,7 @@ export async function createPaymentRequest(input: {
       const expenseRef = financialDbAdmin.collection("expenses").doc(input.expenseId);
       const expense = await transaction.get(expenseRef);
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      assertExpenseAllowsNewPayment(expense.data()!);
       if (input.sourceType === "consultancy_provision") {
         const [payments, otherRequests] = await Promise.all([
           transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", input.expenseId).limit(2)),
@@ -286,6 +290,7 @@ async function commitInboxPaymentPreparation(params: {
     if (!currentExpenseSnapshot.exists || currentExpenseSnapshot.get("workspaceId") !== params.workspaceId) {
       throw fail("A despesa vinculada não pertence ao mesmo ambiente da cobrança.");
     }
+    assertExpenseAllowsNewPayment(currentExpenseSnapshot.data()!);
     params.assertCurrent?.(currentMessageSnapshot, currentExpenseSnapshot);
     if (currentRequestSnapshot.exists) {
       const linkedRequestId = String(currentMessageSnapshot.get("paymentRequestId") || "").trim();
@@ -1042,6 +1047,8 @@ export async function cancelAndReplaceExpenseBoletoPaymentRequest(
 }
 
 export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
+  const pending = await getPaymentRequest(id);
+  if (pending.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(pending.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   const now = new Date().toISOString();
   const request = await transitionPaymentRequest(id, ["awaiting_financial_authorization"], "ready_to_submit", { authorizedAt: now, authorizedBy: actor.uid });
   await addPaymentEvent(id, "FINANCIAL_AUTHORIZATION_GRANTED", actor);
@@ -1245,6 +1252,7 @@ async function commitBankSubmissionResult(params: {
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
   const requestRef = paymentRequestRef(id);
   const preflightRequest = await getPaymentRequest(id);
+  if (preflightRequest.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(preflightRequest.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   if (preflightRequest.sourceType === "consultancy_provision") {
     if (preflightRequest.beneficiaryReference?.sourceType !== "employee" || !preflightRequest.scheduledFor) throw new Error("A consultoria perdeu favorecido ou data programada.");
     const forecast = await financialDbAdmin.collection("expenses").doc(preflightRequest.sourceId).get();
@@ -1256,6 +1264,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     const snapshot = await transaction.get(requestRef);
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.expenseId) { const target = await transaction.get(financialDbAdmin.collection("expenses").doc(current.expenseId)); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
     if (current.bankInstructionOrigin === "inter_dda") {
       throw new Error("Agendamento importado do Inter não pode ser reenviado.");
     }
@@ -1823,6 +1832,7 @@ async function completeSource(request: BankPaymentRequest) {
     await financialDbAdmin.runTransaction(async (transaction) => {
       const expense = await transaction.get(expenseRef);
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      assertExpenseAllowsNewPayment(expense.data()!);
       transaction.set(paymentRef, {
         workspaceId: request.workspaceId ?? WORKSPACE_ID,
         expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id, paidAt: request.paidAt,

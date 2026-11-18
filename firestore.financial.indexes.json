@@ -544,6 +544,16 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "events",
+      "fieldPath": "actorId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "interWebhookRawEvents",
       "fieldPath": "expiresAt",
       "ttl": true,

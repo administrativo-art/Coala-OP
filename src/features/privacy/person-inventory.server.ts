@@ -38,6 +38,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "requests": return actor.permissions.dp?.requests?.view === true;
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
     case "terminations": return actor.permissions.dp?.collaborators?.terminate === true;
+    case "financial-admin": return false;
     case "financial": return actor.permissions.financial?.view === true && actor.permissions.financial?.personnelCosts?.view === true && (source.collection !== "bankPaymentRequests" || actor.permissions.financial?.paymentRequests?.view === true);
     case "audit-global": return actor.permissions.dashboard?.audit === true && resolveUnitAccess(actor.userDoc).allUnits;
     case "integrations": return hasFormalizationPermission(actor.permissions, "onboarding.manage");
@@ -47,6 +48,12 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
 }
 /** Source-native scope fields; financial result centers never become operational units. */
 export function canViewPersonRecord(actor: ServerUserContext, source: Source, data: Record<string, unknown> | undefined): boolean {
+  // Existing cash-withdrawal claims own their tenant under source, not at the root.
+  if (source.id === "financial-source-settlement-updaters") {
+    const native = (data?.source as { workspaceId?: unknown } | undefined)?.workspaceId;
+    if (native !== actor.workspace_id || !matchesPersonWorkspace(data, actor.workspace_id, true)) return false;
+    data = { ...data, workspaceId: native };
+  }
   // candidateId also holds manual/PJ routing aliases. Check origin before admin bypass.
   if (source.id === "onboarding-candidates" && (!data || onboardingOrigin(data) !== "recruitment")) return false;
   if (!canViewPersonSource(actor, source) || !matchesPersonWorkspace(data, actor.workspace_id, source.scopePolicy !== "finance-workspace")) return false;
@@ -186,7 +193,7 @@ export async function collectPersonSource(params: {
       : group ? db.collectionGroup(source.collection) : db.collection(source.collection);
     let query: FirebaseFirestore.Query = collection;
     if (source.field !== "__parent__") query = source.namespace === "subjectKeys" ? query.where(source.field, "array-contains-any", prepared.resolution.refs.map(subjectKey)) : query.where(source.field, "==", value);
-    if (source.scopePolicy === "finance-workspace") query = query.where("workspaceId", "==", actor.workspace_id);
+    if (source.scopePolicy === "finance-workspace") query = query.where(source.id === "financial-source-settlement-updaters" ? "source.workspaceId" : "workspaceId", "==", actor.workspace_id);
     if (source.id.startsWith("financial-") && source.id.endsWith("-payments")) query = query.where("beneficiaryReference.sourceType", "==", "employee").where("sourceType", "==", source.id.split("-")[1]);
     if (source.id === "financial-vacation-expenses") query = query.where("sourceType", "==", "vacation");
     if (source.id === "asset-custody") query = query.where("toHolder.holderType", "==", "employee");

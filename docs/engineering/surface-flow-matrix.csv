@@ -259,6 +259,7 @@ api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineerin
 api,src/app/api/financial/payment-requests/adopt-inter/route.ts,,docs/engineering/flows/payment-requests.md,Vincula agendamento DDA ja existente no Inter a despesa ou provisao com conferencia bancaria e auditoria; nao envia pagamento.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts,,docs/engineering/flows/stone-sales-review.md,Registra a resolução auditada de um Pix Stone sem vínculo.
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-anticipations/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-future-receivables/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -657,3 +658,4 @@ api,src/app/api/documents/editor/templates/[tid]/publish/route.ts,,docs/engineer
 api,src/app/api/documents/editor/templates/[tid]/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute: abre modelo e conteudo da versao atual por workspace; exige hr.documents.generate; sem escrita.
 api,src/app/api/documents/editor/templates/[tid]/use/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: cria rascunho sem titular a partir da versao PUBLICADA (transacao com auditoria used); exige hr.documents.generate; 409 se arquivado/nao publicado/versao publicada mudou.
 api,src/app/api/documents/editor/templates/route.ts,,docs/engineering/flows/document-generation.md,GET lista paginada (status, limit 1-25, cursor) e POST cria modelo (content ou fromDocument; fromDocument exige poder abrir o documento); secureRoute; exige hr.documents.generate; sem catalogo.
+api,src/app/api/financial/dre/export/route.ts,,docs/engineering/flows/dre.md,Exportacao contextual PDF XLSX somente leitura com escopo financeiro e unidades.

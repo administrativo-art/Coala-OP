@@ -2,9 +2,9 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **570**
-- Totalmente contratados: **246**
-- Legados congelados: **316**
+- Arquivos de rota: **572**
+- Totalmente contratados: **249**
+- Legados congelados: **315**
 - Exceções temporárias: **8**
 - Violações: **0**
 
@@ -197,7 +197,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/vacations/[vacationId]/notice` | GET | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/notice/route.ts](../../src/app/api/dp/vacations/[vacationId]/notice/route.ts) |
 | `/api/dp/vacations/[vacationId]/receipt-documents/[documentId]` | GET | `LEGACY_BASELINE` | [src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts](../../src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts) |
 | `/api/financial/accounts` | DELETE, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/financial/accounts/route.ts](../../src/app/api/financial/accounts/route.ts) |
-| `/api/financial/acquirer-fees` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/acquirer-fees/route.ts](../../src/app/api/financial/acquirer-fees/route.ts) |
+| `/api/financial/acquirer-fees` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/acquirer-fees/route.ts](../../src/app/api/financial/acquirer-fees/route.ts) |
 | `/api/financial/agent` | POST | `LEGACY_BASELINE` | [src/app/api/financial/agent/route.ts](../../src/app/api/financial/agent/route.ts) |
 | `/api/financial/analysis-routines` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/route.ts](../../src/app/api/financial/analysis-routines/route.ts) |
 | `/api/financial/analysis-routines/scheduler` | POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/scheduler/route.ts](../../src/app/api/financial/analysis-routines/scheduler/route.ts) |
@@ -259,6 +259,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/data` | GET | `LEGACY_BASELINE` | [src/app/api/financial/data/route.ts](../../src/app/api/financial/data/route.ts) |
 | `/api/financial/document-counterparties` | GET ✓ | `CONTRACTED` | [src/app/api/financial/document-counterparties/route.ts](../../src/app/api/financial/document-counterparties/route.ts) |
 | `/api/financial/dre/cmv-closure` | POST | `LEGACY_BASELINE` | [src/app/api/financial/dre/cmv-closure/route.ts](../../src/app/api/financial/dre/cmv-closure/route.ts) |
+| `/api/financial/dre/export` | POST ✓ | `CONTRACTED` | [src/app/api/financial/dre/export/route.ts](../../src/app/api/financial/dre/export/route.ts) |
 | `/api/financial/dre/source-data` | GET | `LEGACY_BASELINE` | [src/app/api/financial/dre/source-data/route.ts](../../src/app/api/financial/dre/source-data/route.ts) |
 | `/api/financial/dre/stock-cmv` | GET | `LEGACY_BASELINE` | [src/app/api/financial/dre/stock-cmv/route.ts](../../src/app/api/financial/dre/stock-cmv/route.ts) |
 | `/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts](../../src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts) |
@@ -296,6 +297,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/payment-requests/[id]/submit` | POST | `EXCEPTION` | [src/app/api/financial/payment-requests/[id]/submit/route.ts](../../src/app/api/financial/payment-requests/[id]/submit/route.ts) |
 | `/api/financial/payment-requests/adopt-inter` | POST ✓ | `CONTRACTED` | [src/app/api/financial/payment-requests/adopt-inter/route.ts](../../src/app/api/financial/payment-requests/adopt-inter/route.ts) |
 | `/api/financial/pdv-stone-review` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) |
+| `/api/financial/pdv-stone-review/unlinked-resolution` | POST ✓ | `CONTRACTED` | [src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts](../../src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts) |
 | `/api/financial/stone-agenda` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-agenda/route.ts](../../src/app/api/financial/stone-agenda/route.ts) |
 | `/api/financial/stone-anticipations` | GET | `LEGACY_BASELINE` | [src/app/api/financial/stone-anticipations/route.ts](../../src/app/api/financial/stone-anticipations/route.ts) |
 | `/api/financial/stone-fee-expenses` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/financial/stone-fee-expenses/route.ts](../../src/app/api/financial/stone-fee-expenses/route.ts) |

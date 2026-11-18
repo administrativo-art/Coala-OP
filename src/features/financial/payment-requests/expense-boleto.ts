@@ -1,3 +1,4 @@
+import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { z } from "zod";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { financialCompetenceMonthSchema, financialExpenseCompetenceMonth } from "../lib/expense-accounting-contract";
@@ -47,6 +48,7 @@ export function validateExpenseBoleto(input: ExpenseBoletoInput) {
   if (factor !== expected) throw new Error("O vencimento não confere com a linha digitável.");
 }
 export function assertExpenseBoletoTarget(expense: Record<string, any>, input: ExpenseBoletoInput, workspaceId: string) {
+  assertExpenseAllowsNewPayment(expense);
   if (expense.workspaceId !== workspaceId) throw new Error("Despesa fora do workspace.");
   if (!["pending", "provisioned"].includes(expense.status) || expense.paymentState === "paid" || expense.paidAt || expense.linkedBankTransactionId) throw new Error("A despesa não está disponível para pagamento.");
   if (expense.financialInboxMessageId) throw new Error("Use o fluxo original para cobrança recebida.");
