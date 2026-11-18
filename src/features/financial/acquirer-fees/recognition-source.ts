@@ -1,3 +1,6 @@
+import { cardModality, receiptGroupKey } from "../receipts-reconciliation/stone-account";
+import { stoneBrandName } from "@/lib/integrations/stone/stone-codes";
+import { rateReferenceEvidence, referenceOnDate, type ConfirmedRateReference } from "../receipts-reconciliation/confirmed-rate-reference";
 import { parseStoneAgendaXml } from "@/lib/integrations/stone/agenda-parser";
 import type { DailySalesApiResult } from "../sales-reconciliation/review-state";
 import { dailySalesSourceFingerprint } from "../sales-reconciliation/review-state";
@@ -9,9 +12,9 @@ import type { FeeRecognitionComponent, FeeRecognitionPolicy } from "./recognitio
 const centsDecimal = (cents: number) => `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
 const decimalUnits = (value: bigint) => `${value / BigInt(1000000000000)}.${String(value % BigInt(1000000000000)).padStart(12, "0")}`;
 export function collectSaleRecognition(input: { request: FeeRequest; workspaceId: string; file: ReturnType<typeof parseStoneAgendaXml> | null;
-  pix: PixSourceResult | null; review: DailySalesApiResult | null; policy: FeeRecognitionPolicy | null }) {
+  pix: PixSourceResult | null; review: DailySalesApiResult | null; policy: FeeRecognitionPolicy | null; references?: ConfirmedRateReference[] }) {
   const { request, review, policy } = input; const pending: string[] = []; const components: FeeRecognitionComponent[] = [];
-  if (!policy?.enabled) pending.push("Configure e habilite a apuração deste vínculo; nenhuma tarifa é inventada.");
+
   if (!review || review.review.status !== "closed" || review.scope.workspaceId !== input.workspaceId || review.scope.kioskId !== request.kioskId
     || review.mappingId !== request.mappingId || review.scope.stoneCode !== request.stoneCode || review.scope.referenceDate !== request.referenceDate)
     pending.push("Conclua a conciliação do bruto PDV por meio e unidade antes de reconhecer taxas.");
@@ -41,23 +44,28 @@ export function collectSaleRecognition(input: { request: FeeRequest; workspaceId
         if (!item.expectedPaymentDate || item.suspendedByChargeback || item.saleFee !== null) { pending.push("Parcela sem vencimento ou com desconto não segregado."); continue; }
         try {
           const grossUnits = feeUnits(item.grossAmount), netUnits = feeUnits(item.netAmount); let feeDecimal: string; let expectedNetDecimal = item.netAmount;
-          let measurement: "assessed" | "estimated" = "assessed", basis: "provider_fee" | "capture_net" | "contract" = "provider_fee", contractId: string | null = null, contractVersion: number | null = null;
+          let rateReference: ReturnType<typeof rateReferenceEvidence> | undefined;
+          let measurement: "assessed" | "estimated" = "assessed", basis: "provider_fee" | "capture_net" | "contract" | "confirmed_reference" = "provider_fee", contractId: string | null = null, contractVersion: number | null = null;
           if (grossUnits <= BigInt(0) || netUnits > grossUnits) { pending.push("Valores da parcela incompatíveis."); continue; }
           if (item.mdrAmount !== null) feeDecimal = item.mdrAmount;
           else if ((item.netAmount.split(".")[1] ?? "").length > 2 && (item.advanceRateAmount === null || feeUnits(item.advanceRateAmount) === BigInt(0))) {
             // In a capture, original forecast net precedes anticipation. Combined/other sale fees are excluded above.
             feeDecimal = decimalUnits(grossUnits - netUnits); basis = "capture_net";
           } else {
-            const contract = selectRateContract(policy!, { date: soldOn!, source: "cards", brandCode: transaction.brandCode, accountTypeCode: transaction.accountTypeCode, installmentCount: transaction.installmentCount ?? transaction.installments.length });
-            if (!contract) { pending.push("Taxa desconhecida: sem MDR/precisão comprovada e sem contrato vigente configurado."); continue; }
-            const cents = contractFeeCents(item.grossAmount, contract); feeDecimal = centsDecimal(cents);
-            expectedNetDecimal = decimalUnits(grossUnits - feeUnits(feeDecimal)); measurement = "estimated"; basis = "contract"; contractId = contract.id; contractVersion = contract.version;
+            const groupKey = receiptGroupKey({source:"card",brand:transaction.brandCode ? stoneBrandName(transaction.brandCode) : null,modality:cardModality(transaction),installmentCount:transaction.installmentCount ?? transaction.installments.length});
+            const reference = referenceOnDate(input.references ?? [],groupKey,soldOn!);
+            const contract = !reference && policy ? selectRateContract(policy, { date: soldOn!, source: "cards", brandCode: transaction.brandCode, accountTypeCode: transaction.accountTypeCode, installmentCount: transaction.installmentCount ?? transaction.installments.length }) : null;
+            if (!reference && !contract) { pending.push("Taxa desconhecida: confirme uma referência vigente na aba Taxas; sugestão não é taxa confirmada."); continue; }
+            const cents = reference ? Math.round(feeTotalCents([item.grossAmount]) * reference.rate) : contractFeeCents(item.grossAmount,contract!);
+            feeDecimal = centsDecimal(cents); expectedNetDecimal = decimalUnits(grossUnits-feeUnits(feeDecimal)); measurement="estimated";
+            if (reference) { basis="confirmed_reference"; rateReference=rateReferenceEvidence(reference); }
+            else { basis="contract"; contractId=contract!.id; contractVersion=contract!.version; }
           }
           if (feeUnits(feeDecimal) > grossUnits || feeUnits(feeDecimal) > grossUnits - feeUnits(expectedNetDecimal)) { pending.push("Taxa incompatível com o líquido previsto; residual não foi classificado como MDR."); continue; }
           if (measurement === "assessed" && feeUnits(feeDecimal) !== grossUnits - feeUnits(expectedNetDecimal)) { pending.push("Desconto residual não segregado; apuração pendente."); continue; }
           components.push({ ...common, id: feeComponentIdentity(input.workspaceId, request.stoneCode, transaction.transactionId, item.number, "mdr"), kind: "mdr", transactionId: transaction.transactionId, installment: item.number,
             dueOn: item.expectedPaymentDate, grossDecimal: item.grossAmount, feeDecimal, expectedNetDecimal, measurement, basis,
-            sourceFileId: input.file!.fileId, sourceHash: feeHash(input.file), contractId, contractVersion, settledOn: null, paidNetDecimal: null, anticipationDecimal: null });
+            sourceFileId: input.file!.fileId, sourceHash: feeHash(input.file), ...(rateReference ? {rateReference} : {}), contractId, contractVersion, settledOn: null, paidNetDecimal: null, anticipationDecimal: null });
         } catch { pending.push("Parcela/contrato ambíguo ou valores inválidos; nenhuma taxa inferida."); }
       }
     }

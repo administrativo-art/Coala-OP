@@ -1,3 +1,4 @@
+import { compareConfirmedRates } from "@/features/financial/receipts-reconciliation/fee-reference-comparison.server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<Record<string, never>> };
 type Mapping = Awaited<ReturnType<typeof readReceivablePeriodMapping>>;
-const viewSchema = z.object({ kioskId: z.string().trim().min(1).max(180), stoneCode: z.string().regex(/^\d{1,20}$/), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }).strict();
+const viewSchema = z.object({ view:z.enum(["review","references","alert_count"]).optional(), offset:z.coerce.number().int().min(0).max(2000).optional(), kioskId: z.string().trim().min(1).max(180), stoneCode: z.string().regex(/^\d{1,20}$/), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }).strict();
 type ViewInput = z.infer<typeof viewSchema>;
 
 const viewContract = defineSecurityContract({ schemaVersion: 1, id: "financial.stone-fees.view", version: 1,
@@ -66,7 +67,12 @@ const decideEnforcer = createStandardSecurityEnforcer<NextRequest, Context, unkn
 
 export const GET = secureRoute({ contract: viewContract, enforcer: viewEnforcer }, async ({ security }) => {
   const { input, resource } = security;
+  if (input.view === "references") {
+    const latest=latestPublishedDate(new Date());const through=receiptMonthRange(input.month).through;const date=through>latest?latest:through;
+    return NextResponse.json(await compareConfirmedRates(resource.workspaceId,date,input.offset),{headers:{"Cache-Control":"private, no-store"}});
+  }
   const view = await buildFeeReview({ workspaceId: resource.workspaceId, mappingId: resource.id, kioskId: resource.kioskId, stoneCode: input.stoneCode }, input.month);
+  if(input.view==="alert_count") return NextResponse.json({pendingCount:view.pendingCount,ready:view.ready,month:input.month},{headers:{"Cache-Control":"private, no-store"}});
   return NextResponse.json(view, { headers: { "Cache-Control": "private, no-store" } });
 });
 

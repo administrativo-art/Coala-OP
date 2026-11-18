@@ -27,13 +27,15 @@ export const feeDecisionInputSchema = z.object({
   kind: z.enum(["sale_fee", "rate_change", "group_rate", "other_charge"]),
   itemKey: z.string().min(1).max(200),
   decision: z.enum(["accepted", "contested", "new_rate", "confirmed"]),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>Number.isFinite(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0,10)===value).optional(),
   fingerprint: z.string().regex(/^[a-z0-9:._-]{1,300}$/i),
   note: z.string().trim().max(500).nullable().optional(),
 }).strict().superRefine((value, context) => {
   const allowed: Record<string, string[]> = {
-    sale_fee: ["accepted", "contested", "new_rate"], rate_change: ["new_rate", "contested"],
+    sale_fee: ["accepted", "contested"], rate_change: ["new_rate", "contested"],
     group_rate: ["confirmed"], other_charge: ["accepted", "contested"],
   };
+  if (["confirmed", "new_rate"].includes(value.decision) && !value.effectiveFrom) context.addIssue({code:z.ZodIssueCode.custom,path:["effectiveFrom"],message:"Confirme explicitamente a data de início da taxa."});
   if (!allowed[value.kind].includes(value.decision)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["decision"], message: "Decisão incompatível com o item." });
 });
 export type FeeDecisionInput = z.infer<typeof feeDecisionInputSchema>;
@@ -140,13 +142,14 @@ export function detectRateChanges(sales: Sale[], groups: FeeGroup[]): RateChange
   return changes;
 }
 
-export function feeExceptions(sales: Sale[], groups: FeeGroup[], changes: RateChange[], month: string): FeeException[] {
+export function feeExceptions(sales: Sale[], groups: FeeGroup[], changes: RateChange[], month: string, referenceAt?: (groupKey: string,date: string)=>FeeReference|null): FeeException[] {
   const inChange = new Set(changes.flatMap(change => sales.filter(sale => sale.groupKey === change.groupKey && sale.date >= change.since
     && Math.abs(round4(saleRate(sale)) - change.to) <= 0.00005).map(sale => sale.saleId)));
   const byKey = new Map(groups.map(group => [group.key, group]));
   return sales.flatMap(sale => {
     if (!sale.date.startsWith(month) || inChange.has(sale.saleId)) return [];
-    const group = byKey.get(sale.groupKey);
+    const sourceGroup = byKey.get(sale.groupKey);
+    const group = sourceGroup && referenceAt ? {...sourceGroup,reference:referenceAt(sale.groupKey,sale.date)} : sourceGroup;
     if (!group?.reference || withinTolerance(sale, group.reference.rate)) return [];
     const expected = expectedFee(sale, group.reference.rate);
     const difference = sale.feeCents - expected;

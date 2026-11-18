@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MonthSelect } from "./month-select";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { MappingView } from "../agent/configuration";
@@ -38,14 +39,15 @@ function Card({ kick, title, sub, aside, children, open, onToggle }: { kick: str
  * Taxas (layout E1): mudanças de taxa a confirmar, vendas a corrigir, outras cobranças, histórico,
  * taxas atuais e decisões. Referência = taxa atual por recorrência confirmada pelo operador, não o contrato.
  */
-export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChange }: { mapping: MappingView; stoneCode: string; onPending?: (count: number | null) => void; onMonthChange?: (month: string) => void }) {
+export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChange, initialMonth }: { initialMonth?:string; mapping: MappingView; stoneCode: string; onPending?: (count: number | null) => void; onMonthChange?: (month: string) => void }) {
   const api = useAuthenticatedApi();
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useState(()=>initialMonth && /^\d{4}-\d{2}$/.test(initialMonth)?initialMonth:currentMonth());
   const [view, setView] = useState<FeeReviewView | null>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [salesOpen, setSalesOpen] = useState(false);
+  const [salesOpen, setSalesOpen] = useState(true);
+  const [effectiveDates,setEffectiveDates]=useState<Record<string,string>>({});
   const [chargesOpen, setChargesOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
@@ -65,14 +67,15 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; controller.abort(); };
   }, [load, month]);
-  useEffect(() => { onPending?.(view ? view.pendingCount : null); }, [view, onPending]);
+  useEffect(() => { onPending?.(view?.ready ? view.pendingCount : null); }, [view, onPending]);
   useEffect(() => { onMonthChange?.(month); }, [month, onMonthChange]);
 
   const decide = async (input: Omit<FeeDecisionInput, "kioskId" | "stoneCode" | "month">) => {
     if (saving) return;
     setSaving(`${input.kind}:${input.itemKey}`); setError("");
     try {
-      await api("/api/financial/stone-fees", { method: "POST", json: { kioskId: mapping.kioskId, stoneCode, month, ...input } });
+      if (["confirmed","new_rate"].includes(input.decision) && !effectiveDates[input.itemKey]) { setError("Informe a data de início da taxa para confirmar a vigência."); return; }
+      await api("/api/financial/stone-fees", { method: "POST", json: { kioskId: mapping.kioskId, stoneCode, month, ...input, ...(["confirmed","new_rate"].includes(input.decision)?{effectiveFrom:effectiveDates[input.itemKey]}:{}) } });
       setView(await load());
     } catch (caught) { setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível gravar a decisão."); }
     finally { setSaving(null); }
@@ -82,6 +85,7 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
   const toggleGroup = (key: string) => setOpenGroups(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
 
   const exceptionsByGroup = view ? [...new Set(view.exceptions.map(item => item.groupKey))].map(key => ({ key, items: view.exceptions.filter(item => item.groupKey === key) })) : [];
+  const effectiveDate=(key:string)=><label className="grid gap-1 text-xs">Início confirmado<Input aria-label={`Início da taxa ${key}`} type="date" value={effectiveDates[key]??""} onChange={e=>setEffectiveDates(p=>({...p,[key]:e.target.value}))} /></label>;
   const totalFees = view ? view.totals.cardFeeCents + view.totals.pixFeeCents + view.totals.anticipationCents : 0;
 
   return <div className="space-y-[18px]">
@@ -100,16 +104,18 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
     </section>
 
     {view ? <>
+      <p className="text-sm font-semibold">{mapping.kioskName} · {mapping.accountName} · StoneCode {stoneCode}</p>
+      {view.referenceSource.unresolved ? <p role="status">Há referências sem escopo/vigência comprovados. Confira o histórico; não foram aplicadas automaticamente.</p> : null}
       {view.changes.length ? <Card kick="Mudanças a confirmar" title={`${view.changes.length} grupo(s) mudaram de taxa`} sub="A taxa nova se repetiu em várias vendas. Confirme se é a nova taxa ou conteste.">
         <ul className="divide-y divide-ds-divider border-t border-ds-divider">{view.changes.map(change => <li key={change.key} className="flex flex-wrap items-center gap-3 px-[18px] py-3">
           <span className="min-w-0 flex-1 text-[13.5px]"><b>{change.label}</b> passou de <b className="tabular-nums">{rateLabel(change.from)}</b> para <b className={`tabular-nums ${change.to > change.from ? "text-ds-danger" : "text-ds-ok"}`}>{rateLabel(change.to)} {change.to > change.from ? "▲" : "▼"}</b> desde {dayLabel(change.since)}
             <span className="block text-xs text-ds-ink-muted">{change.saleCount} vendas com a taxa nova · {change.impactCents >= 0 ? `custo extra ${centsLabel(change.impactCents)}` : `economia ${centsLabel(-change.impactCents)}`}{change.reopened ? " · reaberto: a Stone mudou o dado depois da decisão" : ""}</span></span>
-          <span className="flex gap-2">{act(`rate_change:${change.key}`, "É a nova taxa", { kind: "rate_change", itemKey: change.key, decision: "new_rate", fingerprint: change.fingerprint })}{act(`rate_change:${change.key}`, "Não, contestar", { kind: "rate_change", itemKey: change.key, decision: "contested", fingerprint: change.fingerprint }, true)}</span>
+          <span className="flex flex-wrap gap-2">{effectiveDate(change.key)}{act(`rate_change:${change.key}`, "É a nova taxa", { kind: "rate_change", itemKey: change.key, decision: "new_rate", fingerprint: change.fingerprint })}{act(`rate_change:${change.key}`, "Não, contestar", { kind: "rate_change", itemKey: change.key, decision: "contested", fingerprint: change.fingerprint }, true)}</span>
         </li>)}</ul>
       </Card> : null}
 
       <Card kick="Vendas a corrigir" title={`${view.exceptions.length} venda(s) · ${centsLabel(view.exceptions.filter(item => item.differenceCents > 0).reduce((sum, item) => sum + item.differenceCents, 0))} acima`}
-        sub="Só as vendas fora da taxa atual do grupo (tolerância de R$ 0,01 por parcela)." open={salesOpen} onToggle={() => setSalesOpen(value => !value)}
+        sub="Taxa vigente na data da venda × cobrada. Cartão respeita arredondamento por parcela; PIX usa corte de centavos. Antecipação não integra o MDR." open={salesOpen} onToggle={() => setSalesOpen(value => !value)}
         aside={view.exceptions.length ? <StatusPill variant="danger">{view.exceptions.length} pendente(s)</StatusPill> : <StatusPill variant="ok">Nada a corrigir</StatusPill>}>
         {salesOpen ? exceptionsByGroup.length ? <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
           <thead><tr><th className={th}>Venda</th><th className={`${th} text-right`}>Bruto</th><th className={`${th} text-right`}>Taxa atual</th><th className={`${th} text-right`}>Cobrada</th><th className={`${th} text-right`}>Diferença</th><th className={th}>Motivo</th><th className={th} /></tr></thead>
@@ -117,8 +123,8 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
             const open = openGroups.has(group.key);
             const sum = group.items.reduce((total, item) => total + item.differenceCents, 0);
             return <Fragment key={group.key}>
-              <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggleGroup(group.key)} aria-expanded={open}>
-                <td colSpan={4} className={`${td} whitespace-nowrap font-extrabold`}><span className="inline-flex items-center gap-1">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronRight aria-hidden="true" className="h-4 w-4" />}{group.items[0].label} <span className="font-normal text-ds-ink-muted">· {group.items.length} venda(s)</span></span></td>
+              <tr className="hover:[&>td]:bg-ds-muted">
+                <td colSpan={4} className={`${td} whitespace-nowrap font-extrabold`}><span className="inline-flex items-center gap-1">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronRight aria-hidden="true" className="h-4 w-4" />}{group.items[0].label} <span className="font-normal text-ds-ink-muted">· {group.items.length} venda(s) · vigente {rateLabel(group.items[0].expectedCents/group.items[0].grossCents)} · cobrada {rateLabel(Math.min(...group.items.map(item=>item.chargedCents/item.grossCents)))} a {rateLabel(Math.max(...group.items.map(item=>item.chargedCents/item.grossCents)))}</span><Button type="button" size="xs" variant="ds-secondary" aria-expanded={open} onClick={()=>toggleGroup(group.key)}>Investigar</Button></span></td>
                 <td className={`${td} text-right tabular-nums font-bold ${sum > 0 ? "text-ds-danger" : "text-ds-ok"}`}>{sum > 0 ? "+" : ""}{centsLabel(sum)}</td><td colSpan={2} className={td} />
               </tr>
               {open ? group.items.map(item => <tr key={item.key}>
@@ -130,7 +136,6 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
                 <td className={`${td} text-xs`}>{REASON[item.reason]}</td>
                 <td className={td}><span className="flex flex-wrap gap-1">
                   {act(`sale_fee:${item.key}`, "Aceitar", { kind: "sale_fee", itemKey: item.key, decision: "accepted", fingerprint: item.fingerprint })}
-                  {act(`sale_fee:${item.key}`, "É a nova taxa", { kind: "sale_fee", itemKey: item.key, decision: "new_rate", fingerprint: item.fingerprint })}
                   {act(`sale_fee:${item.key}`, "Contestar", { kind: "sale_fee", itemKey: item.key, decision: "contested", fingerprint: item.fingerprint }, true)}
                 </span></td>
               </tr>) : null}
@@ -155,7 +160,7 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
         <div className="pb-4"><FeeHistoryCharts series={view.history} /></div>
       </Card>
 
-      <Card kick="Taxas atuais" title="Taxa recorrente por grupo" sub="Referência = taxa que mais se repete nos últimos 60 dias (mínimo de 5 vendas), confirmada pelo operador. Não é o contrato.">
+      <Card kick="Sugestões e referências da unidade" title="Referências por grupo" sub="Referência = taxa que mais se repete nos últimos 60 dias (mínimo de 5 vendas), confirmada pelo operador. Não é o contrato.">
         <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
           <thead><tr><th className={th}>Grupo</th><th className={`${th} text-right`}>Taxa atual</th><th className={th}>Desde</th><th className={`${th} text-right`}>Vendas (60 dias)</th><th className={th}>Situação</th></tr></thead>
           <tbody>{view.groups.map(group => <tr key={group.key}>
@@ -165,7 +170,7 @@ export function StoneFeeReviewPanel({ mapping, stoneCode, onPending, onMonthChan
             <td className={`${td} text-right tabular-nums`}>{group.saleCount}</td>
             <td className={td}>{!group.reference ? <StatusPill variant="neutral">Sem referência (poucas vendas)</StatusPill>
               : group.reference.status === "confirmed" ? <StatusPill variant="ok">Confirmada</StatusPill>
-                : <span className="flex flex-wrap items-center gap-2"><StatusPill variant="warn">Sugerida</StatusPill>{act(`group_rate:${group.key}`, "Confirmar", { kind: "group_rate", itemKey: group.key, decision: "confirmed", fingerprint: `group:${group.reference.rate}` })}</span>}</td>
+                : <span className="flex flex-wrap items-center gap-2"><StatusPill variant="warn">Sugerida · não aplicada</StatusPill>{effectiveDate(group.key)}{act(`group_rate:${group.key}`, "Confirmar", { kind: "group_rate", itemKey: group.key, decision: "confirmed", fingerprint: `group:${group.reference.rate}` })}</span>}</td>
           </tr>)}</tbody>
         </table></div>
       </Card>
