@@ -1037,6 +1037,8 @@ const CSS = `
 
 /* a barra do simulador para logo abaixo da barra superior do sistema (header: sticky top-3 + h-11 = 56px) */
 .gm-ds .gm-pg{scroll-margin-top:330px}
+/* barra do simulador em escala menor no desktop: mesmo conteúdo e visual, só reduzido (zoom 0,8) */
+@media (min-width:1024px){.gm-ds .gm-fixa{zoom:.8;top:calc(68px / .8);margin-bottom:calc(20px / .8)}.gm-ds .gm-pg{scroll-margin-top:270px}}
 /* vendas no mês em destaque: número grande, situação da meta e régua com as metas */
 .gm-ds .gm-fixa-l label{font-size:15px;color:var(--ds-ink-on-dark-2)}
 .gm-ds .gm-fixa .gm-campo{background:transparent;border:0;border-radius:12px;padding:0 6px;margin-left:-6px;align-items:baseline;width:fit-content;max-width:100%}
