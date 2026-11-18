@@ -413,17 +413,18 @@ test("a dense maximum-sized day reconciles as one complete daily set without dro
 });
 
 test("reconciles a net card capture after discounts on active and cancelled items", () => {
+  const items = [
+    { ValorTotal: "12.00" },
+    { ValorTotal: "6.00", ValorDesconto: "1.50" },
+    { ValorTotal: "9.00", ValorDesconto: "1.50" },
+    { ValorTotal: "6.00", ValorDesconto: "1.00", IsCancelado: true, DtCancelamento: "2026-09-20T10:21:00" },
+  ];
   const adjusted = coupon({
     dtrecebimento: "2026-09-20T10:23:01",
     valortotal: "24.00",
     formaPgtos: [{ nome: "CARTAO CREDITO", valortotal: "24.00", detalhes: [{ nsu: "000123", subadquirente: "STONE" }] }],
     iscancelado: true,
-    Itens: [
-      { ValorTotal: "12.00" },
-      { ValorTotal: "6.00", ValorDesconto: "1.50" },
-      { ValorTotal: "9.00", ValorDesconto: "1.50" },
-      { ValorTotal: "6.00", ValorDesconto: "1.00", IsCancelado: true, DtCancelamento: "2026-09-20T10:21:00" },
-    ],
+    Itens: items,
   });
   const stone = file(sale("000123", "24.00", "2"));
   const result = review([adjusted], stone);
@@ -435,12 +436,11 @@ test("reconciles a net card capture after discounts on active and cancelled item
     finalizedAfterCancellation: true,
   });
   for (const malformed of ["", "-1.50", "1.501", "7.00", null]) {
-    const items = adjusted.Itens as Record<string, unknown>[];
     const invalid = review([{ ...adjusted, Itens: [{ ...items[1], ValorDesconto: malformed }, items[0], ...items.slice(2)] }], stone);
     assert.equal(invalid.cases[0].kind, "status_mismatch");
     assert.equal(invalid.pdvFacts[0].adjustment, undefined);
   }
-  const afterCapture = (adjusted.Itens as Record<string, unknown>[]).map(item => item.IsCancelado
+  const afterCapture = items.map(item => item.IsCancelado
     ? { ...item, DtCancelamento: "2026-09-20T10:22:36" } : item);
   const overlap = review([{ ...adjusted, Itens: afterCapture }], stone);
   assert.equal(overlap.pdvFacts[0].adjustment?.finalizedAfterCancellation, true);
