@@ -1,3 +1,5 @@
+import { readConfirmedRateReferences } from "../receipts-reconciliation/confirmed-rate-reference.server";
+import { rateReferenceEvidence, referenceOnDate } from "../receipts-reconciliation/confirmed-rate-reference";
 import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
@@ -32,30 +34,38 @@ export async function readFeeRecognitionPolicy(request: FeeRequest, context: Fee
 export async function previewSaleFees(request: FeeRequest, context: FeeContext, deps = recognitionDependencies()): Promise<FeeRecognitionPreview> {
   assertFeeAdmin(context); const { policy } = await readFeeRecognitionPolicy(request, context);
   const identity = { workspaceId: context.workspace_id, kioskId: request.kioskId, mappingId: request.mappingId, stoneCode: request.stoneCode, referenceDate: request.referenceDate };
-  const [review, file, pix, existing, centers] = await Promise.all([
+  const [review, file, pix, existing, centers, referenceSource] = await Promise.all([
     deps.readReview(identity), request.source === "cards" ? deps.readStone(request).then(xml => parseStoneAgendaXml(xml, request)) : null,
     request.source === "pix" ? deps.readPix(identity) : null,
     records.where("workspaceId", "==", context.workspace_id).where("unitId", "==", request.kioskId).where("stoneCode", "==", request.stoneCode).where("referenceDate", "==", request.referenceDate).where("source", "==", request.source).limit(101).get(),
     db.collection("resultCenters").where("unitIds", "array-contains", request.kioskId).limit(26).get(),
+    readConfirmedRateReferences(identity),
   ]);
   if (existing.size > 100 || centers.size > 25) fail("LIMIT", "Volume acima do limite da prévia. Nenhuma escrita realizada.");
   let currentReview = review;
   if (review) { const head = await db.collection("dailySalesReviews").doc(review.review.id).get();
     if (head.get("status") !== "closed" || head.get("revision") !== review.review.revision || head.get("workspaceId") !== context.workspace_id || head.get("kioskId") !== request.kioskId) currentReview = null;
   }
-  const evidence = collectSaleRecognition({ request, workspaceId: context.workspace_id, file, pix, review: currentReview, policy });
+  const evidence = collectSaleRecognition({ request, workspaceId: context.workspace_id, file, pix, review: currentReview, policy, references: referenceSource.references });
+  if (referenceSource.unresolved) evidence.pending.push("Há referências legadas sem escopo/vigência comprovados; confira a aba Taxas.");
+  if (!policy?.enabled) evidence.pending.push("Configure somente a classificação contábil e a autorização de apuração; os percentuais confirmados da aba Taxas são reutilizados.");
   const legacyId = createHash("sha256").update(`${context.workspace_id}:${request.stoneCode}:${request.referenceDate.slice(0, 7)}`).digest("hex");
   const legacy = await db.collection("stoneFeeMonthExpenses").doc(legacyId).get();
   if (legacy.get("active")) evidence.pending.push("Há lançamento mensal legado ativo. Revise o histórico antes de reconhecer componentes, sem migrar automaticamente.");
-  return { request, batches: evidence.batches, pending: evidence.pending, policy,
+  return { request, batches: evidence.batches, pending: evidence.pending, policy, referenceFingerprint:feeHash(referenceSource),
     records: existing.docs.filter(d => d.get("schemaVersion") === 2).map(d => d.data() as FeeRecognitionRecord),
     centers: centers.docs.filter(d => (d.get("workspaceId") ?? WORKSPACE_ID) === context.workspace_id && d.get("active") !== false && d.get("unitIds")?.length === 1)
       .map(d => ({ id: d.id, name: String(d.get("name") || d.id) })),
     sourceStatus: currentReview?.review.status === "closed" ? "Vendas conciliadas; conferir taxa por componente" : "Conciliação PDV pendente" };
 }
-async function validateTransactionScope(tx: FirebaseFirestore.Transaction, request: FeeRequest, context: FeeContext, policy: FeeRecognitionPolicy) {
+async function validateTransactionScope(tx: FirebaseFirestore.Transaction, request: FeeRequest, context: FeeContext, policy: FeeRecognitionPolicy, batch?: import("./recognition-contracts").FeeRecognitionBatch, expectedReferences?: string) {
   const { document: mappingDoc } = await recognitionMapping(request, context, tx);
   if (feeHash(feeRecognitionPolicySchema.parse(mappingDoc.get("feeRecognitionPolicy"))) !== feeHash(policy)) fail("POLICY_CHANGED", "Configuração mudou; atualize a prévia.");
+  if (expectedReferences) {
+    const latest = await readConfirmedRateReferences({workspaceId:context.workspace_id,mappingId:request.mappingId,kioskId:request.kioskId,stoneCode:request.stoneCode},tx);
+    if(feeHash(latest)!==expectedReferences) fail("REFERENCE_CHANGED","Referências confirmadas mudaram; atualize a prévia antes de reconhecer.");
+    for (const member of batch?.members??[]) if (member.rateReference) { const reference=referenceOnDate(latest.references,member.rateReference.groupKey,member.soldOn); if (!reference || feeHash(rateReferenceEvidence(reference))!==feeHash(member.rateReference)) fail("REFERENCE_CHANGED","Referência confirmada mudou; atualize a prévia antes de reconhecer."); }
+  }
   assertFeePeriodOpen(policy, request.referenceDate.slice(0, 7));
   const legacyId = createHash("sha256").update(`${context.workspace_id}:${request.stoneCode}:${request.referenceDate.slice(0, 7)}`).digest("hex");
   const legacy = await tx.get(db.collection("stoneFeeMonthExpenses").doc(legacyId)); if (legacy.get("active")) fail("LEGACY_ACTIVE", "Lançamento mensal legado ativo; revisão necessária antes de reconhecer novamente.");
@@ -94,7 +104,7 @@ export async function executeSaleFeeAction(raw: unknown, context: FeeContext, de
   const preview = await previewSaleFees(input.request, context, deps); const batch = preview.batches.find(b => b.id === input.batchId);
   if (!batch || batch.fingerprint !== input.fingerprint) fail("STALE_PREVIEW", "Fonte mudou ou não é elegível. Atualize a prévia.");
   return db.runTransaction(async tx => {
-    await validateTransactionScope(tx, input.request, context, policy); const ref = records.doc(batch.id), current = await tx.get(ref);
+    await validateTransactionScope(tx, input.request, context, policy, batch, preview.referenceFingerprint); const ref = records.doc(batch.id), current = await tx.get(ref);
     const previous = current.exists ? current.data() as FeeRecognitionRecord : null;
     if (previous && (previous.schemaVersion !== 2 || previous.workspaceId !== context.workspace_id || previous.unitId !== input.request.kioskId || previous.stoneCode !== input.request.stoneCode)) fail("LEGACY_REVIEW", "Registro legado ou de outro escopo exige revisão.");
     if (previous?.active && previous.receivedComponentIds.length && previous.batch.fingerprint !== batch.fingerprint) fail("SETTLED_REVISION", "Há parcelas liquidadas. Revise pelo arquivo de pagamentos ou reverta explicitamente, sem substituir evidência por previsão.");

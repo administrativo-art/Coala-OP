@@ -1,3 +1,4 @@
+import type { ConfirmedRateReference } from "../receipts-reconciliation/confirmed-rate-reference";
 import { z } from "zod";
 import { feeRequestSchema, type FeeKind } from "./contracts";
 const id = z.string().trim().min(1).max(180).regex(/^[^/]+$/);
@@ -15,8 +16,9 @@ export const feeRecognitionPolicySchema = z.object({ version: z.number().int().p
 export type FeeRecognitionPolicy = z.infer<typeof feeRecognitionPolicySchema>;
 export type FeeRateContract = z.infer<typeof feeRateContractSchema>;
 export type FeeRecognitionComponent = { id: string; kind: FeeKind; transactionId: string; installment: number; soldOn: string; dueOn: string;
-  grossDecimal: string; feeDecimal: string; expectedNetDecimal: string; measurement: "assessed" | "estimated"; basis: "provider_fee" | "capture_net" | "contract";
+  grossDecimal: string; feeDecimal: string; expectedNetDecimal: string; measurement: "assessed" | "estimated"; basis: "provider_fee" | "capture_net" | "contract" | "confirmed_reference";
   sourceFileId: string; sourceHash: string; reviewId: string; reviewRevision: number; reviewFingerprint: string;
+  rateReference?: Omit<ConfirmedRateReference,"actorId"|"actorNamespace">;
   contractId: string | null; contractVersion: number | null; settledOn: string | null; paidNetDecimal: string | null; anticipationDecimal: string | null };
 export type FeeRecognitionBatch = { id: string; fingerprint: string; kind: FeeKind; soldOn: string; dueOn: string; amountCents: number; grossCents: number; expectedNetCents: number;
   measurement: "assessed" | "estimated"; members: FeeRecognitionComponent[] };
@@ -25,7 +27,7 @@ export type FeeRecognitionRecord = { schemaVersion: 2; id: string; workspaceId: 
   createdExpense?: boolean; previousFields?: Record<string, unknown>; previousMissing?: string[];
   policyVersion: number; state: "assessed" | "estimated" | "partially_received" | "received" | "cancelled"; receivedComponentIds: string[]; expenseGuard: string | null; updatedAt: string };
 export type FeeRecognitionPreview = { request: z.infer<typeof feeRequestSchema>; batches: FeeRecognitionBatch[]; records: FeeRecognitionRecord[]; pending: string[];
-  policy: FeeRecognitionPolicy | null; centers: Array<{ id: string; name: string }>; sourceStatus: string };
+  policy: FeeRecognitionPolicy | null; referenceFingerprint: string; centers: Array<{ id: string; name: string }>; sourceStatus: string };
 export const feeRecognitionActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("preview_sales"), request: feeRequestSchema }).strict(),
   z.object({ action: z.enum(["recognize_sale", "revise_sale", "link_sale"]), request: feeRequestSchema, batchId: hash, fingerprint: hash,
