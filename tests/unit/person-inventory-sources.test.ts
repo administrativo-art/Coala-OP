@@ -85,3 +85,5 @@ test('claim financeiro com workspace aninhado prova o tenant sem aceitar root co
 test('cabeçalho PIX que admite CPF é pessoal com lacuna explícita, sem equivalência por documento',()=>{
  const source=sourceById("stone-pix-file-owner-identity-gap");assert.equal(source?.collection,"stonePixConciliationFiles");assert.equal(source?.field,"document");assert.equal(source?.role,"subject");assert.equal(source?.coverage,"legacy_gap");assert.equal(source?.namespace,"subjectKeys");assert.match(source?.reason??"",/CPF.*não há ID imutável/);assert.equal(source?.permissionPolicy,"financial");
 });
+
+test("XML bruto da carteira permanece lacuna explícita sem identidade inventada",()=>{const source=sourceById("stone-portfolio-raw-xml-identity-gap");assert.equal(source?.collection,"stonePortfolioFiles");assert.equal(source?.field,"xml");assert.equal(source?.coverage,"legacy_gap");assert.equal(source?.namespace,"subjectKeys");assert.match(source?.reason??"",/Consulta por pessoa indisponível/);});

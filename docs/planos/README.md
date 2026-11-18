@@ -38,3 +38,4 @@
 | [Plano de Implementação: Analytics Operacional em Formulários](plano-implementacao-analytics-formularios.md) | Formulários |
 | [Documentos e histórico de férias](plano-ferias-documentos.md) | Pessoas e DP |
 - [Taxas confirmadas de Recebimentos → DRE](plano-taxas-confirmadas-recebimentos-dre.md)
+- [Recebimentos: pagamentos entre competências](plano-recebimentos-pagamentos-entre-competencias.md)

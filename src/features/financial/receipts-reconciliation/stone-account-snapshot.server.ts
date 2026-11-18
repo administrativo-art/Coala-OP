@@ -62,7 +62,7 @@ export async function saveStoneReceiptSnapshot(identity: StoneReceiptSnapshotIde
 
 export type StoneReceiptSavedResult =
   | { view: "saved"; status: "not_ready"; month: string }
-  | { view: "saved"; status: "ready"; month: string; savedAt: string; result: StoneAccountMonthResult };
+  | { view: "saved"; status: "ready"; month: string; savedAt: string|null; cacheReadAt?:string; result: StoneAccountMonthResult };
 
 /** Lê o resultado salvo, conferindo que pertence ao mesmo vínculo; outro vínculo = "ainda não conferido". */
 export async function readStoneReceiptSnapshot(identity: StoneReceiptSnapshotIdentity): Promise<StoneReceiptSavedResult> {
