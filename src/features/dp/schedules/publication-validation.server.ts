@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
+import type { ServerUserContext } from '@/lib/auth-server';
+import { canAccessUnit } from '@/lib/unit-access';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
@@ -41,10 +43,10 @@ function chunks<T>(items: T[], size: number): T[][] {
 
 /** Run after capturing publication fence and before preparing the revision. */
 export async function validatePublicationOccupancy(params: {
-  scheduleId: string; workspaceId: string; year: number; month: number;
+  context: ServerUserContext; scheduleId: string; workspaceId: string; year: number; month: number;
   shifts: Shift[];
 }) {
-  const { scheduleId, workspaceId, year, month, shifts } = params;
+  const { context, scheduleId, workspaceId, year, month, shifts } = params;
   const first = `${year}-${String(month).padStart(2, '0')}-01`;
   const through = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   const prior = dayBefore(first);
@@ -99,15 +101,33 @@ export async function validatePublicationOccupancy(params: {
     }
   }
   if (other.size > MAX_OTHER_SHIFTS) fail('DP_PUBLICATION_OCCUPANCY_LIMIT', 'Há turnos demais para validar a disponibilidade.');
-  const byDay = new Map<string, Array<{ shift: string; slice: OccupancySlice }>>();
+  const byDay = new Map<string, Array<{ shift: Shift; slice: OccupancySlice }>>();
   for (const shift of [...shifts, ...other.values()]) {
     for (const slice of sliceFor(shift)) {
       const key = createHash('sha256').update(`${slice.beneficiaryUid}:${slice.date}`).digest('hex');
       const existing = byDay.get(key) ?? [];
-      if (existing.some((item) => item.shift !== `${shift.scheduleId}:${shift.id}` && overlaps(item.slice, slice))) {
+      const conflict = existing.find((item) =>
+        (item.shift.scheduleId !== shift.scheduleId || item.shift.id !== shift.id) && overlaps(item.slice, slice));
+      if (conflict) {
+        const work = shift.dayOffDraft === true ? conflict.shift
+          : conflict.shift.dayOffDraft === true ? shift : undefined;
+        if (work?.type === 'work') {
+          const otherUnitId = work.unitId;
+          if (typeof otherUnitId === 'string' && otherUnitId && !otherUnitId.includes('/')
+            && canAccessUnit(context.userDoc, otherUnitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+            const unit = await dbAdmin.collection('dp_units').doc(otherUnitId).get();
+            const unitName = unit.get('name');
+            const dateLabel = slice.date.split('-').reverse().join('/');
+            if (typeof unitName === 'string' && typeof work.startTime === 'string' && typeof work.endTime === 'string') {
+              fail('DP_PUBLICATION_OCCUPANCY_CONFLICT',
+                `O DSR de ${dateLabel} conflita com um turno em ${unitName}, das ${work.startTime} às ${work.endTime}.`);
+            }
+          }
+          fail('DP_PUBLICATION_OCCUPANCY_CONFLICT', 'Um DSR do rascunho conflita com um turno vigente. Revise as escalas da colaboradora.');
+        }
         fail('DP_PUBLICATION_OCCUPANCY_CONFLICT', 'Uma pessoa possui turnos ou folgas sobrepostos.');
       }
-      existing.push({ shift: `${shift.scheduleId}:${shift.id}`, slice });
+      existing.push({ shift, slice });
       byDay.set(key, existing);
     }
   }

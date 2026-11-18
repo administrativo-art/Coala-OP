@@ -3,6 +3,7 @@
   "nonPersonalCollections": [
     "accounts",
     "dailySalesRefundWatches",
+    "dp_units",
     "financialAcquirerFeeBatches",
     "kiosks",
     "pixRefundReviewDates",

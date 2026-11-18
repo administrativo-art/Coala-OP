@@ -7,8 +7,10 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { holdRepPCompetenceForSchedulePublication } from '@/features/dp/rep-p/competence-fence.server';
 import { AppError } from '@/lib/observability/app-error';
-import { canAccessUnit } from '@/lib/unit-access';
+import { canAccessUnit, canAccessUserByUnit } from '@/lib/unit-access';
 import { hasPublishedScheduleVersion, mergeScheduleDraft, scheduleShiftFingerprint, type DPScheduleDraftEdit } from '@/lib/dp-schedule-publication';
+import type { DraftDayOffInput } from '@/features/dp/day-offs/schemas';
+import { assertPublishDayOffPermission, dayOffOperationRef } from '@/features/dp/day-offs/service.server';
 import type { SaveWorkShiftInput, BulkWorkShiftInput } from '@/features/dp/shifts/schemas';
 import { validateScheduleJourneys } from '@/features/dp/journey-validation/service.server';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
@@ -56,6 +58,9 @@ function draftGeneration(schedule: DocumentSnapshot) {
 function editId(generation: string, shiftId: string) {
   if (!shiftId || shiftId.includes('/')) fail('DP_SHIFT_ID_INVALID', 'VALIDATION', 'Identificador de turno inválido.');
   return `${generation}_${shiftId}`;
+}
+function draftEditRef(scheduleRef: DocumentSnapshot['ref'], generation: string, shiftId: string) {
+  return scheduleRef.collection('draftEdits').doc(editId(generation, shiftId));
 }
 function raw(document: DocumentSnapshot | QueryDocumentSnapshot): Shift { return document.data() ?? {}; }
 function draft(document: DocumentSnapshot | QueryDocumentSnapshot): DraftDocument {
@@ -144,6 +149,69 @@ export async function discardConflictingDraftShifts(context: ServerUserContext, 
   });
 }
 
+export async function stageScheduleDayOff(context: ServerUserContext, scheduleId: string, input: DraftDayOffInput, requestId: string) {
+  assertPublishDayOffPermission(context);
+  const state = await loadDraft(context, scheduleId, 'edit');
+  const unitId = assertAccess(context, state.schedule, 'edit');
+  assertPeriod(state.schedule, input.date, unitId, input.unitId);
+  if (state.schedule.get('workspaceId') !== context.workspace_id) {
+    fail('DP_SCHEDULE_DRAFT_SCOPE_INVALID', 'AUTHORIZATION', 'Sem acesso a esta escala.');
+  }
+  if (state.conflicts.length || draftVersion(state.schedule) !== input.expectedDraftVersion) {
+    fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'A escala mudou. Atualize antes de editar o DSR.');
+  }
+  const operationRef = dayOffOperationRef(context.workspace_id, input.userId, input.date);
+  const shiftId = `day-off-${operationRef.id.slice(0, 20)}`;
+  const editRef = draftEditRef(state.ref, state.generation, shiftId);
+  const current = state.merged.get(shiftId);
+  const adding = input.action === 'add';
+  if (!adding && (current?.dayOffDraft !== true || state.published.has(shiftId))) {
+    fail('DP_DAY_OFF_DRAFT_NOT_FOUND', 'NOT_FOUND', 'DSR não encontrado no rascunho.');
+  }
+  if (adding) {
+    if (current?.dayOffDraft === true) return { shiftId };
+    if (current || state.published.has(shiftId) || [...state.merged.values()].some(
+      (shift) => shift.userId === input.userId && shift.date === input.date,
+    )) {
+      fail('DP_DAY_OFF_DRAFT_CONFLICT', 'CONFLICT', 'Já existe um turno ou DSR para esta pessoa no dia. Revise o rascunho.');
+    }
+    if (state.edits.size >= MAX_DRAFT_EDITS) fail('DP_SCHEDULE_DRAFT_LIMIT', 'DATA_INTEGRITY', 'O rascunho excede 500 turnos alterados.');
+  }
+
+  return dbAdmin.runTransaction(async (tx) => {
+    const schedule = await tx.get(state.ref);
+    assertAccess(context, schedule, 'edit');
+    if (!schedule.updateTime?.isEqual(state.schedule.updateTime!)) {
+      fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'A escala mudou. Atualize antes de editar o DSR.');
+    }
+    const now = Timestamp.now();
+    if (adding) {
+      const [user, unit] = await tx.getAll(dbAdmin.collection('users').doc(input.userId), dbAdmin.collection('dp_units').doc(unitId));
+      const bizneoId = Number(String(user.get('registrationIdBizneo') ?? '').trim());
+      if (!user.exists || user.get('isActive') === false || !Number.isInteger(bizneoId) || bizneoId <= 0) {
+        fail('DP_DAY_OFF_DRAFT_USER_UNAVAILABLE', 'VALIDATION', 'A colaboradora precisa estar ativa e vinculada ao Bizneo.');
+      }
+      if (!canAccessUserByUnit(context.userDoc, user.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {
+        fail('DP_DAY_OFF_DRAFT_USER_FORBIDDEN', 'AUTHORIZATION', 'Sem acesso à colaboradora para lançar o DSR.');
+      }
+      if (!unit.exists || unit.get('isArchived') === true) fail('DP_SCHEDULE_UNIT_UNAVAILABLE', 'VALIDATION', 'A unidade da escala está indisponível.');
+      tx.set(editRef, { generationId: state.generation, shiftId, baseFingerprint: scheduleShiftFingerprint(null),
+        value: { scheduleId, unitId, userId: input.userId, userName: user.get('username') ?? null,
+          date: input.date, startTime: '', endTime: '', type: 'day_off', dayOffSource: 'manual', dayOffDraft: true,
+          createdAt: now, updatedAt: now }, updatedAt: now, updatedBy: context.decoded.uid });
+    } else {
+      tx.delete(editRef);
+    }
+    tx.update(state.ref, { publicationStatus: 'draft', publicationVersion: schedule.get('publicationVersion') ?? (schedule.get('publicationStatus') === 'draft' ? 0 : 1),
+      draftGenerationId: state.generation, draftVersion: draftVersion(schedule) + 1, draftUpdatedAt: now, draftUpdatedBy: context.decoded.uid });
+    tx.create(dbAdmin.collection('actionLogs').doc(), { workspace_id: context.workspace_id, user_id: context.decoded.uid,
+      username: context.userDoc.username ?? null, module: 'dp.schedules', action: 'day_off_draft_changed',
+      metadata: { request_id: requestId, schedule_id: scheduleId, shift_id: shiftId, action: input.action },
+      ip_address: null, timestamp: now, ttl: Timestamp.fromMillis(now.toMillis() + 365 * 24 * 60 * 60 * 1000) });
+    return { shiftId };
+  });
+}
+
 export async function stageWorkShift(params: { context: ServerUserContext; scheduleId: string; shiftId: string; input?: SaveWorkShiftInput; mode: 'create' | 'update' | 'delete'; requestId: string }) {
   const { context, scheduleId, shiftId, input, mode } = params;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
@@ -151,7 +219,7 @@ export async function stageWorkShift(params: { context: ServerUserContext; sched
     const schedule = await tx.get(scheduleRef);
     const unitId = assertAccess(context, schedule, 'edit');
     const generation = draftGeneration(schedule);
-    const editRef = scheduleRef.collection('draftEdits').doc(editId(generation, shiftId));
+    const editRef = draftEditRef(scheduleRef, generation, shiftId);
     const [official] = await currentShifts(tx, schedule, [shiftId]);
     const [edit, editCount] = await Promise.all([tx.get(editRef),
       tx.get(scheduleRef.collection('draftEdits').where('generationId', '==', generation).limit(MAX_DRAFT_EDITS + 1))]);
@@ -266,7 +334,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   const state = await loadDraft(context, scheduleId, 'publish');
   if (state.schedule.get('publicationStatus') === 'published' && state.edits.empty) {
     return { publicationStatus: 'published' as const, publicationVersion: publicationVersion(state.schedule),
-      shiftCount: Number(state.schedule.get('shiftCount') ?? 0), validation: state.schedule.get('journeyValidation') ?? null };
+      dayOffsToSync: [], shiftCount: Number(state.schedule.get('shiftCount') ?? 0), validation: state.schedule.get('journeyValidation') ?? null };
   }
   if (!context.isDefaultAdmin && context.permissions.dp.schedules.edit !== true) {
     fail('DP_SCHEDULE_EDIT_FORBIDDEN', 'AUTHORIZATION', 'Sem permissão para editar esta escala.');
@@ -283,6 +351,9 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   if (typeof workspaceId !== 'string' || workspaceId !== context.workspace_id || !Number.isInteger(year) || !Number.isInteger(month)) {
     fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'DATA_INTEGRITY', 'O ambiente ou a competência da escala está inconsistente.');
   }
+  const draftDayOffs = [...state.merged].filter(([, shift]) => shift.type === 'day_off' && shift.dayOffDraft === true);
+  if (draftDayOffs.length) assertPublishDayOffPermission(context);
+  const dayOffsToSync = draftDayOffs.map(([, shift]) => ({ userId: String(shift.userId), date: String(shift.date), unitId, source: 'retry' as const }));
   const releaseClosureFence = await holdRepPCompetenceForSchedulePublication(
     repPDbAdmin, workspaceId, `${year}-${String(month).padStart(2, '0')}`);
   try {
@@ -298,6 +369,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   const fencePeople = [...new Set([...changedPeople, ...allPeople])];
   const capturedFence = await capturePublicationFence(context.workspace_id, fencePeople);
   const proposed = [...state.merged].map(([id, value]) => ({ ...value, id, scheduleId }));
+  if (dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
   const validation = await validateScheduleJourneys({ context, scheduleId, proposedShifts: proposed });
   if (validation.status === 'blocked') fail('DP_SCHEDULE_JOURNEY_BLOCKED', 'VALIDATION', validation.issues[0]?.message ?? 'Revise as jornadas antes de publicar.');
   const restPeople: DPScheduleRestRecord['people'] = {};
@@ -320,7 +392,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   if (restRecord && Buffer.byteLength(JSON.stringify(restRecord)) > 350_000) {
     fail('DP_SCHEDULE_REST_RECORD_LIMIT', 'DATA_INTEGRITY', 'O registro de repousos excede o limite seguro da escala.');
   }
-  await validatePublicationOccupancy({ scheduleId, workspaceId, year, month, shifts: proposed });
+  if (!dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
 
   const unitRef = dbAdmin.collection('dp_units').doc(unitId);
   const userRefs = allPeople.map((id) => dbAdmin.collection('users').doc(id));
@@ -334,8 +406,9 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
     const value = state.pending.get(id)?.value?.shiftDefinitionId;
     return typeof value === 'string' && value ? [value] : [];
   }))];
+  const operationRefs = dayOffsToSync.map(({ userId, date }) => dayOffOperationRef(workspaceId, userId, date));
   const basisRefs = [unitRef, ...userRefs, ...journeyIds.map((id) => dbAdmin.collection('dp_journeys').doc(id)),
-    ...definitionIds.map((id) => dbAdmin.collection('dp_shiftDefinitions').doc(id))];
+    ...definitionIds.map((id) => dbAdmin.collection('dp_shiftDefinitions').doc(id)), ...operationRefs];
   const basis = await dbAdmin.getAll(...basisRefs);
   if (basis.reduce((size, document) => size + Buffer.byteLength(JSON.stringify(document.data() ?? {})), 0) > 6 * 1024 * 1024) {
     fail('DP_SCHEDULE_PUBLICATION_BASIS_LIMIT', 'DATA_INTEGRITY', 'Dados de pessoas e jornadas excedem o limite seguro da transação.');
@@ -347,17 +420,48 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   if ([...users.values()].some((document) => !document.exists || document.get('isActive') === false)) {
     fail('DP_SHIFT_USER_UNAVAILABLE', 'VALIDATION', 'Uma pessoa da escala está inativa ou indisponível.');
   }
+  for (const dayOff of dayOffsToSync) {
+    const user = users.get(dayOff.userId);
+    if (!canAccessUserByUnit(context.userDoc, user?.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {
+      fail('DP_DAY_OFF_DRAFT_USER_FORBIDDEN', 'AUTHORIZATION', 'Sem acesso a uma colaboradora com DSR no rascunho.');
+    }
+    const bizneoId = Number(String(user?.get('registrationIdBizneo') ?? '').trim());
+    if (!Number.isInteger(bizneoId) || bizneoId <= 0) {
+      fail('DP_DAY_OFF_DRAFT_USER_UNAVAILABLE', 'VALIDATION', 'Uma colaboradora com DSR no rascunho está sem vínculo com o Bizneo.');
+    }
+  }
   const journeys = new Map(basis.slice(1 + userRefs.length, 1 + userRefs.length + journeyIds.length)
     .map((document) => [document.id, document]));
-  const definitions = new Map(basis.slice(1 + userRefs.length + journeyIds.length).map((document) => [document.id, document]));
+  const definitions = new Map(basis.slice(1 + userRefs.length + journeyIds.length, 1 + userRefs.length + journeyIds.length + definitionIds.length).map((document) => [document.id, document]));
+  const operationStart = 1 + userRefs.length + journeyIds.length + definitionIds.length;
+  for (const [index, operation] of basis.slice(operationStart).entries()) {
+    if (!operation.exists) continue;
+    const { userId, date } = dayOffsToSync[index];
+    if (operation.get('workspaceId') !== workspaceId || operation.get('userId') !== userId
+      || operation.get('date') !== date || operation.get('scheduleId') !== scheduleId
+      || operation.get('unitId') !== unitId || operation.get('shiftId') !== draftDayOffs[index][0]
+      || operation.get('status') !== 'removed') {
+      fail('DP_DAY_OFF_DRAFT_OPERATION_CONFLICT', 'CONFLICT',
+        'Um DSR do rascunho já tem uma operação no Bizneo vinculada a outra escala ou ainda em andamento. Revise a folga antes de publicar.');
+    }
+  }
   const stableAt = state.schedule.get('draftUpdatedAt') instanceof Timestamp
     ? state.schedule.get('draftUpdatedAt') as Timestamp : state.schedule.updateTime ?? Timestamp.now();
   const identity = { draftGenerationId: state.generation, draftVersion: expectedDraftVersion,
     operationalVersion: oldOperationalVersion, publicationVersion: oldVersion,
     baseRevisionId: typeof state.schedule.get('activeRevisionId') === 'string' ? state.schedule.get('activeRevisionId') as string : null };
-  const revisionId = createHash('sha256').update(JSON.stringify({ scheduleId, identity, basisTimes }))
+  const referenceAudit = workIds.length ? { actorId: context.decoded.uid, requestId } : null;
+  const revisionId = createHash('sha256').update(JSON.stringify({ scheduleId, identity, basisTimes, referenceAudit }))
     .digest('hex').slice(0, 48);
-  const entries = proposed.map((shift) => ({ id: shift.id, value: { ...shift } as Shift }));
+  const entries = proposed.map((shift) => {
+    const value: Shift = { ...shift };
+    if (value.type === 'day_off' && value.dayOffDraft === true) {
+      delete value.dayOffDraft;
+      value.bizneoSyncStatus = 'pending';
+      value.bizneoSyncUpdatedAt = stableAt;
+    }
+    return { id: shift.id, value };
+  });
   const entryById = new Map(entries.map((entry) => [entry.id, entry]));
   const references: Array<{ id: string; value: Record<string, unknown> }> = [];
   for (const id of workIds) {
@@ -430,7 +534,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
     const [manifest, ...currentBasis] = await tx.getAll(state.ref.collection('revisions').doc(revisionId), ...basisRefs);
     if (!manifest.exists || manifest.get('status') !== 'ready' || manifest.get('hash') !== prepared.hash
       || manifest.get('scheduleId') !== scheduleId) fail('DP_REVISION_INCOMPLETE', 'DATA_INTEGRITY', 'A revisão preparada está incompleta.');
-    if (currentBasis.some((document, index) => document.updateTime?.toMillis() !== basisTimes[index][1])) {
+    if (currentBasis.some((document, index) => (document.updateTime?.toMillis() ?? null) !== basisTimes[index][1])) {
       fail('DP_SCHEDULE_PUBLICATION_BASIS_CHANGED', 'CONFLICT', 'Dados de unidade, pessoa ou jornada mudaram. Revise a escala.');
     }
     const fence = await preparePublicationFenceCommit(tx, workspaceId, fencePeople, capturedFence);
@@ -456,7 +560,7 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
       metadata: { request_id: requestId, schedule_id: scheduleId, version, revision_id: revisionId,
         changed_shift_count: changedIds.length }, ip_address: null, timestamp: now,
       ttl: Timestamp.fromMillis(now.toMillis() + 365 * 24 * 60 * 60 * 1000) });
-    return { publicationStatus: 'published' as const, publicationVersion: version, shiftCount: entries.length, validation };
+    return { publicationStatus: 'published' as const, publicationVersion: version, shiftCount: entries.length, validation, dayOffsToSync };
   });
   } finally {
     await releaseClosureFence();

@@ -109,6 +109,10 @@ function opaqueId(...parts: string[]) {
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 32);
 }
 
+export function dayOffOperationRef(workspaceId: string, userId: string, date: string) {
+  return dbAdmin.collection(OPERATIONS_COLLECTION).doc(opaqueId(workspaceId, userId, date));
+}
+
 function previousDates(date: string, count: number) {
   const cursor = new Date(`${date}T12:00:00.000Z`);
   return Array.from({ length: count }, (_, index) => {
@@ -153,7 +157,7 @@ function businessAudit(params: {
   };
 }
 
-function assertPublishPermission(context: ServerUserContext) {
+export function assertPublishDayOffPermission(context: ServerUserContext) {
   if (
     !context.isDefaultAdmin
     && (
@@ -219,10 +223,10 @@ async function prepareDayOff(params: {
   requestId: string;
 }): Promise<PreparedDayOff> {
   const { context, scheduleId, input, requestId } = params;
-  assertPublishPermission(context);
+  assertPublishDayOffPermission(context);
 
-  const operationId = opaqueId(context.workspace_id, input.userId, input.date);
-  const operationRef = dbAdmin.collection(OPERATIONS_COLLECTION).doc(operationId);
+  const operationRef = dayOffOperationRef(context.workspace_id, input.userId, input.date);
+  const operationId = operationRef.id;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
   const userRef = dbAdmin.collection('users').doc(input.userId);
   const unitRef = dbAdmin.collection('dp_units').doc(input.unitId);
@@ -761,10 +765,10 @@ async function prepareDayOffRemoval(params: {
   requestId: string;
 }): Promise<PreparedDayOffRemoval> {
   const { context, scheduleId, input, requestId } = params;
-  assertPublishPermission(context);
+  assertPublishDayOffPermission(context);
 
-  const operationId = opaqueId(context.workspace_id, input.userId, input.date);
-  const operationRef = dbAdmin.collection(OPERATIONS_COLLECTION).doc(operationId);
+  const operationRef = dayOffOperationRef(context.workspace_id, input.userId, input.date);
+  const operationId = operationRef.id;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
   const shiftRef = scheduleRef.collection('shifts').doc(input.shiftId);
   const userRef = dbAdmin.collection('users').doc(input.userId);
