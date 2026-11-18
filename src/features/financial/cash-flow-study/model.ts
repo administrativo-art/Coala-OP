@@ -50,10 +50,10 @@ export type StudyStoneParcel = { dueDate: string; grossCents: number; netCents: 
 export type StudyCategory = { id: string | null; name: string };
 export type StudyExpense = {
   id: string; description: string; supplier: string | null; date: string | null; amountCents: number; provisioned: boolean;
-  category: StudyCategory | null;
+  category: StudyCategory | null; excludeFromRecurringCoverage?: boolean;
 };
 /** Movimento realizado da conta. `transfer` = entre contas próprias: muda o saldo, não conta como entrada nem saída. */
-export type StudyRealized = { date: string; direction: "in" | "out"; amountCents: number; category: StudyCategory | null; transfer: boolean };
+export type StudyRealized = { date: string; direction: "in" | "out"; amountCents: number; category: StudyCategory | null; transfer: boolean; cardPayment?: boolean };
 export type StudyAccount = { id: string; name: string; kind: "operating" | "reserve"; cents: number | null; at: string | null };
 
 export type StudyInputs = {
@@ -254,7 +254,7 @@ export function projectRecurringOutflows(input: Pick<StudyInputs, "today" | "rea
   const window = [-3, -2, -1].map(offset => addMonths(currentMonth, offset));
   const categories = new Map<string, CategoryHistory>();
   for (const row of input.realized) {
-    if (row.direction !== "out" || row.transfer) continue;
+    if (row.direction !== "out" || row.transfer || row.cardPayment) continue;
     const month = row.date.slice(0, 7);
     if (!window.includes(month)) continue;
     const key = categoryKey(row.category);
@@ -267,9 +267,9 @@ export function projectRecurringOutflows(input: Pick<StudyInputs, "today" | "rea
   const monthsWithData = window.filter(month => [...categories.values()].some(history => history.months.has(month))).length;
   if (!monthsWithData) return [];
 
-  const launched = input.expenses.filter(expense => expense.date && expense.amountCents > 0)
+  const launched = input.expenses.filter(expense => !expense.excludeFromRecurringCoverage && expense.date && expense.amountCents > 0)
     .map(expense => ({ key: categoryKey(expense.category), date: clampToToday(expense.date!, today), cents: expense.amountCents }));
-  const paidThisMonth = input.realized.filter(row => row.direction === "out" && !row.transfer && row.date.startsWith(currentMonth) && row.date <= today)
+  const paidThisMonth = input.realized.filter(row => row.direction === "out" && !row.transfer && !row.cardPayment && row.date.startsWith(currentMonth) && row.date <= today)
     .map(row => ({ key: categoryKey(row.category), date: row.date, cents: row.amountCents }));
   const inRange = (list: Array<{ key: string; date: string; cents: number }>, key: string, from: string, to: string) =>
     list.filter(item => item.key === key && item.date >= from && item.date <= to).reduce((sum, item) => sum + item.cents, 0);

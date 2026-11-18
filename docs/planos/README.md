@@ -41,3 +41,5 @@
 - [Recebimentos: pagamentos entre competências](plano-recebimentos-pagamentos-entre-competencias.md)
 
 - [Visão do caixa — estágios do numerário](plano-visao-caixa-estagios-especie.md)
+
+- [Visão do caixa por fatura de cartão](plano-visao-caixa-faturas-cartao.md).
