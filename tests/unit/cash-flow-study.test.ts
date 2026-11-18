@@ -1,9 +1,10 @@
+import { issuedCashEvidence } from "../helpers/cash-flow-study-fixtures";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { authorizeCashFlowStudyActor } from "../../src/features/financial/cash-flow-study/access";
 import {
-  addDays, addMonths, backtestSalesAccuracy, buildCashFlowStudy, cashLagByUnit, DEFAULT_CASH_LAG_DAYS, horizonEndFor, monthEnd, projectRecurringOutflows,
+  addDays, addMonths, backtestSalesAccuracy, buildCashFlowStudy, cashLagByUnit, horizonEndFor, monthEnd, projectRecurringOutflows,
   weekStart, weekdaySalesAverage,
   type StudyAccount, type StudyBatch, type StudyClosure, type StudyExpense, type StudyInputs, type StudyRealized,
 } from "../../src/features/financial/cash-flow-study/model";
@@ -18,7 +19,7 @@ const closure = (date: string, partial: Partial<StudyClosure> = {}): StudyClosur
   depositStatus: "issued", depositEligibleCents: 10_000, ...partial,
 });
 const batch = (id: string, partial: Partial<StudyBatch> = {}): StudyBatch => ({
-  id, kioskId: "k1", kioskName: "Quiosque Tirirical", status: "paid", totalCents: 100_000,
+  id, workspaceId: "coala", interCobrancaId: `${id}_bill`, kioskId: "k1", kioskName: "Quiosque Tirirical", status: "paid", totalCents: 100_000,
   periodStartDate: "2026-09-01", periodEndDate: "2026-09-21", issuedAt: "2026-09-25T12:00:00.000Z", paidAt: "2026-09-28T12:00:00.000Z", ...partial,
 });
 const expense = (id: string, partial: Partial<StudyExpense> = {}): StudyExpense => ({
@@ -27,7 +28,7 @@ const expense = (id: string, partial: Partial<StudyExpense> = {}): StudyExpense 
 const out = (date: string, amountCents: number, category: StudyRealized["category"] = { id: "folha", name: "Folha" }, extra: Partial<StudyRealized> = {}): StudyRealized =>
   ({ date, direction: "out", amountCents, category, transfer: false, ...extra });
 const base = (partial: Partial<StudyInputs> = {}): StudyInputs => ({
-  today: TODAY, accounts: [inter()], stone: [], batches: [], closures: [], expenses: [], realized: [], ...partial,
+  today: TODAY, accounts: [inter()], stone: [], batches: [], closures: [], expenses: [], realized: [], cashEvidence: issuedCashEvidence(partial.batches ?? []), ...partial,
 });
 
 test("semanas começam na segunda; o estudo vai até o fim do sexto mês seguinte", () => {
@@ -50,6 +51,7 @@ test("boleto emitido cai 3 dias após a emissão; vencido conta hoje e fica marc
   assert.equal(b1.date, "2026-11-16");
   assert.equal(b1.certainty, "guaranteed");
   assert.equal(b1.stage, "boleto");
+  assert.equal(b1.detail, "Espécie · vendas de 01/09/2026 a 21/09/2026");
   assert.equal(b1.lateFrom, undefined, "no prazo não é atrasado");
   assert.equal(b2.date, TODAY, "boleto atrasado conta hoje");
   assert.equal(b2.lateFrom, "2026-11-04", "e guarda a data em que devia ter caído");
@@ -57,36 +59,14 @@ test("boleto emitido cai 3 dias após a emissão; vencido conta hoje e fica marc
   assert.equal(result.units[0].boletoCents, 1_062_000);
 });
 
-test("lote aberto e fechamento aprovado sem lote viram 'contado' em hoje + 10 dias, sem contar em dobro, com a data de origem", () => {
-  const result = buildCashFlowStudy(base({
-    batches: [batch("open", { status: "open", paidAt: null, issuedAt: null, totalCents: 30_000, periodEndDate: "2026-11-09" })],
-    closures: [
-      closure("2026-11-10", { depositStatus: "allocated", depositEligibleCents: 30_000 }),
-      closure("2026-11-11", { depositStatus: "not_allocated", depositEligibleCents: 12_000 }),
-    ],
-  }));
-  const counted = result.entries.filter(entry => entry.source === "deposit_counted");
-  assert.deepEqual(counted.map(entry => entry.amountCents).sort(), [12_000, 30_000]);
-  assert.ok(counted.every(entry => entry.date === addDays(TODAY, 10) && entry.stage === "counted"));
-  assert.deepEqual(counted.map(entry => entry.sinceDate).sort(), ["2026-11-09", "2026-11-11"]);
-  assert.equal(result.units[0].countedCents, 42_000);
-});
-
-test("espécie de dia sem contagem usa o prazo padrão até a unidade ter 4 lotes pagos e guarda desde quando espera", () => {
-  const open = closure("2026-11-14", { status: "draft", depositStatus: "not_eligible" });
-  const without = buildCashFlowStudy(base({ closures: [open] }));
-  const entry = without.entries.find(item => item.source === "cash_open")!;
-  assert.equal(entry.date, addDays("2026-11-14", DEFAULT_CASH_LAG_DAYS));
-  assert.equal(entry.stage, "cash_open");
-  assert.equal(entry.sinceDate, "2026-11-14");
-  assert.match(entry.label, /aguardando contagem/);
-  // 4 lotes pagos, meio do período em 11/09 e pagamento em 28/09 = 17 dias.
+test("numerário sem boleto fica operacional, sem entrada ou data bancária inventada", () => {
+  const result = buildCashFlowStudy(base({ batches: [batch("open", { status: "open", paidAt: null, issuedAt: null })], closures: [closure("2026-10-01", { status: "draft", operatorCount: 2, depositStatus: "not_eligible" })] }));
+  assert.equal(result.entries.some(entry => entry.source === "deposit_counted" || entry.source === "cash_open"), false);
+  assert.equal(result.cashOperations[0].originDate, "2026-10-01");
+  assert.equal(result.cashOperations[0].stage, "awaiting_count");
+  assert.equal(result.cashOperations[0].remainingCents, null);
   const paid = ["p1", "p2", "p3", "p4"].map(id => batch(id));
   assert.deepEqual(cashLagByUnit(paid).of("k1"), { days: 17, fromHistory: true });
-  assert.deepEqual(cashLagByUnit(paid).units, [{ kioskId: "k1", kioskName: "Quiosque Tirirical", paidBatches: 4, avgDays: 17, maxDays: 17 }]);
-  const withHistory = buildCashFlowStudy(base({ closures: [open], batches: paid }));
-  assert.equal(withHistory.entries.find(item => item.source === "cash_open")!.date, "2026-12-01");
-  assert.equal(withHistory.units[0].lagFromHistory, true);
 });
 
 test("vendas projetadas: média por dia da semana dos últimos 90 dias, líquidas e no prazo de cada forma", () => {

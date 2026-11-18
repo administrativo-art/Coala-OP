@@ -39,3 +39,5 @@
 | [Documentos e histórico de férias](plano-ferias-documentos.md) | Pessoas e DP |
 - [Taxas confirmadas de Recebimentos → DRE](plano-taxas-confirmadas-recebimentos-dre.md)
 - [Recebimentos: pagamentos entre competências](plano-recebimentos-pagamentos-entre-competencias.md)
+
+- [Visão do caixa — estágios do numerário](plano-visao-caixa-estagios-especie.md)
