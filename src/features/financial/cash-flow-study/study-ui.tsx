@@ -132,13 +132,20 @@ export function TileRow({ children }: { children: ReactNode }) {
 }
 
 /** Cabeçalho de grupo, no formato do cabeçalho de semana de Despesas (dia, semana ou mês). */
-export function GroupHeader({ row, granularity, today, open, onToggle, count, children }: {
-  row: Pick<PeriodRow, "start" | "end" | "weekStart" | "month">; granularity: Granularity; today: string; open: boolean; onToggle: () => void; count: number; children?: ReactNode;
+export function GroupHeader({ row, granularity, today, open, onToggle, count, children, summaryColumns }: {
+  row: Pick<PeriodRow, "start" | "end" | "weekStart" | "month">; granularity: Granularity; today: string; open: boolean; onToggle: () => void; count: number; children?: ReactNode; summaryColumns?: string;
 }) {
   const kicker = granularity === "day" ? (row.start === today ? "Hoje" : weekdayOf(row.start)) : granularity === "month" ? "Mês" : `Semana ${isoWeek(row.weekStart ?? row.start)}`;
   const label = granularity === "day" ? dmy(row.start)
     : granularity === "month" ? `${monthName(row.month!)} de ${row.month!.slice(0, 4)}${row.start > `${row.month}-01` ? " · de hoje em diante" : ""}`
       : `${row.start.slice(5, 7) === row.end.slice(5, 7) ? row.start.slice(8, 10) : dm(row.start)} a ${dmy(row.end)}`;
+  const heading = <>
+    <ChevronRight aria-hidden="true" className={cn("h-4 w-4 shrink-0 text-ds-accent-ink transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
+    <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-accent-ink" />
+    <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">{kicker}</span>
+    <span className="text-[13px] font-bold text-ds-ink">{label}</span>
+    <span className="text-xs text-ds-ink-faint">{count} {count === 1 ? "lançamento" : "lançamentos"}</span>
+  </>;
   return (
     <button
       type="button"
@@ -146,21 +153,23 @@ export function GroupHeader({ row, granularity, today, open, onToggle, count, ch
       aria-expanded={open}
       aria-label={`${open ? "Recolher" : "Expandir"} ${kicker} · ${label}`}
       onClick={onToggle}
-      className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-ds-divider bg-ds-accent-row px-[18px] py-2.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink"
+      className={cn("w-full items-center gap-x-3 border-b border-ds-divider bg-ds-accent-row px-[18px] py-2.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink",
+        summaryColumns ? cn("grid gap-y-2.5", summaryColumns) : "flex flex-wrap gap-y-1")}
     >
-      <ChevronRight aria-hidden="true" className={cn("h-4 w-4 shrink-0 text-ds-accent-ink transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
-      <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-accent-ink" />
-      <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">{kicker}</span>
-      <span className="text-[13px] font-bold text-ds-ink">{label}</span>
-      <span className="text-xs text-ds-ink-faint">{count} {count === 1 ? "lançamento" : "lançamentos"}</span>
-      <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 font-ds-mono text-[12.5px] font-extrabold">{children}</span>
+      {summaryColumns ? <>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">{heading}</span>
+        <span className="grid grid-cols-2 items-start gap-3 md:contents">{children}</span>
+      </> : <>
+        {heading}
+        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 font-ds-mono text-[12.5px] font-extrabold">{children}</span>
+      </>}
     </button>
   );
 }
 
-export function LedgerHead({ columns, labels }: { columns: string; labels: Array<{ text: string; right?: boolean }> }) {
+export function LedgerHead({ columns, labels, visibility = "md:grid" }: { columns: string; visibility?: "md:grid" | "lg:grid"; labels: Array<{ text: string; right?: boolean }> }) {
   return (
-    <div className={cn("hidden gap-3 border-b border-ds-divider bg-ds-muted px-[18px] py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint md:grid", columns)} aria-hidden="true">
+    <div className={cn("hidden gap-3 border-b border-ds-divider bg-ds-muted px-[18px] py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint", visibility, columns)} aria-hidden="true">
       {labels.map(label => <span key={label.text} className={cn(label.right && "text-right")}>{label.text}</span>)}
     </div>
   );

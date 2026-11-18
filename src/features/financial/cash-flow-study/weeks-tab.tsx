@@ -19,7 +19,12 @@ export const PERIOD_STATUS: Record<PeriodStatus, { label: string; variant: Statu
   negative: { label: "Negativo", variant: "danger" },
 };
 
-const LEDGER = "md:grid-cols-[minmax(0,2fr)_minmax(90px,.8fr)_96px_120px_120px_120px]";
+const LEDGER = "lg:grid-cols-[minmax(0,2fr)_minmax(90px,.8fr)_96px_120px_120px_120px]";
+const PERIOD_SUMMARY = "md:grid-cols-[minmax(0,1fr)_120px_120px_120px_120px]";
+const SUMMARY_AMOUNT = "flex min-w-0 flex-col items-start gap-y-0.5 text-[12.5px] md:block md:text-right";
+const SUMMARY_LABEL = "text-[11px] font-semibold text-ds-ink-muted md:sr-only";
+const SUMMARY_VALUE = "ml-auto whitespace-nowrap font-ds-mono font-extrabold tabular-nums";
+
 
 function axisLabel(row: PeriodRow, granularity: Granularity, today: string) {
   if (granularity === "day") return row.start === today ? "hoje" : dm(row.start);
@@ -104,41 +109,55 @@ export function WeeksTab({ data, controls }: { data: CashFlowStudyPayload; contr
       </Card>
 
       <Card title="Entradas e saídas" description="Um lançamento por linha, na data em que cai ou vence. Clique no cabeçalho do grupo para recolher ou abrir." aside={<span className="text-[12.5px] text-ds-ink-muted">{entryCount} lançamentos · {projection ? "com projeção" : "sem projeção"}</span>}>
-        <LedgerHead columns={LEDGER} labels={[{ text: "Descrição" }, { text: "Origem" }, { text: "Data" }, { text: "Valor", right: true }, { text: "Saldo depois", right: true }, { text: "Status" }]} />
+        <LedgerHead columns={PERIOD_SUMMARY} labels={[{ text: "Período" }, { text: "Entradas", right: true }, { text: "Saídas", right: true }, { text: "Saldo final", right: true }, { text: "Status" }]} />
         {rows.map(row => {
           const open = isOpen(row.key);
           let balance = row.openingCents;
           return (
             <div key={row.key}>
-              <GroupHeader row={row} granularity={granularity} today={today} open={open} onToggle={() => toggle(row.key)} count={row.entries.length}>
-                <MoneyIn>+{brl(row.inCents)}</MoneyIn>
-                <MoneyOut>−{brl(row.outCents)}</MoneyOut>
-                <span className="text-ds-ink">saldo {brl(row.closingCents)}</span>
-                <StatusPill variant={PERIOD_STATUS[row.status].variant}>{PERIOD_STATUS[row.status].label}</StatusPill>
+              <GroupHeader row={row} granularity={granularity} today={today} open={open} onToggle={() => toggle(row.key)} count={row.entries.length} summaryColumns={PERIOD_SUMMARY}>
+                <span className={SUMMARY_AMOUNT}>
+                  <span className={SUMMARY_LABEL}>Entradas</span>
+                  <span className={SUMMARY_VALUE}><MoneyIn>+{brl(row.inCents)}</MoneyIn></span>
+                </span>
+                <span className={SUMMARY_AMOUNT}>
+                  <span className={SUMMARY_LABEL}>Saídas</span>
+                  <span className={SUMMARY_VALUE}><MoneyOut>−{brl(row.outCents)}</MoneyOut></span>
+                </span>
+                <span className={SUMMARY_AMOUNT}>
+                  <span className={SUMMARY_LABEL}>Saldo final</span>
+                  <span className={cn(SUMMARY_VALUE, "text-ds-ink")}>{brl(row.closingCents)}</span>
+                </span>
+                <span className="self-center justify-self-end md:justify-self-start">
+                  <StatusPill variant={PERIOD_STATUS[row.status].variant}>{PERIOD_STATUS[row.status].label}</StatusPill>
+                </span>
               </GroupHeader>
-              {open ? (row.entries.length ? row.entries.map(entry => {
-                balance += entry.direction === "in" ? entry.amountCents : -entry.amountCents;
-                const projected = isProjection(entry);
-                return (
-                  <div key={entry.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-ds-divider px-[18px] py-2.5", LEDGER, entry.lateFrom && "bg-ds-alert-bg")}>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span aria-hidden="true" className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-[11px]", projected ? "border border-dashed border-ds-ink-faint text-ds-ink-faint" : entry.direction === "in" ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger")}>
-                        {entry.direction === "in" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-[13.5px] font-bold leading-5">{entry.label}</p>
-                        {entry.detail ? <p className="truncate text-xs text-ds-ink-muted">{entry.detail}</p> : null}
+              {open ? (row.entries.length ? <>
+                <LedgerHead columns={LEDGER} visibility="lg:grid" labels={[{ text: "Descrição" }, { text: "Origem" }, { text: "Data" }, { text: "Valor", right: true }, { text: "Saldo depois", right: true }, { text: "Status" }]} />
+                {row.entries.map(entry => {
+                  balance += entry.direction === "in" ? entry.amountCents : -entry.amountCents;
+                  const projected = isProjection(entry);
+                  return (
+                    <div key={entry.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-ds-divider px-[18px] py-2.5", LEDGER, entry.lateFrom && "bg-ds-alert-bg")}>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span aria-hidden="true" className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-[11px]", projected ? "border border-dashed border-ds-ink-faint text-ds-ink-faint" : entry.direction === "in" ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger")}>
+                          {entry.direction === "in" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-[13.5px] font-bold leading-5">{entry.label}</p>
+                          {entry.detail ? <p className="truncate text-xs text-ds-ink-muted">{entry.detail}</p> : null}
+                        </div>
                       </div>
+                      <span className={cn("text-right font-ds-mono text-[13.5px] font-bold lg:hidden", entry.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{signedBrl(entry)}</span>
+                      <span className="col-span-2 truncate text-[13px] font-semibold lg:col-span-1">{entryOrigin(entry)}</span>
+                      <div className="col-span-2 lg:col-span-1"><p className="font-ds-mono text-[12.5px]">{dm(entry.date)}</p><DueHint entry={entry} today={today} /></div>
+                      <span className={cn("hidden text-right font-ds-mono text-[13.5px] font-extrabold lg:block", entry.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{signedBrl(entry)}</span>
+                      <span className={cn("col-span-2 font-ds-mono text-[12.5px] lg:col-span-1 lg:text-right lg:text-[13.5px] lg:font-bold", balance < 0 ? "text-ds-danger" : data.minimumCents !== null && balance < data.minimumCents ? "text-ds-alert-ink" : "")}><span className="lg:hidden">saldo depois: </span>{brl(balance)}</span>
+                      <div className="col-span-2 lg:col-span-1"><EntryStatusPill entry={entry} /></div>
                     </div>
-                    <span className={cn("text-right font-ds-mono text-[13.5px] font-bold md:hidden", entry.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{signedBrl(entry)}</span>
-                    <span className="col-span-2 truncate text-[13px] font-semibold md:col-span-1">{entryOrigin(entry)}</span>
-                    <div className="col-span-2 md:col-span-1"><p className="font-ds-mono text-[12.5px]">{dm(entry.date)}</p><DueHint entry={entry} today={today} /></div>
-                    <span className={cn("hidden text-right font-ds-mono text-[13.5px] font-extrabold md:block", entry.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{signedBrl(entry)}</span>
-                    <span className={cn("col-span-2 font-ds-mono text-[12.5px] md:col-span-1 md:text-right md:text-[13.5px] md:font-bold", balance < 0 ? "text-ds-danger" : data.minimumCents !== null && balance < data.minimumCents ? "text-ds-alert-ink" : "")}><span className="md:hidden">saldo depois: </span>{brl(balance)}</span>
-                    <div className="col-span-2 md:col-span-1"><EntryStatusPill entry={entry} /></div>
-                  </div>
-                );
-              }) : <p className="border-b border-ds-divider px-[18px] py-3 text-[13px] text-ds-ink-muted">Nada neste período.</p>) : null}
+                  );
+                })}
+              </> : <p className="border-b border-ds-divider px-[18px] py-3 text-[13px] text-ds-ink-muted">Nada neste período.</p>) : null}
             </div>
           );
         })}
