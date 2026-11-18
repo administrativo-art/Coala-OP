@@ -19,7 +19,9 @@
     "stone-pix-file-owner-identity-gap",
     "stone-portfolio-raw-xml-identity-gap",
     "financial-cash-counting-session-openers",
-    "financial-inter-charge-creators"
+    "financial-inter-charge-creators",
+    "financial-card-statement-creators",
+    "financial-card-obligation-creators"
   ],
   "dynamicCollectionReaders": [
     {

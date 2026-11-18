@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isCardPurchase } from "./card-forecast";
+import { loadStudyCardForecast } from "./card-forecast.server";
 import { loadStudyCashEvidence } from "./cash-evidence.server";
 import { Timestamp } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -59,6 +61,7 @@ export function toStudyCategory(id: unknown, name: unknown, names?: ReadonlyMap<
 }
 
 export function toStudyExpense(id: string, row: Row, names?: ReadonlyMap<string, string>): StudyExpense | null {
+  if (isCardPurchase(row) || row.sourceType === "CARD_STATEMENT" || row.obligationType === "CARD_STATEMENT") return null;
   if (!["pending", "partially_paid"].includes(text(row.status))) return null;
   const amount = Math.round(expenseCashForecastAmount(row as Parameters<typeof expenseCashForecastAmount>[0]) * 100);
   return {
@@ -74,7 +77,9 @@ export function toStudyRealized(row: Row, names?: ReadonlyMap<string, string>): 
   const amount = typeof row.amount === "number" ? Math.round(Math.abs(row.amount) * 100) : 0;
   const direction = row.direction === "in" || row.direction === "out" ? row.direction : null;
   const transfer = row.type === "transfer_in" || row.type === "transfer_out";
-  return date && amount > 0 && direction ? { date, direction, amountCents: amount, transfer, category: transfer ? null : toStudyCategory(row.accountPlanId, row.accountPlanName, names) } : null;
+  const cardPayment = direction === "out" && (Boolean(text(row.cardStatementId)) || row.type === "card_statement_payment");
+  const unmatchedCardPayment = cardPayment && (!text(row.cardStatementId) || row.awaitingCardStatementReconciliation === true);
+  return date && amount > 0 && direction ? { date, direction, amountCents: amount, transfer, cardPayment, unmatchedCardPayment, category: transfer ? null : toStudyCategory(row.accountPlanId, row.accountPlanName, names) } : null;
 }
 
 async function loadStone(): Promise<{ parcels: StudyStoneParcel[]; issue: string | null }> {
@@ -150,8 +155,10 @@ export async function loadCashFlowStudy(now = new Date()) {
   }
   if (!interAccountId) gaps.push("A conta do Inter não está configurada; as saídas recorrentes e a aba Saúde ficam sem o realizado.");
   if (stone.issue) gaps.push(stone.issue);
-  const expenses = limited([...pending.docs, ...partial.docs], STUDY_QUERY_LIMITS.expensesPerStatus * 2, "despesas abertas", gaps)
-    .flatMap(doc => toStudyExpense(doc.id, doc.data(), categoryNames) ?? []);
+  const expenseDocs = limited([...pending.docs, ...partial.docs], STUDY_QUERY_LIMITS.expensesPerStatus * 2, "despesas abertas", gaps);
+  const cardForecast = await loadStudyCardForecast(expenseDocs.map(doc => ({ id: doc.id, data: doc.data() })), today, pending.size <= STUDY_QUERY_LIMITS.expensesPerStatus && partial.size <= STUDY_QUERY_LIMITS.expensesPerStatus);
+  gaps.push(...cardForecast.gaps);
+  const expenses = [...expenseDocs.flatMap(doc => toStudyExpense(doc.id, doc.data(), categoryNames) ?? []), ...cardForecast.expenses];
   const studyBatches = batches.map(batch => toStudyBatch(batch.id, batch as unknown as Row));
   const cashEvidence = await loadStudyCashEvidence(studyBatches, historyFrom);
   gaps.push(...cashEvidence.gaps);
