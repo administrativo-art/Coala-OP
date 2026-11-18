@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 131.
+Arquivos locais percorridos: 133.
 
 Chamadas candidatas encontradas:
 
@@ -2139,7 +2139,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/stone-anticipations/page.tsx`](../../src/app/dashboard/financial/stone-anticipations/page.tsx).
 
-Arquivos locais percorridos: 38.
+Arquivos locais percorridos: 40.
 
 Chamadas candidatas encontradas:
 
@@ -2155,7 +2155,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 67.
+Arquivos locais percorridos: 70.
 
 Chamadas candidatas encontradas:
 
