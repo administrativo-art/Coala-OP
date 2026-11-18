@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FeeRecognitionPreview } from "./recognition-contracts";
 import { centsLabel } from "../receipts-reconciliation/stone-account-format";
 import { RecognitionPolicyForm, type FeeConfiguration } from "./recognition-policy-form";
+import { AutoRecognitionCard } from "./auto-recognition-card";
 import { RecognitionValues, recognitionStateLabels as states } from "./recognition-values";
 export function SaleFeeRecognitionPanel({ mappingId, kioskId, stoneCode, month }: { mappingId: string; kioskId: string; stoneCode: string; month: string }) {
   const api = useAuthenticatedApi();
@@ -24,6 +25,7 @@ export function SaleFeeRecognitionPanel({ mappingId, kioskId, stoneCode, month }
   return <section className="space-y-3 rounded-ds-card border border-ds-border bg-ds-surface p-4" aria-label="Taxas por venda conciliada">
     <h2 className="text-base font-bold">Taxas por venda conciliada</h2>
     <p className="text-sm text-ds-ink-muted">Apure a taxa na competência da venda, sem aguardar o repasse. O líquido previsto é a receber. A liquidação exige evento da adquirente; a confirmação no extrato bancário continua separada. Espécie permanece no fechamento.</p>
+    <AutoRecognitionCard mappingId={mappingId} kioskId={kioskId} stoneCode={stoneCode} month={month} />
     <div className="flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm">Data da venda<Input type="date" min={`${month}-01`} max={`${month}-31`} value={date} onChange={e => { setDate(e.target.value); setPreview(null); }} /></label>
       <label className="grid gap-1 text-sm">Meio<select className="rounded border p-2" value={source} onChange={e => { setSource(e.target.value as "cards" | "pix"); setPreview(null); }}><option value="cards">Cartão</option><option value="pix">PIX Stone</option></select></label>

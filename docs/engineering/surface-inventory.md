@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **572 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **573 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -475,6 +475,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/integrations/pdvlegal/filiais` | GET | [src/app/api/integrations/pdvlegal/filiais/route.ts](../../src/app/api/integrations/pdvlegal/filiais/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/inspect` | GET | [src/app/api/integrations/pdvlegal/inspect/route.ts](../../src/app/api/integrations/pdvlegal/inspect/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/sync` | GET | [src/app/api/integrations/pdvlegal/sync/route.ts](../../src/app/api/integrations/pdvlegal/sync/route.ts) | [pdv-sync](flows/pdv-sync.md) |
+| `/api/jobs/acquirer-fees/auto` | POST | [src/app/api/jobs/acquirer-fees/auto/route.ts](../../src/app/api/jobs/acquirer-fees/auto/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/jobs/assets/maintenance-materialize` | POST | [src/app/api/jobs/assets/maintenance-materialize/route.ts](../../src/app/api/jobs/assets/maintenance-materialize/route.ts) | [assets](flows/assets.md) |
 | `/api/jobs/cash-closures/daily-sync` | POST | [src/app/api/jobs/cash-closures/daily-sync/route.ts](../../src/app/api/jobs/cash-closures/daily-sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/cash-deposits/reconcile` | POST | [src/app/api/jobs/cash-deposits/reconcile/route.ts](../../src/app/api/jobs/cash-deposits/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -617,6 +618,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `absenceRetentionReconciliation` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTacitApprovalJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-absences](flows/dp-absences.md) |
 | `absenceTerminationEffectsResume` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [dp-absences](flows/dp-absences.md) |
+| `acquirerFeeAutoRecognition` | `onSchedule` | [functions/src/acquirer-fee-auto-jobs.ts](../../functions/src/acquirer-fee-auto-jobs.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `activateCollaboratorPeriods` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [people-access](flows/people-access.md) |
 | `assetMaintenanceDailyMaterialize` | `onSchedule` | [functions/src/asset-maintenance-jobs.ts](../../functions/src/asset-maintenance-jobs.ts) | [assets](flows/assets.md) |
 | `automaticAbsenceJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
