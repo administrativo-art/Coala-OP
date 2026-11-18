@@ -4,6 +4,7 @@
 
 | Plano | Área |
 | --- | --- |
+| [Resolução de Pix Stone sem vínculo](plano-resolucao-pix-stone-sem-vinculo.md) | Financeiro, Conciliação de vendas |
 | [Verificação de devoluções Pix na Stone](plano-verificacao-devolucoes-pix-stone.md) | Financeiro, Conciliação de vendas |
 | [Rastreabilidade por pessoa](plano-rastreabilidade-pessoa.md) | Privacidade, Pessoas, documentos e integrações |
 | [Destinação dos arquivos de Cobranças](plano-destinacao-documental-cobrancas.md) | Financeiro, Patrimônio e Documentos |

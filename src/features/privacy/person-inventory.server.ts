@@ -38,6 +38,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "requests": return actor.permissions.dp?.requests?.view === true;
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
     case "terminations": return actor.permissions.dp?.collaborators?.terminate === true;
+    case "financial-admin": return false;
     case "financial": return actor.permissions.financial?.view === true && actor.permissions.financial?.personnelCosts?.view === true && (source.collection !== "bankPaymentRequests" || actor.permissions.financial?.paymentRequests?.view === true);
     case "audit-global": return actor.permissions.dashboard?.audit === true && resolveUnitAccess(actor.userDoc).allUnits;
     case "integrations": return hasFormalizationPermission(actor.permissions, "onboarding.manage");
