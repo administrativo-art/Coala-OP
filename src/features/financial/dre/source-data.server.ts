@@ -79,6 +79,12 @@ export async function getDreSourceData(input: {
   periods: string[];
   canViewExpenseDetails: boolean;
   canViewPersonnel?: boolean;
+  /** Reports use stock CMV only; defaults preserve existing screen contracts. */
+  includeCompositionCmv?: boolean;
+  includeReconciliation?: boolean;
+  compositionPeriods?: string[];
+  tolerateCompositionFailure?: boolean;
+  includeBudgetPlanning?: boolean;
 }): Promise<DreSourceDataPayload> {
   if (input.kioskIds.length < 1 || input.kioskIds.length > 20) {
     throw new DreSourceLimitError("reports");
@@ -105,19 +111,25 @@ export async function getDreSourceData(input: {
     if (!allowedKiosks.has(String(data.kioskId ?? ""))) return [];
     return [{ ...data, id: document.id } as SalesReport];
   });
-  const cmvClosures = await loadCmvClosures(input.workspaceId, input.kioskIds, input.periods);
+  const compositionPeriodsToRead = input.compositionPeriods ?? input.periods;
+  let compositionFailure = false;
+  const cmvClosures = input.includeCompositionCmv === false ? [] : await loadCmvClosures(input.workspaceId, input.kioskIds, compositionPeriodsToRead).catch(cause => { if (!input.tolerateCompositionFailure) throw cause; compositionFailure = true; return []; });
   const closureByKey = new Map(cmvClosures.map(closure => [`${closure.kioskId}:${closure.period}`, closure]));
   const keyForReport = (report: SalesReport) => `${report.kioskId}:${report.year}-${String(report.month).padStart(2, "0")}`;
-  const liveReports = reports.filter(report => closureByKey.get(keyForReport(report))?.status !== "closed");
+  const liveReports = reports.filter(report => compositionPeriodsToRead.includes(keyForReport(report).split(":").at(-1)!) && closureByKey.get(keyForReport(report))?.status !== "closed");
   const simulationIds = liveReports.flatMap(report => Array.isArray(report.items) ? report.items.map(item => item?.simulationId) : []);
-  const currentCosts = await loadCurrentCompositionCosts(simulationIds);
+  const currentCosts: Awaited<ReturnType<typeof loadCurrentCompositionCosts>> = input.includeCompositionCmv === false || compositionFailure
+    ? { costs: new Map(), stats: { simulationDocuments: 0, compositionItemDocuments: 0, ingredientDocuments: 0 } }
+    : await loadCurrentCompositionCosts(simulationIds).catch(cause => { if (!input.tolerateCompositionFailure) throw cause; compositionFailure = true; return { costs: new Map(), stats: { simulationDocuments: 0, compositionItemDocuments: 0, ingredientDocuments: 0 } }; });
   const simulationCmv = new Map([...currentCosts.costs].flatMap(([id, result]) => result.complete && result.totalCmv !== null ? [[id, result.totalCmv] as const] : []));
   const sales = summarizeDreSalesReports(reports, simulationCmv);
-  const cmvPeriods = input.kioskIds.flatMap(kioskId => input.periods.map(period => {
+  const cmvBuilds = input.includeCompositionCmv === false ? [] : input.kioskIds.flatMap(kioskId => compositionPeriodsToRead.map(period => {
     const key = `${kioskId}:${period}`;
     return buildCmvPeriod(kioskId, period, reports.filter(report => keyForReport(report) === key),
-      currentCosts.costs, closureByKey.get(key)).view;
+      currentCosts.costs, closureByKey.get(key));
   }));
+  if (compositionFailure) for (const build of cmvBuilds) { build.view.complete = false; build.view.totalCmv = null; build.view.diagnostics.push("composition_source_unavailable"); build.products = []; }
+  const cmvPeriods = cmvBuilds.map(build => build.view);
   for (const cmv of cmvPeriods) {
     const [year, month] = cmv.period.split("-").map(Number);
     const summary = sales.salesSummaries.find(row => row.kioskId === cmv.kioskId && row.year === year && row.month === month);
@@ -139,10 +151,13 @@ export async function getDreSourceData(input: {
     .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary));
 
   return {
-    budgetPlanning: await getBudgetPlanningComparisons({ periods: input.periods, kioskIds: input.kioskIds,
+    budgetPlanning: input.includeBudgetPlanning === false ? undefined : await getBudgetPlanningComparisons({ periods: input.periods, kioskIds: input.kioskIds,
       expenses: expenseDocuments.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)), canViewPersonnel: input.canViewPersonnel === true }),
     expenses,
     cmvPeriods,
+    ...(input.includeReconciliation ? { cmvReconciliation: cmvBuilds.map(build => ({ kioskId: build.view.kioskId, period: build.view.period,
+      status: build.view.status, complete: build.view.complete, sourceChanged: build.view.sourceChanged, referenceAt: build.view.calculatedAt, revision: build.view.revision, sourceFingerprint: build.view.sourceFingerprint, salesFingerprint: build.view.salesFingerprint,
+      totalCmv: build.view.totalCmv, products: build.products })) } : {}),
     salesSummaries: sales.salesSummaries,
     closureSummaries,
     missingSimulationIds: sales.missingSimulationIds,

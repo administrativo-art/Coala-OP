@@ -1,3 +1,4 @@
+import type { CompositionReconciliationInput } from "./cmv-reconciliation";
 import type { DreCmvPeriod } from "./cmv-closure";
 import type { SalesReport } from "@/types";
 import type { BudgetPlanningComparison } from "../budgets/projection-view";
@@ -53,6 +54,7 @@ export type DreSourceDataStats = {
 export type DreSourceDataPayload = {
   budgetPlanning?: BudgetPlanningComparison[];
   cmvPeriods?: DreCmvPeriod[];
+  cmvReconciliation?: CompositionReconciliationInput[];
   cmvCapabilities?: { canClose: boolean; canReopen: boolean };
   expenses: FinancialExpenseDreDocument[];
   salesSummaries: DreSalesUnitMonthSummary[];
