@@ -568,7 +568,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 54.
+Arquivos locais percorridos: 55.
 
 Chamadas candidatas encontradas:
 
