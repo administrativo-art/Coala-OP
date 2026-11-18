@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadStudyCashEvidence } from "./cash-evidence.server";
 import { Timestamp } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { getInterAvailableBalanceCents } from "@/lib/integrations/inter/balance.server";
@@ -33,15 +34,17 @@ export function toStudyClosure(row: Row): StudyClosure | null {
   return {
     kioskId: text(row.kioskId), kioskName: text(row.kioskName) || text(row.kioskId), date, status: text(row.status),
     byChannelCents: { cash: cents(channels.cash), pix: cents(channels.pix), debit_card: cents(channels.debit_card), credit_card: cents(channels.credit_card) },
+    operatorCount: typeof row.operatorCount === "number" ? row.operatorCount : undefined, countedCashCents: cents(row.countedCashCents), cashDepositPolicy: text(row.cashDepositPolicy),
     depositStatus: row.cashDepositPolicy === "dre_only" ? "not_eligible" : text(deposit.status), depositEligibleCents: cents(deposit.eligibleCents),
   };
 }
 
 export function toStudyBatch(id: string, row: Row): StudyBatch {
   return {
-    id, kioskId: text(row.kioskId), kioskName: text(row.kioskName) || text(row.kioskId), status: text(row.status),
+    id, workspaceId: text(row.workspaceId), kioskId: text(row.kioskId), kioskName: text(row.kioskName) || text(row.kioskId), status: text(row.status),
     totalCents: cents(row.totalCents), periodStartDate: text(row.periodStartDate), periodEndDate: text(row.periodEndDate) || text(row.periodStartDate),
     issuedAt: text(row.issuedAt) || null, paidAt: text(row.paidAt) || null,
+    countingSessionId: text(row.countingSessionId) || null, interCobrancaId: text(row.interCobrancaId) || null, kioskIds: Array.isArray(row.kioskIds) ? row.kioskIds.filter((id): id is string => typeof id === "string") : undefined,
   };
 }
 
@@ -149,9 +152,12 @@ export async function loadCashFlowStudy(now = new Date()) {
   if (stone.issue) gaps.push(stone.issue);
   const expenses = limited([...pending.docs, ...partial.docs], STUDY_QUERY_LIMITS.expensesPerStatus * 2, "despesas abertas", gaps)
     .flatMap(doc => toStudyExpense(doc.id, doc.data(), categoryNames) ?? []);
+  const studyBatches = batches.map(batch => toStudyBatch(batch.id, batch as unknown as Row));
+  const cashEvidence = await loadStudyCashEvidence(studyBatches, historyFrom);
+  gaps.push(...cashEvidence.gaps);
   const result = buildCashFlowStudy({
     today, accounts, stone: stone.parcels,
-    batches: batches.map(batch => toStudyBatch(batch.id, batch as unknown as Row)),
+    batches: studyBatches, cashEvidence,
     closures: recentClosures.flatMap(closure => toStudyClosure(closure as unknown as Row) ?? []),
     expenses,
     realized: transactions ? limited(transactions.docs, STUDY_QUERY_LIMITS.transactions, "movimentações do Inter", gaps).flatMap(doc => toStudyRealized(doc.data(), categoryNames) ?? []) : [],

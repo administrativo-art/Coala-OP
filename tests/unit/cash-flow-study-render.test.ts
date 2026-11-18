@@ -1,3 +1,4 @@
+import { issuedCashEvidence } from "../helpers/cash-flow-study-fixtures";
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as ReactNamespace from "react";
@@ -12,7 +13,7 @@ import type { CashMovement } from "../../src/features/financial/components/cash-
 import type { CashFlowStudyPayload, StudyControls } from "../../src/features/financial/cash-flow-study/cash-flow-study-view";
 import { EntriesTab } from "../../src/features/financial/cash-flow-study/entries-tab";
 import { HealthTab } from "../../src/features/financial/cash-flow-study/health-tab";
-import { addDays, buildCashFlowStudy, type StudyBatch, type StudyClosure, type StudyRealized } from "../../src/features/financial/cash-flow-study/model";
+import { addDays, buildCashFlowStudy, type StudyBatch, type StudyClosure, type StudyRealized, type StudyInputs } from "../../src/features/financial/cash-flow-study/model";
 import { autoGranularity, futurePresetRange, type Granularity } from "../../src/features/financial/cash-flow-study/periods";
 import { WeeksTab } from "../../src/features/financial/cash-flow-study/weeks-tab";
 
@@ -25,7 +26,7 @@ const closure = (date: string, partial: Partial<StudyClosure> = {}): StudyClosur
   byChannelCents: { cash: 10_000, pix: 20_000, debit_card: 15_000, credit_card: 5_000 }, depositStatus: "issued", depositEligibleCents: 10_000, ...partial,
 });
 const batch = (id: string, partial: Partial<StudyBatch> = {}): StudyBatch => ({
-  id, kioskId: "k1", kioskName: "Quiosque Iguatemi", status: "paid", totalCents: 100_000, periodStartDate: "2026-09-01", periodEndDate: "2026-09-21",
+  id, workspaceId: "coala", interCobrancaId: `${id}_bill`, kioskId: "k1", kioskName: "Quiosque Iguatemi", status: "paid", totalCents: 100_000, periodStartDate: "2026-09-01", periodEndDate: "2026-09-21",
   issuedAt: "2026-09-25T12:00:00.000Z", paidAt: "2026-09-28T12:00:00.000Z", ...partial,
 });
 const realized: StudyRealized[] = ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].flatMap(month => [
@@ -33,7 +34,7 @@ const realized: StudyRealized[] = ["2026-06", "2026-07", "2026-08", "2026-09", "
   { date: `${month}-05`, direction: "out" as const, amountCents: 1_800_000, category: { id: "folha", name: "Folha" }, transfer: false },
   { date: `${month}-20`, direction: "out" as const, amountCents: 2_400_000, category: { id: "fornecedores", name: "Fornecedores" }, transfer: false },
 ]);
-const study = buildCashFlowStudy({
+const studyInput: StudyInputs = {
   today: TODAY,
   accounts: [{ id: "inter", name: "Inter · conta corrente", kind: "operating", cents: 1_658_143, at: "2026-11-17T21:55:00.000Z" }, { id: "cdb", name: "Inter · CDB", kind: "reserve", cents: 2_000_000, at: null }],
   stone: [{ dueDate: "2026-11-18", grossCents: 30_000, netCents: 29_000, feeCents: 1_000 }],
@@ -45,7 +46,8 @@ const study = buildCashFlowStudy({
   closures: [...Array.from({ length: 200 }, (_, index) => closure(addDays(TODAY, -200 + index))), closure("2026-11-14", { status: "draft", depositStatus: "not_eligible" })],
   expenses: [{ id: "e1", description: "FGTS - 11/2026", supplier: null, date: "2026-11-20", amountCents: 312_000, provisioned: false, category: { id: "fgts", name: "FGTS" } }],
   realized,
-});
+};
+const study = buildCashFlowStudy({ ...studyInput, cashEvidence: issuedCashEvidence(studyInput.batches) });
 const payload: CashFlowStudyPayload = { ...study, generatedAt: "2026-11-17T21:55:00.000Z" };
 
 const controls = (range: { from: string; to: string }, granularity: Granularity, projection: boolean, includeReserve = false): StudyControls => ({
@@ -87,7 +89,9 @@ test("Entradas mostra a pendência com o próximo passo e o boleto vencido", () 
   assert.match(html, /Precisa de ação/);
   assert.match(html, /Boleto vencido/);
   assert.match(html, /Ir para Depósitos|Ver depósito/);
-  assert.match(html, /1 parado · até 3 dias/, "o malote de 14/11 espera a contagem há 3 dias");
+  assert.match(html, /Numerário: acompanhamento operacional/);
+  assert.match(html, /não somam entradas nem saldo previsto/);
+  assert.doesNotMatch(html, /1 parado · até 3 dias/, "pendência de espécie saiu do total bancário");
 });
 
 test("Saúde do negócio renderiza com dados e com histórico vazio", () => {
