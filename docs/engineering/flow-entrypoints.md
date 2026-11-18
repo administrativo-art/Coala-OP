@@ -2155,11 +2155,11 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 67.
+Arquivos locais percorridos: 69.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/recognition-panel.tsx`](../../src/features/financial/acquirer-fees/recognition-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
+- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/auto-recognition-card.tsx`](../../src/features/financial/acquirer-fees/auto-recognition-card.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
 - `/api/financial/stone-fee-expenses` — interface [`src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx); rota candidata [`src/app/api/financial/stone-fee-expenses/route.ts`](../../src/app/api/financial/stone-fee-expenses/route.ts)
 - `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
