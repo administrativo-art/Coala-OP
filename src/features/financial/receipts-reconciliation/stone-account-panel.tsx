@@ -1,5 +1,6 @@
 "use client";
 
+import { mergeReceiptPaymentPage } from "./payment-followup";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
@@ -44,11 +45,7 @@ function currentMonth() {
   const now = new Date(Date.now() - 8 * 3_600_000 - 86_400_000);
   return now.toISOString().slice(0, 7);
 }
-function monthRange(month: string) {
-  const [year, value] = month.split("-").map(Number);
-  const last = new Date(Date.UTC(year, value, 0)).getUTCDate();
-  return { from: `${month}-01`, through: `${month}-${String(last).padStart(2, "0")}` };
-}
+
 
 // Parcela numa linha: venda, data da venda, parcela (1/1, 2/3), previsto, pago, taxa, líquido e situação.
 const PARCEL_GRID = "grid grid-cols-[minmax(170px,1.5fr)_96px_56px_64px_64px_118px_96px_minmax(150px,1.3fr)] items-center gap-3 whitespace-nowrap";
@@ -115,12 +112,13 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
 
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [notReady, setNotReady] = useState(false);
-  // Abre com a conferência salva pela rotina diária; "Reconferir agora" faz a consulta ao vivo.
+  // Reusa a base salva ou reconstrói do cache; todas as páginas posteriores são somente leitura.
   useEffect(() => {
     if (!stoneCode || !/^\d{4}-\d{2}$/.test(month)) return;
-    const controller = new AbortController();
+    active.current?.abort();
+    const controller = new AbortController();active.current=controller;
     let alive = true;
-    void Promise.resolve().then(() => { if (alive) { setBusy(true); setError(""); setNotReady(false); } })
+    void Promise.resolve().then(() => { if (alive) { setBusy(true); setError(""); setNotReady(false);setResult(null);setSavedAt(null); } })
       .then(() => api<StoneReceiptSavedResult>("/api/financial/stone-receipts/reconcile", { method: "POST", json: { view: "saved", kioskId: mapping.kioskId, stoneCode, month }, signal: controller.signal }))
       .then(saved => {
         if (!alive) return;
@@ -129,40 +127,46 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
         } else { setResult(null); setSavedAt(null); setNotReady(true); }
       })
       .catch(caught => { if (alive && !controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível abrir a conferência salva."); })
-      .finally(() => { if (alive) setBusy(false); });
-    return () => { alive = false; controller.abort(); };
+      .finally(() => { if (alive && active.current===controller){setBusy(false);active.current=null;} });
+    return () => { alive = false; controller.abort();if(active.current===controller)active.current=null; };
   }, [api, mapping.id, mapping.kioskId, stoneCode, month]);
 
-  const run = async () => {
+  const run = async (continuePayments=false) => {
     if (busy || !stoneCode || !/^\d{4}-\d{2}$/.test(month)) return;
     active.current?.abort();
     const controller = new AbortController(); active.current = controller;
     setBusy(true); setError("");
     try {
-      const next = await api<StoneAccountMonthResult>("/api/financial/stone-receipts/reconcile", { method: "POST", json: { view: "month", kioskId: mapping.kioskId, stoneCode, ...monthRange(month) }, signal: controller.signal });
+      const payment=result?.coverage.payments;
+      const saved=await api<StoneReceiptSavedResult>("/api/financial/stone-receipts/reconcile",{method:"POST",json:{view:"saved",kioskId:mapping.kioskId,stoneCode,month,...(continuePayments&&payment?.nextCursor?{paymentCursor:payment.nextCursor,paymentAsOf:payment.asOf,paymentCohort:payment.cohortFingerprint}:{})},signal:controller.signal});
+      if(controller.signal.aborted)return;
+      if(saved.status!=="ready")throw new Error("Não há fonte armazenada suficiente para esta competência.");
+      const next=saved.result;
       if (next.scope.mappingId !== mapping.id || next.scope.kioskId !== mapping.kioskId || next.scope.stoneCode !== stoneCode) {
         throw new AuthenticatedApiError("O vínculo mudou durante a consulta. Recarregue a página e tente novamente.", 409, null);
       }
-      setResult(next); setSavedAt(null); setNotReady(false); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set()); setOpenWeeks(null); setBrand(null);
+      setResult(continuePayments&&result?mergeReceiptPaymentPage(result,next):next); setSavedAt(null); setNotReady(false); setPanel(null); setAudits({}); setOpenDays(new Set()); setOpenGroups(new Set()); setOpenWeeks(null); setBrand(null);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível conferir os recebimentos.");
     } finally { if (active.current === controller) { active.current = null; setBusy(false); } }
   };
 
+  const auditKeyFor=(parcel:ReceiptParcel)=>`${mapping.id}:${stoneCode}:${month}:${parcel.id}:${parcel.paidDate??"unconfirmed"}:${Boolean(parcel.paymentConflict)}`;
   const openSale = (parcelId: string, back: Panel | null) => {
     const parcel = byId.get(parcelId);
     if (!parcel || !parcel.saleDate) return;
     setPanel({ mode: "sale", parcelId, detail: false, back: back?.mode === "list" ? { title: back.title, parcelIds: back.parcelIds } : null });
-    if (audits[parcel.saleId] && audits[parcel.saleId] !== "loading" && !("error" in (audits[parcel.saleId] as object))) return;
-    setAudits(current => ({ ...current, [parcel.saleId]: "loading" }));
+    const auditKey=auditKeyFor(parcel);
+    if (audits[auditKey] && audits[auditKey] !== "loading" && !("error" in (audits[auditKey] as object))) return;
+    setAudits(current => ({ ...current, [auditKey]: "loading" }));
     void api<StoneAccountSaleResult>("/api/financial/stone-receipts/reconcile", { method: "POST", json: {
-      view: "sale", kioskId: mapping.kioskId, stoneCode, saleDate: parcel.saleDate, source: parcel.source, saleId: parcel.saleId,
-    } }).then(next => setAudits(current => ({ ...current, [parcel.saleId]: next.audit })))
-      .catch(caught => setAudits(current => ({ ...current, [parcel.saleId]: { error: caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar a auditoria da venda." } })));
+      view: "sale", kioskId: mapping.kioskId, stoneCode, saleDate: parcel.saleDate, source: parcel.source, saleId: parcel.saleId,...(parcel.paidDate?{paymentDateHint:parcel.paidDate}:{}),...(parcel.paymentConflict?{paymentConflictHint:true}:{}),...(parcel.paymentEvidenceDates?{paymentEvidenceDateHints:parcel.paymentEvidenceDates}:{}),
+    } }).then(next => setAudits(current => ({ ...current, [auditKey]: next.audit })))
+      .catch(caught => setAudits(current => ({ ...current, [auditKey]: { error: caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar a auditoria da venda." } })));
   };
 
   const selectedParcel = panel?.mode === "sale" ? byId.get(panel.parcelId) ?? null : null;
-  const audit = selectedParcel ? audits[selectedParcel.saleId] : undefined;
+  const audit = selectedParcel ? audits[auditKeyFor(selectedParcel)] : undefined;
   const loadedAudit = audit && audit !== "loading" && !("error" in audit) ? audit : null;
   const checks = loadedAudit && selectedParcel ? saleAuditChecks(loadedAudit, usualRates.get(receiptGroupKey(selectedParcel)) ?? null) : null;
   const verdict = checks ? saleAuditVerdict(checks) : null;
@@ -224,7 +228,8 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
           Arquivos Stone até {dayLabel(result.period.through)}{result.coverage.missingDates.length ? ` · faltam ${result.coverage.missingDates.length}` : ""}
         </span> : null}
       </div>
-      <p className="mt-2 text-xs text-ds-ink-muted">{result ? savedAt ? `Conferido automaticamente em ${new Date(savedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}. ` : "Conferido agora, ao vivo. " : ""}A conferência roda sozinha todo dia depois que a Stone publica o arquivo; “Reconferir agora” refaz na hora. Não cria lançamentos.</p>
+      <p className="mt-2 text-xs text-ds-ink-muted">{result ? savedAt ? `Base mensal salva em ${new Date(savedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}. ` : "Consultado nos arquivos armazenados. " : ""}A rotina diária guarda os arquivos. Esta consulta cruza a competência com pagamentos posteriores já armazenados, sem importar ou criar lançamentos. Pago pela Stone não significa crédito no extrato bancário.</p>
+      {result?.coverage.payments ? <div className="mt-3 space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-3 text-sm" role="status"><p>Pagamentos armazenados até {dayLabel(result.coverage.payments.asOf)} · consultado até {dayLabel(result.coverage.payments.scannedThrough)}. {result.coverage.payments.complete?"Cobertura concluída.":"Cobertura parcial: parcelas sem evidência continuam para conferir."}</p>{result.coverage.payments.missingDates.length?<p>{result.coverage.payments.missingDates.length} dia(s) sem arquivo armazenado nesta leitura. Isso não comprova ausência de pagamento.</p>:null}{result.coverage.payments.nextCursor?<Button variant="ds-secondary" disabled={busy} onClick={()=>void run(true)}>Continuar verificando pagamentos posteriores</Button>:null}</div>:null}
       {error ? <p role="alert" className="mt-2 text-sm font-semibold text-ds-danger">{error}</p> : null}
     </section>
 

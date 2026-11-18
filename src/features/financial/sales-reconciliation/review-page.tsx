@@ -576,8 +576,8 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           <span className={cn(label, "mb-0")}>Resumo por meio de pagamento</span>
           <span className="text-[11.5px] text-ds-ink-faint">clique para filtrar a conferência</span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {(["all", ...channelOrder] as ChannelFilter[]).map(value => {
+        <div className="grid gap-3 sm:grid-cols-2 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+          {(["all", ...channelOrder.filter(method => method !== "voucher" || result.cases.some(row => row.channel === "voucher"))] as ChannelFilter[]).map(value => {
             const item = summarizeChannel(result.cases, value);
             const active = channel === value;
             const pixOff = value === "pix" && pixPending;
@@ -668,7 +668,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
                     <span role="cell" className={cn(mono, "text-right text-[12.5px] font-bold", row.differenceAmountCents ? "text-ds-danger" : "text-ds-ok")}>{money(row.differenceAmountCents)}</span>
                     <div role="cell" className="flex min-w-0 flex-col items-start gap-[3px]">
                       <StatusBadge tone={attention ? "bad" : "ok"}>{attention ? "⚠" : "✓"} {caseBadgeLabel(row)}</StatusBadge>
-                      <span className="max-w-full truncate text-[11px] text-ds-ink-faint">{bases[row.matchBasis]}</span>
+                      <span className="max-w-full truncate text-[11px] text-ds-ink-faint">{row.paymentMethodDifference ? "PDV: crédito · Stone: voucher" : bases[row.matchBasis]}</span>
                     </div>
                   </div>;
                 })}

@@ -26,6 +26,9 @@ const monthRequestSchema = z.object({
   ...scopeShape,
   from: civilDateSchema,
   through: civilDateSchema,
+  paymentCursor:civilDateSchema.optional(),
+  paymentAsOf:civilDateSchema.optional(),
+  paymentCohort:z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict().superRefine((value, context) => {
   const days = Math.round((Date.parse(`${value.through}T00:00:00Z`) - Date.parse(`${value.from}T00:00:00Z`)) / 86_400_000) + 1;
   if (value.from > value.through) context.addIssue({ code: z.ZodIssueCode.custom, path: ["through"], message: "O fim deve ser posterior ao início." });
@@ -35,6 +38,9 @@ const saleRequestSchema = z.object({
   view: z.literal("sale"),
   ...scopeShape,
   saleDate: civilDateSchema,
+  paymentDateHint:civilDateSchema.optional(),
+  paymentConflictHint:z.boolean().optional(),
+  paymentEvidenceDateHints:z.array(civilDateSchema).max(13).optional(),
   source: z.enum(["card", "pix"]),
   saleId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
 }).strict();
@@ -43,6 +49,9 @@ const savedRequestSchema = z.object({
   view: z.literal("saved"),
   ...scopeShape,
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  paymentCursor:civilDateSchema.optional(),
+  paymentAsOf:civilDateSchema.optional(),
+  paymentCohort:z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 
 export const stoneAccountRequestSchema = z.union([monthRequestSchema, saleRequestSchema, savedRequestSchema]);
@@ -98,6 +107,9 @@ export type ReceiptParcel = {
   /** Líquido previsto na origem, antes de antecipação. */
   expectedNetCents: number;
   expectedDate: string | null;
+  paymentCoveragePending?: boolean;
+  paymentConflict?: boolean;
+  paymentEvidenceDates?: string[];
   paidDate: string | null;
   paidNetCents: number | null;
   status: ReceiptParcelStatus;
@@ -322,7 +334,7 @@ export function buildStoneAccountParcels(input: {
     const previous = parcels.get(parcel.id);
     if (previous && JSON.stringify(previous) !== JSON.stringify(parcel)) {
       conflicts.add(parcel.id);
-      parcels.set(parcel.id, { ...previous, status: "review" });
+      parcels.set(parcel.id, { ...previous, status: "review", paymentConflict:true });
       return;
     }
     parcels.set(parcel.id, parcel);
@@ -431,6 +443,27 @@ export function buildStoneAccountParcels(input: {
   const list = [...parcels.values()].sort((a, b) =>
     (a.expectedDate ?? "9999").localeCompare(b.expectedDate ?? "9999") || a.id.localeCompare(b.id));
   return { parcels: list, conflictCount: conflicts.size };
+}
+
+/** Overlay only exact captured identities; later files never introduce another month's sales. No writes or inferred payments. */
+export function applyReceiptPaymentFiles(base:ReceiptParcel[],files:StoneFile[],from:string,through:string,asOf:string){
+ const result=new Map(base.map(p=>[p.id,p]));let conflicts=0;
+ for(const file of files)for(const tx of file.transactions){
+  for(const installment of tx.installments){
+   const id=`${tx.transactionId}:${installment.number}`;let original=result.get(id);
+   if(!original||original.source!=="card"||!original.saleDate||original.saleDate>through)continue;
+   if(file.referenceDate&&file.referenceDate<=asOf&&(adverse(tx)||(tx.events.Cancellations??0)>0||tx.events.Payments>0)){original={...original,paymentEvidenceDates:[...new Set([...(original.paymentEvidenceDates??[]),file.referenceDate])].slice(0,13)};result.set(id,original);}
+   if(adverse(tx)||(tx.events.Cancellations??0)>0){result.set(id,{...original,status:"review",paymentCoveragePending:false,paymentConflict:true});conflicts++;continue;}
+   if(tx.sourceSection!=="FinancialTransactionsAccounts"||tx.events.Payments<=0||installment.paymentDate!==file.referenceDate||!installment.paymentDate||installment.paymentDate>asOf)continue;
+   const gross=stoneDecimalCents(installment.grossAmount),net=stoneDecimalCents(installment.netAmount),advance=stoneDecimalCents(installment.advanceRateAmount);
+   if(gross!==original.grossCents||net===null||net<0){result.set(id,{...original,status:"review",paymentCoveragePending:false,paymentConflict:true});conflicts++;continue;}
+   if(original.paidDate&&(original.paidDate!==installment.paymentDate||original.paidNetCents!==net)){result.set(id,{...original,status:"review",paymentCoveragePending:false,paymentConflict:true});conflicts++;continue;}
+   const expected=installment.advancedReceivableOriginalPaymentDate??installment.originalPaymentDate??installment.expectedPaymentDate??original.expectedDate;
+   const fee=resolveCardFee({mdr:installment.mdrAmount??(original.feeCents===null?null:(original.feeCents/100).toFixed(2)),gross:installment.grossAmount,net:installment.netAmount,anticipation:installment.advanceRateAmount});
+   result.set(id,{...original,...fee,expectedDate:expected,expectedNetCents:net+Math.max(0,advance??0),anticipationCents:advance,paidDate:installment.paymentDate,paidNetCents:net,status:original.paymentConflict?"review":paidStatus(expected,installment.paymentDate,installment.suspendedByChargeback),paymentCoveragePending:false});
+  }
+ }
+ return{parcels:[...result.values()],conflicts};
 }
 
 function pendingStatus(expected: string | null, input: { latestPublished: string }, missing: Set<string>, chargeback: boolean): ReceiptParcelStatus {
@@ -672,7 +705,7 @@ const BASIS: Record<SuggestedSalesReconciliationCase["matchBasis"], string> = {
   unmatched: "sem par",
 };
 const CONFIDENCE = { high: "alta", medium: "média", none: "nenhuma" } as const;
-const CHANNEL: Record<SalesMatchFact["channel"], string> = { pix: "Pix", debit_card: "Débito", credit_card: "Crédito" };
+const CHANNEL: Record<SalesMatchFact["channel"], string> = { pix: "Pix", debit_card: "Débito", credit_card: "Crédito", voucher: "Voucher" };
 const PDV_STATUS: Record<SalesMatchFact["status"], string> = {
   approved: "Aprovada", pending: "Finalizada", partial_cancellation: "Cancelamento parcial", cancelled: "Cancelada", refunded: "Estornada", chargeback: "Chargeback",
 };
@@ -722,9 +755,10 @@ export function saleAuditChecks(audit: SaleAudit, groupUsualRate: number | null)
     couponGross === null || captured === null ? recorded ? "bad" : "wait" : couponGross === captured ? "ok" : "bad",
     couponGross !== null && captured !== null && couponGross !== captured ? `Diferença de ${money(captured - couponGross)}.` : null);
 
-  const stoneChannel = audit.source === "pix" ? "pix" : stoneAccountKind(audit.stone.accountTypeCode) === "debit" ? "debit_card" : "credit_card";
+  const stoneChannel = audit.source === "pix" ? "pix" : audit.stone.accountTypeCode === "5" ? "voucher"
+    : stoneAccountKind(audit.stone.accountTypeCode) === "debit" ? "debit_card" : "credit_card";
   add("Mesmo meio de pagamento", "Meio do PDV × tipo de conta na Stone", coupon ? CHANNEL[coupon.channel] : "—",
-    audit.source === "pix" ? "Pix" : MODALITY_LABEL[audit.stone.modality],
+    stoneChannel === "pix" || stoneChannel === "voucher" ? CHANNEL[stoneChannel] : MODALITY_LABEL[audit.stone.modality],
     !coupon ? recorded ? "bad" : "wait" : coupon.channel === stoneChannel ? "ok" : "bad");
 
   const minutes = coupon ? minutesBetween(coupon.soldAt, audit.stone.captureLocalDateTime) : null;
@@ -799,6 +833,7 @@ export function saleAuditVerdict(checks: AuditCheck[]): { label: string; tone: "
 export function cardSaleInstallments(input: {
   origin: StoneTransaction | null; payments: Array<{ file: StoneFile; transaction: StoneTransaction; installment: StoneInstallment }>;
   portfolio: StonePortfolioParcel[]; latestPublished: string; missingDates: string[];
+  adverseTransactions?: StoneTransaction[];
 }): SaleAuditInstallment[] {
   const missing = new Set(input.missingDates);
   const numbers = new Set<number>([
@@ -809,6 +844,8 @@ export function cardSaleInstallments(input: {
   return [...numbers].sort((a, b) => a - b).map(number => {
     const origin = input.origin?.installments.find(row => row.number === number) ?? null;
     const paid = input.payments.filter(row => row.installment.number === number);
+    const conflicting = paid.some(row=>adverse(row.transaction)||(row.transaction.events.Cancellations??0)>0||(origin&&stoneDecimalCents(row.installment.grossAmount)!==stoneDecimalCents(origin.grossAmount)))
+      || [input.origin,...(input.adverseTransactions??[])].some(tx=>tx&&tx.installments.some(i=>i.number===number)&&(adverse(tx)||(tx.events.Cancellations??0)>0));
     const payment = paid[0] ?? null;
     const portfolio = input.portfolio.find(row => row.installment === number) ?? null;
     const expected = origin?.expectedPaymentDate ?? portfolio?.dueDate ?? null;
@@ -836,7 +873,7 @@ export function cardSaleInstallments(input: {
       paymentEventCount: paid.length,
       suspendedByChargeback: chargeback,
       file: payment ? { id: payment.file.fileId, referenceDate: payment.file.referenceDate, generatedAt: payment.file.generatedAtProvider } : null,
-      status: paidDate ? paidStatus(original ?? expected, paidDate, chargeback)
+      status: conflicting||paid.length>1 ? "review" : paidDate ? paidStatus(original ?? expected, paidDate, chargeback)
         : portfolio?.status === "review" ? "review" : pendingStatus(expected, input, missing, chargeback),
     };
   });

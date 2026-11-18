@@ -55,8 +55,9 @@ function FactCard({ fact }: { fact: SalesMatchFact }) {
     </dl> : null}
     {fact.adjustment ? <div className="mt-2 space-y-0.5 rounded-lg bg-ds-ok-bg px-2 py-1.5 text-[11px]">
       <p className="font-medium text-ds-ok">
-        Cupom original {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
+        Cupom antes do cancelamento {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
       </p>
+      {fact.adjustment.itemDiscountCents ? <p className="text-ds-ink-faint">Descontos nos itens incluídos no cálculo · {money(fact.adjustment.itemDiscountCents)}.</p> : null}
       <p className="text-ds-ink-faint">
         {fact.adjustment.finalizedAfterCancellation
           ? `Cancelado às ${fact.adjustment.lastCancellationAt?.slice(11, 19)}; pagamento final às ${fact.adjustment.finalizedAt.slice(11, 19)}.`
