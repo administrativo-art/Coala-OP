@@ -34,3 +34,13 @@ Decisão de produto: 31/10/2026. Estado: implementação local em verificação.
 - Homologar a interface e o gatilho de reconciliação de metas em ambiente integrado antes da ativação.
 - A exclusão de escala com revisão ativa ainda retorna conflito no serviço legado. O botão de exclusão é ocultado nesse caso; será necessário um fluxo próprio de exclusão de revisão e seus índices antes de reabrir essa operação.
 - Executar migração de dados reais somente com autorização específica; a leitura legada deve permanecer publicada mesmo antes de qualquer migração.
+
+## Correção de acesso ao DSR no rascunho — 18/11/2026
+
+A rota de DSR introduzida em #904 exigia `schedule.workspaceId` exatamente igual ao workspace da sessão, mas o tipo/legado da escala e o criador atual (`use-dp-store.addSchedule`) não persistem esse campo. O erro foi reproduzido em emulador como `DP_SCHEDULE_DRAFT_SCOPE_INVALID`/403, sem inferir o usuário da captura ou consultar dados de RH reais.
+
+Compatibilidade delimitada: campo ausente pertence somente ao workspace configurado da implantação (`WORKSPACE_ID`), sem aceitar qualquer workspace da sessão. Campo explícito estrangeiro ou malformado continua negado. Permanecem exigidos permissão de DSR/edição e acesso à unidade; o mesmo escopo é revalidado na transação, além da revisão otimista. Não há migração de documentos nem mudança no cálculo/natureza/publicação do DSR, REP-P ou integração Bizneo. O DSR continua apenas no rascunho até Publicar.
+
+Critérios: adicionar/remover no legado e no explícito autorizado; negar outra unidade/perfil/workspace e campo inválido; impedir mudança concorrente de escopo; preservar fonte oficial e não criar operação Bizneo durante a edição. Nenhuma query adicional (mesmos snapshots já lidos), custo incremental de leituras/escritas zero. Testes demo dirigidos: `npm run test:integration -- --dsr-draft-access`. Revisão Doc Brown exigida por AGENTS antes do commit; publicação deste chamado não autorizada nesta etapa.
+
+Revisão obrigatória Doc Brown concluída em 18/11/2026: **conforme para commit**, quanto a escopo/autorização, rascunho versus oficial, concorrência/rastreabilidade e REP-P/PTRP; seis integrações demo aprovadas, sem alteração de marcações ou chamadas Bizneo. Ressalva futura não bloqueante: uma implantação multiworkspace requer persistir/migrar `workspaceId` com autorização própria; o fallback atual não é um vínculo genérico entre workspaces.

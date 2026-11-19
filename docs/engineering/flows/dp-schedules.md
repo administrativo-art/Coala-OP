@@ -91,3 +91,9 @@ A nova rota `GET /api/dp/natasha/team` prepara a equipe mínima por até cinco u
 ## Centralização por vigências — 28/10/2026
 
 A equipe habitual, candidatos, cobertura, lançamentos individuais e em lote usam `operationalUnitPeriods` pela data do turno. Sem o campo permanece o legado; timeline definida não recebe quiosques extras. A unidade do turno não rateia custos nem muda empregador. Ver [contextos](../unit-contexts.md) e [edição centralizada](people-access.md).
+
+### Compatibilidade de workspace do DSR no rascunho — 18/11/2026
+
+`DPSchedule` e a criação atual de `use-dp-store.addSchedule` não exigem/gravam `workspaceId`; o guard estrito adicionado ao DSR em #904 recusava essas escalas com “Sem acesso a esta escala”, embora a unidade e o perfil fossem válidos. `stageScheduleDayOff` agora aceita campo ausente somente para a sessão do workspace configurado da implantação. Valor explícito divergente, nulo, vazio ou inválido não usa fallback. ACL da unidade e permissões de editar/DSR permanecem exigidas; workspace é revalidado na transação antes da escrita, juntamente com a revisão do documento.
+
+Não se associa escala por nome, não se altera cadastro/escopo da origem, nem se publica DSR, escala ou Bizneo durante a edição. Sem queries extras: usa snapshots já lidos. [Regressão demo](../../../tests/integration/dp-dsr-draft-access.test.mjs) reproduz o 403 anterior e cobre legado, explícito, negações e corrida de workspace; o percurso de publicação legado continua coberto por `dp-publication-legacy.test.mjs`. Decisão/limites no [plano de publicação](../../planos/plano-publicacao-escalas.md).
