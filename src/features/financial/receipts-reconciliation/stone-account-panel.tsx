@@ -9,6 +9,7 @@ import { LiftRow } from "@/components/patterns/lift-row";
 import { Segmented } from "@/components/patterns/segmented";
 import { SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MonthSelect } from "./month-select";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { MappingView } from "../agent/configuration";
@@ -80,6 +81,9 @@ const bySaleTime = (a: ReceiptParcel, b: ReceiptParcel) =>
 export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { mapping: MappingView; stoneCode: string; onIndicators: (value: StoneAccountIndicators) => void }) {
   const api = useAuthenticatedApi();
   const [month, setMonth] = useState(currentMonth);
+  // Recorte de dias dentro da competência: só filtra a leitura, a base consultada continua mensal.
+  const [dayFrom, setDayFrom] = useState("");
+  const [dayThrough, setDayThrough] = useState("");
   const [result, setResult] = useState<StoneAccountMonthResult | null>(null);
   const [filter, setFilter] = useState<SourceFilter>("all");
   const [openDays, setOpenDays] = useState<Set<string>>(new Set());
@@ -95,7 +99,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
 
   const parcels = useMemo(() => (result?.parcels ?? []).filter(parcel => filter === "all" || (filter === "pix" ? parcel.source === "pix" : parcel.source === "card")), [result, filter]);
   const byId = useMemo(() => new Map((result?.parcels ?? []).map(parcel => [parcel.id, parcel])), [result]);
-  const days = useMemo(() => result ? summarizeReceiptDays(parcels, receiptPeriodDates(result.period.from, result.period.through), result.coverage.missingDates).reverse() : [], [result, parcels]);
+  const days = useMemo(() => result ? summarizeReceiptDays(parcels, receiptPeriodDates(result.period.from, result.period.through), result.coverage.missingDates).filter(day => (!dayFrom || day.date >= dayFrom) && (!dayThrough || day.date <= dayThrough)).reverse() : [], [result, parcels, dayFrom, dayThrough]);
   const weeks = useMemo(() => groupReceiptWeeks(days).reverse(), [days]);
   const groups = useMemo(() => result ? summarizeReceiptGroups(parcels, result.period.from, result.period.through, result.latestPublished) : [], [result, parcels]);
   const usualRates = useMemo(() => new Map(result ? summarizeReceiptGroups(result.parcels, result.period.from, result.period.through, result.latestPublished).map(group => [group.key, group.usualRate]) : []), [result]);
@@ -221,8 +225,15 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
     <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4 sm:px-[18px]">
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Competência
-          <MonthSelect label="Competência dos recebimentos" value={month} onChange={value => { setMonth(value); setResult(null); setSavedAt(null); }} />
+          <MonthSelect label="Competência dos recebimentos" value={month} onChange={value => { setMonth(value); setDayFrom(""); setDayThrough(""); setResult(null); setSavedAt(null); }} />
         </label>
+        <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Dia de
+          <Input aria-label="Primeiro dia do recorte" type="date" className="w-[160px] normal-case tracking-normal" min={result?.period.from} max={dayThrough || result?.period.through} value={dayFrom} onChange={event => setDayFrom(event.target.value)} />
+        </label>
+        <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">até
+          <Input aria-label="Último dia do recorte" type="date" className="w-[160px] normal-case tracking-normal" min={dayFrom || result?.period.from} max={result?.period.through} value={dayThrough} onChange={event => setDayThrough(event.target.value)} />
+        </label>
+        {dayFrom || dayThrough ? <Button type="button" variant="ghost" size="md" onClick={() => { setDayFrom(""); setDayThrough(""); }}>Limpar dias</Button> : null}
         <Button type="button" variant="ds-secondary" size="md" disabled={busy || !stoneCode || !month} onClick={() => void run()}>
           <RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Conferindo…" : "Reconferir agora"}
         </Button>
