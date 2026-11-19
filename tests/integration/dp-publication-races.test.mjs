@@ -71,4 +71,23 @@ test('evento operacional não conflitante entra na revisão; alteração do mesm
   const resolved = await publishPreparedSchedule(context, schedule.id, 'publish-after-discard', 2);
   assert.equal(resolved.publicationVersion, 3);
   assert.equal((await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.some((shift) => shift.id === 'a'), false);
+  const beforeManual = (await schedule.get()).get('activeRevisionId');
+  await stageWorkShift({ context, scheduleId: schedule.id, shiftId: 'b', mode: 'update',
+    requestId: 'manual-draft', input: { ...input, date: '2027-11-05',
+      manualDay: { mode: 'flexible', expectedWorkMinutes: 360, expectedBreakMinutes: 0 } } });
+  await assert.rejects(publishPreparedSchedule(context, schedule.id, 'manual-publish-blocked', 1),
+    { code: 'DP_SCHEDULE_MANUAL_DAY_PUBLICATION_UNAVAILABLE' });
+  const afterManual = await schedule.get();
+  assert.equal(afterManual.get('activeRevisionId'), beforeManual);
+  assert.equal(afterManual.get('publicationVersion'), 3);
+  assert.equal((await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.find((shift) => shift.id === 'b').manualDay, undefined);
+  const draftWithManual = await listEditableScheduleShifts(context, schedule.id);
+  assert.deepEqual(draftWithManual.conflicts, []);
+  assert.equal(draftWithManual.shifts.find((shift) => shift.id === 'b').manualDay.mode, 'flexible');
+
+  await stageWorkShift({ context, scheduleId: schedule.id, shiftId: 'b', mode: 'update',
+    requestId: 'remove-manual-draft', input: { ...input, date: '2027-11-05' } });
+  const plain = await publishPreparedSchedule(context, schedule.id, 'publish-ordinary-again', 2);
+  assert.equal(plain.publicationVersion, 4);
+
 });
