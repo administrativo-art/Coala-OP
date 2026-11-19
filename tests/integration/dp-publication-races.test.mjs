@@ -8,6 +8,7 @@ const { stageWorkShift, publishPreparedSchedule, listEditableScheduleShifts, dis
   await import('../../src/features/dp/schedules/publication-service.server.ts');
 const { applyActiveRevisionOperationalChanges } =
   await import('../../src/features/dp/schedules/operational-overlay.server.ts');
+const { saveClosedScheduleDay } = await import('../../src/features/dp/coverage-demands/service.server.ts');
 const { readOfficialScheduleShifts } = await import('../../src/features/dp/schedules/official-revision.server.ts');
 
 test('evento operacional não conflitante entra na revisão; alteração do mesmo turno barra a troca do ponteiro', async () => {
@@ -89,5 +90,28 @@ test('evento operacional não conflitante entra na revisão; alteração do mesm
     requestId: 'remove-manual-draft', input: { ...input, date: '2027-11-05' } });
   const plain = await publishPreparedSchedule(context, schedule.id, 'publish-ordinary-again', 2);
   assert.equal(plain.publicationVersion, 4);
+
+  const changeClosure = (date, closed) => saveClosedScheduleDay({
+    context, scheduleId: schedule.id, date, requestId: 'closure',
+    input: { closed, schedules: [{ scheduleId: schedule.id, unitId }] },
+  });
+  await changeClosure('2027-11-05', true);
+  await assert.rejects(publishPreparedSchedule(context, schedule.id, 'closure-with-shift', 1),
+    { code: 'DP_SCHEDULE_CLOSED_DAY_HAS_WORK' });
+  assert.equal((await schedule.get()).get('closedDates'), undefined);
+  await changeClosure('2027-11-05', false);
+  await changeClosure('2027-11-06', true);
+  const closed = await publishPreparedSchedule(context, schedule.id, 'closure-without-shift', 3);
+  assert.equal(closed.publicationVersion, 5);
+  const afterClosure = await schedule.get();
+  assert.deepEqual(afterClosure.get('closedDates'), ['2027-11-06']);
+  assert.equal(afterClosure.get('draftClosedDates'), undefined);
+  const activeB = (await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.find((shift) => shift.id === 'b');
+  await assert.rejects(dbAdmin.runTransaction(async (tx) => {
+    const snapshot = await tx.get(schedule);
+    await applyActiveRevisionOperationalChanges({ tx, schedule: snapshot, workspaceId,
+      changes: [{ shiftId: 'b', previous: activeB, next: { ...activeB, date: '2027-11-06' } }],
+      actorId: personId, reason: 'shift_swap_accepted' });
+  }), { code: 'DP_OPERATIONAL_DAY_CLOSED' });
 
 });

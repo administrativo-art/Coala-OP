@@ -48,6 +48,10 @@ export async function prepareActiveRevisionOperationalChanges(params: {
   if (!changes.length || changes.length > MAX_CHANGES_PER_TRANSACTION || new Set(changes.map((change) => change.shiftId)).size !== changes.length) {
     invalid('DP_OPERATIONAL_CHANGE_LIMIT', 'Há turnos demais ou repetidos nesta operação.');
   }
+  const closedDates = new Set<string>(schedule.get('closedDates') ?? []);
+  if (changes.some(({ next }) => next?.type === 'work' && typeof next.date === 'string' && closedDates.has(next.date))) {
+    invalid('DP_OPERATIONAL_DAY_CLOSED', 'A unidade está fechada na data do turno.');
+  }
   const revisionRef = scheduleRef.collection('revisions').doc(revisionId);
   const overlayRef = scheduleRef.collection('operationalOverlays').doc(revisionId);
   const entryRefs = changes.map((change) => overlayRef.collection('entries').doc(id(change.shiftId)));
