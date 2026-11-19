@@ -28,6 +28,7 @@ import {
   type SaleAudit,
 } from "./stone-account";
 import { centsLabel, dayLabel, dayReasonLabel, parcelKind, parcelNumber, parcelProblems, parcelRateText, parcelStatusView, parcelTitle, rateLabel, weekdayLabel } from "./stone-account-format";
+import { StonePositionOverview } from "../receivables/position-bar";
 import { SaleAuditDetail, SaleAuditSummary } from "./sale-audit-view";
 
 type SourceFilter = "all" | "pix" | "card";
@@ -216,6 +217,7 @@ export function StoneAccountReceipts({ mapping, stoneCode, onIndicators }: { map
   };
 
   return <div className="space-y-[18px]">
+    <StonePositionOverview key={`position:${stoneCode}`} stoneCode={stoneCode} />
     <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4 sm:px-[18px]">
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Competência
