@@ -30,10 +30,10 @@ export function stoneReceiptFlowHref(step: StoneReceiptFlowStep, mappingId?: str
 }
 
 const tabs = [
-  { id: "receivables" as const, title: "A receber", description: "O que a Stone ainda deve pagar, e quando.", icon: WalletCards },
-  { id: "anticipations" as const, title: "Antecipações", description: "O que foi pago antes do prazo e quanto custou.", icon: RefreshCw },
-  { id: "fees" as const, title: "Taxas", description: "Quanto a Stone reteve de taxa, para contabilizar.", icon: Percent },
   { id: "credit" as const, title: "Recebido", description: "O previsto caiu na conta Stone, venda a venda.", icon: Landmark },
+  { id: "receivables" as const, title: "A receber", description: "O que a Stone ainda deve pagar, e quando.", icon: WalletCards },
+  { id: "anticipations" as const, title: "Antecipado", description: "O que foi pago antes do prazo e quanto custou.", icon: RefreshCw },
+  { id: "fees" as const, title: "Taxas", description: "Quanto a Stone reteve de taxa, para contabilizar.", icon: Percent },
 ];
 
 /**
