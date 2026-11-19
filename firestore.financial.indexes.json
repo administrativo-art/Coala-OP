@@ -544,6 +544,11 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "feeAutoPendingMonths",
+      "fieldPath": "reviews",
+      "indexes": []
+    },
+    {
       "collectionGroup": "events",
       "fieldPath": "actorId",
       "indexes": [

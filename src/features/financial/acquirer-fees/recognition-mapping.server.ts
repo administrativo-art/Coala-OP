@@ -18,3 +18,19 @@ export async function recognitionMapping(request: FeeRequest, context: FeeContex
   validateFinancialAgentReferences(kiosk.data(), account.data(), context.workspace_id);
   return { mapping, document: matches.docs.find(d => d.id === mapping.id)! };
 }
+
+/** Month-level controls can open a month in which the mapping started after day 1. */
+export async function recognitionMappingForMonth(request: FeeRequest, context: FeeContext, tx?: FirebaseFirestore.Transaction) {
+  assertFeeAdmin(context);
+  const ref = db.collection("stoneMerchantMappings").doc(request.mappingId);
+  const document = tx ? await tx.get(ref) : await ref.get();
+  const validFrom = document.get("validFrom");
+  if (document.get("workspaceId") !== context.workspace_id || typeof validFrom !== "string") {
+    throw new AppError({ code: "ACQUIRER_FEE_MAPPING_CHANGED", kind: "CONFLICT" });
+  }
+  const referenceDate = request.referenceDate < validFrom ? validFrom : request.referenceDate;
+  if (referenceDate.slice(0, 7) !== request.referenceDate.slice(0, 7)) {
+    throw new AppError({ code: "ACQUIRER_FEE_MAPPING_CHANGED", kind: "CONFLICT" });
+  }
+  return recognitionMapping({ ...request, referenceDate }, context, tx);
+}
