@@ -37,6 +37,15 @@ test('rejeita horário inválido ou sem duração e encaminha noturno para valid
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, startTime: '22:00', endTime: '06:00', shiftDefinitionId: 'night' }).success, true);
 });
 
+test('aceita intervalo local dentro do período de uma jornada manual', () => {
+  const manual = { ...validShift, shiftDefinitionId: undefined,
+    manualDay: { mode: 'flexible', expectedWorkMinutes: 480, expectedBreakMinutes: 60 } };
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '12:00', end: '13:00' } }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '08:00', end: '09:00' } }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, manualBreak: { start: '12:00', end: '13:00' } }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse(manual).success, true);
+});
+
 test('valida os identificadores da rota', () => {
   assert.equal(workShiftRouteSchema.safeParse({ scheduleId: 'schedule-1', shiftId: 'shift-1' }).success, true);
   assert.equal(workShiftRouteSchema.safeParse({ scheduleId: '', shiftId: 'shift-1' }).success, false);

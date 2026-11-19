@@ -4141,7 +4141,14 @@ export type DPScheduleRestRecord = {
   }>;
 };
 
+export type DPManualShiftDay =
+  | { mode: 'fixed'; expectedBreakMinutes: number }
+  | { mode: 'flexible'; expectedWorkMinutes: number; expectedBreakMinutes: number };
+
 export type DPShift = {
+  manualDay?: DPManualShiftDay | null;
+  manualDayId?: string | null;
+  manualBreak?: { start: string; end: string } | null;
   id: string;
   scheduleId: string;
   unitId: string;

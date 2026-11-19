@@ -15,8 +15,18 @@ export function scheduleShiftFingerprint(value: Record<string, unknown> | null):
     value.date ?? null, value.startTime ?? null, value.endTime ?? null,
     value.type ?? null, value.shiftDefinitionId ?? null, value.overnight === true,
     value.assignmentKind ?? null, value.originUnitId ?? null,
-    value.exceptionReason ?? null, value.dayOffSource ?? null,
+    value.exceptionReason ?? null,
+    ...(value.manualDay ? [value.manualDay, value.manualBreak ?? null] : []), value.dayOffSource ?? null,
   ]);
+}
+
+// Older publishers see this prefix as a conflict and leave the official revision intact.
+const MANUAL_DRAFT_FINGERPRINT_PREFIX = 'manual-day-draft-v1:';
+
+export function scheduleDraftBaseFingerprint(base: string, manualDay: boolean): string {
+  const original = base.startsWith(MANUAL_DRAFT_FINGERPRINT_PREFIX)
+    ? base.slice(MANUAL_DRAFT_FINGERPRINT_PREFIX.length) : base;
+  return manualDay ? MANUAL_DRAFT_FINGERPRINT_PREFIX + original : original;
 }
 
 export type DPScheduleDraftEdit<T extends Record<string, unknown>> = {
@@ -31,7 +41,7 @@ export function mergeScheduleDraft<T extends Record<string, unknown>>(
   const merged = new Map(published);
   const conflicts: string[] = [];
   for (const [id, edit] of edits) {
-    if (scheduleShiftFingerprint(published.get(id) ?? null) !== edit.baseFingerprint) {
+    if (scheduleShiftFingerprint(published.get(id) ?? null) !== scheduleDraftBaseFingerprint(edit.baseFingerprint, false)) {
       conflicts.push(id);
       continue;
     }
