@@ -10,9 +10,13 @@ import { AppError } from "@/lib/observability/app-error";
 import { latestPublishedDate } from "../receivables/period-review";
 import { stoneReceiptFingerprint, readStoneReceiptSnapshot } from "./stone-account-snapshot.server";
 import {
-  applyDecisions, detectRateChanges, feeExceptions, feeGroups, feeHistory, feeSales, otherCharges,
-  type FeeDecision, type FeeDecisionInput,
+  applyDecisions, detectRateChanges, feeExceptions, feeGroups, feeHistory, feeHistoryDaily, feeSales, otherCharges, HISTORY_PERIODS,
+  type FeeDecision, type FeeDecisionInput, type FeeHistoryPeriod,
 } from "./fee-review";
+import {
+  OCCURRENCE_CHANNELS, OCCURRENCE_OUTCOMES, OCCURRENCE_REASONS, applyOccurrenceAction, occurrenceStatus,
+  type FeeOccurrence, type FeeOccurrenceActionInput, type FeeOccurrenceKind,
+} from "./fee-occurrence";
 
 /**
  * Taxas: monta a visão a partir das conferências mensais salvas (até 6 meses) e grava as decisões
@@ -29,6 +33,36 @@ const decisionSchema = z.object({
   groupKey: z.string().nullable(), rate: z.number().nullable(), since: z.string().nullable(),
   actorId: z.string(), actorNamespace: z.literal("main.users"), decidedAt: z.string(), note: z.string().nullable(), revision: z.number().int().positive(),
 }).passthrough();
+
+const MAX_OCCURRENCES = 500;
+const contactSchema = z.object({ at: z.string(), contactDate: z.string(), channel: z.enum(Object.keys(OCCURRENCE_CHANNELS) as [keyof typeof OCCURRENCE_CHANNELS]), protocol: z.string().nullable(), note: z.string().nullable(), actorId: z.string() });
+const occurrenceSchema = z.object({
+  workspaceId: z.string(), stoneCode: z.string(), mappingId: z.string(), kioskId: z.string(),
+  kind: z.enum(["sale_fee", "rate_change", "other_charge"]), itemKey: z.string(), label: z.string(), detail: z.string().nullable(), itemDate: z.string().nullable(),
+  amountCents: z.number().int(), month: z.string(), reason: z.enum(Object.keys(OCCURRENCE_REASONS) as [keyof typeof OCCURRENCE_REASONS]).nullable(), protocol: z.string().nullable(), note: z.string().nullable(),
+  openedAt: z.string(), openedBy: z.string(), contacts: z.array(contactSchema).max(60),
+  closedAt: z.string().nullable(), closedBy: z.string().nullable(), outcome: z.enum(Object.keys(OCCURRENCE_OUTCOMES) as [keyof typeof OCCURRENCE_OUTCOMES]).nullable(),
+  refundedCents: z.number().int().nullable(), resolvedOn: z.string().nullable(), closeNote: z.string().nullable(),
+}).passthrough();
+
+/** Ocorrências do vínculo (todas as competências), da mais recente para a mais antiga. */
+async function readOccurrences(scope: Scope): Promise<FeeOccurrence[]> {
+  const snapshot = await financialDbAdmin.collection("stoneReceiptOccurrences")
+    .where("workspaceId", "==", scope.workspaceId).where("stoneCode", "==", scope.stoneCode)
+    .limit(MAX_OCCURRENCES + 1).get();
+  if (snapshot.size > MAX_OCCURRENCES) throw new AppError({ code: "STONE_FEE_OCCURRENCE_LIMIT", kind: "EXPECTED_BUSINESS", safeMessage: "Há ocorrências demais para este StoneCode." });
+  return snapshot.docs.flatMap(document => {
+    const parsed = occurrenceSchema.safeParse(document.data());
+    if (!parsed.success || parsed.data.mappingId !== scope.mappingId || parsed.data.kioskId !== scope.kioskId) return [];
+    const data = parsed.data;
+    return [{
+      id: document.id, kind: data.kind, itemKey: data.itemKey, label: data.label, detail: data.detail, itemDate: data.itemDate, amountCents: data.amountCents, month: data.month,
+      reason: data.reason, protocol: data.protocol, note: data.note, openedAt: data.openedAt, openedBy: data.openedBy, contacts: data.contacts,
+      status: occurrenceStatus({ contacts: data.contacts, outcome: data.outcome }), closedAt: data.closedAt, closedBy: data.closedBy,
+      outcome: data.outcome, refundedCents: data.refundedCents, resolvedOn: data.resolvedOn, closeNote: data.closeNote,
+    }];
+  }).sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+}
 
 const monthsBack = (month: string, count: number) => {
   const [year, value] = month.split("-").map(Number);
@@ -56,7 +90,7 @@ export async function buildFeeReview(scope: Scope, month: string, now = new Date
   const saved = await Promise.all(months.map(value => readStoneReceiptSnapshot({ ...scope, month: value })));
   const ready = saved.flatMap((entry, index) => entry.status === "ready" ? [{ month: months[index], result: entry.result }] : []);
   const current = ready.find(entry => entry.month === month) ?? null;
-  const decisions = await readDecisions(scope);
+  const [decisions, occurrences] = await Promise.all([readDecisions(scope), readOccurrences(scope)]);
   const allSales = feeSales(ready.flatMap(entry => entry.result.parcels));
   const referenceSource = await readConfirmedRateReferences(scope);
   const referenceAt = month < latest.slice(0,7) ? `${month}-${new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate()}` : latest;
@@ -79,7 +113,7 @@ export async function buildFeeReview(scope: Scope, month: string, now = new Date
     referenceSource,
     snapshotVersions: saved.map((entry,index)=>({month:months[index],fingerprint:entry.status==="ready"?stoneReceiptFingerprint(entry.result):null})),
     month, ready: Boolean(current), savedAt: current?.result.collectedAt ?? null,
-    groups, changes, exceptions, charges,
+    groups, changes, exceptions, charges, occurrences,
     history: feeHistory(ready.map(entry => ({ month: entry.month, sales: allSales }))),
     historyMonths: ready.map(entry => entry.month),
     totals,
@@ -92,6 +126,19 @@ export async function buildFeeReview(scope: Scope, month: string, now = new Date
   };
 }
 export type FeeReviewView = Awaited<ReturnType<typeof buildFeeReview>>;
+
+/** Histórico por período: o mês aparece por dia; os demais períodos, por mês (até 36 meses em "desde o início"). */
+export async function buildFeeHistory(scope: Scope, month: string, period: FeeHistoryPeriod) {
+  const count = HISTORY_PERIODS[period];
+  const months = monthsBack(month, count);
+  const saved = await Promise.all(months.map(value => readStoneReceiptSnapshot({ ...scope, month: value })));
+  const ready = saved.flatMap((entry, index) => entry.status === "ready" ? [{ month: months[index], result: entry.result }] : []);
+  const sales = feeSales(ready.flatMap(entry => entry.result.parcels));
+  if (period === "month") return { period, granularity: "day" as const, series: feeHistoryDaily(sales, month), months: ready.map(entry => entry.month) };
+  const firstReady = ready[0]?.month ?? month;
+  const shown = period === "all" ? months.filter(value => value >= firstReady) : months;
+  return { period, granularity: "month" as const, series: feeHistory(shown.map(value => ({ month: value, sales }))), months: ready.map(entry => entry.month) };
+}
 
 const decisionId = (scope: Scope, kind: string, itemKey: string) =>
   createHash("sha256").update(`${scope.workspaceId}:${scope.stoneCode}:${kind}:${itemKey}`).digest("hex");
@@ -106,11 +153,16 @@ export async function saveFeeDecision(scope: Scope, input: FeeDecisionInput, act
     if (mapping.id!==scope.mappingId) throw new AppError({code:"STONE_FEE_EFFECTIVE_SCOPE",kind:"CONFLICT",safeMessage:"A data de início pertence a outro vínculo. Nenhuma taxa confirmada."});
   }
   const view = await buildFeeReview(scope, input.month, now);
-  const items: Array<{ key: string; fingerprint: string; groupKey: string | null; rate: number | null; since: string | null }> =
-    input.kind === "sale_fee" ? view.exceptions.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: item.groupKey, rate: input.decision === "new_rate" ? item.chargedCents / item.grossCents : null, since: input.decision === "new_rate" ? item.date : null }))
-      : input.kind === "rate_change" ? view.changes.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: item.groupKey, rate: input.decision === "new_rate" ? item.to : null, since: input.decision === "new_rate" ? item.since : null }))
-        : input.kind === "other_charge" ? view.charges.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: null, rate: null, since: null }))
-          : view.groups.filter(group => group.reference?.status === "suggested").map(group => ({ key: group.key, fingerprint: `group:${group.reference!.rate}`, groupKey: group.key, rate: group.reference!.rate, since: group.reference!.since }));
+  type Snapshot = { label: string; detail: string | null; date: string | null; amountCents: number };
+  const percent = (rate: number) => `${(rate * 100).toFixed(2).replace(".", ",")}%`;
+  const items: Array<{ key: string; fingerprint: string; groupKey: string | null; rate: number | null; since: string | null; snapshot: Snapshot | null }> =
+    input.kind === "sale_fee" ? view.exceptions.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: item.groupKey, rate: input.decision === "new_rate" ? item.chargedCents / item.grossCents : null, since: input.decision === "new_rate" ? item.date : null,
+      snapshot: { label: `${item.label} · venda ${item.saleId}`, detail: `${percent(item.expectedCents / item.grossCents)} esperado, ${percent(item.chargedCents / item.grossCents)} cobrado`, date: item.date, amountCents: item.differenceCents } }))
+      : input.kind === "rate_change" ? view.changes.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: item.groupKey, rate: input.decision === "new_rate" ? item.to : null, since: input.decision === "new_rate" ? item.since : null,
+        snapshot: { label: `${item.label} · ${item.saleCount} vendas`, detail: `${percent(item.from)} para ${percent(item.to)} desde ${item.since}`, date: item.since, amountCents: item.impactCents } }))
+        : input.kind === "other_charge" ? view.charges.map(item => ({ key: item.key, fingerprint: item.fingerprint, groupKey: null, rate: null, since: null,
+          snapshot: { label: `Chargeback · venda ${item.saleId}`, detail: item.label, date: item.date, amountCents: item.amountCents } }))
+          : view.groups.filter(group => group.reference?.status === "suggested").map(group => ({ key: group.key, fingerprint: `group:${group.reference!.rate}`, groupKey: group.key, rate: group.reference!.rate, since: group.reference!.since, snapshot: null }));
   const item = items.find(entry => entry.key === input.itemKey);
   if (!item || item.fingerprint !== input.fingerprint) {
     throw new AppError({ code: "STONE_FEE_ITEM_CHANGED", kind: "CONFLICT", safeMessage: "O item mudou ou já foi tratado. Recarregue a tela." });
@@ -132,8 +184,41 @@ export async function saveFeeDecision(scope: Scope, input: FeeDecisionInput, act
       actorId, actorNamespace: "main.users" as const, decidedAt: at, note: input.note ?? null, revision, month: input.month,
     };
     transaction.set(ref, record);
+    if (input.decision === "contested" && item.snapshot && input.kind !== "group_rate") {
+      const occurrenceId = createHash("sha256").update(`${scope.workspaceId}:${scope.stoneCode}:${input.kind}:${input.itemKey}:occurrence:${revision}`).digest("hex");
+      const occurrence = {
+        workspaceId: scope.workspaceId, stoneCode: scope.stoneCode, mappingId: scope.mappingId, kioskId: scope.kioskId,
+        kind: input.kind as FeeOccurrenceKind, itemKey: input.itemKey, label: item.snapshot.label, detail: item.snapshot.detail, itemDate: item.snapshot.date, amountCents: item.snapshot.amountCents, month: input.month,
+        reason: input.reason ?? null, protocol: input.protocol ?? null, note: input.note ?? null,
+        openedAt: at, openedBy: actorId, actorNamespace: "main.users" as const, decisionId: ref.id, contacts: [] as unknown[],
+        closedAt: null, closedBy: null, outcome: null, refundedCents: null, resolvedOn: null, closeNote: null,
+      };
+      transaction.create(financialDbAdmin.collection("stoneReceiptOccurrences").doc(occurrenceId), occurrence);
+    }
     // Histórico em coleção de topo (não subcoleção): consulta por ator direta, sem collection group.
     transaction.create(financialDbAdmin.collection("stoneReceiptDecisionEvents").doc(randomUUID()), { ...record, decisionId: ref.id, previousRevision: revision - 1 });
     return { saved: true as const, revision };
+  });
+}
+
+/** Registra um contato com a Stone ou finaliza a ocorrência. A ocorrência precisa ser do mesmo vínculo e não estar finalizada. */
+export async function saveFeeOccurrenceAction(scope: Scope, input: FeeOccurrenceActionInput, actorId: string, now = new Date()) {
+  const ref = financialDbAdmin.collection("stoneReceiptOccurrences").doc(input.occurrenceId);
+  return financialDbAdmin.runTransaction(async transaction => {
+    const document = await transaction.get(ref);
+    const parsed = occurrenceSchema.safeParse(document.data());
+    if (!document.exists || !parsed.success || parsed.data.workspaceId !== scope.workspaceId || parsed.data.stoneCode !== scope.stoneCode || parsed.data.mappingId !== scope.mappingId || parsed.data.kioskId !== scope.kioskId) {
+      throw new AppError({ code: "STONE_FEE_OCCURRENCE_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Ocorrência não encontrada neste vínculo." });
+    }
+    const current = parsed.data;
+    const result = applyOccurrenceAction({ contacts: current.contacts, protocol: current.protocol, status: occurrenceStatus({ contacts: current.contacts, outcome: current.outcome }) }, input, actorId, now);
+    if (!result.ok) {
+      const message = { CLOSED: "A ocorrência já foi finalizada.", TOO_MANY_CONTACTS: "Limite de contatos atingido. Finalize a ocorrência.", PROTOCOL_REQUIRED: "Informe o protocolo para finalizar a ocorrência." }[result.code];
+      throw new AppError({ code: `STONE_FEE_OCCURRENCE_${result.code}`, kind: result.code === "PROTOCOL_REQUIRED" ? "VALIDATION" : "CONFLICT", safeMessage: message });
+    }
+    const update: Record<string, unknown> = { contacts: result.contacts, protocol: result.protocol };
+    if (result.closed) Object.assign(update, { outcome: result.closed.outcome, refundedCents: result.closed.refundedCents, resolvedOn: result.closed.resolvedOn, closeNote: result.closed.note, closedAt: now.toISOString(), closedBy: actorId });
+    transaction.update(ref, update);
+    return { saved: true as const, status: occurrenceStatus({ contacts: result.contacts, outcome: result.closed?.outcome ?? null }) };
   });
 }

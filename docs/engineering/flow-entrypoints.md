@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 136.
+Arquivos locais percorridos: 137.
 
 Chamadas candidatas encontradas:
 
@@ -129,6 +129,7 @@ Chamadas candidatas encontradas:
 - `/api/financial/cash-flow-study` — interface [`src/features/financial/cash-flow-study/cash-flow-study-view.tsx`](../../src/features/financial/cash-flow-study/cash-flow-study-view.tsx); rota candidata [`src/app/api/financial/cash-flow-study/route.ts`](../../src/app/api/financial/cash-flow-study/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/management-analysis` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/management-analysis/route.ts`](../../src/app/api/financial/management-analysis/route.ts)
+- `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/use-fee-pending.ts`](../../src/features/financial/receipts-reconciliation/use-fee-pending.ts); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 - `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/portfolio-panel.tsx`](../../src/features/financial/receivables/portfolio-panel.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
@@ -1449,10 +1450,11 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-flow/receivables/page.tsx`](../../src/app/dashboard/financial/cash-flow/receivables/page.tsx).
 
-Arquivos locais percorridos: 38.
+Arquivos locais percorridos: 39.
 
 Chamadas candidatas encontradas:
 
+- `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/use-fee-pending.ts`](../../src/features/financial/receipts-reconciliation/use-fee-pending.ts); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 - `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/portfolio-panel.tsx`](../../src/features/financial/receivables/portfolio-panel.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
@@ -2155,7 +2157,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 75.
+Arquivos locais percorridos: 80.
 
 Chamadas candidatas encontradas:
 
