@@ -56,7 +56,7 @@ export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode, feeP
           selected ? "bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink",
         )}
       >
-        <Icon aria-hidden="true" className={cn("h-4 w-4", selected ? "text-ds-accent-ink" : "")} />{tab.title}{tab.id==="fees" && feePending!==undefined ? <span aria-label={feePending===null?"Alertas de taxas ainda não apurados":`${feePending} alertas de taxas`} className="rounded-full bg-ds-warn-bg px-2 text-xs">{feePending??"—"}</span> : null}
+        <Icon aria-hidden="true" className={cn("h-4 w-4", selected ? "text-ds-accent-ink" : "")} />{tab.title}{tab.id!=="anticipations" && feePending!==undefined ? <span aria-label={feePending===null?"Pendências de taxa ainda não apuradas":`${feePending} pendências de taxa`} className={cn("inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold", feePending ? "bg-ds-accent text-white" : "bg-ds-seg text-ds-ink-muted")}>{feePending??"—"}</span> : null}
       </Link>;
     })}</div></div>
     {active ? <p className="text-[12.5px] text-ds-ink-muted">{active.description}</p> : null}
