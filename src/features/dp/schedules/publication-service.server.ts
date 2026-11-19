@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { WORKSPACE_ID } from '@/lib/workspace';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { holdRepPCompetenceForSchedulePublication } from '@/features/dp/rep-p/competence-fence.server';
 import { AppError } from '@/lib/observability/app-error';
@@ -38,6 +39,13 @@ function assertAccess(context: ServerUserContext, schedule: DocumentSnapshot, pe
     fail('DP_SCHEDULE_UNIT_FORBIDDEN', 'AUTHORIZATION', 'Sem acesso à unidade desta escala.');
   }
   return unitId as string;
+}
+/** Legacy schedules predate workspaceId; only the configured deployment workspace owns that fallback. */
+function assertDraftDayOffWorkspace(context: ServerUserContext, schedule: DocumentSnapshot) {
+  const workspaceId = schedule.get('workspaceId');
+  if (workspaceId === undefined ? context.workspace_id !== WORKSPACE_ID : workspaceId !== context.workspace_id) {
+    fail('DP_SCHEDULE_DRAFT_SCOPE_INVALID', 'AUTHORIZATION', 'Sem acesso a esta escala.');
+  }
 }
 function publicationVersion(schedule: DocumentSnapshot) {
   const value = schedule.get('publicationVersion');
@@ -154,9 +162,7 @@ export async function stageScheduleDayOff(context: ServerUserContext, scheduleId
   const state = await loadDraft(context, scheduleId, 'edit');
   const unitId = assertAccess(context, state.schedule, 'edit');
   assertPeriod(state.schedule, input.date, unitId, input.unitId);
-  if (state.schedule.get('workspaceId') !== context.workspace_id) {
-    fail('DP_SCHEDULE_DRAFT_SCOPE_INVALID', 'AUTHORIZATION', 'Sem acesso a esta escala.');
-  }
+  assertDraftDayOffWorkspace(context, state.schedule);
   if (state.conflicts.length || draftVersion(state.schedule) !== input.expectedDraftVersion) {
     fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'A escala mudou. Atualize antes de editar o DSR.');
   }
@@ -181,6 +187,7 @@ export async function stageScheduleDayOff(context: ServerUserContext, scheduleId
   return dbAdmin.runTransaction(async (tx) => {
     const schedule = await tx.get(state.ref);
     assertAccess(context, schedule, 'edit');
+    assertDraftDayOffWorkspace(context, schedule);
     if (!schedule.updateTime?.isEqual(state.schedule.updateTime!)) {
       fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'A escala mudou. Atualize antes de editar o DSR.');
     }
