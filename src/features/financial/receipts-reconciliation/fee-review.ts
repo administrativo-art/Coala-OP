@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contestDetailsSchema } from "./fee-occurrence";
 import { pixFeeForRate, receiptGroupKey, receiptModalityLabel, truncatedNominalRate, usualRate, weightedFeeRate, type ReceiptParcel } from "./stone-account";
 
 /**
@@ -30,7 +31,9 @@ export const feeDecisionInputSchema = z.object({
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>Number.isFinite(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0,10)===value).optional(),
   fingerprint: z.string().regex(/^[a-z0-9:._-]{1,300}$/i),
   note: z.string().trim().max(500).nullable().optional(),
+  ...contestDetailsSchema,
 }).strict().superRefine((value, context) => {
+  if (value.decision !== "contested" && (value.reason !== undefined || value.protocol !== undefined)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["reason"], message: "Motivo e protocolo só valem para contestação." });
   const allowed: Record<string, string[]> = {
     sale_fee: ["accepted", "contested"], rate_change: ["new_rate", "contested"],
     group_rate: ["confirmed"], other_charge: ["accepted", "contested"],
@@ -191,6 +194,25 @@ export function feeHistory(salesByMonth: Array<{ month: string; sales: Sale[] }>
     months: salesByMonth.map(entry => {
       const list = entry.sales.filter(sale => sale.groupKey === key && sale.date.startsWith(entry.month) && !sale.derived);
       return { month: entry.month, rate: list.length ? groupRate(list) : null, sales: list.length };
+    }),
+  })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+export const HISTORY_PERIODS = { month: 1, quarter: 3, semester: 6, year: 12, all: 36 } as const;
+export type FeeHistoryPeriod = keyof typeof HISTORY_PERIODS;
+export const feeHistoryPeriodSchema = z.enum(["month", "quarter", "semester", "year", "all"]);
+
+/** Histórico do mês por dia: taxa mais frequente de cada grupo em cada dia com venda (a chave do ponto é a data). */
+export function feeHistoryDaily(sales: Sale[], month: string) {
+  const inMonth = sales.filter(sale => sale.date.startsWith(month) && !sale.derived);
+  const groups = new Map<string, string>();
+  inMonth.forEach(sale => groups.set(sale.groupKey, sale.label));
+  const dates = [...new Set(inMonth.map(sale => sale.date))].sort();
+  return [...groups.entries()].map(([key, label]) => ({
+    key, label,
+    months: dates.map(date => {
+      const list = inMonth.filter(sale => sale.groupKey === key && sale.date === date);
+      return { month: date, rate: list.length ? groupRate(list) : null, sales: list.length };
     }),
   })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }

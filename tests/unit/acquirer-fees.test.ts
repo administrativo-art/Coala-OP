@@ -78,5 +78,8 @@ test("fronteira estrita da prévia diária (o painel manual saiu da tela em 2026
   assert.equal(feeActionSchema.safeParse({ action: "preview", request, amountCents: 99 }).success, false);
   const page = readFileSync(new URL("../../src/features/financial/receipts-reconciliation/receipts-page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(page, /AcquirerFeesPanel/);
-  assert.match(page, /StoneFeeMonthExpensePanel/);
+  // A despesa do mês continua na aba Taxas, agora na visão "Contabilização" do painel de taxas.
+  const panel = readFileSync(new URL("../../src/features/financial/receipts-reconciliation/fee-review-panel.tsx", import.meta.url), "utf8");
+  assert.match(page, /StoneFeeReviewPanel/);
+  assert.match(panel, /StoneFeeMonthExpensePanel/);
 });
