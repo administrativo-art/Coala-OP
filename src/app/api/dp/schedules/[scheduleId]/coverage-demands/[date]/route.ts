@@ -1,70 +1,72 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { saveClosedScheduleDay, saveCoverageDemands } from '@/features/dp/coverage-demands/service.server';
-import { requireUser } from '@/lib/auth-server';
+import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { coverageDemandRouteSchema, saveClosedScheduleDaySchema, saveCoverageDemandsSchema } from '@/lib/dp-coverage-demands';
-import { AppError, withApiErrorHandling } from '@/lib/observability';
+import { AppError } from '@/lib/observability';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { secureRoute } from '@/lib/security/secure-route.server';
+import { canAccessUnit } from '@/lib/unit-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/api/dp/schedules/[scheduleId]/coverage-demands/[date]';
+type RouteContext = { params: Promise<{ scheduleId: string; date: string }> };
+type Resource = z.infer<typeof coverageDemandRouteSchema>;
 
-type RouteContext = {
-  params: Promise<{ scheduleId: string; date: string }>;
-};
-
-export const PUT = withApiErrorHandling<RouteContext>({
-  source: 'api-dp',
-  operation: 'save-coverage-demands',
-  routeOrJob: ROUTE,
-}, async (request: NextRequest, contextArg: RouteContext, observation) => {
-  const context = await requireUser(request).catch((cause) => {
-    throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', cause });
-  });
-  const parsedRoute = coverageDemandRouteSchema.safeParse(await contextArg.params);
-  if (!parsedRoute.success) {
-    throw new AppError({ code: 'DP_COVERAGE_DEMAND_ROUTE_INVALID', kind: 'VALIDATION' });
-  }
-  const parsedBody = saveCoverageDemandsSchema.safeParse(await request.json().catch(() => null));
-  if (!parsedBody.success) {
-    throw new AppError({
-      code: 'DP_COVERAGE_DEMAND_PAYLOAD_INVALID',
-      kind: 'VALIDATION',
-      safeMessage: 'Os dados da demanda são inválidos.',
-      cause: parsedBody.error,
-    });
-  }
-
-  const result = await saveCoverageDemands({
-    context,
-    scheduleId: parsedRoute.data.scheduleId,
-    date: parsedRoute.data.date,
-    input: parsedBody.data,
-    requestId: observation.requestId,
-  });
-
-  return NextResponse.json(result, {
-    status: 200,
-    headers: { 'Cache-Control': 'private, no-store' },
-  });
+const coverageContract = defineSecurityContract({
+  schemaVersion: 1, id: 'dp.schedules.coverage-demands.save', version: 1,
+  surface: { method: 'PUT', path: ROUTE }, exposure: 'authenticated',
+  identity: { kind: 'active-user' }, authorization: { kind: 'permission', action: 'dp.schedules.edit' },
+  resourceScope: { kind: 'unit' }, input: { kind: 'schema', schema: 'dp.schedule.coverage-demand', unknownFields: 'reject' },
+  effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
 
-export const PATCH = withApiErrorHandling<RouteContext>({
-  source: 'api-dp',
-  operation: 'save-closed-schedule-day',
-  routeOrJob: ROUTE,
-}, async (request: NextRequest, contextArg: RouteContext, observation) => {
-  const context = await requireUser(request).catch((cause) => {
-    throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', cause });
-  });
-  const route = coverageDemandRouteSchema.safeParse(await contextArg.params);
-  const body = saveClosedScheduleDaySchema.safeParse(await request.json().catch(() => null));
-  if (!route.success || !body.success) {
-    throw new AppError({ code: 'DP_SCHEDULE_CLOSED_INPUT_INVALID', kind: 'VALIDATION',
-      safeMessage: 'Confira a data e as escalas selecionadas.' });
-  }
-  const result = await saveClosedScheduleDay({ context, ...route.data, input: body.data,
-    requestId: observation.requestId });
-  return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
+const closedDayContract = defineSecurityContract({
+  schemaVersion: 1, id: 'dp.schedules.closed-day.save', version: 1,
+  surface: { method: 'PATCH', path: ROUTE }, exposure: 'authenticated',
+  identity: { kind: 'active-user' }, authorization: { kind: 'permission', action: 'dp.schedules.edit' },
+  resourceScope: { kind: 'unit' }, input: { kind: 'schema', schema: 'dp.schedule.closed-day', unknownFields: 'reject' },
+  effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
+
+function scheduleWriteEnforcer<T>(id: string, schema: z.ZodType<T>, targetUnits: (input: T) => string[]) {
+  return defineSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, T, Resource>({
+    id,
+    guarantees: ['authenticated-user', 'active-user', 'permission-checked', 'unit-scoped', 'input-validated', 'fields-allowlisted'],
+    async enforce({ request, routeContext }) {
+      const actor = await requireUser(request).catch((cause) => {
+        throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', cause });
+      });
+      if (!actor.isDefaultAdmin && !actor.permissions.dp.schedules.edit) {
+        throw new AppError({ code: 'DP_COVERAGE_DEMAND_EDIT_FORBIDDEN', kind: 'AUTHORIZATION' });
+      }
+      const route = coverageDemandRouteSchema.safeParse(await routeContext.params);
+      const body = schema.safeParse(await request.json().catch(() => null));
+      if (!route.success || !body.success) {
+        throw new AppError({ code: 'DP_SCHEDULE_DAY_INPUT_INVALID', kind: 'VALIDATION',
+          safeMessage: 'Confira a data e as escalas selecionadas.' });
+      }
+      if (targetUnits(body.data).some((unit) => !canAccessUnit(actor.userDoc, unit, { isDefaultAdmin: actor.isDefaultAdmin }))) {
+        throw new AppError({ code: 'DP_COVERAGE_DEMAND_UNIT_FORBIDDEN', kind: 'AUTHORIZATION' });
+      }
+      return { actor, input: body.data, resource: route.data };
+    },
+  });
+}
+
+const coverageEnforcer = scheduleWriteEnforcer('dp-schedule-coverage-demand-write-v1', saveCoverageDemandsSchema,
+  ({ unitId }) => [unitId]);
+const closedDayEnforcer = scheduleWriteEnforcer('dp-schedule-closed-day-write-v1', saveClosedScheduleDaySchema,
+  ({ schedules }) => schedules.map(({ unitId }) => unitId));
+
+export const PUT = secureRoute({ contract: coverageContract, enforcer: coverageEnforcer }, async ({ security, observation }) =>
+  NextResponse.json(await saveCoverageDemands({ context: security.actor, ...security.resource, input: security.input,
+    requestId: observation.requestId }), { headers: { 'Cache-Control': 'private, no-store' } }));
+
+export const PATCH = secureRoute({ contract: closedDayContract, enforcer: closedDayEnforcer }, async ({ security, observation }) =>
+  NextResponse.json(await saveClosedScheduleDay({ context: security.actor, ...security.resource, input: security.input,
+    requestId: observation.requestId }), { headers: { 'Cache-Control': 'private, no-store' } }));
