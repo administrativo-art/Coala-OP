@@ -9,8 +9,10 @@ type View = "bars" | "minis" | "heat" | "curve";
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const MONTHS_LONG = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-const short = (month: string) => MONTHS[Number(month.slice(5)) - 1];
-const long = (month: string) => MONTHS_LONG[Number(month.slice(5)) - 1];
+// O ponto do gráfico é um mês ("2026-11") ou, no período "Mês", um dia ("2026-11-12").
+const isDay = (bucket: string) => bucket.length === 10;
+const short = (bucket: string) => isDay(bucket) ? bucket.slice(8) : `${MONTHS[Number(bucket.slice(5, 7)) - 1]}${bucket.slice(2, 4) === String(new Date().getFullYear()).slice(2) ? "" : `/${bucket.slice(2, 4)}`}`;
+const long = (bucket: string) => isDay(bucket) ? `${bucket.slice(8)}/${bucket.slice(5, 7)}/${bucket.slice(0, 4)}` : `${MONTHS_LONG[Number(bucket.slice(5, 7)) - 1]} de ${bucket.slice(0, 4)}`;
 // Cores: azul = série; laranja/verde = subiu/desceu (sempre com seta e texto, nunca só cor).
 const BLUE = "#2a78d6", UP = "#eb6834", DOWN = "#1baf7a", GRID = "#f1eee8", INK_FAINT = "#6e737a";
 const STORAGE_KEY = "taxas-historico-vista";
@@ -45,8 +47,9 @@ function scale(values: number[], height: number, pad = 0.15) {
   return { min, max, y: (value: number) => height - (value - min) / (max - min) * height };
 }
 
-/** Completa a série até 6 meses (o último mês conferido e os 5 anteriores); mês sem conferência fica vazio. */
+/** Completa a série até `count` meses (o último mês conferido e os anteriores); mês sem conferência fica vazio. */
 export function padHistoryMonths(series: FeeHistorySeries[], count = 6): FeeHistorySeries[] {
+  if (!count || series.some(item => item.months.some(month => isDay(month.month)))) return series;
   const last = series.flatMap(item => item.months.map(month => month.month)).sort().at(-1);
   if (!last) return series;
   const months: string[] = [];
@@ -63,7 +66,7 @@ function MainChart({ series, kind }: { series: FeeHistorySeries; kind: "bars" | 
   const band = (W - PX - PR) / Math.max(count, 1);
   const x = (index: number) => PX + band * (index + 0.5);
   const values = series.months.map(item => item.rate).filter((value): value is number => value !== null);
-  if (!values.length) return <p className="px-[18px] pb-4 text-sm text-ds-ink-muted">Sem taxa nos meses conferidos.</p>;
+  if (!values.length) return <p className="px-[18px] pb-4 text-sm text-ds-ink-muted">Sem taxa no período.</p>;
   // Barras começam no zero; a curva usa a faixa dos valores para mostrar a variação.
   const top = Math.max(Math.ceil(Math.max(...values) * 1.25 * 1000) / 1000, 0.001);
   const s = kind === "bars" ? { min: 0, max: top, y: (value: number) => H - value / top * H } : scale(values, H, 0.25);
@@ -111,7 +114,7 @@ function MainChart({ series, kind }: { series: FeeHistorySeries; kind: "bars" | 
       {series.months.map((item, index) => <text key={item.month} x={x(index)} y={H + 22} textAnchor="middle" fontSize="12" fill={INK_FAINT}>{short(item.month)}</text>)}
     </svg>
     {hover !== null && series.months[hover] ? <div className="absolute top-2 z-10" style={{ left: `min(calc(${(x(hover) / W) * 100}% + 12px), calc(100% - 240px))` }}><Tooltip series={series} index={hover} /></div> : null}
-    {first > 0 ? <p className="mt-1 text-xs text-ds-ink-muted">Histórico começa em {long(series.months[first].month)} de {series.months[first].month.slice(0, 4)}: a conferência diária passou a ser salva neste mês.</p> : null}
+    {first > 0 ? <p className="mt-1 text-xs text-ds-ink-muted">Histórico começa em {long(series.months[first].month)}: a conferência diária passou a ser salva neste mês.</p> : null}
   </div>;
 }
 
@@ -166,8 +169,8 @@ function Heat({ all }: { all: FeeHistorySeries[] }) {
 }
 
 /** Histórico de taxas: o operador escolhe Barras, Mini gráficos, Mapa de calor ou Curva; a escolha fica neste navegador. */
-export function FeeHistoryCharts({ series: raw }: { series: FeeHistorySeries[] }) {
-  const series = padHistoryMonths(raw);
+export function FeeHistoryCharts({ series: raw, padTo = 6 }: { series: FeeHistorySeries[]; padTo?: number }) {
+  const series = padHistoryMonths(raw, padTo);
   const [view, setView] = useState<View>(readView);
   const [selected, setSelected] = useState<string | null>(null);
   const chosen = series.find(item => item.key === selected) ?? series.find(item => {
@@ -175,7 +178,7 @@ export function FeeHistoryCharts({ series: raw }: { series: FeeHistorySeries[] }
     return rates.length > 1 && new Set(rates).size > 1;
   }) ?? series[0];
   const change = (next: View) => { setView(next); try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* sem armazenamento */ } };
-  if (!series.length) return <p className="px-[18px] pb-4 text-sm text-ds-ink-muted">Ainda não há meses conferidos para o histórico.</p>;
+  if (!series.length) return <p className="px-[18px] pb-4 text-sm text-ds-ink-muted">Ainda não há conferências no período para o histórico.</p>;
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center gap-3 px-[18px]">
       <Segmented aria-label="Tipo de gráfico" value={view} onChange={change} options={[{ value: "bars", label: "Barras" }, { value: "minis", label: "Mini gráficos" }, { value: "heat", label: "Mapa de calor" }, { value: "curve", label: "Curva" }]} />

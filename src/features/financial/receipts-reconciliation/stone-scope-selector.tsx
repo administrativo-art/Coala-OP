@@ -18,15 +18,20 @@ type StoneScopeSelectorProps = {
   onLoadMore?: () => void;
   /** Ações extras do escopo (por exemplo, configurar vínculos), no mesmo estilo secundário. */
   actions?: React.ReactNode;
+  /** Oferece "Todos os vínculos" (visão consolidada); o valor do vínculo passa a ser `STONE_ALL_MAPPINGS`. */
+  allowAll?: boolean;
 };
+
+export const STONE_ALL_MAPPINGS = "__all__";
 
 function dateLabel(value: string | null | undefined) {
   return value ? value.split("-").reverse().join("/") : "sem data final";
 }
 
 export function StoneScopeSelector({
-  mappings, mappingId, stoneCode, busy = false, loaded, error, cursor, onMappingChange, onStoneCodeChange, onRefresh, onLoadMore, actions,
+  mappings, mappingId, stoneCode, busy = false, loaded, error, cursor, onMappingChange, onStoneCodeChange, onRefresh, onLoadMore, actions, allowAll = false,
 }: StoneScopeSelectorProps) {
+  const everything = allowAll && mappingId === STONE_ALL_MAPPINGS;
   const mapping = mappings.find(item => item.id === mappingId);
   return <Card className="rounded-2xl border-ds-border bg-white">
     <CardContent className="p-4 sm:p-5">
@@ -49,18 +54,19 @@ export function StoneScopeSelector({
           <span className="text-xs font-bold text-ds-ink-2">Unidade e conta vinculada</span>
           <Select value={mappingId || undefined} onValueChange={onMappingChange} disabled={busy || !mappings.length}>
             <SelectTrigger aria-label="Vínculo oficial" className="font-semibold"><SelectValue placeholder={mappings.length ? "Selecione o vínculo oficial" : "Nenhum vínculo carregado"} /></SelectTrigger>
-            <SelectContent>{mappings.map(item => <SelectItem key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</SelectItem>)}</SelectContent>
+            <SelectContent>{allowAll && mappings.length > 1 ? <SelectItem value={STONE_ALL_MAPPINGS}>Todos os vínculos ({mappings.length})</SelectItem> : null}{mappings.map(item => <SelectItem key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="grid gap-1.5">
           <span className="text-xs font-bold text-ds-ink-2">Identificador na Stone (StoneCode)</span>
-          <Select value={stoneCode || undefined} onValueChange={onStoneCodeChange} disabled={busy || !mapping}>
+          <Select value={everything ? "__every__" : stoneCode || undefined} onValueChange={onStoneCodeChange} disabled={busy || !mapping}>
             <SelectTrigger aria-label="StoneCode" className="font-semibold"><SelectValue placeholder={mapping ? "Selecione" : "Selecione a unidade primeiro"} /></SelectTrigger>
-            <SelectContent>{mapping?.stoneCodes.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+            {everything ? <SelectContent><SelectItem value="__every__">Todos</SelectItem></SelectContent> : null}
+            {everything ? null : <SelectContent>{mapping?.stoneCodes.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>}
           </Select>
         </div>
         <div className="flex min-h-10 flex-col justify-center rounded-ds-md bg-ds-input px-3 py-1.5 text-xs leading-5 text-ds-ink-muted">
-          {mapping ? <><strong className="block text-sm text-ds-ink-2">Vínculo vigente</strong>{dateLabel(mapping.validFrom)} a {dateLabel(mapping.validTo)}.</> : "Selecione um vínculo para conferir sua vigência e os StoneCodes disponíveis."}
+          {everything ? <><strong className="block text-sm text-ds-ink-2">Consulta consolidada</strong>{mappings.length} vínculos carregados.</> : mapping ? <><strong className="block text-sm text-ds-ink-2">Vínculo vigente</strong>{dateLabel(mapping.validFrom)} a {dateLabel(mapping.validTo)}.</> : "Selecione um vínculo para conferir sua vigência e os StoneCodes disponíveis."}
         </div>
       </div>
       {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
