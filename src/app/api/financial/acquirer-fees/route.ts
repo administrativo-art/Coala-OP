@@ -13,10 +13,11 @@ import { executeSaleFeeAction, recognitionDependencies, readFeeRecognitionPolicy
 import { policyActionSchema, saveRecognitionPolicy, recognitionConfiguration } from "@/features/financial/acquirer-fees/policy.server";
 import { executeFeeAction, listFeeCandidates, listFeeRecords } from "@/features/financial/acquirer-fees/repository.server";
 import { assertFeeAdmin, feeDependencies } from "@/features/financial/acquirer-fees/source.server";
-import { autoModeActionSchema, readAutoState, saveAutoMode } from "@/features/financial/acquirer-fees/auto-recognition.server";
+import { autoModeActionSchema, readAutoState, recheckAutoPending, recheckAutoPendingSchema, saveAutoMode } from "@/features/financial/acquirer-fees/auto-recognition.server";
+import { recognitionMappingForMonth } from "@/features/financial/acquirer-fees/recognition-mapping.server";
 export const runtime = "nodejs"; export const dynamic = "force-dynamic"; export const maxDuration = 150;
 type Context = { params: Promise<Record<string, never>> };
-const postSchema = z.union([feeActionSchema.options[0], feeActionSchema.options[3], feeRecognitionActionSchema, policyActionSchema.extend({ action: z.literal("save_policy") }), autoModeActionSchema]);
+const postSchema = z.union([feeActionSchema.options[0], feeActionSchema.options[3], feeRecognitionActionSchema, policyActionSchema.extend({ action: z.literal("save_policy") }), autoModeActionSchema, recheckAutoPendingSchema]);
 const getSchema = feeRequestSchema.extend({ view: z.enum(["configuration", "history", "auto"]).default("history"), resultCenterId: z.string().min(1).max(180).optional(), cursor: z.string().min(1).max(180).optional() }).strict();
 const contract = (method: "GET" | "POST") => defineSecurityContract({ schemaVersion: 1, id: `financial.acquirer-fees.${method === "GET" ? "configuration" : "recognition"}`, version: 2,
   surface: { method, path: "/api/financial/acquirer-fees" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "financial-default-admin-unit-mapping" }, resourceScope: { kind: "workspace" },
@@ -25,7 +26,11 @@ function enforcer<T extends { request: z.infer<typeof feeRequestSchema> }>(metho
   const c = contract(method); return { contract: c, enforcer: createStandardSecurityEnforcer<NextRequest, Context, unknown, ServerUserContext, T, unknown>(c, {
     authenticate: async ({ request }) => requireUser(request).catch(rethrowServerAuthenticationFailure),
     parseInput: ({ request }) => parse(request), authorize: ({ actor }) => assertFeeAdmin(actor),
-    loadResource: async ({ actor, input }) => readFeeRecognitionPolicy(input.request, actor), assertScope: () => undefined,
+    loadResource: async ({ actor, input }) => (
+      ("view" in input && input.view === "auto") || ("action" in input && input.action === "save_auto_mode")
+        ? recognitionMappingForMonth(input.request, actor)
+        : readFeeRecognitionPolicy(input.request, actor)
+    ), assertScope: () => undefined,
   }) };
 }
 const get = enforcer("GET", async request => { const parsed = getSchema.safeParse(Object.fromEntries(request.nextUrl.searchParams)); if (!parsed.success) throw new AppError({ code: "FEE_QUERY_INVALID", kind: "VALIDATION" }); return { view: parsed.data.view, resultCenterId: parsed.data.resultCenterId, cursor: parsed.data.cursor, request: feeRequestSchema.parse({ mappingId: parsed.data.mappingId, kioskId: parsed.data.kioskId, stoneCode: parsed.data.stoneCode, referenceDate: parsed.data.referenceDate, source: parsed.data.source }) }; });
@@ -38,6 +43,7 @@ export const GET = secureRoute(get, async ({ security }) => {
 export const POST = secureRoute(post, async ({ request, security }) => {
   const input = security.input; const signal = AbortSignal.any([request.signal, AbortSignal.timeout(110000)]);
   const result = input.action === "save_auto_mode" ? await saveAutoMode(input, security.actor)
+    : input.action === "recheck_auto_pending" ? await recheckAutoPending(input.request, security.actor, signal)
     : input.action === "save_policy" ? await saveRecognitionPolicy({ request: input.request, policy: input.policy, expectedVersion: input.expectedVersion, reason: input.reason }, security.actor)
     : input.action === "cancel" || input.action === "preview" ? await executeFeeAction(input, security.actor, feeDependencies(signal))
     : await executeSaleFeeAction(input, security.actor, recognitionDependencies(signal));

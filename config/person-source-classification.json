@@ -4,6 +4,7 @@
     "accounts",
     "dailySalesRefundWatches",
     "dp_units",
+    "feeAutoPendingMonths",
     "financialAcquirerFeeBatches",
     "kiosks",
     "pixRefundReviewDates",

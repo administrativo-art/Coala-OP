@@ -26,7 +26,7 @@ export type FeeRecognitionRecord = { schemaVersion: 2; id: string; workspaceId: 
   active: boolean; revision: number; batch: FeeRecognitionBatch; expenseId: string | null; accountPlanId: string; resultCenterId: string; resultCenterName: string;
   createdExpense?: boolean; previousFields?: Record<string, unknown>; previousMissing?: string[];
   policyVersion: number; state: "assessed" | "estimated" | "partially_received" | "received" | "cancelled"; receivedComponentIds: string[]; expenseGuard: string | null; updatedAt: string };
-export type FeeRecognitionPreview = { request: z.infer<typeof feeRequestSchema>; batches: FeeRecognitionBatch[]; records: FeeRecognitionRecord[]; pending: string[];
+export type FeeRecognitionPreview = { request: z.infer<typeof feeRequestSchema>; batches: FeeRecognitionBatch[]; records: FeeRecognitionRecord[]; pending: string[]; autoBlockedReason?: string;
   policy: FeeRecognitionPolicy | null; referenceFingerprint: string; centers: Array<{ id: string; name: string }>; sourceStatus: string };
 export const feeRecognitionActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("preview_sales"), request: feeRequestSchema }).strict(),
