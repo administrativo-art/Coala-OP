@@ -11,17 +11,34 @@ export const bulkWorkShiftRouteSchema = z.object({
   scheduleId: z.string().trim().min(1).max(180),
 });
 
+const dayBreakMinutes = z.number().int().min(0).max(480);
+export const manualShiftDaySchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('fixed'), expectedBreakMinutes: dayBreakMinutes }).strict(),
+  z.object({ mode: z.literal('flexible'), expectedWorkMinutes: z.number().int().min(1).max(1439),
+    expectedBreakMinutes: dayBreakMinutes }).strict(),
+]);
+
 export const saveWorkShiftSchema = z.object({
   userId: z.string().trim().min(1).max(180),
   userName: z.string().trim().min(1).max(240).optional(),
   unitId: z.string().trim().min(1).max(180),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   shiftDefinitionId: z.string().trim().min(1).max(180).optional(),
+  manualDay: manualShiftDaySchema.optional(),
+  manualBreak: z.object({ start: timeSchema, end: timeSchema }).strict().optional(),
   startTime: timeSchema,
   endTime: timeSchema,
   type: z.literal('work').optional(),
   exceptionReason: z.string().trim().min(3).max(500).optional(),
 }).strict().refine(
+  (shift) => !shift.manualDay || (!shift.shiftDefinitionId && shift.endTime > shift.startTime
+    && (shift.manualDay.mode === 'fixed' || shift.manualDay.expectedWorkMinutes + shift.manualDay.expectedBreakMinutes <= 1440)),
+  { path: ['manualDay'], message: 'Revise a carga, o intervalo e os horários do turno manual.' },
+).refine(
+  (shift) => !shift.manualBreak || (Boolean(shift.manualDay) && shift.startTime < shift.manualBreak.start
+    && shift.manualBreak.start < shift.manualBreak.end && shift.manualBreak.end < shift.endTime),
+  { path: ['manualBreak'], message: 'O intervalo precisa começar e terminar dentro do período manual.' },
+).refine(
   (shift) => shift.endTime !== shift.startTime,
   { message: 'O início e o fim do turno não podem ser iguais.' },
 );

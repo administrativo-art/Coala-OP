@@ -22,6 +22,8 @@ function workShiftPayload(data: Omit<DPShift, 'id' | 'createdAt'> | DPShift) {
     unitId: data.unitId,
     date: data.date,
     ...(data.shiftDefinitionId ? { shiftDefinitionId: data.shiftDefinitionId } : {}),
+    ...(data.manualDay ? { manualDay: data.manualDay } : {}),
+    ...(data.manualBreak ? { manualBreak: data.manualBreak } : {}),
     startTime: data.startTime,
     endTime: data.endTime,
     type: 'work' as const,

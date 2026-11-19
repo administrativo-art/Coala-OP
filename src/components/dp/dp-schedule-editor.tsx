@@ -19,6 +19,7 @@ import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
 import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
+import { manualShiftDaySchema } from '@/features/dp/shifts/schemas';
 import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
@@ -183,6 +184,9 @@ const shiftSchema = z.object({
   unitId: z.string().min(1, 'Selecione uma unidade.'),
   date: z.string().min(1, 'Selecione a data.'),
   shiftDefinitionId: z.string().optional(),
+  manualDay: manualShiftDaySchema.nullish(),
+  manualBreakStart: z.string().optional(),
+  manualBreakEnd: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
   exceptionReason: z.string().optional(),
@@ -203,6 +207,7 @@ interface ShiftDialogProps {
   onOpenChange: (v: boolean) => void;
   /** userId → Set<date> of dates already occupied in sibling units */
   siblingOccupied?: Map<string, Set<string>>;
+  siblingDraftIds?: string[];
   /** userId → datas com folga explicitamente registrada */
   dayOffOccupied?: Map<string, Set<string>>;
   vacations: DPVacationRecord[];
@@ -210,7 +215,7 @@ interface ShiftDialogProps {
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations, onDelete,
+  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, siblingDraftIds, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
   const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
@@ -249,6 +254,9 @@ function ShiftDialog({
       unitId: shift?.unitId ?? defaultUnitId ?? '',
       date: shift?.date ?? defaultDate ?? '',
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
+      manualDay: shift?.manualDay ?? null,
+      manualBreakStart: shift?.manualBreak?.start ?? '',
+      manualBreakEnd: shift?.manualBreak?.end ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
       exceptionReason: shift?.exceptionReason ?? '',
@@ -262,10 +270,14 @@ function ShiftDialog({
         unitId: shift?.unitId ?? defaultUnitId ?? '',
         date: shift?.date ?? defaultDate ?? '',
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
+        manualDay: shift?.manualDay ?? null,
+        manualBreakStart: shift?.manualBreak?.start ?? '',
+        manualBreakEnd: shift?.manualBreak?.end ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
         exceptionReason: shift?.exceptionReason ?? '',
       });
+      setDetachManualDay(false);
       const isExternal = shift?.assignmentKind === 'external_coverage';
       setExternalMode(isExternal);
       setCandidateSearch('');
@@ -294,6 +306,37 @@ function ShiftDialog({
   const selectedUnitId = form.watch('unitId');
   const selectedShiftDefinitionId = form.watch('shiftDefinitionId');
   const hasSelectedShiftDefinition = Boolean(selectedShiftDefinitionId);
+  const manualDay = form.watch('manualDay');
+  const [relatedDraft, setRelatedDraft] = useState<{
+    userId: string; date: string; periods: DPShift[]; error: boolean;
+  } | null>(null);
+  const [lookupPending, setLookupPending] = useState(false);
+  const [detachManualDay, setDetachManualDay] = useState(false);
+  const activeRelated = relatedDraft?.userId === selectedUserId && relatedDraft?.date === selectedDate
+    ? relatedDraft : null;
+  const linkedPeriod = activeRelated?.periods[0];
+  const linkedDay = detachManualDay ? null : linkedPeriod?.manualDay;
+  const linkConflict = activeRelated?.periods.some((period) =>
+    period.manualDayId !== linkedPeriod?.manualDayId || JSON.stringify(period.manualDay) !== JSON.stringify(linkedDay));
+  React.useEffect(() => {
+    if (!open || !selectedUserId || !selectedDate || !siblingDraftIds?.length) return;
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setLookupPending(true);
+      try {
+        const drafts = await Promise.all(siblingDraftIds.map(fetchDraftScheduleShifts));
+        if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: false,
+          periods: drafts.flatMap((draft) => draft.shifts.filter((period) =>
+            period.userId === selectedUserId && period.date === selectedDate && Boolean(period.manualDay))) });
+      } catch {
+        if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: true, periods: [] });
+      } finally {
+        if (!cancelled) setLookupPending(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [open, selectedDate, selectedUserId, siblingDraftIds]);
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
     [selectedDate, selectedUserId, vacations],
@@ -305,6 +348,11 @@ function ShiftDialog({
 
   function handleDefinitionChange(defId: string) {
     form.setValue('shiftDefinitionId', defId);
+    if (defId) {
+      form.setValue('manualDay', null);
+      form.setValue('manualBreakStart', '');
+      form.setValue('manualBreakEnd', '');
+    }
     const def = shiftDefinitions.find(d => d.id === defId);
     if (def) {
       form.setValue('startTime', def.startTime);
@@ -367,8 +415,20 @@ function ShiftDialog({
 
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
     const userName = selectedExternal?.username ?? activeUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    if (!detachManualDay && !values.shiftDefinitionId && (values.manualDay || linkedDay) && (lookupPending || linkConflict || activeRelated?.error)) {
+      toast({ title: 'Confira os períodos das outras unidades antes de salvar a jornada manual.', variant: 'destructive' });
+      return;
+    }
+    const { manualBreakStart, manualBreakEnd, ...shiftFields } = values;
+    if (!values.shiftDefinitionId && (linkedDay || values.manualDay) && Boolean(manualBreakStart) !== Boolean(manualBreakEnd)) {
+      toast({ title: 'Informe o início e o fim do intervalo deste período.', variant: 'destructive' });
+      return;
+    }
     const payload = {
-      ...values,
+      ...shiftFields,
+      manualBreak: !values.shiftDefinitionId && (linkedDay || values.manualDay) && manualBreakStart && manualBreakEnd
+        ? { start: manualBreakStart, end: manualBreakEnd } : null,
+      manualDay: values.shiftDefinitionId ? null : linkedDay ?? values.manualDay ?? null,
       exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
       scheduleId,
       ...(userName ? { userName } : {}),
@@ -568,6 +628,67 @@ function ShiftDialog({
                 </FormItem>
               )} />
             </div>
+
+            {!hasSelectedShiftDefinition && (
+              <fieldset className="mt-4 space-y-2 rounded-md border p-3">
+                <legend className="px-1 text-xs font-semibold">Apuração do turno manual</legend>
+                {linkedDay && (
+                  <p className="text-xs text-ds-ink-muted">
+                    Jornada do dia já iniciada em {units.find((unit) => unit.id === linkedPeriod?.unitId)?.name ?? 'outra unidade'}.
+                  </p>
+                )}
+                <Select disabled={Boolean(linkedDay)} value={(linkedDay ?? manualDay)?.mode ?? 'journey'} onValueChange={(mode) => {
+                  const expectedBreakMinutes = manualDay?.expectedBreakMinutes ?? 0;
+                  form.setValue('manualDay', mode === 'fixed' ? { mode, expectedBreakMinutes }
+                    : mode === 'flexible' ? { mode, expectedWorkMinutes: 480, expectedBreakMinutes } : null);
+                }}>
+                  <SelectTrigger aria-label="Regime do turno manual"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="journey">Usar jornada vigente</SelectItem>
+                    <SelectItem value="fixed">Fixo</SelectItem>
+                    <SelectItem value="flexible">Flexível</SelectItem>
+                  </SelectContent>
+                </Select>
+                {linkedDay && <p className="text-xs">Intervalo no dia: {linkedDay.expectedBreakMinutes} min.{linkedDay.mode === 'flexible' ? ` Carga líquida: ${linkedDay.expectedWorkMinutes} min.` : ''}</p>}
+                {!linkedDay && manualDay && (
+                  <label className="block text-xs">Intervalo previsto no dia, em minutos
+                    <Input type="number" min={0} max={480} value={manualDay.expectedBreakMinutes}
+                      onChange={(event) => form.setValue('manualDay', { ...manualDay, expectedBreakMinutes: event.target.valueAsNumber })} />
+                  </label>
+                )}
+                {!linkedDay && manualDay?.mode === 'flexible' && (
+                  <label className="block text-xs">Carga líquida esperada no dia, em minutos
+                    <Input type="number" min={1} max={1439} value={manualDay.expectedWorkMinutes}
+                      onChange={(event) => form.setValue('manualDay', { ...manualDay, expectedWorkMinutes: event.target.valueAsNumber })} />
+                  </label>
+                )}
+                {(linkedDay ?? manualDay) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-xs">Início do intervalo neste período
+                      <Input type="time" {...form.register('manualBreakStart')} />
+                    </label>
+                    <label className="block text-xs">Fim do intervalo neste período
+                      <Input type="time" {...form.register('manualBreakEnd')} />
+                    </label>
+                  </div>
+                )}
+                {(linkedDay ?? manualDay) && (
+                  <>
+                    <p className="text-xs text-ds-ink-muted">
+                      A escala fica em rascunho enquanto houver um período com esta configuração.
+                    </p>
+                    {isEdit && shift?.manualDay && (
+                      <Button type="button" variant="outline" size="sm" onClick={() => {
+                        setDetachManualDay(true);
+                        form.setValue('manualDay', null);
+                        form.setValue('manualBreakStart', '');
+                        form.setValue('manualBreakEnd', '');
+                      }}>Remover configuração manual</Button>
+                    )}
+                  </>
+                )}
+              </fieldset>
+            )}
 
             {vacationConflict && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -3275,6 +3396,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        siblingDraftIds={siblingIds}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
       />
@@ -3319,6 +3441,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        siblingDraftIds={siblingIds}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
         onDelete={(shift) => {
