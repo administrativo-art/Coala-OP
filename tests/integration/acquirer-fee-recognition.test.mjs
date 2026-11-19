@@ -13,6 +13,7 @@ const { queryDailySales } = await import("../../src/features/financial/sales-rec
 const { saveDailySalesReview, readDailySalesReviewSnapshot } = await import("../../src/features/financial/sales-reconciliation/review-state.server.ts");
 const { dailySalesReviewId } = await import("../../src/features/financial/sales-reconciliation/review-state.ts");
 const { previewSaleFees, executeSaleFeeAction } = await import("../../src/features/financial/acquirer-fees/recognition.server.ts");
+const { autoContext, readAutoState, runAutoRecognition, saveAutoMode } = await import("../../src/features/financial/acquirer-fees/auto-recognition.server.ts");
 const { saveRecognitionPolicy } = await import("../../src/features/financial/acquirer-fees/policy.server.ts");
 const { executeFeeAction } = await import("../../src/features/financial/acquirer-fees/repository.server.ts");
 const { launchFeeMonthExpense } = await import("../../src/features/financial/receipts-reconciliation/fee-month-expense.server.ts");
@@ -52,6 +53,27 @@ async function fixture(name, options = {}) {
  const recognize = batch ? { action: "recognize_sale", batchId: batch.id, fingerprint: batch.fingerprint, resultCenterId: center, expectedRevision: 0, confirmedNoManualExpense: true } : null;
  return { request, deps, policy, mappingRef, center, reviewId, preview, batch, call, recognize, setPayment: value => payment = value, setCapture: value => capture = value, merchant };
 }
+test("piloto mantém pendências do mês, ativação lança uma vez e desligamento protege a DRE", async () => {
+ const f = await fixture("auto");
+ const input = { action: "save_auto_mode", request: f.request, mode: "simulation", reason: "Piloto de integração" };
+ const options = { now: new Date("2026-10-02T09:00:00Z"), days: 1, dependencies: f.deps };
+ const expenseRef = own(db.collection("expenses").doc(`acquirer_fee_${f.batch.id}_recognized`));
+ own(db.collection("financialAcquirerFeeBatches").doc(f.batch.id));
+ for (const item of f.batch.members) own(db.collection("financialSourceSettlements").doc(item.id));
+ await saveAutoMode(input, actor);
+ assert.equal((await runAutoRecognition(options)).units[0].wouldRecognize, 1);
+ assert.equal((await expenseRef.get()).exists, false);
+ const state = await readAutoState(f.request, actor);
+ assert.ok(state.pending.some(item => item.date === "2026-10-01" && item.source === "pix"));
+ await runAutoRecognition({ ...options, now: new Date("2026-10-10T09:00:00Z") });
+ assert.ok((await readAutoState(f.request, actor)).pending.some(item => item.date === "2026-10-01"));
+ await assert.rejects(executeSaleFeeAction({ ...f.recognize, request: f.request }, autoContext(), f.deps), code("FEE_RECOGNITION_AUTO_MODE_CHANGED"));
+ await saveAutoMode({ ...input, mode: "active" }, actor);
+ assert.equal((await runAutoRecognition(options)).units[0].recognized, 1);
+ assert.equal((await expenseRef.get()).get("competenceMonth"), "2026-10");
+ assert.equal((await runAutoRecognition(options)).units[0].alreadyDone, 1);
+ await saveAutoMode({ ...input, mode: "off" }, actor);
+});
 test("venda100/taxa3/97 antes D+30: transação concorrente única, não paga nem pagável; liquidação idempotente sem nova despesa", async () => {
  const f = await fixture("journey"); assert.ok(f.batch, JSON.stringify(f.preview));
  const [a,b] = await Promise.all([f.call(f.recognize), f.call(f.recognize)]); assert.equal(a.record.id,b.record.id); assert.equal([a,b].filter(x => x.idempotent).length,1);
