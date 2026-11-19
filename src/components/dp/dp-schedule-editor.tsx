@@ -1922,7 +1922,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       .map(s => s.id);
   }, [accessibleSchedules, isPerUnit, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
-  const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds);
+  const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds, canManageSchedule || (isDefaultAdmin && !isArchivedUnitSchedule));
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
   const dayOffShifts = useMemo(() => shifts.filter(isDayOffShift), [shifts]);
   const prevWorkShifts = useMemo(() => prevShifts.filter(isWorkShift), [prevShifts]);
@@ -3147,7 +3147,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             user={user}
                             contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
                             canPublish={canPublishDayOff && !shift?.dayOffDraft && (explicit || canEdit)}
-                            canRemove={canPublishDayOff && explicit && Boolean(shift?.dayOffDraft || shift?.bizneoOperationId)}
+                            canRemove={canPublishDayOff && explicit && Boolean(shift?.dayOffDraft ? shift.scheduleId === schedule.id : shift?.bizneoOperationId)}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
                             removing={removingDayOffKey === `${userId}::${date}`}
                             onPublish={() => !explicit
