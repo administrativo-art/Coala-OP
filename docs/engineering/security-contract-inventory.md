@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **574**
-- Totalmente contratados: **251**
-- Legados congelados: **315**
+- Totalmente contratados: **252**
+- Legados congelados: **314**
 - Exceções temporárias: **8**
 - Violações: **0**
 
@@ -136,7 +136,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/responsibility-tasks/[taskId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/responsibility-tasks/[taskId]/route.ts](../../src/app/api/dp/responsibility-tasks/[taskId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]` | DELETE ✓, GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/absences` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/absences/route.ts](../../src/app/api/dp/schedules/[scheduleId]/absences/route.ts) |
-| `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts) |
+| `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PATCH ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/day-offs` | DELETE, POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts](../../src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts) |
 | `/api/dp/schedules/[scheduleId]/draft-shifts` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts](../../src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts) |
 | `/api/dp/schedules/[scheduleId]/draft-shifts/day-off` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts](../../src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts) |
