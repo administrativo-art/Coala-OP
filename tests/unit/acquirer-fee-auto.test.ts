@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { autoModeSchema, autoWindow, decideAutoBatches, settableAutoModeSchema } from "../../src/features/financial/acquirer-fees/auto-recognition";
+import { autoModeSchema, autoWindow, decideAutoBatches, pendingReview, settableAutoModeSchema } from "../../src/features/financial/acquirer-fees/auto-recognition";
 import type { FeeRecognitionBatch, FeeRecognitionPreview, FeeRecognitionRecord } from "../../src/features/financial/acquirer-fees/recognition-contracts";
 
 const batch = (over: Partial<FeeRecognitionBatch> = {}): FeeRecognitionBatch => ({ id: "a".repeat(64), fingerprint: "b".repeat(64), kind: "pix", soldOn: "2026-11-03", dueOn: "2026-11-03",
@@ -42,8 +42,32 @@ test("janela cobre D-3 a D-1 em ordem e nunca inclui hoje", () => {
   assert.deepEqual(autoWindow("2026-11-18"), ["2026-11-15", "2026-11-16", "2026-11-17"]);
   assert.deepEqual(autoWindow("2026-03-02", 2), ["2026-02-28", "2026-03-01"]);
 });
-test("a API não aceita gravar o modo ativo nesta entrega", () => {
+test("a API oferece ativação explícita, simulação e desligamento", () => {
   assert.equal(autoModeSchema.safeParse("active").success, true);
-  assert.equal(settableAutoModeSchema.safeParse("active").success, false);
+  assert.equal(settableAutoModeSchema.safeParse("active").success, true);
   assert.equal(settableAutoModeSchema.safeParse("simulation").success, true);
+});
+
+
+test("cada pendência conserva a data e o meio fora do resumo da rodada", () => {
+  const date = "2026-11-03";
+  const source = "pix";
+  const item = { date, source, reason: "Conciliação pendente" } as const;
+  const review = pendingReview([item, item], date, source, "2026-11-04T09:00:00.000Z");
+  assert.deepEqual(review.reasons, ["Conciliação pendente"]);
+  assert.equal(review.date, date);
+  assert.equal(review.source, source);
+  assert.equal(review.truncated, false);
+});
+
+test("a ausência de origem de taxa lançada exige conferência", () => {
+  const decision = decideAutoBatches(preview({ batches: [], records: [record()] }));
+  assert.equal(decision.eligible.length, 0);
+  assert.match(decision.pending[0], /não aparece mais/);
+});
+
+test("competência impedida pelo servidor também bloqueia a simulação", () => {
+  const decision = decideAutoBatches(preview({ autoBlockedReason: "Competência bloqueada." }));
+  assert.equal(decision.eligible.length, 0);
+  assert.deepEqual(decision.pending, ["Competência bloqueada."]);
 });
