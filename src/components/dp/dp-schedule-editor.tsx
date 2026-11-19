@@ -8,6 +8,7 @@ import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
+import { useDPStore } from '@/store/use-dp-store';
 import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
@@ -813,8 +814,9 @@ function ManualDayOffDialog({
 }
 
 /** Um botão por dia: o operador escolhe o que lançar (turno, DSR ou ausência), em vez de procurar botões separados. */
-function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence }: {
+function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence, closed, onSetClosed, onCloseAll }: {
   canShift: boolean; canDayOff: boolean; canAbsence: boolean; onShift: () => void; onDayOff: () => void; onAbsence: () => void;
+  closed?: boolean; onSetClosed?: () => void; onCloseAll?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (action: () => void) => () => { setOpen(false); action(); };
@@ -834,6 +836,10 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
         {canShift ? <button type="button" className={item} onClick={pick(onShift)}><Clock3 className="h-3.5 w-3.5" />Turno</button> : null}
         {canDayOff ? <button type="button" className={item} onClick={pick(onDayOff)}><CalendarOff className="h-3.5 w-3.5" />DSR</button> : null}
         {canAbsence ? <button type="button" className={item} onClick={pick(onAbsence)}><CalendarDays className="h-3.5 w-3.5" />Ausência</button> : null}
+        {onSetClosed && <button type="button" className={item} onClick={pick(onSetClosed)}>
+          {closed ? 'Reabrir unidade neste dia' : 'Marcar unidade como fechada'}
+        </button>}
+        {onCloseAll && <button type="button" className={item} onClick={pick(onCloseAll)}>Fechar todas as unidades acessíveis</button>}
       </PopoverContent>
     </Popover>
   );
@@ -2235,12 +2241,47 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     [isPerUnit, siblingWorkShifts, workShifts],
   );
 
+  const closedDateKeys = useMemo(() => {
+    const editable = isDefaultAdmin || permissions.dp?.schedules?.edit === true;
+    const selected = accessibleSchedules.filter((candidate) => candidate.id !== publication.id
+      && candidate.month === schedule.month && candidate.year === schedule.year);
+    return new Set([...selected, publication].flatMap((candidate) =>
+      ((editable ? candidate.draftClosedDates ?? candidate.closedDates : candidate.closedDates) ?? [])
+        .map((date) => `${date}::${candidate.unitId}`)));
+  }, [accessibleSchedules, isDefaultAdmin, permissions.dp?.schedules?.edit, publication, schedule.month, schedule.year]);
+  const [savingClosedDay, setSavingClosedDay] = useState(false);
+  const closureTargets = accessibleSchedules.filter((candidate) => candidate.month === schedule.month
+    && candidate.year === schedule.year && candidate.unitId
+    && activeOperationalUnits(units).some((unit) => unit.id === candidate.unitId));
+  async function setClosedDay(date: string, unitId: string, closed: boolean, all = false) {
+    setSavingClosedDay(true);
+    try {
+      const current = closureTargets.find((candidate) => candidate.id === schedule.id && candidate.unitId === unitId);
+      if (!current) return;
+      const targets = all ? closureTargets : [current];
+      const result = await api<{ changed: string[] }>(`/api/dp/schedules/${encodeURIComponent(schedule.id)}/coverage-demands/${date}`, {
+        method: 'PATCH',
+        json: { closed, schedules: targets.map((target) => ({ scheduleId: target.id, unitId: target.unitId })) },
+        fallbackError: 'Falha ao atualizar o funcionamento do dia.',
+      });
+      const fresh = new Map((await Promise.all(result.changed.map(fetchSchedule))).map((item) => [item.id, item]));
+      if (fresh.has(schedule.id)) setPublication(fresh.get(schedule.id)!);
+      setSchedules(useDPStore.getState().schedules.map((item) => fresh.get(item.id) ?? item));
+      result.changed.forEach(notifyDPScheduleShiftsChanged);
+      toast({ title: closed ? 'Fechamento salvo no rascunho.' : 'Unidade reaberta no rascunho.' });
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Falha ao atualizar o funcionamento do dia.', variant: 'destructive' });
+    } finally {
+      setSavingClosedDay(false);
+    }
+  }
   const coverageByCellKey = useMemo(() => {
     const coverage = new Map<string, DPDailyCoverage>();
     activeUnits.forEach((unit) => {
       if (!alertsWhenUnitEmpty(unit)) return;
       const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
       days.forEach(({ date }) => {
+        if (closedDateKeys.has(`${date}::${unit.id}`)) return;
         const daily = buildDailyEmptyUnitCoverage({ date, shifts: unitShifts });
         if (daily.gaps.length > 0) {
           coverage.set(`${date}::${unit.id}`, daily);
@@ -2248,7 +2289,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
     return coverage;
-  }, [activeUnits, days, units, workShifts]);
+  }, [activeUnits, closedDateKeys, days, units, workShifts]);
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -2281,6 +2322,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           alerts.push({ key: 'unplanned', label: 'Equipe escalada sem demanda', tone: 'warning' });
         }
 
+        if (closedDateKeys.has(`${date}::${unit.id}`)
+          && workShifts.some((shift) => shift.date === date && shift.unitId === unit.id)) {
+          alerts.push({ key: 'closed-work', label: 'Há turno em unidade fechada', tone: 'danger' });
+        }
         (shiftIndex[date]?.[unit.id] ?? []).forEach((shift) => {
           const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
           if (shift.hasConflict) {
@@ -2316,7 +2361,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
     return index;
-  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
+  }, [activeUnits, closedDateKeys, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
 
   const alertDates = useMemo(
     () => new Set(Array.from(alertsByCellKey.keys()).map((key) => key.slice(0, 10))),
@@ -3048,6 +3093,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     {/* Unit cells */}
                     {activeUnits.map(unit => {
                       const cellShifts = shiftIndex[date]?.[unit.id] ?? [];
+                      const closed = closedDateKeys.has(`${date}::${unit.id}`);
                       const coverageAlert = coverageByCellKey.get(`${date}::${unit.id}`);
                       const dayOffEntries = dayOffIndex[date]?.[unit.id] ?? [];
                       const ghosts = isPerUnit
@@ -3181,7 +3227,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       const canAddDayOff = canEdit && canPublishDayOff;
                       const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
                         <DayLaunchMenu
-                          canShift={canEdit}
+                          closed={closed}
+                          canShift={canEdit && !closed}
+                          onSetClosed={canEdit && isPerUnit && !savingClosedDay ? () => void setClosedDay(date, unit.id, !closed) : undefined}
+                          onCloseAll={canEdit && isPerUnit && !savingClosedDay && closureTargets.length > 1
+                            ? () => void setClosedDay(date, unit.id, true, true) : undefined}
                           canDayOff={canAddDayOff}
                           canAbsence={canLaunchAbsence}
                           onShift={() => setAddDialog({ date, unitId: unit.id })}
@@ -3196,6 +3246,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             <div className="grid min-h-[52px] grid-cols-[55%_32%_13%] divide-x divide-[#eef1f6]">
                             <div className="min-w-0 p-2">
                               <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-1">
+                                {closed && <span className="text-xs font-semibold text-muted-foreground">Fechado</span>}
                                 {workCards}
                                 {addShiftButton}
                               </div>
@@ -3218,7 +3269,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               </div>
                               <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {dayOffCards}
-                                {unassignedCards}
+                                {!closed && unassignedCards}
                               </div>
                               <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {coverageAlert ? (
@@ -3245,7 +3296,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                     </div>
                                   ))}
                                 {!coverageAlert && cellAlerts.length === 0 && (
-                                  <p className="px-1 py-2 text-[11px] text-muted-foreground">Sem alertas.</p>
+                                  <p className="px-1 py-2 text-[11px] text-muted-foreground">{closed ? 'Unidade fechada.' : 'Sem alertas.'}</p>
                                 )}
                               </div>
                             </div>

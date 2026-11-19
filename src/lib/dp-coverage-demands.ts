@@ -47,6 +47,18 @@ export const coverageDemandRouteSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate, 'Data inválida.'),
 });
 
+export const saveClosedScheduleDaySchema = z.object({
+  closed: z.boolean(),
+  schedules: z.array(z.object({
+    scheduleId: z.string().trim().min(1).max(180).refine((id) => !id.includes('/')),
+    unitId: z.string().trim().min(1).max(180).refine((id) => !id.includes('/')),
+  }).strict()).min(1).max(40),
+}).strict().refine(({ schedules }) =>
+  new Set(schedules.map(({ scheduleId }) => scheduleId)).size === schedules.length
+  && new Set(schedules.map(({ unitId }) => unitId)).size === schedules.length);
+
+export type SaveClosedScheduleDayInput = z.infer<typeof saveClosedScheduleDaySchema>;
+
 export type SaveCoverageDemandsInput = z.infer<typeof saveCoverageDemandsSchema>;
 
 export type DPCoverageGap = {

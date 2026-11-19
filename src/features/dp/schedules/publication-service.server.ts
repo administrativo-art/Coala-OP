@@ -237,6 +237,9 @@ export async function stageWorkShift(params: { context: ServerUserContext; sched
     if (current?.type === 'day_off') fail('DP_SHIFT_DAY_OFF_IMMUTABLE', 'CONFLICT', 'Uma folga não pode ser editada como turno.');
     if (input) {
       assertPeriod(schedule, input.date, unitId, input.unitId);
+      if ((schedule.get('draftClosedDates') ?? schedule.get('closedDates') ?? []).includes(input.date)) {
+        fail('DP_SCHEDULE_DAY_CLOSED', 'VALIDATION', 'Reabra a unidade antes de lançar um turno neste dia.');
+      }
       const user = await tx.get(dbAdmin.collection('users').doc(input.userId));
       if (!user.exists || user.get('isActive') === false) fail('DP_SHIFT_USER_UNAVAILABLE', 'VALIDATION', 'Colaboradora não encontrada ou inativa.');
       if (input.shiftDefinitionId) {
@@ -317,6 +320,9 @@ export async function stageBulkWorkShift(params: { context: ServerUserContext; s
       if (input.action === 'create') {
         const entry = input.entries[index];
         assertPeriod(schedule, entry.date, unitId, unitId);
+        if ((schedule.get('draftClosedDates') ?? schedule.get('closedDates') ?? []).includes(entry.date)) {
+          fail('DP_SCHEDULE_DAY_CLOSED', 'VALIDATION', 'Remova os dias fechados da seleção antes de lançar os turnos.');
+        }
         value = { scheduleId, unitId, userId: entry.userId, date: entry.date,
           startTime: input.startTime, endTime: input.endTime, overnight: input.endTime < input.startTime,
           type: 'work', shiftDefinitionId: input.shiftDefinitionId, createdAt: now, updatedAt: now };
@@ -373,7 +379,11 @@ async function prepareScheduleActivation(
     .filter((value): value is string => typeof value === 'string' && Boolean(value)))];
   const fencePeople = [...new Set([...changedPeople, ...allPeople])];
   const capturedFence = await capturePublicationFence(context.workspace_id, fencePeople);
-  const proposed = [...state.merged].map(([id, value]) => ({ ...value, id, scheduleId }));
+  const proposed: Array<Shift & { id: string; scheduleId: string }> = [...state.merged].map(([id, value]) => ({ ...value, id, scheduleId }));
+  const closedDates = new Set(state.schedule.get('draftClosedDates') ?? state.schedule.get('closedDates') ?? []);
+  if (proposed.some((shift) => shift.type === 'work' && closedDates.has(shift.date))) {
+    fail('DP_SCHEDULE_CLOSED_DAY_HAS_WORK', 'VALIDATION', 'Há turno de trabalho em um dia fechado. Revise a escala.');
+  }
   if (dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
   const validation = await validateScheduleJourneys({ context, scheduleId, proposedShifts: proposed });
   if (validation.status === 'blocked') fail('DP_SCHEDULE_JOURNEY_BLOCKED', 'VALIDATION', validation.issues[0]?.message ?? 'Revise as jornadas antes de publicar.');
@@ -548,9 +558,12 @@ async function prepareScheduleActivation(
       const version = oldVersion + 1;
       if (restRecord) tx.update(manifest.ref, { restRecord });
       const draftedCoverage = schedule.get('draftCoverageDemands');
+      const draftedClosedDates = schedule.get('draftClosedDates');
       tx.update(state.ref, { activeRevisionId: revisionId, publicationStatus: 'published', publicationVersion: version,
         ...(draftedCoverage !== undefined ? { coverageDemands: Object.keys(draftedCoverage ?? {}).length ? draftedCoverage : FieldValue.delete() } : {}),
         draftCoverageDemands: FieldValue.delete(),
+        ...(draftedClosedDates !== undefined ? { closedDates: draftedClosedDates } : {}),
+        draftClosedDates: FieldValue.delete(),
         draftGenerationId: randomUUID(), draftVersion: 0, publishedAt: now, publishedBy: context.decoded.uid,
         shiftCount: entries.length, snapshot: { users: snapshotUsers },
         goalEligibilityVersion: FieldValue.increment(1), journeyValidationVersion: FieldValue.increment(1),
