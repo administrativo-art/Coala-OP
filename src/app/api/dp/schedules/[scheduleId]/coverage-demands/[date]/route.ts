@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { saveCoverageDemands } from '@/features/dp/coverage-demands/service.server';
+import { saveClosedScheduleDay, saveCoverageDemands } from '@/features/dp/coverage-demands/service.server';
 import { requireUser } from '@/lib/auth-server';
-import { coverageDemandRouteSchema, saveCoverageDemandsSchema } from '@/lib/dp-coverage-demands';
+import { coverageDemandRouteSchema, saveClosedScheduleDaySchema, saveCoverageDemandsSchema } from '@/lib/dp-coverage-demands';
 import { AppError, withApiErrorHandling } from '@/lib/observability';
 
 export const runtime = 'nodejs';
@@ -48,4 +48,23 @@ export const PUT = withApiErrorHandling<RouteContext>({
     status: 200,
     headers: { 'Cache-Control': 'private, no-store' },
   });
+});
+
+export const PATCH = withApiErrorHandling<RouteContext>({
+  source: 'api-dp',
+  operation: 'save-closed-schedule-day',
+  routeOrJob: ROUTE,
+}, async (request: NextRequest, contextArg: RouteContext, observation) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', cause });
+  });
+  const route = coverageDemandRouteSchema.safeParse(await contextArg.params);
+  const body = saveClosedScheduleDaySchema.safeParse(await request.json().catch(() => null));
+  if (!route.success || !body.success) {
+    throw new AppError({ code: 'DP_SCHEDULE_CLOSED_INPUT_INVALID', kind: 'VALIDATION',
+      safeMessage: 'Confira a data e as escalas selecionadas.' });
+  }
+  const result = await saveClosedScheduleDay({ context, ...route.data, input: body.data,
+    requestId: observation.requestId });
+  return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 });

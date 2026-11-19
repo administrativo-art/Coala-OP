@@ -4125,6 +4125,8 @@ export type DPSchedule = {
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   draftCoverageDemands?: DPCoverageDemands;
+  closedDates?: string[];
+  draftClosedDates?: string[];
   createdAt: Timestamp;
 };
 
