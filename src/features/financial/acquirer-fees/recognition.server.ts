@@ -21,6 +21,7 @@ import { collectSaleRecognition } from "./recognition-source";
 import { assertFeePeriodOpen, buildRecognitionBatches, feeComponentIdentity, recognitionExpenseFields, recognitionTransition } from "./recognition";
 import { feeRecognitionActionSchema, feeRecognitionPolicySchema, type FeeRecognitionPolicy, type FeeRecognitionRecord, type FeeRecognitionPreview } from "./recognition-contracts";
 import type { FeeRequest } from "./contracts";
+import { AUTO_ACTOR_ID, decideAutoBatches } from "./auto-recognition";
 const OWNED_EXPENSE_FIELDS = ["totalValue", "competenceMonth", "accountingContractVersion", "competenceDate", "dueDate", "accountPlan", "accountId", "accountPlanName", "resultCenterId", "resultCenter", "resultCenterName", "status", "paidAt", "paymentState", "paymentMethod", "cashEffectIncludedInNetReceivable", "sourceSettlement", "settlementSummary", "isApportioned", "hasAccountAllocations", "hasPersonAllocations", "originModule"];
 const records = db.collection("financialAcquirerFeeBatches"), claims = db.collection("financialSourceSettlements");
 function fail(code: string, message: string): never { throw new AppError({ code: `FEE_RECOGNITION_${code}`, kind: "CONFLICT", safeMessage: message }); }
@@ -51,8 +52,19 @@ export async function previewSaleFees(request: FeeRequest, context: FeeContext, 
   if (!policy?.enabled) evidence.pending.push("Configure somente a classificação contábil e a autorização de apuração; os percentuais confirmados da aba Taxas são reutilizados.");
   const legacyId = createHash("sha256").update(`${context.workspace_id}:${request.stoneCode}:${request.referenceDate.slice(0, 7)}`).digest("hex");
   const legacy = await db.collection("stoneFeeMonthExpenses").doc(legacyId).get();
-  if (legacy.get("active")) evidence.pending.push("Há lançamento mensal legado ativo. Revise o histórico antes de reconhecer componentes, sem migrar automaticamente.");
-  return { request, batches: evidence.batches, pending: evidence.pending, policy, referenceFingerprint:feeHash(referenceSource),
+  let autoBlockedReason: string | undefined;
+  if (legacy.get("active")) {
+    autoBlockedReason = "Há lançamento mensal legado ativo. Revise o histórico antes de reconhecer componentes.";
+    evidence.pending.push(autoBlockedReason);
+  } else if (policy?.enabled) {
+    try {
+      assertFeePeriodOpen(policy, request.referenceDate.slice(0, 7));
+    } catch (caught) {
+      if (!(caught instanceof AppError)) throw caught;
+      autoBlockedReason = caught.safeMessage ?? "Competência bloqueada para apuração.";
+    }
+  }
+  return { request, batches: evidence.batches, pending: evidence.pending, autoBlockedReason, policy, referenceFingerprint:feeHash(referenceSource),
     records: existing.docs.filter(d => d.get("schemaVersion") === 2).map(d => d.data() as FeeRecognitionRecord),
     centers: centers.docs.filter(d => (d.get("workspaceId") ?? WORKSPACE_ID) === context.workspace_id && d.get("active") !== false && d.get("unitIds")?.length === 1)
       .map(d => ({ id: d.id, name: String(d.get("name") || d.id) })),
@@ -60,6 +72,9 @@ export async function previewSaleFees(request: FeeRequest, context: FeeContext, 
 }
 async function validateTransactionScope(tx: FirebaseFirestore.Transaction, request: FeeRequest, context: FeeContext, policy: FeeRecognitionPolicy, batch?: import("./recognition-contracts").FeeRecognitionBatch, expectedReferences?: string) {
   const { document: mappingDoc } = await recognitionMapping(request, context, tx);
+  if (context.decoded.uid === AUTO_ACTOR_ID && mappingDoc.get("feeAutoRecognition.mode") !== "active") {
+    fail("AUTO_MODE_CHANGED", "O reconhecimento automático saiu do modo Ativo.");
+  }
   if (feeHash(feeRecognitionPolicySchema.parse(mappingDoc.get("feeRecognitionPolicy"))) !== feeHash(policy)) fail("POLICY_CHANGED", "Configuração mudou; atualize a prévia.");
   if (expectedReferences) {
     const latest = await readConfirmedRateReferences({workspaceId:context.workspace_id,mappingId:request.mappingId,kioskId:request.kioskId,stoneCode:request.stoneCode},tx);
@@ -103,6 +118,12 @@ export async function executeSaleFeeAction(raw: unknown, context: FeeContext, de
   });
   const preview = await previewSaleFees(input.request, context, deps); const batch = preview.batches.find(b => b.id === input.batchId);
   if (!batch || batch.fingerprint !== input.fingerprint) fail("STALE_PREVIEW", "Fonte mudou ou não é elegível. Atualize a prévia.");
+  if (context.decoded.uid === AUTO_ACTOR_ID) {
+    const eligible = decideAutoBatches(preview).eligible.some(candidate => candidate.id === batch.id);
+    if (!eligible || input.action !== "recognize_sale" || preview.centers[0]?.id !== input.resultCenterId) {
+      fail("AUTO_ELIGIBILITY_CHANGED", "A taxa deixou de cumprir os requisitos do automático. Confira a prévia.");
+    }
+  }
   return db.runTransaction(async tx => {
     await validateTransactionScope(tx, input.request, context, policy, batch, preview.referenceFingerprint); const ref = records.doc(batch.id), current = await tx.get(ref);
     const previous = current.exists ? current.data() as FeeRecognitionRecord : null;

@@ -24,7 +24,7 @@ api,src/app/api/dp/responsibility-coverages/route.ts,,docs/engineering/flows/dp-
 api,src/app/api/dp/responsibility-tasks/route.ts,,docs/engineering/flows/dp-absences.md,Lista paginada de pendencias operacionais atribuidas ou sem cobertura conforme permissao e abrangencia.
 api,src/app/api/dp/responsibility-tasks/[taskId]/route.ts,,docs/engineering/flows/dp-absences.md,Primeiro responsavel elegivel assume por CAS e conclui com justificativa e auditoria.
 api,src/app/api/dp/schedules/[scheduleId]/absences/route.ts,,docs/engineering/flows/dp-absences.md,Projecao minima de ausencias aprovadas na competencia da escala sem motivo tipo ou documento.
-api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Previa e apropriacao de taxas explicitas; admin padrao e escopo revalidados; sem novo debito bancario.
+api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Apuracao de taxas e configuracao do modo automatico; leitura e reavaliacao das pendencias do mes; admin padrao e vinculo revalidados.
 api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Destino de investigacao; conferir metodo e ramo no handler.
