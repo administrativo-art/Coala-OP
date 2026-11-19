@@ -27,13 +27,13 @@ function reviewKey(request: FeeRequest) {
   return `${request.referenceDate}_${request.source}`;
 }
 
-async function savePendingReview(ref: FirebaseFirestore.DocumentReference, request: FeeRequest, review: AutoPendingReview, actorId: string) {
+async function savePendingReview(ref: FirebaseFirestore.DocumentReference, request: FeeRequest, review: AutoPendingReview) {
   await db.runTransaction(async tx => {
     const month = await tx.get(ref);
     const key = reviewKey(request);
     const previous = month.get(`reviews.${key}`) as AutoPendingReview | undefined;
     if (previous && previous.checkedAt >= review.checkedAt) return;
-    tx.set(ref, { reviews: { [key]: { ...review, actorId } } }, { merge: true });
+    tx.set(ref, { reviews: { [key]: review } }, { merge: true });
   });
 }
 
@@ -94,7 +94,7 @@ export async function recheckAutoPending(request: FeeRequest, context: FeeContex
   const counts: Counts = { recognized: 0, wouldRecognize: 0, amountCents: 0, alreadyDone: 0, pending: [] };
   await runOne(request, document.get("feeAutoRecognition.mode") === "simulation" ? "simulation" : "review", counts, context, recognitionDependencies(signal));
   signal?.throwIfAborted();
-  await savePendingReview(ref, request, pendingReview(counts.pending, request.referenceDate, request.source, checkedAt), context.decoded.uid);
+  await savePendingReview(ref, request, pendingReview(counts.pending, request.referenceDate, request.source, checkedAt));
   return readAutoState(request, context);
 }
 
@@ -125,7 +125,7 @@ export async function runAutoRecognition(options: { now?: Date; days?: number; s
         await runOne(request, mode, counts, context, deps);
         options.signal?.throwIfAborted();
         const review = pendingReview(counts.pending.slice(previousCount), referenceDate, source, checkedAt);
-        await savePendingReview(pendingMonth(doc.ref, request), request, review, context.decoded.uid);
+        await savePendingReview(pendingMonth(doc.ref, request), request, review);
       }
     const summary: AutoRunSummary = { at: new Date().toISOString(), mode, dates: eligibleDates, recognized: counts.recognized, wouldRecognize: counts.wouldRecognize, amountCents: counts.amountCents, alreadyDone: counts.alreadyDone,
       pending: counts.pending.slice(0, AUTO_MAX_PENDING), pendingTruncated: counts.pending.length > AUTO_MAX_PENDING };
