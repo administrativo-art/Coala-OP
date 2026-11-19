@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 135.
+Arquivos locais percorridos: 136.
 
 Chamadas candidatas encontradas:
 
@@ -1449,7 +1449,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-flow/receivables/page.tsx`](../../src/app/dashboard/financial/cash-flow/receivables/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 38.
 
 Chamadas candidatas encontradas:
 
@@ -2155,7 +2155,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 72.
+Arquivos locais percorridos: 75.
 
 Chamadas candidatas encontradas:
 
@@ -2163,6 +2163,7 @@ Chamadas candidatas encontradas:
 - `/api/financial/stone-fee-expenses` — interface [`src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx); rota candidata [`src/app/api/financial/stone-fee-expenses/route.ts`](../../src/app/api/financial/stone-fee-expenses/route.ts)
 - `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
+- `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/position-bar.tsx`](../../src/features/financial/receivables/position-bar.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
 - `/api/financial/stone-portfolio-cron` — interface [`src/features/financial/receipts-reconciliation/stone-account-daily.server.ts`](../../src/features/financial/receipts-reconciliation/stone-account-daily.server.ts); rota candidata [`src/app/api/financial/stone-portfolio-cron/route.ts`](../../src/app/api/financial/stone-portfolio-cron/route.ts)
 - `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/stone-account-panel.tsx`](../../src/features/financial/receipts-reconciliation/stone-account-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
 

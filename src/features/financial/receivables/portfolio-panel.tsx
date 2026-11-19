@@ -2,29 +2,25 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { LiftRow } from "@/components/patterns/lift-row";
 import { SidePanel, PanelSection } from "@/components/patterns/side-panel";
+import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
-import type { parseStoneWalletPosition } from "@/lib/integrations/stone/wallet-position-parser";
 import { centsLabel, rateLabel } from "../receipts-reconciliation/stone-account-format";
 import { parcelFeeRate, receiptModalityLabel } from "../receipts-reconciliation/stone-account";
 import type { StonePortfolioRow } from "./portfolio-projection";
+import { StonePositionBar, type RightsPosition } from "./position-bar";
 import {
-  natureLabel,
   receivableItems,
   receivableMonth,
   receivableMonths,
   receivableTotals,
   receivableWeeks,
-  rightsByNature,
-  type NatureKey,
   type ReceivableItem,
   type ReceivableTotals,
 } from "./receivable-view";
-
-type RightsPosition = Pick<ReturnType<typeof parseStoneWalletPosition>,
-  "referenceDate" | "status" | "rows" | "unknownNatureCount">;
 
 type PortfolioResult = {
   status: "synchronized" | "not_synchronized";
@@ -39,40 +35,66 @@ type PortfolioResult = {
 export type ReceivableIndicators = { openCents: number; openCount: number; next7Cents: number; reviewCount: number } | null;
 
 const ALL = "all";
+const CUSTOM = "custom";
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const MONTHS_LONG = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-// Cores categóricas validadas (dataviz validate_palette: PASS), na ordem fixa das naturezas.
-const NATURE_COLOR: Record<NatureKey, string> = {
-  regular: "#2a78d6", stone_anticipation: "#eb6834", warranty: "#1baf7a", ownership_assignment: "#eda100", unknown: "#5f646c",
-};
 const th = "whitespace-nowrap border-y border-ds-divider bg-ds-muted px-[18px] py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
 const td = "whitespace-nowrap border-b border-ds-divider px-[18px] py-2.5 align-middle text-[13.5px]";
 const date = (value: string | null) => value ? value.split("-").reverse().join("/") : "—";
 const short = (value: string | null) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}` : "—";
 const weekday = (value: string) => ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(`${value}T12:00:00Z`).getUTCDay()];
 const monthName = (month: string) => `${MONTHS_LONG[Number(month.slice(5)) - 1]}${month.slice(0, 4) !== String(new Date().getFullYear()) ? ` de ${month.slice(0, 4)}` : ""}`;
+const periodText = (from: string, through: string) => from && through ? ` de ${date(from)} a ${date(through)}` : from ? ` a partir de ${date(from)}` : through ? ` até ${date(through)}` : " no período";
 const range = (first: string, last: string) => {
   const name = MONTHS[Number(first.slice(5, 7)) - 1];
   return first === last ? `${Number(first.slice(8))} de ${name}` : `${Number(first.slice(8))} a ${Number(last.slice(8))} de ${name}`;
 };
 const addDays = (value: string, days: number) => { const d = new Date(`${value}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
-function Summary({ totals }: { totals: ReceivableTotals }) {
-  return <span className="flex flex-wrap justify-end gap-x-5 gap-y-1 text-[12.5px] text-ds-ink-muted">
-    <span>Bruto <b className="ml-1 tabular-nums font-bold text-ds-ink">{centsLabel(totals.grossCents)}</b></span>
-    <span>Taxa <b className="ml-1 tabular-nums font-bold text-ds-ink">{totals.feeUnknown === totals.count ? "—" : centsLabel(totals.feeCents)}</b></span>
-    <span>Líquido <b className="ml-1 tabular-nums font-bold text-ds-ink">{centsLabel(totals.netCents)}</b></span>
-  </span>;
+// Parcela numa linha, no mesmo desenho da aba Recebido: venda, data da venda, parcela, previsto, bruto, taxa, líquido e situação.
+const PARCEL_GRID = "grid grid-cols-[minmax(170px,1.5fr)_96px_56px_64px_84px_118px_96px_minmax(150px,1.3fr)] items-center gap-3 whitespace-nowrap";
+
+function ParcelHeader() {
+  return <div className={`${PARCEL_GRID} border-b border-ds-divider px-[18px] py-2 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint`}>
+    <span>Venda</span><span>Data da venda</span><span>Parcela</span><span>Previsto</span><span className="text-right">Bruto</span><span className="text-right">Taxa</span><span className="text-right">Líquido</span><span>Situação</span>
+  </div>;
+}
+
+function ParcelRow({ item, onOpen }: { item: ReceivableItem; onOpen: () => void }) {
+  return <LiftRow table onClick={onOpen} className={`${PARCEL_GRID} text-[13px]`}>
+    <span className="truncate font-extrabold text-ds-ink">{itemTitle(item)}</span>
+    <span className="tabular-nums text-ds-ink-muted">{short(item.saleDate)}</span>
+    <span className="tabular-nums font-bold text-ds-ink">{item.installment}/{item.installmentCount ?? "—"}</span>
+    <span className="tabular-nums text-ds-ink-muted">{short(item.dueDate)}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted">{centsLabel(item.grossCents)}</span>
+    <span className="text-right tabular-nums text-ds-ink-muted">{item.feeCents === null ? "—" : rateLabel(parcelFeeRate(item))}</span>
+    <span className="text-right tabular-nums font-bold text-ds-ink">{centsLabel(item.netCents)}</span>
+    <span className="flex gap-1">{item.status === "review" ? <StatusPill variant="warn" title={item.reason ?? undefined}>Conferir</StatusPill> : <StatusPill variant="neutral">A receber</StatusPill>}
+      {item.feeSource === "derived" ? <StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill> : null}</span>
+  </LiftRow>;
+}
+
+/** Colunas de totais da linha de mês, semana e dia: mesmas seis colunas da tabela Recebido. */
+function TotalsCells({ totals, className, extra }: { totals: ReceivableTotals; className: string; extra?: string }) {
+  const feeText = totals.feeUnknown === totals.count ? "—" : centsLabel(totals.feeCents);
+  const review = totals.reviewCount;
+  return <>
+    <td className={`${className} text-right tabular-nums`}>{totals.count}</td>
+    <td className={`${className} text-right tabular-nums`}>{centsLabel(totals.grossCents)}</td>
+    <td className={`${className} text-right tabular-nums`}>{feeText}</td>
+    <td className={`${className} text-right tabular-nums font-bold`}>{centsLabel(totals.netCents)}</td>
+    <td className={`${className} text-[12.5px] ${review ? "" : "text-ds-ink-muted"}`}>{review ? <StatusPill variant="warn">{review} para conferir</StatusPill> : extra ?? "a receber"}</td>
+  </>;
 }
 
 function itemTitle(item: ReceivableItem) {
   if (!item.brand || !item.modality) return "Cartão (aguardando sincronização)";
-  return `${item.brand} · ${receiptModalityLabel(item.modality)}`;
+  return `${item.brand} ${receiptModalityLabel(item.modality).toLowerCase()}`;
 }
 
 /**
  * A receber: o que a Stone ainda deve pagar na conta Stone. Abre em "Tudo"; as abas de mês filtram a tabela,
- * as semanas abrem nas parcelas e os cartões da posição Stone abrem o detalhe por arranjo.
+ * semana, dia e parcela abrem em sequência, como em Recebido e os cartões da posição Stone abrem o detalhe por arranjo.
  */
 export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: string; onIndicators?: (value: ReceivableIndicators) => void }) {
   const api = useAuthenticatedApi();
@@ -81,7 +103,9 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
   const [error, setError] = useState("");
   const [month, setMonth] = useState(ALL);
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(new Set());
-  const [nature, setNature] = useState<NatureKey | null>(null);
+  const [from, setFrom] = useState("");
+  const [through, setThrough] = useState("");
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<ReceivableItem | null>(null);
   useEffect(() => {
     if (!stoneCode) return;
@@ -97,9 +121,8 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
 
   const items = useMemo(() => receivableItems(result?.rows ?? []), [result]);
   const months = useMemo(() => receivableMonths(items), [items]);
-  const shown = month === ALL ? items : items.filter(item => receivableMonth(item.dueDate) === month);
-  const natures = useMemo(() => result?.rightsPosition?.status === "reported" ? rightsByNature(result.rightsPosition.rows) : [], [result]);
-  const natureTotal = natures.reduce((sum, item) => sum + item.cents, 0);
+  const inRange = (item: ReceivableItem) => (!from || item.dueDate >= from) && (!through || item.dueDate <= through);
+  const shown = month === ALL ? items : month === CUSTOM ? items.filter(inRange) : items.filter(item => receivableMonth(item.dueDate) === month);
   const total = receivableTotals(items);
 
   useEffect(() => {
@@ -115,33 +138,36 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
 
   if (!stoneCode) return null;
   const toggle = (key: string) => setOpenWeeks(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
-  const weekRows = (list: ReceivableItem[]) => receivableWeeks(list).map(week => {
+  const toggleDay = (key: string) => setOpenDays(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const dayRows = (items: ReceivableItem[], date: string) => {
+    const open = openDays.has(date);
+    const totals = receivableTotals(items);
+    return <Fragment key={date}>
+      <tr className={`cursor-pointer hover:[&>td]:bg-ds-muted ${open ? "[&>td]:bg-ds-accent-row" : ""}`} onClick={() => toggleDay(date)} aria-expanded={open}>
+        <td className={`${td} pl-9`}><span className="inline-flex items-center gap-1 font-bold">{open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}{weekday(date)} {short(date)}</span></td>
+        <TotalsCells totals={totals} className={td} />
+      </tr>
+      {open ? <tr><td colSpan={6} className="border-b border-ds-divider bg-ds-input px-[18px] pb-3.5 pl-16 pt-2">
+        <div className="overflow-x-auto rounded-ds-btn-lg border border-ds-border bg-ds-surface"><div className="min-w-[920px]"><ParcelHeader />{items.map(item => <ParcelRow key={item.id} item={item} onOpen={() => setSelected(item)} />)}</div></div>
+      </td></tr> : null}
+    </Fragment>;
+  };
+  const weekRows = (list: ReceivableItem[]) => receivableWeeks(list).map((week, index) => {
     const key = `${month}:${week.from}`;
     const open = openWeeks.has(key);
+    const days = [...new Set(week.items.map(item => item.dueDate))];
     return <Fragment key={key}>
       <tr className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => toggle(key)} aria-expanded={open}>
-        <td colSpan={4} className={`${td} py-3`}><span className="inline-flex items-center gap-1">
+        <td className={`${td} py-3.5`}><span className="inline-flex items-center gap-1">
           {open ? <ChevronDown aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint" />}
-          <strong className="inline-block min-w-[150px] font-extrabold text-ds-ink">Semana de {Number(week.from.slice(8))} {MONTHS[Number(week.from.slice(5, 7)) - 1]}</strong>
+          <strong className="inline-block min-w-[92px] font-extrabold text-ds-ink">Semana {index + 1}</strong>
           <span className="border-l-2 border-ds-ink-faint pl-3 text-[12.5px] font-semibold leading-none text-ds-ink-muted">{range(week.first, week.last)}</span>
-          <span className="ml-2 text-xs text-ds-ink-faint">{week.totals.count} parcela{week.totals.count > 1 ? "s" : ""}</span>
         </span></td>
-        <td colSpan={4} className={`${td} py-3`}><Summary totals={week.totals} /></td>
+        <TotalsCells totals={week.totals} className={`${td} py-3.5`} />
       </tr>
-      {open ? week.items.map(item => <tr key={item.id} className="cursor-pointer hover:[&>td]:bg-ds-muted" onClick={() => setSelected(item)}>
-        <td className={`${td} pl-11 tabular-nums`}>{weekday(item.dueDate)} {short(item.dueDate)}</td>
-        <td className={`${td} tabular-nums`}>{short(item.saleDate)}</td>
-        <td className={td}>{itemTitle(item)}</td>
-        <td className={`${td} text-right tabular-nums`}>{item.installment}/{item.installmentCount ?? "—"}</td>
-        <td className={`${td} text-right tabular-nums`}>{centsLabel(item.grossCents)}</td>
-        <td className={`${td} text-right tabular-nums`}>{item.feeCents === null ? "—" : rateLabel(parcelFeeRate(item))}
-          {item.feeSource === "derived" ? <span className="mt-1 block"><StatusPill variant="warn" title="A Stone não mandou o MDR; taxa proposta = bruto − líquido">Verificar taxa</StatusPill></span> : null}</td>
-        <td className={`${td} text-right tabular-nums font-bold`}>{centsLabel(item.netCents)}</td>
-        <td className={td}>{item.status === "review" ? <StatusPill variant="warn" title={item.reason ?? undefined}>Conferir</StatusPill> : <StatusPill variant="neutral">A receber</StatusPill>}</td>
-      </tr>) : null}
+      {open ? days.map(date => dayRows(week.items.filter(item => item.dueDate === date), date)) : null}
     </Fragment>;
   });
-  const selectedNature = natures.find(item => item.key === nature) ?? null;
 
   return <section aria-label="A receber" className="space-y-4">
     {loading ? <p role="status" className="text-sm text-ds-ink-muted">Carregando carteira…</p> : null}
@@ -157,46 +183,35 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
         <header className="flex flex-wrap items-end gap-3 px-[18px] pb-3 pt-4">
           <div>
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Carteira até {date(result.asOf)} · vendas desde {date(result.firstCaptureDate)}</p>
-            <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">{centsLabel(receivableTotals(shown).netCents)} a receber{month === ALL ? "" : ` em ${monthName(month)}`}</h2>
+            <h2 className="mt-0.5 text-[15.5px] font-extrabold text-ds-ink">{centsLabel(receivableTotals(shown).netCents)} a receber{month === ALL ? "" : month === CUSTOM ? periodText(from, through) : ` em ${monthName(month)}`}</h2>
           </div>
           <div role="group" aria-label="Mês do vencimento" className="ml-auto flex max-w-full overflow-x-auto"><div className="inline-flex rounded-ds-md bg-ds-seg p-[3px]">
-            {[ALL, ...months].map(value => <button key={value} type="button" aria-pressed={month === value} onClick={() => { setMonth(value); setOpenWeeks(new Set()); }}
+            {[ALL, ...months].map(value => <button key={value} type="button" aria-pressed={month === value} onClick={() => { setMonth(value); setOpenWeeks(new Set()); setOpenDays(new Set()); }}
               className={`h-8 whitespace-nowrap rounded-ds-sm px-3.5 text-[13px] font-bold ${month === value ? "bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink"}`}>
               {value === ALL ? "Tudo" : `${MONTHS[Number(value.slice(5)) - 1]}${value.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${value.slice(2, 4)}` : ""}`}
             </button>)}
+            <button type="button" aria-pressed={month === CUSTOM} onClick={() => { setMonth(CUSTOM); setOpenWeeks(new Set()); setOpenDays(new Set()); }}
+              className={`h-8 whitespace-nowrap rounded-ds-sm px-3.5 text-[13px] font-bold ${month === CUSTOM ? "bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]" : "text-ds-ink-muted hover:text-ds-ink"}`}>Personalizado</button>
           </div></div>
         </header>
+        {month === CUSTOM ? <div className="flex flex-wrap items-end gap-3 px-[18px] pb-3.5">
+          <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Vencimento de<Input aria-label="Vencimento a partir de" type="date" className="w-[170px] normal-case tracking-normal" value={from} max={through || undefined} onChange={event => { setFrom(event.target.value); setOpenWeeks(new Set()); setOpenDays(new Set()); }} /></label>
+          <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">até<Input aria-label="Vencimento até" type="date" className="w-[170px] normal-case tracking-normal" value={through} min={from || undefined} onChange={event => { setThrough(event.target.value); setOpenWeeks(new Set()); setOpenDays(new Set()); }} /></label>
+          <div className="flex gap-2 pb-0.5">{[["7 dias", 7], ["15 dias", 15], ["30 dias", 30]].map(([label, days]) => <button key={label} type="button" onClick={() => { const start = result?.asOf ?? ""; setFrom(start); setThrough(start ? addDays(start, days as number) : ""); }} className="h-8 rounded-full border border-ds-border-input bg-ds-surface px-3 text-[12.5px] font-bold text-ds-ink-2 hover:bg-ds-muted">Próximos {label}</button>)}</div>
+        </div> : null}
 
-        <div className="space-y-3 px-[18px] pb-[18px]">
-          {result.rightsPosition?.status === "reported" && natureTotal > 0 ? <>
-            <div className="flex h-[22px] gap-0.5 overflow-hidden rounded-full bg-ds-surface" role="img" aria-label="Posição da Stone por natureza">
-              {natures.filter(item => item.cents > 0).map(item => <i key={item.key} title={`${natureLabel[item.key]}: ${centsLabel(item.cents)}`} className="block h-full" style={{ width: `${(item.cents / natureTotal * 100).toFixed(2)}%`, background: NATURE_COLOR[item.key] }} />)}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {natures.map(item => <button key={item.key} type="button" onClick={() => setNature(item.key)}
-                className="rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 text-left transition-colors hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
-                <span className="flex items-center gap-1.5 text-[13px] text-ds-ink-2"><i aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: NATURE_COLOR[item.key] }} />{natureLabel[item.key]}</span>
-                <span className="mt-1 block tabular-nums text-[19px] font-bold text-ds-ink">{centsLabel(item.cents)}</span>
-                <span className="block text-xs text-ds-ink-muted">{Math.round(item.cents / natureTotal * 100)}% da posição · ver detalhe</span>
-              </button>)}
-            </div>
-            <p className="text-xs text-ds-ink-muted">Posição informada pela Stone em {date(result.rightsPosition.referenceDate)}, para a carteira toda. A Stone não separa essa posição por mês nem diz quais parcelas estão antecipadas, em garantia ou cedidas.</p>
-          </> : <p className="text-xs text-ds-ink-muted">{result.rightsPosition?.status === "not_provided" ? "A Stone não incluiu a posição por natureza no último arquivo. Isso não comprova saldo zero."
-            : result.rightsPosition?.status === "empty" ? "A posição por natureza veio vazia no último arquivo. Isso não comprova saldo zero."
-              : "A posição por natureza (livre, antecipado, garantia, cedido) ainda não foi lida."}</p>}
-        </div>
+        <StonePositionBar position={result.rightsPosition ?? null} className="px-[18px] pb-[18px]" />
 
         <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0">
-          <thead><tr><th className={th}>Vencimento</th><th className={th}>Venda</th><th className={th}>Cartão</th><th className={`${th} text-right`}>Parcela</th><th className={`${th} text-right`}>Bruto</th><th className={`${th} text-right`}>Taxa</th><th className={`${th} text-right`}>Líquido</th><th className={th}>Situação</th></tr></thead>
-          <tbody>{!shown.length ? <tr><td colSpan={8} className={`${td} py-8 text-center text-ds-ink-muted`}>Nenhuma parcela aberta neste recorte. Isso não comprova ausência de recebíveis.</td></tr>
+          <thead><tr><th className={th}>Semana / dia do vencimento</th><th className={`${th} text-right`}>Parcelas</th><th className={`${th} text-right`}>Bruto</th><th className={`${th} text-right`}>Taxa</th><th className={`${th} text-right`}>Líquido a receber</th><th className={th}>Situação</th></tr></thead>
+          <tbody>{!shown.length ? <tr><td colSpan={6} className={`${td} py-8 text-center text-ds-ink-muted`}>Nenhuma parcela aberta neste recorte. Isso não comprova ausência de recebíveis.</td></tr>
             : month === ALL ? months.map(value => {
               const list = items.filter(item => receivableMonth(item.dueDate) === value);
               return <Fragment key={value}>
                 {/* Faixa do mês: fundo neutro do sistema, nome maior e contagem; as semanas seguem brancas. */}
-                <tr><td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`}>
-                    <span className="text-[16px] font-extrabold capitalize text-ds-ink">{monthName(value)}</span>
-                    <span className="ml-3 text-xs font-semibold text-ds-ink-muted">{list.length} parcela{list.length > 1 ? "s" : ""}</span></td>
-                  <td colSpan={4} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`}><Summary totals={receivableTotals(list)} /></td></tr>
+                <tr><td className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`}>
+                    <span className="text-[16px] font-extrabold capitalize text-ds-ink">{monthName(value)}</span></td>
+                  <TotalsCells totals={receivableTotals(list)} className={`${td} border-t-2 border-t-ds-ink-faint bg-ds-muted py-3.5`} /></tr>
                 {weekRows(list)}
               </Fragment>;
             }) : weekRows(shown)}</tbody>
@@ -204,18 +219,6 @@ export function StonePortfolioPanel({ stoneCode, onIndicators }: { stoneCode: st
         <p className="border-t border-ds-divider px-[18px] py-3 text-[12.5px] text-ds-ink-muted">{result.summary?.paidCount ?? 0} parcela(s) já pagas pela Stone saíram da carteira. Previsão da Stone: não confirma saldo na conta Stone; o pagamento aparece na aba Recebido.</p>
       </section>
     </> : null}
-
-    <SidePanel open={selectedNature !== null} onOpenChange={value => { if (!value) setNature(null); }} kicker="Posição da Stone por natureza"
-      title={selectedNature ? `${natureLabel[selectedNature.key]} · ${centsLabel(selectedNature.cents)}` : ""}
-      subtitle={result?.rightsPosition ? `Informado em ${date(result.rightsPosition.referenceDate)} · carteira toda` : undefined}>
-      {selectedNature ? <PanelSection title="Por bandeira e produto" aside={`${selectedNature.rows.length} linha(s)`}>
-        {selectedNature.rows.length ? <ul className="divide-y divide-ds-divider">{selectedNature.rows.map(row => <li key={`${row.label}:${row.category}`} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
-          <span><span className="font-semibold text-ds-ink">{row.label}</span><span className="block text-xs text-ds-ink-faint">{row.category}</span></span>
-          <span className="tabular-nums font-bold">{centsLabel(row.cents)}</span></li>)}</ul>
-          : <p className="text-sm text-ds-ink-muted">Nada informado nesta natureza.</p>}
-        <p className="text-xs text-ds-ink-muted">A Stone informa o total por arranjo; não diz quais parcelas da tabela compõem este valor.</p>
-      </PanelSection> : null}
-    </SidePanel>
 
     <SidePanel open={selected !== null} onOpenChange={value => { if (!value) setSelected(null); }} kicker="Parcela a receber"
       title={selected ? `${itemTitle(selected)}${selected.installmentCount && selected.installmentCount > 1 ? ` ${selected.installment}/${selected.installmentCount}` : ""}` : ""}

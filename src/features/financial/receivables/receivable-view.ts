@@ -65,7 +65,7 @@ const mondayOf = (date: string) => {
   return value.toISOString().slice(0, 10);
 };
 
-export type ReceivableTotals = { count: number; grossCents: number; feeCents: number; netCents: number; feeUnknown: number; feeToVerify: number };
+export type ReceivableTotals = { count: number; grossCents: number; feeCents: number; netCents: number; feeUnknown: number; feeToVerify: number; reviewCount: number };
 export function receivableTotals(items: ReceivableItem[]): ReceivableTotals {
   return {
     count: items.length,
@@ -74,6 +74,7 @@ export function receivableTotals(items: ReceivableItem[]): ReceivableTotals {
     netCents: items.reduce((sum, item) => sum + item.netCents, 0),
     feeUnknown: items.filter(item => item.feeCents === null).length,
     feeToVerify: items.filter(item => item.feeSource === "derived").length,
+    reviewCount: items.filter(item => item.status === "review").length,
   };
 }
 
