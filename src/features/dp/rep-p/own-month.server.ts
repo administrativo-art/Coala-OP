@@ -23,6 +23,9 @@ export type RepPOwnScheduledShift = {
   startTime: string | null;
   endTime: string | null;
   overnight: boolean;
+  manualOrder?: number;
+  manualMode?: 'fixed' | 'flexible';
+  manualWorkMinutes?: number;
   unitId: string | null;
   unitName: string | null;
   assignmentKind?: 'regular' | 'external_coverage';
@@ -169,8 +172,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
 
   const result: RepPOwnScheduledShift[] = ownShifts.map((doc) => {
     const definition = definitionById.get(text(doc.get('shiftDefinitionId')) ?? '');
-    const breakStart = text(definition?.get('breakStart'));
-    const breakEnd = text(definition?.get('breakEnd'));
+    const breakStart = text(doc.get('manualBreak.start')) ?? text(definition?.get('breakStart'));
+    const breakEnd = text(doc.get('manualBreak.end')) ?? text(definition?.get('breakEnd'));
     const declaredBreak = text(definition?.get('breakType'));
     const breakType = (['none', 'fixed', 'flexible', 'staggered'] as const).find((value) => value === declaredBreak)
       ?? (breakStart && breakEnd ? 'fixed' : 'none');
@@ -180,7 +183,13 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       ? rawSegments.filter((segment) => typeof segment?.start === 'string' && typeof segment?.end === 'string')
         .map((segment) => ({ start: String(segment.start), end: String(segment.end) }))
       : null;
+    const manualOrder = minutes(doc.get('manualOrder'));
+    const manualMode = doc.get('manualDay.mode');
+    const manualWorkMinutes = minutes(doc.get('manualDay.expectedWorkMinutes'));
     return {
+      ...(manualOrder != null && (manualMode === 'fixed' || manualMode === 'flexible')
+        ? { manualOrder, manualMode, ...(manualMode === 'flexible' && manualWorkMinutes != null ? { manualWorkMinutes } : {}) }
+        : {}),
       date: String(doc.get('date')),
       type: doc.get('type') === 'day_off' ? 'day_off' : 'work',
       startTime: text(doc.get('startTime')),

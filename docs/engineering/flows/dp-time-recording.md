@@ -240,3 +240,10 @@ Pedido de ajuste da simulação aprovado passa a valer no dia do ensaio: a batid
 - **Cobertura por ausência** (`absenceCoverage`): só pedido de dia inteiro, já carregado e não recusado nem cancelado, cobre "sem batidas" e "ímpar". Ausência por horas, pedido ainda carregando ou leitura com falha mantêm o alerta. "Nenhuma batida esperada" só aparece com ausência aprovada.
 - **Custo de leitura:** sem listener nem polling novos. Os cards do ano fazem até 12 leituras da rota de fechamento por abertura. O modo foco faz 1 leitura do pedido por dia aberto que tenha ausência.
 - **Revisão do Doc Brown (01/11/2026):** conforme após a correção da cobertura por ausência. Pendências jurídicas em `docs/planos/plano-jornada-fechamento-rh.md` §3.12.
+
+
+### Jornada manual em trechos
+
+O contrato de leitura da escala publicada expõe a ordem, o regime e a carga dos trechos flexíveis. O Meu Ponto web e o Coala Go exibem a sequência e destacam o trecho atual ou seguinte conforme as saídas declaradas por unidade. As quatro finalidades de ponto e o formato de envio permanecem os mesmos. A sequência vem da revisão oficial da escala. Quando há mais de uma escala vinculada no rascunho, o DP confirma a publicação conjunta.
+
+A carga planejada da jornada híbrida é somada por trecho. A regra contratual do banco de horas continua usando a referência da jornada. A homologação do horário contratual do dia híbrido no AEJ e no espelho permanece pendente.

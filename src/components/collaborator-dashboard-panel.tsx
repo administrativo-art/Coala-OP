@@ -1148,12 +1148,13 @@ function SidebarEscala({
   error: string | null;
   showMockup?: boolean;
 }) {
-  const { shiftDefinitions } = useDPStore();
+  const { units, shiftDefinitions } = useDPStore();
   const todayKey = dateKey(new Date());
   const upcoming = useMemo(() => {
     return [...shifts]
       .filter((shift) => shift.type !== "day_off" && shift.date >= todayKey)
-      .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.manualOrder != null && b.manualOrder != null
+        ? a.manualOrder - b.manualOrder : a.startTime.localeCompare(b.startTime)))
       .slice(0, 5);
   }, [shifts, todayKey]);
 
@@ -1220,10 +1221,15 @@ function SidebarEscala({
               <div key={shift.id} className="flex items-center justify-between gap-2 py-1 text-sm">
                 <span className={isToday ? "font-semibold text-ds-accent-ink" : "text-ds-ink-muted"}>
                   {label}
-                  {definition?.name ? <span className="ml-1.5 text-xs text-ds-ink-faint">{definition.name}</span> : null}
+                  {shift.manualOrder != null ? <span className="ml-1.5 text-xs text-ds-ink-faint">
+                    {units.find(({ id }) => id === shift.unitId)?.name ?? shift.unitId}
+                    {' · '}{shift.manualDay?.mode === "flexible" ? "Flexível" : "Fixo"}
+                  </span> : definition?.name ? <span className="ml-1.5 text-xs text-ds-ink-faint">{definition.name}</span> : null}
                 </span>
                 <span className="font-mono text-xs tabular-nums text-ds-ink-muted">
-                  {shift.startTime}–{shift.endTime}
+                  {shift.manualOrder != null && shift.manualDay?.mode === "flexible"
+                    ? `${shift.manualDay.expectedWorkMinutes} min${shift.startTime && shift.endTime ? ` · ${shift.startTime}–${shift.endTime}` : ""}`
+                    : `${shift.startTime}–${shift.endTime}`}
                 </span>
               </div>
             );
@@ -1743,7 +1749,7 @@ function CollaboratorDashboardPanelInner() {
   // Today's shift (greeting + timeline markers)
   const todayShift = useMemo(() => {
     const candidates = effectiveShifts
-      .filter((shift) => shift.date === todayKey && shift.type !== "day_off")
+      .filter((shift) => shift.date === todayKey && shift.type !== "day_off" && shift.manualDay?.mode !== "flexible")
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     const shift = candidates[0];
     if (!shift) return null;
