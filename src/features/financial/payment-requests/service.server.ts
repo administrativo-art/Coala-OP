@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
-import { createBeneficiarySnapshot, resolvePaymentBeneficiary } from "../beneficiaries/resolver.server";
+import { normalizeBrazilianDocument } from "../beneficiaries/normalization";
+import { createBeneficiarySnapshot, resolvePaymentBeneficiary, resolveValidatedEntityPixBeneficiary } from "../beneficiaries/resolver.server";
 import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/proof.server";
 import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
@@ -23,6 +24,7 @@ import {
   planInboxPixCopyPastePreparation,
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
+import { assertExpenseSupplierPixTarget, assertSupplierPixBeneficiary } from "./expense-supplier-pix.server";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
 import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
@@ -1265,6 +1267,28 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
     if (current.expenseId) { const target = await transaction.get(financialDbAdmin.collection("expenses").doc(current.expenseId)); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
+    if (current.sourceType === "expense_supplier_pix") {
+      if (actor === "system" || current.expenseId !== current.sourceId
+        || current.beneficiaryReference.sourceType !== "entity") {
+        throw new Error("O Pix do fornecedor exige envio manual vinculado à despesa.");
+      }
+      const expenseId = current.sourceId;
+      const [expense, payment, relatedRequests] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("expenses").doc(expenseId)),
+        transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", expenseId).limit(1)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", expenseId).limit(2)),
+      ]);
+      const document = expense.get("billingIdentity.supplierTaxId");
+      const description = assertExpenseSupplierPixTarget(
+        expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
+        normalizeBrazilianDocument(document), Math.round(current.amount * 100),
+      );
+      if (current.workspaceId !== WORKSPACE_ID || expense.get("paymentRequestId") !== current.id
+        || current.description !== description || !payment.empty
+        || relatedRequests.docs.some((item) => item.id !== current.id)) {
+        throw new Error("O vínculo, os dados da despesa ou os pagamentos mudaram após o preparo.");
+      }
+    }
     if (current.bankInstructionOrigin === "inter_dda") {
       throw new Error("Agendamento importado do Inter não pode ser reenviado.");
     }
@@ -1662,9 +1686,22 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     if (!pending.beneficiaryReference || !pending.beneficiarySnapshot) {
       throw new Error("Os dados do favorecido não estão disponíveis.");
     }
-    const beneficiary = await resolvePaymentBeneficiary(pending.beneficiaryReference);
+    const beneficiary = pending.sourceType === "expense_supplier_pix"
+      ? await resolveValidatedEntityPixBeneficiary(pending.beneficiaryReference.sourceId)
+      : await resolvePaymentBeneficiary(pending.beneficiaryReference);
     if (beneficiary.sourceUpdatedAt !== pending.beneficiarySnapshot.sourceUpdatedAt) {
       throw new Error("Os dados do favorecido mudaram após a criação. Crie uma nova solicitação para revalidar o pagamento.");
+    }
+    if (pending.sourceType === "expense_supplier_pix") {
+      const document = assertSupplierPixBeneficiary(beneficiary);
+      const expense = await financialDbAdmin.collection("expenses").doc(pending.sourceId).get();
+      const description = assertExpenseSupplierPixTarget(
+        expense.data(), WORKSPACE_ID, pending.beneficiaryReference.sourceId,
+        document, Math.round(pending.amount * 100),
+      );
+      if (expense.get("paymentRequestId") !== pending.id || pending.description !== description) {
+        throw new Error("A despesa mudou após a autorização.");
+      }
     }
     if (!pending.beneficiarySnapshot.documentHash) {
       const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, pending.beneficiarySnapshot.resolvedAt);
@@ -1842,9 +1879,10 @@ async function completeSource(request: BankPaymentRequest) {
       const expenseData = expense.data()!;
       const installments = Array.isArray(expenseData.installments) ? expenseData.installments : [];
       const isInstallmentBoleto = request.sourceType === "expense_boleto" && installments.length > 1 && request.installmentNumber != null;
-      const isSingleConsultancy = request.sourceType === "consultancy_provision" && installments.length === 1;
-      if (isInstallmentBoleto || isSingleConsultancy) {
-        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => isSingleConsultancy || Number(item.number ?? index + 1) === request.installmentNumber
+      const isSingleInstallmentPix = installments.length === 1
+        && (request.sourceType === "consultancy_provision" || request.sourceType === "expense_supplier_pix");
+      if (isInstallmentBoleto || isSingleInstallmentPix) {
+        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => isSingleInstallmentPix || Number(item.number ?? index + 1) === request.installmentNumber
           ? { ...item, status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath ?? null }
           : item);
         const allPaid = nextInstallments.every((item: Record<string, unknown>) => item.status === "paid" || Boolean(item.paidAt));

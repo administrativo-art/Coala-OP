@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **576**
-- Totalmente contratados: **254**
+- Arquivos de rota: **577**
+- Totalmente contratados: **255**
 - Legados congelados: **314**
 - Exceções temporárias: **8**
 - Violações: **0**
@@ -271,6 +271,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/expenses/[expenseId]/payments` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/payments/route.ts](../../src/app/api/financial/expenses/[expenseId]/payments/route.ts) |
 | `/api/financial/expenses/[expenseId]/reconcile-provision` | POST | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts](../../src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts) |
 | `/api/financial/expenses/[expenseId]/settlement` | GET | `LEGACY_BASELINE` | [src/app/api/financial/expenses/[expenseId]/settlement/route.ts](../../src/app/api/financial/expenses/[expenseId]/settlement/route.ts) |
+| `/api/financial/expenses/[expenseId]/supplier-pix` | POST ✓ | `CONTRACTED` | [src/app/api/financial/expenses/[expenseId]/supplier-pix/route.ts](../../src/app/api/financial/expenses/[expenseId]/supplier-pix/route.ts) |
 | `/api/financial/expenses/provision-series` | PATCH ✓ | `CONTRACTED` | [src/app/api/financial/expenses/provision-series/route.ts](../../src/app/api/financial/expenses/provision-series/route.ts) |
 | `/api/financial/import-sessions/[sessionId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/financial/import-sessions/[sessionId]/route.ts](../../src/app/api/financial/import-sessions/[sessionId]/route.ts) |
 | `/api/financial/inbox` | GET | `LEGACY_BASELINE` | [src/app/api/financial/inbox/route.ts](../../src/app/api/financial/inbox/route.ts) |

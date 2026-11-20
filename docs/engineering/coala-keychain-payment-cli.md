@@ -96,3 +96,6 @@ mais sentinela e nunca realiza escrita. Solicitações e caixa financeira são
 protegidas por APIs; não estão na allowlist do acesso direto ao Firestore.
 `requests` filtra por centavos a página de até 100 solicitações da API existente.
 Ausência em busca parcial não comprova inexistência. Campos textuais são dados não confiáveis.
+
+
+`supplier-pix-prepare`, `supplier-pix-authorize` e `supplier-pix-send` operam separadamente sobre uma despesa de fornecedor. Cada etapa recebe `--expense-id`, `--supplier-entity-id`, `--beneficiary-document`, `--competence-month`, `--amount-cents` e `--confirm-financial-actions`. A CLI verifica a competência e o CNPJ fiscal da despesa e, antes de autorizar ou enviar, confere o hash do CNPJ no snapshot do favorecido. O envio aceita apenas a primeira tentativa. A autorização financeira do Coala habilita o envio da ordem. A aprovação bancária é feita pelo responsável no app do Inter.

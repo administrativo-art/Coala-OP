@@ -59,7 +59,7 @@ async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBenefic
   };
 }
 
-async function resolveEntity(sourceId: string): Promise<ResolvedPaymentBeneficiary> {
+async function resolveEntity(sourceId: string, requireValidated = false): Promise<ResolvedPaymentBeneficiary> {
   const [entity, profile] = await Promise.all([
     dbAdmin.collection("entities").doc(sourceId).get(),
     financialDbAdmin.collection("supplierPaymentProfiles").doc(sourceId).get(),
@@ -68,6 +68,11 @@ async function resolveEntity(sourceId: string): Promise<ResolvedPaymentBeneficia
   if (entity.get("status") === "inactive") throw new Error("A pessoa ou empresa favorecida está inativa.");
   if (!profile.exists) throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
   const entityDocument = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
+  if (requireValidated && (profile.get("active") !== true || !profile.get("validatedAt")
+    || profile.get("paymentMethod") !== "pix_key"
+    || normalizeBrazilianDocument(profile.get("holderDocument")) !== entityDocument)) {
+    throw new Error("O perfil de pagamento do fornecedor precisa estar ativo e validado para o CNPJ cadastrado.");
+  }
   const paymentData = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
   if (!paymentData.pixKey) {
     throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
@@ -87,6 +92,10 @@ async function resolveEntity(sourceId: string): Promise<ResolvedPaymentBeneficia
     validated: true,
     sourceUpdatedAt: String(profile.get("updatedAt") ?? new Date(0).toISOString()),
   };
+}
+
+export function resolveValidatedEntityPixBeneficiary(sourceId: string) {
+  return resolveEntity(sourceId, true);
 }
 
 export async function resolvePaymentBeneficiary(

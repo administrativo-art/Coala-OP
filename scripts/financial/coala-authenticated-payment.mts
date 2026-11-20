@@ -7,6 +7,8 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+import { financialExpenseCompetenceMonth, financialCompetenceMonthSchema } from "../../src/features/financial/lib/expense-accounting-contract";
+import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
 import { interOverdueMinimumCents } from "../../src/features/financial/payment-requests/inter-overdue-quote";
 import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "./payment-cli-contract";
@@ -93,6 +95,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-document-attach --email EMAIL --id ORDER_ID --receipt-id RECEIPT_ID --role danfe|boletos --file PDF --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-attach --email EMAIL --expense-id EXPENSE_ID --installment-number N --file PDF --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence-month AAAA-MM --beneficiary-document CNPJ --document-reference REFERENCIA --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-prepare --email EMAIL --expense-id EXPENSE_ID --installment-number N --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --barcode CODIGO --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
@@ -683,7 +686,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "session", "find", "inspect", "analyze", "link-forecast", "link-expense", "create-dare-expense", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "session", "find", "inspect", "analyze", "link-forecast", "link-expense", "create-dare-expense", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "supplier-pix-prepare", "supplier-pix-authorize", "supplier-pix-send", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -693,6 +696,53 @@ async function main() {
       throw new PaymentCliError("reconcile-vivo analisa, vincula, autoriza e envia pagamentos. Repita com --confirm-financial-actions somente após conferir as duas cobranças.");
     }
     return reconcileVivo(await commandToken(email));
+  }
+  if (command === "supplier-pix-prepare" || command === "supplier-pix-authorize" || command === "supplier-pix-send") {
+    if (!process.argv.includes("--confirm-financial-actions")) {
+      throw new PaymentCliError("Confirme esta etapa com --confirm-financial-actions.");
+    }
+    const expenseId = requireOption("expense-id");
+    const supplierEntityId = requireOption("supplier-entity-id");
+    const idPattern = /^[a-zA-Z0-9_-]{1,150}$/;
+    const amountCents = Number(requireOption("amount-cents"));
+    const competenceMonth = requireOption("competence-month");
+    const beneficiary = CnpjValidator.validate(requireOption("beneficiary-document"));
+    if (![expenseId, supplierEntityId].every((id) => idPattern.test(id))
+      || !Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100_000_000
+      || !financialCompetenceMonthSchema.safeParse(competenceMonth).success || !beneficiary.valid) {
+      throw new PaymentCliError("ID, valor, CNPJ ou competência inválidos.");
+    }
+    const token = await commandToken(email);
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    const billingIdentity = expense?.billingIdentity as Record<string, unknown> | undefined;
+    if (!expense || expense.id !== expenseId || expense.workspaceId !== "coala" || expense.status !== "pending"
+      || financialExpenseCompetenceMonth(expense) !== competenceMonth
+      || Math.round(Number(expense.totalValue) * 100) !== amountCents
+      || String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "") !== beneficiary.clean) {
+      throw new PaymentCliError("A despesa, o valor, a competência ou o CNPJ divergem. Nenhuma ação foi realizada.");
+    }
+    const id = `expense_supplier_pix_${expenseId}`;
+    if (command === "supplier-pix-prepare") {
+      const response = await paymentCliFetch(`${COALA_URL}/api/financial/expenses/${expenseId}/supplier-pix`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierEntityId, amountCents }), cache: "no-store",
+      });
+      if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o preparo (HTTP ${response.status}). Consulte a despesa antes de repetir.`);
+      const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
+      if (body.request?.id !== id) throw new PaymentCliError("O Coala não confirmou a solicitação esperada. Consulte a despesa antes de repetir.");
+      return printStatus({ ...body.request, amount: amountCents / 100 });
+    }
+    const request = (await coalaGet(token)).find((item) => item.id === id);
+    const snapshot = request?.beneficiarySnapshot as Record<string, unknown> | undefined;
+    const expectedStatus = command === "supplier-pix-authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
+    if (!request || request.status !== expectedStatus || request.sourceType !== "expense_supplier_pix"
+      || request.sourceId !== expenseId || request.expenseId !== expenseId || expense.paymentRequestId !== id
+      || Math.round(Number(request.amount) * 100) !== amountCents || snapshot?.sourceId !== supplierEntityId
+      || snapshot.documentHash !== createHash("sha256").update(beneficiary.clean).digest("hex")
+      || request.submissionStartedAt || request.interRequestId || Number(request.submissionAttemptCount ?? 0) !== 0) {
+      throw new PaymentCliError("A solicitação diverge, já foi enviada ou está em outra etapa. Nenhuma ação foi realizada.");
+    }
+    return printStatus(await coalaPost(token, id, command === "supplier-pix-authorize" ? "authorize" : "submit"));
   }
   if (command === "requests") {
     const cents = Number(requireOption("amount-cents"));
