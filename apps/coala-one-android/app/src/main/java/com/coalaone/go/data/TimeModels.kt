@@ -60,6 +60,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class BreakSegment(val start: String, val end: String)
 @Serializable data class OwnShift(val date: String, val type: String, val startTime: String? = null, val endTime: String? = null, val overnight: Boolean = false, val unitId: String? = null, val unitName: String? = null, val shiftName: String? = null,
     val assignmentKind: String = "regular",
+    val manualOrder: Int? = null, val manualMode: String? = null, val manualWorkMinutes: Int? = null,
     val breakType: String? = null, val breakStart: String? = null, val breakEnd: String? = null, val breakDurationMinutes: Int? = null, val breakWindowStart: String? = null, val breakWindowEnd: String? = null,
     val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val breakMinPauseMinutes: Int? = null,
     val toleranceMinutes: Int? = null, val expectedPunches: Int? = null,

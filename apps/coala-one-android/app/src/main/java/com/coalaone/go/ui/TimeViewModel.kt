@@ -222,13 +222,17 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val key = month.toString()
         val markings = api.markings(start, end); val shifts = api.timeMonth(key); val adjustments = api.adjustments(key)
         mutable.update { current ->
-            val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
+            val date = current.today.toString()
+            val segments = TimeRules.manualSegments(shifts.shifts, date)
+            val scheduledUnit = if (segments.isNotEmpty())
+                TimeRules.currentManualSegment(segments, markings.markings, date)?.unitId
+            else shifts.shifts.firstOrNull { it.date == date && it.type == "work" }?.unitId
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 automaticAbsences = shifts.automaticAbsences.toSet(),
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments,
                 dayLoad = if (month == YearMonth.from(current.today)) DayLoad.READ else DayLoad.PENDING,
                 // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.
-                unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
+                unitId = if (attempt != null) current.unitId else scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
                     ?: current.options?.executionUnits?.firstOrNull()?.id ?: current.unitId)
         }
     }

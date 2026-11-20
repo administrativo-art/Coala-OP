@@ -12,8 +12,9 @@ import { hasPublishedScheduleVersion, scheduleShiftFingerprint } from '@/lib/dp-
 import { prepareActiveRevisionOperationalChanges, readActiveRevisionShift } from '@/features/dp/schedules/operational-overlay.server';
 import { readActiveRevisionPersonMonth } from '@/features/dp/schedules/operational-overlay.server';
 import { preparePublicationFenceAdvance } from '@/features/dp/schedules/publication-fence.server';
+import { isWindowlessFlexibleShift } from '@/features/dp/schedules/split-journey';
 import { evaluateCoverageAgenda } from '@/features/dp/absences/coverage/core';
-import { guardOccupancyWrite, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { guardOccupancyWrite, scheduledShiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 import { AppError } from '@/lib/observability/app-error';
 import { resolveOperationalResponsibility, responsibilityScopeKey } from '@/features/dp/responsibility-coverage/service.server';
 
@@ -62,6 +63,9 @@ async function assertRestorationSafe(tx: FirebaseFirestore.Transaction, record: 
   const legacyPublished = new Set(legacySchedules.filter((schedule) => schedule.exists && !schedule.get('activeRevisionId')
     && hasPublishedScheduleVersion(schedule.data() ?? {})).map((schedule) => schedule.id));
   const originalIds = new Set((record.displacedShifts ?? []).map((shift) => `${shift.scheduleId}/${shift.shiftId}`));
+  const occupancyTimes = (shift: Record<string, unknown>) => isWindowlessFlexibleShift(shift)
+    ? { startTime: '00:00', endTime: '23:59' }
+    : { startTime: String(shift.startTime ?? '00:00'), endTime: String(shift.endTime ?? '23:59') };
   const agenda = [
     ...legacy.docs.filter((doc) => doc.ref.path.split('/').length === 4 && legacyPublished.has(doc.ref.parent.parent?.id ?? '')).map((doc) => ({
       key: `${doc.ref.parent.parent?.id}/${doc.id}`, value: doc.data(),
@@ -69,12 +73,11 @@ async function assertRestorationSafe(tx: FirebaseFirestore.Transaction, record: 
     ...revisions.flat().map((shift) => ({ key: `${shift.scheduleId}/${shift.id}`, value: shift })),
   ].filter(({ key, value }) => !originalIds.has(key) && (value.type === 'work' || value.type === 'day_off'))
     .map(({ value }) => ({ date: String(value.date), type: value.type as 'work' | 'day_off',
-      startTime: String(value.startTime ?? '00:00'), endTime: String(value.endTime ?? '23:59') }));
-  const issues = evaluateCoverageAgenda({ date, startTime: String(item.shift.startTime),
-    endTime: String(item.shift.endTime) }, agenda);
+      ...occupancyTimes(value) }));
+  const issues = evaluateCoverageAgenda({ date, ...occupancyTimes(item.shift) }, agenda);
   if (issues.some((issue) => issue.blocking)) conflict();
-  await guardOccupancyWrite(tx, record.workspaceId, shiftOccupancySlices({ beneficiaryUid: record.employeeUid,
-    date, startTime: String(item.shift.startTime), endTime: String(item.shift.endTime), addsOccupancy: true }), 2);
+  await guardOccupancyWrite(tx, record.workspaceId, scheduledShiftOccupancySlices({ beneficiaryUid: record.employeeUid,
+    date, shift: item.shift, addsOccupancy: true }), 2);
 }
 
 /** Reconciles the published scale after the HR record is durable. Repeated calls are safe. */
@@ -127,8 +130,8 @@ async function reconcilePublishedShifts(record: AutomaticAbsenceRecord, deps: De
             journeyValidationVersion: FieldValue.increment(1) });
         }
       } else if (current) {
-        await guardOccupancyWrite(tx, record.workspaceId, shiftOccupancySlices({ beneficiaryUid: record.employeeUid,
-          date: record.workDate, startTime: String(item.shift.startTime), endTime: String(item.shift.endTime), addsOccupancy: false }), 2);
+        await guardOccupancyWrite(tx, record.workspaceId, scheduledShiftOccupancySlices({ beneficiaryUid: record.employeeUid,
+          date: record.workDate, shift: item.shift, addsOccupancy: false }), 2);
         if (item.revisionId) {
           (await prepareActiveRevisionOperationalChanges({ tx, schedule, workspaceId: record.workspaceId,
             actorId: 'automatic-absence', reason: 'automatic_absence_registered',
@@ -302,8 +305,9 @@ export async function registerOverdueAutomaticAbsences(workspaceId: string, opti
     const timeZone = unit && isBrazilTimeZone(unit.get('timeZone')) ? unit.get('timeZone') as string : DEFAULT_ZONE;
     const sameDayShifts = shifts.filter((candidate) => candidate.shift.userId === uid && candidate.shift.date === date
       && candidate.shift.type === 'work' && hasPublishedScheduleVersion(candidate.schedule.data() ?? {}));
-    const deadline = sameDayShifts.map((candidate) => automaticAbsenceDeadline(date,
-      String(candidate.shift.startTime), String(candidate.shift.endTime), candidate.shift.overnight === true, timeZone))
+    const deadline = sameDayShifts.map(({ shift: candidate }) => isWindowlessFlexibleShift(candidate)
+      ? automaticAbsenceDeadline(date, '00:00', '23:59', false, timeZone)
+      : automaticAbsenceDeadline(date, String(candidate.startTime), String(candidate.endTime), candidate.overnight === true, timeZone))
       .sort((a, b) => b.dueAt.localeCompare(a.dueAt))[0];
     if (Date.parse(deadline.dueAt) > now.getTime()) { stats.notDue += 1; continue; }
     const id = automaticAbsenceId(workspaceId, uid, date);

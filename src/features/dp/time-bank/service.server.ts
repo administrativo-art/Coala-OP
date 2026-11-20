@@ -181,9 +181,20 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     const date = new Date(cursor).toISOString().slice(0, 10);
     const shifts = month.shifts.filter((item) => item.date === date);
     const raw = shifts.find((item) => item.type === 'work') ?? shifts[0] ?? null;
+    const pieces = shifts.filter((item) => item.manualOrder != null)
+      .sort((left, right) => (left.manualOrder ?? 0) - (right.manualOrder ?? 0));
+    const plannedMinutesOf = (item: NonNullable<typeof raw>) => item.manualWorkMinutes
+      ?? (item.startTime && item.endTime
+        ? Math.max(0, ((toMinutes(item.endTime) - toMinutes(item.startTime) + 1440) % 1440 || 1440)
+          - (item.breakDurationMinutes ?? 0)) : null);
+    const first = pieces[0];
+    const last = pieces.at(-1);
     const shift: BankShift | null = raw ? {
-      type: raw.type, startTime: raw.startTime, endTime: raw.endTime, overnight: raw.overnight,
-      plannedMinutes: raw.startTime && raw.endTime ? Math.max(0, ((toMinutes(raw.endTime) - toMinutes(raw.startTime) + 1440) % 1440 || 1440) - (raw.breakDurationMinutes ?? 0)) : null,
+      type: raw.type,
+      startTime: first ? (first.manualMode === 'fixed' ? first.startTime : null) : raw.startTime,
+      endTime: last ? (last.manualMode === 'fixed' ? last.endTime : null) : raw.endTime,
+      overnight: raw.overnight,
+      plannedMinutes: pieces.length ? pieces.reduce((total, item) => total + (plannedMinutesOf(item) ?? 0), 0) : plannedMinutesOf(raw),
       referenceMinutes: raw.referenceMinutes, toleranceMinutes: raw.toleranceMinutes, journeyId: raw.journeyId,
     } : null;
     const markings = [

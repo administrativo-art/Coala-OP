@@ -86,7 +86,7 @@ async function buildSnapshot(deps: Dependencies, workspaceId: string, competence
     workspaceId, competence, closureVersion: closure.version, manifestHash: closure.manifestHash ?? '', generatedAt: at, clockSource,
     employee: { uid, name: arp.identity?.employeeName ?? declaration?.name ?? text(user.get('username')) ?? 'Colaborador', cpf: arp.identity?.employeeCpf ?? null },
     employer: { legalName: arp.identity?.employerLegalName ?? employer?.unitName ?? null, cnpj: arp.identity?.employerCnpj ?? employer?.cnpj ?? null },
-    markings: arp.markings, shifts: month.shifts.map((shift) => ({ date: shift.date, type: shift.type as 'work' | 'day_off', startTime: shift.startTime, endTime: shift.endTime, shiftName: shift.shiftName })),
+    markings: arp.markings, shifts: month.shifts,
     declaration, truncated: arp.truncated || month.truncated,
     actors: Object.fromEntries(actors.filter((doc) => doc.exists && text(doc.get('username'))).map((doc) => [doc.id, String(doc.get('username')).slice(0, 120)])),
   });
