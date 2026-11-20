@@ -96,6 +96,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-attach --email EMAIL --expense-id EXPENSE_ID --installment-number N --file PDF --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence-month AAAA-MM --beneficiary-document CNPJ --document-reference REFERENCIA --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-prepare --email EMAIL --expense-id EXPENSE_ID --installment-number N --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
+  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto para confirmar a origem da cobrança.
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
@@ -715,22 +716,44 @@ async function main() {
     const token = await commandToken(email);
     const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
     const billingIdentity = expense?.billingIdentity as Record<string, unknown> | undefined;
-    if (!expense || expense.id !== expenseId || expense.workspaceId !== "coala" || expense.status !== "pending"
+    const document = String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
+    const previousPaidRequestId = option("previous-paid-request-id");
+    const confirmation = command === "supplier-pix-prepare" && previousPaidRequestId && idPattern.test(previousPaidRequestId)
+      ? { beneficiaryDocument: beneficiary.clean, competenceMonth, previousPaidRequestId,
+          allowExistingBoleto: process.argv.includes("--preserve-boleto") }
+      : undefined;
+    if ((previousPaidRequestId && !confirmation) || (process.argv.includes("--preserve-boleto") && !confirmation)) {
+      throw new PaymentCliError("A confirmação só é aceita no preparo e exige um ID válido de pagamento conciliado.");
+    }
+    const legacyForecast = confirmation && !expense?.workspaceId && expense?.provisionType === "forecast"
+      && expense.sourceType === "recurring_expense_forecast" && typeof expense.unitId === "string";
+    const confirmedForecast = confirmation && (legacyForecast || expense?.workspaceId === "coala")
+      && expense?.provisionType === "forecast" && ["provisioned", "reconciled"].includes(String(expense.status));
+    if (!expense || expense.id !== expenseId || (expense.workspaceId !== "coala" && !legacyForecast)
+      || (!confirmedForecast && expense.status !== "pending")
       || financialExpenseCompetenceMonth(expense) !== competenceMonth
       || Math.round(Number(expense.totalValue) * 100) !== amountCents
-      || String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "") !== beneficiary.clean) {
+      || (!confirmation ? document !== beneficiary.clean : Boolean(document && document !== beneficiary.clean))) {
       throw new PaymentCliError("A despesa, o valor, a competência ou o CNPJ divergem. Nenhuma ação foi realizada.");
     }
-    const id = `expense_supplier_pix_${expenseId}`;
+    const actualExpenseId = confirmedForecast ? `supplier_pix_actual_${expenseId}` : expenseId;
+    const id = `expense_supplier_pix_${actualExpenseId}`;
     if (command === "supplier-pix-prepare") {
       const response = await paymentCliFetch(`${COALA_URL}/api/financial/expenses/${expenseId}/supplier-pix`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierEntityId, amountCents }), cache: "no-store",
+        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}) }), cache: "no-store",
       });
-      if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o preparo (HTTP ${response.status}). Consulte a despesa antes de repetir.`);
+      if (!response.ok) {
+        const error = await paymentCliJson<{ error?: { code?: string; message?: string } }>(response).catch(() => null);
+        const message = error?.error?.code?.startsWith("EXPENSE_SUPPLIER_PIX_") ? error.error.message : null;
+        throw new PaymentCliError(message || `O Coala não confirmou o preparo (HTTP ${response.status}). Consulte a despesa antes de repetir.`);
+      }
       const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
-      if (body.request?.id !== id) throw new PaymentCliError("O Coala não confirmou a solicitação esperada. Consulte a despesa antes de repetir.");
-      return printStatus({ ...body.request, amount: amountCents / 100 });
+      if (body.request?.id !== id || (confirmation && body.request.expenseId !== actualExpenseId)) {
+        throw new PaymentCliError("O Coala não confirmou a solicitação esperada. Consulte a despesa antes de repetir.");
+      }
+      stdout.write(`${JSON.stringify({ expenseId: actualExpenseId, id, status: body.request.status, amount: amountCents / 100 })}\n`);
+      return;
     }
     const request = (await coalaGet(token)).find((item) => item.id === id);
     const snapshot = request?.beneficiarySnapshot as Record<string, unknown> | undefined;

@@ -49,6 +49,7 @@ export async function reconcileExpenseProvisionOnServer(
     identity?: { provisionSeriesKey: string; provisionCompetence: string; provisionType: "actual" };
     expensePatch?: RawRecord;
     createIfMissing?: RawRecord;
+    requiredProvisionId?: string;
   } = {},
 ) {
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
@@ -107,6 +108,21 @@ export async function reconcileExpenseProvisionOnServer(
       });
     }
     const consultation = consultExpenseProvision({ ...actual, ...identity }, related);
+    if (options.requiredProvisionId) {
+      if (!("provision" in consultation) || consultation.provision.id !== options.requiredProvisionId) {
+        return { status: "missing" as const };
+      }
+      const provision = asRecord(consultation.provision);
+      const [payments, requests] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", options.requiredProvisionId).limit(1)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", options.requiredProvisionId).limit(1)),
+      ]);
+      if (!payments.empty || !requests.empty || provision.paymentRequestId || provision.linkedBankTransactionId
+        || moneyToCents(provision.totalValue) !== moneyToCents(actual.totalValue)) {
+        throw new AppError({ code: "EXPENSE_PROVISION_NOT_AVAILABLE", kind: "CONFLICT",
+          safeMessage: "A previsão possui pagamento, ordem bancária ou valor divergente." });
+      }
+    }
     const accountingFields = financialExpenseAccountingFields({ ...actual, ...identity });
     const referenceCenterFields = inheritExpenseReferenceCenter(
       actual,

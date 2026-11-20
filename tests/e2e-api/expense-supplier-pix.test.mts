@@ -145,4 +145,62 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   const request = await requests.doc(requestId).get();
   assert.equal(request.get("status"), "ready_to_submit");
   assert.equal(request.get("interRequestId"), undefined);
+
+  const octoberEntity = "supplier-pix-missing-document";
+  const octoberDocument = "11444777000161";
+  const octoberForecast = "supplier-pix-october-forecast";
+  const octoberActual = `supplier_pix_actual_${octoberForecast}`;
+  const paidExpense = "supplier-pix-paid-history";
+  const paidRequest = "supplier-pix-paid-history";
+  await db.collection("entities").doc(octoberEntity).set({ type: "pessoa_juridica", name: "Prestador de Teste Ltda", document: "" });
+  await expenses.doc(paidExpense).set({ workspaceId: "coala", supplier: "Prestador de Teste", paymentRequestId: paidRequest });
+  await requests.doc(paidRequest).set({
+    expenseId: paidExpense, status: "paid", statementReconciliationStatus: "matched",
+    barcodeSnapshot: { beneficiaryDocument: octoberDocument },
+  });
+  const date = new Date("2026-10-17T15:00:00.000Z");
+  await expenses.doc(octoberForecast).set({
+    status: "provisioned", provisionType: "forecast", sourceType: "recurring_expense_forecast",
+    supplier: "Prestador de Teste", description: "Cobrança de teste em outubro", totalValue: 536.64,
+    provisionSeriesKey: "recurring:prestador:teste", provisionCompetence: "2026-10", competenceMonth: "2026-10",
+    dueDate: date, unitId: "test-unit", accountPlan: "test-account", referenceResultCenterId: "test-center",
+  });
+  const confirmOctober = (competenceMonth: string) => post(`/api/financial/expenses/${octoberForecast}/supplier-pix`, token, {
+    supplierEntityId: octoberEntity, amountCents: 53664,
+    confirmation: { beneficiaryDocument: octoberDocument, competenceMonth, previousPaidRequestId: paidRequest, allowExistingBoleto: false },
+  });
+  assert.equal((await confirmOctober("2026-11")).status, 409);
+  assert.equal((await expenses.doc(octoberActual).get()).exists, false);
+  assert.equal((await db.collection("entities").doc(octoberEntity).get()).get("document"), "");
+  const confirmedOctober = await confirmOctober("2026-10");
+  const octoberResponse = await confirmedOctober.json();
+  assert.equal(confirmedOctober.status, 200, JSON.stringify(octoberResponse));
+  assert.equal(octoberResponse.request.expenseId, octoberActual);
+  assert.equal((await expenses.doc(octoberForecast).get()).get("status"), "reconciled");
+  const october = await expenses.doc(octoberActual).get();
+  assert.equal(october.get("accountPlan"), "test-account");
+  assert.equal(october.get("billingIdentity.supplierTaxId"), octoberDocument);
+  assert.equal(october.get("paymentRequestId"), octoberResponse.request.id);
+  assert.equal((await db.collection("entities").doc(octoberEntity).get()).get("document"), octoberDocument);
+  assert.equal((await confirmOctober("2026-10")).status, 200);
+  assert.equal((await requests.where("expenseId", "==", octoberActual).get()).size, 1);
+
+
+  const { assertExpenseSupplierPixTarget } = await import("../../src/features/financial/payment-requests/expense-supplier-pix.server");
+  const { paymentBarcodeHash } = await import("../../src/features/financial/inbox/document-identity");
+  const syntheticCode = "1".repeat(47);
+  const withBoleto = {
+    ...october.data(),
+    paymentRequestId: null,
+    boletoAttachment: {
+      barcode: syntheticCode, storagePath: "test-only.pdf", beneficiaryDocument: octoberDocument,
+      amountCents: 53664, competenceMonth: "2026-10",
+    },
+  };
+  const pin = { competenceMonth: "2026-10", previousPaidRequestId: paidRequest, replacedBoletoHash: paymentBarcodeHash(syntheticCode) };
+  assert.equal(assertExpenseSupplierPixTarget(withBoleto, "coala", octoberEntity, octoberDocument, 53664, pin), "Cobrança de teste em outubro");
+  assert.throws(() => assertExpenseSupplierPixTarget(withBoleto, "coala", octoberEntity, octoberDocument, 53664), /boleto ou a competência/);
+  const mismatched = { ...withBoleto, boletoAttachment: { ...withBoleto.boletoAttachment, amountCents: 53665 } };
+  assert.throws(() => assertExpenseSupplierPixTarget(mismatched, "coala", octoberEntity, octoberDocument, 53664, pin), /arquivo do boleto/);
+
 });
