@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   bulkWorkShiftRouteSchema,
   bulkWorkShiftSchema,
+  manualJourneyDraftSchema,
   saveWorkShiftSchema,
   workShiftRouteSchema,
 } from '../../src/features/dp/shifts/schemas';
@@ -41,6 +42,9 @@ test('aceita intervalo local dentro do período de uma jornada manual', () => {
   const manual = { ...validShift, shiftDefinitionId: undefined,
     manualDay: { mode: 'flexible', expectedWorkMinutes: 480, expectedBreakMinutes: 60 } };
   assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '12:00', end: '13:00' } }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, travelFromPreviousMinutes: 25 }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, travelFromPreviousMinutes: -1 }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, travelFromPreviousMinutes: 25 }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '08:00', end: '09:00' } }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, manualBreak: { start: '12:00', end: '13:00' } }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse(manual).success, true);
@@ -103,4 +107,18 @@ test('submete atribuição individual e troca em lote à jornada resolvida', () 
     assert.match(source, /journeyResolution/);
     assert.match(source, /journeyValidationVersion/);
   }
+});
+
+test('aceita trechos da jornada em mais de uma escala e rejeita alvos repetidos', () => {
+  const segment = { scheduleId: 'matriz-dezembro', shiftId: 'manha', expectedDraftVersion: 3,
+    expectedDraftGenerationId: 'initial', expectedOperationalVersion: 0, existing: true, unitId: 'matriz', startTime: '07:00', endTime: '09:30' };
+  const day = { userId: 'user-1', date: '2026-12-04', manualDay: { mode: 'fixed', expectedBreakMinutes: 60 } };
+  const destination = { ...segment, scheduleId: 'tirirical-dezembro', unitId: 'tirirical',
+    shiftId: 'tarde', existing: false, startTime: '10:00', endTime: '16:30',
+    manualBreak: { start: '12:00', end: '13:00' } };
+  assert.equal(manualJourneyDraftSchema.safeParse({ ...day, segments: [segment, destination] }).success, true);
+  assert.equal(manualJourneyDraftSchema.safeParse({ ...day, segments: [segment, segment] }).success, false);
+  assert.equal(manualJourneyDraftSchema.safeParse({
+    ...day, segments: [{ ...segment, expectedDraftVersion: -1 }],
+  }).success, false);
 });

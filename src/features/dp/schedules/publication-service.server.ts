@@ -12,7 +12,7 @@ import { canAccessUnit, canAccessUserByUnit } from '@/lib/unit-access';
 import { hasPublishedScheduleVersion, mergeScheduleDraft, scheduleDraftBaseFingerprint, scheduleShiftFingerprint, type DPScheduleDraftEdit } from '@/lib/dp-schedule-publication';
 import type { DraftDayOffInput } from '@/features/dp/day-offs/schemas';
 import { assertPublishDayOffPermission, dayOffOperationRef } from '@/features/dp/day-offs/service.server';
-import type { SaveWorkShiftInput, BulkWorkShiftInput } from '@/features/dp/shifts/schemas';
+import type { ManualJourneyDraftInput, SaveWorkShiftInput, BulkWorkShiftInput } from '@/features/dp/shifts/schemas';
 import { validateScheduleJourneys } from '@/features/dp/journey-validation/service.server';
 import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
 import { buildDPShiftReference } from '@/lib/dp-shift-reference';
@@ -21,6 +21,7 @@ import { readOfficialScheduleShifts } from './official-revision.server';
 import { capturePublicationFence, preparePublicationFenceCommit } from './publication-fence.server';
 import { prepareScheduleRevision } from './revision-preparation.server';
 import { validatePublicationOccupancy } from './publication-validation.server';
+import { reviewSplitJourney } from './split-journey';
 
 export const MAX_PUBLICATION_CHANGES = 500;
 const MAX_OFFICIAL_SHIFTS = 2_000;
@@ -126,7 +127,7 @@ async function loadDraft(context: ServerUserContext, scheduleId: string, permiss
 export async function listEditableScheduleShifts(context: ServerUserContext, scheduleId: string) {
   const state = await loadDraft(context, scheduleId, 'edit');
   return { shifts: [...state.merged].map(([id, value]) => ({ id, ...value })).sort((a, b) => String((a as Shift).date).localeCompare(String((b as Shift).date))),
-    conflicts: state.conflicts, draftVersion: draftVersion(state.schedule), draftGenerationId: state.generation };
+    conflicts: state.conflicts, draftVersion: draftVersion(state.schedule), draftGenerationId: state.generation, operationalVersion: Number(state.schedule.get('operationalVersion') ?? 0) };
 }
 
 /** Descartar conflitos é uma escolha explícita do DP; nunca rebaseia uma alteração operacional silenciosamente. */
@@ -219,58 +220,109 @@ export async function stageScheduleDayOff(context: ServerUserContext, scheduleId
   });
 }
 
-export async function stageWorkShift(params: { context: ServerUserContext; scheduleId: string; shiftId: string; input?: SaveWorkShiftInput; mode: 'create' | 'update' | 'delete'; requestId: string }) {
+async function prepareWorkShift(tx: Transaction, params: { context: ServerUserContext; scheduleId: string; shiftId: string; input?: SaveWorkShiftInput; mode: 'create' | 'update' | 'delete'; requestId: string }, group?: { version: number; generation: string; operationalVersion: number; userId: string; date: string }) {
   const { context, scheduleId, shiftId, input, mode } = params;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
-  return dbAdmin.runTransaction(async (tx) => {
-    const schedule = await tx.get(scheduleRef);
-    const unitId = assertAccess(context, schedule, 'edit');
-    const generation = draftGeneration(schedule);
-    const editRef = draftEditRef(scheduleRef, generation, shiftId);
-    const [official] = await currentShifts(tx, schedule, [shiftId]);
-    const [edit, editCount] = await Promise.all([tx.get(editRef),
-      tx.get(scheduleRef.collection('draftEdits').where('generationId', '==', generation).limit(MAX_DRAFT_EDITS + 1))]);
-    if (editCount.size >= MAX_DRAFT_EDITS && !edit.exists) fail('DP_SCHEDULE_DRAFT_LIMIT', 'DATA_INTEGRITY', 'O rascunho excede 500 turnos alterados.');
-    const current = edit.exists ? draft(edit).value : official;
-    if (mode === 'create' && current) fail('DP_SHIFT_ID_COLLISION', 'CONFLICT', 'O turno já existe no rascunho.');
-    if (mode !== 'create' && !current) fail('DP_SHIFT_NOT_FOUND', 'NOT_FOUND', 'Turno não encontrado no rascunho.');
-    if (current?.type === 'day_off') fail('DP_SHIFT_DAY_OFF_IMMUTABLE', 'CONFLICT', 'Uma folga não pode ser editada como turno.');
-    if (input) {
-      assertPeriod(schedule, input.date, unitId, input.unitId);
-      if ((schedule.get('draftClosedDates') ?? schedule.get('closedDates') ?? []).includes(input.date)) {
-        fail('DP_SCHEDULE_DAY_CLOSED', 'VALIDATION', 'Reabra a unidade antes de lançar um turno neste dia.');
-      }
-      const user = await tx.get(dbAdmin.collection('users').doc(input.userId));
-      if (!user.exists || user.get('isActive') === false) fail('DP_SHIFT_USER_UNAVAILABLE', 'VALIDATION', 'Colaboradora não encontrada ou inativa.');
-      if (input.shiftDefinitionId) {
-        const definition = await tx.get(dbAdmin.collection('dp_shiftDefinitions').doc(input.shiftDefinitionId));
-        if (!definition.exists || definition.get('isArchived') === true) fail('DP_SHIFT_DEFINITION_UNAVAILABLE', 'VALIDATION', 'Definição de turno indisponível.');
-      }
+  const schedule = await tx.get(scheduleRef);
+  const unitId = assertAccess(context, schedule, 'edit');
+  if (group) {
+    assertDraftDayOffWorkspace(context, schedule);
+    if (draftVersion(schedule) !== group.version || draftGeneration(schedule) !== group.generation
+      || Number(schedule.get('operationalVersion') ?? 0) !== group.operationalVersion) {
+      fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'A escala mudou. Abra a jornada novamente.');
     }
-    const manualDayId = input?.manualDay
-      ? createHash('sha256').update(JSON.stringify([context.workspace_id, input.userId, input.date])).digest('hex')
-      : null;
-    const now = Timestamp.now();
-    const value = input ? {
-      ...(current ?? {}), scheduleId, unitId, userId: input.userId,
-      userName: input.userName ?? current?.userName ?? null, date: input.date,
-      startTime: input.startTime, endTime: input.endTime, overnight: input.endTime < input.startTime,
-      type: 'work', shiftDefinitionId: input.shiftDefinitionId ?? null,
-      ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualBreak: input.manualBreak ?? null } : {}),
-      exceptionReason: input.exceptionReason ?? current?.exceptionReason ?? null,
-      updatedAt: now, ...(mode === 'create' ? { createdAt: now } : {}),
-    } : null;
+  }
+  const generation = draftGeneration(schedule);
+  const editRef = draftEditRef(scheduleRef, generation, shiftId);
+  const [official] = await currentShifts(tx, schedule, [shiftId]);
+  const [edit, editCount] = await Promise.all([tx.get(editRef),
+    tx.get(scheduleRef.collection('draftEdits').where('generationId', '==', generation).limit(MAX_DRAFT_EDITS + 1))]);
+  if (editCount.size >= MAX_DRAFT_EDITS && !edit.exists) fail('DP_SCHEDULE_DRAFT_LIMIT', 'DATA_INTEGRITY', 'O rascunho excede 500 turnos alterados.');
+  if (group && edit.exists
+    && scheduleDraftBaseFingerprint(draft(edit).baseFingerprint, false) !== scheduleShiftFingerprint(official)) {
+    fail('DP_SCHEDULE_DRAFT_CONFLICT', 'CONFLICT', 'O turno mudou na escala oficial. Resolva o conflito no rascunho.');
+  }
+  const current = edit.exists ? draft(edit).value : official;
+  if (mode === 'create' && current) fail('DP_SHIFT_ID_COLLISION', 'CONFLICT', 'O turno já existe no rascunho.');
+  if (mode !== 'create' && !current) fail('DP_SHIFT_NOT_FOUND', 'NOT_FOUND', 'Turno não encontrado no rascunho.');
+  if (group && current && (current.userId !== group.userId || current.date !== group.date)) {
+    fail('DP_SHIFT_DAY_MISMATCH', 'CONFLICT', 'O turno pertence a outra pessoa ou data.');
+  }
+  if (current?.type === 'day_off') fail('DP_SHIFT_DAY_OFF_IMMUTABLE', 'CONFLICT', 'Uma folga não pode ser editada como turno.');
+  if (input) {
+    assertPeriod(schedule, input.date, unitId, input.unitId);
+    if ((schedule.get('draftClosedDates') ?? schedule.get('closedDates') ?? []).includes(input.date)) {
+      fail('DP_SCHEDULE_DAY_CLOSED', 'VALIDATION', 'Reabra a unidade antes de lançar um turno neste dia.');
+    }
+    const user = await tx.get(dbAdmin.collection('users').doc(input.userId));
+    if (!user.exists || user.get('isActive') === false) fail('DP_SHIFT_USER_UNAVAILABLE', 'VALIDATION', 'Colaboradora não encontrada ou inativa.');
+    if (group && !canAccessUserByUnit(context.userDoc, user.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {
+      fail('DP_SHIFT_USER_FORBIDDEN', 'AUTHORIZATION', 'Sem acesso à colaboradora.');
+    }
+    if (input.shiftDefinitionId) {
+      const definition = await tx.get(dbAdmin.collection('dp_shiftDefinitions').doc(input.shiftDefinitionId));
+      if (!definition.exists || definition.get('isArchived') === true) fail('DP_SHIFT_DEFINITION_UNAVAILABLE', 'VALIDATION', 'Definição de turno indisponível.');
+    }
+  }
+  const manualDayId = input?.manualDay
+    ? createHash('sha256').update(JSON.stringify([context.workspace_id, input.userId, input.date])).digest('hex')
+    : null;
+  const now = Timestamp.now();
+  const value = input ? {
+    ...(current ?? {}), scheduleId, unitId, userId: input.userId,
+    userName: input.userName ?? current?.userName ?? null, date: input.date,
+    startTime: input.startTime, endTime: input.endTime, overnight: input.endTime < input.startTime,
+    type: 'work', shiftDefinitionId: input.shiftDefinitionId ?? null,
+    ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualBreak: input.manualBreak ?? null,
+      travelFromPreviousMinutes: input.manualDay ? input.travelFromPreviousMinutes ?? null : null } : {}),
+    exceptionReason: input.exceptionReason ?? current?.exceptionReason ?? null,
+    updatedAt: now, ...(mode === 'create' ? { createdAt: now } : {}),
+  } : null;
+  const apply = (updateSchedule = true) => {
     tx.set(editRef, { generationId: generation, shiftId,
       baseFingerprint: scheduleDraftBaseFingerprint(
         edit.exists ? draft(edit).baseFingerprint : scheduleShiftFingerprint(official), Boolean(input?.manualDay)),
       value, updatedAt: now, updatedBy: context.decoded.uid });
-    tx.update(scheduleRef, { publicationStatus: 'draft', publicationVersion: schedule.get('publicationVersion') ?? (schedule.get('publicationStatus') === 'draft' ? 0 : 1),
+    if (updateSchedule) tx.update(scheduleRef, { publicationStatus: 'draft', publicationVersion: schedule.get('publicationVersion') ?? (schedule.get('publicationStatus') === 'draft' ? 0 : 1),
       draftGenerationId: generation, draftVersion: draftVersion(schedule) + 1, draftUpdatedAt: now, draftUpdatedBy: context.decoded.uid });
     tx.create(dbAdmin.collection('actionLogs').doc(), { workspace_id: context.workspace_id, user_id: context.decoded.uid,
       username: context.userDoc.username ?? null, module: 'dp.schedules', action: 'shift_draft_changed',
       metadata: { request_id: params.requestId, schedule_id: scheduleId, shift_id: shiftId, mode },
       ip_address: null, timestamp: now, ttl: Timestamp.fromMillis(now.toMillis() + 365 * 24 * 60 * 60 * 1000) });
     return { shiftId, draft: true };
+  };
+  return { scheduleId, editCount: editCount.size, addsEdit: !edit.exists, apply };
+}
+
+export async function stageWorkShift(params: Parameters<typeof prepareWorkShift>[1]) {
+  return dbAdmin.runTransaction(async (tx) => (await prepareWorkShift(tx, params)).apply());
+}
+
+export async function stageManualJourneyDraft(context: ServerUserContext, input: ManualJourneyDraftInput, requestId: string) {
+  const review = reviewSplitJourney(input.segments.map(({ shiftId, ...segment }) => ({ ...segment, id: shiftId })));
+  if (review.issues.length) fail('DP_MANUAL_JOURNEY_INVALID', 'VALIDATION', review.issues[0].message);
+  return dbAdmin.runTransaction(async (tx) => {
+    const prepared = await Promise.all(input.segments.map(({ scheduleId, shiftId, expectedDraftVersion, expectedDraftGenerationId, expectedOperationalVersion, existing,
+      unitId, startTime, endTime, manualBreak }) => prepareWorkShift(tx, {
+        context, scheduleId, shiftId, requestId, mode: existing ? 'update' : 'create',
+        input: { userId: input.userId, date: input.date, unitId, startTime, endTime,
+          manualDay: input.manualDay, manualBreak },
+      }, { version: expectedDraftVersion, generation: expectedDraftGenerationId, operationalVersion: expectedOperationalVersion,
+        userId: input.userId, date: input.date })));
+    const newEditsBySchedule = new Map<string, number>();
+    for (const item of prepared) {
+      const added = (newEditsBySchedule.get(item.scheduleId) ?? 0) + Number(item.addsEdit);
+      if (item.editCount + added > MAX_DRAFT_EDITS) {
+        fail('DP_SCHEDULE_DRAFT_LIMIT', 'DATA_INTEGRITY', 'O rascunho excede 500 turnos alterados.');
+      }
+      newEditsBySchedule.set(item.scheduleId, added);
+    }
+    const updated = new Set<string>();
+    for (const item of prepared) {
+      item.apply(!updated.has(item.scheduleId));
+      updated.add(item.scheduleId);
+    }
+    return { scheduleIds: [...newEditsBySchedule.keys()] };
   });
 }
 

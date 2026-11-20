@@ -16,7 +16,8 @@ export function scheduleShiftFingerprint(value: Record<string, unknown> | null):
     value.type ?? null, value.shiftDefinitionId ?? null, value.overnight === true,
     value.assignmentKind ?? null, value.originUnitId ?? null,
     value.exceptionReason ?? null,
-    ...(value.manualDay ? [value.manualDay, value.manualBreak ?? null] : []), value.dayOffSource ?? null,
+    ...(value.manualDay ? [value.manualDay, value.manualBreak ?? null] : []),
+    ...(value.travelFromPreviousMinutes != null ? [value.travelFromPreviousMinutes] : []), value.dayOffSource ?? null,
   ]);
 }
 

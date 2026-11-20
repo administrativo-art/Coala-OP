@@ -433,11 +433,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/page.tsx`](../../src/app/dashboard/dp/page.tsx).
 
-Arquivos locais percorridos: 16.
+Arquivos locais percorridos: 17.
 
 Chamadas candidatas encontradas:
 
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/hr/terminations` — interface [`src/features/hr/termination/active-terminations-card.tsx`](../../src/features/hr/termination/active-terminations-card.tsx); rota candidata [`src/app/api/hr/terminations/route.ts`](../../src/app/api/hr/terminations/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
@@ -448,7 +449,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx), [`src/app/dashboard/dp/schedules/month/[period]/page.tsx`](../../src/app/dashboard/dp/schedules/month/%5Bperiod%5D/page.tsx), [`src/app/dashboard/dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 62.
 
 Chamadas candidatas encontradas:
 
@@ -461,6 +462,7 @@ Chamadas candidatas encontradas:
 - `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
 - `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
 - `/api/dp/schedules/` — interface [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -820,6 +822,7 @@ Chamadas candidatas encontradas:
 - `/api/ai/analyze-goals` — interface [`src/components/goals-tracking-dashboard.tsx`](../../src/components/goals-tracking-dashboard.tsx); rota candidata [`src/app/api/ai/analyze-goals/route.ts`](../../src/app/api/ai/analyze-goals/route.ts)
 - `/api/catalogo` — interface [`src/components/product-simulation-category-provider.tsx`](../../src/components/product-simulation-category-provider.tsx); rota candidata [`src/app/api/catalogo/route.ts`](../../src/app/api/catalogo/route.ts)
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 
@@ -1315,6 +1318,7 @@ Chamadas candidatas encontradas:
 
 - `/api/dashboard/layouts` — interface [`src/features/management-dashboard/use-layouts.ts`](../../src/features/management-dashboard/use-layouts.ts); rota candidata [`src/app/api/dashboard/layouts/route.ts`](../../src/app/api/dashboard/layouts/route.ts)
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/goals/employee-goals` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx); rota candidata [`src/app/api/goals/employee-goals/route.ts`](../../src/app/api/goals/employee-goals/route.ts)
 - `/api/goals/periods/` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx)
