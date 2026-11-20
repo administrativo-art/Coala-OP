@@ -282,6 +282,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               || permissions.financial?.paymentRequests?.view,
           },
           {
+            label: "Fechamento do mês",
+            href: "/dashboard/financial/month-closing",
+            icon: ClipboardCheck,
+            show: isDefaultAdmin || (permissions.financial?.view && permissions.financial?.monthClosings?.view),
+          },
+          {
             label: "Conciliação e fechamento",
             href: "__group:reconciliation",
             icon: ClipboardCheck,

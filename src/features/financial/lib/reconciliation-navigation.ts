@@ -68,6 +68,7 @@ export function financialSidebarPath(pathname: string, visibleHrefs: string[]): 
     "/dashboard/financial/cash-deposits": "/dashboard/financial/cash-closures",
     "/dashboard/financial/budget-comparison": FINANCIAL_ROUTES.expenses,
     [FINANCIAL_ROUTES.stoneAnticipations]: FINANCIAL_ROUTES.stoneReceipts,
+    [FINANCIAL_ROUTES.monthClosingExpenses]: FINANCIAL_ROUTES.monthClosing,
   };
   const parent = parents[pathname];
   return parent && visibleHrefs.includes(parent) ? parent : pathname;
