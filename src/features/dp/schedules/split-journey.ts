@@ -4,13 +4,12 @@ export interface SplitJourneySegment {
   startTime: string;
   endTime: string;
   manualBreak?: { start: string; end: string } | null;
-  travelFromPreviousMinutes?: number | null;
 }
 
 type SplitJourneyIssue = {
   segmentId: string;
   previousSegmentId?: string;
-  code: 'invalid_time' | 'invalid_break' | 'overlap' | 'invalid_travel' | 'insufficient_travel';
+  code: 'invalid_time' | 'invalid_break' | 'overlap';
   message: string;
 };
 
@@ -48,24 +47,11 @@ export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
       }
     }
 
-    const travel = segment.travelFromPreviousMinutes;
     if (previous && start < previous.end) {
       issues.push({ segmentId: segment.id, previousSegmentId: previous.segment.id, code: 'overlap',
         message: 'Os horários dos trechos se sobrepõem.' });
     } else if (previous && previous.segment.unitId !== segment.unitId) {
-      const available = start - previous.end;
-      if (travel == null || !Number.isInteger(travel) || travel < 0) {
-        issues.push({ segmentId: segment.id, previousSegmentId: previous.segment.id, code: 'invalid_travel',
-          message: 'Informe o tempo de deslocamento entre as unidades.' });
-      } else if (travel > available) {
-        issues.push({ segmentId: segment.id, previousSegmentId: previous.segment.id, code: 'insufficient_travel',
-          message: `${available} min disponíveis para um deslocamento de ${travel} min.` });
-      } else {
-        travelMinutes += travel;
-      }
-    } else if (travel != null && travel !== 0) {
-      issues.push({ segmentId: segment.id, code: 'invalid_travel',
-        message: 'Informe deslocamento apenas entre trechos de unidades diferentes.' });
+      travelMinutes += start - previous.end;
     }
 
     if (!previous || previous.end < end) previous = { segment, end };
@@ -73,4 +59,33 @@ export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
 
   return { segments: ordered, issues, workMinutes, breakMinutes, travelMinutes,
     journeyMinutes: workMinutes + travelMinutes };
+}
+
+export function validSplitJourneyShiftIds(shifts: readonly (SplitJourneySegment & {
+  userId: string;
+  date: string;
+  manualDayId?: string | null;
+  manualDay?: { mode: string; expectedBreakMinutes: number; expectedWorkMinutes?: number } | null;
+})[]) {
+  const days = new Map<string, Array<(typeof shifts)[number]>>();
+  for (const shift of shifts) {
+    const key = JSON.stringify([shift.userId, shift.date]);
+    const periods = days.get(key) ?? [];
+    periods.push(shift);
+    days.set(key, periods);
+  }
+
+  const ids = new Set<string>();
+  for (const periods of days.values()) {
+    const first = periods[0];
+    const configuration = first.manualDay;
+    if (!first.manualDayId || !configuration || new Set(periods.map(({ unitId }) => unitId)).size < 2) continue;
+    if (periods.some((period) => period.manualDayId !== first.manualDayId
+      || period.manualDay?.mode !== configuration.mode
+      || period.manualDay?.expectedBreakMinutes !== configuration.expectedBreakMinutes
+      || period.manualDay?.expectedWorkMinutes !== configuration.expectedWorkMinutes)) continue;
+    if (reviewSplitJourney(periods).issues.length) continue;
+    periods.forEach(({ id }) => ids.add(id));
+  }
+  return ids;
 }

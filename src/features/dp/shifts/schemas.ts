@@ -131,3 +131,33 @@ export const bulkWorkShiftSchema = z.discriminatedUnion('action', [
 });
 
 export type BulkWorkShiftInput = z.infer<typeof bulkWorkShiftSchema>;
+
+export const manualJourneyDraftSchema = z.object({
+  userId: z.string().trim().min(1).max(180),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  manualDay: manualShiftDaySchema,
+  segments: z.array(workShiftRouteSchema.extend({
+    expectedDraftVersion: z.number().int().nonnegative(),
+    expectedDraftGenerationId: z.string().min(1).max(180).regex(/^[^/]+$/),
+    expectedOperationalVersion: z.number().int().nonnegative(),
+    existing: z.boolean(),
+    unitId: z.string().trim().min(1).max(180),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    manualBreak: z.object({ start: timeSchema, end: timeSchema }).strict().optional(),
+  }).strict()).min(1).max(32),
+}).strict().superRefine((day, ctx) => {
+  const keys = new Set<string>();
+  for (const [index, segment] of day.segments.entries()) {
+    const key = JSON.stringify([segment.scheduleId, segment.shiftId]);
+    const { unitId, startTime, endTime, manualBreak } = segment;
+    if (keys.has(key) || segment.scheduleId.includes('/') || segment.shiftId.includes('/') || !saveWorkShiftSchema.safeParse({
+      unitId, startTime, endTime, manualBreak, userId: day.userId, date: day.date, manualDay: day.manualDay,
+    }).success) {
+      ctx.addIssue({ code: 'custom', path: ['segments', index], message: 'Confira os dados e os horários do trecho.' });
+    }
+    keys.add(key);
+  }
+});
+
+export type ManualJourneyDraftInput = z.infer<typeof manualJourneyDraftSchema>;
