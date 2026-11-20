@@ -87,6 +87,18 @@ object TimeRules {
         val pauses = when { shift.breakType == "fixed" -> shift.breakSegments?.size ?: 1; shift.breakSplit == "multiple" -> shift.breakPauseCount; else -> 1 }
         return pauses?.let { 2 + 2 * it }
     }
+    fun manualSegments(shifts: List<OwnShift>, date: String) =
+        shifts.filter { it.date == date && it.manualOrder != null }.sortedBy { it.manualOrder }
+
+    fun currentManualSegment(segments: List<OwnShift>, markings: List<OwnMarking>, date: String): OwnShift? {
+        var index = 0
+        for (marking in markings.filter { it.workDate == date }.sortedWith(compareBy({ markingInstant(it.markedAt) }, { it.nsr }))) {
+            if (marking.executionUnitId == segments.getOrNull(index)?.unitId &&
+                marking.classification?.purpose == "journey_end") index++
+        }
+        return segments.getOrNull(index)
+    }
+
     val PUNCH_PURPOSES = listOf("journey_start" to "Início da jornada", "break_start" to "Início do intervalo",
         "break_end" to "Volta do intervalo", "journey_end" to "Fim da jornada")
     fun purposeLabel(value: String?) = PUNCH_PURPOSES.firstOrNull { it.first == value }?.second ?: "Classificação pendente"
