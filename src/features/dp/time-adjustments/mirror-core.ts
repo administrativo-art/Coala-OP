@@ -2,6 +2,8 @@
  * Espelho de ponto do fechamento (Etapa 6, parte 2). O instantâneo é montado uma vez por pessoa e versão do
  * fechamento e gravado; o PDF é sempre derivado dele, nunca do cadastro atual. Puro e testável.
  */
+import { manualPlannedDayMinutes, type ManualPlannedShift } from '@/features/dp/schedules/split-journey';
+
 import { competenceRange, sha256, type ClosureAbsence, type ClosureAdjustment, type ClosurePerson, type ClosureShiftSwap } from './closure-core';
 
 export const MIRROR_TITLE = 'Espelho de ponto' as const;
@@ -26,7 +28,7 @@ export type MirrorInputs = {
   workspaceId: string; competence: string; closureVersion: number; manifestHash: string; generatedAt: string; clockSource: 'hora_legal' | 'server';
   employee: { uid: string; name: string; cpf: string | null }; employer: { legalName: string | null; cnpj: string | null };
   markings: Array<{ workDate: string; nsr: number; markedAt: string }>;
-  shifts: Array<{ date: string; type: 'work' | 'day_off'; startTime: string | null; endTime: string | null; shiftName: string | null }>;
+  shifts: Array<ManualPlannedShift & { date: string; type: 'work' | 'day_off'; shiftName: string | null; manualOrder?: number }>;
   declaration: ClosurePerson | null; truncated: boolean; actors: Record<string, string>;
 };
 
@@ -60,7 +62,14 @@ export function buildMirrorSnapshot(input: MirrorInputs): MirrorSnapshot {
   const days: MirrorDay[] = [];
   for (let cursor = Date.parse(`${start}T00:00:00Z`); cursor <= Date.parse(`${end}T00:00:00Z`); cursor += 86_400_000) {
     const date = new Date(cursor).toISOString().slice(0, 10);
-    const shift = input.shifts.find((item) => item.date === date) ?? null;
+    const dayShifts = input.shifts.filter((item) => item.date === date);
+    const shift = dayShifts[0] ?? null;
+    const segments = dayShifts.filter((item) => item.type === 'work' && item.manualOrder != null);
+    const plannedMinutes = segments.length ? manualPlannedDayMinutes(segments) : null;
+    const shiftLabel = segments.length
+      ? (plannedMinutes === null ? 'Carga a conferir' : `${hoursText(plannedMinutes)} planejadas`)
+      : (shift?.type === 'day_off' ? 'Folga'
+        : shift ? [shift.startTime && shift.endTime ? `${shift.startTime}–${shift.endTime}` : null, shift.shiftName].filter(Boolean).join(' · ') || 'Turno' : null);
     const originals: MirrorPunch[] = input.markings.filter((item) => item.workDate === date)
       .map((item) => ({ time: clock(item.markedAt), at: item.markedAt, nsr: item.nsr, mark: discarded.has(`${item.nsr}|${item.markedAt}`) ? 'discarded' as const : 'original' as const }));
     const included: MirrorPunch[] = approved.filter((item) => item.workDate === date).flatMap((item) => operations(item))
@@ -70,7 +79,7 @@ export function buildMirrorSnapshot(input: MirrorInputs): MirrorSnapshot {
       .map((item) => `${item.typeName}${item.approval === 'tacit_timeout' ? ' (aprovada por decurso de prazo)' : ''}`);
     if (!shift && !punches.length && !dayAbsences.length) continue;
     days.push({
-      date, shift: shift ? (shift.type === 'day_off' ? 'Folga' : [shift.startTime && shift.endTime ? `${shift.startTime}–${shift.endTime}` : null, shift.shiftName].filter(Boolean).join(' · ') || 'Turno') : null,
+      date, shift: shiftLabel,
       punches, pairedMinutes: pairedMinutes(punches.filter((item) => item.mark !== 'discarded').map((item) => item.at)), absences: dayAbsences,
     });
   }

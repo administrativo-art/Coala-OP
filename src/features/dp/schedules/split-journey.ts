@@ -25,6 +25,35 @@ function minuteOfDay(time: string) {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 }
 
+export type ManualPlannedShift = {
+  manualMode?: 'fixed' | 'flexible';
+  manualWorkMinutes?: number;
+  startTime: string | null;
+  endTime: string | null;
+  breakDurationMinutes?: number | null;
+};
+
+function manualPlannedMinutesOf(shift: ManualPlannedShift): number | null {
+  if (shift.manualMode === 'flexible') {
+    const minutes = shift.manualWorkMinutes;
+    return typeof minutes === 'number' && Number.isSafeInteger(minutes) && minutes > 0 ? minutes : null;
+  }
+  if (shift.manualMode !== 'fixed' || !shift.startTime || !shift.endTime) return null;
+  const span = minuteOfDay(shift.endTime) - minuteOfDay(shift.startTime);
+  const minutes = span - (shift.breakDurationMinutes ?? 0);
+  return Number.isSafeInteger(minutes) && minutes > 0 ? minutes : null;
+}
+
+export function manualPlannedDayMinutes(shifts: readonly ManualPlannedShift[]) {
+  let total = 0;
+  for (const shift of shifts) {
+    const minutes = manualPlannedMinutesOf(shift);
+    if (minutes === null) return null;
+    total += minutes;
+  }
+  return total;
+}
+
 export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
   const explicitOrder = segments.every((segment) => segment.manualOrder != null);
   const ordered = [...segments].sort((left, right) => explicitOrder
