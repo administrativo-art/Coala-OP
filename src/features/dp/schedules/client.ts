@@ -38,7 +38,7 @@ export function fetchScheduleShifts(scheduleId: string) {
 }
 
 export function fetchDraftScheduleShifts(scheduleId: string) {
-  return authenticatedApiRequest<{ shifts: DPShift[]; conflicts: string[]; draftVersion: number }>(
+  return authenticatedApiRequest<{ shifts: DPShift[]; conflicts: string[]; draftVersion: number; draftGenerationId: string; operationalVersion: number }>(
     `/api/dp/schedules/${encodeURIComponent(scheduleId)}/draft-shifts`,
     { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
   );
@@ -70,4 +70,13 @@ export function fetchScheduleJourneyValidation(scheduleId: string) {
     `/api/dp/schedules/${encodeURIComponent(scheduleId)}/journey-validation`,
     { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
   ).then((payload) => payload.validation);
+}
+
+export async function saveManualJourneyDraft(input: import('@/features/dp/shifts/schemas').ManualJourneyDraftInput) {
+  const result = await authenticatedApiRequest<{ scheduleIds: string[] }>('/api/dp/schedules/manual-journey', {
+    method: 'POST',
+    json: input,
+    getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
+  });
+  result.scheduleIds.forEach(notifyDPScheduleShiftsChanged);
 }
