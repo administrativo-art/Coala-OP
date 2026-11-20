@@ -24,7 +24,7 @@ import {
   planInboxPixCopyPastePreparation,
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
-import { assertExpenseSupplierPixTarget, assertSupplierPixBeneficiary } from "./expense-supplier-pix.server";
+import { assertArchivedBoletoUnused, assertExpenseSupplierPixTarget, assertSupplierPixBeneficiary } from "./expense-supplier-pix.server";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
 import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
@@ -1281,7 +1281,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       const document = expense.get("billingIdentity.supplierTaxId");
       const description = assertExpenseSupplierPixTarget(
         expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
-        normalizeBrazilianDocument(document), Math.round(current.amount * 100),
+        normalizeBrazilianDocument(document), Math.round(current.amount * 100), current.supplierPixConfirmation,
       );
       if (current.workspaceId !== WORKSPACE_ID || expense.get("paymentRequestId") !== current.id
         || current.description !== description || !payment.empty
@@ -1697,11 +1697,12 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       const expense = await financialDbAdmin.collection("expenses").doc(pending.sourceId).get();
       const description = assertExpenseSupplierPixTarget(
         expense.data(), WORKSPACE_ID, pending.beneficiaryReference.sourceId,
-        document, Math.round(pending.amount * 100),
+        document, Math.round(pending.amount * 100), pending.supplierPixConfirmation,
       );
       if (expense.get("paymentRequestId") !== pending.id || pending.description !== description) {
         throw new Error("A despesa mudou após a autorização.");
       }
+      await assertArchivedBoletoUnused(expense.data(), pending.supplierPixConfirmation?.replacedBoletoHash);
     }
     if (!pending.beneficiarySnapshot.documentHash) {
       const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, pending.beneficiarySnapshot.resolvedAt);
@@ -1879,6 +1880,14 @@ async function completeSource(request: BankPaymentRequest) {
       const expenseData = expense.data()!;
       const installments = Array.isArray(expenseData.installments) ? expenseData.installments : [];
       const isInstallmentBoleto = request.sourceType === "expense_boleto" && installments.length > 1 && request.installmentNumber != null;
+      const supplierPixNote = request.sourceType === "expense_supplier_pix" && request.proofStoragePath && request.interRequestId
+        ? `Pix Banco Inter confirmado em ${String(request.paidAt).slice(0, 10)}${request.supplierPixConfirmation ? ` (competência ${request.supplierPixConfirmation.competenceMonth})` : ""}. Referência ${request.interRequestId}. Comprovante anexado.`
+        : null;
+      const notes = typeof expenseData.notes === "string" ? expenseData.notes : "";
+      const supplierPixProof = supplierPixNote ? {
+        paymentProofStoragePath: request.proofStoragePath,
+        notes: notes.includes(supplierPixNote) ? notes : [notes, supplierPixNote].filter(Boolean).join("\n"),
+      } : {};
       const isSingleInstallmentPix = installments.length === 1
         && (request.sourceType === "consultancy_provision" || request.sourceType === "expense_supplier_pix");
       if (isInstallmentBoleto || isSingleInstallmentPix) {
@@ -1888,12 +1897,13 @@ async function completeSource(request: BankPaymentRequest) {
         const allPaid = nextInstallments.every((item: Record<string, unknown>) => item.status === "paid" || Boolean(item.paidAt));
         transaction.set(expenseRef, {
           installments: nextInstallments,
+          ...supplierPixProof,
           status: allPaid ? "paid" : expenseData.status,
           ...(allPaid ? { paidAt: request.paidAt } : {}),
           updatedAt: now,
         }, { merge: true });
       } else {
-        transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: now }, { merge: true });
+        transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, ...supplierPixProof, updatedAt: now }, { merge: true });
       }
       transaction.set(financialDbAdmin.collection("transactions").doc(`inter_${request.id}`), {
         type: "expense", expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id,

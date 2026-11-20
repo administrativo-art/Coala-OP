@@ -148,6 +148,11 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
   beneficiarySnapshot: BeneficiarySnapshot;
   barcodeSnapshot?: never;
   pixCopyPasteSnapshot?: never;
+  supplierPixConfirmation?: {
+    competenceMonth: string;
+    previousPaidRequestId: string;
+    replacedBoletoHash?: string;
+  };
   status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 
