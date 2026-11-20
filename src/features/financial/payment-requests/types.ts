@@ -5,8 +5,8 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "scheduled" | "processing" | "awaiting_statement" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "consultancy_provision" | "financial_inbox" | "expense_boleto";
-export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto">;
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "consultancy_provision" | "financial_inbox" | "expense_boleto" | "expense_supplier_pix";
+export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto" | "expense_supplier_pix">;
 export type BankPaymentRail = "pix" | "barcode" | "pix_copy_paste";
 
 export type BarcodePaymentSnapshot = {
@@ -142,7 +142,7 @@ type BankPaymentRequestBase = {
 };
 
 export type PixBankPaymentRequest = BankPaymentRequestBase & {
-  sourceType: LegacyBankPaymentSourceType;
+  sourceType: LegacyBankPaymentSourceType | "expense_supplier_pix";
   paymentRail?: "pix";
   beneficiaryReference: PaymentBeneficiaryReference;
   beneficiarySnapshot: BeneficiarySnapshot;
