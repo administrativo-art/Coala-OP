@@ -9,6 +9,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
 import { useDPStore } from '@/store/use-dp-store';
+import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
 import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
@@ -814,9 +815,9 @@ function ManualDayOffDialog({
 }
 
 /** Um botão por dia: o operador escolhe o que lançar (turno, DSR ou ausência), em vez de procurar botões separados. */
-function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence, closed, onSetClosed, onCloseAll }: {
+function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence, closed, onSetClosed }: {
   canShift: boolean; canDayOff: boolean; canAbsence: boolean; onShift: () => void; onDayOff: () => void; onAbsence: () => void;
-  closed?: boolean; onSetClosed?: () => void; onCloseAll?: () => void;
+  closed?: boolean; onSetClosed?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (action: () => void) => () => { setOpen(false); action(); };
@@ -839,7 +840,6 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
         {onSetClosed && <button type="button" className={item} onClick={pick(onSetClosed)}>
           {closed ? 'Reabrir unidade neste dia' : 'Marcar unidade como fechada'}
         </button>}
-        {onCloseAll && <button type="button" className={item} onClick={pick(onCloseAll)}>Fechar todas as unidades acessíveis</button>}
       </PopoverContent>
     </Popover>
   );
@@ -2250,16 +2250,26 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         .map((date) => `${date}::${candidate.unitId}`)));
   }, [accessibleSchedules, isDefaultAdmin, permissions.dp?.schedules?.edit, publication, schedule.month, schedule.year]);
   const [savingClosedDay, setSavingClosedDay] = useState(false);
-  const closureTargets = accessibleSchedules.filter((candidate) => candidate.month === schedule.month
-    && candidate.year === schedule.year && candidate.unitId
-    && activeOperationalUnits(units).some((unit) => unit.id === candidate.unitId));
-  async function setClosedDay(date: string, unitId: string, closed: boolean, all = false) {
+  const activeUnitIds = new Set(activeOperationalUnits(units).map((unit) => unit.id));
+  const closureTargets = [...new Map([...accessibleSchedules, publication].filter((candidate) =>
+    candidate.month === schedule.month && candidate.year === schedule.year
+    && candidate.unitId && activeUnitIds.has(candidate.unitId))
+    .map((candidate) => [candidate.unitId, candidate])).values()];
+  const [manageDaysOpen, setManageDaysOpen] = useState(false);
+  const [managedDate, setManagedDate] = useState('');
+  const [managedScheduleIds, setManagedScheduleIds] = useState<string[]>([]);
+  const selectedClosureTargets = closureTargets.filter((candidate) => managedScheduleIds.includes(candidate.id));
+  const singleTarget = selectedClosureTargets.length === 1 ? selectedClosureTargets[0] : undefined;
+  const singleUnit = singleTarget && units.find((unit) => unit.id === singleTarget.unitId);
+  const singleClosedDates = singleTarget?.draftClosedDates ?? singleTarget?.closedDates ?? [];
+  const operatingDays = singleUnit ? countExpectedDPUnitDays({
+    unit: singleUnit, year: schedule.year, month: schedule.month, shiftDefinitions, closedDates: singleClosedDates,
+  }) : null;
+  async function setClosedDay(date: string, targets: DPSchedule[], closed: boolean) {
+    if (!targets.length || !days.some((day) => day.date === date)) return;
     setSavingClosedDay(true);
     try {
-      const current = closureTargets.find((candidate) => candidate.id === schedule.id && candidate.unitId === unitId);
-      if (!current) return;
-      const targets = all ? closureTargets : [current];
-      const result = await api<{ changed: string[] }>(`/api/dp/schedules/${encodeURIComponent(schedule.id)}/coverage-demands/${date}`, {
+      const result = await api<{ changed: string[] }>(`/api/dp/schedules/${encodeURIComponent(targets[0].id)}/coverage-demands/${date}`, {
         method: 'PATCH',
         json: { closed, schedules: targets.map((target) => ({ scheduleId: target.id, unitId: target.unitId })) },
         fallbackError: 'Falha ao atualizar o funcionamento do dia.',
@@ -2621,7 +2631,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         ) : !embedded && (
           <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         )}
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {embedded ? (
             <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
               {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
@@ -2632,18 +2642,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           {!embedded && (
             <p className="text-sm text-muted-foreground">{MONTHS[schedule.month - 1]} {schedule.year}</p>
           )}
+          {embedded && onPreviousMonth && onNextMonth && (
+            <div className="flex shrink-0 items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
+              <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
         <div className="col-span-full flex flex-wrap items-center justify-end gap-2">
-        {embedded && onPreviousMonth && onNextMonth && (
-          <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
-            <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
         <Badge className={publicationStatus === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
           Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
         </Badge>
@@ -2666,6 +2676,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             </Button>
           </div>
         )}
+        {canEdit && !bulkSelectionActive && !bulkCreateActive && closureTargets.length > 0 && (
+          <Button size="sm" variant="outline" onClick={() => {
+            setManagedDate(days[0]?.date ?? '');
+            setManagedScheduleIds(closureTargets.some((target) => target.id === schedule.id) ? [schedule.id] : []);
+            setManageDaysOpen(true);
+          }} className="h-8 rounded-[10px] px-3 text-[12.5px] font-bold">
+            <CalendarDays className="mr-2 h-4 w-4" />Gerenciar dias
+          </Button>
+        )}
         {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <Button
             size="sm"
@@ -2680,16 +2699,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
       {publicationStatus === 'draft' && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
-          {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
-          {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
-        </div>
-      )}
-      {publicationStatus === 'draft' && (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-          As jornadas e conflitos operacionais serão validados ao publicar.
+        <div className="mx-4 flex flex-wrap items-start gap-2 pt-3">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
+            {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
+            {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
+          </div>
+          <div className="inline-flex max-w-full rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700">
+            As jornadas e conflitos operacionais serão validados ao publicar.
+          </div>
         </div>
       )}
       {isArchivedUnitSchedule && (
@@ -3087,6 +3106,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             Feriado
                           </span>
                         )}
+                        {isPerUnit && schedule.unitId && closedDateKeys.has(`${date}::${schedule.unitId}`) && (
+                          <Badge variant="secondary" className="text-[9px]">Fechado</Badge>
+                        )}
                       </div>
                     </td>
 
@@ -3229,9 +3251,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         <DayLaunchMenu
                           closed={closed}
                           canShift={canEdit && !closed}
-                          onSetClosed={canEdit && isPerUnit && !savingClosedDay ? () => void setClosedDay(date, unit.id, !closed) : undefined}
-                          onCloseAll={canEdit && isPerUnit && !savingClosedDay && closureTargets.length > 1
-                            ? () => void setClosedDay(date, unit.id, true, true) : undefined}
+                          onSetClosed={canEdit && !savingClosedDay && closureTargets.some((target) => target.unitId === unit.id)
+                            ? () => void setClosedDay(date, closureTargets.filter((target) => target.unitId === unit.id), !closed) : undefined}
                           canDayOff={canAddDayOff}
                           canAbsence={canLaunchAbsence}
                           onShift={() => setAddDialog({ date, unitId: unit.id })}
@@ -3337,6 +3358,48 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
       </div>
       </div>
+
+      <Dialog open={manageDaysOpen && canEdit} onOpenChange={setManageDaysOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerenciar dias</DialogTitle>
+            <DialogDescription>Defina o funcionamento da data nas unidades selecionadas.</DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1 text-sm font-medium">
+            <span>Data</span>
+            <Input type="date" min={days[0]?.date} max={days.at(-1)?.date}
+              value={managedDate} onChange={(event) => setManagedDate(event.target.value)} />
+          </label>
+          <fieldset className="max-h-52 space-y-1 overflow-y-auto">
+            <legend className="mb-1 text-sm font-medium">Unidades</legend>
+            {closureTargets.map((target) => (
+              <label key={target.id} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted">
+                <input type="checkbox" checked={managedScheduleIds.includes(target.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setManagedScheduleIds((ids) => checked ? [...ids, target.id] : ids.filter((id) => id !== target.id));
+                  }} />
+                <span className="flex-1">{units.find((unit) => unit.id === target.unitId)?.name ?? target.unitId}</span>
+                {closedDateKeys.has(`${managedDate}::${target.unitId}`) && <Badge variant="secondary">Fechado</Badge>}
+              </label>
+            ))}
+          </fieldset>
+          {singleTarget && (
+            <dl className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm">
+              <div><dt className="text-muted-foreground">Dias de funcionamento</dt><dd className="text-xl font-bold">{operatingDays ?? '—'}</dd></div>
+              <div><dt className="text-muted-foreground">Dias fechados no mês</dt><dd className="text-xl font-bold">{singleClosedDates.length}</dd></div>
+            </dl>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={savingClosedDay || !days.some((day) => day.date === managedDate)
+              || !selectedClosureTargets.some((target) => closedDateKeys.has(`${managedDate}::${target.unitId}`))}
+              onClick={() => void setClosedDay(managedDate, selectedClosureTargets, false)}>Reabrir dia</Button>
+            <Button type="button" disabled={savingClosedDay || !days.some((day) => day.date === managedDate)
+              || !selectedClosureTargets.some((target) => !closedDateKeys.has(`${managedDate}::${target.unitId}`))}
+              onClick={() => void setClosedDay(managedDate, selectedClosureTargets, true)}>Fechar dia</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={canEdit && bulkSelectionActive && bulkEditDialogOpen} onOpenChange={setBulkEditDialogOpen}>
         <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
