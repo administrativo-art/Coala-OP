@@ -35,7 +35,7 @@ export function useTodayJourney(marking: Marking, enabled: boolean) {
       if (cancelled) return;
       const shifts = month.shifts.filter((shift) => shift.date === today);
       const shift = shifts.find((item) => item.type === "work") ?? shifts[0] ?? null;
-      setDay(buildDayView({ date: today, today, shift, markings: history.markings.filter((item) => item.workDate === today), absences: [] }));
+      setDay(buildDayView({ date: today, today, shift, shifts, markings: history.markings.filter((item) => item.workDate === today), absences: [] }));
       setLoaded(true);
     }).catch(() => {
       // Sem a leitura, a batida continua possível; só a sugestão da próxima finalidade fica sem base.

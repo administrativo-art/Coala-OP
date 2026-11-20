@@ -27,7 +27,9 @@ export const MAX_PUBLICATION_CHANGES = 500;
 const MAX_OFFICIAL_SHIFTS = 2_000;
 const MAX_DRAFT_EDITS = 500;
 type Shift = Record<string, unknown>;
-type DraftDocument = DPScheduleDraftEdit<Shift>;
+type DraftDocument = DPScheduleDraftEdit<Shift> & { linkedScheduleIds?: string[] };
+type ScheduleDraft = Awaited<ReturnType<typeof loadDraft>>;
+const MAX_LINKED_SCHEDULES = 10;
 
 function fail(code: string, kind: 'AUTHORIZATION' | 'CONFLICT' | 'NOT_FOUND' | 'VALIDATION' | 'DATA_INTEGRITY', safeMessage: string): never {
   throw new AppError({ code, kind, safeMessage });
@@ -77,7 +79,13 @@ function draft(document: DocumentSnapshot | QueryDocumentSnapshot): DraftDocumen
   if (typeof data.baseFingerprint !== 'string' || (data.value !== null && (typeof data.value !== 'object' || Array.isArray(data.value)))) {
     fail('DP_SCHEDULE_DRAFT_CORRUPT', 'DATA_INTEGRITY', 'O rascunho da escala está inconsistente.');
   }
-  return { baseFingerprint: data.baseFingerprint as string, value: data.value as Shift | null };
+  const linkedScheduleIds = data.linkedScheduleIds;
+  if (linkedScheduleIds !== undefined && (!Array.isArray(linkedScheduleIds)
+    || linkedScheduleIds.length > MAX_LINKED_SCHEDULES
+    || linkedScheduleIds.some((id) => typeof id !== 'string' || !id || id.includes('/')))) {
+    fail('DP_SCHEDULE_DRAFT_CORRUPT', 'DATA_INTEGRITY', 'O vínculo da jornada manual está inconsistente.');
+  }
+  return { baseFingerprint: data.baseFingerprint as string, value: data.value as Shift | null, linkedScheduleIds };
 }
 function assertPeriod(schedule: DocumentSnapshot, date: string, unitId: string, inputUnitId: string) {
   const month = Number(schedule.get('month')); const year = Number(schedule.get('year'));
@@ -124,10 +132,14 @@ async function loadDraft(context: ServerUserContext, scheduleId: string, permiss
   }));
   return { ref, schedule, official, edits, generation, published, pending, ...mergeScheduleDraft(published, pending) };
 }
+function linkedSchedules(state: ScheduleDraft) {
+  return new Set([...state.pending.values()].flatMap((edit) => edit.linkedScheduleIds ?? []));
+}
+
 export async function listEditableScheduleShifts(context: ServerUserContext, scheduleId: string) {
   const state = await loadDraft(context, scheduleId, 'edit');
   return { shifts: [...state.merged].map(([id, value]) => ({ id, ...value })).sort((a, b) => String((a as Shift).date).localeCompare(String((b as Shift).date))),
-    conflicts: state.conflicts, draftVersion: draftVersion(state.schedule), draftGenerationId: state.generation, operationalVersion: Number(state.schedule.get('operationalVersion') ?? 0) };
+    conflicts: state.conflicts, linkedScheduleIds: [...linkedSchedules(state)], draftVersion: draftVersion(state.schedule), draftGenerationId: state.generation, operationalVersion: Number(state.schedule.get('operationalVersion') ?? 0) };
 }
 
 /** Descartar conflitos é uma escolha explícita do DP; nunca rebaseia uma alteração operacional silenciosamente. */
@@ -220,7 +232,7 @@ export async function stageScheduleDayOff(context: ServerUserContext, scheduleId
   });
 }
 
-async function prepareWorkShift(tx: Transaction, params: { context: ServerUserContext; scheduleId: string; shiftId: string; input?: SaveWorkShiftInput; mode: 'create' | 'update' | 'delete'; requestId: string }, group?: { version: number; generation: string; operationalVersion: number; userId: string; date: string }) {
+async function prepareWorkShift(tx: Transaction, params: { context: ServerUserContext; scheduleId: string; shiftId: string; input?: SaveWorkShiftInput; mode: 'create' | 'update' | 'delete'; requestId: string }, group?: { version: number; generation: string; operationalVersion: number; userId: string; date: string; linkedScheduleIds: string[]; segmentCount: number }) {
   const { context, scheduleId, shiftId, input, mode } = params;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
   const schedule = await tx.get(scheduleRef);
@@ -248,7 +260,19 @@ async function prepareWorkShift(tx: Transaction, params: { context: ServerUserCo
   if (group && current && (current.userId !== group.userId || current.date !== group.date)) {
     fail('DP_SHIFT_DAY_MISMATCH', 'CONFLICT', 'O turno pertence a outra pessoa ou data.');
   }
+  if (!group && (input?.manualOrder != null || current?.manualOrder != null || edit.exists && draft(edit).linkedScheduleIds?.length)) {
+    fail('DP_SCHEDULE_MANUAL_DAY_GROUP_REQUIRED', 'CONFLICT', 'Edite este trecho pela jornada manual do dia.');
+  }
+  if (group && mode === 'delete' && (!current?.manualDay || !current.manualDayId)) {
+    fail('DP_SHIFT_DAY_MISMATCH', 'CONFLICT', 'Somente trechos da jornada manual podem ser retirados.');
+  }
   if (current?.type === 'day_off') fail('DP_SHIFT_DAY_OFF_IMMUTABLE', 'CONFLICT', 'Uma folga não pode ser editada como turno.');
+  if (group && mode === 'delete') {
+    const user = await tx.get(dbAdmin.collection('users').doc(group.userId));
+    if (!user.exists || !canAccessUserByUnit(context.userDoc, user.data() ?? {}, { isDefaultAdmin: context.isDefaultAdmin })) {
+      fail('DP_SHIFT_USER_FORBIDDEN', 'AUTHORIZATION', 'Sem acesso à colaboradora.');
+    }
+  }
   if (input) {
     assertPeriod(schedule, input.date, unitId, input.unitId);
     if ((schedule.get('draftClosedDates') ?? schedule.get('closedDates') ?? []).includes(input.date)) {
@@ -273,15 +297,22 @@ async function prepareWorkShift(tx: Transaction, params: { context: ServerUserCo
     userName: input.userName ?? current?.userName ?? null, date: input.date,
     startTime: input.startTime, endTime: input.endTime, overnight: input.endTime < input.startTime,
     type: 'work', shiftDefinitionId: input.shiftDefinitionId ?? null,
-    ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualBreak: input.manualBreak ?? null,
+    ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualOrder: input.manualOrder ?? null,
+      manualSegmentCount: input.manualOrder != null ? group?.segmentCount ?? null : null, manualBreak: input.manualBreak ?? null,
       travelFromPreviousMinutes: input.manualDay ? input.travelFromPreviousMinutes ?? null : null } : {}),
     exceptionReason: input.exceptionReason ?? current?.exceptionReason ?? null,
     updatedAt: now, ...(mode === 'create' ? { createdAt: now } : {}),
   } : null;
+  const inheritedLinks = edit.exists ? draft(edit).linkedScheduleIds ?? [] : [];
+  const linkedScheduleIds = [...new Set([...(group?.linkedScheduleIds ?? []), ...inheritedLinks])];
+  if (linkedScheduleIds.length > MAX_LINKED_SCHEDULES) {
+    fail('DP_SCHEDULE_PUBLICATION_LIMIT', 'VALIDATION', 'Há escalas demais vinculadas ao rascunho da jornada.');
+  }
   const apply = (updateSchedule = true) => {
     tx.set(editRef, { generationId: generation, shiftId,
       baseFingerprint: scheduleDraftBaseFingerprint(
-        edit.exists ? draft(edit).baseFingerprint : scheduleShiftFingerprint(official), Boolean(input?.manualDay)),
+        edit.exists ? draft(edit).baseFingerprint : scheduleShiftFingerprint(official), Boolean(input?.manualDay || current?.manualDay)),
+      ...(linkedScheduleIds.length ? { linkedScheduleIds } : {}),
       value, updatedAt: now, updatedBy: context.decoded.uid });
     if (updateSchedule) tx.update(scheduleRef, { publicationStatus: 'draft', publicationVersion: schedule.get('publicationVersion') ?? (schedule.get('publicationStatus') === 'draft' ? 0 : 1),
       draftGenerationId: generation, draftVersion: draftVersion(schedule) + 1, draftUpdatedAt: now, draftUpdatedBy: context.decoded.uid });
@@ -299,16 +330,24 @@ export async function stageWorkShift(params: Parameters<typeof prepareWorkShift>
 }
 
 export async function stageManualJourneyDraft(context: ServerUserContext, input: ManualJourneyDraftInput, requestId: string) {
-  const review = reviewSplitJourney(input.segments.map(({ shiftId, ...segment }) => ({ ...segment, id: shiftId })));
+  const review = reviewSplitJourney(input.segments.map(({ shiftId, ...segment }, manualOrder) => ({ ...segment, id: shiftId, ...(segment.manualDay ? { manualOrder } : {}) })));
   if (review.issues.length) fail('DP_MANUAL_JOURNEY_INVALID', 'VALIDATION', review.issues[0].message);
+  const linkedScheduleIds = [...new Set([...input.segments, ...(input.removals ?? [])].map(({ scheduleId }) => scheduleId))];
+  if (linkedScheduleIds.length > MAX_LINKED_SCHEDULES) fail('DP_SCHEDULE_PUBLICATION_LIMIT', 'VALIDATION', 'Há escalas demais para publicar nesta jornada.');
   return dbAdmin.runTransaction(async (tx) => {
-    const prepared = await Promise.all(input.segments.map(({ scheduleId, shiftId, expectedDraftVersion, expectedDraftGenerationId, expectedOperationalVersion, existing,
-      unitId, startTime, endTime, manualBreak }) => prepareWorkShift(tx, {
+    const prepared = await Promise.all([...input.segments.map(({ scheduleId, shiftId, expectedDraftVersion, expectedDraftGenerationId, expectedOperationalVersion, existing,
+      unitId, startTime, endTime, manualBreak, manualDay }, manualOrder) => prepareWorkShift(tx, {
         context, scheduleId, shiftId, requestId, mode: existing ? 'update' : 'create',
         input: { userId: input.userId, date: input.date, unitId, startTime, endTime,
-          manualDay: input.manualDay, manualBreak },
+          manualDay: manualDay ?? input.manualDay, manualOrder: manualDay ? manualOrder : undefined, manualBreak },
       }, { version: expectedDraftVersion, generation: expectedDraftGenerationId, operationalVersion: expectedOperationalVersion,
-        userId: input.userId, date: input.date })));
+        userId: input.userId, date: input.date, linkedScheduleIds, segmentCount: input.segments.length })),
+      ...(input.removals ?? []).map(({ scheduleId, shiftId, expectedDraftVersion, expectedDraftGenerationId, expectedOperationalVersion }) =>
+        prepareWorkShift(tx, { context, scheduleId, shiftId, requestId, mode: 'delete' }, {
+          version: expectedDraftVersion, generation: expectedDraftGenerationId, operationalVersion: expectedOperationalVersion,
+          userId: input.userId, date: input.date, linkedScheduleIds, segmentCount: input.segments.length,
+        })),
+    ]);
     const newEditsBySchedule = new Map<string, number>();
     for (const item of prepared) {
       const added = (newEditsBySchedule.get(item.scheduleId) ?? 0) + Number(item.addsEdit);
@@ -365,6 +404,9 @@ export async function stageBulkWorkShift(params: { context: ServerUserContext; s
       if (input.action === 'create' && current) fail('DP_SHIFT_ID_COLLISION', 'CONFLICT', 'Um turno já existe no rascunho.');
       if (input.action !== 'create' && !current) fail('DP_SHIFT_NOT_FOUND', 'NOT_FOUND', 'Um turno não existe no rascunho.');
       if (current?.type === 'day_off') fail('DP_SHIFT_DAY_OFF_IMMUTABLE', 'CONFLICT', 'Uma folga não pode ser editada em lote.');
+      if (current?.manualOrder != null || existingEdit?.linkedScheduleIds?.length) {
+        fail('DP_SCHEDULE_MANUAL_DAY_GROUP_REQUIRED', 'CONFLICT', 'Edite este trecho pela jornada manual do dia.');
+      }
       if (current?.manualDay && input.action === 'replace') {
         fail('DP_SHIFT_MANUAL_DAY_BULK_REPLACE', 'CONFLICT', 'Edite individualmente os períodos de uma jornada manual.');
       }
@@ -404,7 +446,8 @@ export async function stageBulkWorkShift(params: { context: ServerUserContext; s
 
 async function prepareScheduleActivation(
   context: ServerUserContext, scheduleId: string, requestId: string, expectedDraftVersion: number,
-  state: Awaited<ReturnType<typeof loadDraft>>,
+  state: ScheduleDraft,
+  group?: { proposed: Array<Shift & { id: string; scheduleId: string }>; scheduleIds: Set<string> },
 ) {
   const unitId = String(state.schedule.get('unitId'));
   const year = Number(state.schedule.get('year'));
@@ -413,9 +456,9 @@ async function prepareScheduleActivation(
   if (typeof workspaceId !== 'string' || workspaceId !== context.workspace_id || !Number.isInteger(year) || !Number.isInteger(month)) {
     fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'DATA_INTEGRITY', 'O ambiente ou a competência da escala está inconsistente.');
   }
-  if ([...state.merged.values()].some((shift) => shift.manualDay)) {
+  if ([...state.merged.values()].some((shift) => shift.manualDay && shift.manualOrder == null)) {
     fail('DP_SCHEDULE_MANUAL_DAY_PUBLICATION_UNAVAILABLE', 'CONFLICT',
-      'A jornada manual está no rascunho e depende da publicação conjunta dos períodos.');
+      'Reabra a jornada manual e salve o regime e a ordem de cada trecho antes de publicar.');
   }
   const draftDayOffs = [...state.merged].filter(([, shift]) => shift.type === 'day_off' && shift.dayOffDraft === true);
   if (draftDayOffs.length) assertPublishDayOffPermission(context);
@@ -430,14 +473,15 @@ async function prepareScheduleActivation(
   const allPeople = [...new Set([...state.merged.values()].map((shift) => shift.userId)
     .filter((value): value is string => typeof value === 'string' && Boolean(value)))];
   const fencePeople = [...new Set([...changedPeople, ...allPeople])];
-  const capturedFence = await capturePublicationFence(context.workspace_id, fencePeople);
+  const capturedFence = group ? new Map<string, number>() : await capturePublicationFence(context.workspace_id, fencePeople);
   const proposed: Array<Shift & { id: string; scheduleId: string }> = [...state.merged].map(([id, value]) => ({ ...value, id, scheduleId }));
   const closedDates = new Set(state.schedule.get('draftClosedDates') ?? state.schedule.get('closedDates') ?? []);
   if (proposed.some((shift) => shift.type === 'work' && closedDates.has(shift.date))) {
     fail('DP_SCHEDULE_CLOSED_DAY_HAS_WORK', 'VALIDATION', 'Há turno de trabalho em um dia fechado. Revise a escala.');
   }
-  if (dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
-  const validation = await validateScheduleJourneys({ context, scheduleId, proposedShifts: proposed });
+  if (!group && dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
+  const validation = await validateScheduleJourneys({ context, scheduleId, proposedShifts: proposed, companionShifts: group?.proposed.filter((shift) => shift.scheduleId !== scheduleId),
+    replacedScheduleIds: group?.scheduleIds });
   if (validation.status === 'blocked') fail('DP_SCHEDULE_JOURNEY_BLOCKED', 'VALIDATION', validation.issues[0]?.message ?? 'Revise as jornadas antes de publicar.');
   const restPeople: DPScheduleRestRecord['people'] = {};
   for (const [userId, person] of Object.entries(validation.people)) {
@@ -459,7 +503,7 @@ async function prepareScheduleActivation(
   if (restRecord && Buffer.byteLength(JSON.stringify(restRecord)) > 350_000) {
     fail('DP_SCHEDULE_REST_RECORD_LIMIT', 'DATA_INTEGRITY', 'O registro de repousos excede o limite seguro da escala.');
   }
-  if (!dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
+  if (!group && !dayOffsToSync.length) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month, shifts: proposed });
 
   const unitRef = dbAdmin.collection('dp_units').doc(unitId);
   const userRefs = allPeople.map((id) => dbAdmin.collection('users').doc(id));
@@ -603,10 +647,10 @@ async function prepareScheduleActivation(
     if (currentBasis.some((document, index) => (document.updateTime?.toMillis() ?? null) !== basisTimes[index][1])) {
       fail('DP_SCHEDULE_PUBLICATION_BASIS_CHANGED', 'CONFLICT', 'Dados de unidade, pessoa ou jornada mudaram. Revise a escala.');
     }
-    const fence = await preparePublicationFenceCommit(tx, workspaceId, fencePeople, capturedFence);
+    const fence = group ? null : await preparePublicationFenceCommit(tx, workspaceId, fencePeople, capturedFence);
     return () => {
       const now = Timestamp.now();
-      fence.apply();
+      fence?.apply();
       const version = oldVersion + 1;
       if (restRecord) tx.update(manifest.ref, { restRecord });
       const draftedCoverage = schedule.get('draftCoverageDemands');
@@ -638,19 +682,43 @@ async function prepareScheduleActivation(
 }
 
 export async function publishPreparedSchedule(context: ServerUserContext, scheduleId: string, requestId: string,
-  expectedDraftVersion: number, onPrepared?: () => Promise<void>) {
+  expectedDraftVersion: number, onPrepared?: () => Promise<void>, companions: PublishScheduleCompanion[] = []) {
   const state = await loadDraft(context, scheduleId, 'publish');
-  if (state.schedule.get('publicationStatus') === 'published' && state.edits.empty) {
-    return { publicationStatus: 'published' as const, publicationVersion: publicationVersion(state.schedule),
-      dayOffsToSync: [], shiftCount: Number(state.schedule.get('shiftCount') ?? 0), validation: state.schedule.get('journeyValidation') ?? null };
-  }
   if (!context.isDefaultAdmin && context.permissions.dp.schedules.edit !== true) {
     fail('DP_SCHEDULE_EDIT_FORBIDDEN', 'AUTHORIZATION', 'Sem permissão para editar esta escala.');
   }
-  if (draftVersion(state.schedule) !== expectedDraftVersion) fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'O rascunho mudou. Atualize a escala.');
-  if (state.conflicts.length) fail('DP_SCHEDULE_DRAFT_CONFLICT', 'CONFLICT', 'Um turno editado mudou na escala oficial. Resolva o conflito.');
-  if (state.edits.size > MAX_PUBLICATION_CHANGES || state.merged.size > MAX_OFFICIAL_SHIFTS) {
-    fail('DP_SCHEDULE_PUBLICATION_LIMIT', 'DATA_INTEGRITY', 'A escala excede o limite seguro de 500 alterações ou 2.000 turnos.');
+  const targets = [{ scheduleId, expectedDraftVersion }, ...companions];
+  if (targets.length > MAX_LINKED_SCHEDULES || new Set(targets.map((target) => target.scheduleId)).size !== targets.length) {
+    fail('DP_SCHEDULE_PUBLICATION_GROUP_INVALID', 'VALIDATION', 'Confira as escalas a publicar em conjunto.');
+  }
+  const states = new Map([[scheduleId, state]]);
+  const byId = new Map(targets.map((target) => [target.scheduleId, target]));
+  const pendingIds = [scheduleId];
+  for (const id of pendingIds) {
+    const current = states.get(id)!;
+    for (const linkedId of linkedSchedules(current)) {
+      if (!byId.has(linkedId)) fail('DP_SCHEDULE_PUBLICATION_GROUP_REQUIRED', 'CONFLICT', 'Revise as escalas vinculadas antes de publicar em conjunto.');
+      if (!states.has(linkedId)) {
+        states.set(linkedId, await loadDraft(context, linkedId, 'publish'));
+        pendingIds.push(linkedId);
+      }
+    }
+  }
+  if (state.schedule.get('publicationStatus') === 'published' && state.edits.empty && states.size === 1) {
+    return { publicationStatus: 'published' as const, publicationVersion: publicationVersion(state.schedule),
+      dayOffsToSync: [], publishedScheduleIds: [scheduleId], shiftCount: Number(state.schedule.get('shiftCount') ?? 0),
+      validation: state.schedule.get('journeyValidation') ?? null };
+  }
+  if (states.size !== targets.length) fail('DP_SCHEDULE_PUBLICATION_GROUP_INVALID', 'CONFLICT', 'Há uma escala sem vínculo neste lote. Atualize a publicação.');
+  for (const [id, current] of states) {
+    if (draftVersion(current.schedule) !== byId.get(id)!.expectedDraftVersion
+      || (id !== scheduleId && current.edits.empty)) {
+      fail('DP_SCHEDULE_DRAFT_STALE', 'CONFLICT', 'Um rascunho vinculado mudou. Atualize a escala.');
+    }
+    if (current.conflicts.length) fail('DP_SCHEDULE_DRAFT_CONFLICT', 'CONFLICT', 'Um turno editado mudou na escala oficial. Resolva o conflito.');
+    if (current.edits.size > MAX_PUBLICATION_CHANGES || current.merged.size > MAX_OFFICIAL_SHIFTS) {
+      fail('DP_SCHEDULE_PUBLICATION_LIMIT', 'DATA_INTEGRITY', 'Uma escala excede o limite seguro de 500 alterações ou 2.000 turnos.');
+    }
   }
   const year = Number(state.schedule.get('year'));
   const month = Number(state.schedule.get('month'));
@@ -658,20 +726,75 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   if (typeof workspaceId !== 'string' || workspaceId !== context.workspace_id || !Number.isInteger(year) || !Number.isInteger(month)) {
     fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'DATA_INTEGRITY', 'O ambiente ou a competência da escala está inconsistente.');
   }
+  for (const current of states.values()) {
+    if (current.schedule.get('workspaceId') !== workspaceId || Number(current.schedule.get('year')) !== year
+      || Number(current.schedule.get('month')) !== month) {
+      fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'CONFLICT', 'As escalas vinculadas precisam pertencer à mesma competência.');
+    }
+  }
+  const group = states.size > 1 ? {
+    scheduleIds: new Set(states.keys()),
+    proposed: [...states].flatMap(([id, current]) =>
+      [...current.merged].map(([shiftId, value]) => ({ ...value, id: shiftId, scheduleId: id }))),
+  } : undefined;
+  const changedManualDays = new Set<string>();
+  for (const current of states.values()) {
+    for (const [id, pending] of current.pending) {
+      const value = pending.value ?? current.published.get(id);
+      if (value?.manualOrder != null && typeof value.manualDayId === 'string') changedManualDays.add(value.manualDayId);
+    }
+  }
+  const manualDays = new Map<string, Array<Shift & { id: string }>>();
+  for (const [id, current] of states) {
+    for (const [shiftId, shift] of current.merged) {
+      if (typeof shift.manualDayId !== 'string' || !changedManualDays.has(shift.manualDayId)) continue;
+      const segments = manualDays.get(shift.manualDayId) ?? [];
+      segments.push({ ...shift, id: `${id}:${shiftId}` });
+      manualDays.set(shift.manualDayId, segments);
+    }
+  }
+  for (const segments of manualDays.values()) {
+    const orders = new Set(segments.map((segment) => segment.manualOrder));
+    if (orders.size !== segments.length || segments.some((segment) => segment.manualSegmentCount !== segments.length
+      || typeof segment.manualOrder !== 'number' || segment.manualOrder < 0 || segment.manualOrder >= segments.length)) {
+      fail('DP_SCHEDULE_PUBLICATION_GROUP_INCOMPLETE', 'CONFLICT', 'Reabra a jornada manual e salve todos os trechos antes de publicar.');
+    }
+  }
   const releaseClosureFence = await holdRepPCompetenceForSchedulePublication(
     repPDbAdmin, workspaceId, `${year}-${String(month).padStart(2, '0')}`);
   try {
-    const readActivation = await prepareScheduleActivation(context, scheduleId, requestId, expectedDraftVersion, state);
+    const fencePeople = new Set<string>();
+    for (const current of states.values()) {
+      for (const value of [...current.merged.values(), ...[...current.pending.keys()].map((id) => current.published.get(id))]) {
+        if (typeof value?.userId === 'string' && value.userId) fencePeople.add(value.userId);
+      }
+    }
+    const capturedFence = group ? await capturePublicationFence(workspaceId, fencePeople) : null;
+    if (group) await validatePublicationOccupancy({ context, scheduleId, workspaceId, year, month,
+      shifts: group.proposed, scheduleIds: group.scheduleIds });
+
+    const readActivations: Array<Awaited<ReturnType<typeof prepareScheduleActivation>>> = [];
+    for (const [id, current] of states) {
+      readActivations.push(await prepareScheduleActivation(context, id, requestId, byId.get(id)!.expectedDraftVersion, current, group));
+    }
     await onPrepared?.();
     return await dbAdmin.runTransaction(async (tx) => {
-      const activate = await readActivation(tx);
-      return activate();
+      const activations = [];
+      for (const readActivation of readActivations) activations.push(await readActivation(tx));
+      const fence = capturedFence ? await preparePublicationFenceCommit(tx, workspaceId, fencePeople, capturedFence) : null;
+      fence?.apply();
+      const [primary, ...others] = activations.map((activate) => activate());
+      return { ...primary, publishedScheduleIds: [...states.keys()],
+        dayOffsToSync: [primary, ...others].flatMap((result, index) =>
+          result.dayOffsToSync.map((input) => ({ ...input, scheduleId: pendingIds[index] }))) };
     });
   } finally {
     await releaseClosureFence();
   }
 }
 
-export async function publishSchedule(context: ServerUserContext, scheduleId: string, requestId: string, expectedDraftVersion: number) {
-  return publishPreparedSchedule(context, scheduleId, requestId, expectedDraftVersion);
+type PublishScheduleCompanion = { scheduleId: string; expectedDraftVersion: number };
+
+export async function publishSchedule(context: ServerUserContext, scheduleId: string, requestId: string, expectedDraftVersion: number, companions?: PublishScheduleCompanion[]) {
+  return publishPreparedSchedule(context, scheduleId, requestId, expectedDraftVersion, undefined, companions);
 }

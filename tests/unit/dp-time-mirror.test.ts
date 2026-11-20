@@ -91,3 +91,17 @@ test('prazo de 24 horas da assinatura do pacote: recusado ou enviado há mais de
   assert.equal(isOverdue({ status: 'refused', sentAt: '2026-10-20T11:00:00.000Z' }, now), true);
   assert.equal(isOverdue({ status: 'signed', sentAt: '2026-10-01T00:00:00.000Z' }, now), false);
 });
+
+
+test('espelho híbrido mostra somente a carga do dia e preserva as batidas reais', async () => {
+  const date = '2026-01-05';
+  const work = { date, type: 'work' as const, shiftName: null };
+  const snapshot = buildMirrorSnapshot({ ...MIRROR_PREVIEW_INPUT(), shifts: [
+    { ...work, manualOrder: 1, manualMode: 'fixed', startTime: '13:00', endTime: '18:00', breakDurationMinutes: 60 },
+    { ...work, manualOrder: 0, manualMode: 'flexible', startTime: null, endTime: null, manualWorkMinutes: 240 },
+  ] });
+  assert.equal(snapshot.days[0].shift, '08:00 planejadas');
+  assert.deepEqual(snapshot.days[0].punches.map(({ nsr, time }) => [nsr, time]), [[1, '08:00']]);
+  const pdf = await renderMirrorPdf(snapshot, mirrorSnapshotHash(snapshot), null);
+  assert.equal((await PDFDocument.load(pdf)).getPageCount(), 1);
+});

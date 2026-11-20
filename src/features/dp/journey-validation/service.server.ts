@@ -95,8 +95,11 @@ export async function validateScheduleJourneys(params: {
   scheduleId: string;
   authorizedSchedule?: Record<string, unknown>;
   proposedShifts?: Array<Record<string, unknown> & { id: string }>;
+  companionShifts?: Array<Record<string, unknown> & { id: string }>;
+  replacedScheduleIds?: ReadonlySet<string>;
 }): Promise<DPJourneyValidationResult> {
   const schedule = params.authorizedSchedule ?? await getSchedule(params.context, params.scheduleId);
+  const replacedScheduleIds = params.replacedScheduleIds ?? new Set([params.scheduleId]);
   const { periodStart, periodEnd } = periodForSchedule(schedule);
   const historyFrom = format(addDays(parseISO(periodStart), -HISTORY_DAY_LIMIT), 'yyyy-MM-dd');
   const currentOfficial = params.proposedShifts ? [] : (await readOfficialScheduleShifts({ scheduleId: params.scheduleId })).shifts;
@@ -111,7 +114,15 @@ export async function validateScheduleJourneys(params: {
     const type = shift.type;
     if (!userId || !date || !unitId || (type !== 'work' && type !== 'day_off')) return null;
     const shiftDefinitionId = stringValue(shift.shiftDefinitionId);
-    return { id: shift.id, userId, date, unitId, type, ...(shiftDefinitionId ? { shiftDefinitionId } : {}),
+    const manualDay = shift.manualDay as { mode?: string; expectedWorkMinutes?: number; expectedBreakMinutes?: number } | undefined;
+    const start = stringValue(shift.startTime);
+    const end = stringValue(shift.endTime);
+    const minuteOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+    const manualWorkMinutes = Number.isInteger(shift.manualOrder)
+      ? manualDay?.mode === 'flexible' ? manualDay.expectedWorkMinutes
+        : manualDay?.mode === 'fixed' && start && end ? minuteOf(end) - minuteOf(start) - (manualDay.expectedBreakMinutes ?? 0) : undefined
+      : undefined;
+    return { id: shift.id, userId, date, unitId, type, ...(manualWorkMinutes !== undefined ? { manualWorkMinutes } : {}), ...(shiftDefinitionId ? { shiftDefinitionId } : {}),
       ...(stringValue(shift.startTime) ? { startTime: stringValue(shift.startTime) } : {}),
       ...(stringValue(shift.endTime) ? { endTime: stringValue(shift.endTime) } : {}) };
   };
@@ -165,7 +176,7 @@ export async function validateScheduleJourneys(params: {
     const legacyPaths = new Set(schedules.filter((doc) => !doc.get('activeRevisionId')
       && hasPublishedScheduleVersion(doc.data() ?? {})).map((doc) => doc.ref.path));
     physical.filter((document) => legacyPaths.has(document.ref.parent.parent!.path)
-      && document.ref.parent.parent?.id !== params.scheduleId)
+      && !replacedScheduleIds.has(document.ref.parent.parent!.id))
       .forEach((document) => { const shift = shiftFromDocument(document); if (shift) historyShifts.set(document.ref.path, shift); });
     if (historyShifts.size > HISTORY_SHIFT_LIMIT) {
       throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
@@ -190,9 +201,16 @@ export async function validateScheduleJourneys(params: {
         readOfficialScheduleShifts({ scheduleId: id, userId, db: dbAdmin })))).flatMap((item) => item.shifts);
     }));
     results.flat().filter((shift) => typeof shift.date === 'string' && shift.date >= historyFrom && shift.date <= periodEnd
-      && shift.scheduleId !== params.scheduleId)
+      && !replacedScheduleIds.has(shift.scheduleId))
       .forEach((shift) => { const value = proposedShift(shift); if (value) historyShifts.set(`dp_schedules/${shift.scheduleId}/shifts/${shift.id}`, value); });
     if (historyShifts.size > HISTORY_SHIFT_LIMIT) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
+  }
+
+  for (const shift of params.companionShifts ?? []) {
+    const proposed = proposedShift(shift);
+    if (proposed && participantIds.includes(proposed.userId)) {
+      historyShifts.set(`dp_schedules/${shift.scheduleId}/shifts/${shift.id}`, proposed);
+    }
   }
 
   const userDocuments = await dbAdmin.getAll(...participantIds.map((id) => dbAdmin.collection('users').doc(id)));

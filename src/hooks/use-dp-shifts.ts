@@ -22,6 +22,7 @@ function workShiftPayload(data: Omit<DPShift, 'id' | 'createdAt'> | DPShift) {
     unitId: data.unitId,
     date: data.date,
     ...(data.shiftDefinitionId ? { shiftDefinitionId: data.shiftDefinitionId } : {}),
+    ...(data.manualOrder != null ? { manualOrder: data.manualOrder } : {}),
     ...(data.manualDay ? { manualDay: data.manualDay } : {}),
     ...(data.manualBreak ? { manualBreak: data.manualBreak } : {}),
     ...(data.travelFromPreviousMinutes != null ? { travelFromPreviousMinutes: data.travelFromPreviousMinutes } : {}),

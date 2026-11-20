@@ -16,7 +16,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type RouteContext = { params: Promise<{ scheduleId: string }> };
-const bodySchema = z.object({ expectedDraftVersion: z.number().int().min(0) }).strict();
+const draftVersion = z.number().int().min(0);
+const bodySchema = z.object({
+  expectedDraftVersion: draftVersion,
+  companions: z.array(bulkWorkShiftRouteSchema.extend({ expectedDraftVersion: draftVersion }).strict()).max(9).optional(),
+}).strict();
 const contract = defineSecurityContract({ schemaVersion: 1, id: 'dp.schedules.publish', version: 1,
   surface: { method: 'POST', path: '/api/dp/schedules/[scheduleId]/publish' }, exposure: 'authenticated',
   identity: { kind: 'active-user' }, authorization: { kind: 'permission', action: 'dp.schedules.publish' },
@@ -50,18 +54,18 @@ const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Serv
 export const POST = secureRoute({ contract, enforcer }, async ({ security, observation }) => {
   const { scheduleId } = security.resource;
   const { dayOffsToSync, ...result } = await publishSchedule(security.actor, scheduleId,
-    observation.requestId, security.input.expectedDraftVersion);
+    observation.requestId, security.input.expectedDraftVersion, security.input.companions);
   if (dayOffsToSync.length) {
     after(async () => {
-      for (const input of dayOffsToSync) {
+      for (const { scheduleId: sourceScheduleId, ...input } of dayOffsToSync) {
         try {
-          await publishDayOff({ context: security.actor, scheduleId, input, requestId: observation.requestId });
+          await publishDayOff({ context: security.actor, scheduleId: sourceScheduleId, input, requestId: observation.requestId });
         } catch (error) {
           // A revisão guarda o DSR pendente. O mesmo serviço permite retomar o envio pela grade.
           reportSystemError({
             error, source: 'api-dp', operation: 'sync-published-schedule-day-off',
             routeOrJob: '/api/dp/schedules/[scheduleId]/publish',
-            requestId: observation.requestId, metadata: { scheduleId },
+            requestId: observation.requestId, metadata: { scheduleId: sourceScheduleId },
           });
         }
       }

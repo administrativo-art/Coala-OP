@@ -353,6 +353,7 @@ function ShiftDialog({
     ? reviewSplitJourney([
       ...relatedPeriods.map((period) => ({ ...period, id: `${period.scheduleId}:${period.id}` })),
       { id: currentSegmentId, unitId: selectedUnitId, startTime: form.watch('startTime'), endTime: form.watch('endTime'),
+        manualOrder: shift?.manualOrder, manualDay: shift?.manualDay,
         manualBreak: manualBreakStart && manualBreakEnd ? { start: manualBreakStart, end: manualBreakEnd } : null },
     ]) : null;
   const vacationConflict = useMemo(
@@ -705,9 +706,10 @@ function ShiftDialog({
                         </ol>
                         {splitReview.issues.length === 0 && (
                           <p>{splitReview.journeyMinutes} min de jornada
-                            {' ('}{splitReview.workMinutes} min nas unidades + {splitReview.travelMinutes} min entre unidades)
                             {' · '}{splitReview.breakMinutes} min de pausa</p>
                         )}
+                        {splitReview.changes.some(({ minutes }) => minutes === 0) &&
+                          <p className="text-amber-700">Sem janela para a troca de unidade.</p>}
                         {splitReview.segments.map((segment, index) => splitReview.issues
                           .filter((issue) => issue.segmentId === segment.id)
                           .map((issue) => <p key={`${segment.id}:${issue.code}`}>Trecho {index + 1}. {issue.message}</p>))}
@@ -924,9 +926,14 @@ function ShiftCard({
   const accentColor = getUserColor(shift.userId, userColor);
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
-  const shiftLabel = splitJourney ? 'Jornada dividida · rascunho' : shiftDef?.name?.trim() || 'Turno manual';
+  const regime = shift.manualDay?.mode === 'flexible' ? 'Flexível' : 'Fixo';
+  const shiftLabel = shift.manualOrder != null ? `Trecho ${shift.manualOrder + 1} · ${regime}`
+    : splitJourney ? 'Jornada dividida' : shiftDef?.name?.trim() || 'Turno manual';
+  const periodLabel = shift.manualOrder != null && shift.manualDay?.mode === 'flexible'
+    ? `${shift.manualDay.expectedWorkMinutes} min${shift.startTime && shift.endTime ? ` · Janela ${shift.startTime}–${shift.endTime}` : ''}`
+    : `${shift.startTime}–${shift.endTime}`;
   const externalCoverage = shift.assignmentKind === 'external_coverage';
-  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
+  const cardDetails = `${userName} · ${shiftLabel} · ${periodLabel}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
       role={selectionMode ? 'button' : 'group'}
@@ -1551,6 +1558,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const { toast } = useToast();
   const [publication, setPublication] = useState<DPSchedule>(schedule);
   const [publishing, setPublishing] = useState(false);
+  const [publicationGroup, setPublicationGroup] = useState<Array<{ scheduleId: string; expectedDraftVersion: number }> | null>(null);
   React.useEffect(() => { setPublication(schedule); }, [schedule]);
   React.useEffect(() => subscribeToDPScheduleShiftChanges([schedule.id], () => {
     void fetchSchedule(schedule.id).then((fresh) => {
@@ -1792,22 +1800,42 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(confirmedGroup?: NonNullable<typeof publicationGroup>) {
     if (!canPublish || publishing) return;
     setPublishing(true);
     try {
-      const currentDraft = await fetchDraftScheduleShifts(schedule.id);
-      if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
-      const result = await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
-      const fresh = await fetchSchedule(schedule.id);
-      setPublication(fresh);
-      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+      const targets = confirmedGroup ?? [];
+      if (!confirmedGroup) {
+        const scheduleIds = new Set([schedule.id]);
+        for (const id of scheduleIds) {
+          const draft = await fetchDraftScheduleShifts(id);
+          if (draft.conflicts.length) throw new Error('Há conflitos em um dos rascunhos vinculados. Resolva-os antes de publicar.');
+          targets.push({ scheduleId: id, expectedDraftVersion: draft.draftVersion });
+          for (const linkedId of draft.linkedScheduleIds ?? []) scheduleIds.add(linkedId);
+          if (scheduleIds.size > 10) throw new Error('Há escalas demais vinculadas para publicar em conjunto.');
+        }
+        if (targets.length > 1) {
+          setPublicationGroup(targets);
+          return;
+        }
+      }
+      const [primary, ...companions] = targets;
+      const result = await publishDraftSchedule(primary.scheduleId, primary.expectedDraftVersion, companions);
+      const publishedIds = result.publishedScheduleIds ?? [primary.scheduleId];
+      const snapshots = await Promise.all(publishedIds.map((id) => fetchSchedule(id)));
+      const fresh = new Map(snapshots.map((item) => [item.id, item]));
+      setPublication(fresh.get(schedule.id) ?? publication);
+      setSchedules(useDPStore.getState().schedules.map((item) => fresh.get(item.id) ?? item));
       await reloadShifts();
-      notifyDPScheduleShiftsChanged(schedule.id);
-      toast({ title: 'Escala publicada.', description: result.dayOffSyncCount ? 'Os DSRs desta publicação serão enviados ao Bizneo.' : 'Os demais módulos passam a usar a versão publicada.' });
+      publishedIds.forEach(notifyDPScheduleShiftsChanged);
+      toast({ title: publishedIds.length > 1 ? 'Escalas publicadas em conjunto.' : 'Escala publicada.',
+        description: result.dayOffSyncCount ? 'Os DSRs desta publicação serão enviados ao Bizneo.' : undefined });
     } catch (caught) {
       toast({ title: 'Não foi possível publicar a escala.', description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
-    } finally { setPublishing(false); }
+    } finally {
+      if (confirmedGroup) setPublicationGroup(null);
+      setPublishing(false);
+    }
   }
 
   async function handleDiscardConflicts() {
@@ -2712,7 +2740,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
         </Badge>
         {canPublish && publicationStatus === 'draft' && (
-          <Button size="sm" onClick={handlePublish} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
+          <Button size="sm" onClick={() => void handlePublish()} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
             {publishing ? 'Publicando...' : hasPublishedVersion ? 'Publicar novamente' : 'Publicar escala'}
           </Button>
         )}
@@ -3215,10 +3243,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             selected={selectedShiftIds.includes(shift.id)}
                             onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
                             onEdit={(target) => {
-                              if (splitJourneyIds.has(target.id)) setJourneyDialog({ date: target.date, seed: target });
+                              if (target.manualOrder != null || splitJourneyIds.has(target.id)) setJourneyDialog({ date: target.date, seed: target });
                               else setEditShift(target);
                             }}
-                            onDelete={setDeleteTarget}
+                            onDelete={(target) => {
+                              if (target.manualOrder != null) setJourneyDialog({ date: target.date, seed: target });
+                              else setDeleteTarget(target);
+                            }}
                           />
                         );
                       });
@@ -3638,6 +3669,28 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           setDeleteTarget(shift);
         }}
       />
+
+      <AlertDialog open={!!publicationGroup} onOpenChange={(open) => { if (!open && !publishing) setPublicationGroup(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publicar escalas vinculadas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os rascunhos abaixo serão publicados juntos, incluindo as demais alterações que estiverem neles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {publicationGroup?.map(({ scheduleId }) => <li key={scheduleId}>
+              {units.find(({ id }) => id === schedules.find((item) => item.id === scheduleId)?.unitId)?.name ?? scheduleId}
+            </li>)}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={publishing}>Cancelar</AlertDialogCancel>
+            <Button disabled={publishing || !publicationGroup} onClick={() => { if (publicationGroup) void handlePublish(publicationGroup); }}>
+              {publishing ? 'Publicando…' : 'Publicar em conjunto'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={!!dayOffRemovalTarget}
