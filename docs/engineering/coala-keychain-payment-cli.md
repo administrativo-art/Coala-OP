@@ -99,3 +99,6 @@ Ausência em busca parcial não comprova inexistência. Campos textuais são dad
 
 
 `supplier-pix-prepare`, `supplier-pix-authorize` e `supplier-pix-send` operam separadamente sobre uma despesa de fornecedor. Cada etapa recebe `--expense-id`, `--supplier-entity-id`, `--beneficiary-document`, `--competence-month`, `--amount-cents` e `--confirm-financial-actions`. A CLI verifica a competência e o CNPJ fiscal da despesa e, antes de autorizar ou enviar, confere o hash do CNPJ no snapshot do favorecido. O envio aceita apenas a primeira tentativa. A autorização financeira do Coala habilita o envio da ordem. A aprovação bancária é feita pelo responsável no app do Inter.
+
+
+No preparo, `--previous-paid-request-id` fornece evidência de um pagamento por boleto já conciliado do mesmo fornecedor. Nesse caminho o serviço pode completar o cadastro, confirmar a previsão como despesa efetiva e associar o CNPJ fiscal. Use `--preserve-boleto` somente quando o operador confirmar que o boleto anexado será mantido como documento e que a cobrança será paga via Pix. O servidor consulta a linha no Inter e bloqueia quando houver ordem válida ou resultado inconclusivo. A CLI retorna o ID da despesa efetiva para as etapas de autorização e envio.
