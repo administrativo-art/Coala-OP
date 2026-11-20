@@ -256,7 +256,8 @@ export async function stageWorkShift(params: { context: ServerUserContext; sched
       userName: input.userName ?? current?.userName ?? null, date: input.date,
       startTime: input.startTime, endTime: input.endTime, overnight: input.endTime < input.startTime,
       type: 'work', shiftDefinitionId: input.shiftDefinitionId ?? null,
-      ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualBreak: input.manualBreak ?? null } : {}),
+      ...(input.manualDay || current?.manualDay ? { manualDay: input.manualDay ?? null, manualDayId, manualBreak: input.manualBreak ?? null,
+        travelFromPreviousMinutes: input.manualDay ? input.travelFromPreviousMinutes ?? null : null } : {}),
       exceptionReason: input.exceptionReason ?? current?.exceptionReason ?? null,
       updatedAt: now, ...(mode === 'create' ? { createdAt: now } : {}),
     } : null;
