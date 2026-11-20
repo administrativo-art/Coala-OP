@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **58**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -923,6 +923,21 @@ Arquivos locais percorridos: 7.
 
 Nenhuma string de API encontrada no percurso estático; investigar chamadas indiretas, ações de servidor e SDKs.
 
+## `month-closing`
+
+Páginas: [`src/app/dashboard/financial/month-closing/expenses/page.tsx`](../../src/app/dashboard/financial/month-closing/expenses/page.tsx), [`src/app/dashboard/financial/month-closing/page.tsx`](../../src/app/dashboard/financial/month-closing/page.tsx).
+
+Arquivos locais percorridos: 22.
+
+Chamadas candidatas encontradas:
+
+- `/api/financial/month-closing` — interface [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts); rota candidata [`src/app/api/financial/month-closing/route.ts`](../../src/app/api/financial/month-closing/route.ts)
+
+Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
+
+- `financial.monthClosings.view` — [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts)
+- `financial.view` — [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts)
+
 ## `operations`
 
 Páginas: [`src/app/dashboard/operations/page.tsx`](../../src/app/dashboard/operations/page.tsx).
@@ -1177,6 +1192,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.interIntegration.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.close` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.reopen` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.authorize` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.refresh` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1799,6 +1817,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.interIntegration.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.close` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.reopen` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.authorize` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.refresh` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)

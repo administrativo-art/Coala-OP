@@ -79,6 +79,8 @@ src/app/dashboard/financial/expenses/page.tsx,active,expenses,
 src/app/dashboard/financial/expenses/pending-audit/page.tsx,redirect,expenses,/dashboard/financial/expenses?status=pending_audit
 src/app/dashboard/financial/financial-flow/page.tsx,redirect,cash-flow,/dashboard/financial/cash-flow
 src/app/dashboard/financial/inbox/page.tsx,redirect,financial-inbox,/dashboard/financial/expenses/inbox
+src/app/dashboard/financial/month-closing/expenses/page.tsx,active,month-closing,Fluxo de Despesas do fechamento mensal (somente leitura).
+src/app/dashboard/financial/month-closing/page.tsx,active,month-closing,Tela inicial do fechamento mensal (somente leitura).
 src/app/dashboard/financial/page.tsx,active,financial-overview,Painel com indicadores
 src/app/dashboard/financial/payment-requests/page.tsx,redirect,payment-requests,/dashboard/financial/expenses/authorizations
 src/app/dashboard/financial/reconciliation/card-statements/page.tsx,active,card-statements,
