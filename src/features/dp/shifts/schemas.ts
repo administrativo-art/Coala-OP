@@ -25,12 +25,16 @@ export const saveWorkShiftSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   shiftDefinitionId: z.string().trim().min(1).max(180).optional(),
   manualDay: manualShiftDaySchema.optional(),
+  travelFromPreviousMinutes: z.number().int().min(0).max(1439).optional(),
   manualBreak: z.object({ start: timeSchema, end: timeSchema }).strict().optional(),
   startTime: timeSchema,
   endTime: timeSchema,
   type: z.literal('work').optional(),
   exceptionReason: z.string().trim().min(3).max(500).optional(),
 }).strict().refine(
+  (shift) => shift.travelFromPreviousMinutes === undefined || Boolean(shift.manualDay),
+  { path: ['travelFromPreviousMinutes'], message: 'O deslocamento exige uma jornada manual.' },
+).refine(
   (shift) => !shift.manualDay || (!shift.shiftDefinitionId && shift.endTime > shift.startTime
     && (shift.manualDay.mode === 'fixed' || shift.manualDay.expectedWorkMinutes + shift.manualDay.expectedBreakMinutes <= 1440)),
   { path: ['manualDay'], message: 'Revise a carga, o intervalo e os horários do turno manual.' },
