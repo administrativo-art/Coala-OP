@@ -114,65 +114,28 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `cash-flow`
 
-Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
+Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 137.
+Arquivos locais percorridos: 70.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/agent` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/agent/route.ts`](../../src/app/api/financial/agent/route.ts)
-- `/api/financial/analysis-routines` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/analysis-routines/route.ts`](../../src/app/api/financial/analysis-routines/route.ts)
 - `/api/financial/budgets` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/route.ts`](../../src/app/api/financial/budgets/route.ts)
 - `/api/financial/budgets/` — interface [`src/features/financial/components/settings/budget-coverage-editor.tsx`](../../src/features/financial/components/settings/budget-coverage-editor.tsx); rota candidata [`src/app/api/financial/budgets/[id]/route.ts`](../../src/app/api/financial/budgets/%5Bid%5D/route.ts)
 - `/api/financial/budgets/centers` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/centers/route.ts`](../../src/app/api/financial/budgets/centers/route.ts)
 - `/api/financial/budgets/person-references` — interface [`src/features/financial/components/settings/budget-api.ts`](../../src/features/financial/components/settings/budget-api.ts); rota candidata [`src/app/api/financial/budgets/person-references/route.ts`](../../src/app/api/financial/budgets/person-references/route.ts)
 - `/api/financial/cash-flow-study` — interface [`src/features/financial/cash-flow-study/cash-flow-study-view.tsx`](../../src/features/financial/cash-flow-study/cash-flow-study-view.tsx); rota candidata [`src/app/api/financial/cash-flow-study/route.ts`](../../src/app/api/financial/cash-flow-study/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
-- `/api/financial/management-analysis` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/management-analysis/route.ts`](../../src/app/api/financial/management-analysis/route.ts)
-- `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/use-fee-pending.ts`](../../src/features/financial/receipts-reconciliation/use-fee-pending.ts); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
-- `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
-- `/api/financial/stone-mappings` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
-- `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/portfolio-panel.tsx`](../../src/features/financial/receivables/portfolio-panel.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
-- `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/anticipations-panel.tsx`](../../src/features/financial/receipts-reconciliation/anticipations-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
-- `/api/financial/stone-wallet-position` — interface [`src/features/financial/receivables/wallet-position-panel.tsx`](../../src/features/financial/receivables/wallet-position-panel.tsx); rota candidata [`src/app/api/financial/stone-wallet-position/route.ts`](../../src/app/api/financial/stone-wallet-position/route.ts)
-
-Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
-
-- `baseProducts` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `kiosks` — [`src/features/financial/agent/management.server.ts`](../../src/features/financial/agent/management.server.ts)
-- `productSimulationItems` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `productSimulations` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `profiles` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `salesReports` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `users` — [`src/features/financial/budgets/references.server.ts`](../../src/features/financial/budgets/references.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `audits.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `audits.import` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `audits.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cardStatements.reconcile` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cardStatements.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashClosures.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashDeposits.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashFlow.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.create` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `financial.cashClosures.approve` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `financial.cashClosures.reopen` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.cashFlow.create` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
 - `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
-- `financial.dre` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.expenses.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.financialFlow` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
-- `financial.personnelCosts.view` — [`src/features/financial/budgets/personnel-access.ts`](../../src/features/financial/budgets/personnel-access.ts)
+- `financial.personnelCosts.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
-- `paymentRequests.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `personnelCosts.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `settings.manageExpenseDescriptions` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `settings.manageImportAliases` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 
 ## `catalog`
 
