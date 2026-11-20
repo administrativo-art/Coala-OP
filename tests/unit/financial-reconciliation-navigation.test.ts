@@ -46,7 +46,7 @@ test("sidebar reúne conciliação e fechamento sem antecipar fechamento mensal"
   assert.match(reconciliation, /label: "Fechamento de caixa".*show: permissions\.financial\?\.view/);
   assert.match(reconciliation, /label: "Fechamento de caixa"[\s\S]*label: "Depósitos"/);
   assert.match(reconciliation, /label: "Depósitos".*show: permissions\.financial\?\.cashDeposits\?\.view/);
-  assert.match(source, /label: "Coala Financeiro".*show: isDefaultAdmin/);
+  assert.doesNotMatch(source, /label: "Coala Financeiro"/);
   assert.doesNotMatch(source, /label: "Orçamento × despesas"/);
   for (const label of ["Despesas", "Fechamento de caixa", "Visão do caixa"]) {
     assert.ok(source.includes(`label: "${label}"`));
@@ -63,9 +63,7 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
     assert.match(source, /redirect\(/);
     assert.match(source, /financialSearchQuery/);
   }
-  for (const route of ["stone-anticipations", "cash-flow/agent"]) {
-    assert.match(read(`src/app/dashboard/financial/${route}/page.tsx`), /StoneAnticipationsPage/);
-  }
+  assert.match(read("src/app/dashboard/financial/stone-anticipations/page.tsx"), /StoneAnticipationsPage/);
   assert.match(read("src/app/dashboard/financial/stone-receipts/page.tsx"), /<StoneReceiptsPage \/>/);
   const receiptsPage = read("src/features/financial/receipts-reconciliation/receipts-page.tsx");
   assert.match(receiptsPage, /if \(!isDefaultAdmin\)/);
