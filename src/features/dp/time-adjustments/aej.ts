@@ -9,7 +9,8 @@
  */
 import { createHash } from 'node:crypto';
 
-import type { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
+import type { RepPOwnScheduledShift } from '@/features/dp/rep-p/own-month.server';
+import { manualPlannedDayMinutes } from '@/features/dp/schedules/split-journey';
 
 export const AEJ_LAYOUT_VERSION = '002' as const;
 const SIGNATURE_LITERAL = 'ASSINATURA_DIGITAL_EM_ARQUIVO_P7S';
@@ -117,10 +118,12 @@ export function generateAej(input: AejInput) {
   return { filename, signatureFilename: `${filename}.p7s`, bytes, sha256: createHash('sha256').update(bytes).digest('hex'), counts, lineCount: lines.length, warnings };
 }
 
-type MonthShift = Awaited<ReturnType<typeof readRepPMonthOfPerson>>['shifts'][number];
+type ContractShift = Pick<RepPOwnScheduledShift, 'date' | 'type' | 'startTime' | 'endTime' | 'overnight'
+  | 'breakType' | 'breakDurationMinutes' | 'breakStart' | 'breakEnd' | 'breakSegments'
+  | 'manualOrder' | 'manualMode' | 'manualWorkMinutes'>;
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 /** Horário contratual do dia: início, intervalos com horário fixo e fim; duração líquida em minutos. */
-export function aejShiftOf(shift: MonthShift): AejShift | null {
+export function aejShiftOf<T extends ContractShift>(shift: T): AejShift | null {
   if (shift.type !== 'work' || !shift.startTime || !shift.endTime) return null;
   const span = (minutesOf(shift.endTime) - minutesOf(shift.startTime) + 1440) % 1440 || 1440;
   const breaks = shift.breakType === 'fixed'
@@ -128,4 +131,48 @@ export function aejShiftOf(shift: MonthShift): AejShift | null {
     : [];
   return { date: shift.date, startTime: shift.startTime, endTime: shift.endTime, overnight: shift.overnight || minutesOf(shift.endTime) <= minutesOf(shift.startTime),
     netMinutes: Math.max(0, span - (shift.breakType && shift.breakType !== 'none' ? shift.breakDurationMinutes ?? 0 : 0)), breaks };
+}
+
+
+export function aejContractSchedules(shifts: readonly ContractShift[]) {
+  const days = new Map<string, ContractShift[]>();
+  for (const shift of shifts) {
+    if (shift.type !== 'work') continue;
+    const sameDay = days.get(shift.date) ?? [];
+    sameDay.push(shift);
+    days.set(shift.date, sameDay);
+  }
+  const schedules: AejShift[] = [];
+  const unresolved: Array<{ date: string; plannedMinutes: number | null }> = [];
+  for (const [date, day] of days) {
+    const manual = day.filter((shift) => shift.manualOrder != null);
+    if (!manual.length) {
+      for (const shift of day) {
+        const contract = aejShiftOf(shift);
+        if (contract) schedules.push(contract);
+      }
+      continue;
+    }
+    const plannedMinutes = manualPlannedDayMinutes(manual);
+    // A janela operacional de um trecho flexível não estabelece um par contratual no AEJ.
+    if (manual.length !== day.length || plannedMinutes === null || manual.some((shift) => shift.manualMode !== 'fixed')) {
+      unresolved.push({ date, plannedMinutes });
+      continue;
+    }
+    const fixed = manual.map(aejShiftOf).filter((shift): shift is AejShift => shift !== null)
+      .sort((left, right) => left.startTime.localeCompare(right.startTime));
+    if (fixed.length !== manual.length || fixed.some((shift, index) => shift.overnight
+      || (index > 0 && shift.startTime < fixed[index - 1].endTime))) {
+      unresolved.push({ date, plannedMinutes });
+      continue;
+    }
+    const breaks = fixed.flatMap((shift, index) => {
+      const next = fixed[index + 1];
+      return next && shift.endTime < next.startTime
+        ? [...shift.breaks, { start: shift.endTime, end: next.startTime }] : shift.breaks;
+    });
+    schedules.push({ date, startTime: fixed[0].startTime, endTime: fixed[fixed.length - 1].endTime,
+      overnight: false, netMinutes: plannedMinutes, breaks });
+  }
+  return { schedules, unresolved };
 }

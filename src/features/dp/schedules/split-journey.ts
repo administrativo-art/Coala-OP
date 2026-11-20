@@ -3,7 +3,14 @@ export interface SplitJourneySegment {
   unitId: string;
   startTime: string;
   endTime: string;
+  manualOrder?: number | null;
+  manualDay?: { mode: string; expectedBreakMinutes: number; expectedWorkMinutes?: number } | null;
   manualBreak?: { start: string; end: string } | null;
+}
+
+export function isWindowlessFlexibleShift(shift: Record<string, unknown>) {
+  return Number.isInteger(shift.manualOrder) && (shift.manualDay as { mode?: string } | null)?.mode === 'flexible'
+    && shift.startTime === '' && shift.endTime === '';
 }
 
 type SplitJourneyIssue = {
@@ -18,15 +25,57 @@ function minuteOfDay(time: string) {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
 }
 
+export type ManualPlannedShift = {
+  manualMode?: 'fixed' | 'flexible';
+  manualWorkMinutes?: number;
+  startTime: string | null;
+  endTime: string | null;
+  breakDurationMinutes?: number | null;
+};
+
+function manualPlannedMinutesOf(shift: ManualPlannedShift): number | null {
+  if (shift.manualMode === 'flexible') {
+    const minutes = shift.manualWorkMinutes;
+    return typeof minutes === 'number' && Number.isSafeInteger(minutes) && minutes > 0 ? minutes : null;
+  }
+  if (shift.manualMode !== 'fixed' || !shift.startTime || !shift.endTime) return null;
+  const span = minuteOfDay(shift.endTime) - minuteOfDay(shift.startTime);
+  const minutes = span - (shift.breakDurationMinutes ?? 0);
+  return Number.isSafeInteger(minutes) && minutes > 0 ? minutes : null;
+}
+
+export function manualPlannedDayMinutes(shifts: readonly ManualPlannedShift[]) {
+  let total = 0;
+  for (const shift of shifts) {
+    const minutes = manualPlannedMinutesOf(shift);
+    if (minutes === null) return null;
+    total += minutes;
+  }
+  return total;
+}
+
 export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
-  const ordered = [...segments].sort((left, right) => left.startTime.localeCompare(right.startTime));
+  const explicitOrder = segments.every((segment) => segment.manualOrder != null);
+  const ordered = [...segments].sort((left, right) => explicitOrder
+    ? (left.manualOrder ?? 0) - (right.manualOrder ?? 0)
+    : left.startTime.localeCompare(right.startTime));
+  const changes: { fromId: string; toId: string; minutes: number | null }[] = [];
   const issues: SplitJourneyIssue[] = [];
   let workMinutes = 0;
   let breakMinutes = 0;
-  let travelMinutes = 0;
   let previous: { segment: SplitJourneySegment; end: number } | undefined;
 
-  for (const segment of ordered) {
+  for (const [index, segment] of ordered.entries()) {
+    const prior = ordered[index - 1];
+    if (prior && prior.unitId !== segment.unitId) {
+      const gap = minuteOfDay(segment.startTime) - minuteOfDay(prior.endTime);
+      changes.push({ fromId: prior.id, toId: segment.id, minutes: gap >= 0 ? gap : null });
+    }
+    const flex = segment.manualOrder != null && segment.manualDay?.mode === 'flexible';
+    if (flex && !segment.startTime && !segment.endTime && !segment.manualBreak) {
+      workMinutes += segment.manualDay?.expectedWorkMinutes ?? 0;
+      continue;
+    }
     const start = minuteOfDay(segment.startTime);
     const end = minuteOfDay(segment.endTime);
     if (!(start < end)) {
@@ -34,7 +83,7 @@ export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
         message: 'Informe início e fim válidos no mesmo dia.' });
       continue;
     }
-    workMinutes += end - start;
+    workMinutes += flex ? segment.manualDay?.expectedWorkMinutes ?? 0 : end - start;
     if (segment.manualBreak) {
       const breakStart = minuteOfDay(segment.manualBreak.start);
       const breakEnd = minuteOfDay(segment.manualBreak.end);
@@ -43,29 +92,25 @@ export function reviewSplitJourney(segments: readonly SplitJourneySegment[]) {
           message: 'O intervalo precisa começar e terminar dentro do trecho.' });
       } else {
         breakMinutes += breakEnd - breakStart;
-        workMinutes -= breakEnd - breakStart;
+        if (!flex) workMinutes -= breakEnd - breakStart;
       }
     }
 
     if (previous && start < previous.end) {
       issues.push({ segmentId: segment.id, previousSegmentId: previous.segment.id, code: 'overlap',
         message: 'Os horários dos trechos se sobrepõem.' });
-    } else if (previous && previous.segment.unitId !== segment.unitId) {
-      travelMinutes += start - previous.end;
     }
 
     if (!previous || previous.end < end) previous = { segment, end };
   }
 
-  return { segments: ordered, issues, workMinutes, breakMinutes, travelMinutes,
-    journeyMinutes: workMinutes + travelMinutes };
+  return { segments: ordered, issues, workMinutes, breakMinutes, changes, journeyMinutes: workMinutes };
 }
 
 export function validSplitJourneyShiftIds(shifts: readonly (SplitJourneySegment & {
   userId: string;
   date: string;
   manualDayId?: string | null;
-  manualDay?: { mode: string; expectedBreakMinutes: number; expectedWorkMinutes?: number } | null;
 })[]) {
   const days = new Map<string, Array<(typeof shifts)[number]>>();
   for (const shift of shifts) {
@@ -80,10 +125,12 @@ export function validSplitJourneyShiftIds(shifts: readonly (SplitJourneySegment 
     const first = periods[0];
     const configuration = first.manualDay;
     if (!first.manualDayId || !configuration || new Set(periods.map(({ unitId }) => unitId)).size < 2) continue;
-    if (periods.some((period) => period.manualDayId !== first.manualDayId
-      || period.manualDay?.mode !== configuration.mode
-      || period.manualDay?.expectedBreakMinutes !== configuration.expectedBreakMinutes
-      || period.manualDay?.expectedWorkMinutes !== configuration.expectedWorkMinutes)) continue;
+    const ordered = periods.every((period) => period.manualOrder != null);
+    if (ordered && new Set(periods.map((period) => period.manualOrder)).size !== periods.length) continue;
+    if (periods.some((period) => period.manualDayId !== first.manualDayId || !period.manualDay
+      || (!ordered && (period.manualDay.mode !== configuration.mode
+      || period.manualDay.expectedBreakMinutes !== configuration.expectedBreakMinutes
+      || period.manualDay.expectedWorkMinutes !== configuration.expectedWorkMinutes)))) continue;
     if (reviewSplitJourney(periods).issues.length) continue;
     periods.forEach(({ id }) => ids.add(id));
   }
