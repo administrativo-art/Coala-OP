@@ -92,3 +92,12 @@ test('publicação usa validação autoritativa de jornada e rejeita resultado o
   assert.match(publicationSource, /DP_SCHEDULE_JOURNEY_BLOCKED/);
   assert.match(publicationSource, /journeyValidationVersion/);
 });
+
+test('fechamento direto altera uma unidade e Gerenciar dias usa a seleção explícita', () => {
+  assert.match(editorSource, /closureTargets\.filter\(\(target\) => target\.unitId === unit\.id\), !closed/);
+  assert.doesNotMatch(editorSource, /Fechar todas as unidades acessíveis/);
+  assert.match(editorSource, /<DialogTitle>Gerenciar dias<\/DialogTitle>/);
+  assert.match(editorSource, /setClosedDay\(managedDate, selectedClosureTargets, true\)/);
+  assert.match(editorSource, /setClosedDay\(managedDate, selectedClosureTargets, false\)/);
+  assert.match(editorSource, /singleTarget && \([\s\S]*?Dias de funcionamento[\s\S]*?Dias fechados no mês/);
+});
