@@ -123,6 +123,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   beneficiaries: "Beneficiários",
   paymentRequests: "Solicitações de pagamento",
   cashClosures: "Fechamentos de caixa",
+  monthClosings: "Fechamento do mês",
   cashDeposits: "Depósitos de caixa",
   interIntegration: "Integração bancária",
   pay: "Pagar",

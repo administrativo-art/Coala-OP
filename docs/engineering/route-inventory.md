@@ -105,7 +105,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/expiry` | [page.tsx](../../src/app/dashboard/expiry/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx) |
 
-## financial (32)
+## financial (34)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -133,6 +133,8 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/expenses/pending-audit` | [page.tsx](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx) | [constants.ts](../../src/features/financial/lib/constants.ts) |
 | `dashboard/financial/financial-flow` | [page.tsx](../../src/app/dashboard/financial/financial-flow/page.tsx) | Redireciona para `/dashboard/financial/cash-flow` |
 | `dashboard/financial/inbox` | [page.tsx](../../src/app/dashboard/financial/inbox/page.tsx) | Redireciona para `/dashboard/financial/expenses/inbox` |
+| `dashboard/financial/month-closing/expenses` | [page.tsx](../../src/app/dashboard/financial/month-closing/expenses/page.tsx) | [expenses-flow-page.tsx](../../src/features/financial/month-closing/expenses-flow-page.tsx) |
+| `dashboard/financial/month-closing` | [page.tsx](../../src/app/dashboard/financial/month-closing/page.tsx) | [month-closing-page.tsx](../../src/features/financial/month-closing/month-closing-page.tsx) |
 | `dashboard/financial` | [page.tsx](../../src/app/dashboard/financial/page.tsx) | [financial-dashboard-page.tsx](../../src/features/financial/pages/financial-dashboard-page.tsx) |
 | `dashboard/financial/payment-requests` | [page.tsx](../../src/app/dashboard/financial/payment-requests/page.tsx) | Redireciona para `/dashboard/financial/expenses/authorizations` |
 | `dashboard/financial/reconciliation/bank-statements` | [page.tsx](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx) | [bank-statements-page.tsx](../../src/features/financial/pages/bank-statements-page.tsx) |
@@ -363,4 +365,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **181 páginas** no checkout usado para a geração.
+Total: **183 páginas** no checkout usado para a geração.

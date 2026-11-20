@@ -662,4 +662,5 @@ api,src/app/api/documents/editor/templates/route.ts,,docs/engineering/flows/docu
 api,src/app/api/financial/dre/export/route.ts,,docs/engineering/flows/dre.md,Exportacao contextual PDF XLSX somente leitura com escopo financeiro e unidades.
 api,src/app/api/jobs/acquirer-fees/auto/route.ts,,docs/engineering/flows/stone-sales-review.md,Reconhecimento diario automatico das taxas de venda conciliada; modo por unidade (desligado, simulacao, ativo); mesmo portao do botao Reconhecer.
 function,functions/src/acquirer-fee-auto-jobs.ts,acquirerFeeAutoRecognition,docs/engineering/flows/stone-sales-review.md,onSchedule diario 05:40 America/Belem; chama a rota de reconhecimento automatico; deploy nao confirmado.
+api,src/app/api/financial/month-closing/route.ts,,docs/engineering/flows/month-closing.md,Leitura do fechamento mensal por competencia com secureRoute; somente leitura.
 api,src/app/api/dp/schedules/manual-journey/route.ts,,docs/engineering/flows/dp-schedules.md,Salva em conjunto os trechos de uma jornada manual no rascunho com controle de versao por escala.
