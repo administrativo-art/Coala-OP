@@ -8,6 +8,7 @@ import { AppError } from "@/lib/observability";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import { financialCompetenceMonthSchema } from "@/features/financial/lib/expense-accounting-contract";
 import { WORKSPACE_ID } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -15,7 +16,16 @@ export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ expenseId: string }> };
 const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,150}$/);
-const inputSchema = z.object({ supplierEntityId: idSchema, amountCents: z.number().int().positive().max(100_000_000) }).strict();
+const inputSchema = z.object({
+  supplierEntityId: idSchema,
+  amountCents: z.number().int().positive().max(100_000_000),
+  confirmation: z.object({
+    beneficiaryDocument: z.string().regex(/^\d{14}$/),
+    competenceMonth: financialCompetenceMonthSchema,
+    previousPaidRequestId: idSchema,
+    allowExistingBoleto: z.boolean(),
+  }).strict().optional(),
+}).strict();
 type Input = z.infer<typeof inputSchema>;
 type Resource = { expenseId: string };
 
@@ -45,9 +55,16 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
     if (!expenseId.success || !input.success) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_INVALID", kind: "VALIDATION", safeMessage: "Despesa, fornecedor ou valor inválido." });
     }
+    if (input.data.confirmation && !actor.isDefaultAdmin
+      && (actor.permissions.registration?.entities?.edit !== true || permission?.expenses?.create !== true)) {
+      throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_CONFIRMATION_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
     const expense = await financialDbAdmin.collection("expenses").doc(expenseId.data).get();
     if (!expense.exists) throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_NOT_FOUND", kind: "NOT_FOUND" });
-    if (actor.workspace_id !== WORKSPACE_ID || expense.get("workspaceId") !== actor.workspace_id) {
+    const legacyForecast = input.data.confirmation && !expense.get("workspaceId")
+      && expense.get("provisionType") === "forecast" && expense.get("sourceType") === "recurring_expense_forecast"
+      && Boolean(expense.get("unitId"));
+    if (actor.workspace_id !== WORKSPACE_ID || (expense.get("workspaceId") !== actor.workspace_id && !legacyForecast)) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_SCOPE", kind: "AUTHORIZATION" });
     }
     return { actor, input: input.data, resource: { expenseId: expenseId.data } };
@@ -57,6 +74,6 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
   const { actor, input, resource } = security;
   const result = await prepareExpenseSupplierPix(resource.expenseId, input.supplierEntityId, input.amountCents, WORKSPACE_ID,
-    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username });
+    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username }, input.confirmation);
   return NextResponse.json({ request: result }, { headers: { "Cache-Control": "private, no-store" } });
 });

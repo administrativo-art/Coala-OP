@@ -186,3 +186,8 @@ Os leitores de `cashCountingSessions` e `interCobrancas` usam máscara de campos
 ### Leitura de faturas no estudo de caixa — 18/11/2026
 
 `financial-card-statement-creators` (`cardStatements.createdBy`, main.users) e `financial-card-obligation-creators` (`financialObligations.createdBy.uid`, main.users, produtor CARD_STATEMENT) registram atores separados de titular/fornecedor. São `legacy_gap`: não há consulta pessoal live até existir autorização nativa da fatura/conta/instrumento; financial/finance-workspace genérico não a substitui. O leitor técnico do estudo, apenas administrador padrão, usa IDs explícitos e máscaras financeiras que excluem atores, nomes, anexos e alocações. Não cria identidades, vínculos ou migração. Teste de inventário comprova unavailable/zero consultas por pessoa para ambas as fontes.
+
+
+### Atores da confirmação de Pix de fornecedor
+
+`entity-registration-updaters` consulta `entities.updatedBy` em main, e `supplier-payment-profile-validators` consulta `supplierPaymentProfiles.validatedBy` no banco financeiro. Ambas as fontes registram o operador por UID no namespace `main.users` com política `financial-admin`. A busca administrativa retorna metadados do registro. O CNPJ e a chave Pix da entidade não estabelecem vínculo pessoal. Os eventos da confirmação preservam o UID do operador e o identificador da ordem anterior para auditoria da operação.

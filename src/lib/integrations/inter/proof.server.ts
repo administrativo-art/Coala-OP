@@ -14,6 +14,7 @@ function paymentOriginLabel(request: BankPaymentRequest) {
   if (request.sourceType === "purchase_order") return "Pedido de compra";
   if (request.sourceType === "financial_inbox") return "Cobrança recebida por e-mail";
   if (request.sourceType === "expense_boleto") return "Boleto anexado à despesa";
+  if (request.sourceType === "expense_supplier_pix") return "Pix por despesa de fornecedor";
   return "Recibo gerado pelo Coala";
 }
 
