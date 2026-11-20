@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import type { Transaction } from 'firebase-admin/firestore';
+import { isWindowlessFlexibleShift } from '@/features/dp/schedules/split-journey';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { absenceCivilDateSchema } from '../requests/schemas';
@@ -102,6 +103,17 @@ export async function guardOccupancyWrite(transaction: Transaction, workspaceId:
       date: values[0].date, epoch, version: version + 1, updatedAt: new Date().toISOString() });
   });
   return { guarded: true as const, epoch, touchedDays: refs.length };
+}
+
+export function scheduledShiftOccupancySlices(input: {
+  beneficiaryUid: string; date: string; shift: Record<string, unknown>; addsOccupancy: boolean;
+}) {
+  const { shift, ...base } = input;
+  if (isWindowlessFlexibleShift(shift)) {
+    if (!absenceCivilDateSchema.safeParse(base.date).success) throw failure('ABSENCE_SHIFT_TIME_INVALID');
+    return [{ ...base, fromMinute: 0, toMinute: 1440 }];
+  }
+  return shiftOccupancySlices({ ...base, startTime: shift.startTime as string, endTime: shift.endTime as string });
 }
 
 export function shiftOccupancySlices(input: { beneficiaryUid: string; date: string; startTime?: string | null;

@@ -122,3 +122,15 @@ test('aceita trechos da jornada em mais de uma escala e rejeita alvos repetidos'
     ...day, segments: [{ ...segment, expectedDraftVersion: -1 }],
   }).success, false);
 });
+
+test('aceita fixo e flexível sem janela no mesmo rascunho e valida retiradas', () => {
+  const version = { expectedDraftVersion: 3, expectedDraftGenerationId: 'initial', expectedOperationalVersion: 0 };
+  const first = { ...version, scheduleId: 'x', shiftId: 'first', unitId: 'x', existing: true,
+    startTime: '', endTime: '', manualDay: { mode: 'flexible', expectedWorkMinutes: 240, expectedBreakMinutes: 0 } };
+  const second = { ...version, scheduleId: 'y', shiftId: 'second', unitId: 'y', existing: false,
+    startTime: '13:00', endTime: '17:00', manualDay: { mode: 'fixed', expectedBreakMinutes: 0 } };
+  const day = { userId: 'user-1', date: '2026-12-04', segments: [first, second] };
+  assert.equal(manualJourneyDraftSchema.safeParse({ ...day, removals: [{ ...version, scheduleId: 'x', shiftId: 'old' }] }).success, true);
+  assert.equal(manualJourneyDraftSchema.safeParse({ ...day, removals: [{ ...version, scheduleId: 'x', shiftId: 'first' }] }).success, false);
+  assert.equal(manualJourneyDraftSchema.safeParse({ ...day, segments: [{ ...first, startTime: '08:00' }, second] }).success, false);
+});

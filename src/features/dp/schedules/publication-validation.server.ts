@@ -7,7 +7,8 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { hasPublishedScheduleVersion } from '@/lib/dp-schedule-publication';
 import { operationalDayRefs, operationalReadinessRef, operationalReadinessValid,
-  shiftOccupancySlices, type OccupancySlice } from '@/features/dp/absences/operational/occupancy-guard.server';
+  scheduledShiftOccupancySlices, type OccupancySlice } from '@/features/dp/absences/operational/occupancy-guard.server';
+import { isWindowlessFlexibleShift } from './split-journey';
 import { readOfficialPersonMonth, readOfficialScheduleShifts } from './official-revision.server';
 
 type Shift = Record<string, unknown> & { id: string; scheduleId: string };
@@ -28,8 +29,7 @@ function sliceFor(shift: Shift): OccupancySlice[] {
     || !/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date)) fail('DP_PUBLICATION_SHIFT_INVALID', 'Um turno da escala está inconsistente.');
   if (shift.type === 'day_off') return [{ beneficiaryUid, date, fromMinute: 0, toMinute: 1440, addsOccupancy: true }];
   if (shift.type !== 'work') fail('DP_PUBLICATION_SHIFT_INVALID', 'Um turno da escala está inconsistente.');
-  return shiftOccupancySlices({ beneficiaryUid, date, startTime: shift.startTime as string,
-    endTime: shift.endTime as string, addsOccupancy: true });
+  return scheduledShiftOccupancySlices({ beneficiaryUid, date, shift, addsOccupancy: true });
 }
 function overlaps(a: OccupancySlice, b: OccupancySlice) {
   return a.beneficiaryUid === b.beneficiaryUid && a.date === b.date
@@ -45,8 +45,10 @@ function chunks<T>(items: T[], size: number): T[][] {
 export async function validatePublicationOccupancy(params: {
   context: ServerUserContext; scheduleId: string; workspaceId: string; year: number; month: number;
   shifts: Shift[];
+  scheduleIds?: ReadonlySet<string>;
 }) {
   const { context, scheduleId, workspaceId, year, month, shifts } = params;
+  const scheduleIds = params.scheduleIds ?? new Set([scheduleId]);
   const first = `${year}-${String(month).padStart(2, '0')}-01`;
   const through = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   const prior = dayBefore(first);
@@ -54,7 +56,7 @@ export async function validatePublicationOccupancy(params: {
     .filter((userId): userId is string => typeof userId === 'string' && Boolean(userId)))];
   if (shifts.some((shift) => typeof shift.userId !== 'string' || !shift.userId)) fail('DP_PUBLICATION_SHIFT_INVALID', 'Um turno da escala está inconsistente.');
   if (participants.length > MAX_PARTICIPANTS) fail('DP_PUBLICATION_PARTICIPANT_LIMIT', 'Há pessoas demais nesta escala para validar a disponibilidade.');
-  if (shifts.some((shift) => shift.scheduleId !== scheduleId || typeof shift.date !== 'string'
+  if (shifts.some((shift) => !scheduleIds.has(shift.scheduleId) || typeof shift.date !== 'string'
     || shift.date < first || shift.date > through)) fail('DP_PUBLICATION_PERIOD_INVALID', 'A escala contém turno fora da competência.');
   const proposedSlices = shifts.flatMap(sliceFor);
   const other = new Map<string, Shift>();
@@ -77,7 +79,7 @@ export async function validatePublicationOccupancy(params: {
       const ids = await pointerSchedulesByMonth.get(competence)!;
       return (await Promise.all(ids.map((id) => readOfficialScheduleShifts({ scheduleId: id, userId })))).flatMap((item) => item.shifts);
     }));
-    results.flat().filter((shift) => shift.scheduleId !== scheduleId && typeof shift.date === 'string'
+    results.flat().filter((shift) => !scheduleIds.has(shift.scheduleId) && typeof shift.date === 'string'
       && shift.date >= prior && shift.date <= through).forEach((shift) => other.set(`${shift.scheduleId}:${shift.id}`, shift as Shift));
   }
   for (const participantChunk of chunks(participants, 20)) {
@@ -94,7 +96,7 @@ export async function validatePublicationOccupancy(params: {
         && hasPublishedScheduleVersion(item.data() ?? {})).map((item) => item.id));
       physical.docs.forEach((item) => {
         const parent = item.ref.parent.parent;
-        if (parent && parent.id !== scheduleId && legacy.has(parent.id)) {
+        if (parent && !scheduleIds.has(parent.id) && legacy.has(parent.id)) {
           other.set(`${parent.id}:${item.id}`, { id: item.id, scheduleId: parent.id, ...item.data() } as Shift);
         }
       });
@@ -107,7 +109,10 @@ export async function validatePublicationOccupancy(params: {
       const key = createHash('sha256').update(`${slice.beneficiaryUid}:${slice.date}`).digest('hex');
       const existing = byDay.get(key) ?? [];
       const conflict = existing.find((item) =>
-        (item.shift.scheduleId !== shift.scheduleId || item.shift.id !== shift.id) && overlaps(item.slice, slice));
+        (item.shift.scheduleId !== shift.scheduleId || item.shift.id !== shift.id)
+        && !(item.shift.manualDayId && item.shift.manualDayId === shift.manualDayId
+          && item.shift.date === shift.date && (isWindowlessFlexibleShift(item.shift) || isWindowlessFlexibleShift(shift)))
+        && overlaps(item.slice, slice));
       if (conflict) {
         const work = shift.dayOffDraft === true ? conflict.shift
           : conflict.shift.dayOffDraft === true ? shift : undefined;
