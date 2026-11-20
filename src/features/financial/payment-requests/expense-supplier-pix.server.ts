@@ -110,10 +110,12 @@ export async function prepareExpenseSupplierPix(
   if (confirmation && Boolean(code) !== confirmation.allowExistingBoleto) {
     conflict("A confirmação para preservar o boleto diverge dos anexos atuais.");
   }
-  const supplierPixConfirmation = confirmation ? {
+  const replacedBoletoHash = code ? paymentBarcodeHash(code) : null;
+  if (code && !replacedBoletoHash) conflict("Não foi possível identificar o boleto preservado.");
+  const supplierPixConfirmation: PixBankPaymentRequest["supplierPixConfirmation"] = confirmation ? {
     competenceMonth: confirmation.competenceMonth,
     previousPaidRequestId: confirmation.previousPaidRequestId,
-    ...(code ? { replacedBoletoHash: paymentBarcodeHash(code) } : {}),
+    ...(replacedBoletoHash ? { replacedBoletoHash } : {}),
   } : undefined;
   await assertArchivedBoletoUnused(before, supplierPixConfirmation?.replacedBoletoHash);
   const now = new Date().toISOString();
