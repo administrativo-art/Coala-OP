@@ -41,6 +41,9 @@ test('aceita intervalo local dentro do período de uma jornada manual', () => {
   const manual = { ...validShift, shiftDefinitionId: undefined,
     manualDay: { mode: 'flexible', expectedWorkMinutes: 480, expectedBreakMinutes: 60 } };
   assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '12:00', end: '13:00' } }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, travelFromPreviousMinutes: 25 }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...manual, travelFromPreviousMinutes: -1 }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, travelFromPreviousMinutes: 25 }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse({ ...manual, manualBreak: { start: '08:00', end: '09:00' } }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, manualBreak: { start: '12:00', end: '13:00' } }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse(manual).success, true);

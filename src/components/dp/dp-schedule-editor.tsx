@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import { reviewSplitJourney } from '@/features/dp/schedules/split-journey';
 import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
 import { manualShiftDaySchema } from '@/features/dp/shifts/schemas';
 import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
@@ -188,6 +189,7 @@ const shiftSchema = z.object({
   shiftDefinitionId: z.string().optional(),
   manualDay: manualShiftDaySchema.nullish(),
   manualBreakStart: z.string().optional(),
+  travelMinutesInput: z.string().regex(/^\d{0,4}$/).optional(),
   manualBreakEnd: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
@@ -258,6 +260,7 @@ function ShiftDialog({
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
       manualDay: shift?.manualDay ?? null,
       manualBreakStart: shift?.manualBreak?.start ?? '',
+      travelMinutesInput: shift?.travelFromPreviousMinutes?.toString() ?? '',
       manualBreakEnd: shift?.manualBreak?.end ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
@@ -274,6 +277,7 @@ function ShiftDialog({
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
         manualDay: shift?.manualDay ?? null,
         manualBreakStart: shift?.manualBreak?.start ?? '',
+        travelMinutesInput: shift?.travelFromPreviousMinutes?.toString() ?? '',
         manualBreakEnd: shift?.manualBreak?.end ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
@@ -321,16 +325,18 @@ function ShiftDialog({
   const linkConflict = activeRelated?.periods.some((period) =>
     period.manualDayId !== linkedPeriod?.manualDayId || JSON.stringify(period.manualDay) !== JSON.stringify(linkedDay));
   React.useEffect(() => {
-    if (!open || !selectedUserId || !selectedDate || !siblingDraftIds?.length) return;
+    if (!open || !selectedUserId || !selectedDate) return;
     let cancelled = false;
     void Promise.resolve().then(async () => {
       if (cancelled) return;
       setLookupPending(true);
       try {
-        const drafts = await Promise.all(siblingDraftIds.map(fetchDraftScheduleShifts));
+        const relatedScheduleIds = [...new Set([scheduleId, ...(siblingDraftIds ?? [])])];
+        const drafts = await Promise.all(relatedScheduleIds.map(fetchDraftScheduleShifts));
         if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: false,
           periods: drafts.flatMap((draft) => draft.shifts.filter((period) =>
-            period.userId === selectedUserId && period.date === selectedDate && Boolean(period.manualDay))) });
+            period.userId === selectedUserId && period.date === selectedDate && Boolean(period.manualDay)
+            && !(period.scheduleId === scheduleId && period.id === shift?.id))) });
       } catch {
         if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: true, periods: [] });
       } finally {
@@ -338,7 +344,19 @@ function ShiftDialog({
       }
     });
     return () => { cancelled = true; };
-  }, [open, selectedDate, selectedUserId, siblingDraftIds]);
+  }, [open, scheduleId, selectedDate, selectedUserId, shift?.id, siblingDraftIds]);
+  const manualBreakStart = form.watch('manualBreakStart');
+  const manualBreakEnd = form.watch('manualBreakEnd');
+  const travelMinutesInput = form.watch('travelMinutesInput');
+  const currentSegmentId = 'current-period';
+  const relatedPeriods = activeRelated?.periods ?? [];
+  const splitReview = linkedDay && relatedPeriods.length
+    ? reviewSplitJourney([
+      ...relatedPeriods.map((period) => ({ ...period, id: `${period.scheduleId}:${period.id}` })),
+      { id: currentSegmentId, unitId: selectedUnitId, startTime: form.watch('startTime'), endTime: form.watch('endTime'),
+        manualBreak: manualBreakStart && manualBreakEnd ? { start: manualBreakStart, end: manualBreakEnd } : null,
+        travelFromPreviousMinutes: travelMinutesInput ? Number(travelMinutesInput) : null },
+    ]) : null;
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
     [selectedDate, selectedUserId, vacations],
@@ -421,7 +439,13 @@ function ShiftDialog({
       toast({ title: 'Confira os períodos das outras unidades antes de salvar a jornada manual.', variant: 'destructive' });
       return;
     }
-    const { manualBreakStart, manualBreakEnd, ...shiftFields } = values;
+    const { manualBreakStart, manualBreakEnd, travelMinutesInput, ...shiftFields } = values;
+    const manualConfiguration = values.shiftDefinitionId ? null : linkedDay ?? values.manualDay ?? null;
+    const travelMinutes = manualConfiguration && travelMinutesInput ? Number(travelMinutesInput) : null;
+    if (travelMinutes != null && travelMinutes > 1439) {
+      toast({ title: 'Informe o deslocamento em minutos dentro do mesmo dia.', variant: 'destructive' });
+      return;
+    }
     if (!values.shiftDefinitionId && (linkedDay || values.manualDay) && Boolean(manualBreakStart) !== Boolean(manualBreakEnd)) {
       toast({ title: 'Informe o início e o fim do intervalo deste período.', variant: 'destructive' });
       return;
@@ -430,7 +454,8 @@ function ShiftDialog({
       ...shiftFields,
       manualBreak: !values.shiftDefinitionId && (linkedDay || values.manualDay) && manualBreakStart && manualBreakEnd
         ? { start: manualBreakStart, end: manualBreakEnd } : null,
-      manualDay: values.shiftDefinitionId ? null : linkedDay ?? values.manualDay ?? null,
+      manualDay: manualConfiguration,
+      travelFromPreviousMinutes: travelMinutes,
       exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
       scheduleId,
       ...(userName ? { userName } : {}),
@@ -676,6 +701,29 @@ function ShiftDialog({
                 )}
                 {(linkedDay ?? manualDay) && (
                   <>
+                    <label className="block text-xs">Deslocamento desde o trecho anterior, em minutos
+                      <Input type="number" min={0} max={1439} step={1} {...form.register('travelMinutesInput')} />
+                    </label>
+                    {splitReview && (
+                      <div className="space-y-1 text-xs">
+                        <ol className="list-decimal pl-5">
+                          {splitReview.segments.map((segment) => (
+                            <li key={segment.id}>
+                              {units.find((unit) => unit.id === segment.unitId)?.name ?? 'Unidade não informada'}
+                              {' · '}{segment.startTime || '—'}–{segment.endTime || '—'}
+                            </li>
+                          ))}
+                        </ol>
+                        {splitReview.issues.length === 0 && (
+                          <p>{splitReview.journeyMinutes} min de jornada
+                            {' ('}{splitReview.workMinutes} min nas unidades + {splitReview.travelMinutes} min de deslocamento)
+                            {' · '}{splitReview.breakMinutes} min de pausa</p>
+                        )}
+                        {splitReview.segments.map((segment, index) => splitReview.issues
+                          .filter((issue) => issue.segmentId === segment.id)
+                          .map((issue) => <p key={`${segment.id}:${issue.code}`}>Trecho {index + 1}. {issue.message}</p>))}
+                      </div>
+                    )}
                     <p className="text-xs text-ds-ink-muted">
                       A escala fica em rascunho enquanto houver um período com esta configuração.
                     </p>
@@ -685,6 +733,7 @@ function ShiftDialog({
                         form.setValue('manualDay', null);
                         form.setValue('manualBreakStart', '');
                         form.setValue('manualBreakEnd', '');
+                        form.setValue('travelMinutesInput', '');
                       }}>Remover configuração manual</Button>
                     )}
                   </>

@@ -4151,6 +4151,7 @@ export type DPShift = {
   manualDay?: DPManualShiftDay | null;
   manualDayId?: string | null;
   manualBreak?: { start: string; end: string } | null;
+  travelFromPreviousMinutes?: number | null;
   id: string;
   scheduleId: string;
   unitId: string;
