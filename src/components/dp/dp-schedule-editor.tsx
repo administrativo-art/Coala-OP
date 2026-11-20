@@ -20,7 +20,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
-import { reviewSplitJourney } from '@/features/dp/schedules/split-journey';
+import { DPManualJourneyDialog } from './dp-manual-journey-dialog';
+import { reviewSplitJourney, validSplitJourneyShiftIds } from '@/features/dp/schedules/split-journey';
 import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
 import { manualShiftDaySchema } from '@/features/dp/shifts/schemas';
 import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
@@ -189,7 +190,6 @@ const shiftSchema = z.object({
   shiftDefinitionId: z.string().optional(),
   manualDay: manualShiftDaySchema.nullish(),
   manualBreakStart: z.string().optional(),
-  travelMinutesInput: z.string().regex(/^\d{0,4}$/).optional(),
   manualBreakEnd: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
@@ -206,6 +206,8 @@ interface ShiftDialogProps {
   defaultDate?: string;
   defaultUnitId?: string;
   units: DPUnit[];
+  relatedUnits?: DPUnit[];
+  onEditJourney?: () => void;
   shiftDefinitions: DPShiftDefinition[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -219,7 +221,7 @@ interface ShiftDialogProps {
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, siblingDraftIds, dayOffOccupied, vacations, onDelete,
+  scheduleId, shift, defaultDate, defaultUnitId, units, relatedUnits, onEditJourney, shiftDefinitions, open, onOpenChange, siblingOccupied, siblingDraftIds, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
   const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
@@ -260,7 +262,6 @@ function ShiftDialog({
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
       manualDay: shift?.manualDay ?? null,
       manualBreakStart: shift?.manualBreak?.start ?? '',
-      travelMinutesInput: shift?.travelFromPreviousMinutes?.toString() ?? '',
       manualBreakEnd: shift?.manualBreak?.end ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
@@ -277,7 +278,6 @@ function ShiftDialog({
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
         manualDay: shift?.manualDay ?? null,
         manualBreakStart: shift?.manualBreak?.start ?? '',
-        travelMinutesInput: shift?.travelFromPreviousMinutes?.toString() ?? '',
         manualBreakEnd: shift?.manualBreak?.end ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
@@ -347,15 +347,13 @@ function ShiftDialog({
   }, [open, scheduleId, selectedDate, selectedUserId, shift?.id, siblingDraftIds]);
   const manualBreakStart = form.watch('manualBreakStart');
   const manualBreakEnd = form.watch('manualBreakEnd');
-  const travelMinutesInput = form.watch('travelMinutesInput');
   const currentSegmentId = 'current-period';
   const relatedPeriods = activeRelated?.periods ?? [];
   const splitReview = linkedDay && relatedPeriods.length
     ? reviewSplitJourney([
       ...relatedPeriods.map((period) => ({ ...period, id: `${period.scheduleId}:${period.id}` })),
       { id: currentSegmentId, unitId: selectedUnitId, startTime: form.watch('startTime'), endTime: form.watch('endTime'),
-        manualBreak: manualBreakStart && manualBreakEnd ? { start: manualBreakStart, end: manualBreakEnd } : null,
-        travelFromPreviousMinutes: travelMinutesInput ? Number(travelMinutesInput) : null },
+        manualBreak: manualBreakStart && manualBreakEnd ? { start: manualBreakStart, end: manualBreakEnd } : null },
     ]) : null;
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
@@ -439,13 +437,8 @@ function ShiftDialog({
       toast({ title: 'Confira os períodos das outras unidades antes de salvar a jornada manual.', variant: 'destructive' });
       return;
     }
-    const { manualBreakStart, manualBreakEnd, travelMinutesInput, ...shiftFields } = values;
+    const { manualBreakStart, manualBreakEnd, ...shiftFields } = values;
     const manualConfiguration = values.shiftDefinitionId ? null : linkedDay ?? values.manualDay ?? null;
-    const travelMinutes = manualConfiguration && travelMinutesInput ? Number(travelMinutesInput) : null;
-    if (travelMinutes != null && travelMinutes > 1439) {
-      toast({ title: 'Informe o deslocamento em minutos dentro do mesmo dia.', variant: 'destructive' });
-      return;
-    }
     if (!values.shiftDefinitionId && (linkedDay || values.manualDay) && Boolean(manualBreakStart) !== Boolean(manualBreakEnd)) {
       toast({ title: 'Informe o início e o fim do intervalo deste período.', variant: 'destructive' });
       return;
@@ -455,7 +448,6 @@ function ShiftDialog({
       manualBreak: !values.shiftDefinitionId && (linkedDay || values.manualDay) && manualBreakStart && manualBreakEnd
         ? { start: manualBreakStart, end: manualBreakEnd } : null,
       manualDay: manualConfiguration,
-      travelFromPreviousMinutes: travelMinutes,
       exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
       scheduleId,
       ...(userName ? { userName } : {}),
@@ -701,22 +693,19 @@ function ShiftDialog({
                 )}
                 {(linkedDay ?? manualDay) && (
                   <>
-                    <label className="block text-xs">Deslocamento desde o trecho anterior, em minutos
-                      <Input type="number" min={0} max={1439} step={1} {...form.register('travelMinutesInput')} />
-                    </label>
                     {splitReview && (
                       <div className="space-y-1 text-xs">
                         <ol className="list-decimal pl-5">
                           {splitReview.segments.map((segment) => (
                             <li key={segment.id}>
-                              {units.find((unit) => unit.id === segment.unitId)?.name ?? 'Unidade não informada'}
+                              {(relatedUnits ?? units).find((unit) => unit.id === segment.unitId)?.name ?? 'Unidade não informada'}
                               {' · '}{segment.startTime || '—'}–{segment.endTime || '—'}
                             </li>
                           ))}
                         </ol>
                         {splitReview.issues.length === 0 && (
                           <p>{splitReview.journeyMinutes} min de jornada
-                            {' ('}{splitReview.workMinutes} min nas unidades + {splitReview.travelMinutes} min de deslocamento)
+                            {' ('}{splitReview.workMinutes} min nas unidades + {splitReview.travelMinutes} min entre unidades)
                             {' · '}{splitReview.breakMinutes} min de pausa</p>
                         )}
                         {splitReview.segments.map((segment, index) => splitReview.issues
@@ -733,7 +722,6 @@ function ShiftDialog({
                         form.setValue('manualDay', null);
                         form.setValue('manualBreakStart', '');
                         form.setValue('manualBreakEnd', '');
-                        form.setValue('travelMinutesInput', '');
                       }}>Remover configuração manual</Button>
                     )}
                   </>
@@ -752,6 +740,7 @@ function ShiftDialog({
             )}
 
             <DialogFooter className="mt-6! flex! flex-row! items-center! justify-between! gap-3 sm:justify-between! sm:space-x-0!">
+          {onEditJourney && <Button type="button" variant="outline" onClick={onEditJourney}>Editar jornada do dia</Button>}
               {isEdit && shift && onDelete ? (
                 <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-[#fbd0da] px-[13px] text-[12.5px] font-extrabold text-[#be123c] hover:border-[#f7a9bc] hover:bg-[#fef2f4] hover:text-[#be123c]">
                   Remover
@@ -864,9 +853,9 @@ function ManualDayOffDialog({
 }
 
 /** Um botão por dia: o operador escolhe o que lançar (turno, DSR ou ausência), em vez de procurar botões separados. */
-function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence, closed, onSetClosed }: {
+function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onJourney, onDayOff, onAbsence, closed, onSetClosed }: {
   canShift: boolean; canDayOff: boolean; canAbsence: boolean; onShift: () => void; onDayOff: () => void; onAbsence: () => void;
-  closed?: boolean; onSetClosed?: () => void;
+  closed?: boolean; onSetClosed?: () => void; onJourney?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (action: () => void) => () => { setOpen(false); action(); };
@@ -884,6 +873,7 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
       </PopoverTrigger>
       <PopoverContent className="w-48 p-1" align="start">
         {canShift ? <button type="button" className={item} onClick={pick(onShift)}><Clock3 className="h-3.5 w-3.5" />Turno</button> : null}
+        {canShift && onJourney ? <button type="button" className={item} onClick={pick(onJourney)}>Jornada manual</button> : null}
         {canDayOff ? <button type="button" className={item} onClick={pick(onDayOff)}><CalendarOff className="h-3.5 w-3.5" />DSR</button> : null}
         {canAbsence ? <button type="button" className={item} onClick={pick(onAbsence)}><CalendarDays className="h-3.5 w-3.5" />Ausência</button> : null}
         {onSetClosed && <button type="button" className={item} onClick={pick(onSetClosed)}>
@@ -897,6 +887,7 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
 // ─── Shift Card ───────────────────────────────────────────────────────────────
 
 interface ShiftCardProps {
+  splitJourney?: boolean;
   shift: DPShift;
   originUnitName?: string;
   vacationConflict?: DPVacationRecord | null;
@@ -915,6 +906,7 @@ interface ShiftCardProps {
 
 function ShiftCard({
   shift,
+  splitJourney,
   originUnitName,
   vacationConflict,
   userName,
@@ -932,7 +924,7 @@ function ShiftCard({
   const accentColor = getUserColor(shift.userId, userColor);
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
-  const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
+  const shiftLabel = splitJourney ? 'Jornada dividida · rascunho' : shiftDef?.name?.trim() || 'Turno manual';
   const externalCoverage = shift.assignmentKind === 'external_coverage';
   const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
@@ -1673,6 +1665,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const canEdit = canManageSchedule && vacationDataReady;
   const canPublish = canManageSchedule && (isDefaultAdmin || permissions.dp?.schedules?.publish === true);
 
+  const [journeyDialog, setJourneyDialog] = useState<{ date: string; seed?: DPShift } | null>(null);
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
   // Ausência lançada pela escala: primeiro a pessoa, depois o pedido com a data já preenchida.
@@ -1977,6 +1970,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       .map(s => s.id);
   }, [accessibleSchedules, isPerUnit, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
+  const journeySchedules = useMemo(() => {
+    if (!isPerUnit) return [];
+    const ids = new Set([schedule.id, ...siblingIds]);
+    return accessibleSchedules.flatMap((item) => {
+      const unit = accessibleUnits.find((candidate) => candidate.id === item.unitId);
+      return ids.has(item.id) && unit && !unit.isArchived ? [{ id: item.id, unitId: unit.id, name: unit.name }] : [];
+    });
+  }, [accessibleSchedules, accessibleUnits, isPerUnit, schedule.id, siblingIds]);
+
   const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds, canManageSchedule || (isDefaultAdmin && !isArchivedUnitSchedule));
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
   const dayOffShifts = useMemo(() => shifts.filter(isDayOffShift), [shifts]);
@@ -2139,10 +2141,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   // IDs of current-unit shifts that conflict with a sibling schedule (same user, same date).
   // This is intentionally derived from the live sibling listeners. A persisted
   // hasConflict may be stale after the conflicting shift is deleted elsewhere.
+  const splitJourneyIds = useMemo(() => validSplitJourneyShiftIds([...workShifts, ...siblingWorkShifts]),
+    [workShifts, siblingWorkShifts]);
   const crossConflictShiftIds = useMemo(() => {
     if (!isPerUnit) return new Set<string>();
-    return buildCrossUnitConflictShiftIds(workShifts, siblingWorkShifts);
-  }, [isPerUnit, siblingWorkShifts, workShifts]);
+    return new Set([...buildCrossUnitConflictShiftIds(workShifts, siblingWorkShifts)]
+      .filter((id) => !splitJourneyIds.has(id)));
+  }, [isPerUnit, siblingWorkShifts, splitJourneyIds, workShifts]);
 
   const prevCrossConflictShiftIds = useMemo(() => {
     if (!isPerUnit) return new Set<string>();
@@ -3197,6 +3202,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           <ShiftCard
                             key={`own-${shift.id}`}
                             shift={shift}
+                            splitJourney={splitJourneyIds.has(shift.id) && !shift.hasConflict}
                             originUnitName={shift.originUnitId ? units.find((item) => item.id === shift.originUnitId)?.name ?? shift.originUnitId : undefined}
                             vacationConflict={vacationConflictForShift(shift)}
                             userName={user?.username ?? 'Desconhecido'}
@@ -3208,7 +3214,10 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             selectionMode={bulkSelectionActive}
                             selected={selectedShiftIds.includes(shift.id)}
                             onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
-                            onEdit={setEditShift}
+                            onEdit={(target) => {
+                              if (splitJourneyIds.has(target.id)) setJourneyDialog({ date: target.date, seed: target });
+                              else setEditShift(target);
+                            }}
                             onDelete={setDeleteTarget}
                           />
                         );
@@ -3305,6 +3314,8 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           canDayOff={canAddDayOff}
                           canAbsence={canLaunchAbsence}
                           onShift={() => setAddDialog({ date, unitId: unit.id })}
+                          onJourney={journeySchedules.some((item) => item.id === schedule.id)
+                            ? () => setJourneyDialog({ date }) : undefined}
                           onDayOff={() => setManualDayOffDialog({ date, unitId: unit.id })}
                           onAbsence={() => setAbsencePicker({ date, unitId: unit.id })}
                         />
@@ -3550,11 +3561,21 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         />
       ) : null}
 
+      {journeyDialog && <DPManualJourneyDialog
+        date={journeyDialog.date}
+        originScheduleId={schedule.id}
+        schedules={journeySchedules}
+        people={operationalUsers}
+        seed={journeyDialog.seed}
+        onClose={() => setJourneyDialog(null)}
+      />}
+
       <ShiftDialog
         scheduleId={schedule.id}
         defaultDate={addDialog?.date}
         defaultUnitId={addDialog?.unitId}
         units={activeUnits}
+        relatedUnits={accessibleUnits}
         shiftDefinitions={shiftDefinitions}
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
@@ -3599,7 +3620,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       <ShiftDialog
         scheduleId={schedule.id}
         shift={editShift}
+        onEditJourney={editShift && journeySchedules.some((item) => item.id === schedule.id) ? () => {
+          setJourneyDialog({ date: editShift.date, seed: editShift });
+          setEditShift(null);
+        } : undefined}
         units={activeUnits}
+        relatedUnits={accessibleUnits}
         shiftDefinitions={shiftDefinitions}
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
