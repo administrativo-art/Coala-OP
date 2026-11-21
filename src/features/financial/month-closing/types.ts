@@ -27,7 +27,16 @@ export type ClosingItemKind =
   | "card_statement_missing"
   | "card_statement_open"
   | "card_statement_awaiting_payment"
-  | "card_statement_overdue";
+  | "card_statement_overdue"
+  | "sales_attention"
+  | "sales_awaiting_source"
+  | "sales_reopened"
+  | "sales_not_reviewed"
+  | "sales_not_published"
+  | "fees_not_ready"
+  | "fees_exception"
+  | "fees_rate_change"
+  | "fees_charge";
 
 export type ClosingCheck = {
   id: string;
@@ -65,6 +74,8 @@ export type ClosingFlow = {
   itemsHidden: boolean;
   /** Maior data de vencimento entre os itens com prazo; `null` se não houver. */
   readyFrom: string | null;
+  /** Tela de origem já no mês, para fluxos sem tela própria (Vendas e Taxas). */
+  originHref?: string;
 };
 
 /** Totais dos títulos reais da competência, sem as compras de cartão (que seguem pela fatura) nem as previsões. */

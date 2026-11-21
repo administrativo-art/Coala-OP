@@ -27,6 +27,11 @@ export function canViewMonthClosingExpenseItems(actor: Actor) {
   return canViewMonthClosing(actor) && actor.permissions.financial?.expenses?.view === true;
 }
 
+/** Vendas e Taxas têm telas de origem só do administrador padrão: os itens seguem a mesma regra. */
+export function canViewMonthClosingStoneItems(actor: Actor) {
+  return actor.isDefaultAdmin;
+}
+
 export function assertMonthClosingAccess(actor: Actor) {
   if (!canViewMonthClosing(actor)) {
     throw new AppError({ code: "MONTH_CLOSING_FORBIDDEN", kind: "AUTHORIZATION" });
