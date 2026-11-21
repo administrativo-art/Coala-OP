@@ -33,6 +33,38 @@ test("venda fora da taxa vira exceção com diferença em centavos; arredondamen
   assert.deepEqual(exceptions.map(e => [e.saleId, e.differenceCents, e.reason]), [[above.saleId, 31, "above"]]);
 });
 
+// Vendas pequenas com `feeRate` (cobrado ÷ bruto sem arredondar), como a conferência salva traz desde 15/11.
+const rated = (date: string, gross: number, fee: number, extra: Partial<ReceiptParcel> = {}) => parcel(date, gross, fee, { feeRate: fee / gross, ...extra });
+const withReference = (parcels: ReceiptParcel[], rate = 0.0222) => {
+  const sales = feeSales(parcels);
+  const references = new Map([["Visa|credit", { rate, since: "2026-09-20", status: "confirmed" as const }]]);
+  return { sales, groups: feeGroups(sales, references, "2026-11-13") };
+};
+
+test("venda pequena cobrada exatamente no valor esperado está conciliada, mesmo com percentual diferente da referência", () => {
+  // 2,22% de R$ 6,00 = 13,32 → 13 (2,1667%); de R$ 7,00 = 15,54 → 16 (2,2857%): ambas exatas em centavos.
+  const { sales, groups } = withReference([rated("2026-10-01", 600, 13), rated("2026-10-01", 700, 16), rated("2026-10-02", 1000, 22)]);
+  assert.deepEqual(feeExceptions(sales, groups, [], "2026-10"), []);
+});
+
+test("um centavo a mais ou a menos que o esperado continua sendo divergência, com a referência na linha", () => {
+  const over = rated("2026-10-03", 700, 17);
+  const under = rated("2026-10-04", 700, 15);
+  const { sales, groups } = withReference([over, under]);
+  const found = feeExceptions(sales, groups, [], "2026-10");
+  assert.deepEqual(found.map(item => [item.saleId, item.expectedCents, item.chargedCents, item.differenceCents, item.reason, item.referenceRate]),
+    [[over.saleId, 16, 17, 1, "above", 0.0222], [under.saleId, 16, 15, -1, "below", 0.0222]]);
+});
+
+test("a detecção de mudança recorrente não é afetada: taxa nova em vendas grandes continua virando mudança", () => {
+  const base = days("2026-10-01", 10).map(d => rated(d, 10000, 222));
+  const changed = days("2026-11-05", 6).map(d => rated(d, 10000, 242));
+  const { sales, groups } = withReference([...base, ...changed]);
+  const changes = detectRateChanges(sales, groups);
+  assert.equal(changes.length, 1);
+  assert.deepEqual([changes[0].from, changes[0].to, changes[0].saleCount], [0.0222, 0.0242, 6]);
+});
+
 test("taxa nova repetida vira uma mudança a confirmar, não dezenas de exceções", () => {
   const base = days("2026-10-01", 10).map(d => parcel(d, 10000, 289));
   const changed = days("2026-11-05", 6).map(d => parcel(d, 10000, 309));
