@@ -26,7 +26,8 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
   const countable = flow.checks.filter((check) => check.state !== "unavailable");
   const done = countable.filter((check) => check.state === "ok").length;
   const pct = flow.checks.length === 0 ? 0 : Math.round((done / flow.checks.length) * 100);
-  const detailHref = flow.key === "expenses" ? `${FINANCIAL_ROUTES.monthClosingExpenses}?${new URLSearchParams({ month })}` : null;
+  const detailHref = flow.key === "expenses" ? `${FINANCIAL_ROUTES.monthClosingExpenses}?${new URLSearchParams({ month })}` : flow.originHref ?? null;
+  const detailLabel = flow.key === "expenses" ? `Ver fluxo de ${flow.name.toLowerCase()}` : `Abrir ${flow.name.toLowerCase()} em ${monthLabel(month)}`;
   return (
     <article className="flex min-w-0 flex-col rounded-ds-card border border-ds-border bg-ds-surface transition-[transform,box-shadow] duration-200 ease-ds-lift hover:-translate-y-0.5 hover:shadow-ds-lift motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <header className="flex flex-col gap-2 p-4 pb-3">
@@ -61,7 +62,7 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
       <div className="mt-auto">
         {detailHref ? (
           <Link href={detailHref} className="flex items-center justify-between rounded-b-ds-card border-t border-ds-divider px-4 py-3 text-[12.5px] font-bold text-ds-accent-ink hover:bg-ds-muted hover:text-ds-accent-ink-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
-            <span>Ver fluxo de {flow.name.toLowerCase()}</span><span aria-hidden="true">›</span>
+            <span>{detailLabel}</span><span aria-hidden="true">›</span>
           </Link>
         ) : (
           <div className="rounded-b-ds-card border-t border-ds-divider px-4 py-3 text-[12.5px] font-bold text-ds-ink-faint">Em construção</div>
@@ -73,7 +74,7 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
 
 function FlowItems({ flow }: { flow: ClosingFlow }) {
   if (flow.itemsHidden) {
-    return <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">Os itens ficam visíveis para quem também visualiza despesas.</p>;
+    return <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">{flow.key === "expenses" ? "Os itens ficam visíveis para quem também visualiza despesas." : "Os itens ficam visíveis para quem acessa a tela de origem deste fluxo."}</p>;
   }
   const visible = flow.items.slice(0, 3);
   if (visible.length === 0) {

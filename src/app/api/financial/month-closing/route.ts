@@ -7,7 +7,7 @@ import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
 import { rethrowServerAuthenticationFailure } from "@/lib/server-authentication-failure";
-import { assertMonthClosingAccess, canViewMonthClosingExpenseItems } from "@/features/financial/month-closing/access";
+import { assertMonthClosingAccess, canViewMonthClosingExpenseItems, canViewMonthClosingStoneItems } from "@/features/financial/month-closing/access";
 import { isClosableRange } from "@/features/financial/month-closing/month";
 import { getMonthClosingOverview, MonthClosingLimitError } from "@/features/financial/month-closing/overview.server";
 
@@ -57,7 +57,9 @@ const enforcer = createStandardSecurityEnforcer<NextRequest, Context, unknown, S
 export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
   const payload = await getMonthClosingOverview({
     month: security.input.month,
+    workspaceId: security.resource.workspaceId,
     canViewExpenseItems: canViewMonthClosingExpenseItems(security.actor),
+    canViewStoneItems: canViewMonthClosingStoneItems(security.actor),
   }).catch((cause) => {
     if (cause instanceof MonthClosingLimitError) {
       throw new AppError({
