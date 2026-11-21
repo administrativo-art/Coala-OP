@@ -28,7 +28,7 @@ Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previ
 
 ## Vendas e Taxas (decisão de 21/11/2026)
 
-Ambos leem os vínculos Stone ativos (`stoneMerchantMappings`, via `listAutomatedSalesReviewMappings`) com vigência na competência, um por StoneCode; vínculo por terminal fica de fora. Unidade sem vínculo vigente não entra; sem nenhum vínculo o fluxo fica **indisponível**, nunca conferido. Se a leitura falhar, só aquele fluxo fica indisponível, com evento de erro (`reportSystemError`), e os demais continuam.
+Ambos leem `stoneMerchantMappings` (todas as situações, até 100) pela mesma elegibilidade das telas de origem (`resolveFinancialAgentMapping`): vale o vínculo **ativo ou o encerrado que tem data de fim**, um por StoneCode; vínculo por terminal fica de fora ([`stone-bindings.ts`](../../../src/features/financial/month-closing/stone-bindings.ts)). Vendas considera todo vínculo que vigorou em algum dia do mês; Taxas usa o vigente no último dia do mês (ou no último dia publicado), como a tela de Taxas, porque a conferência Stone salva fica ligada a esse vínculo; vínculos concorrentes para o mesmo StoneCode deixam só Taxas indisponível. Unidade sem vínculo vigente não entra; sem nenhum vínculo o fluxo fica **indisponível**, nunca conferido. Se a leitura falhar, só aquele fluxo fica indisponível, com evento de erro (`reportSystemError`), e os demais continuam.
 
 | Fluxo | Conferência | Conferido quando | Fonte |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Ambos leem os vínculos Stone ativos (`stoneMerchantMappings`, via `listAutomate
 | --- | --- | --- | --- |
 | `expenses` (banco financeiro) | leitura por competência | `overview.server.ts` | Rota: `financial.view` + `financial.monthClosings.view`; itens (descrição, fornecedor, valor) só com `financial.expenses.view`. |
 | `cardStatements` | leitura por competência | `overview.server.ts` | Mesma rota. |
-| `stoneMerchantMappings`, `kiosks`, `dailySalesReviews`, decisões/ocorrências/conferências Stone | leitura | `sales-fees.server.ts` | Rota igual; itens de Vendas e Taxas só administrador padrão (`canViewMonthClosingStoneItems`). |
+| `stoneMerchantMappings` (workspace, até 100), `kiosks`, `dailySalesReviews`, decisões/ocorrências/conferências Stone | leitura | `sales-fees.server.ts` | Rota igual; itens de Vendas e Taxas só administrador padrão (`canViewMonthClosingStoneItems`). |
 | Nenhuma | escrita | — | Não há escrita nem auditoria nesta etapa. |
 
 - Permissão nova: `financial.monthClosings` = `{ view, close, reopen }` ([`src/types/index.ts`](../../../src/types/index.ts)), opcional para não quebrar perfis salvos (ausência = negado). Administrador padrão tem tudo. `close` e `reopen` aparecem no perfil mas **não têm efeito** ainda. Perfis existentes que precisem da tela exigem ajuste manual.
@@ -62,5 +62,5 @@ Por abertura de tela: até 1.500 leituras de despesas + até 60 de faturas; típ
 - Testes: [`financial-month-closing-expenses-flow`](../../../tests/unit/financial-month-closing-expenses-flow.test.ts) (classificação, vencimento, cartão, dinheiro, datas sem deslocamento de fuso, ocultação de itens) e [`financial-month-closing-access-and-month`](../../../tests/unit/financial-month-closing-access-and-month.test.ts) (permissões, fuso, intervalo, apresentação).
 - **Não verificado:** dados reais (a classificação ainda não foi executada sobre outubro), navegador/visual, rota HTTP ponta a ponta em emulador, e a hipótese de que `settlementSummary` está preenchido nas despesas já pagas (despesas antigas sem ele aparecerão como “Sem vínculo no extrato”).
 - Hipóteses a confirmar: dinheiro conta pela baixa do caixa; pagamento só informado não basta; fatura de cartão só conta como conferida quando `paid`.
-- Testes de Vendas e Taxas: [`financial-month-closing-sales-fees-flow`](../../../tests/unit/financial-month-closing-sales-fees-flow.test.ts). A leitura do servidor (`sales-fees.server.ts`) não tem teste automatizado nem foi executada com dados reais.
+- Testes de Vendas e Taxas: [`financial-month-closing-sales-fees-flow`](../../../tests/unit/financial-month-closing-sales-fees-flow.test.ts) e [`financial-month-closing-stone-bindings`](../../../tests/unit/financial-month-closing-stone-bindings.test.ts). A leitura do servidor (`sales-fees.server.ts`) não tem teste automatizado nem foi executada com dados reais.
 - Lacunas conhecidas: tabela por quiosque, Bancos (saldo final), Recebimento e DRE, e o reconhecimento da taxa na competência.
