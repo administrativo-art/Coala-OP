@@ -736,12 +736,17 @@ async function main() {
       || (!confirmation ? document !== beneficiary.clean : Boolean(document && document !== beneficiary.clean))) {
       throw new PaymentCliError("A despesa, o valor, a competência ou o CNPJ divergem. Nenhuma ação foi realizada.");
     }
+    const replacementOf = option("replacement-of");
+    if (replacementOf && (!idPattern.test(replacementOf) || confirmation)) {
+      throw new PaymentCliError("Informe o ID válido da ordem Pix anterior, sem reconfirmar a cobrança.");
+    }
     const actualExpenseId = confirmedForecast ? `supplier_pix_actual_${expenseId}` : expenseId;
-    const id = `expense_supplier_pix_${actualExpenseId}`;
+    const id = replacementOf ? `supplier_pix_retry_${createHash("sha256").update(replacementOf).digest("hex")}`
+      : `expense_supplier_pix_${actualExpenseId}`;
     if (command === "supplier-pix-prepare") {
       const response = await paymentCliFetch(`${COALA_URL}/api/financial/expenses/${expenseId}/supplier-pix`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}) }), cache: "no-store",
+        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}), ...(replacementOf ? { replacementOf } : {}) }), cache: "no-store",
       });
       if (!response.ok) {
         const error = await paymentCliJson<{ error?: { code?: string; message?: string } }>(response).catch(() => null);
@@ -759,6 +764,7 @@ async function main() {
     const snapshot = request?.beneficiarySnapshot as Record<string, unknown> | undefined;
     const expectedStatus = command === "supplier-pix-authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
     if (!request || request.status !== expectedStatus || request.sourceType !== "expense_supplier_pix"
+      || (request.supersedesPaymentRequestId ?? undefined) !== replacementOf
       || request.sourceId !== expenseId || request.expenseId !== expenseId || expense.paymentRequestId !== id
       || Math.round(Number(request.amount) * 100) !== amountCents || snapshot?.sourceId !== supplierEntityId
       || snapshot.documentHash !== createHash("sha256").update(beneficiary.clean).digest("hex")
