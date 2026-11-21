@@ -24,7 +24,7 @@ import {
   planInboxPixCopyPastePreparation,
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
-import { assertArchivedBoletoUnused, assertExpenseSupplierPixTarget, assertSupplierPixBeneficiary } from "./expense-supplier-pix.server";
+import { assertArchivedBoletoUnused, assertExpenseSupplierPixTarget, assertSupplierPixBankClosed, assertSupplierPixBeneficiary, hasConflictingSupplierPixHistory, SUPPLIER_PIX_HISTORY_LIMIT } from "./expense-supplier-pix.server";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
 import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
@@ -1260,6 +1260,13 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     const forecast = await financialDbAdmin.collection("expenses").doc(preflightRequest.sourceId).get();
     await assertValidatedConsultancyContract(String(forecast.get("consultancyContractDocumentId") ?? ""), preflightRequest.beneficiaryReference.sourceId, preflightRequest.scheduledFor);
   }
+  if (preflightRequest.sourceType === "expense_supplier_pix" && preflightRequest.supersedesPaymentRequestId) {
+    const previous = await getPaymentRequest(preflightRequest.supersedesPaymentRequestId);
+    if (previous.sourceType !== "expense_supplier_pix" || previous.supersededByPaymentRequestId !== id) {
+      throw new Error("O vínculo com a solicitação anterior mudou.");
+    }
+    await assertSupplierPixBankClosed(previous);
+  }
   const submissionStartedAt = new Date().toISOString();
   const submissionEventId = randomUUID();
   const pending = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -1276,7 +1283,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       const [expense, payment, relatedRequests] = await Promise.all([
         transaction.get(financialDbAdmin.collection("expenses").doc(expenseId)),
         transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", expenseId).limit(1)),
-        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", expenseId).limit(2)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", expenseId).limit(SUPPLIER_PIX_HISTORY_LIMIT)),
       ]);
       const document = expense.get("billingIdentity.supplierTaxId");
       const description = assertExpenseSupplierPixTarget(
@@ -1285,7 +1292,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       );
       if (current.workspaceId !== WORKSPACE_ID || expense.get("paymentRequestId") !== current.id
         || current.description !== description || !payment.empty
-        || relatedRequests.docs.some((item) => item.id !== current.id)) {
+        || hasConflictingSupplierPixHistory(relatedRequests.docs, current.id, current.supersedesPaymentRequestId ?? undefined)) {
         throw new Error("O vínculo, os dados da despesa ou os pagamentos mudaram após o preparo.");
       }
     }
