@@ -112,15 +112,13 @@ test("fatura fechada aguarda pagamento; vencida depende de você; aberta pende",
   assert.deepEqual(result.flow.items.map((entry) => entry.kind).sort(), ["card_statement_awaiting_payment", "card_statement_open", "card_statement_overdue"]);
 });
 
-test("folha e caixa de documentos aparecem como fonte não conectada e impedem o fluxo de ficar conferido", () => {
+test("o fluxo tem só três conferências e fica conferido quando tudo está conciliado", () => {
   const result = run([{ id: "a", description: "Aluguel", totalValue: 1000, dueDate: "2026-10-05", ...paidLinked }]);
-  assert.equal(check(result, "expenses.payroll").state, "unavailable");
-  assert.equal(check(result, "expenses.documents").state, "unavailable");
-  assert.equal(result.flow.state, "unavailable");
-  assert.notEqual(result.flow.state, "ok");
+  assert.deepEqual(result.flow.checks.map((entry) => entry.id), ["expenses.forecasts", "expenses.payments", "expenses.card"]);
+  assert.equal(result.flow.state, "ok");
 });
 
-test("pendência real prevalece sobre fonte não conectada no estado do fluxo", () => {
+test("pendência real deixa o fluxo pendente", () => {
   const result = run([{ id: "v", description: "Freezer", totalValue: 480, dueDate: "2026-11-14", status: "pending" }]);
   assert.equal(result.flow.state, "pending");
 });
