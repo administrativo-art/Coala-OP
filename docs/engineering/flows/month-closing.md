@@ -1,4 +1,4 @@
-# Fechamento financeiro mensal: tela inicial e fluxo de Despesas (somente leitura)
+# Fechamento financeiro mensal: tela inicial e fluxos de Despesas, Vendas e Taxas (somente leitura)
 
 **Estado:** localizado. **Base:** `origin/main` `73236fb8`, 20/11/2026, com a implementação local desta mudança. Descreve comportamento implementado; decisões aprovadas estão no [plano](../../planos/plano-fechamento-financeiro-mensal.md). Fechar, reabrir, travar a competência e relatório **não existem ainda**.
 
@@ -6,7 +6,7 @@
 
 - Tela inicial **Financeiro › Fechamento do mês** ([`month-closing/page.tsx`](../../../src/app/dashboard/financial/month-closing/page.tsx) → [`MonthClosingPage`](../../../src/features/financial/month-closing/month-closing-page.tsx)) e tela do fluxo [`month-closing/expenses/page.tsx`](../../../src/app/dashboard/financial/month-closing/expenses/page.tsx) → [`ExpensesFlowPage`](../../../src/features/financial/month-closing/expenses-flow-page.tsx). A competência vem de `?month=AAAA-MM`; sem ela, o mês anterior ao atual no fuso `America/Belem`, nunca antes de agosto de 2026 (início da DRE).
 - Entrada na barra lateral do Financeiro (“Fechamento do mês”), visível para o administrador padrão ou para quem tem `financial.view` e `financial.monthClosings.view`.
-- Os cinco fluxos aparecem na tela inicial. Só **Despesas** é calculado. **Vendas, Recebimento, Taxas e DRE** aparecem como “Ainda não conectado”, sem números. Detalhe de cada um fica para as próximas etapas do plano.
+- Os cinco fluxos aparecem na tela inicial. **Despesas, Vendas e Taxas** são calculados; **Recebimento e DRE** aparecem como “Ainda não conectado”, sem números (Recebimento é um dos últimos: o crédito a 30 dias só fecha depois). Só Despesas tem tela de detalhe; Vendas e Taxas levam direto à tela de origem, já no mês e no vínculo Stone da pendência. Cada fluxo fica **Conferido sozinho** quando todas as suas conferências estão ok; só o fechamento do mês será manual (etapa futura).
 - Fora deste fluxo: tratar a pendência (pagar, vincular, cancelar, ajustar) continua nas telas de [Despesas](expenses.md), [Faturas de cartão](card-statements.md) e do extrato. As telas do fechamento só mostram a situação e levam à tela de origem pelo filtro da URL (`?competence=`, `?expense=`, `?month=`, `accountId`, `paymentMethodId`).
 
 ## Percurso observado
@@ -26,12 +26,27 @@
 
 Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previsão, `hiddenFromExpensePanel` e `budgetMigration`. O fluxo só confere despesas: fica “Conferido” quando previsões, títulos pagos e vinculados ao extrato e fatura do cartão estão resolvidos. Folha e Caixa de documentos não são conferências do fluxo (decisão de 2026-11-21): a folha entra como despesa provisionada e a caixa de cobranças é tratada em Cobranças.
 
+## Vendas e Taxas (decisão de 21/11/2026)
+
+Ambos leem os vínculos Stone ativos (`stoneMerchantMappings`, via `listAutomatedSalesReviewMappings`) com vigência na competência, um por StoneCode; vínculo por terminal fica de fora. Unidade sem vínculo vigente não entra; sem nenhum vínculo o fluxo fica **indisponível**, nunca conferido. Se a leitura falhar, só aquele fluxo fica indisponível, com evento de erro (`reportSystemError`), e os demais continuam.
+
+| Fluxo | Conferência | Conferido quando | Fonte |
+| --- | --- | --- | --- |
+| Vendas | PDV × Stone (cartão e Pix) | todo dia elegível de cada vínculo está **Fechado** na revisão diária e nenhum dia deixou de ser publicado pela Stone; dia sem revisão, com atenção, aguardando fonte ou reaberto por informação tardia pende | `dailySalesReviews` pelo calendário (`listDailySalesReviewCalendar` + `buildSalesReviewMonth`) |
+| Taxas | Conferência Stone do mês | conferência salva **depois do fim do mês** e com o mês inteiro publicado (antes disso o dado pode estar incompleto) | `buildFeeReview` (`ready`, `savedAt`) |
+| Taxas | Vendas a corrigir / Mudanças de taxa / Outras cobranças | zero em cada categoria em todos os vínculos; sem a conferência salva as contagens são desconhecidas e contam como pendentes | `buildFeeReview` (`exceptions`, `changes`, `charges`) |
+
+- O card de Vendas tinha “Caixa fechado”, “PDV × Stone (cartão)” e “Pix” como placeholders. A revisão diária cobre cartão e Pix juntos, então virou uma conferência única. O caixa fechado em dinheiro não é conferido aqui (os depósitos entram em Recebimento). O card de Taxas tinha “Lançamento no mês”: o lançamento mensal foi substituído pelo reconhecimento por data da venda e não há status mensal lido aqui; o reconhecimento da taxa na competência **não é verificado** por este fluxo.
+- Itens (dias e contagens por vínculo) só para o administrador padrão, como as telas de origem; quem tem só `financial.monthClosings.view` vê as contagens. Dia ainda não publicado pela Stone não depende da pessoa.
+- Atalhos: Vendas → `sales-reconciliation?month=&mapping=&stoneCode=`; Taxas → `stone-receipts?tab=fees&month=&mapping=&stoneCode=`.
+
 ## Dados e acesso
 
 | Dado ou coleção | Operação | Fonte | Quem pode ler e onde é verificado |
 | --- | --- | --- | --- |
 | `expenses` (banco financeiro) | leitura por competência | `overview.server.ts` | Rota: `financial.view` + `financial.monthClosings.view`; itens (descrição, fornecedor, valor) só com `financial.expenses.view`. |
 | `cardStatements` | leitura por competência | `overview.server.ts` | Mesma rota. |
+| `stoneMerchantMappings`, `kiosks`, `dailySalesReviews`, decisões/ocorrências/conferências Stone | leitura | `sales-fees.server.ts` | Rota igual; itens de Vendas e Taxas só administrador padrão (`canViewMonthClosingStoneItems`). |
 | Nenhuma | escrita | — | Não há escrita nem auditoria nesta etapa. |
 
 - Permissão nova: `financial.monthClosings` = `{ view, close, reopen }` ([`src/types/index.ts`](../../../src/types/index.ts)), opcional para não quebrar perfis salvos (ausência = negado). Administrador padrão tem tudo. `close` e `reopen` aparecem no perfil mas **não têm efeito** ainda. Perfis existentes que precisem da tela exigem ajuste manual.
@@ -40,11 +55,12 @@ Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previ
 
 ## Custo de leitura (Firestore)
 
-Por abertura de tela: até 1.500 leituras de despesas + até 60 de faturas; típico de uma competência, centenas. Cenário 10 aberturas/dia × 22 dias: até 330.000 leituras/mês no teto, tipicamente 30 mil a 70 mil. Sem listeners nem polling; a tela de Despesas e a inicial leem de novo a cada abertura (sem cache entre telas).
+Por abertura de tela: até 1.500 leituras de despesas + até 60 de faturas; típico de uma competência, centenas. **Vendas:** até 31 leituras do calendário por vínculo Stone (cerca de 100 com três quiosques). **Taxas:** por vínculo, até 6 conferências mensais salvas, decisões (≤2.000), ocorrências (≤500) e referências de taxa; estimativa de centenas por vínculo, na ordem de 1.000 a 2.000 leituras por abertura com três quiosques. Cenário de 20 aberturas no mês: cerca de 20 a 40 mil leituras adicionais. Cenário 10 aberturas/dia × 22 dias: até 330.000 leituras/mês no teto, tipicamente 30 mil a 70 mil. Sem listeners nem polling; a tela de Despesas e a inicial leem de novo a cada abertura (sem cache entre telas).
 
 ## Verificação e limites
 
 - Testes: [`financial-month-closing-expenses-flow`](../../../tests/unit/financial-month-closing-expenses-flow.test.ts) (classificação, vencimento, cartão, dinheiro, datas sem deslocamento de fuso, ocultação de itens) e [`financial-month-closing-access-and-month`](../../../tests/unit/financial-month-closing-access-and-month.test.ts) (permissões, fuso, intervalo, apresentação).
 - **Não verificado:** dados reais (a classificação ainda não foi executada sobre outubro), navegador/visual, rota HTTP ponta a ponta em emulador, e a hipótese de que `settlementSummary` está preenchido nas despesas já pagas (despesas antigas sem ele aparecerão como “Sem vínculo no extrato”).
 - Hipóteses a confirmar: dinheiro conta pela baixa do caixa; pagamento só informado não basta; fatura de cartão só conta como conferida quando `paid`.
-- Lacunas conhecidas: tabela por quiosque, Bancos (saldo final) e os demais quatro fluxos.
+- Testes de Vendas e Taxas: [`financial-month-closing-sales-fees-flow`](../../../tests/unit/financial-month-closing-sales-fees-flow.test.ts). A leitura do servidor (`sales-fees.server.ts`) não tem teste automatizado nem foi executada com dados reais.
+- Lacunas conhecidas: tabela por quiosque, Bancos (saldo final), Recebimento e DRE, e o reconhecimento da taxa na competência.

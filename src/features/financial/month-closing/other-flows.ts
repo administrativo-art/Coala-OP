@@ -11,8 +11,8 @@ const PLANNED: Array<{ key: Exclude<ClosingFlowKey, "expenses">; name: string; c
   { key: "dre", name: "DRE", checks: ["CMV congelado", "Fontes conferidas"] },
 ];
 
-export function notConnectedFlows(): ClosingFlow[] {
-  return PLANNED.map((flow) => ({
+export function notConnectedFlows(only?: ClosingFlowKey[]): ClosingFlow[] {
+  return PLANNED.filter((flow) => !only || only.includes(flow.key)).map((flow) => ({
     key: flow.key,
     name: flow.name,
     state: "not_connected",
