@@ -6,6 +6,7 @@ import {
   assertMonthClosingAccess,
   canViewMonthClosing,
   canViewMonthClosingExpenseItems,
+  canViewMonthClosingStoneItems,
 } from "../../src/features/financial/month-closing/access";
 import { defaultClosingMonth, formatCents, formatDateBr, isClosableRange, monthLabel, shiftMonth, todayKey } from "../../src/features/financial/month-closing/month";
 import { dependsOnYou, nextDueDate } from "../../src/features/financial/month-closing/presentation";
@@ -33,6 +34,11 @@ test("os itens de despesa exigem também financial.expenses.view", () => {
   assert.equal(canViewMonthClosingExpenseItems(actor({ view: true, monthClosings: { view: true }, expenses: { view: true } })), true);
   assert.equal(canViewMonthClosingExpenseItems(actor({ view: true, expenses: { view: true } })), false);
   assert.equal(canViewMonthClosingExpenseItems(actor(undefined, true)), true);
+});
+
+test("os itens de Vendas e Taxas seguem as telas de origem: só administrador padrão", () => {
+  assert.equal(canViewMonthClosingStoneItems(actor({ view: true, monthClosings: { view: true }, expenses: { view: true } })), false);
+  assert.equal(canViewMonthClosingStoneItems(actor(undefined, true)), true);
 });
 
 test("assertMonthClosingAccess nega como erro de autorização sanitizado", () => {
