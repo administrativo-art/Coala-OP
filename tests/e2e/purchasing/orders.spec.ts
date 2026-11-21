@@ -2,6 +2,20 @@ import { expect, test } from "@playwright/test";
 
 import { E2E_ORDER_IDS, E2E_USER } from "../support/global-setup";
 
+test("a API exige sessão em todos os métodos da rota de compras", async ({ request }) => {
+  const cases = [
+    ["GET", "/api/purchasing/orders"],
+    ["POST", "/api/purchasing/orders"],
+    ["PATCH", `/api/purchasing/orders/${E2E_ORDER_IDS.confirmed}`],
+    ["DELETE", "/api/purchasing/quotations/test-quotation/items/test-item"],
+  ] as const;
+  for (const [method, path] of cases) {
+    const response = await request.fetch(path, { method });
+    expect(response.status()).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "PURCHASING_AUTH_REQUIRED" } });
+  }
+});
+
 test("protege a listagem, as gavetas e o retrocesso de pedido", async ({ page }) => {
   await test.step("autentica somente no emulador", async () => {
     await page.goto("/login");
