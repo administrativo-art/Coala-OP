@@ -37,6 +37,8 @@ Exceções ficam em `config/vulnerability-exceptions.json`. Cada exceção deve 
 
 Em 2026-10-23, uma publicação emergencial autorizada adicionou exceções com expiração em 2026-10-30 para os novos advisories de `body-parser` e `zod`, publicados após o baseline e não introduzidos pela mudança funcional. A remediação definitiva deve atualizar as dependências transitivas e migrar o Zod em trabalho dedicado antes da expiração; o baseline não foi ampliado.
 
+Em 17/11/2026, o responsável aprovou uma exceção temporária para o [CVE-2026-112366](https://github.com/advisories/GHSA-FC5Q-39XC-VJPF), presente em `picomatch` no grafo de desenvolvimento. A auditoria confirmou que as 15 chaves bloqueantes listadas em `config/vulnerability-exceptions.json` tinham origem exclusiva nesse advisory. As cópias npm sinalizadas não entram no grafo de runtime auditado. Persiste risco de indisponibilidade do CI e das ferramentas locais quando processam padrões do checkout de uma contribuição. O ratchet registra esses achados como avisos até 20/11/2026 às 23:59:59,999 UTC e volta a falhar a partir de 21/11/2026 às 00:00 UTC. Remover as entradas assim que houver correção compatível para as cadeias 2.x e 4.x. Os demais achados continuam sujeitos às regras do gate.
+
 Uma falha de rede ou resposta inválida do registry é falha operacional distinta, não aprovação silenciosa.
 
 ## Ratchet de contratos de API
