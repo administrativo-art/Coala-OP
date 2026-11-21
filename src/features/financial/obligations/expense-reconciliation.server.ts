@@ -41,8 +41,10 @@ export async function readExpenseReconciliationEvidence(expenses: ExpenseReconci
   }
 
   let readCount = linkedIds.length;
-  for (let start = 0; start < candidates.length; start += QUERY_BATCH_SIZE) {
-    const ids = candidates.slice(start, start + QUERY_BATCH_SIZE).map((expense) => expense.id);
+  const reverseLinkIds = candidates.filter((expense) => expense.reconciliationInstallmentNumber === undefined)
+    .map((expense) => expense.id);
+  for (let start = 0; start < reverseLinkIds.length; start += QUERY_BATCH_SIZE) {
+    const ids = reverseLinkIds.slice(start, start + QUERY_BATCH_SIZE);
     const limit = Math.min(ids.length * 4, MAX_TRANSACTION_DOCUMENTS - readCount);
     const snapshot = await collection.where(Filter.or(
       Filter.where("expenseId", "in", ids),

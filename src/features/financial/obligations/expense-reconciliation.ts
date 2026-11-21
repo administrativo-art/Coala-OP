@@ -18,6 +18,7 @@ export type ExpenseReconciliationSource = {
   evidenceSource?: unknown;
   linkedBankTransactionId?: unknown;
   linkedBankTransactionIds?: unknown;
+  reconciliationInstallmentNumber?: number;
 };
 
 export type ExpenseBankTransaction = {
@@ -100,6 +101,7 @@ function canonicalReconciliation(expense: ExpenseReconciliationSource): ExpenseR
 
 export function expenseNeedsImportedBankEvidence(expense: ExpenseReconciliationSource) {
   if (expense.status !== "paid" || expense.settlementScope === "CARD_LINE" || expense.plannedPaymentMethodType === "credit_card") return false;
+  if (expense.reconciliationInstallmentNumber !== undefined && !text(expense.linkedBankTransactionId)) return false;
   const status = canonicalReconciliation(expense);
   return status === "unmatched" || status === "reported";
 }
@@ -137,7 +139,10 @@ function matchesExpenseAmount(expense: ExpenseReconciliationSource, transaction:
 export function resolveExpenseReconciliation(expense: ExpenseReconciliationSource, index?: TransactionIndex): ExpenseReconciliation {
   const stored = canonicalReconciliation(expense);
   if (!index || !expenseNeedsImportedBankEvidence(expense)) return stored;
-  const ids = new Set([...expenseLinkedBankIds(expense), ...(index.byExpense.get(expense.id) ?? [])]);
+  const ids = new Set(expenseLinkedBankIds(expense));
+  if (expense.reconciliationInstallmentNumber === undefined) {
+    for (const id of index.byExpense.get(expense.id) ?? []) ids.add(id);
+  }
   const confirmed = [...ids].map((id) => index.byId.get(id)).filter((transaction): transaction is ExpenseBankTransaction =>
     !!transaction && isResolvedBankDebit(transaction, expense) && matchesExpenseAmount(expense, transaction));
   return confirmed.length === 1 ? "bank" : stored;

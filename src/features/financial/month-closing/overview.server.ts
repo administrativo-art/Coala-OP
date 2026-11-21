@@ -1,12 +1,13 @@
-import { FieldPath } from "firebase-admin/firestore";
+import { FieldPath, Filter } from "firebase-admin/firestore";
 
+import { FINANCIAL_INSTALLMENT_PAYMENT_METHOD } from "@/features/financial/lib/expense-accounting-contract";
 import {
   ExpenseReconciliationLimitError,
   readExpenseReconciliationEvidence,
 } from "@/features/financial/obligations/expense-reconciliation.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
-import { evaluateExpensesFlow, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
+import { evaluateExpensesFlow, expensesForCompetence, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
 import { todayKey } from "./month";
 import { notConnectedFlows } from "./other-flows";
 import { readSalesAndFeesFlows } from "./sales-fees.server";
@@ -30,7 +31,11 @@ async function listExpenses(month: string) {
     const remaining = MONTH_CLOSING_MAX_EXPENSES + 1 - documents.length;
     const pageSize = Math.min(EXPENSE_PAGE_SIZE, remaining);
     let query: FirebaseFirestore.Query = financialDbAdmin.collection("expenses")
-      .where("competenceMonth", "==", month)
+      .where(Filter.or(
+        Filter.where("competenceMonth", "==", month),
+        // O lançamento pode ter parcelas no mês mesmo quando o título pertence a outra competência.
+        Filter.where("paymentMethod", "==", FINANCIAL_INSTALLMENT_PAYMENT_METHOD),
+      ))
       .orderBy(FieldPath.documentId())
       .limit(pageSize);
     if (cursor) query = query.startAfter(cursor);
@@ -74,7 +79,9 @@ export async function getMonthClosingOverview(input: {
     const data = document.data();
     return { ...data, id: document.id, workspaceId: data.workspaceId || input.workspaceId } as ClosingExpenseInput;
   });
-  const bankTransactions = await readExpenseReconciliationEvidence(expenses, input.workspaceId).catch((error) => {
+  const cardStatements = statementDocuments.map((document) => ({ ...document.data(), id: document.id }) as ClosingCardStatementInput);
+  const candidates = expensesForCompetence({ month: input.month, expenses, cardStatements });
+  const bankTransactions = await readExpenseReconciliationEvidence(candidates, input.workspaceId).catch((error) => {
     if (error instanceof ExpenseReconciliationLimitError) throw new MonthClosingLimitError("expenses");
     throw error;
   });
@@ -84,7 +91,7 @@ export async function getMonthClosingOverview(input: {
     canViewItems: input.canViewExpenseItems,
     expenses,
     bankTransactions,
-    cardStatements: statementDocuments.map((document) => ({ ...document.data(), id: document.id }) as ClosingCardStatementInput),
+    cardStatements,
   });
   return {
     month: input.month,
