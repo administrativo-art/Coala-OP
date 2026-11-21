@@ -11,11 +11,73 @@ const paidLinked = {
   settlementSummary: { paymentEvidenceStatus: "CONFIRMED", reconciliationStatus: "MATCHED" },
 };
 
-function run(expenses: ClosingExpenseInput[], cardStatements: ClosingCardStatementInput[] = [], canViewItems = true) {
-  return evaluateExpensesFlow({ month: MONTH, today: TODAY, expenses, cardStatements, canViewItems });
+function run(expenses: ClosingExpenseInput[], cardStatements: ClosingCardStatementInput[] = [], canViewItems = true, month = MONTH) {
+  return evaluateExpensesFlow({
+    month, today: TODAY, cardStatements, canViewItems,
+    expenses: expenses.map((expense) => ({ competenceMonth: MONTH, ...expense })),
+  });
 }
 
 const check = (result: ReturnType<typeof run>, id: string) => result.flow.checks.find((entry) => entry.id === id)!;
+
+test("fechamento soma apenas as parcelas cobradas no mês e usa a baixa da própria parcela", () => {
+  const title = {
+    id: "parcelado", status: "partially_paid", paymentMethod: "installments", totalValue: 3343.56,
+    competenceMonth: "2026-10", dueDate: "2026-10-23",
+    settlementSummary: { paymentEvidenceStatus: "CONFIRMED", reconciliationStatus: "MATCHED", balanceAmountCents: 222904 },
+    installments: [
+      { number: 1, value: 1114.52, dueDate: "2026-10-29", status: "paid", linkedBankTransactionId: "extrato-1" },
+      { number: 2, value: 1114.52, dueDate: new Date("2026-11-20T00:00:00Z"), status: "partially_paid", paidValue: 300, settlementCreditValue: 14.52 },
+      { number: 3, value: 1114.52, dueDate: new Date("2026-12-01T00:00:00Z"), status: "pending" },
+    ],
+  };
+  const october = run([title]);
+  assert.deepEqual([october.totals.titleCount, october.totals.titlesCents, october.totals.settledCents], [1, 111452, 111452]);
+  assert.equal(october.flow.items.length, 0);
+
+  const november = run([title], [], true, "2026-11");
+  assert.equal(november.totals.titlesCents, 111452);
+  assert.equal(november.totals.openCents, 80000);
+  assert.equal(november.flow.items[0].amountCents, 80000);
+  assert.equal(november.flow.items[0].dueDate, "2026-11-20");
+  assert.match(november.flow.items[0].href, /expense=parcelado&installment=2$/);
+
+  const december = run([title], [], true, "2026-12");
+  assert.equal(december.totals.openCents, 111452);
+  assert.equal(december.flow.items[0].dueDate, "2026-12-01");
+});
+
+test("compra parcelada sem cobrança em outubro não entra no fechamento de outubro", () => {
+  const title = {
+    id: "nfe", status: "pending", paymentMethod: "installments", totalValue: 3343.56,
+    competenceMonth: "2026-10", dueDate: "2026-11-20",
+    installments: [
+      { number: 1, value: 1114.52, dueDate: "2026-11-20", status: "pending" },
+      { number: 2, value: 1114.52, dueDate: "2026-11-27", status: "pending" },
+      { number: 3, value: 1114.52, dueDate: "2026-12-04", status: "pending" },
+    ],
+  };
+  assert.equal(run([title]).totals.titleCount, 0);
+  const november = run([title], [], true, "2026-11");
+  assert.equal(november.totals.titleCount, 2);
+  assert.equal(november.totals.titlesCents, 222904);
+  assert.equal(run([title], [], true, "2026-12").totals.titlesCents, 111452);
+});
+
+test("parcela de cartão segue a competência da fatura mesmo quando vence no mês seguinte", () => {
+  const purchase = {
+    id: "compra-cartao", status: "pending", paymentMethod: "installments", plannedPaymentMethodType: "credit_card",
+    competenceMonth: "2026-09", plannedBankAccountId: "conta", plannedPaymentMethodId: "cartao",
+    installments: [
+      { number: 1, value: 50, dueDate: "2026-10-12", cardStatementMonthKey: "2026-09" },
+      { number: 2, value: 50, dueDate: "2026-11-12", cardStatementMonthKey: "2026-10" },
+    ],
+  };
+  const result = run([purchase]);
+  assert.equal(result.totals.titleCount, 0);
+  assert.equal(result.flow.items[0].kind, "card_statement_missing");
+  assert.equal(run([purchase], [], true, "2026-11").flow.items.length, 0);
+});
 
 test("título pago e confirmado no extrato conta como conferido", () => {
   const result = run([{ id: "a", description: "Aluguel", totalValue: 1000, dueDate: "2026-10-05", ...paidLinked }]);

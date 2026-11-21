@@ -18,6 +18,8 @@ O indicador **Pendente auditoria** não abre outra página: ele aplica `status=p
 
 Na listagem, despesas com `plannedPaymentMethodType: credit_card` e identidade de ciclo ativa são apresentadas dentro da fatura correspondente por [`groupExpensesByCardStatement`](../../../src/features/financial/lib/expense-card-statement-groups.ts). Uma compra parcelada contribui em cada fatura apenas com a parcela daquele ciclo, e os filtros de competência/vencimento avaliam as ocorrências das faturas em vez de esconder parcelas futuras pelo vencimento da primeira. O lançamento continua sendo a despesa real de origem; a fatura representa o agrupamento e a obrigação de caixa, não uma segunda despesa.
 
+Despesas, seus indicadores por competência e o [Fechamento do mês](month-closing.md) usam o [contrato central](../../../src/features/financial/lib/expense-accounting-contract.ts) para as parcelas avulsas. Cada parcela ativa é exibida no mês da sua cobrança, com valor, vencimento e estado próprios. A linha abre o título original para edição ou pagamento. Faturas continuam seguindo seus ciclos e a competência contábil do título continua disponível à DRE.
+
 ## Dados e acesso
 
 ### Navegação financeira — etapa local de 2026-09-26

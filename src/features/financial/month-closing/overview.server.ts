@@ -1,5 +1,6 @@
-import { FieldPath } from "firebase-admin/firestore";
+import { FieldPath, Filter } from "firebase-admin/firestore";
 
+import { FINANCIAL_INSTALLMENT_PAYMENT_METHOD } from "@/features/financial/lib/expense-accounting-contract";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
 import { evaluateExpensesFlow, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
@@ -26,7 +27,11 @@ async function listExpenses(month: string) {
     const remaining = MONTH_CLOSING_MAX_EXPENSES + 1 - documents.length;
     const pageSize = Math.min(EXPENSE_PAGE_SIZE, remaining);
     let query: FirebaseFirestore.Query = financialDbAdmin.collection("expenses")
-      .where("competenceMonth", "==", month)
+      .where(Filter.or(
+        Filter.where("competenceMonth", "==", month),
+        // O lançamento pode ter parcelas no mês mesmo quando o título pertence a outra competência.
+        Filter.where("paymentMethod", "==", FINANCIAL_INSTALLMENT_PAYMENT_METHOD),
+      ))
       .orderBy(FieldPath.documentId())
       .limit(pageSize);
     if (cursor) query = query.startAfter(cursor);

@@ -9,7 +9,7 @@ Base `70aaab65`. Inventários regenerados contra o código desta versão; mapas 
 | APIs por arquivo handler | 544 |
 | Exports de Functions | 66 |
 | Grupos com ao menos um guia | 60/60 |
-| Grupos marcados `Traçado` | 59/60 |
+| Grupos marcados `Traçado` | 60/60 |
 | Grupos marcados `Verificado` | 0/60 |
 | Guias de subfluxo | 80 |
 
