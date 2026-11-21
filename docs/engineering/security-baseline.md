@@ -54,3 +54,5 @@ Achados são deduplicados por advisory/componente, classificados e encaminhados 
 Os controles desta fase usam recursos gratuitos para repositório público e runners padrão do GitHub. Nenhum runner adicional, GitHub Advanced Security pago, scanner SaaS ou API faturável foi adicionado. O custo operacional inclui maior duração de CI, triagem humana e possíveis falsos positivos.
 
 As Actions existentes permanecem em suas versões major atuais, fixadas nas releases oficiais `actions/checkout` v4.4.0, `actions/setup-node` v4.4.0 e `actions/setup-java` v4.9.1. O CodeQL usa `github/codeql-action` v4.37.9. O comentário ao lado de cada SHA conserva a versão humana; atualização futura exige revisão explícita.
+
+Em 21/11/2026, as 15 exceções de CVE-2026-112366 foram removidas após a retirada do advisory pelo GitHub e nova auditoria de root e Functions sem regressões bloqueantes. Os baselines foram preservados.
