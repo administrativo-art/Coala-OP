@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { evaluateExpensesFlow, type ClosingCardStatementInput, type ClosingExpenseInput } from "../../src/features/financial/month-closing/expenses-flow";
+import { indexExpenseBankTransactions } from "../../src/features/financial/obligations/expense-reconciliation";
 
 const MONTH = "2026-10";
 const TODAY = "2026-11-20";
@@ -30,6 +31,28 @@ test("pago sem confirmação no extrato fica pendente e nunca vira conferido", (
   assert.equal(check(result, "expenses.payments").state, "pending");
   assert.equal(result.flow.items[0].kind, "paid_without_bank_link");
   assert.equal(result.totals.settledCents, 0);
+});
+
+test("fechamento usa a mesma baixa bancária reconhecida no detalhe de Despesas", () => {
+  const result = evaluateExpensesFlow({
+    month: MONTH, today: TODAY, canViewItems: true, cardStatements: [],
+    expenses: [
+      { id: "legacy", status: "paid", totalValue: 100 },
+      { id: "interest", status: "paid", totalValue: 2, type: "encargo", originExpenseId: "legacy",
+        linkedBankTransactionId: "debit", evidenceSource: "BANK_STATEMENT" },
+      { id: "unlinked", status: "paid", totalValue: 102 },
+    ],
+    bankTransactions: indexExpenseBankTransactions([{
+      id: "debit", expenseId: "legacy", type: "expense", amount: 102, direction: "out",
+      auditStatus: "resolved", importSource: "inter_api",
+      obligationAllocations: [{ expenseId: "legacy", principalAmount: 100 }],
+    }]),
+  });
+  const payments = check(result, "expenses.payments");
+  assert.equal(payments.name, "Pagamentos conferidos");
+  assert.deepEqual([payments.done, payments.total], [2, 3]);
+  assert.equal(result.totals.settledCents, 10200);
+  assert.deepEqual(result.flow.items.map(({ id }) => id), ["expense:unlinked"]);
 });
 
 test("pagamento só informado e pagamento divergente são pendências distintas", () => {

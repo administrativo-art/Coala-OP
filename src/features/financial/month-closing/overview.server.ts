@@ -1,5 +1,9 @@
 import { FieldPath } from "firebase-admin/firestore";
 
+import {
+  ExpenseReconciliationLimitError,
+  readExpenseReconciliationEvidence,
+} from "@/features/financial/obligations/expense-reconciliation.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
 import { evaluateExpensesFlow, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
@@ -12,7 +16,6 @@ const EXPENSE_PAGE_SIZE = 250;
 /** Mesmo teto de ordem de grandeza da DRE; acima disso a consulta é recusada em vez de truncada em silêncio. */
 export const MONTH_CLOSING_MAX_EXPENSES = 1500;
 const MAX_CARD_STATEMENTS = 60;
-
 export class MonthClosingLimitError extends Error {
   constructor(readonly reason: "expenses" | "card-statements") {
     super(`Limite do fechamento mensal excedido: ${reason}.`);
@@ -52,7 +55,7 @@ async function listCardStatements(month: string) {
 
 /**
  * Leitura do fechamento de uma competência. Somente leitura: não cria, corrige nem baixa nada.
- * Custo por chamada: até 1.500 leituras de despesas + até 60 de faturas (tipicamente poucas centenas).
+ * Despesas, faturas e evidências vinculadas têm limites de leitura próprios.
  */
 export async function getMonthClosingOverview(input: {
   month: string;
@@ -67,11 +70,20 @@ export async function getMonthClosingOverview(input: {
     readSalesAndFeesFlows({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
   ]);
   const today = todayKey(input.now);
+  const expenses = expenseDocuments.map((document) => {
+    const data = document.data();
+    return { ...data, id: document.id, workspaceId: data.workspaceId || input.workspaceId } as ClosingExpenseInput;
+  });
+  const bankTransactions = await readExpenseReconciliationEvidence(expenses, input.workspaceId).catch((error) => {
+    if (error instanceof ExpenseReconciliationLimitError) throw new MonthClosingLimitError("expenses");
+    throw error;
+  });
   const { flow, totals } = evaluateExpensesFlow({
     month: input.month,
     today,
     canViewItems: input.canViewExpenseItems,
-    expenses: expenseDocuments.map((document) => ({ ...document.data(), id: document.id }) as ClosingExpenseInput),
+    expenses,
+    bankTransactions,
     cardStatements: statementDocuments.map((document) => ({ ...document.data(), id: document.id }) as ClosingCardStatementInput),
   });
   return {

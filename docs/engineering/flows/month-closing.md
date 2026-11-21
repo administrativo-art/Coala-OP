@@ -14,17 +14,17 @@
 1. A página chama [`useMonthClosing`](../../../src/features/financial/month-closing/use-month-closing.ts), que faz uma leitura `GET /api/financial/month-closing?month=` pelo cliente autenticado compartilhado. Sem polling nem listener; atualiza ao trocar a competência ou por “Tentar de novo”.
 2. A rota [`api/financial/month-closing/route.ts`](../../../src/app/api/financial/month-closing/route.ts) usa `secureRoute` (contrato `financial.month-closing.overview`): valida `month` (`AAAA-MM`, de 2026-08 até o mês atual), autentica, exige a permissão (`assertMonthClosingAccess`) e chama [`getMonthClosingOverview`](../../../src/features/financial/month-closing/overview.server.ts).
 3. O serviço lê `expenses` por `competenceMonth` (páginas de 250, teto de 1.500, acima disso responde 409 `MONTH_CLOSING_LIMIT_EXCEEDED` em vez de truncar) e `cardStatements` por `monthKey` (teto de 60), e entrega a [`evaluateExpensesFlow`](../../../src/features/financial/month-closing/expenses-flow.ts), função pura e testada.
-4. A avaliação reaproveita [`expense-display-state`](../../../src/features/financial/lib/expense-display-state.ts) (mesma regra de “Vencido” da lista de Despesas) e devolve conferências, pendências ordenadas (vencidas primeiro, depois por data) e totais.
+4. A avaliação reaproveita [`expense-display-state`](../../../src/features/financial/lib/expense-display-state.ts) para a regra de “Vencido” e o [contrato de conciliação](../../../src/features/financial/obligations/expense-reconciliation.ts) para a situação de pagamento, tal como no detalhe de Despesas. O backend consulta débitos antigos por vínculos persistidos apenas para despesas pagas que precisam dessa evidência. O limite é de 1.500 documentos de transação, com leitura adicional para detectar estouro. A resposta contém conferências, pendências ordenadas (vencidas primeiro, depois por data) e totais.
 
 ## Regras de classificação (Despesas)
 
 | Conferência | Conferido quando | Observações |
 | --- | --- | --- |
 | Previsões e rascunhos resolvidos | nenhuma previsão (`provisionType: forecast`) sem valor real e nenhum rascunho | Previsão `reconciled` conta como resolvida. |
-| Pagas e vinculadas ao extrato | título pago com `settlementSummary.paymentEvidenceStatus` CONFIRMED/MIXED e `reconciliationStatus` MATCHED | **Dinheiro** (`plannedPaymentMethodType: cash`) conta pela baixa do fechamento de caixa. Pago sem confirmação no extrato, só informado, divergente e “pagamento encontrado sem documento” são pendências. Vencido = saldo em aberto após o vencimento; a vencer aguarda a data. |
+| Pagamentos conferidos | título pago com baixa confirmada pela regra compartilhada com Despesas | Reconhece baixa bancária atual, débito antigo vinculado e pagamento em dinheiro baixado pelo caixa. Pagamento informado, sem vínculo, divergente ou com valor real da despesa a conferir fica pendente. Vencido indica saldo aberto após o vencimento. |
 | Fatura do cartão | fatura da competência com `status: paid` | Compra no cartão é conferida pela fatura, não como título avulso. Fatura fechada aguarda pagamento (vencida vira pendência que depende de quem opera); aberta pende; compra no cartão sem fatura importada pende. |
 
-Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previsão, `hiddenFromExpensePanel` e `budgetMigration`. O fluxo só confere despesas: fica “Conferido” quando previsões, títulos pagos e vinculados ao extrato e fatura do cartão estão resolvidos. Folha e Caixa de documentos não são conferências do fluxo (decisão de 2026-11-21): a folha entra como despesa provisionada e a caixa de cobranças é tratada em Cobranças.
+Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previsão, `hiddenFromExpensePanel` e `budgetMigration`. O fluxo fica “Conferido” quando previsões, pagamentos e fatura do cartão estão resolvidos. A folha entra como despesa provisionada e a caixa de cobranças é tratada em Cobranças (decisão de 2026-11-21).
 
 ## Vendas e Taxas (decisão de 21/11/2026)
 
@@ -46,6 +46,7 @@ Ambos leem `stoneMerchantMappings` (todas as situações, até 100) pela mesma e
 | --- | --- | --- | --- |
 | `expenses` (banco financeiro) | leitura por competência | `overview.server.ts` | Rota: `financial.view` + `financial.monthClosings.view`; itens (descrição, fornecedor, valor) só com `financial.expenses.view`. |
 | `cardStatements` | leitura por competência | `overview.server.ts` | Mesma rota. |
+| `transactions` | leitura por vínculo persistido | `expense-reconciliation.server.ts` | O backend usa a evidência no cálculo. A resposta expõe a contagem e, com `financial.expenses.view`, os itens de Despesas. |
 | `stoneMerchantMappings` (workspace, até 100), `kiosks`, `dailySalesReviews`, decisões/ocorrências/conferências Stone | leitura | `sales-fees.server.ts` | Rota igual; itens de Vendas e Taxas só administrador padrão (`canViewMonthClosingStoneItems`). |
 | Nenhuma | escrita | — | Não há escrita nem auditoria nesta etapa. |
 
