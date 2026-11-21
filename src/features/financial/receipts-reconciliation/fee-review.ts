@@ -111,8 +111,15 @@ const withinTolerance = (sale: Sale, rate: number) => pixSale(sale)
   ? Math.abs(round4(saleRate(sale)) - rate) <= 0.00005
   : Math.abs(sale.feeCents - expectedFee(sale, rate)) <= FEE_TOLERANCE_CENTS * sale.parcels.length;
 
+/**
+ * Venda cobrada exatamente no valor esperado, arredondando parcela a parcela como a Stone calcula o MDR: está
+ * conciliada em dinheiro, mesmo que cobrado ÷ bruto (em centavos inteiros) difira da referência em vendas pequenas.
+ * Vale só para a classificação da venda individual; a detecção de mudança recorrente de taxa segue em `withinTolerance`.
+ */
+const chargedAsExpected = (sale: Sale, rate: number) => sale.feeCents === expectedFee(sale, rate);
+
 export type RateChange = { key: string; groupKey: string; label: string; from: number; to: number; since: string; saleCount: number; impactCents: number; fingerprint: string; reopened: boolean };
-export type FeeException = { key: string; saleId: string; groupKey: string; label: string; date: string; grossCents: number; chargedCents: number; expectedCents: number; differenceCents: number; reason: "above" | "below" | "derived"; fingerprint: string; reopened: boolean };
+export type FeeException = { key: string; saleId: string; groupKey: string; label: string; date: string; grossCents: number; chargedCents: number; expectedCents: number; differenceCents: number; referenceRate: number; reason: "above" | "below" | "derived"; fingerprint: string; reopened: boolean };
 
 /**
  * Mudança de taxa: as vendas mais recentes do grupo repetem uma taxa nova por ≥5 vendas ou ≥3 dias.
@@ -153,12 +160,12 @@ export function feeExceptions(sales: Sale[], groups: FeeGroup[], changes: RateCh
     if (!sale.date.startsWith(month) || inChange.has(sale.saleId)) return [];
     const sourceGroup = byKey.get(sale.groupKey);
     const group = sourceGroup && referenceAt ? {...sourceGroup,reference:referenceAt(sale.groupKey,sale.date)} : sourceGroup;
-    if (!group?.reference || withinTolerance(sale, group.reference.rate)) return [];
+    if (!group?.reference || chargedAsExpected(sale, group.reference.rate) || withinTolerance(sale, group.reference.rate)) return [];
     const expected = expectedFee(sale, group.reference.rate);
     const difference = sale.feeCents - expected;
     return [{
       key: `${sale.groupKey}:${sale.saleId}`, saleId: sale.saleId, groupKey: sale.groupKey, label: sale.label, date: sale.date,
-      grossCents: sale.grossCents, chargedCents: sale.feeCents, expectedCents: expected, differenceCents: difference,
+      grossCents: sale.grossCents, chargedCents: sale.feeCents, expectedCents: expected, differenceCents: difference, referenceRate: group.reference.rate,
       reason: sale.derived ? "derived" as const : difference > 0 ? "above" as const : "below" as const,
       fingerprint: `sale:${sale.grossCents}:${sale.feeCents}:${group.reference.rate}`, reopened: false,
     }];
