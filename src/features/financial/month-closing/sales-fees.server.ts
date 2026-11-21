@@ -1,16 +1,19 @@
 import "server-only";
 
 import { dbAdmin } from "@/lib/firebase-admin";
+import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { latestPublishedDate } from "@/features/financial/receivables/period-review";
 import { buildFeeReview } from "@/features/financial/receipts-reconciliation/fee-review.server";
-import { listAutomatedSalesReviewMappings } from "@/features/financial/sales-reconciliation/mapping.server";
+import { financialAgentMappingSchema, type FinancialAgentMapping } from "@/features/financial/agent/contracts";
+import { MAX_AGENT_MAPPINGS } from "@/features/financial/agent/mapping";
 import { buildSalesReviewMonth } from "@/features/financial/sales-reconciliation/review-calendar";
 import { listDailySalesReviewCalendar } from "@/features/financial/sales-reconciliation/review-state.server";
 
 import { evaluateFeesFlow, feesFlowUnavailable, type FeesUnitInput } from "./fees-flow";
 import { evaluateSalesFlow, salesFlowUnavailable, type SalesUnitInput } from "./sales-flow";
+import { feeBindings, salesBindings, type StoneBinding } from "./stone-bindings";
 import type { ClosingFlow } from "./types";
 
 type Input = { workspaceId: string; month: string; canViewItems: boolean; now?: Date };
@@ -27,6 +30,18 @@ async function kioskNames(kioskIds: string[]) {
   return new Map(documents.map((document) => [document.id, String(document.data()?.name ?? document.id)]));
 }
 
+/** Todos os vínculos do workspace, de qualquer situação: o vínculo de um mês passado pode já ter sido encerrado. */
+async function readMappings(workspaceId: string): Promise<FinancialAgentMapping[]> {
+  const snapshot = await financialDbAdmin.collection("stoneMerchantMappings")
+    .where("workspaceId", "==", workspaceId).limit(MAX_AGENT_MAPPINGS + 1).get();
+  if (snapshot.size > MAX_AGENT_MAPPINGS) throw new Error("Vínculos Stone acima do limite operacional.");
+  return snapshot.docs.map((document) => {
+    const parsed = financialAgentMappingSchema.safeParse({ ...document.data(), id: document.id });
+    if (!parsed.success || parsed.data.workspaceId !== workspaceId) throw new Error(`Vínculo Stone inválido: ${document.id}.`);
+    return parsed.data;
+  });
+}
+
 const query = (entries: Record<string, string>) => new URLSearchParams(entries).toString();
 
 /**
@@ -40,42 +55,42 @@ export async function readSalesAndFeesFlows(input: Input): Promise<{ sales: Clos
   const bounds = monthBounds(input.month);
   const salesHref = `${FINANCIAL_ROUTES.salesReconciliation}?${query({ month: input.month })}`;
   const feesHref = `${FINANCIAL_ROUTES.stoneReceipts}?${query({ tab: "fees", month: input.month })}`;
+  let feesBlocked = false;
   const fallback = (error: unknown, operation: string) => {
     reportSystemError({ error, source: "api-financial", operation, routeOrJob: "/api/financial/month-closing" });
   };
 
-  let bindings: Array<{ id: string; kioskId: string; stoneCode: string; validFrom: string; validTo: string | null }>;
+  const referenceDay = latestPublishedDate(now) < bounds.through ? latestPublishedDate(now) : bounds.through;
+  let salesUnits: StoneBinding[];
+  let feeUnits: StoneBinding[];
   let names: Map<string, string>;
   try {
-    const mappings = await listAutomatedSalesReviewMappings(input.workspaceId);
-    bindings = mappings
-      // Vínculo por terminal não tem revisão diária da unidade; o calendário e as taxas são por StoneCode.
-      .filter((mapping) => mapping.terminalIds.length === 0 && mapping.validFrom <= bounds.through && (!mapping.validTo || mapping.validTo >= bounds.from))
-      .flatMap((mapping) => mapping.stoneCodes.map((stoneCode) => ({
-        id: mapping.id, kioskId: mapping.kioskId, stoneCode, validFrom: mapping.validFrom, validTo: mapping.validTo ?? null,
-      })));
-    names = await kioskNames([...new Set(bindings.map((binding) => binding.kioskId))]);
+    const mappings = await readMappings(input.workspaceId);
+    salesUnits = salesBindings(mappings, bounds.from, bounds.through);
+    // Taxas: ligado ao vínculo vigente na data de referência, como a tela de Taxas. Ambíguo falha só este fluxo.
+    try { feeUnits = feeBindings(mappings, referenceDay); } catch (error) { fallback(error, "month-closing-fee-bindings"); feeUnits = []; feesBlocked = true; }
+    names = await kioskNames([...new Set([...salesUnits, ...feeUnits].map((binding) => binding.kioskId))]);
   } catch (error) {
     fallback(error, "month-closing-stone-bindings");
     return { sales: salesFlowUnavailable(salesHref), fees: feesFlowUnavailable(feesHref) };
   }
-  const label = (binding: (typeof bindings)[number]) => {
-    const same = bindings.filter((other) => other.kioskId === binding.kioskId).length;
+  const label = (binding: StoneBinding, group: StoneBinding[]) => {
+    const same = group.filter((other) => other.kioskId === binding.kioskId).length;
     const name = names.get(binding.kioskId) ?? binding.kioskId;
     return same > 1 ? `${name} · Stone ${binding.stoneCode}` : name;
   };
-  const target = (binding: (typeof bindings)[number], base: string, extra: Record<string, string> = {}) =>
+  const target = (binding: StoneBinding, base: string, extra: Record<string, string> = {}) =>
     `${base}?${query({ ...extra, month: input.month, mapping: binding.id, stoneCode: binding.stoneCode })}`;
   const publishedThrough = latestPublishedDate(now);
 
   const salesPromise = (async () => {
-    const units: SalesUnitInput[] = await Promise.all(bindings.map(async (binding) => {
+    const units: SalesUnitInput[] = await Promise.all(salesUnits.map(async (binding) => {
       const records = await listDailySalesReviewCalendar({
         workspaceId: input.workspaceId, kioskId: binding.kioskId, mappingId: binding.id, stoneCode: binding.stoneCode,
         referenceDate: bounds.from, from: bounds.from, through: bounds.through,
       });
       return {
-        key: `${binding.id}:${binding.stoneCode}`, label: label(binding),
+        key: `${binding.id}:${binding.stoneCode}`, label: label(binding, salesUnits),
         href: target(binding, FINANCIAL_ROUTES.salesReconciliation),
         month: buildSalesReviewMonth({ year: bounds.year, month: bounds.index, records, publishedThrough, validFrom: binding.validFrom, validTo: binding.validTo }),
       };
@@ -84,10 +99,11 @@ export async function readSalesAndFeesFlows(input: Input): Promise<{ sales: Clos
   })().catch((error) => { fallback(error, "month-closing-sales"); return salesFlowUnavailable(salesHref); });
 
   const feesPromise = (async () => {
-    const units: FeesUnitInput[] = await Promise.all(bindings.map(async (binding) => {
+    if (feesBlocked) return feesFlowUnavailable(feesHref);
+    const units: FeesUnitInput[] = await Promise.all(feeUnits.map(async (binding) => {
       const review = await buildFeeReview({ workspaceId: input.workspaceId, mappingId: binding.id, kioskId: binding.kioskId, stoneCode: binding.stoneCode }, input.month, now);
       return {
-        key: `${binding.id}:${binding.stoneCode}`, label: label(binding),
+        key: `${binding.id}:${binding.stoneCode}`, label: label(binding, feeUnits),
         href: target(binding, FINANCIAL_ROUTES.stoneReceipts, { tab: "fees" }),
         ready: review.ready,
         // Mês inteiro publicado e conferência salva depois do fim do mês; antes disso o dado pode estar incompleto.
