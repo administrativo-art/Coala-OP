@@ -89,7 +89,7 @@ function decideRows(entry: Entry): DecideRow[] {
     ...view.exceptions.map((item): DecideRow => ({ id: `${id}:sale_fee:${item.key}`, target: entry.target, kind: "sale_fee", key: item.key, fingerprint: item.fingerprint, label: item.label, sub: `venda ${item.saleId}`,
       date: item.date, dateLabel: fullDateLabel(item.date), impactCents: item.differenceCents, reopened: item.reopened,
       reason: item.reason === "above" ? "acima da taxa atual" : item.reason === "below" ? "abaixo da taxa atual" : "sem MDR no arquivo, diferente",
-      detail: <>{percent(item.expectedCents / item.grossCents)} → <b className={item.differenceCents > 0 ? "text-ds-danger" : "text-ds-ok"}>{percent(item.chargedCents / item.grossCents)}</b> · {centsLabel(item.grossCents)}</> })),
+      detail: <>Referência {percent(item.referenceRate)} · Esperado {centsLabel(item.expectedCents)} · Cobrado <b className={item.differenceCents > 0 ? "text-ds-danger" : "text-ds-ok"}>{centsLabel(item.chargedCents)}</b> · Diferença {item.differenceCents > 0 ? "+" : "−"}{centsLabel(Math.abs(item.differenceCents))}</> })),
     ...view.charges.map((item): DecideRow => ({ id: `${id}:other_charge:${item.key}`, target: entry.target, kind: "other_charge", key: item.key, fingerprint: item.fingerprint, label: "Chargeback", sub: `venda ${item.saleId}`,
       date: item.date, dateLabel: fullDateLabel(item.date), impactCents: item.amountCents, reopened: item.reopened, detail: item.label })),
   ];
