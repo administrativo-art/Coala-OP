@@ -23,10 +23,8 @@
 | Previsões e rascunhos resolvidos | nenhuma previsão (`provisionType: forecast`) sem valor real e nenhum rascunho | Previsão `reconciled` conta como resolvida. |
 | Pagas e vinculadas ao extrato | título pago com `settlementSummary.paymentEvidenceStatus` CONFIRMED/MIXED e `reconciliationStatus` MATCHED | **Dinheiro** (`plannedPaymentMethodType: cash`) conta pela baixa do fechamento de caixa. Pago sem confirmação no extrato, só informado, divergente e “pagamento encontrado sem documento” são pendências. Vencido = saldo em aberto após o vencimento; a vencer aguarda a data. |
 | Fatura do cartão | fatura da competência com `status: paid` | Compra no cartão é conferida pela fatura, não como título avulso. Fatura fechada aguarda pagamento (vencida vira pendência que depende de quem opera); aberta pende; compra no cartão sem fatura importada pende. |
-| Folha e encargos | — | **Fonte não conectada** (fechamento do DP em outro banco). Nunca aparece como conferido. |
-| Caixa de documentos | — | **Fonte não conectada**. Idem. |
 
-Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previsão, `hiddenFromExpensePanel` e `budgetMigration`. Fluxo sem pendência, mas com fonte não conectada, fica **“Fonte não conectada”**, não “Conferido”.
+Exclusões iguais às da lista de Despesas: `cancelled`, `reconciled` não previsão, `hiddenFromExpensePanel` e `budgetMigration`. O fluxo só confere despesas: fica “Conferido” quando previsões, títulos pagos e vinculados ao extrato e fatura do cartão estão resolvidos. Folha e Caixa de documentos não são conferências do fluxo (decisão de 2026-11-21): a folha entra como despesa provisionada e a caixa de cobranças é tratada em Cobranças.
 
 ## Dados e acesso
 
@@ -46,7 +44,7 @@ Por abertura de tela: até 1.500 leituras de despesas + até 60 de faturas; típ
 
 ## Verificação e limites
 
-- Testes: [`financial-month-closing-expenses-flow`](../../../tests/unit/financial-month-closing-expenses-flow.test.ts) (classificação, vencimento, cartão, dinheiro, datas sem deslocamento de fuso, fonte não conectada, ocultação de itens) e [`financial-month-closing-access-and-month`](../../../tests/unit/financial-month-closing-access-and-month.test.ts) (permissões, fuso, intervalo, apresentação).
+- Testes: [`financial-month-closing-expenses-flow`](../../../tests/unit/financial-month-closing-expenses-flow.test.ts) (classificação, vencimento, cartão, dinheiro, datas sem deslocamento de fuso, ocultação de itens) e [`financial-month-closing-access-and-month`](../../../tests/unit/financial-month-closing-access-and-month.test.ts) (permissões, fuso, intervalo, apresentação).
 - **Não verificado:** dados reais (a classificação ainda não foi executada sobre outubro), navegador/visual, rota HTTP ponta a ponta em emulador, e a hipótese de que `settlementSummary` está preenchido nas despesas já pagas (despesas antigas sem ele aparecerão como “Sem vínculo no extrato”).
 - Hipóteses a confirmar: dinheiro conta pela baixa do caixa; pagamento só informado não basta; fatura de cartão só conta como conferida quando `paid`.
-- Lacunas conhecidas: Folha, Caixa de documentos, tabela por quiosque, Bancos (saldo final) e os demais quatro fluxos.
+- Lacunas conhecidas: tabela por quiosque, Bancos (saldo final) e os demais quatro fluxos.
