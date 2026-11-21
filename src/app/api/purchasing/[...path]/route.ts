@@ -5,6 +5,10 @@ import { addMonths } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { AppError } from '@/lib/observability';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { secureRoute } from '@/lib/security/secure-route.server';
 import { canAccessUnit } from '@/lib/unit-access';
 import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
 import {
@@ -137,14 +141,6 @@ async function validateAccountPlanForPosting(accountPlanId: unknown): Promise<st
   return null;
 }
 
-async function getUserContext(request: NextRequest) {
-  try {
-    return await requireUser(request);
-  } catch {
-    return null;
-  }
-}
-
 function isAllowed(
   context: ServerUserContext,
   check: (permissions: ServerUserContext['permissions']) => boolean,
@@ -193,10 +189,6 @@ function canPostPath(context: ServerUserContext, path: string[]) {
     return isAllowed(context, canReceivePurchase);
   }
   return null;
-}
-
-function permissionError() {
-  return jsonError('Sem permissão para esta operação de compras.', 403);
 }
 
 function docData(doc: FirebaseFirestore.DocumentSnapshot) {
@@ -778,12 +770,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   return syncedExpenses.goodsExpenseId;
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handleGet(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  if (!isAllowed(userContext, canViewPurchasing)) return permissionError();
 
   if (resource === 'barcode' && id === 'lookup') {
     return lookupBarcode(request.nextUrl.searchParams.get('barcode'));
@@ -851,13 +839,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   return NextResponse.json(docData(doc));
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handlePost(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  const canPost = canPostPath(userContext, path);
-  if (canPost === false) return permissionError();
   const decoded = userContext.decoded;
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
@@ -2616,18 +2599,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   return jsonError('Operação POST não implementada para este caminho.', 404);
 }
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handlePatch(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  const canPatch =
-    resource === 'quotations'
-      ? isAllowed(userContext, canCreateQuotation)
-      : resource === 'orders'
-        ? isAllowed(userContext, canCreatePurchase)
-        : null;
-  if (canPatch === false) return permissionError();
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -2969,14 +2942,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   return jsonError('Operação PATCH não implementada para este caminho.', 404);
 }
 
-export async function DELETE(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handleDelete(path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  if (resource === 'quotations' && !isAllowed(userContext, canCreateQuotation)) {
-    return permissionError();
-  }
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).delete();
@@ -2985,3 +2952,65 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   return jsonError('Operação DELETE não implementada para este caminho.', 404);
 }
+
+
+type PurchasingContext = { params: Promise<{ path?: string[] }> };
+
+function purchasingContract(method: "GET" | "POST" | "PATCH" | "DELETE") {
+  return defineSecurityContract({
+    schemaVersion: 1,
+    id: `purchasing.dispatch.${method.toLowerCase()}`,
+    version: 1,
+    surface: { method, path: "/api/purchasing/[...path]" },
+    exposure: "authenticated",
+    identity: { kind: "active-user" },
+    authorization: { kind: "custom", strategy: "purchasing-method-permission" },
+    resourceScope: { kind: "none" },
+    input: { kind: "none" },
+    effects: { mode: method === "GET" ? "read" : method === "DELETE" ? "delete" : "write", audit: "none" },
+    errorExposure: "sanitized",
+  });
+}
+
+function purchasingEnforcer(contract: ReturnType<typeof purchasingContract>) {
+  return createStandardSecurityEnforcer<NextRequest, PurchasingContext, unknown, ServerUserContext, undefined, undefined>(
+    contract,
+    {
+      async authenticate({ request }) {
+        return requireUser(request).catch((cause) => {
+          throw new AppError({ code: "PURCHASING_AUTH_REQUIRED", kind: "AUTHENTICATION", cause });
+        });
+      },
+      async authorize({ actor, routeContext }) {
+        const path = (await routeContext.params).path ?? [];
+        const [resource] = path;
+        const method = contract.surface.method;
+        const allowed = method === "GET" ? isAllowed(actor, canViewPurchasing)
+          : method === "POST" ? canPostPath(actor, path)
+          : resource === "quotations" ? isAllowed(actor, canCreateQuotation)
+          : method === "PATCH" && resource === "orders" ? isAllowed(actor, canCreatePurchase)
+          : null;
+        if (allowed === false) {
+          throw new AppError({
+            code: "PURCHASING_ACCESS_FORBIDDEN", kind: "AUTHORIZATION",
+            safeMessage: "Sem permissão para esta operação de compras.",
+          });
+        }
+      },
+    },
+  );
+}
+
+const getContract = purchasingContract("GET");
+const postContract = purchasingContract("POST");
+const patchContract = purchasingContract("PATCH");
+const deleteContract = purchasingContract("DELETE");
+
+export const GET = secureRoute({ contract: getContract, enforcer: purchasingEnforcer(getContract) }, async ({ request, routeContext, security }) =>
+  handleGet(request, security.actor, (await routeContext.params).path ?? []));
+export const POST = secureRoute({ contract: postContract, enforcer: purchasingEnforcer(postContract) }, async ({ request, routeContext, security }) =>
+  handlePost(request, security.actor, (await routeContext.params).path ?? []));
+export const PATCH = secureRoute({ contract: patchContract, enforcer: purchasingEnforcer(patchContract) }, async ({ request, routeContext, security }) =>
+  handlePatch(request, security.actor, (await routeContext.params).path ?? []));
+export const DELETE = secureRoute({ contract: deleteContract, enforcer: purchasingEnforcer(deleteContract) }, async ({ routeContext }) =>
+  handleDelete((await routeContext.params).path ?? []));

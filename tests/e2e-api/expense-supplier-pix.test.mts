@@ -203,4 +203,31 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   const mismatched = { ...withBoleto, boletoAttachment: { ...withBoleto.boletoAttachment, amountCents: 53665 } };
   assert.throws(() => assertExpenseSupplierPixTarget(mismatched, "coala", octoberEntity, octoberDocument, 53664, pin), /arquivo do boleto/);
 
+  const originalEncryptionKey = process.env.PAYMENT_DATA_ENCRYPTION_KEY;
+  process.env.PAYMENT_DATA_ENCRYPTION_KEY = encryptionKey;
+  context.after(() => {
+    if (originalEncryptionKey === undefined) delete process.env.PAYMENT_DATA_ENCRYPTION_KEY;
+    else process.env.PAYMENT_DATA_ENCRYPTION_KEY = originalEncryptionKey;
+  });
+  const { prepareExpenseSupplierPix } = await import("../../src/features/financial/payment-requests/expense-supplier-pix.server");
+  const octoberRequest = requests.doc(octoberResponse.request.id);
+  await octoberRequest.update({ status: "approval_expired", interRequestId: "test-expired-pix", bankStatus: "EXPIRADO" });
+  const fakeBank = (status: string) => async (id: string) => ({
+    transacaoPix: { codigoSolicitacao: id, status, valor: 536.64 },
+  });
+  const replace = (status: string) => prepareExpenseSupplierPix(
+    octoberActual, octoberEntity, 53664, "coala", { uid: "supplier-pix-admin" },
+    undefined, octoberRequest.id, fakeBank(status),
+  );
+  await assert.rejects(replace("PAGO"), /não confirmou o encerramento/);
+  await assert.rejects(replace("PENDENTE_APROVACAO"), /não confirmou o encerramento/);
+  assert.equal((await expenses.doc(octoberActual).get()).get("paymentRequestId"), octoberRequest.id);
+  const replacements = await Promise.all([replace("EXPIRADO"), replace("EXPIRADO")]);
+  assert.equal(replacements[0].id, replacements[1].id);
+  assert.equal(replacements[0].status, "awaiting_financial_authorization");
+  assert.equal((await octoberRequest.get()).get("supersededByPaymentRequestId"), replacements[0].id);
+  assert.equal((await requests.doc(replacements[0].id).get()).get("supersedesPaymentRequestId"), octoberRequest.id);
+  assert.equal((await expenses.doc(octoberActual).get()).get("paymentRequestId"), replacements[0].id);
+  assert.equal((await requests.where("expenseId", "==", octoberActual).get()).size, 2);
+
 });

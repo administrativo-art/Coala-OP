@@ -19,13 +19,14 @@ const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,150}$/);
 const inputSchema = z.object({
   supplierEntityId: idSchema,
   amountCents: z.number().int().positive().max(100_000_000),
+  replacementOf: idSchema.optional(),
   confirmation: z.object({
     beneficiaryDocument: z.string().regex(/^\d{14}$/),
     competenceMonth: financialCompetenceMonthSchema,
     previousPaidRequestId: idSchema,
     allowExistingBoleto: z.boolean(),
   }).strict().optional(),
-}).strict();
+}).strict().refine(input => !input.confirmation || !input.replacementOf);
 type Input = z.infer<typeof inputSchema>;
 type Resource = { expenseId: string };
 
@@ -74,6 +75,6 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
   const { actor, input, resource } = security;
   const result = await prepareExpenseSupplierPix(resource.expenseId, input.supplierEntityId, input.amountCents, WORKSPACE_ID,
-    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username }, input.confirmation);
+    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username }, input.confirmation, input.replacementOf);
   return NextResponse.json({ request: result }, { headers: { "Cache-Control": "private, no-store" } });
 });
