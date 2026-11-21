@@ -38,6 +38,8 @@ Recomendações apresentadas e aceitas pelo usuário ("pode"):
 7. **Permissão própria no perfil de permissões**, separada do fechamento de caixa: grupo `financial.monthClosings` com `view`, `close` e `reopen`, editável em `access-profiles-settings`/`profile-management-modal` e declarado em `src/types/index.ts` (padrão restrito `false`; administrador `true`). O servidor valida cada ação; esconder o botão não é controle.
 8. **Vencimento usa o estado que Despesas já calcula** (`overdue`/"Vencido" em `expense-display-state.ts` e `expenseHasOverdueBalance`). O item 6 mostra os títulos da competência vencidos e abre Despesas com o filtro "Vencidos"; não há alerta nem prazo novo.
 9. **Sem exceção por enquanto (2026-11-20).** Nenhum item é liberado sem estar conferido. O tratamento é feito no módulo de origem; o fechamento só revisa e fecha. A tela de Despesas do fechamento não tem ações: mostra situação, motivo e atalho para Despesas já filtrada (`?competence=AAAA-MM`, `status`, `unit`, `expense`).
+10. **Fluxo de Despesas só confere despesas (2026-11-21).** Ficam três conferências: previsões e rascunhos resolvidos, títulos pagos e vinculados ao extrato, fatura do cartão. Saem "Folha e encargos" e "Caixa de documentos": o fechamento da folha é do DP; o custo da folha (salário, FGTS, INSS, pró-labore, PJ) entra como despesa provisionada e já é cobrado pelas conferências de despesas; a caixa de cobranças é tratada em Cobranças. O fluxo fecha quando tudo está conciliado, sem verificação própria por pessoa.
+11. **Boleto de competência já fechada (2026-11-21).** A trava recusa o lançamento; quem tem permissão reabre o mês com motivo, a revisão fechada fica preservada, lança-se e concilia-se, e fecha-se de novo como nova revisão. Não se lança como ajuste no mês seguinte.
 
 ## Pendências a confirmar
 
@@ -87,8 +89,6 @@ Protótipo: canvas privado "Fechamento do mês" no claude.ai, artboard `Alt0-Flu
 | **Despesas** | nenhum rascunho (`draft`) e nenhuma previsão (`forecast`) sem valor real (DAS, folha, encargos, séries) | `expenses` por `competenceMonth`, conciliação de provisões |
 | | títulos da competência pagos (`paidAt`) e vinculados a lançamento do extrato — sem emissão de boleto: vincula e paga, ou paga direto e vincula pelo extrato (decisão 2026-11-20); futuros "aguarda dd/mm"; vencidos como "Vencido" com atalho ao filtro de Despesas | `expenses`, `transactions`, `expense-display-state.ts` |
 | | fatura do cartão da competência fechada e paga/conciliada | `cardStatements` |
-| | folha fechada no DP; FGTS/INSS quitados | fechamento DP, guias |
-| | caixa de documentos sem item da competência | inbox |
 | **Vendas** | caixa de todos os dias de cada quiosque fechado (dinheiro contado) | cash-closures, `cashClosureMonthlySummaries` |
 | | PDV × Stone (cartão e Pix) revisado em todos os dias, sem divergência sem decisão | `dailySalesReviews` |
 | **Recebimento** | depósitos do dinheiro conciliados no banco | cash-deposits |
@@ -105,7 +105,7 @@ Protótipo: canvas privado "Fechamento do mês" no claude.ai, artboard `Alt0-Flu
 Primeira entrega local (sem commit, sem publicação), a pedido "vamos implementar" da tela inicial e da tela de Despesas:
 
 - **Feito:** tela inicial (opção 0) e fluxo de Despesas, somente leitura; rota `GET /api/financial/month-closing` com `secureRoute`; permissão `financial.monthClosings` (ver/fechar/reabrir; `fechar` e `reabrir` ainda sem efeito); item "Fechamento do mês" na barra lateral; guia em [flows/month-closing.md](../engineering/flows/month-closing.md); testes unitários (classificação, fuso, permissões).
-- **Despesas, o que é calculado:** previsões e rascunhos resolvidos; pagas e vinculadas ao extrato (vencidas e a vencer separadas); fatura do cartão. **Folha e Caixa de documentos** aparecem como "fonte não conectada" e impedem o fluxo de ficar "Conferido".
+- **Despesas, o que é calculado:** previsões e rascunhos resolvidos; pagas e vinculadas ao extrato (vencidas e a vencer separadas); fatura do cartão. Folha e Caixa de documentos saíram do fluxo (decisão 10).
 - **Os outros quatro fluxos** (Vendas, Recebimento, Taxas, DRE) aparecem como "Ainda não conectado", sem números.
 - **Fora desta entrega:** fechar/reabrir, trava da competência, relatório, tabela por quiosque, saldo dos bancos, exceções (decisão 9).
 - **Hipóteses a confirmar com dados reais** (diagnóstico de outubro): despesas antigas sem `settlementSummary` aparecem como "sem vínculo no extrato"; pago em dinheiro conta pela baixa do caixa; pagamento só informado não basta; fatura do cartão só conta como conferida quando `paid`.

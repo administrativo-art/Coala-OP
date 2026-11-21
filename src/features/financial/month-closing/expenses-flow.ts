@@ -57,8 +57,6 @@ export type ExpensesFlowInput = {
 const CHECK_FORECASTS = "expenses.forecasts";
 const CHECK_PAYMENTS = "expenses.payments";
 const CHECK_CARD = "expenses.card";
-const CHECK_PAYROLL = "expenses.payroll";
-const CHECK_DOCUMENTS = "expenses.documents";
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 const cents = (value: unknown) => Math.round((Number(value) || 0) * 100);
@@ -275,8 +273,6 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
       id: CHECK_CARD, name: "Fatura do cartão",
       state: pendingOf(CHECK_CARD) ? "pending" : "ok", done: cardDone, total: cardTotal,
     },
-    { id: CHECK_PAYROLL, name: "Folha e encargos", state: "unavailable", done: null, total: null, note: "Fonte ainda não conectada ao fechamento." },
-    { id: CHECK_DOCUMENTS, name: "Caixa de documentos", state: "unavailable", done: null, total: null, note: "Fonte ainda não conectada ao fechamento." },
   ];
 
   const state = checks.some((check) => check.state === "pending") ? "pending"
