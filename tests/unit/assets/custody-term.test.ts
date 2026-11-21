@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { assetCustodyTermPdfInputSchema, renderAssetCustodyTermPdf, safeAssetCustodyTermText } from "../../../src/features/assets/custody-term-pdf";
+import { ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE, ASSET_CUSTODY_TERM_VERSION, assetCustodyTermPdfInputSchema, renderAssetCustodyTermPdf, safeAssetCustodyTermText } from "../../../src/features/assets/custody-term-pdf";
 import { SYSTEM_DOCUMENT_TEMPLATES } from "../../../src/features/hr/documents/system-template-catalog";
 import { resolvePublicationPolicy } from "../../../src/lib/hr/employee-document-publication";
 
@@ -24,6 +24,7 @@ test("catálogo registra termo patrimonial contextual, timbrado e independente",
   assert.equal(template?.letterheadVersion, "coala-letterhead-v2");
   assert.equal(template?.signatureScope, "independent");
   assert.equal(template?.retentionPolicyId, "employment_plus_5y");
+  assert.equal(template?.version, ASSET_CUSTODY_TERM_VERSION);
   assert.deepEqual(resolvePublicationPolicy("ASSET_CUSTODY_TERM"), { mode: "automatic", trigger: "signed" });
 });
 
@@ -35,6 +36,19 @@ test("renderer usa allowlist estrita e omite campos sensíveis em texto livre", 
   assert.equal(safeAssetCustodyTermText("senha: abc"), "[dado omitido]");
   const pdf = await renderAssetCustodyTermPdf(input);
   assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+});
+
+test("termo v2 traz a cláusula de aparelho gerenciado sem ser apagada pelo filtro de dados sensíveis", async () => {
+  assert.equal(safeAssetCustodyTermText(ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE), ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE);
+  assert.match(ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE, /apagá-lo remotamente/);
+  assert.match(ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE, /não deverá armazenar nele conteúdo pessoal/);
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await getDocument({ data: new Uint8Array(await renderAssetCustodyTermPdf(input)) }).promise;
+  assert.equal(document.numPages, 1);
+  const content = await (await document.getPage(1)).getTextContent();
+  const text = content.items.map((item) => ("str" in item ? item.str : "")).join(" ").replace(/\s+/g, " ");
+  assert.match(text, /ferramenta de gestão de dispositivos/);
+  assert.match(text, /Termo de Ciência sobre o Tratamento de Dados Pessoais/);
 });
 
 test("rota é segura e serviço mantém idempotência, recuperação e metadados de origem", () => {

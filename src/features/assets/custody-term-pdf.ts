@@ -15,6 +15,12 @@ export const assetCustodyTermPdfInputSchema = z.object({
 
 export type AssetCustodyTermPdfInput = z.infer<typeof assetCustodyTermPdfInputSchema>;
 
+/** v2: cláusula de aparelhos gerenciados, alinhada ao termo LGPD v6 (seção 3-B, inciso VIII). */
+export const ASSET_CUSTODY_TERM_VERSION = 2;
+
+export const ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE =
+  "Quando o patrimônio for celular, tablet ou outro aparelho com o Coala Go, ele poderá ser administrado por ferramenta de gestão de dispositivos, que permite identificar o aparelho e o usuário vinculado, instalar e atualizar aplicativos da empresa, aplicar configurações de segurança e bloqueá-lo ou apagá-lo remotamente em caso de perda, roubo, substituição ou encerramento do vínculo. O aparelho destina-se ao trabalho, e o colaborador não deverá armazenar nele conteúdo pessoal. O tratamento de dados, inclusive o acompanhamento de localização nos turnos configurados, segue o Termo de Ciência sobre o Tratamento de Dados Pessoais.";
+
 const forbidden = /\b(?:imei|telefone|phone|senha|password|token|segredo|secret|chave\s+privada)\b/i;
 export function safeAssetCustodyTermText(value: unknown) {
   const text = String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
@@ -66,6 +72,7 @@ export async function renderAssetCustodyTermPdf(raw: AssetCustodyTermPdfInput) {
   if (input.condition) y = paragraph(page, `Estado na entrega: ${safeAssetCustodyTermText(input.condition)}`, y, regular);
   if (input.accessories.length) y = paragraph(page, `Acessórios entregues: ${input.accessories.map(safeAssetCustodyTermText).join(", ")}.`, y, regular);
   y = paragraph(page, "O colaborador declara receber o patrimônio nas condições registradas, compromete-se a utilizá-lo exclusivamente para as atividades autorizadas, zelar por sua conservação e comunicar imediatamente perda, dano ou necessidade de manutenção.", y - 8, regular);
+  y = paragraph(page, ASSET_CUSTODY_TERM_MANAGED_DEVICE_CLAUSE, y, regular);
   y = paragraph(page, "A assinatura eletrônica confirma a entrega e a ciência das responsabilidades, sem autorizar desconto automático ou renúncia a direitos.", y, regular);
   page.drawText(`Emitido em ${dateBr(input.issuedAt)}.`, { x: 52, y: Math.max(y - 10, 160), size: 8, font: regular, color: rgb(0.35, 0.35, 0.4) });
   page.drawText("Assinaturas eletrônicas: colaborador e representante institucional.", { x: 52, y: 112, size: 8.5, font: bold, color: rgb(0.12, 0.12, 0.14) });

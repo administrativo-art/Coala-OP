@@ -39,7 +39,7 @@ if (realConverter) {
   assert.equal(process.env.DOCX_TO_PDF_AUDIENCE, process.env.DOCX_TO_PDF_URL);
 }
 
-test('LGPD v5: geração, PDF, pacote, troca de versão e histórico em emuladores', { timeout: 600_000 }, async (t) => {
+test('LGPD vigente: geração, PDF, pacote, troca de versão e histórico em emuladores', { timeout: 600_000 }, async (t) => {
   let converter;
   const oldUrl = process.env.DOCX_TO_PDF_URL;
   const oldAudience = process.env.DOCX_TO_PDF_AUDIENCE;
@@ -107,19 +107,21 @@ test('LGPD v5: geração, PDF, pacote, troca de versão e histórico em emulador
 
     let first;
     let pdfBytes;
-    await t.test('gera v5 completa com auditoria, PDF timbrado e repetição idempotente', async () => {
+    await t.test('gera a versão vigente completa com auditoria, PDF timbrado e repetição idempotente', async () => {
       first = await generate();
-      assert.equal(first.templateVersion, 5);
+      assert.equal(first.templateVersion, template.version);
       assert.deepEqual(extractDocxVariables(first.buffer), []);
       const xml = new PizZip(first.buffer).file('word/document.xml').asText();
       assert.ok(xml.includes(fixture.candidateName));
       assert.ok(xml.includes('3-A. Localização'));
+      assert.ok(xml.includes('3-B. Acompanhamento da localização'));
+      assert.ok(xml.includes('3-C. Metas, desempenho e premiação'));
       assert.ok(first.pdfStoragePath, 'conversão deve produzir PDF, sem aceitar degradação silenciosa');
       pdfBytes = (await bucket.file(first.pdfStoragePath).download())[0];
       const pdf = await PDFDocument.load(pdfBytes);
       assert.ok(pdf.getPageCount() > 0);
       const doc = await dbAdmin.collection('generatedDocuments').doc(first.id).get();
-      assert.equal(doc.get('templateVersion'), 5);
+      assert.equal(doc.get('templateVersion'), template.version);
       assert.equal(doc.get('templateContentHash'), template.contentHash);
       assert.equal(doc.get('pdfContentHash'), hash(pdfBytes));
       assert.equal(doc.get('pdfGenerationStatus'), 'ready');
@@ -151,36 +153,36 @@ test('LGPD v5: geração, PDF, pacote, troca de versão e histórico em emulador
       await save('lgpd-v5-long.pdf', bytes);
     });
 
-    await t.test('modelo v4 armazenado prevalece: atualização do banco é pré-condição da entrega da v5', async () => {
-      const source = await readFile('docs/modelos-documentos/admissionais/03-termo-lgpd-v4.docx');
-      const storagePath = `synthetic-lgpd-validation/${prefix}/template-v4.docx`;
+    await t.test('modelo v5 armazenado prevalece: atualização do banco é pré-condição da entrega da versão vigente', async () => {
+      const source = await readFile('docs/modelos-documentos/admissionais/03-termo-lgpd-v5.docx');
+      const storagePath = `synthetic-lgpd-validation/${prefix}/template-v5.docx`;
       await bucket.file(storagePath).save(source, { resumable: false });
-      await templateRef.set({ ...JSON.parse(JSON.stringify(template)), version: 4, storagePath, contentHash: hash(source), status: 'published' });
+      await templateRef.set({ ...JSON.parse(JSON.stringify(template)), version: 5, storagePath, contentHash: hash(source), status: 'published' });
       const previous = await generate();
-      assert.equal(previous.templateVersion, 4);
+      assert.equal(previous.templateVersion, 5);
       assert.notEqual(previous.id, first.id);
-      assert.equal(new PizZip(previous.buffer).file('word/document.xml').asText().includes('3-A. Localização'), false);
+      assert.equal(new PizZip(previous.buffer).file('word/document.xml').asText().includes('3-C. Metas, desempenho e premiação'), false);
       // Marca histórica no emulador: não envia nada ao provedor de assinatura.
       const previousRef = dbAdmin.collection('generatedDocuments').doc(previous.id);
       await previousRef.update({ status: 'signed', signatureStatus: 'signed', signatureProvider: 'synthetic-fixture' });
       const original = (await previousRef.get()).data();
       const pdfHash = hash((await bucket.file(previous.pdfStoragePath).download())[0]);
-      const v5 = await readFile(template.sourcePath);
-      const v5Path = `synthetic-lgpd-validation/${prefix}/template-v5.docx`;
-      await bucket.file(v5Path).save(v5, { resumable: false });
-      await templateRef.update({ version: 5, storagePath: v5Path, contentHash: hash(v5) });
+      const latest = await readFile(template.sourcePath);
+      const latestPath = `synthetic-lgpd-validation/${prefix}/template-v${template.version}.docx`;
+      await bucket.file(latestPath).save(latest, { resumable: false });
+      await templateRef.update({ version: template.version, storagePath: latestPath, contentHash: hash(latest) });
       const current = await generate();
-      assert.equal(current.templateVersion, 5);
+      assert.equal(current.templateVersion, template.version);
       assert.equal(current.id, first.id);
       assert.deepEqual((await previousRef.get()).data(), original);
       assert.equal(hash((await bucket.file(previous.pdfStoragePath).download())[0]), pdfHash);
       const invalid = { contentHash: '0'.repeat(64) };
       await templateRef.update(invalid);
       await assert.rejects(generate({ revisionKey: 'tampered-template' }), /DOCX publicado não corresponde/i);
-      await templateRef.update({ contentHash: hash(v5) });
+      await templateRef.update({ contentHash: hash(latest) });
     });
 
-    await t.test('pacote com PDF v5 real recalcula índice e posiciona assinaturas no encerramento', async () => {
+    await t.test('pacote com PDF vigente real recalcula índice e posiciona assinaturas no encerramento', async () => {
       const components = [];
       const expectedIndex = [];
       let nextPage = 1;
@@ -239,7 +241,7 @@ test('LGPD v5: geração, PDF, pacote, troca de versão e histórico em emulador
       assert.deepEqual(bundle.index.map((row) => [row.startPage, row.endPage]), expectedIndex);
       assert.deepEqual(bundle.manifest.components.map((item) => item.templateId), expectedIds);
       for (const party of ['employee', 'company']) assert.equal(admissionBundleSignerPositions(bundle.manifest, party)[0].z, bundle.pageCount);
-      assert.equal(bundle.manifest.components.find((item) => item.templateId === template.id).templateVersion, 5);
+      assert.equal(bundle.manifest.components.find((item) => item.templateId === template.id).templateVersion, template.version);
       await save('closing-filled.docx', closingDocx);
       await save('admission-bundle.pdf', bundle.buffer);
       await save('manifest.json', Buffer.from(JSON.stringify(bundle.manifest, null, 2)));
