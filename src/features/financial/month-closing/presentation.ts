@@ -53,6 +53,11 @@ const KIND_LABEL: Record<ClosingItemKind, string> = {
   card_pix_awaiting: "Dentro do prazo",
   cash_closing_open: "Caixa não aprovado",
   cash_deposit_unpaid: "Depósito pendente",
+  dre_cmv_open: "CMV em aberto",
+  dre_cmv_incomplete: "CMV incompleto",
+  dre_cmv_changed: "Vendas alteradas",
+  dre_sources_unproven: "Fonte não comprovada",
+  dre_expense_integrity: "Despesa inconsistente",
 };
 
 export function itemLabel(item: ClosingItem) {
