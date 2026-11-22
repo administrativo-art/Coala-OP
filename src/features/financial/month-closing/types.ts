@@ -36,7 +36,10 @@ export type ClosingItemKind =
   | "fees_not_ready"
   | "fees_exception"
   | "fees_rate_change"
-  | "fees_charge";
+  | "fees_charge"
+  | "receipts_not_ready"
+  | "receipts_pending"
+  | "receipts_awaiting";
 
 export type ClosingCheck = {
   id: string;

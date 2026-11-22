@@ -10,6 +10,7 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { evaluateExpensesFlow, expensesForCompetence, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
 import { todayKey } from "./month";
 import { notConnectedFlows } from "./other-flows";
+import { readReceiptsFlow } from "./receipts.server";
 import { readSalesAndFeesFlows } from "./sales-fees.server";
 import type { MonthClosingPayload } from "./types";
 
@@ -69,10 +70,11 @@ export async function getMonthClosingOverview(input: {
   canViewStoneItems: boolean;
   now?: Date;
 }): Promise<MonthClosingPayload> {
-  const [expenseDocuments, statementDocuments, stone] = await Promise.all([
+  const [expenseDocuments, statementDocuments, stone, receipts] = await Promise.all([
     listExpenses(input.month),
     listCardStatements(input.month),
     readSalesAndFeesFlows({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
+    readReceiptsFlow({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
   ]);
   const today = todayKey(input.now);
   const expenses = expenseDocuments.map((document) => {
@@ -96,7 +98,7 @@ export async function getMonthClosingOverview(input: {
   return {
     month: input.month,
     today,
-    flows: [flow, stone.sales, ...notConnectedFlows(["receipts"]), stone.fees, ...notConnectedFlows(["dre"])],
+    flows: [flow, stone.sales, receipts, stone.fees, ...notConnectedFlows(["dre"])],
     expenseTotals: input.canViewExpenseItems ? totals : null,
     limits: { expensesRead: expenseDocuments.length, expensesLimit: MONTH_CLOSING_MAX_EXPENSES },
   };

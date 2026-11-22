@@ -18,20 +18,20 @@ import type { ClosingFlow } from "./types";
 
 type Input = { workspaceId: string; month: string; canViewItems: boolean; now?: Date };
 
-function monthBounds(month: string) {
+export function monthBounds(month: string) {
   const [year, index] = month.split("-").map(Number);
   const last = new Date(Date.UTC(year, index, 0)).getUTCDate();
   return { year, index, from: `${month}-01`, through: `${month}-${String(last).padStart(2, "0")}` };
 }
 
-async function kioskNames(kioskIds: string[]) {
+export async function kioskNames(kioskIds: string[]) {
   if (kioskIds.length === 0) return new Map<string, string>();
   const documents = await dbAdmin.getAll(...kioskIds.map((id) => dbAdmin.collection("kiosks").doc(id)));
   return new Map(documents.map((document) => [document.id, String(document.data()?.name ?? document.id)]));
 }
 
 /** Todos os vínculos do workspace, de qualquer situação: o vínculo de um mês passado pode já ter sido encerrado. */
-async function readMappings(workspaceId: string): Promise<FinancialAgentMapping[]> {
+export async function readMappings(workspaceId: string): Promise<FinancialAgentMapping[]> {
   const snapshot = await financialDbAdmin.collection("stoneMerchantMappings")
     .where("workspaceId", "==", workspaceId).limit(MAX_AGENT_MAPPINGS + 1).get();
   if (snapshot.size > MAX_AGENT_MAPPINGS) throw new Error("Vínculos Stone acima do limite operacional.");
