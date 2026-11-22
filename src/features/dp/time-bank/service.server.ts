@@ -1,14 +1,14 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import type { Firestore } from 'firebase-admin/firestore';
+import { FieldPath, type Firestore, type Transaction } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
 import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
-import { assertClosureAccess, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
+import { assertClosureAccess, readCompetenceClosure, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
 import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
 import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from '@/features/dp/time-adjustments/automatic-absence.server';
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
@@ -18,13 +18,14 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
-import { canAccessUserByUnit } from '@/lib/unit-access';
+import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
 import type { DPAbsenceType, DPOvertimePolicy } from '@/types';
 
 import {
   applyWeeklyOvertimeLimits, buildStatement, competencesBetween, computeBankDay, monthTotals, overnightWorkDate, TIME_BANK_ALGORITHM_VERSION,
   type BankAbsence, type BankDay, type BankManualMovement, type BankMonthRecord, type BankPolicy, type BankSettlement, type BankShift,
 } from './core';
+import { payrollReviewReason, type PayrollPersonStatus, type PayrollReadiness } from './payroll-readiness';
 import { cycleOf } from './cycle';
 import type { TimeBankActionInput } from './schemas';
 
@@ -60,10 +61,14 @@ async function subject(deps: Dependencies, context: ServerUserContext, employeeU
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 const fiscalMs = (markedAt: string) => Date.parse(markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+const competenceRef = (deps: Dependencies, workspaceId: string, competence: string) =>
+  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+const frozenPeople = (version: FirebaseFirestore.DocumentReference) => version.collection('people');
+const bankMonths = (version: FirebaseFirestore.DocumentReference) => version.collection('timeBank');
 const bankRef = (deps: Dependencies, workspaceId: string, competence: string, version: number, uid: string) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection('versions').doc(String(version)).collection('timeBank').doc(uid);
+  bankMonths(competenceRef(deps, workspaceId, competence).collection('versions').doc(String(version))).doc(uid);
 const movementCollection = (deps: Dependencies, workspaceId: string, competence: string) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection(BANK_MOVEMENTS);
+  competenceRef(deps, workspaceId, competence).collection(BANK_MOVEMENTS);
 const movementKey = (workspaceId: string, uid: string, operationId: string) =>
   createHash('sha256').update(JSON.stringify(['bank-movement', workspaceId, uid, operationId])).digest('hex');
 const movementGuardRef = (deps: Dependencies, workspaceId: string, uid: string) =>
@@ -73,22 +78,29 @@ const movementOperationRef = (deps: Dependencies, workspaceId: string, uid: stri
 const guardRevision = (snapshot: FirebaseFirestore.DocumentSnapshot) => snapshot.exists && Number.isSafeInteger(snapshot.get('revision'))
   ? Number(snapshot.get('revision')) : 0;
 
-async function movementsFor(deps: Dependencies, workspaceId: string, uid: string, competences: string[]) {
-  const snapshots = await Promise.all(competences.map((competence) => movementCollection(deps, workspaceId, competence).where('uid', '==', uid).limit(501).get()));
+async function movementsFor(deps: Dependencies, workspaceId: string, uid: string, competences: string[], tx?: Transaction) {
+  const snapshots = await Promise.all(competences.map((competence) => {
+    const query = movementCollection(deps, workspaceId, competence).where('uid', '==', uid).limit(501);
+    return tx ? tx.get(query) : query.get();
+  }));
   if (snapshots.some((snapshot) => snapshot.size > 500)) throw fail('PTRP_BANK_MOVEMENTS_TRUNCATED', 'Há movimentos demais no período para montar um extrato seguro.', 'CONFLICT');
   return snapshots.flatMap((snapshot) => snapshot.docs.map((doc) => doc.data() as BankManualMovement));
 }
 
-async function policiesAndTarget(deps: Dependencies, uid: string) {
+async function readBankPolicies(deps: Dependencies) {
+  const snapshot = await deps.mainDb.collection(OVERTIME_POLICIES).where('status', 'in', ['published', 'archived']).limit(POLICY_LIMIT + 1).get();
+  if (snapshot.size > POLICY_LIMIT) throw fail('PTRP_BANK_POLICY_LIMIT', 'Há políticas de hora extra demais para resolver o banco com segurança.', 'CONFLICT');
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as DPOvertimePolicy);
+}
+
+async function policiesAndTarget(deps: Dependencies, uid: string, published?: DPOvertimePolicy[]) {
   const user = await deps.mainDb.collection('users').doc(uid).get();
   const unitId = text(user.get('unitId'));
   const unit = unitId ? await deps.mainDb.collection('dp_units').doc(unitId).get() : null;
   const unitGroupId = text(unit?.get('groupId'));
   const group = unitGroupId ? await deps.mainDb.collection('dp_unitGroups').doc(unitGroupId).get() : null;
   const unitOrganizationId = text(unit?.get('organizationId')) ?? text(group?.get('organizationId'));
-  const snapshot = await deps.mainDb.collection(OVERTIME_POLICIES).where('status', 'in', ['published', 'archived']).limit(POLICY_LIMIT + 1).get();
-  if (snapshot.size > POLICY_LIMIT) throw fail('PTRP_BANK_POLICY_LIMIT', 'Há políticas de hora extra demais para resolver o banco com segurança.', 'CONFLICT');
-  const policies = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as DPOvertimePolicy);
+  const policies = published ?? await readBankPolicies(deps);
   const target = {
     collaboratorId: uid, ...(text(user.get('jobRoleId')) ? { jobRoleId: text(user.get('jobRoleId'))! } : {}),
     jobFunctionIds: Array.isArray(user.get('jobFunctionIds')) ? (user.get('jobFunctionIds') as string[]) : [],
@@ -146,10 +158,10 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
 
 async function computeBankMonth(deps: Dependencies, workspaceId: string, competence: string, closure: ClosureRecord | null, uid: string) {
   const { start, end } = competenceRange(competence);
-  const closureRef = closure ? deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection('versions').doc(String(closure.version)) : null;
+  const closureRef = closure ? competenceRef(deps, workspaceId, competence).collection('versions').doc(String(closure.version)) : null;
   const [{ user, policyOn }, declaration] = await Promise.all([
     policiesAndTarget(deps, uid),
-    closureRef ? closureRef.collection('people').doc(uid).get().then((doc) => (doc.data() as ClosurePerson | undefined) ?? null)
+    closureRef ? frozenPeople(closureRef).doc(uid).get().then((doc) => (doc.data() as ClosurePerson | undefined) ?? null)
       : liveDeclaration(deps, workspaceId, competence, uid),
   ]);
   const [arp, pilot, month] = await Promise.all([
@@ -220,12 +232,15 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
 
 /** Lê a apuração gravada para a versão vigente do fechamento ou, no mês fechado, apura uma vez e grava. */
 async function bankMonthFor(deps: Dependencies, workspaceId: string, competence: string, uid: string, actorUid: string, expectedVersion?: number) {
-  const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
-  const closure = (await closureRef.get()).data() as ClosureRecord | undefined;
+  const closureRef = competenceRef(deps, workspaceId, competence);
+  const version = expectedVersion ?? (await closureRef.get()).get('version');
+  if (!version) throw fail('PTRP_BANK_NOT_CLOSED', 'O banco de horas do mês é apurado depois do fechamento.', 'CONFLICT');
+  const target = bankRef(deps, workspaceId, competence, version, uid);
+  const [current, saved] = await deps.hrDb.getAll(closureRef, target);
+  const closure = current.data() as ClosureRecord | undefined;
   if (closure?.status !== 'closed') throw fail('PTRP_BANK_NOT_CLOSED', 'O banco de horas do mês é apurado depois do fechamento.', 'CONFLICT');
-  if (expectedVersion !== undefined && closure.version !== expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
-  const target = bankRef(deps, workspaceId, competence, closure.version, uid);
-  const existing = (await target.get()).data() as BankMonthDocument | undefined;
+  if (closure.version !== version) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
+  const existing = saved.data() as BankMonthDocument | undefined;
   if (existing) {
     if (existing.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION) {
       throw fail('PTRP_BANK_ALGORITHM_OUTDATED', 'A apuração foi feita por uma regra anterior. Reabra e feche novamente a competência.', 'CONFLICT');
@@ -237,9 +252,11 @@ async function bankMonthFor(deps: Dependencies, workspaceId: string, competence:
     ...computed, generatedAt: deps.now().toISOString(), createdBy: actorUid };
   return deps.hrDb.runTransaction(async (tx) => {
     const [again, current] = await Promise.all([tx.get(target), tx.get(closureRef)]);
-    if (again.exists) return again.data() as BankMonthDocument;
     if (current.get('status') !== 'closed' || current.get('version') !== closure.version) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou durante a apuração. Atualize e confira.', 'CONFLICT');
+    if (again.exists) return again.data() as BankMonthDocument;
     tx.create(target, record);
+    const errorField = new FieldPath('bankCalculationErrors', uid);
+    if (current.get(errorField)) tx.update(closureRef, errorField, null);
     return record;
   });
 }
@@ -251,18 +268,158 @@ export async function generateBankMonth(context: ServerUserContext, input: Extra
   return bankMonthFor(deps, context.workspace_id, input.competence, uid, context.decoded.uid, input.expectedVersion);
 }
 
+/** Somente falhas de cálculo da versão ativa aparecem no painel. A apuração gravada tem precedência. */
+async function calculateForPayroll(deps: Dependencies, context: ServerUserContext, competence: string, version: number, uid: string) {
+  try {
+    return await bankMonthFor(deps, context.workspace_id, competence, uid, context.decoded.uid, version);
+  } catch (cause) {
+    const ref = competenceRef(deps, context.workspace_id, competence);
+    await deps.hrDb.runTransaction(async (tx) => {
+      const [current, bank] = await tx.getAll(ref, bankRef(deps, context.workspace_id, competence, version, uid));
+      if (bank.exists || current.get('status') !== 'closed' || current.get('version') !== version) return;
+      const message = cause instanceof AppError ? cause.safeMessage : 'A apuração falhou. Tente novamente.';
+      tx.update(ref, new FieldPath('bankCalculationErrors', uid), message.slice(0, 500));
+    });
+    throw cause;
+  }
+}
+
+export async function retryPayrollCalculation(context: ServerUserContext,
+  input: Extract<TimeBankActionInput, { action: 'retry_calculation' }>, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  assertClosureAccess(context, 'close');
+  const uid = await subject(deps, context, input.employeeUid, 'close');
+  const version = competenceRef(deps, context.workspace_id, input.competence).collection('versions').doc(String(input.expectedVersion));
+  if (!(await frozenPeople(version).doc(uid).get()).exists) throw fail('PTRP_BANK_SUBJECT_INVALID', 'Pessoa fora da equipe desta versão.', 'NOT_FOUND');
+  return calculateForPayroll(deps, context, input.competence, input.expectedVersion, uid);
+}
+
+/** O extrato acrescenta linhas de crédito vencido depois de aplicar os movimentos e o FIFO. */
+async function expiredCreditReview(deps: Dependencies, tx: Transaction, workspaceId: string, uid: string, competence: string, policies: DPOvertimePolicy[]) {
+  const { policyOn } = await policiesAndTarget(deps, uid, policies);
+  const { end } = competenceRange(competence);
+  const periods = new Set<string>();
+  for (let day = 1; day <= Number(end.slice(-2)); day++) {
+    const date = competence + '-' + String(day).padStart(2, '0');
+    const policy = policyOn(date);
+    if (!policy?.timeBank.expirationDays || policy.timeBank.expiredBalanceDestination === 'payroll') continue;
+    const period = policy.timeBank.cycle ? cycleOf(policy.timeBank.cycle, date) : null;
+    const key = [policy.id, policy.version, period?.start].join('/');
+    if (periods.has(key)) continue;
+    periods.add(key);
+    const { statement } = await statementFor(deps, workspaceId, uid, date, tx, policy);
+    if (statement?.lines.some((item) => item.competence === competence && item.line.nature === 'review' && item.line.reason === 'credit_expired')) {
+      return 'Crédito vencido aguardando definição de destino no extrato.';
+    }
+  }
+  return null;
+}
+
+export async function readPayrollReadiness(context: ServerUserContext, competence: string, injected: Partial<Dependencies> = {}): Promise<PayrollReadiness> {
+  assertClosureAccess(context, 'read');
+  const deps = { ...defaults, ...injected };
+  const ref = competenceRef(deps, context.workspace_id, competence);
+  return deps.hrDb.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    const version = Number(current.get('version') ?? 0);
+    if (current.get('status') !== 'closed') return { competence, version: null, ready: false, total: 0, readyCount: 0, people: [] };
+    const frozen = ref.collection('versions').doc(String(version));
+    const roster = await tx.get(frozenPeople(frozen).select('breakReviewDates').limit(451));
+    if (roster.size > 450 || roster.size !== current.get('peopleCount')) throw fail('PTRP_BANK_ROSTER_INCOMPLETE', 'A lista congelada está incompleta. Confira o fechamento.', 'CONFLICT');
+    const first = new Date(competence + '-01T00:00:00Z');
+    const initialWeekDays = (8 - (first.getUTCDay() || 7)) % 7;
+    first.setUTCDate(0);
+    const priorMonth = first.toISOString().slice(0, 7);
+    const prior = initialWeekDays ? await tx.get(competenceRef(deps, context.workspace_id, priorMonth)) : null;
+    let publishedPolicies: Promise<DPOvertimePolicy[]> | undefined;
+    let openPriorTeam: Promise<Set<string>> | undefined;
+    const people: PayrollPersonStatus[] = [];
+    for (let offset = 0; offset < roster.size; offset += 12) {
+      const group = roster.docs.slice(offset, offset + 12);
+      const docs = await tx.getAll(...group.map((doc) => bankMonths(frozen).doc(doc.id)), {
+        fieldMask: ['uid', 'competence', 'closureVersion', 'algorithmVersion', 'days'],
+      });
+      const statuses = await Promise.all(docs.map(async (doc, index): Promise<PayrollPersonStatus> => {
+        const uid = doc.id;
+        if (!doc.exists) {
+          const error = current.get(new FieldPath('bankCalculationErrors', uid));
+          return error ? { uid, status: 'failed', reason: String(error) } : { uid, status: 'missing', reason: 'Ainda sem apuração gravada nesta versão.' };
+        }
+        const month = doc.data() as BankMonthDocument;
+        if (month.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || month.closureVersion !== version || month.competence !== competence || month.uid !== uid || !Array.isArray(month.days)) {
+          return { uid, status: 'outdated', reason: 'Apuração incompatível. Reabra e feche a competência para gerar uma nova versão.' };
+        }
+        const breakDates = group[index].get('breakReviewDates') as string[] | undefined;
+        if (breakDates?.length) {
+          return { uid, status: 'review', reason: 'Confira o intervalo e seu efeito na folha em ' + breakDates.join(', ') + '. Para corrigir o ponto, reabra a competência.' };
+        }
+        let previous: BankMonthDocument | undefined;
+        const crossesWeek = month.days.some((day) => Number(day.date.slice(-2)) <= initialWeekDays &&
+          day.policy?.weeklyOvertimeLimitMinutes && day.lines.some((line) => line.categoryId && ['worked_more', 'rest_day_work', 'sunday_work', 'holiday_work', 'unplanned_work', 'pending_approval'].includes(line.reason)));
+        if (crossesWeek && prior?.get('status') !== 'closed') {
+          openPriorTeam ??= readCompetenceClosure(context, priorMonth, deps).then((state) => {
+            if (state.truncated) throw fail('PTRP_BANK_ROSTER_INCOMPLETE', 'Não foi possível conferir a equipe do mês anterior.', 'CONFLICT');
+            return new Set(state.people.map((person) => person.uid));
+          });
+          if ((await openPriorTeam).has(uid)) return { uid, status: 'review', reason: 'O limite semanal depende da apuração do mês anterior, que está aberto.' };
+        }
+        if (crossesWeek && prior?.get('status') === 'closed') {
+          const priorVersion = Number(prior.get('version'));
+          const priorRef = prior.ref.collection('versions').doc(String(priorVersion));
+          const [bank, member] = await tx.getAll(bankMonths(priorRef).doc(uid), frozenPeople(priorRef).doc(uid));
+          previous = bank.data() as BankMonthDocument | undefined;
+          if ((member.exists && !previous) || (previous && (previous.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || previous.closureVersion !== priorVersion || previous.competence !== priorMonth || !Array.isArray(previous.days)))) {
+            return { uid, status: 'review', reason: 'Confira a apuração do mês anterior para calcular o limite semanal.' };
+          }
+        }
+        const hasApproval = month.days.some((day) => day.lines.some((line) => line.reason === 'pending_approval'));
+        let movements: BankManualMovement[] = [];
+        if (hasApproval) {
+          const records = await tx.get(movementCollection(deps, context.workspace_id, competence).where('uid', '==', uid).limit(501));
+          if (records.size > 500) return { uid, status: 'review', reason: 'O volume de movimentos excedeu o limite de conferência.' };
+          movements = records.docs.map((item) => item.data() as BankManualMovement);
+        }
+        let reason = payrollReviewReason(month, movements, previous);
+        if (!reason) {
+          try {
+            publishedPolicies ??= readBankPolicies(deps);
+            const policies = await publishedPolicies;
+            if (policies.some((policy) => policy.timeBank.expirationDays && policy.timeBank.expiredBalanceDestination !== 'payroll')) {
+              reason = await expiredCreditReview(deps, tx, context.workspace_id, uid, competence, policies);
+            }
+          } catch (cause) {
+            if (!(cause instanceof AppError)) throw cause;
+            reason = cause.safeMessage;
+          }
+        }
+        return reason ? { uid, status: 'review', reason } : { uid, status: 'ready', reason: 'Apuração concluída.' };
+      }));
+      people.push(...statuses);
+    }
+    const readyCount = people.filter((person) => person.status === 'ready').length;
+    let visible = people;
+    if (people.length && !resolveUnitAccess(context.userDoc, { isDefaultAdmin: context.isDefaultAdmin }).allUnits) {
+      const users = await deps.mainDb.getAll(...people.map(({ uid }) => deps.mainDb.collection('users').doc(uid)),
+        { fieldMask: ['unitIds', 'operationalUnitPeriods', 'assignedKioskIds'] });
+      visible = people.filter((person, index) => person.uid === context.decoded.uid ||
+        (users[index].exists && canAccessUserByUnit(context.userDoc, users[index].data() ?? {})));
+    }
+    return { competence, version, ready: people.length > 0 && readyCount === people.length, total: people.length, readyCount, people: visible };
+  }, { readOnly: true });
+}
+
 /** Apura toda a equipe congelada logo após fechar a competência; falhas ficam explícitas e podem ser repetidas idempotentemente. */
 export async function generateBankClosedCompetence(context: ServerUserContext, competence: string, version: number, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertClosureAccess(context, 'close');
-  const people = await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).collection('versions').doc(String(version))
-    .collection('people').limit(451).get();
+  const frozen = competenceRef(deps, context.workspace_id, competence).collection('versions').doc(String(version));
+  const people = await frozenPeople(frozen).limit(451).get();
   if (people.size > 450) throw fail('PTRP_BANK_ROSTER_TOO_LARGE', 'Há pessoas demais para apurar a competência numa única execução.', 'CONFLICT');
   const failures: Array<{ uid: string; code: string }> = [];
   let generated = 0;
   for (let index = 0; index < people.docs.length; index += 8) {
     const batch = people.docs.slice(index, index + 8);
-    const results = await Promise.allSettled(batch.map((person) => bankMonthFor(deps, context.workspace_id, competence, person.id, context.decoded.uid, version)));
+    const results = await Promise.allSettled(batch.map((person) => calculateForPayroll(deps, context, competence, version, person.id)));
     results.forEach((result, offset) => {
       if (result.status === 'fulfilled') generated += 1;
       else failures.push({ uid: batch[offset].id, code: result.reason instanceof AppError ? result.reason.code : 'PTRP_BANK_CALCULATION_FAILED' });
@@ -294,13 +451,12 @@ export async function readBankStatement(context: ServerUserContext, query: { emp
 /** Data civil de Brasília: o ciclo só termina depois do último dia no fuso da empresa. */
 const brasiliaDate = (at: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
 const settlementRef = (deps: Dependencies, workspaceId: string, uid: string, cycle: { start: string; end: string }) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, `${cycle.end.slice(0, 7)}-01`)).collection('timeBankSettlements').doc(`${uid}_${cycle.start}`);
+  competenceRef(deps, workspaceId, `${cycle.end.slice(0, 7)}-01`).collection('timeBankSettlements').doc(`${uid}_${cycle.start}`);
 
-async function statementFor(deps: Dependencies, workspaceId: string, uid: string, requestedDate?: string) {
+async function statementFor(deps: Dependencies, workspaceId: string, uid: string, requestedDate?: string, tx?: Transaction, resolvedPolicy?: DPOvertimePolicy) {
   const today = brasiliaDate(deps.now());
   const date = requestedDate ?? today;
-  const { policyOn } = await policiesAndTarget(deps, uid);
-  const policy = policyOn(date);
+  const policy = resolvedPolicy ?? (await policiesAndTarget(deps, uid)).policyOn(date);
   if (!policy) return { policy: null, statement: null, closures: {} as Record<string, number> };
   const cycle = policy.timeBank.cycle;
   const period = cycle ? cycleOf(cycle, date) : null;
@@ -308,9 +464,13 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
   const end = period?.end ?? (date > today ? date : today);
   const carryFrom = cycle?.residualDestination === 'carry' ? (cycle.anchorDate > policy.validFrom ? cycle.anchorDate : policy.validFrom) : null;
   const allCompetences = competencesBetween(carryFrom && carryFrom < start ? carryFrom : start, end).slice(-CARRY_LOOKBACK_MONTHS);
-  const closures = await deps.hrDb.getAll(...allCompetences.map((competence) => deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence))));
+  const closureRefs = allCompetences.map((competence) => competenceRef(deps, workspaceId, competence));
+  const closures = tx ? await tx.getAll(...closureRefs) : await deps.hrDb.getAll(...closureRefs);
   const closed = new Map(allCompetences.flatMap((competence, index) => closures[index].get('status') === 'closed' ? [[competence, Number(closures[index].get('version'))] as const] : []));
-  const stored = await Promise.all([...closed].map(([competence, version]) => bankRef(deps, workspaceId, competence, version, uid).get()));
+  const stored = await Promise.all([...closed].map(([competence, version]) => {
+    const ref = bankRef(deps, workspaceId, competence, version, uid);
+    return tx ? tx.get(ref) : ref.get();
+  }));
   const storedMonths = stored.filter((doc) => doc.exists).map((doc) => doc.data() as BankMonthDocument);
   if (storedMonths.some((month) => month.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION)) {
     throw fail('PTRP_BANK_ALGORITHM_OUTDATED', 'Há apuração feita por uma regra anterior. Reabra e feche novamente a competência.', 'CONFLICT');
@@ -327,9 +487,10 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
   // Com saldo transportado, os meses anteriores ao ciclo sem apuração também faltam: o saldo de abertura não pode sair subestimado.
   const missing = (carryFrom ? allCompetences : periodCompetences).filter((competence) => !months.some((month) => month.competence === competence && month.closureVersion > 0)
     && competence <= today.slice(0, 7));
-  const settlement = period ? ((await settlementRef(deps, workspaceId, uid, period).get()).data() as BankSettlement | undefined) ?? null : null;
+  const ref = period ? settlementRef(deps, workspaceId, uid, period) : null;
+  const settlement = ref ? ((await (tx ? tx.get(ref) : ref.get())).data() as BankSettlement | undefined) ?? null : null;
   // O extrato puro calcula a abertura sobre meses e movimentos anteriores, inclusive expiração FIFO.
-  const movements = await movementsFor(deps, workspaceId, uid, allCompetences);
+  const movements = await movementsFor(deps, workspaceId, uid, allCompetences, tx);
   const statement = buildStatement({ period, today, months, missing, openingMinutes: 0, carryFrom, settlement, movements, timeBank: policy.timeBank });
   return { policy: { id: policy.id, version: policy.version, name: policy.name, enabled: policy.timeBank.enabled, cycle: cycle ?? null },
     statement, previewCompetences: months.filter((month) => month.closureVersion === 0).map((month) => month.competence),

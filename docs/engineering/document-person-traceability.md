@@ -191,3 +191,5 @@ Os leitores de `cashCountingSessions` e `interCobrancas` usam máscara de campos
 ### Atores da confirmação de Pix de fornecedor
 
 `entity-registration-updaters` consulta `entities.updatedBy` em main, e `supplier-payment-profile-validators` consulta `supplierPaymentProfiles.validatedBy` no banco financeiro. Ambas as fontes registram o operador por UID no namespace `main.users` com política `financial-admin`. A busca administrativa retorna metadados do registro. O CNPJ e a chave Pix da entidade não estabelecem vínculo pessoal. Os eventos da confirmação preservam o UID do operador e o identificador da ordem anterior para auditoria da operação.
+
+As justificativas de alerta grave do fechamento em RH (`dp_timeClosureAlertReviews`) são localizáveis pelo identificador do colaborador (`employeeUid`) e do revisor (`by`). A política exige acesso ao fechamento e às unidades registradas na ocorrência. A consulta de inventário registra a existência da fonte sem reproduzir o texto da justificativa.

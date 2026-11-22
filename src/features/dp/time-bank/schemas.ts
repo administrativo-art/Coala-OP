@@ -10,6 +10,7 @@ const operationId = z.string().uuid();
 export const timeBankQuerySchema = z.object({ employeeUid: uid.optional(), date: date.optional() }).strict();
 export const timeBankActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('generate'), competence, expectedVersion: z.number().int().positive(), employeeUid: uid.optional() }).strict(),
+  z.object({ action: z.literal('retry_calculation'), competence, expectedVersion: z.number().int().positive(), employeeUid: uid }).strict(),
   // Encerramento do ciclo pelo DP: grava o residual conferido (minutos esperados) com o destino da política.
   z.object({ action: z.literal('settle'), date, employeeUid: uid, expectedMinutes: z.number().int().min(-100000).max(100000) }).strict(),
   z.object({ action: z.literal('approve_overtime'), operationId, employeeUid: uid, date, categoryId: movementId,

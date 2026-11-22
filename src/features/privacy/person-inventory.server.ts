@@ -35,6 +35,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "rep-p": return actor.permissions.dp?.timeRecording?.view === true;
     case "rep-p-location": return actor.permissions.dp?.timeRecording?.view === true && actor.permissions.dp?.timeRecording?.readLocation === true;
     case "schedule-global": return actor.permissions.dp?.schedules?.view === true && resolveUnitAccess(actor.userDoc).allUnits;
+    case "time-closure": return actor.permissions.dp?.timeClosure?.close === true || actor.permissions.dp?.timeClosure?.reopen === true;
     case "requests": return actor.permissions.dp?.requests?.view === true;
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
     case "terminations": return actor.permissions.dp?.collaborators?.terminate === true;

@@ -12,13 +12,13 @@ const { publishEmploymentReference } = await import('../../src/features/dp/emplo
 const { classifyOwnRepPMarking } = await import('../../src/features/dp/rep-p/service.server.ts');
 const { assertRepPCompetenceAcceptsMarking, repPCompetenceFenceRef } = await import('../../src/features/dp/rep-p/competence-fence.server.ts');
 const { createOwnAdjustment, decideAdjustment, CLOSURES } = await import('../../src/features/dp/time-adjustments/service.server.ts');
-const { closeCompetence, readCompetenceClosure, reopenCompetence } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
+const { closeCompetence, readCompetenceClosure, reopenCompetence, previewClosureAlerts, justifyClosureAlert } = await import('../../src/features/dp/time-adjustments/closure.server.ts');
 const { generateMirror, mirrorPdf, readMirrorStatus } = await import('../../src/features/dp/time-adjustments/mirror.server.ts');
 const { checkOverdueClosingPackages, finalizeClosingMonth, readClosingPackage, readClosingSummary, sendClosingPackage, syncClosingPackageSignature } = await import('../../src/features/dp/time-adjustments/closing-package.server.ts');
 const { PDFDocument } = await import('pdf-lib');
 const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
 const { TREATMENTS, AEJ_EXPORTS } = await import('../../src/features/dp/time-adjustments/service.server.ts');
-const { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
+const { createBankMovement, generateBankMonth, generateBankClosedCompetence, readPayrollReadiness, retryPayrollCalculation, readBankStatement, reverseBankMovement, settleBankCycle } = await import('../../src/features/dp/time-bank/service.server.ts');
 
 test('fechamento concorrente com classificação converge sem editar diretamente um mês já fechado', async () => {
   const prefix = `closure-classification-${randomUUID().slice(0, 6)}`;
@@ -104,6 +104,11 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId],
       jobFunctionIds: [], sourceDocumentId: 'admission', sourceReason: 'Admissão conferida para o ensaio' }] });
 
+    const preview = await readCompetenceClosure(closer, competence, deps);
+    assert.equal(preview.people.find((person) => person.uid === userId)?.rosterReason, 'historical');
+    const beforeAdmission = await readCompetenceClosure(closer, '2025-12', deps);
+    assert.equal(beforeAdmission.people.some((person) => person.uid === userId), false);
+
     // Sem permissão não lê nem fecha; quem só fecha não reabre.
     await assert.rejects(readCompetenceClosure(reviewer, competence, closureDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
     await assert.rejects(closeCompetence(closer, { competence: '2026-10', expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_TOO_EARLY' });
@@ -135,6 +140,34 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       events: [{ action: 'submitted', at: '2026-08-10T12:00:00.000Z', actorUid: userId, actorName: 'Maria', declaration: 'Solicito a troca.', evidence: { authenticatedUid: userId } },
         { action: 'accepted', at: '2026-08-10T13:00:00.000Z', actorUid: otherUserId, actorName: 'Outra pessoa', declaration: 'Aceito a troca.', evidence: { authenticatedUid: otherUserId } }] });
     await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 3 }, closureDeps), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
+    // A inclusão aprovada deixou uma batida ímpar. O servidor bloqueia mesmo sem pedidos abertos.
+    const hrPermissions = structuredClone(closerPermissions);
+    hrPermissions.dp.requests.review = true;
+    const hrReviewer = actor(prefix + '-hr', hrPermissions, { unitAccessScope: 'selected', unitAccessUnitIds: [unitId] });
+    const otherUnit = actor(prefix + '-elsewhere', hrPermissions, { unitAccessScope: 'selected', unitAccessUnitIds: ['outside'] });
+    const release = async (expectedVersion) => {
+      const preview = await previewClosureAlerts(admin, competence, closureDeps);
+      assert.ok(preview.alerts.some((item) => item.incidents.includes('odd')));
+      for (const alert of preview.alerts) {
+        const input = { action: 'justifyAlert', competence, expectedVersion, employeeUid: alert.employeeUid,
+          fingerprint: alert.fingerprint, reason: 'RH conferiu a ocorrência com a unidade.' };
+        await assert.rejects(justifyClosureAlert(closer, input, closureDeps), { code: 'PTRP_ALERT_REVIEW_FORBIDDEN' });
+        await assert.rejects(justifyClosureAlert({ ...admin, decoded: { uid: alert.employeeUid } }, input, closureDeps), { code: 'PTRP_ALERT_REVIEW_FORBIDDEN' });
+        await assert.rejects(justifyClosureAlert(admin, { ...input, fingerprint: 'f'.repeat(64) }, closureDeps), { code: 'PTRP_CLOSURE_ALERT_CHANGED' });
+        await assert.rejects(justifyClosureAlert(otherUnit, input, closureDeps), { code: 'PTRP_ALERT_REVIEW_FORBIDDEN' });
+        const decision = await justifyClosureAlert(hrReviewer, input, closureDeps);
+        assert.equal(decision.by, hrReviewer.decoded.uid);
+        assert.deepEqual(await justifyClosureAlert(admin, input, closureDeps), decision);
+      }
+    };
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_CRITICAL_ALERT' });
+    await release(0);
+    const approvedTreatment = (await hrDbAdmin.collection(TREATMENTS).where('adjustmentId', '==', pending.id).get()).docs[0];
+    const previousTime = approvedTreatment.get('markedAt');
+    await approvedTreatment.ref.update({ markedAt: '2026-08-12T08:05:00-0300' });
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 0 }, closureDeps), { code: 'PTRP_CLOSURE_CRITICAL_ALERT' });
+    await approvedTreatment.ref.update({ markedAt: previousTime });
+
     let releaseFence;
     let confirmFence;
     const fenceAcquired = new Promise((resolve) => { confirmFence = resolve; });
@@ -149,6 +182,14 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     releaseFence();
     const first = await closing;
     assert.equal(first.status, 'closed');
+    const alertAudit = await previewClosureAlerts(admin, competence, closureDeps);
+    assert.ok(alertAudit.alerts.some((item) => item.decision?.by === hrReviewer.decoded.uid && item.decision?.reason.includes('unidade')));
+    const { sourceById } = await import('../../src/features/privacy/person-inventory.ts');
+    for (const [sourceId, id] of [['closure-alert-subjects', userId], ['closure-alert-reviewers', hrReviewer.decoded.uid]]) {
+      const source = sourceById(sourceId);
+      const discovered = await hrDbAdmin.collection(source.collection).where(source.field, '==', id).get();
+      assert.ok(discovered.docs.some((doc) => doc.id === alertAudit.alerts[0].fingerprint));
+    }
     assert.equal(first.version, 1);
     assert.deepEqual(first.counts, { adjustments: 1, absences: 1, shiftSwaps: 1 });
     assert.equal(first.closedBy, closer.decoded.uid);
@@ -176,6 +217,8 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       reason: 'Esqueci de bater a entrada.' }, deps);
     await decideAdjustment(reviewer, late.id, { action: 'reject', expectedVersion: 1, reason: 'Sem registro da presença neste dia.' }, deps);
     roster.push({ uid: otherUserId, name: 'Outra pessoa' });
+    await assert.rejects(closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps), { code: 'PTRP_CLOSURE_CRITICAL_ALERT' });
+    await release(1);
     const second = await closeCompetence(closer, { competence, expectedVersion: 1 }, closureDeps);
     assert.equal(second.version, 2);
     assert.equal(second.peopleCount, 2);
@@ -422,5 +465,74 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     await assert.rejects(readMirrorStatus(foreignCloser, competence, userId, mirrorDeps), { code: 'PTRP_MIRROR_SUBJECT_NOT_FOUND' });
   } finally {
     await Promise.all([absenceRef.delete(), shiftSwapRef.delete()]);
+  }
+});
+
+
+test('folha distingue lote parcial, falha persistida, repetição individual e mudança de versão', async () => {
+  const workspaceId = 'payroll-' + randomUUID();
+  const competence = '2025-02';
+  const actor = { decoded: { uid: 'dp' }, workspace_id: workspaceId, userDoc: {}, permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date('2025-03-15T12:00:00Z') };
+  const ref = hrDbAdmin.collection(CLOSURES).doc(workspaceId + '_' + competence);
+  const team = ref.collection('versions').doc('1').collection('people');
+  const ids = ['ana', 'bia'].map((suffix) => workspaceId + '-' + suffix);
+  const users = ids.map((uid) => dbAdmin.collection('users').doc(uid));
+  const retry = (uid, extra = {}) => retryPayrollCalculation(actor, { action: 'retry_calculation', competence, employeeUid: uid, expectedVersion: 1 }, { ...deps, ...extra });
+  const read = () => readPayrollReadiness(actor, competence, deps);
+  const policyRef = dbAdmin.collection('dp_overtimePolicies').doc(workspaceId);
+  const priorRef = hrDbAdmin.collection(CLOSURES).doc(workspaceId + '_2025-01');
+  try {
+    await ref.set({ workspaceId, competence, status: 'closed', version: 1, peopleCount: 2 });
+    await Promise.all(ids.map(async (uid, index) => {
+      await users[index].set({ unitIds: ['A'] });
+      await team.doc(uid).set({ uid, name: uid, absences: [], adjustments: [], shiftSwaps: [] });
+    }));
+    assert.deepEqual((await read()).people.map((person) => person.status), ['missing', 'missing']);
+    const first = await retry(ids[0]);
+    const partial = await generateBankClosedCompetence(actor, competence, 1, { ...deps, now() { throw new Error('segredo de diagnóstico'); } });
+    assert.equal(partial.generated, 1);
+    const failed = await read();
+    assert.equal(failed.ready, false);
+    assert.deepEqual(failed.people.map((person) => person.status), ['ready', 'failed']);
+    assert.doesNotMatch(failed.people[1].reason, /segredo/);
+    await assert.rejects(retry('outside'), { code: 'PTRP_BANK_SUBJECT_INVALID' });
+    await retry(ids[1]);
+    assert.equal((await read()).ready, true);
+    assert.equal((await retry(ids[0])).generatedAt, first.generatedAt);
+    await team.doc(ids[0]).update({ breakReviewDates: ['2025-02-12'] });
+    assert.equal((await read()).ready, false);
+    assert.match((await read()).people[0].reason, /intervalo.*2025-02-12/);
+    await team.doc(ids[0]).update({ breakReviewDates: [] });
+    const monthRef = ref.collection('versions').doc('1').collection('timeBank').doc(ids[0]);
+    const day = { date: '2025-02-01', kind: 'workday', issues: [], workedMinutes: 60, nightMinutes: 0, absences: [],
+      lines: [{ categoryId: 'extra', nature: 'bank_credit', reason: 'worked_more', minutes: 60 }],
+      policy: { id: workspaceId, version: 1, weeklyOvertimeLimitMinutes: 80 } };
+    await monthRef.update({ days: [day] });
+    await priorRef.set({ workspaceId, competence: '2025-01', status: 'open', version: 1, peopleCount: 1 });
+    assert.match((await read()).people[0].reason, /mês anterior/);
+    await priorRef.update({ status: 'closed' });
+    const priorVersion = priorRef.collection('versions').doc('1');
+    await priorVersion.collection('people').doc(ids[0]).set({ uid: ids[0] });
+    await priorVersion.collection('timeBank').doc(ids[0]).set({ ...first, competence: '2025-01', days: [{ ...day, date: '2025-01-31' }] });
+    assert.equal((await read()).people[0].status, 'review');
+    await monthRef.update({ days: [{ ...day, date: '2025-02-05' }] });
+    await policyRef.set({ name: 'Teste', lineageId: workspaceId, version: 1, status: 'published', validFrom: '2025-02-01',
+      applicability: { scope: { kind: 'company' }, collaboratorIds: [ids[0]] }, categories: [], timeBank: {
+        enabled: true, expirationDays: 5, expiredBalanceDestination: 'review', cycle: { unit: 'month', length: 1, anchorDate: '2025-02-01', residualDestination: 'review' } } });
+    assert.match((await read()).people[0].reason, /vencido/);
+    const viewer = { ...actor, userDoc: { unitAccessScope: 'selected', unitAccessUnitIds: ['B'] }, isDefaultAdmin: false };
+    assert.deepEqual((await readPayrollReadiness(viewer, competence, deps)).people, []);
+    await assert.rejects(retryPayrollCalculation(viewer, { action: 'retry_calculation', employeeUid: ids[1], competence, expectedVersion: 1 }, deps), { code: 'PTRP_BANK_SUBJECT_FORBIDDEN' });
+    await ref.update({ status: 'open' });
+    assert.equal((await read()).ready, false);
+    await ref.update({ status: 'closed', version: 2 });
+    const nextTeam = ref.collection('versions').doc('2').collection('people');
+    await Promise.all(ids.map((uid) => nextTeam.doc(uid).set({ uid })));
+    assert.deepEqual((await read()).people.map((person) => person.status), ['missing', 'missing']);
+    await assert.rejects(retry(ids[0]), { code: 'PTRP_CLOSURE_VERSION_CONFLICT' });
+  } finally {
+    await Promise.all([hrDbAdmin.recursiveDelete(ref), hrDbAdmin.recursiveDelete(priorRef), policyRef.delete()]);
+    await Promise.all(users.map((user) => user.delete()));
   }
 });
