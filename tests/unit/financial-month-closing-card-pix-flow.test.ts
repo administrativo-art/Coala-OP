@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cardPixSourceMonths, evaluateCardPixFlow, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "../../src/features/financial/month-closing/card-pix-flow";
+import { cardPixSourceMonths, evaluateCardInstallmentsFlow, evaluateCardPixFlow, splitReceiptParcels, type StoneReceiptParcelInput, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "../../src/features/financial/month-closing/card-pix-flow";
 import { dependsOnYou } from "../../src/features/financial/month-closing/presentation";
 
 const source = (month: string, ready = true, complete = true): CardPixSourceInput => ({ month, ready, complete });
@@ -92,4 +92,53 @@ test("sem permissão os itens ficam ocultos e sem vínculo o fluxo fica indispon
   const empty = flow([]);
   assert.equal(check(empty, "card_pix.sources").state, "unavailable");
   assert.equal(empty.state, "unavailable");
+});
+
+const raw = (id: string, saleDate: string, expectedDate: string, installmentCount = 1, source: StoneReceiptParcelInput["source"] = "card", status: StoneReceiptParcelInput["status"] = "paid"): StoneReceiptParcelInput =>
+  ({ id, source, status, expectedDate, netCents: 1000, saleDate, installmentCount });
+
+test("à vista conta no mês da venda, mesmo pago depois; parcelado conta no mês em que a parcela vence", () => {
+  const { cashSale, installment } = splitReceiptParcels([
+    raw("vista-out-vence-nov", "2026-10-20", "2026-11-19"),
+    raw("vista-out-vence-out", "2026-10-02", "2026-10-02"),
+    raw("vista-set-vence-out", "2026-09-25", "2026-10-25"),
+    raw("pix-out", "2026-10-10", "2026-10-10", 1, "pix"),
+    raw("12x-set-vence-out", "2026-09-25", "2026-10-25", 12),
+    raw("12x-out-vence-nov", "2026-10-05", "2026-11-05", 12),
+    raw("12x-out-vence-out", "2026-10-05", "2026-10-05", 12),
+    raw("sem-data-venda", "", "2026-10-15"),
+  ].map((parcel) => (parcel.id === "sem-data-venda" ? { ...parcel, saleDate: null } : parcel)), "2026-10");
+  assert.deepEqual(cashSale.map((parcel) => parcel.id), ["vista-out-vence-nov", "vista-out-vence-out", "pix-out", "sem-data-venda"]);
+  assert.deepEqual(installment.map((parcel) => parcel.id), ["12x-set-vence-out", "12x-out-vence-out"]);
+});
+
+test("crédito à vista de outubro ainda a receber em novembro mantém o fluxo pendente até a data prevista", () => {
+  const result = flow([unit([parcel("a", "paid", "2026-10-02"), parcel("b", "paid", "2026-11-17"), parcel("c", "to_receive", "2026-11-30", 787), parcel("d", "review", "2026-11-19", 84)], [source("2026-10")])]);
+  assert.equal(result.name, "Recebimento · Cartão e Pix");
+  assert.equal(result.state, "pending");
+  assert.equal(check(result, "card_pix.card").done, 2);
+  assert.equal(check(result, "card_pix.card").total, 4);
+  assert.equal(result.readyFrom, "2026-11-30");
+  assert.ok(result.items.some((item) => item.kind === "card_pix_review"));
+});
+
+test("sem venda parcelada no mês, o fluxo de parcelado confere sem inventar pendência", () => {
+  const result = evaluateCardInstallmentsFlow({ units: [unit([], [source("2026-10")])], canViewItems: true, originHref: "/stone?month=2026-10" });
+  assert.equal(result.key, "card_installments");
+  assert.equal(result.name, "Recebimento · Cartão parcelado");
+  assert.equal(result.state, "ok");
+  assert.match(check(result, "card_installments.card").note ?? "", /Nenhuma parcela de venda parcelada/);
+  assert.equal(result.checks.length, 2);
+});
+
+test("parcelado sem conferência salva do mês não é dado como recebido", () => {
+  const result = evaluateCardInstallmentsFlow({ units: [unit([], [source("2026-10", false, false)])], canViewItems: true, originHref: "/stone" });
+  assert.equal(result.state, "pending");
+  assert.equal(check(result, "card_installments.card").done, null);
+});
+
+test("parcela vencida e não paga no parcelado trava o mês, parcela futura não", () => {
+  const unpaid = evaluateCardInstallmentsFlow({ units: [unit([parcel("a", "paid"), parcel("b", "unpaid", "2026-10-20")], [source("2026-10")])], canViewItems: true, originHref: "/stone" });
+  assert.equal(unpaid.state, "pending");
+  assert.equal(check(unpaid, "card_installments.card").done, 1);
 });

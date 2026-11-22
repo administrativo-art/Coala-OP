@@ -7,7 +7,7 @@ import {
 } from "@/features/financial/obligations/expense-reconciliation.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
-import { readCardPixFlow } from "./card-pix.server";
+import { readCardPixFlows } from "./card-pix.server";
 import { readCashFlow } from "./cash.server";
 import { evaluateExpensesFlow, expensesForCompetence, type ClosingCardStatementInput, type ClosingExpenseInput } from "./expenses-flow";
 import { todayKey } from "./month";
@@ -75,7 +75,7 @@ export async function getMonthClosingOverview(input: {
     listExpenses(input.month),
     listCardStatements(input.month),
     readSalesAndFeesFlows({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
-    readCardPixFlow({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
+    readCardPixFlows({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
     readCashFlow({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
     readDreFlow({ workspaceId: input.workspaceId, month: input.month, canViewItems: input.canViewStoneItems, now: input.now }),
   ]);
@@ -101,7 +101,7 @@ export async function getMonthClosingOverview(input: {
   return {
     month: input.month,
     today,
-    flows: [flow, stone.sales, cardPix, cash, stone.fees, dre],
+    flows: [flow, stone.sales, cardPix.cardPix, cardPix.installments, cash, stone.fees, dre],
     expenseTotals: input.canViewExpenseItems ? totals : null,
     limits: { expensesRead: expenseDocuments.length, expensesLimit: MONTH_CLOSING_MAX_EXPENSES },
   };
