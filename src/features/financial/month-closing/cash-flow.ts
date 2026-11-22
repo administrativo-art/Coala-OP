@@ -82,7 +82,7 @@ export function evaluateCashFlow(input: CashFlowInput): ClosingFlow {
   const state = checks.some((check) => check.state === "pending") ? "pending"
     : checks.some((check) => check.state === "unavailable") ? "unavailable" : "ok";
   return {
-    key: "cash", name: "Dinheiro", state, checks,
+    key: "cash", name: "Recebimento · Dinheiro", state, checks,
     items: input.canViewItems ? items : [], itemsHidden: !input.canViewItems && items.length > 0,
     readyFrom: null, originHref: input.originHref,
   };
