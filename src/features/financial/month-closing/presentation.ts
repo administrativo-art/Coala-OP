@@ -44,11 +44,15 @@ const KIND_LABEL: Record<ClosingItemKind, string> = {
   fees_exception: "Taxa a corrigir",
   fees_rate_change: "Mudança de taxa",
   fees_charge: "Outra cobrança",
-  receipts_not_ready: "Conferência pendente",
-  receipts_pending: "Não recebida",
-  receipts_awaiting: "Dentro do prazo",
-  receipts_cash_open: "Caixa não aprovado",
-  receipts_cash_deposit: "Depósito pendente",
+  card_pix_not_ready: "Conferência pendente",
+  card_pix_unpaid: "Não recebida",
+  card_pix_late: "Paga com atraso",
+  card_pix_chargeback: "Estorno",
+  card_pix_review: "Em revisão",
+  card_pix_missing_file: "Sem arquivo da Stone",
+  card_pix_awaiting: "Dentro do prazo",
+  cash_closing_open: "Caixa não aprovado",
+  cash_deposit_unpaid: "Depósito pendente",
 };
 
 export function itemLabel(item: ClosingItem) {
@@ -57,7 +61,7 @@ export function itemLabel(item: ClosingItem) {
 
 /** Itens que só a pessoa pode resolver (sem data a esperar) × os que se resolvem quando o prazo chega. */
 export function dependsOnYou(item: ClosingItem) {
-  return item.kind !== "awaiting_due_date" && item.kind !== "card_statement_awaiting_payment" && item.kind !== "sales_not_published" && item.kind !== "receipts_awaiting";
+  return item.kind !== "awaiting_due_date" && item.kind !== "card_statement_awaiting_payment" && item.kind !== "sales_not_published" && item.kind !== "card_pix_awaiting";
 }
 
 export function nextDueDate(items: ClosingItem[], today: string) {
