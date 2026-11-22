@@ -1,3 +1,4 @@
+import { payrollReviewReason } from '../../src/features/dp/time-bank/payroll-readiness';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -224,11 +225,16 @@ describe('Banco de horas: ciclo e extrato', () => {
     const approvalPolicy = { ...policy, categories: categories.map((item) => item.id === 'banco' ? { ...item, requiresApproval: true } : item) };
     const pending = computeBankDay(day({ date: '2026-10-10', policy: approvalPolicy, shift: { ...shift, referenceMinutes: 360 },
       markings: punches('2026-10-10', '10:00', '13:00', '13:15', '17:15') }));
-    const stale = bankLinesWithMovements([{ competence: '2026-10', closureVersion: 2, days: [pending], totals: monthTotals([pending]) }], [{
+    const october = { competence: '2026-10', closureVersion: 2, days: [pending], totals: monthTotals([pending]) };
+    const approval = {
       id: 'approval', uid: 'u', date: '2026-10-10', competence: '2026-10', status: 'active', kind: 'overtime_approval', minutes: 60,
       reason: 'Aprovação da versão anterior.', createdAt: '2026-10-11T00:00:00Z', createdBy: 'dp', categoryId: 'banco', replacesMinutes: 60,
       sourceClosureVersion: 1, line: { nature: 'bank_credit', minutes: 90, reason: 'approved_overtime', categoryId: 'banco', factor: 1.5 },
-    }]);
+    } as const;
+    const stale = bankLinesWithMovements([october], [approval]);
+    assert.match(payrollReviewReason(october, [approval]) ?? '', /aguardando aprovação/);
+    assert.equal(payrollReviewReason(october, [{ ...approval, sourceClosureVersion: 2 }]), null);
+    assert.match(payrollReviewReason(october, [{ ...approval, sourceClosureVersion: 2, status: 'reversed' }]) ?? '', /aguardando aprovação/);
     assert.deepEqual(stale.map((item) => item.line.reason), ['pending_approval']);
   });
 

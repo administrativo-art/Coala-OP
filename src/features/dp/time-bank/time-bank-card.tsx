@@ -59,7 +59,7 @@ const parseHm = (value: string) => {
  * Ao abrir, apura (uma vez por versão do fechamento) os meses fechados do ciclo que ainda não têm apuração.
  * No painel do DP (`employeeUid`), mostra o banco da pessoa na data informada.
  */
-export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false, detailHref, onLoaded }: {
+export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = false, detailed = false, detailHref, onLoaded, autoGenerate = true, onUpdated }: {
   firebaseUser: FirebaseUser | null;
   employeeUid?: string;
   date?: string;
@@ -67,6 +67,8 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
   detailed?: boolean;
   detailHref?: string;
   /** Recebe o extrato lido (a trilha do fechamento resume as horas extras do mês). */
+  autoGenerate?: boolean;
+  onUpdated?: () => void;
   onLoaded?: (data: TimeBankStatementResponse) => void;
 }) {
   const [data, setData] = useState<StatementResponse | null>(null);
@@ -92,7 +94,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
       const url = `/api/dp/time-recording/time-bank${query ? `?${query}` : ""}`;
       let response = await request<StatementResponse>(url, { fallbackError: "Não foi possível ler o banco de horas." });
       const pending = (response.statement?.missing ?? []).filter((competence) => response.closures[competence]);
-      if (pending.length && (!employeeUid || canManage)) {
+      if (autoGenerate && pending.length && (!employeeUid || canManage)) {
         for (const competence of pending) {
           await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "generate", competence, expectedVersion: response.closures[competence], ...(employeeUid ? { employeeUid } : {}) },
             fallbackError: "Não foi possível apurar o banco de horas." });
@@ -104,7 +106,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
     } catch (cause) {
       setError(errorMessageOf(cause, "Não foi possível ler o banco de horas."));
     }
-  }, [canManage, employeeUid, onLoaded, query, request]);
+  }, [autoGenerate, canManage, employeeUid, onLoaded, query, request]);
   useEffect(() => { void load(); }, [load]);
 
   async function settle() {
@@ -116,7 +118,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
       await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "settle", employeeUid, date: data.statement.cycle.end, expectedMinutes: residual.minutes },
         fallbackError: "Não foi possível registrar o encerramento do ciclo." });
       setConfirming(false);
-      await load();
+      onUpdated?.(); await load();
     } catch (cause) {
       setError(errorMessageOf(cause, "Não foi possível registrar o encerramento do ciclo."));
     } finally {
@@ -130,7 +132,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
     try {
       await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "approve_overtime", operationId: crypto.randomUUID(), employeeUid,
         date: workDate, categoryId, minutes, reason: "Hora extra conferida e aprovada pelo Departamento Pessoal." }, fallbackError: "Não foi possível aprovar a hora extra." });
-      await load();
+      onUpdated?.(); await load();
     } catch (cause) { setError(errorMessageOf(cause, "Não foi possível aprovar a hora extra.")); } finally { setBusy(false); }
   }
 
@@ -145,7 +147,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
       await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "movement", operationId: crypto.randomUUID(), employeeUid,
         date: movementDate, kind, minutes: kind === "compensation" ? parsed : minutes, expectedBalance: data.statement.balanceMinutes, reason: movementReason.trim() },
       fallbackError: "Não foi possível lançar o movimento." });
-      setMovementMinutes(""); setMovementReason(""); setMovementOpen(false); await load();
+      setMovementMinutes(""); setMovementReason(""); setMovementOpen(false); onUpdated?.(); await load();
     } catch (cause) { setError(errorMessageOf(cause, "Não foi possível lançar o movimento.")); } finally { setBusy(false); }
   }
 
@@ -156,7 +158,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
     try {
       await request("/api/dp/time-recording/time-bank", { method: "POST", json: { action: "reverse", employeeUid, date: movement.date,
         movementId: movement.id, reason: reversalReason.trim() }, fallbackError: "Não foi possível estornar o movimento." });
-      setReversingId(null); setReversalReason(""); await load();
+      setReversingId(null); setReversalReason(""); onUpdated?.(); await load();
     } catch (cause) { setError(errorMessageOf(cause, "Não foi possível estornar o movimento.")); } finally { setBusy(false); }
   }
 
