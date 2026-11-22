@@ -1,10 +1,21 @@
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import {
+  financialExpenseChargePeriods,
+  financialExpenseInstallmentCharges,
+  financialInstallmentDisplayFields,
+  type FinancialExpenseChargeSource,
+} from "@/features/financial/lib/expense-accounting-contract";
+import {
   expenseDisplayAmounts,
   expenseDisplayStatus,
   expenseHasOverdueBalance,
 } from "@/features/financial/lib/expense-display-state";
 import { financialDateKey } from "@/features/financial/lib/financial-dates";
+import {
+  resolveExpenseReconciliation,
+  type ExpenseReconciliationSource,
+  type indexExpenseBankTransactions,
+} from "@/features/financial/obligations/expense-reconciliation";
 
 import type {
   ClosingCheck,
@@ -15,21 +26,15 @@ import type {
 } from "./types";
 
 /** Campos de uma despesa usados pelo fechamento. Valores desconhecidos nunca viram "conferido". */
-export type ClosingExpenseInput = {
-  id: string;
+export type ClosingExpenseInput = ExpenseReconciliationSource & FinancialExpenseChargeSource & {
   description?: unknown;
   supplier?: unknown;
-  status?: unknown;
   totalValue?: unknown;
-  dueDate?: unknown;
-  provisionType?: unknown;
-  plannedPaymentMethodType?: unknown;
   paymentState?: unknown;
   hiddenFromExpensePanel?: unknown;
   budgetMigration?: unknown;
   originModule?: unknown;
   originStatus?: unknown;
-  installments?: unknown;
   settlementSummary?: unknown;
   sourceSettlement?: unknown;
 };
@@ -52,6 +57,7 @@ export type ExpensesFlowInput = {
   expenses: ClosingExpenseInput[];
   cardStatements: ClosingCardStatementInput[];
   canViewItems: boolean;
+  bankTransactions?: ReturnType<typeof indexExpenseBankTransactions>;
 };
 
 const CHECK_FORECASTS = "expenses.forecasts";
@@ -64,8 +70,9 @@ const cents = (value: unknown) => Math.round((Number(value) || 0) * 100);
 const dateKey = (value: unknown) =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : financialDateKey(value);
 
-function expenseHref(month: string, id: string) {
+function expenseHref(month: string, id: string, installment?: number) {
   const params = new URLSearchParams({ competence: month, expense: id });
+  if (installment !== undefined) params.set("installment", String(installment));
   return `${FINANCIAL_ROUTES.expenses}?${params}`;
 }
 
@@ -97,17 +104,6 @@ function settlementOf(expense: ClosingExpenseInput): Settlement {
   return value && typeof value === "object" ? (value as Settlement) : null;
 }
 
-/** Pago e confirmado no extrato (ou pago em dinheiro, cuja baixa vem do fechamento de caixa). */
-function paidConfirmation(expense: ClosingExpenseInput): "linked" | "cash" | "reported" | "divergent" | "none" {
-  if (expense.plannedPaymentMethodType === "cash") return "cash";
-  const settlement = settlementOf(expense);
-  const evidence = settlement?.paymentEvidenceStatus;
-  if (settlement?.reconciliationStatus === "DIVERGENT") return "divergent";
-  if ((evidence === "CONFIRMED" || evidence === "MIXED") && settlement?.reconciliationStatus === "MATCHED") return "linked";
-  if (evidence === "REPORTED") return "reported";
-  return "none";
-}
-
 function item(
   base: Omit<ClosingItem, "tone" | "checkId"> & { kind: ClosingItemKind; checkId: string },
   tone: ClosingItem["tone"],
@@ -123,6 +119,26 @@ function sortItems(items: ClosingItem[]) {
     || left.title.localeCompare(right.title, "pt-BR"));
 }
 
+export function expensesForCompetence(input: Pick<ExpensesFlowInput, "expenses" | "cardStatements" | "month">) {
+  return input.expenses.flatMap((expense) => {
+    const installments = financialExpenseInstallmentCharges(expense);
+    if (!installments) {
+      return financialExpenseChargePeriods(expense, input.cardStatements)
+        .some((period) => period.competenceMonth === input.month) ? [expense] : [];
+    }
+    const title = { ...expense };
+    delete title.sourceSettlement;
+    return installments.filter((charge) => charge.competenceMonth === input.month).map((charge) => ({
+      ...title,
+      ...financialInstallmentDisplayFields(charge),
+      reconciliationInstallmentNumber: charge.number,
+      linkedBankTransactionId: charge.bankTransactionId,
+      linkedBankTransactionIds: undefined,
+      netPayableValue: undefined,
+    }));
+  });
+}
+
 export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingFlow; totals: ExpensesTotals } {
   const { month, today } = input;
   const items: ClosingItem[] = [];
@@ -135,7 +151,7 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
   const totals: ExpensesTotals = { titleCount: 0, titlesCents: 0, settledCents: 0, openCents: 0, overdueCents: 0 };
   let cardExpenseCount = 0;
 
-  for (const expense of input.expenses) {
+  for (const expense of expensesForCompetence(input)) {
     const status = text(expense.status);
     const isForecast = expense.provisionType === "forecast";
     // Mesmas exclusões da lista operacional de Despesas.
@@ -183,30 +199,34 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
       ...(Object.prototype.hasOwnProperty.call(expense, "sourceSettlement") ? { sourceSettlement: expense.sourceSettlement } : {}),
     };
     const display = expenseDisplayStatus(state as never, now);
+    const reconciliation = resolveExpenseReconciliation(expense, input.bankTransactions);
     const due = dateKey(expense.dueDate);
-    const base = { id: `expense:${expense.id}`, checkId: CHECK_PAYMENTS, title: titleOf(expense), dueDate: due, amountCents: total, href: expenseHref(month, expense.id) };
+    const part = expense.reconciliationInstallmentNumber;
+    const base = {
+      id: part === undefined ? `expense:${expense.id}` : `expense:${expense.id}:installment:${part}`,
+      checkId: CHECK_PAYMENTS,
+      title: part === undefined ? titleOf(expense) : `${titleOf(expense)} · Parcela ${part}`,
+      dueDate: due,
+      amountCents: total,
+      href: expenseHref(month, expense.id, part),
+    };
 
-    if (display === "payment_found_pending_document") {
+    if (reconciliation === "pending_document") {
       items.push(item({ ...base, kind: "payment_without_document", detail: detailOf(expense, "Pagamento encontrado no extrato, falta o documento") }, "warn"));
       continue;
     }
-    if (display === "reported_paid") {
+    if (reconciliation === "reported" && (status === "paid" || display === "reported_paid")) {
       items.push(item({ ...base, kind: "payment_reported_only", detail: detailOf(expense, "Pagamento informado, ainda sem confirmação no extrato") }, "warn"));
       continue;
     }
-    if (display === "paid_divergent") {
+    if (reconciliation === "divergent") {
       items.push(item({ ...base, kind: "payment_divergent", detail: detailOf(expense, "O pagamento no extrato diverge do valor do título") }, "danger"));
       continue;
     }
     if (status === "paid") {
-      const confirmation = paidConfirmation(expense);
-      if (confirmation === "linked" || confirmation === "cash") {
+      if (reconciliation === "bank" || reconciliation === "cash") {
         paymentsDone += 1;
         totals.settledCents += total;
-      } else if (confirmation === "divergent") {
-        items.push(item({ ...base, kind: "payment_divergent", detail: detailOf(expense, "O pagamento no extrato diverge do valor do título") }, "danger"));
-      } else if (confirmation === "reported") {
-        items.push(item({ ...base, kind: "payment_reported_only", detail: detailOf(expense, "Pagamento informado, ainda sem confirmação no extrato") }, "warn"));
       } else {
         items.push(item({ ...base, kind: "paid_without_bank_link", detail: detailOf(expense, "Marcada como paga, sem pagamento vinculado no extrato") }, "warn"));
       }
@@ -265,7 +285,7 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
       done: forecastDone, total: forecastDone + forecastPending,
     },
     {
-      id: CHECK_PAYMENTS, name: "Pagas e vinculadas ao extrato",
+      id: CHECK_PAYMENTS, name: "Pagamentos conferidos",
       state: pendingOf(CHECK_PAYMENTS) ? "pending" : "ok", done: paymentsDone, total: paymentsTotal,
       note: "Pagas em dinheiro contam pela baixa do fechamento de caixa.",
     },

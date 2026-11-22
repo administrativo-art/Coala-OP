@@ -1,5 +1,12 @@
 import { endOfWeek, format, startOfWeek } from "date-fns";
 
+import {
+  financialExpenseInstallmentCharges,
+  financialInstallmentDisplayFields,
+  type FinancialExpenseChargeSource,
+} from "./expense-accounting-contract";
+import { financialDateFromIso } from "./financial-dates";
+
 export type ExpenseDueWeekGroup<T> = {
   key: string;
   label: string;
@@ -44,6 +51,22 @@ export function consolidateExpenseObligations<T extends ConsolidatableExpense>(e
 
     return !isReconciledForecast || !availableIds.has(replacementId);
   });
+}
+
+export function expandExpenseInstallmentsForList<T extends FinancialExpenseChargeSource & { sourceSettlement?: unknown }>(expense: T) {
+  const charges = financialExpenseInstallmentCharges(expense);
+  if (!charges) return [expense];
+  const title = { ...expense };
+  delete title.sourceSettlement;
+  return charges.map((charge) => ({
+    ...title,
+    ...financialInstallmentDisplayFields(charge),
+    id: `${expense.id}:installment:${charge.number}`,
+    dueDate: charge.dueDate ? financialDateFromIso(charge.dueDate) : null,
+    paymentMethod: "single",
+    installmentSchedule: expense.installments,
+    sourceExpense: expense,
+  }));
 }
 
 function weekRangeLabel(startDate: Date, endDate: Date) {

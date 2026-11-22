@@ -169,7 +169,7 @@
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
 | 2. Inventários | Atualizados: 174 páginas internas, 22 externas, 544 APIs e 66 exports de Functions. |
-| 3. Guias detalhados | 59/60 grupos traçados integralmente no levantamento estático; 0/60 verificados nesta base. Há 80 guias de subfluxo. |
+| 3. Guias detalhados | 60/60 grupos traçados integralmente no levantamento estático; 0/60 verificados nesta base. Há 80 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |
@@ -276,3 +276,5 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 17/11/2026 — DRE: exportação mensal/12meses PDFtimbrado e XLSX, núcleo compartilhado com tela, CMV fixoestoque, rota secureRoute com escopo porunidade; catálogo contextual transitório e prévia fictícia. Sem publicação ou alteração de dados. Ver flows/dre.md e plano-exportacao-dre.md. Verificação local dirigida não certifica produção.
 
 2026-11-20 — Fechamento financeiro mensal: novo grupo `month-closing` (Localizado) com tela inicial e fluxo de Despesas somente leitura, rota `GET /api/financial/month-closing` com `secureRoute` e permissão `financial.monthClosings`. Sem escrita, sem publicação e sem execução sobre dados reais; os demais quatro fluxos aparecem como não conectados. Ver flows/month-closing.md e planos/plano-fechamento-financeiro-mensal.md.
+
+2026-11-21 — Competência de parcelas no fechamento. O fluxo `month-closing` passa a Traçado. Despesas e Fechamento leem o contrato central para o mês, o valor e o estado das parcelas. A consulta Firestore limitada foi verificada em leitura para outubro e novembro. Verificação HTTP e visual permanecem pendentes.

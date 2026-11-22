@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, ReceiptText, SearchCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import type { FinancialObligationSummary } from "@/features/financial/obligations/types";
+import {
+  expenseNeedsImportedBankEvidence,
+  expenseReconciliationSummary,
+  resolveExpenseReconciliation,
+  type ExpenseReconciliation,
+  type ExpenseReconciliationSource,
+} from "@/features/financial/obligations/expense-reconciliation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,21 +22,14 @@ import { cn } from "@/lib/utils";
 import { SourceSettlementNotice } from "./source-settlement-notice";
 import type { SourceSettlement } from "../../lib/source-settlement";
 
-type ExpenseSummarySource = {
+type ExpenseSummarySource = ExpenseReconciliationSource & {
   sourceSettlement?: SourceSettlement & { closureId?: string };
-  id: string;
   status?: string;
-  totalValue?: number;
-  netPayableValue?: number;
-  provisionType?: string;
-  provisionedValue?: number | null;
-  obligationId?: string | null;
-  linkedBankTransactionId?: string | null;
-  settlementSummary?: Partial<FinancialObligationSummary> | null;
 };
 
-type SettlementDetails = {
-  summary?: FinancialObligationSummary | null;
+type SettlementResult = { summary: FinancialObligationSummary; reconciliation: ExpenseReconciliation };
+
+type SettlementDetails = SettlementResult & {
   payments?: Array<Record<string, any>>;
   links?: Array<Record<string, any>>;
   adjustments?: Array<Record<string, any>>;
@@ -46,57 +46,25 @@ type AdjustmentForm = {
   accountPlanId: string;
 };
 
-function moneyCents(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.round(number * 100) : 0;
-}
-
-function fallbackSummary(expense: ExpenseSummarySource): FinancialObligationSummary {
-  const stored = expense.settlementSummary;
-  if (stored?.obligationStatus) return stored as FinancialObligationSummary;
-  const isForecast = expense.provisionType === "forecast";
-  const actualAmountCents = isForecast ? null : moneyCents(expense.totalValue);
-  const settlementAmountCents = actualAmountCents == null
-    ? null
-    : moneyCents(expense.netPayableValue) || actualAmountCents;
-  const forecastAmountCents = isForecast
-    ? moneyCents(expense.totalValue)
-    : expense.provisionedValue == null ? null : moneyCents(expense.provisionedValue);
-  const isPaid = expense.status === "paid";
-  const confirmed = isPaid && Boolean(expense.linkedBankTransactionId);
-  const cashPaidAmountCents = isPaid ? settlementAmountCents || 0 : 0;
-  return {
-    forecastAmountCents,
-    actualAmountCents,
-    settlementAmountCents,
-    reportedCashAmountCents: isPaid && !confirmed ? cashPaidAmountCents : 0,
-    confirmedCashAmountCents: confirmed ? cashPaidAmountCents : 0,
-    cashPaidAmountCents,
-    principalSettledAmountCents: cashPaidAmountCents,
-    confirmedPrincipalAmountCents: confirmed ? cashPaidAmountCents : 0,
-    settlementCreditsAmountCents: 0,
-    cashChargesAmountCents: 0,
-    cashReductionsAmountCents: 0,
-    unclassifiedDifferenceAmountCents: 0,
-    balanceAmountCents: settlementAmountCents == null ? null : Math.max(0, settlementAmountCents - cashPaidAmountCents),
-    obligationStatus: isPaid ? "PAID" : "OPEN",
-    reconciliationStatus: confirmed ? "MATCHED" : "NOT_FOUND",
-    paymentEvidenceStatus: confirmed ? "CONFIRMED" : isPaid ? "REPORTED" : "NONE",
-  };
-}
-
 function currencyFromCents(value: number | null | undefined) {
   return value == null ? "—" : formatCurrency(value / 100);
 }
 
-function statusCopy(summary: FinancialObligationSummary) {
-  if (summary.reconciliationStatus === "DIVERGENT") return { label: "Revisão necessária", tone: "warning" as const };
-  if (summary.reconciliationStatus === "PENDING_DOCUMENT") return { label: "Pagamento confirmado · conferir despesa", tone: "warning" as const };
+function statusCopy(
+  summary: FinancialObligationSummary,
+  reconciliation: ExpenseReconciliation,
+  status: string | undefined,
+) {
+  if (status === "cancelled") return { label: "Cancelado", tone: "neutral" as const };
+  if (reconciliation === "divergent") return { label: "Revisão necessária", tone: "warning" as const };
+  if (reconciliation === "pending_document") return { label: "Pagamento confirmado · conferir despesa", tone: "warning" as const };
+  if (reconciliation === "cash") return { label: "Pago em dinheiro", tone: "success" as const };
   if (summary.obligationStatus === "PARTIALLY_PAID") return { label: "Parcialmente pago", tone: "warning" as const };
-  if (summary.obligationStatus === "PAID" && summary.paymentEvidenceStatus === "REPORTED") {
-    return { label: "Pago informado · aguardando extrato", tone: "reported" as const };
+  if (summary.obligationStatus === "PAID" || status === "paid") {
+    if (reconciliation === "bank") return { label: "Pago e conciliado", tone: "success" as const };
+    if (reconciliation === "reported") return { label: "Pago informado · aguardando extrato", tone: "reported" as const };
+    return { label: "Pago · conciliação pendente", tone: "reported" as const };
   }
-  if (summary.obligationStatus === "PAID") return { label: "Pago e conciliado", tone: "success" as const };
   return { label: "Em aberto", tone: "neutral" as const };
 }
 
@@ -114,14 +82,48 @@ export function ExpenseFinancialSummary({
   const { firebaseUser, permissions } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState<SettlementDetails | null>(null);
+  const [detailResult, setDetails] = useState<{ expense: ExpenseSummarySource; value: SettlementDetails } | null>(null);
+  const [remoteResult, setRemoteResult] = useState<{ expense: ExpenseSummarySource; value: SettlementResult | null } | null>(null);
   const [error, setError] = useState("");
   const [editingAdjustment, setEditingAdjustment] = useState<Record<string, any> | null>(null);
   const [adjustmentForm, setAdjustmentForm] = useState<AdjustmentForm | null>(null);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [adjustmentError, setAdjustmentError] = useState("");
-  const summary = useMemo(() => fallbackSummary(expense), [expense]);
-  const copy = statusCopy(summary);
+  const details = detailResult?.expense === expense ? detailResult.value : null;
+  const remoteSettlement = remoteResult?.expense === expense ? remoteResult : null;
+  const needsEvidence = !expense.sourceSettlement && expenseNeedsImportedBankEvidence(expense);
+
+  useEffect(() => {
+    if (!needsEvidence || !firebaseUser) return;
+    const controller = new AbortController();
+
+    const user = firebaseUser;
+
+    async function load() {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(`/api/financial/expenses/${encodeURIComponent(expense.id)}/settlement?summary=1`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Falha ao consultar a conciliação.");
+        const value: SettlementResult = await response.json();
+        if (!controller.signal.aborted) setRemoteResult({ expense, value });
+      } catch {
+        if (!controller.signal.aborted) setRemoteResult({ expense, value: null });
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [expense, needsEvidence, firebaseUser]);
+
+  const result = details ?? remoteSettlement?.value;
+  const reconciliation = result?.reconciliation ?? resolveExpenseReconciliation(expense);
+  const summary = result?.summary ?? expenseReconciliationSummary(expense, reconciliation);
+  const copy = needsEvidence && !result
+    ? { label: remoteSettlement || !firebaseUser ? "Conciliação indisponível" : "Conferindo conciliação…", tone: "neutral" }
+    : statusCopy(summary, reconciliation, expense.status);
   const variation = summary.forecastAmountCents == null || summary.actualAmountCents == null
     ? null
     : summary.actualAmountCents - summary.forecastAmountCents;
@@ -140,8 +142,8 @@ export function ExpenseFinancialSummary({
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Falha ao consultar os detalhes.");
-      setDetails(payload);
+      if (!response.ok) throw new Error(payload.error?.message || "Falha ao consultar os detalhes.");
+      setDetails({ expense, value: payload });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Falha ao consultar os detalhes.");
     } finally {
@@ -149,7 +151,6 @@ export function ExpenseFinancialSummary({
     }
   }
 
-  const detailSummary = details?.summary || summary;
   const payments = details?.payments || [];
   const adjustments = details?.adjustments || [];
   const events = details?.events || [];
@@ -193,11 +194,14 @@ export function ExpenseFinancialSummary({
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Falha ao classificar o ajuste.");
-      setDetails((current) => current ? {
-        ...current,
-        adjustments: (current.adjustments || []).map((adjustment) => adjustment.id === payload.adjustment.id
-          ? { ...adjustment, ...payload.adjustment }
-          : adjustment),
+      setDetails((current) => current?.expense === expense ? {
+        expense,
+        value: {
+          ...current.value,
+          adjustments: (current.value.adjustments || []).map((adjustment) => adjustment.id === payload.adjustment.id
+            ? { ...adjustment, ...payload.adjustment }
+            : adjustment),
+        },
       } : current);
       setEditingAdjustment(null);
       setAdjustmentForm(null);
@@ -215,11 +219,11 @@ export function ExpenseFinancialSummary({
           "rounded-xl border p-3",
           compact ? "border-[#eceadf] bg-white dark:border-border dark:bg-background" : "sm:col-span-3 bg-muted/20",
         )}
-        aria-label="Resumo financeiro da obrigação"
+        aria-label="Pagamento da despesa"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resumo financeiro</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pagamento</p>
             <div className={cn(
               "mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium",
               copy.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -275,15 +279,15 @@ export function ExpenseFinancialSummary({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
-                  ["Provisionado", currencyFromCents(detailSummary.forecastAmountCents)],
-                  ["Real", currencyFromCents(detailSummary.actualAmountCents)],
-                  ["Líquido a pagar", currencyFromCents(detailSummary.settlementAmountCents ?? detailSummary.actualAmountCents)],
-                  ["Principal liquidado", currencyFromCents(detailSummary.principalSettledAmountCents)],
-                  ["Total pago", currencyFromCents(detailSummary.cashPaidAmountCents)],
-                  ["Confirmado no banco", currencyFromCents(detailSummary.confirmedCashAmountCents)],
-                  ["Encargos", currencyFromCents(detailSummary.cashChargesAmountCents)],
-                  ["Créditos", currencyFromCents(detailSummary.settlementCreditsAmountCents)],
-                  ["Saldo", currencyFromCents(detailSummary.balanceAmountCents)],
+                  ["Provisionado", currencyFromCents(summary.forecastAmountCents)],
+                  ["Real", currencyFromCents(summary.actualAmountCents)],
+                  ["Líquido a pagar", currencyFromCents(summary.settlementAmountCents ?? summary.actualAmountCents)],
+                  ["Principal liquidado", currencyFromCents(summary.principalSettledAmountCents)],
+                  ["Total pago", currencyFromCents(summary.cashPaidAmountCents)],
+                  ["Confirmado no banco", currencyFromCents(summary.confirmedCashAmountCents)],
+                  ["Encargos", currencyFromCents(summary.cashChargesAmountCents)],
+                  ["Créditos", currencyFromCents(summary.settlementCreditsAmountCents)],
+                  ["Saldo", currencyFromCents(summary.balanceAmountCents)],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl border p-3"><p className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p><p className="mt-1 font-mono text-sm font-semibold">{value}</p></div>
                 ))}
