@@ -1,12 +1,13 @@
 import "server-only";
 
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import { listCashClosures } from "@/features/financial/cash-closures/repository.server";
 import { latestPublishedDate } from "@/features/financial/receivables/period-review";
 import { readStoneReceiptSnapshot } from "@/features/financial/receipts-reconciliation/stone-account-snapshot.server";
 import { reportSystemError } from "@/lib/observability";
 
-import { shiftMonth } from "./month";
-import { evaluateReceiptsFlow, receiptsFlowUnavailable, type ReceiptsParcelInput, type ReceiptsSourceInput, type ReceiptsUnitInput } from "./receipts-flow";
+import { shiftMonth, todayKey } from "./month";
+import { evaluateReceiptsFlow, receiptsFlowUnavailable, type ReceiptsCashInput, type ReceiptsParcelInput, type ReceiptsSourceInput, type ReceiptsUnitInput } from "./receipts-flow";
 import { kioskNames, monthBounds, readMappings } from "./sales-fees.server";
 import { feeBindings } from "./stone-bindings";
 import type { ClosingFlow } from "./types";
@@ -18,7 +19,37 @@ const BASE_LOOKBACK_MONTHS = 1;
 /** Se alguma conferência lida tiver parcelado, lê também os meses anteriores até a maior parcela prevista (12x). */
 const INSTALLMENT_LOOKBACK_MONTHS = 11;
 
+/** Teto de leitura dos fechamentos de caixa do mês (≈ 31 dias × quiosques); acima disso a etapa fica indisponível. */
+const CASH_CLOSURES_LIMIT = 1000;
+
 const query = (entries: Record<string, string>) => new URLSearchParams(entries).toString();
+
+/**
+ * Etapa do dinheiro. Um dia aprovado com dinheiro elegível só está resolvido com depósito pago ou ajustado
+ * (ajuste feito na tela de depósitos). Somente leitura: um GET de até 1.000 fechamentos por chamada, sem polling.
+ */
+async function readCashStage(input: Input, bounds: ReturnType<typeof monthBounds>, now: Date): Promise<ReceiptsCashInput> {
+  const closures = await listCashClosures({ workspaceId: input.workspaceId, year: bounds.year, month: bounds.index, limit: CASH_CLOSURES_LIMIT });
+  if (closures.length >= CASH_CLOSURES_LIMIT) throw new Error("Fechamentos de caixa do mês acima do limite de leitura.");
+  const kiosks = new Map<string, { label: string; openDays: number; unpaidDays: number; unpaidCents: number }>();
+  for (const closure of closures) {
+    const entry = kiosks.get(closure.kioskId) ?? { label: closure.kioskName || closure.kioskId, openDays: 0, unpaidDays: 0, unpaidCents: 0 };
+    if (closure.status !== "approved") entry.openDays += 1;
+    else if (closure.cashDeposit.eligibleCents > 0 && !["paid", "adjusted"].includes(closure.cashDeposit.status)) {
+      entry.unpaidDays += 1;
+      entry.unpaidCents += Math.max(0, closure.cashDeposit.eligibleCents - (closure.cashDeposit.paidCents ?? 0));
+    }
+    kiosks.set(closure.kioskId, entry);
+  }
+  return {
+    monthOver: todayKey(now) > bounds.through,
+    kiosks: [...kiosks.entries()].map(([kioskId, entry]) => ({
+      key: kioskId, ...entry,
+      closuresHref: `${FINANCIAL_ROUTES.cashClosures}?${query({ month: input.month, kioskId })}`,
+      depositsHref: `${FINANCIAL_ROUTES.cashDeposits}?${query({ month: input.month, kioskId })}`,
+    })),
+  };
+}
 
 /**
  * Recebimento (etapa Pix e cartão): parcelas com data prevista na competência, lidas das conferências Stone salvas dos
@@ -68,7 +99,11 @@ export async function readReceiptsFlow(input: Input): Promise<ClosingFlow> {
         sources: reads.map(({ source }) => source), parcels: [...parcels.values()],
       };
     }));
-    return evaluateReceiptsFlow({ units, canViewItems: input.canViewItems, originHref });
+    const cash = await readCashStage(input, bounds, now).catch((error) => {
+      reportSystemError({ error, source: "api-financial", operation: "month-closing-receipts-cash", routeOrJob: "/api/financial/month-closing" });
+      return null;
+    });
+    return evaluateReceiptsFlow({ units, cash, canViewItems: input.canViewItems, originHref });
   } catch (error) {
     reportSystemError({ error, source: "api-financial", operation: "month-closing-receipts", routeOrJob: "/api/financial/month-closing" });
     return receiptsFlowUnavailable(originHref);

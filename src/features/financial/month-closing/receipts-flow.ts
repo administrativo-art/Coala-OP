@@ -26,7 +26,23 @@ export type ReceiptsUnitInput = {
   parcels: ReceiptsParcelInput[];
 };
 
-export type ReceiptsFlowInput = { units: ReceiptsUnitInput[]; canViewItems: boolean; originHref: string };
+/** Dinheiro de um quiosque na competência, lido dos fechamentos de caixa diários. */
+export type ReceiptsCashKioskInput = {
+  key: string;
+  label: string;
+  closuresHref: string;
+  depositsHref: string;
+  /** Dias com fechamento de caixa que ainda não foram aprovados. */
+  openDays: number;
+  /** Dias aprovados com dinheiro elegível a depositar e depósito ainda não pago nem ajustado, e o valor que falta. */
+  unpaidDays: number;
+  unpaidCents: number;
+};
+
+/** Etapa do dinheiro: só vale com o mês terminado; `null` quando não foi possível ler os fechamentos. */
+export type ReceiptsCashInput = { monthOver: boolean; kiosks: ReceiptsCashKioskInput[] } | null;
+
+export type ReceiptsFlowInput = { units: ReceiptsUnitInput[]; cash: ReceiptsCashInput; canViewItems: boolean; originHref: string };
 
 const CHECK_SOURCES = "receipts.sources";
 const CHECK_CARDS = "receipts.cards";
@@ -45,7 +61,8 @@ const isPending = (status: ReceiptParcelStatus) => status === "to_receive" || PE
  * entrou, sem importar em que mês foi vendido. Parcela de venda antiga conta no mês em que vence; crédito
  * à vista de 30 dias vendido no fim do mês pertence ao mês seguinte. Sem a conferência salva dos meses de
  * venda, as contagens são desconhecidas: contam como pendentes, nunca como zero.
- * A etapa do dinheiro só existe depois do fechamento do mês e ainda não está conectada.
+ * Etapa do dinheiro: só vale depois que o mês terminou; todo dia de caixa aprovado e todo dinheiro elegível
+ * depositado (pago ou ajustado) em todos os quiosques. Sem a leitura dos fechamentos nada é dado como depositado.
  */
 export function evaluateReceiptsFlow(input: ReceiptsFlowInput): ClosingFlow {
   const units = input.units;
@@ -85,10 +102,32 @@ export function evaluateReceiptsFlow(input: ReceiptsFlowInput): ClosingFlow {
   }
   const sourceDone = units.filter(unitTrusted).length;
   const cardsDone = units.filter((unit) => unitTrusted(unit) && !unit.parcels.some((parcel) => isPending(parcel.status))).length;
-  const cash: ClosingCheck = {
-    id: CHECK_CASH, name: "Dinheiro depositado", state: "unavailable", done: null, total: null,
-    note: "Confere depois do fechamento do mês.",
-  };
+  const cashKiosks = input.cash?.kiosks ?? [];
+  if (input.cash?.monthOver) {
+    for (const kiosk of cashKiosks) {
+      if (kiosk.openDays > 0) {
+        items.push({
+          id: `receipts:cash:${kiosk.key}:open`, checkId: CHECK_CASH, kind: "receipts_cash_open", tone: "warn", title: kiosk.label,
+          detail: plural(kiosk.openDays, "dia com fechamento de caixa não aprovado", "dias com fechamento de caixa não aprovado"),
+          dueDate: null, amountCents: null, href: kiosk.closuresHref,
+        });
+      }
+      if (kiosk.unpaidDays > 0) {
+        items.push({
+          id: `receipts:cash:${kiosk.key}:deposit`, checkId: CHECK_CASH, kind: "receipts_cash_deposit", tone: "warn", title: kiosk.label,
+          detail: plural(kiosk.unpaidDays, "dia com dinheiro ainda sem depósito pago", "dias com dinheiro ainda sem depósito pago"),
+          dueDate: null, amountCents: kiosk.unpaidCents, href: kiosk.depositsHref,
+        });
+      }
+    }
+  }
+  const cashDone = input.cash?.monthOver ? cashKiosks.filter((kiosk) => kiosk.openDays === 0 && kiosk.unpaidDays === 0).length : 0;
+  const cash: ClosingCheck = !input.cash
+    ? { id: CHECK_CASH, name: "Dinheiro depositado", state: "unavailable", done: null, total: null, note: "Não foi possível ler os fechamentos de caixa agora. Tente de novo." }
+    : !input.cash.monthOver
+      ? { id: CHECK_CASH, name: "Dinheiro depositado", state: "pending", done: 0, total: cashKiosks.length, note: "Confere depois que o mês terminar." }
+      : { id: CHECK_CASH, name: "Dinheiro depositado", state: cashDone === cashKiosks.length ? "ok" : "pending", done: cashDone, total: cashKiosks.length,
+        ...(cashKiosks.length === 0 ? { note: "Nenhum fechamento de caixa neste mês." } : {}) };
   const checks: ClosingCheck[] = units.length === 0
     ? [
       { id: CHECK_SOURCES, name: "Conferências Stone dos meses", state: "unavailable", done: null, total: null, note: "Nenhum vínculo Stone vigente nesta competência." },

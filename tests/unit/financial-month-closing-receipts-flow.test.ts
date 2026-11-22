@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { dependsOnYou } from "../../src/features/financial/month-closing/presentation";
-import { evaluateReceiptsFlow, type ReceiptsParcelInput, type ReceiptsSourceInput, type ReceiptsUnitInput } from "../../src/features/financial/month-closing/receipts-flow";
+import { evaluateReceiptsFlow, type ReceiptsCashInput, type ReceiptsParcelInput, type ReceiptsSourceInput, type ReceiptsUnitInput } from "../../src/features/financial/month-closing/receipts-flow";
 
 const source = (month: string, ready = true, complete = true): ReceiptsSourceInput => ({ month, ready, complete });
 const parcel = (id: string, status: ReceiptsParcelInput["status"], expectedDate = "2026-10-15", netCents = 1000): ReceiptsParcelInput => ({ id, status, expectedDate, netCents });
 const unit = (parcels: ReceiptsParcelInput[], sources = [source("2026-10"), source("2026-09")]): ReceiptsUnitInput => ({ key: "u", label: "Tiririca", href: "/origem", sources, parcels });
-const flow = (units: ReceiptsUnitInput[], canViewItems = true) => evaluateReceiptsFlow({ units, canViewItems, originHref: "/stone?month=2026-10" });
+const cashOk: ReceiptsCashInput = { monthOver: true, kiosks: [{ key: "k", label: "Tiririca", closuresHref: "/caixa", depositsHref: "/dep", openDays: 0, unpaidDays: 0, unpaidCents: 0 }] };
+const flow = (units: ReceiptsUnitInput[], canViewItems = true, cash: ReceiptsCashInput = cashOk) => evaluateReceiptsFlow({ units, cash, canViewItems, originHref: "/stone?month=2026-10" });
 const check = (result: ReturnType<typeof flow>, id: string) => result.checks.find((entry) => entry.id === id)!;
 
 test("Pix e cartão fecham quando toda parcela prevista no mês foi paga, de qualquer mês de venda", () => {
@@ -55,8 +56,32 @@ test("com parcelado, cada parcela conta só no mês da sua data prevista e meses
   assert.equal(result.state, "pending");
 });
 
-test("a etapa do dinheiro ainda não está conectada: o fluxo não fecha sozinho", () => {
+test("Pix, cartão e dinheiro em dia fecham o Recebimento sozinho", () => {
   const result = flow([unit([parcel("a", "paid")])]);
+  assert.equal(check(result, "receipts.cash").state, "ok");
+  assert.equal(result.state, "ok");
+});
+
+test("dinheiro: dia não aprovado e depósito não pago mantêm o fluxo pendente, com valor", () => {
+  const cash: ReceiptsCashInput = { monthOver: true, kiosks: [
+    { key: "k1", label: "Tiririca", closuresHref: "/caixa", depositsHref: "/dep", openDays: 2, unpaidDays: 1, unpaidCents: 45000 },
+    { key: "k2", label: "Matriz", closuresHref: "/caixa", depositsHref: "/dep", openDays: 0, unpaidDays: 0, unpaidCents: 0 },
+  ] };
+  const result = flow([unit([parcel("a", "paid")])], true, cash);
+  assert.equal(result.state, "pending");
+  assert.deepEqual([check(result, "receipts.cash").done, check(result, "receipts.cash").total], [1, 2]);
+  assert.equal(result.items.find((entry) => entry.kind === "receipts_cash_deposit")!.amountCents, 45000);
+  assert.equal(result.items.find((entry) => entry.kind === "receipts_cash_open")!.href, "/caixa");
+});
+
+test("dinheiro: com o mês ainda em curso a etapa fica pendente, nunca conferida", () => {
+  const result = flow([unit([parcel("a", "paid")])], true, { monthOver: false, kiosks: cashOk.kiosks });
+  assert.equal(check(result, "receipts.cash").state, "pending");
+  assert.equal(result.state, "pending");
+});
+
+test("dinheiro: falha na leitura dos fechamentos deixa a etapa indisponível", () => {
+  const result = flow([unit([parcel("a", "paid")])], true, null);
   assert.equal(check(result, "receipts.cash").state, "unavailable");
   assert.equal(result.state, "unavailable");
 });

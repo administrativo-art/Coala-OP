@@ -47,6 +47,8 @@ const KIND_LABEL: Record<ClosingItemKind, string> = {
   receipts_not_ready: "Conferência pendente",
   receipts_pending: "Não recebida",
   receipts_awaiting: "Dentro do prazo",
+  receipts_cash_open: "Caixa não aprovado",
+  receipts_cash_deposit: "Depósito pendente",
 };
 
 export function itemLabel(item: ClosingItem) {
