@@ -61,10 +61,14 @@ async function subject(deps: Dependencies, context: ServerUserContext, employeeU
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 const fiscalMs = (markedAt: string) => Date.parse(markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+const competenceRef = (deps: Dependencies, workspaceId: string, competence: string) =>
+  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+const frozenPeople = (version: FirebaseFirestore.DocumentReference) => version.collection('people');
+const bankMonths = (version: FirebaseFirestore.DocumentReference) => version.collection('timeBank');
 const bankRef = (deps: Dependencies, workspaceId: string, competence: string, version: number, uid: string) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection('versions').doc(String(version)).collection('timeBank').doc(uid);
+  bankMonths(competenceRef(deps, workspaceId, competence).collection('versions').doc(String(version))).doc(uid);
 const movementCollection = (deps: Dependencies, workspaceId: string, competence: string) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection(BANK_MOVEMENTS);
+  competenceRef(deps, workspaceId, competence).collection(BANK_MOVEMENTS);
 const movementKey = (workspaceId: string, uid: string, operationId: string) =>
   createHash('sha256').update(JSON.stringify(['bank-movement', workspaceId, uid, operationId])).digest('hex');
 const movementGuardRef = (deps: Dependencies, workspaceId: string, uid: string) =>
@@ -154,10 +158,10 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
 
 async function computeBankMonth(deps: Dependencies, workspaceId: string, competence: string, closure: ClosureRecord | null, uid: string) {
   const { start, end } = competenceRange(competence);
-  const closureRef = closure ? deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)).collection('versions').doc(String(closure.version)) : null;
+  const closureRef = closure ? competenceRef(deps, workspaceId, competence).collection('versions').doc(String(closure.version)) : null;
   const [{ user, policyOn }, declaration] = await Promise.all([
     policiesAndTarget(deps, uid),
-    closureRef ? closureRef.collection('people').doc(uid).get().then((doc) => (doc.data() as ClosurePerson | undefined) ?? null)
+    closureRef ? frozenPeople(closureRef).doc(uid).get().then((doc) => (doc.data() as ClosurePerson | undefined) ?? null)
       : liveDeclaration(deps, workspaceId, competence, uid),
   ]);
   const [arp, pilot, month] = await Promise.all([
@@ -228,7 +232,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
 
 /** Lê a apuração gravada para a versão vigente do fechamento ou, no mês fechado, apura uma vez e grava. */
 async function bankMonthFor(deps: Dependencies, workspaceId: string, competence: string, uid: string, actorUid: string, expectedVersion?: number) {
-  const closureRef = deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+  const closureRef = competenceRef(deps, workspaceId, competence);
   const version = expectedVersion ?? (await closureRef.get()).get('version');
   if (!version) throw fail('PTRP_BANK_NOT_CLOSED', 'O banco de horas do mês é apurado depois do fechamento.', 'CONFLICT');
   const target = bankRef(deps, workspaceId, competence, version, uid);
@@ -269,7 +273,7 @@ async function calculateForPayroll(deps: Dependencies, context: ServerUserContex
   try {
     return await bankMonthFor(deps, context.workspace_id, competence, uid, context.decoded.uid, version);
   } catch (cause) {
-    const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence));
+    const ref = competenceRef(deps, context.workspace_id, competence);
     await deps.hrDb.runTransaction(async (tx) => {
       const [current, bank] = await tx.getAll(ref, bankRef(deps, context.workspace_id, competence, version, uid));
       if (bank.exists || current.get('status') !== 'closed' || current.get('version') !== version) return;
@@ -285,8 +289,8 @@ export async function retryPayrollCalculation(context: ServerUserContext,
   const deps = { ...defaults, ...injected };
   assertClosureAccess(context, 'close');
   const uid = await subject(deps, context, input.employeeUid, 'close');
-  const version = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence)).collection('versions').doc(String(input.expectedVersion));
-  if (!(await version.collection('people').doc(uid).get()).exists) throw fail('PTRP_BANK_SUBJECT_INVALID', 'Pessoa fora da equipe desta versão.', 'NOT_FOUND');
+  const version = competenceRef(deps, context.workspace_id, input.competence).collection('versions').doc(String(input.expectedVersion));
+  if (!(await frozenPeople(version).doc(uid).get()).exists) throw fail('PTRP_BANK_SUBJECT_INVALID', 'Pessoa fora da equipe desta versão.', 'NOT_FOUND');
   return calculateForPayroll(deps, context, input.competence, input.expectedVersion, uid);
 }
 
@@ -314,25 +318,25 @@ async function expiredCreditReview(deps: Dependencies, tx: Transaction, workspac
 export async function readPayrollReadiness(context: ServerUserContext, competence: string, injected: Partial<Dependencies> = {}): Promise<PayrollReadiness> {
   assertClosureAccess(context, 'read');
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence));
+  const ref = competenceRef(deps, context.workspace_id, competence);
   return deps.hrDb.runTransaction(async (tx) => {
     const current = await tx.get(ref);
     const version = Number(current.get('version') ?? 0);
     if (current.get('status') !== 'closed') return { competence, version: null, ready: false, total: 0, readyCount: 0, people: [] };
     const frozen = ref.collection('versions').doc(String(version));
-    const roster = await tx.get(frozen.collection('people').select('breakReviewDates').limit(451));
+    const roster = await tx.get(frozenPeople(frozen).select('breakReviewDates').limit(451));
     if (roster.size > 450 || roster.size !== current.get('peopleCount')) throw fail('PTRP_BANK_ROSTER_INCOMPLETE', 'A lista congelada está incompleta. Confira o fechamento.', 'CONFLICT');
     const first = new Date(competence + '-01T00:00:00Z');
     const initialWeekDays = (8 - (first.getUTCDay() || 7)) % 7;
     first.setUTCDate(0);
     const priorMonth = first.toISOString().slice(0, 7);
-    const prior = initialWeekDays ? await tx.get(deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, priorMonth))) : null;
+    const prior = initialWeekDays ? await tx.get(competenceRef(deps, context.workspace_id, priorMonth)) : null;
     let publishedPolicies: Promise<DPOvertimePolicy[]> | undefined;
     let openPriorTeam: Promise<Set<string>> | undefined;
     const people: PayrollPersonStatus[] = [];
     for (let offset = 0; offset < roster.size; offset += 12) {
       const group = roster.docs.slice(offset, offset + 12);
-      const docs = await tx.getAll(...group.map((doc) => frozen.collection('timeBank').doc(doc.id)), {
+      const docs = await tx.getAll(...group.map((doc) => bankMonths(frozen).doc(doc.id)), {
         fieldMask: ['uid', 'competence', 'closureVersion', 'algorithmVersion', 'days'],
       });
       const statuses = await Promise.all(docs.map(async (doc, index): Promise<PayrollPersonStatus> => {
@@ -362,7 +366,7 @@ export async function readPayrollReadiness(context: ServerUserContext, competenc
         if (crossesWeek && prior?.get('status') === 'closed') {
           const priorVersion = Number(prior.get('version'));
           const priorRef = prior.ref.collection('versions').doc(String(priorVersion));
-          const [bank, member] = await tx.getAll(priorRef.collection('timeBank').doc(uid), priorRef.collection('people').doc(uid));
+          const [bank, member] = await tx.getAll(bankMonths(priorRef).doc(uid), frozenPeople(priorRef).doc(uid));
           previous = bank.data() as BankMonthDocument | undefined;
           if ((member.exists && !previous) || (previous && (previous.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || previous.closureVersion !== priorVersion || previous.competence !== priorMonth || !Array.isArray(previous.days)))) {
             return { uid, status: 'review', reason: 'Confira a apuração do mês anterior para calcular o limite semanal.' };
@@ -408,8 +412,8 @@ export async function readPayrollReadiness(context: ServerUserContext, competenc
 export async function generateBankClosedCompetence(context: ServerUserContext, competence: string, version: number, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   assertClosureAccess(context, 'close');
-  const people = await deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence)).collection('versions').doc(String(version))
-    .collection('people').limit(451).get();
+  const frozen = competenceRef(deps, context.workspace_id, competence).collection('versions').doc(String(version));
+  const people = await frozenPeople(frozen).limit(451).get();
   if (people.size > 450) throw fail('PTRP_BANK_ROSTER_TOO_LARGE', 'Há pessoas demais para apurar a competência numa única execução.', 'CONFLICT');
   const failures: Array<{ uid: string; code: string }> = [];
   let generated = 0;
@@ -447,7 +451,7 @@ export async function readBankStatement(context: ServerUserContext, query: { emp
 /** Data civil de Brasília: o ciclo só termina depois do último dia no fuso da empresa. */
 const brasiliaDate = (at: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
 const settlementRef = (deps: Dependencies, workspaceId: string, uid: string, cycle: { start: string; end: string }) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, `${cycle.end.slice(0, 7)}-01`)).collection('timeBankSettlements').doc(`${uid}_${cycle.start}`);
+  competenceRef(deps, workspaceId, `${cycle.end.slice(0, 7)}-01`).collection('timeBankSettlements').doc(`${uid}_${cycle.start}`);
 
 async function statementFor(deps: Dependencies, workspaceId: string, uid: string, requestedDate?: string, tx?: Transaction, resolvedPolicy?: DPOvertimePolicy) {
   const today = brasiliaDate(deps.now());
@@ -460,7 +464,7 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
   const end = period?.end ?? (date > today ? date : today);
   const carryFrom = cycle?.residualDestination === 'carry' ? (cycle.anchorDate > policy.validFrom ? cycle.anchorDate : policy.validFrom) : null;
   const allCompetences = competencesBetween(carryFrom && carryFrom < start ? carryFrom : start, end).slice(-CARRY_LOOKBACK_MONTHS);
-  const closureRefs = allCompetences.map((competence) => deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence)));
+  const closureRefs = allCompetences.map((competence) => competenceRef(deps, workspaceId, competence));
   const closures = tx ? await tx.getAll(...closureRefs) : await deps.hrDb.getAll(...closureRefs);
   const closed = new Map(allCompetences.flatMap((competence, index) => closures[index].get('status') === 'closed' ? [[competence, Number(closures[index].get('version'))] as const] : []));
   const stored = await Promise.all([...closed].map(([competence, version]) => {
