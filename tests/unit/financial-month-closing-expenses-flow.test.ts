@@ -255,3 +255,18 @@ test("data civil em texto não desloca de dia pelo fuso, e Timestamp do Firestor
   const timestamp = run([{ id: "t", description: "Timestamp", totalValue: 10, dueDate: stamp, status: "pending" }]);
   assert.equal(timestamp.flow.items[0].dueDate, "2026-12-01");
 });
+
+test("as faixas do total fecham sempre: conferido + sem conferência + a vencer + vencido = títulos", () => {
+  const result = run([
+    { id: "ok", description: "Aluguel", totalValue: 1000, dueDate: "2026-10-05", ...paidLinked },
+    { id: "sem-vinculo", description: "Compra", totalValue: 750.5, dueDate: "2026-10-06", status: "paid" },
+    { id: "informado", description: "Só informado", totalValue: 200, dueDate: "2026-10-07", status: "paid", paymentState: "reported_paid" },
+    { id: "a-vencer", description: "Futuro", totalValue: 300, dueDate: "2026-11-25", status: "pending" },
+    { id: "vencido", description: "Atrasado", totalValue: 480, dueDate: "2026-11-14", status: "pending" },
+    { id: "parcial", description: "Parcial", totalValue: 600, dueDate: "2026-11-14", status: "partially_paid", settlementSummary: { balanceAmountCents: 35000 } },
+  ]);
+  const { titlesCents, settledCents, unconfirmedCents, openCents, overdueCents } = result.totals;
+  assert.equal(titlesCents, settledCents + unconfirmedCents + openCents + overdueCents);
+  assert.equal(settledCents, 100000);
+  assert.ok(unconfirmedCents >= 75050, "o pago sem vínculo aparece na faixa sem conferência");
+});

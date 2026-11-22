@@ -55,7 +55,7 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
         ))}
       </div>
 
-      {connected ? <FlowItems flow={flow} /> : (
+      {connected ? <FlowHiddenNote flow={flow} /> : (
         <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">Este fluxo ainda não foi conectado ao fechamento. Nenhum valor é mostrado até ele existir.</p>
       )}
 
@@ -72,29 +72,10 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
   );
 }
 
-function FlowItems({ flow }: { flow: ClosingFlow }) {
-  if (flow.itemsHidden) {
-    return <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">{flow.key === "expenses" ? "Os itens ficam visíveis para quem também visualiza despesas." : "Os itens ficam visíveis para quem acessa a tela de origem deste fluxo."}</p>;
-  }
-  const visible = flow.items.slice(0, 3);
-  if (visible.length === 0) {
-    return <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">{flow.state === "ok" ? "Tudo conferido neste fluxo." : "Sem pendências listadas."}</p>;
-  }
-  return (
-    <div className="flex flex-col gap-1.5 px-4 pb-3">
-      <span className="pb-0.5 pt-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">O que falta</span>
-      {visible.map((entry) => (
-        <div key={entry.id} className="flex flex-col gap-0.5 rounded-ds-md border border-ds-divider bg-ds-warm px-2.5 py-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0 truncate text-[12.5px] font-extrabold text-ds-ink">{entry.title}</span>
-            <span className={cn("shrink-0 font-ds-mono text-[11.5px] font-bold", entry.tone === "danger" ? "text-ds-danger" : "text-ds-warn")}>{entry.dueDate ? formatDateBr(entry.dueDate).slice(0, 5) : itemLabel(entry)}</span>
-          </div>
-          <span className="text-[12px] text-ds-ink-muted">{entry.detail}</span>
-        </div>
-      ))}
-      {flow.items.length > visible.length ? <span className="text-[12px] text-ds-ink-muted">e mais {flow.items.length - visible.length}</span> : null}
-    </div>
-  );
+/** A lista de pendências fica na tabela “Até fechar”; o card só avisa quando os itens não podem ser vistos. */
+function FlowHiddenNote({ flow }: { flow: ClosingFlow }) {
+  if (!flow.itemsHidden) return null;
+  return <p className="px-4 pb-3 text-[12px] text-ds-ink-muted">{flow.key === "expenses" ? "Os itens ficam visíveis para quem também visualiza despesas." : "Os itens ficam visíveis para quem acessa a tela de origem deste fluxo."}</p>;
 }
 
 function UntilClosing({ items, today }: { items: ClosingItem[]; today: string }) {
@@ -191,6 +172,7 @@ export function MonthClosingPage() {
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12.5px]">
                     <dt className="text-ds-ink-muted">Títulos</dt><dd className="text-right font-ds-mono font-bold">{formatCents(payload.expenseTotals.titlesCents)}</dd>
                     <dt className="text-ds-ink-muted">Pagos e conferidos</dt><dd className="text-right font-ds-mono font-bold">{formatCents(payload.expenseTotals.settledCents)}</dd>
+                    <dt className="text-ds-ink-muted">Pagos sem conferência no extrato</dt><dd className="text-right font-ds-mono font-bold">{formatCents(payload.expenseTotals.unconfirmedCents)}</dd>
                     <dt className="text-ds-ink-muted">A vencer</dt><dd className="text-right font-ds-mono font-bold">{formatCents(payload.expenseTotals.openCents)}</dd>
                     <dt className="text-ds-ink-muted">Vencido</dt><dd className="text-right font-ds-mono font-bold text-ds-danger">{formatCents(payload.expenseTotals.overdueCents)}</dd>
                   </dl>
