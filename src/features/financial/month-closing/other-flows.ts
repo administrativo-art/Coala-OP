@@ -6,7 +6,6 @@ import type { ClosingFlow, ClosingFlowKey } from "./types";
  */
 const PLANNED: Array<{ key: Exclude<ClosingFlowKey, "expenses">; name: string; checks: string[] }> = [
   { key: "sales", name: "Vendas", checks: ["Caixa fechado", "PDV × Stone (cartão)", "Pix"] },
-  { key: "receipts", name: "Recebimento", checks: ["Depósitos do dinheiro", "Liquidações na conta Stone", "Parcelas futuras na carteira"] },
   { key: "fees", name: "Taxas", checks: ["Vendas a corrigir", "Mudanças de taxa", "Lançamento no mês"] },
   { key: "dre", name: "DRE", checks: ["CMV congelado", "Fontes conferidas"] },
 ];

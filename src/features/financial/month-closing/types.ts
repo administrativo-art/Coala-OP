@@ -9,7 +9,7 @@ export type ClosingTone = "ok" | "warn" | "danger" | "neutral" | "info";
 /** `unavailable`: a fonte ainda não está conectada ao fechamento. Nunca equivale a conferido. */
 export type ClosingCheckState = "ok" | "pending" | "unavailable";
 
-export type ClosingFlowKey = "expenses" | "sales" | "receipts" | "fees" | "dre";
+export type ClosingFlowKey = "expenses" | "sales" | "card_pix" | "cash" | "fees" | "dre";
 
 /** `not_connected`: o fluxo inteiro ainda não foi construído (etapas seguintes do plano). */
 export type ClosingFlowState = "ok" | "pending" | "unavailable" | "not_connected";
@@ -37,11 +37,15 @@ export type ClosingItemKind =
   | "fees_exception"
   | "fees_rate_change"
   | "fees_charge"
-  | "receipts_not_ready"
-  | "receipts_pending"
-  | "receipts_awaiting"
-  | "receipts_cash_open"
-  | "receipts_cash_deposit";
+  | "card_pix_not_ready"
+  | "card_pix_unpaid"
+  | "card_pix_late"
+  | "card_pix_chargeback"
+  | "card_pix_review"
+  | "card_pix_missing_file"
+  | "card_pix_awaiting"
+  | "cash_closing_open"
+  | "cash_deposit_unpaid";
 
 export type ClosingCheck = {
   id: string;
