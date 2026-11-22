@@ -26,10 +26,11 @@ const query = (entries: Record<string, string>) => new URLSearchParams(entries).
 
 /**
  * Etapa do dinheiro. Um dia aprovado com dinheiro elegível só está resolvido com depósito pago ou ajustado
- * (ajuste feito na tela de depósitos). Somente leitura: um GET de até 1.000 fechamentos por chamada, sem polling.
+ * (ajuste feito na tela de depósitos). Somente leitura: um GET de até 1.000 fechamentos por chamada, só com filtros de igualdade (sem índice composto), sem polling.
  */
 async function readCashStage(input: Input, bounds: ReturnType<typeof monthBounds>, now: Date): Promise<ReceiptsCashInput> {
-  const closures = await listCashClosures({ workspaceId: input.workspaceId, year: bounds.year, month: bounds.index, limit: CASH_CLOSURES_LIMIT });
+  // Sem ordenação: só filtros de igualdade, que não exigem índice composto (o de workspace+ano+mês+data pede o quiosque).
+  const closures = await listCashClosures({ workspaceId: input.workspaceId, year: bounds.year, month: bounds.index, limit: CASH_CLOSURES_LIMIT, ordered: false });
   if (closures.length >= CASH_CLOSURES_LIMIT) throw new Error("Fechamentos de caixa do mês acima do limite de leitura.");
   const kiosks = new Map<string, { label: string; openDays: number; unpaidDays: number; unpaidCents: number }>();
   for (const closure of closures) {
