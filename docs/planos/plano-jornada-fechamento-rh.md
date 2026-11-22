@@ -419,6 +419,18 @@ Eventos, fechamento/reabertura, envio versionado, retorno, conciliação e defin
 
 Reaproveitar o fechamento integrado já especificado nas seções 9–11; publicar espelhos e versões correspondentes na pasta do colaborador e nas consultas app/web, preservando versões anteriores identificadas.
 
+#### Acompanhamento do fechamento por competência (22/11/2026)
+
+| Item | Situação | Entrega e próximo passo |
+| --- | --- | --- |
+| 1. Equipe do mês | Implementado | O fechamento considera o vínculo e a vigência no mês, o cadastro legado e as pessoas com ocorrências. A versão fechada preserva a equipe. |
+| 2. Alertas graves | Bloqueio e liberação implementados | O fechamento exige que o RH/DP autorizado justifique cada dia com alerta grave ou corrija o ponto. Falta permitir ao RH devolver o dia ao colaborador para ajuste e registrar a resposta, a decisão do DP e o histórico. |
+| 3. Banco de horas e extras | Apuração por pessoa implementada | O DP vê o resultado da versão fechada, o motivo de falhas, a opção de repetir o cálculo individual e as pendências que afetam a folha. Intervalo liberado com alerta continua sinalizado para conferência. Falta registrar o desfecho financeiro de um intervalo confirmado como suprimido. |
+| 4. Acesso do contador | Planejado | Criar página própria por empregador e competência, com acesso restrito, entrega versionada e diferenças após reabertura. Validar com o contador os eventos e o formato do arquivo. |
+| 5. Conferência do contracheque | Planejado | Vincular o retorno à pessoa e à versão enviada. Comparar eventos, quantidades e percentuais. Se foram enviadas oito horas a 50% e voltaram seis, encaminhar a divergência para resolução antes da assinatura. |
+| 6. Acompanhamento e assinaturas | Parcial | Já existe assinatura do espelho e do contracheque, e o fechamento geral exige as assinaturas. Falta distinguir quem aguarda contracheque, quem tem divergência e quem aguarda assinatura. |
+| 7. Conciliação financeira | Planejado | Conferir o líquido de cada contracheque com o título existente e o total da guia com os encargos individuais. Registrar a conferência separadamente do pagamento e evitar lançamentos duplicados. |
+
 ### Fase 6 — Validação integrada
 
 Competência sintética completa com casos esperados aprovados pelo DP/contador e revisão jurídica dos casos sensíveis. Incluir falhas, recuperação, mudança contratual, férias, ausência parcial, desligamento e retroatividade.

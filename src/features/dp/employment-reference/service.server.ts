@@ -289,6 +289,45 @@ export async function readEmploymentReference(context: ServerUserContext, params
   return withOperationalTimeline(withContractualTimeline(resolved, person.get('contractualDataPeriods'), params.date, person.get('scheduledContractChange')?.id), person.get('operationalUnitPeriods'), params.date, person.get('operationalUnitCutoverDate'));
 }
 
+/** Lê a revisão publicada em lote para a equipe, com as mesmas verificações de identidade da consulta individual. */
+export async function readRosterHistories(database: FirebaseFirestore.Firestore, workspaceId: string, uids: string[]) {
+  const histories = new Map<string, EmploymentHistory>();
+  if (!uids.length) return histories;
+  const heads = await database.getAll(...uids.map((uid) => database.collection(HEADS).doc(headId(workspaceId, uid))));
+  const published = heads.flatMap((head, index) => {
+    if (!head.exists) return [];
+    const revision = head.get('revision');
+    const id = historyId(head.id, revision);
+    if (!Number.isSafeInteger(revision) || revision < 1 || head.get('historyId') !== id) {
+      throw fail('DP_EMPLOYMENT_HEAD_INCONSISTENT', 'Referência de vínculo inconsistente. Confira o histórico antes de fechar.', 'DATA_INTEGRITY');
+    }
+    return [{ uid: uids[index], revision, id }];
+  });
+  if (!published.length) return histories;
+  const docs = await database.getAll(...published.map(({ id }) => database.collection(HISTORIES).doc(id)));
+  docs.forEach((doc, index) => {
+    const history = doc.data() as EmploymentHistory | undefined;
+    const { uid, id, revision } = published[index];
+    if (!history || history.workspaceId !== workspaceId || history.userId !== uid || history.historyId !== id
+      || history.revision !== revision || !validEmploymentHistory(history)) {
+      throw fail('DP_EMPLOYMENT_HISTORY_INCONSISTENT', 'Histórico de vínculo inconsistente. Confira o histórico antes de fechar.', 'DATA_INTEGRITY');
+    }
+    histories.set(uid, history);
+  });
+  return histories;
+}
+
+export function contractualRelationshipOnDate(history: EmploymentHistory, user: Record<string, unknown>, date: string) {
+  const period = history.periods.find((item) => item.validFrom <= date && (!item.validTo || item.validTo >= date));
+  if (!period) return null;
+  const scheduled = user.scheduledContractChange as { id?: string } | undefined;
+  const resolution = withContractualTimeline({ status: 'matched', historyId: history.historyId, revision: history.revision,
+    date, period }, user.contractualDataPeriods, date, scheduled?.id);
+  if (resolution.status !== 'matched') throw fail('DP_EMPLOYMENT_HISTORY_INCONSISTENT',
+    'Período contratual inconsistente. Confira o histórico antes de fechar.', 'DATA_INTEGRITY');
+  return resolution.period.employmentRelationshipType;
+}
+
 /** Resolução interna sem autorização de UI; destinada a serviços server-only que já autenticaram o titular. */
 export async function resolveEmploymentReferenceForSystem(params: {
   workspaceId: string; userId: string; date: string; database?: FirebaseFirestore.Firestore;

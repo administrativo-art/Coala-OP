@@ -1762,6 +1762,22 @@ export async function readRepPPilotMarkingsForBank(workspaceId: string, employee
   };
 }
 
+/** Entradas oficiais para conferir o ponto. Não lê PDFs, dados de localização nem o piloto. */
+export async function readClosureMarkings(repDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+  const rows = await repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('employeeId', '==', uid)
+    .where('recordedDate', '>=', start).where('recordedDate', '<=', end).orderBy('recordedDate')
+    .select('snapshot.nsr', 'snapshot.markedAt', 'snapshot.executionUnitId', 'recordedDate', 'classification')
+    .limit(MAX_HISTORY_MARKINGS + 1).get();
+  if (rows.size > MAX_HISTORY_MARKINGS) throw fail('REP_P_HISTORY_TRUNCATED', 'Há batidas demais para conferir a competência.', 'CONFLICT');
+  return rows.docs.map((doc) => ({ receiptId: doc.id, workDate: String(doc.get('recordedDate')),
+    nsr: Number(doc.get('snapshot.nsr')), markedAt: String(doc.get('snapshot.markedAt')), executionUnitId: String(doc.get('snapshot.executionUnitId')),
+    classification: doc.get('classification') ?? null, receiptStatus: 'available' as const }));
+}
+
+export function closureClassificationRef(hrDb: Firestore, receiptId: string) {
+  return hrDb.collection(CLASSIFICATIONS).doc(receiptId);
+}
+
 /**
  * Batidas de uma pessoa num período para o espelho do fechamento (Etapa 6): mesma consulta do histórico próprio,
  * chamada só pelo serviço de espelho depois de conferir a permissão. Devolve também a identidade congelada no
