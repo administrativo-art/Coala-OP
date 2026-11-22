@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { timeBankActionSchema, timeBankQuerySchema, type TimeBankActionInput } from '@/features/dp/time-bank/schemas';
-import { createBankMovement, generateBankMonth, readBankStatement, reverseBankMovement, settleBankCycle } from '@/features/dp/time-bank/service.server';
+import { createBankMovement, generateBankMonth, retryPayrollCalculation, readBankStatement, reverseBankMovement, settleBankCycle } from '@/features/dp/time-bank/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -60,7 +60,7 @@ export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer
     return NextResponse.json({ movement: await createBankMovement(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
   }
   if (input.action === 'reverse') return NextResponse.json({ movement: await reverseBankMovement(security.actor, input) }, { headers: { 'Cache-Control': 'private, no-store' } });
-  const record = await generateBankMonth(security.actor, input);
+  const record = input.action === 'retry_calculation' ? await retryPayrollCalculation(security.actor, input) : await generateBankMonth(security.actor, input);
   return NextResponse.json({ month: { competence: record.competence, closureVersion: record.closureVersion, totals: record.totals } },
     { headers: { 'Cache-Control': 'private, no-store' } });
 });

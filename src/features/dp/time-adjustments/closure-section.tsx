@@ -12,7 +12,10 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
+import type { PayrollReadiness } from "../time-bank/payroll-readiness";
 import type { ClosurePerson } from "./closure-core";
+import { rosterReasons } from "./closure-roster";
+import { ClosureAlertsPanel } from "./closure-alerts-panel";
 import { ClosingPackageCard } from "./closing-package-card";
 import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
@@ -69,16 +72,14 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [packagesKey, setPackagesKey] = useState(0);
   const [summary, setSummary] = useState<ClosingSummary | null>(null);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
-  // Aberto: prévia da equipe atual. Fechado: usa exatamente a equipe congelada naquela versão.
-  const activeTeam = people.filter((person) => belongsToTimeClosureRoster(person.employmentRelationshipType)).sort((left, right) => (left.username ?? '').localeCompare(right.username ?? '', 'pt-BR'));
-  const team = data?.closure?.status === "closed"
-    ? data.people.map((person) => ({ id: person.uid, username: person.name ?? undefined }))
-    : activeTeam;
+  const directoryTeam = people.filter((person) => belongsToTimeClosureRoster(person.employmentRelationshipType));
+  const team = detailOpen ? (data?.people ?? []).map((person) => ({ id: person.uid, username: person.name ?? undefined })) : directoryTeam;
   const names = new Map([...people.map((person) => [person.id, person.username ?? "Responsável"] as const),
     ...(data?.people ?? []).map((person) => [person.uid, person.name ?? "Responsável"] as const)]);
   const orgOptions = (() => {
     const counts = new Map<string, number>();
-    for (const member of activeTeam) counts.set(organizationOf(member.id), (counts.get(organizationOf(member.id)) ?? 0) + 1);
+    for (const member of team) counts.set(organizationOf(member.id), (counts.get(organizationOf(member.id)) ?? 0) + 1);
+    if (detailOpen && orgName && !counts.has(orgName)) counts.set(orgName, 0);
     return [...counts.entries()].sort(([left], [right]) => (left === NO_ORGANIZATION ? 1 : right === NO_ORGANIZATION ? -1 : left.localeCompare(right, "pt-BR")));
   })();
   const activeOrg = orgOptions.some(([name]) => name === orgName) ? orgName : (orgOptions[0]?.[0] ?? null);
@@ -99,7 +100,42 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     }
   }, [competence, detailOpen, request]);
   useEffect(() => { void load(); }, [load]);
-  const closedVersion = data?.closure?.status === "closed" ? data.closure.version : null;
+  const closedVersion = data?.competence === competence && data.closure?.status === "closed" ? data.closure.version : null;
+  const [payroll, setPayroll] = useState<PayrollReadiness | null>(null);
+  const [payrollError, setPayrollError] = useState("");
+  const [retryError, setRetryError] = useState("");
+  const [bankReload, setBankReload] = useState(0);
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const [payrollRevision, setPayrollRevision] = useState(0);
+  const refreshPayroll = useCallback(() => setPayrollRevision((revision) => revision + 1), []);
+  const currentPayroll = payroll?.competence === competence && payroll.version === closedVersion ? payroll : null;
+  useEffect(() => {
+    let active = true;
+    setPayroll(null); setPayrollError("");
+    if (closedVersion) {
+      request<PayrollReadiness>(`/api/dp/time-recording/closures?competence=${competence}&payroll=1`, { fallbackError: "Não foi possível conferir as apurações." })
+        .then((value) => {
+          if (!active) return;
+          if (value.version !== closedVersion || !value.version) throw new Error("O fechamento mudou. Abra a competência novamente.");
+          setPayroll(value);
+        }).catch((cause) => { if (active) setPayrollError(errorMessageOf(cause, "Falha ao conferir a folha.")); });
+    }
+    return () => { active = false; };
+  }, [closedVersion, competence, payrollRevision, request]);
+
+  async function retryCalculation(uid: string) {
+    if (!closedVersion) return;
+    setRetrying(uid); setRetryError("");
+    try {
+      await request("/api/dp/time-recording/time-bank", { method: "POST", json: {
+        action: "retry_calculation", competence, expectedVersion: closedVersion, employeeUid: uid,
+      }, fallbackError: "Não foi possível apurar esta pessoa." });
+      setBankReload((revision) => revision + 1);
+    } catch (cause) {
+      setRetryError(errorMessageOf(cause, "Não foi possível apurar esta pessoa."));
+    } finally { setRetrying(null); refreshPayroll(); }
+  }
+
   const loadSummary = useCallback(async () => {
     if (!closedVersion) { setSummary(null); return; }
     try { setSummary(await request<ClosingSummary>(`/api/dp/time-recording/closing-packages?competence=${competence}`, { fallbackError: "Não foi possível ler os pacotes." })); }
@@ -195,12 +231,43 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       onBack={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}
       doneCount={sidebarClear} totalCount={sidebarTotal} />
     <div className="min-w-0 flex-1 space-y-3">
-      {!detailOpen ? <ClosureYearOverview firebaseUser={firebaseUser} people={people} organization={activeOrg} onOpen={(value) => { setCompetence(value); setDetailOpen(true); }} /> : null}
+      {!detailOpen ? <ClosureYearOverview firebaseUser={firebaseUser} people={people} organization={activeOrg} onOpen={(value) => { setOrgName(activeOrg); setCompetence(value); setDetailOpen(true); }} /> : null}
       {detailOpen ? <div className="flex flex-wrap items-center gap-3">
         <Button variant="ds-secondary" size="sm" onClick={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}>← Todos os meses</Button>
         <h2 className="text-lg font-black text-ds-ink">{competenceLabel(competence)}</h2>
+        {orgOptions.length > 1 ? <label className="text-sm">Organização <select value={activeOrg ?? ""} onChange={(event) => {
+          setOrgName(event.target.value); setSelected(null);
+        }}>{orgOptions.map(([name]) => <option key={name} value={name}>{name}</option>)}</select></label> : null}
+        {selected && data && !closed && data.can.close && confirming !== "close" ? <Button variant="ds-secondary" disabled={blocked}
+          onClick={() => { setActionError(null); setConfirming("close"); }}>Conferir alertas da competência</Button> : null}
         {data ? <StatusPill variant={closed ? "ok" : "neutral"}>{closed ? `Fechada · versão ${data.closure!.version}` : data.closure?.reopenings.length ? "Reaberta" : "Aberta"}</StatusPill> : null}
       </div> : null}
+      {detailOpen && closedVersion ? <section aria-label="Apuração para a folha" className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold">Apuração para a folha</h3>
+          <Button variant="ds-secondary" size="sm" disabled={Boolean(retrying)} onClick={refreshPayroll}>Atualizar apuração</Button>
+        </div>
+        {payrollError || retryError ? <p role="alert" className="text-sm text-ds-danger">{payrollError || retryError}</p> : null}
+        {currentPayroll ? <>
+          <p role="status"><strong>{currentPayroll.ready ? "Folha pronta para o contador" : !currentPayroll.total ? "Competência sem colaboradores" : "Folha pendente de apuração ou conferência"}</strong>
+            {currentPayroll.total ? ` · ${currentPayroll.readyCount} de ${currentPayroll.total} pessoas prontas na competência` : ""}</p>
+          {currentPayroll.people.filter((person) => selected ? person.uid === selected.uid : person.status !== "ready").map((person) =>
+            <div key={person.uid} className="flex flex-wrap items-center justify-between gap-2 border-t py-2 text-sm">
+              <span><strong>{nameOf(person.uid)}</strong> · {person.reason}</span>
+              {data?.can.close && (person.status === "failed" || person.status === "missing") ?
+                <Button size="sm" variant="ds-secondary" disabled={Boolean(retrying)} onClick={() => void retryCalculation(person.uid)}>
+                  {retrying === person.uid ? "Apurando…" : person.status === "failed" ? "Repetir apuração" : "Apurar esta pessoa"}</Button> : null}
+            </div>)}
+          {!selected && currentPayroll.people.some((person) => person.status === "ready") ? <details>
+            <summary className="cursor-pointer text-sm">Pessoas com apuração concluída e conferida</summary>
+            <ul className="mt-2 text-sm">{currentPayroll.people.filter((person) => person.status === "ready").map((person) =>
+              <li key={person.uid}>{nameOf(person.uid)}</li>)}</ul>
+          </details> : null}
+        </> : !payrollError ? <p role="status">Conferindo a versão {closedVersion}…</p> : null}
+      </section> : null}
+      {detailOpen && data && confirming === "close" ? <ClosureAlertsPanel key={competence} firebaseUser={firebaseUser}
+        competence={competence} expectedVersion={data.closure?.version ?? 0} closed={closed} nameOf={(uid) => names.get(uid) ?? uid}
+        busy={busy} onClose={() => act("close")} onCancel={() => setConfirming(null)} /> : null}
       {detailOpen && error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
       {detailOpen && !data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
       {detailOpen && data && !selected ? <>
@@ -245,10 +312,8 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
         <TrailStep number={2} title="Fechar a competência" state={closed ? "done" : blocked ? "locked" : "active"}
           summary={closed ? `Fechada · versão ${data.closure!.version}` : blocked ? "Libera quando não houver pedido sem decisão" : "Congela a declaração de todas as organizações"}>
         {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
-        {!closed && data.can.close ? (confirming === "close"
-          ? <InlineConfirm message={`Fechar ${dateBR(`${competence}-01`).slice(3)}? A declaração fica congelada e o mês deixa de aceitar pedido de ajuste.`} confirmLabel="Fechar competência" loadingLabel="Fechando…"
-              loading={busy} onConfirm={() => void act("close")} onCancel={() => setConfirming(null)} />
-          : <Button variant="primary-page" disabled={blocked} onClick={() => { setActionError(null); setConfirming("close"); }}>Fechar competência</Button>) : null}
+        {confirming !== "close" && (closed || data.can.close) ? <Button variant="ds-secondary" disabled={!closed && blocked}
+          onClick={() => { setActionError(null); setConfirming("close"); }}>{closed ? "Consultar justificativas do fechamento" : "Conferir e fechar competência"}</Button> : null}
         {closed && data.can.reopen ? <div className="space-y-2">
           <textarea rows={2} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da reabertura"
             className="w-full rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-sm text-ds-ink" placeholder="Motivo da reabertura (mínimo de 10 caracteres)" />
@@ -301,7 +366,8 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
             <h2 className="text-lg font-black text-ds-ink">{person.name ?? nameOf(person.uid)}</h2>
             {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : null}
           </div>
-          <ClosurePersonTrail key={person.uid} firebaseUser={firebaseUser} competence={competence} person={person} closed={closed} canManage={data?.can.close ?? false}
+          {person.rosterReason ? <p className="text-sm text-ds-ink-muted">{rosterReasons[person.rosterReason]}</p> : null}
+          <ClosurePersonTrail key={`${person.uid}-${bankReload}`} firebaseUser={firebaseUser} competence={competence} person={person} closed={closed} payrollStatus={currentPayroll?.people.find((item) => item.uid === person.uid)} onBankUpdated={refreshPayroll} canManage={data?.can.close ?? false}
             requests={<>
             <div className="space-y-4">
               <PanelSection title="Ajustes de ponto">
@@ -346,10 +412,8 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
               <h4 className="text-sm font-black text-ds-ink">Fechar a folha de ponto</h4>
               <p className="text-xs text-ds-ink-muted">Hoje o fechamento congela a competência de todas as pessoas de uma vez e gera o espelho de cada uma. O espelho só vai ao colaborador no envio final, junto com o contracheque.</p>
               {actionError ? <p role="alert" className="text-xs font-semibold text-ds-danger">{actionError}</p> : null}
-              {data?.can.close ? (confirming === "close"
-                ? <InlineConfirm message={`Fechar ${competenceLabel(competence)}? A declaração de todas as pessoas fica congelada e o mês deixa de aceitar pedido de ajuste.`} confirmLabel="Fechar competência" loadingLabel="Fechando…"
-                    loading={busy} onConfirm={() => void act("close")} onCancel={() => setConfirming(null)} />
-                : <Button variant="primary-page" disabled={blocked} onClick={() => { setActionError(null); setConfirming("close"); }}>Fechar competência</Button>) : null}
+              {data?.can.close && confirming !== "close" ? <Button variant="primary-page" disabled={blocked}
+                onClick={() => { setActionError(null); setConfirming("close"); }}>Conferir e fechar competência</Button> : null}
               {blocked ? <p className="text-xs text-ds-caution">Há pedidos sem decisão no mês (em alguma pessoa). Decida-os antes de fechar.</p> : null}
             </div>} />
         </div>;
