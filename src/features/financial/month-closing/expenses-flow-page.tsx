@@ -52,14 +52,14 @@ export function ExpensesFlowPage() {
       <PageHero
         kicker={`Fechamento de ${label} · Fluxo 1 de 5`}
         title="Despesas"
-        subtitle="Tudo com competência do mês. A correção é feita em Despesas; aqui só se confere."
+        subtitle="Confira as despesas e parcelas cobradas na competência. Os ajustes são feitos em Despesas."
         actions={<MonthNav month={month} onChange={setMonth} />}
         chips={flow ? (
           <>
             {status ? <StatusPill variant={status.tone}>{status.label}</StatusPill> : null}
             {totals ? (
               <>
-                <HeroChip value={formatCents(totals.titlesCents)} label={`em ${totals.titleCount} títulos`} />
+                <HeroChip value={formatCents(totals.titlesCents)} label={`em ${totals.titleCount} itens`} />
                 <HeroChip value={formatCents(totals.settledCents)} label="pagos e conferidos" />
                 <HeroChip value={formatCents(totals.openCents)} label="a vencer" tone="warning" />
                 <HeroChip value={formatCents(totals.overdueCents)} label="vencido" tone="danger" />
