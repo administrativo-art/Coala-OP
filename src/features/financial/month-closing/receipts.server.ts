@@ -1,8 +1,7 @@
 import "server-only";
 
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
-import type { CashClosure } from "@/features/financial/cash-closures/types";
-import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { listCashClosures } from "@/features/financial/cash-closures/repository.server";
 import { latestPublishedDate } from "@/features/financial/receivables/period-review";
 import { readStoneReceiptSnapshot } from "@/features/financial/receipts-reconciliation/stone-account-snapshot.server";
 import { reportSystemError } from "@/lib/observability";
@@ -30,12 +29,9 @@ const query = (entries: Record<string, string>) => new URLSearchParams(entries).
  * (ajuste feito na tela de depósitos). Somente leitura: um GET de até 1.000 fechamentos por chamada, só com filtros de igualdade (sem índice composto), sem polling.
  */
 async function readCashStage(input: Input, bounds: ReturnType<typeof monthBounds>, now: Date): Promise<ReceiptsCashInput> {
-  // Só filtros de igualdade, sem ordenação: não exige índice composto (o de workspace+ano+mês+data pede o quiosque).
-  const snapshot = await financialDbAdmin.collection("cashClosures")
-    .where("workspaceId", "==", input.workspaceId).where("year", "==", bounds.year).where("month", "==", bounds.index)
-    .limit(CASH_CLOSURES_LIMIT).get();
-  if (snapshot.size >= CASH_CLOSURES_LIMIT) throw new Error("Fechamentos de caixa do mês acima do limite de leitura.");
-  const closures = snapshot.docs.map((document) => document.data() as Pick<CashClosure, "kioskId" | "kioskName" | "status" | "cashDeposit">);
+  // Sem ordenação: só filtros de igualdade, que não exigem índice composto (o de workspace+ano+mês+data pede o quiosque).
+  const closures = await listCashClosures({ workspaceId: input.workspaceId, year: bounds.year, month: bounds.index, limit: CASH_CLOSURES_LIMIT, ordered: false });
+  if (closures.length >= CASH_CLOSURES_LIMIT) throw new Error("Fechamentos de caixa do mês acima do limite de leitura.");
   const kiosks = new Map<string, { label: string; openDays: number; unpaidDays: number; unpaidCents: number }>();
   for (const closure of closures) {
     const entry = kiosks.get(closure.kioskId) ?? { label: closure.kioskName || closure.kioskId, openDays: 0, unpaidDays: 0, unpaidCents: 0 };
