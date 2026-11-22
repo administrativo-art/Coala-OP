@@ -1572,7 +1572,7 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
   // coordenados na mesma transação mesmo com a ARP em banco dedicado.
   return deps.hrDb.runTransaction(async (tx) => {
     const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${workDate.slice(0, 7)}`);
-    const classificationRef = deps.hrDb.collection(CLASSIFICATIONS).doc(receiptId);
+    const classificationRef = closureClassificationRef(deps.hrDb, receiptId);
     const closure = await tx.get(closureRef);
     const classificationDocument = await tx.get(classificationRef);
     const closureVersion = Number(closure.get('version') ?? 0);
@@ -1715,7 +1715,7 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
     baseFilters(deps.pilotDb, PILOT_MARKINGS).get(),
   ]);
   const overlays = snapshot.docs.length ? await deps.hrDb.getAll(...snapshot.docs
-    .map((document) => deps.hrDb.collection(CLASSIFICATIONS).doc(document.id))) : [];
+    .map((document) => closureClassificationRef(deps.hrDb, document.id))) : [];
   const visible = options.locationVisible;
   const locations = visible ? await markingLocations(deps, snapshot.docs
     .filter((document) => visible(String((document.get('snapshot') as RepPReceiptSnapshot).executionUnitId)))
@@ -1764,7 +1764,7 @@ export async function readRepPPilotMarkingsForBank(workspaceId: string, employee
 
 /** Entradas oficiais para conferir o ponto. Não lê PDFs, dados de localização nem o piloto. */
 export async function readClosureMarkings(repDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
-  const rows = await repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('employeeId', '==', uid)
+  const rows = await repDb.collection('repP_receipts').where('workspaceId', '==', workspaceId).where('employeeId', '==', uid)
     .where('recordedDate', '>=', start).where('recordedDate', '<=', end).orderBy('recordedDate')
     .select('snapshot.nsr', 'snapshot.markedAt', 'snapshot.executionUnitId', 'recordedDate', 'classification')
     .limit(MAX_HISTORY_MARKINGS + 1).get();
@@ -1815,7 +1815,7 @@ export async function readRepPForAej(workspaceId: string, establishmentId: strin
   const { markings, receipts } = await deps.repDb.runTransaction(async (transaction) => {
     const events = await transaction.get(deps.repDb.collection(EVENTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
       .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).orderBy('recordedDate').orderBy('nsr').limit(maxEvents + 1));
-    const catalog = await transaction.get(deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+    const catalog = await transaction.get(deps.repDb.collection('repP_receipts').where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
       .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).limit(maxEvents + 1));
     if (events.size > maxEvents || catalog.size > maxEvents) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
     return {

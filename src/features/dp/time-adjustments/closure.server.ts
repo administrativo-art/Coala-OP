@@ -19,7 +19,7 @@ import {
   type ClosureAbsence, type ClosureAdjustment, type ClosureChanges, type ClosurePerson, type ClosureRosterPerson, type ClosureShiftSwap,
 } from './closure-core';
 import type { ClosureActionInput, ClosureCloseInput, ClosureAlertReviewInput } from './schemas';
-import { actInstant, ADJUSTMENTS, TREATMENTS, canReview, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
+import { actInstant, ADJUSTMENTS, canReview, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from './service.server';
 import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from './automatic-absence.server';
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from './automatic-absence-core';
 import { belongsToTimeClosureRoster } from '@/lib/hr/employment-relationship';
@@ -240,7 +240,8 @@ function counts(people: ClosurePerson[]) {
   };
 }
 
-const ALERT_REVIEWS = 'dp_timeClosureAlertReviews';
+const competenceRef = (db: Firestore, workspaceId: string, competence: string) => db.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+const alertReviewRef = (db: Firestore, fingerprint: string) => db.collection('dp_timeClosureAlertReviews').doc(fingerprint);
 
 async function reviewDays(deps: Dependencies, actor: ServerUserContext, competence: string, version: number,
   people: ClosurePerson[], tx?: Transaction, sources?: Map<string, AlertSources>) {
@@ -248,7 +249,7 @@ async function reviewDays(deps: Dependencies, actor: ServerUserContext, competen
   const result: Array<ReviewableAlert & { inScope: boolean }> = [];
   for (let offset = 0; offset < people.length; offset += 8) {
     const batch = await Promise.all(people.slice(offset, offset + 8).map(async (person) => {
-      const query = deps.hrDb.collection(TREATMENTS).where('workspaceId', '==', actor.workspace_id)
+      const query = deps.hrDb.collection('ptrp_treatments').where('workspaceId', '==', actor.workspace_id)
         .where('employeeUid', '==', person.uid).where('workDate', '>=', start).where('workDate', '<=', end)
         .orderBy('workDate').limit(ITEM_LIMIT + 1);
       const entries = await (tx ? tx.get(query) : query.get());
@@ -261,7 +262,7 @@ async function reviewDays(deps: Dependencies, actor: ServerUserContext, competen
       if (sources && !sources.has(person.uid)) throw fail('PTRP_CLOSURE_ROSTER_CHANGED', 'A equipe mudou durante a conferência. Atualize e tente novamente.', 'CONFLICT');
       const checks = await checkPersonAlerts(deps, actor, competence, version, person, treatments, tx, sources?.get(person.uid));
       if (!checks.length) return [];
-      const refs = checks.map(({ alert }) => deps.hrDb.collection(ALERT_REVIEWS).doc(alert.fingerprint));
+      const refs = checks.map(({ alert }) => alertReviewRef(deps.hrDb, alert.fingerprint));
       const decisions = await (tx ? tx.getAll(...refs) : deps.hrDb.getAll(...refs));
       return checks.map(({ alert, inScope }, index) => ({ ...alert, inScope,
         canJustify: inScope && permissions(actor).close && canReview(actor) && actor.decoded.uid !== person.uid,
@@ -280,7 +281,7 @@ export async function previewClosureAlerts(actor: ServerUserContext, competence:
     const alerts: ReviewableAlert[] = [];
     const ids = state.people.flatMap((person) => (person as ClosurePerson & { appliedAlertReviews?: string[] }).appliedAlertReviews ?? []);
     for (let offset = 0; offset < ids.length; offset += 100) {
-      const docs = await deps.hrDb.getAll(...ids.slice(offset, offset + 100).map((id) => deps.hrDb.collection(ALERT_REVIEWS).doc(id)));
+      const docs = await deps.hrDb.getAll(...ids.slice(offset, offset + 100).map((id) => alertReviewRef(deps.hrDb, id)));
       for (const doc of docs) {
         const decision = doc.data() as ClosureAlertDecision | undefined;
         if (!decision) throw fail('PTRP_CLOSURE_ALERT_AUDIT_MISSING', 'Justificativa da versão indisponível.', 'CONFLICT');
@@ -307,7 +308,7 @@ export async function justifyClosureAlert(actor: ServerUserContext, input: Closu
   if (!person || state.truncated) throw fail('PTRP_CLOSURE_ALERT_CHANGED', 'Atualize a conferência dos alertas.', 'CONFLICT');
   const { at } = await actInstant(deps.clock);
   if (!competenceEnded(input.competence, at)) throw fail('PTRP_CLOSURE_TOO_EARLY', 'A competência ainda está em andamento.', 'CONFLICT');
-  const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(actor.workspace_id, input.competence));
+  const ref = competenceRef(deps.hrDb, actor.workspace_id, input.competence);
   return deps.hrDb.runTransaction(async (tx) => {
     const current = await tx.get(ref);
     if (current.get('status') === 'closed' || (current.get('version') ?? 0) !== input.expectedVersion) {
@@ -324,7 +325,7 @@ export async function justifyClosureAlert(actor: ServerUserContext, input: Closu
     const decision = { workspaceId: actor.workspace_id, competence: input.competence,
         expectedVersion: input.expectedVersion, employeeUid: person.uid, date: check.date, incidents: check.incidents,
         fingerprint: check.fingerprint, unitIds: check.unitIds, by: actor.decoded.uid, at, reason: input.reason.trim() };
-    tx.create(deps.hrDb.collection(ALERT_REVIEWS).doc(check.fingerprint), decision);
+    tx.create(alertReviewRef(deps.hrDb, check.fingerprint), decision);
     return decision;
   });
 }
@@ -333,7 +334,7 @@ export async function justifyClosureAlert(actor: ServerUserContext, input: Closu
 export async function readCompetenceClosure(context: ServerUserContext, competence: string, injected: Partial<Dependencies> = {}) {
   assertClosureAccess(context, 'read');
   const deps = { ...defaults, ...injected };
-  const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence));
+  const ref = competenceRef(deps.hrDb, context.workspace_id, competence);
   const snapshot = await ref.get();
   const stored = snapshot.data();
   if (stored) delete stored.bankCalculationErrors;
@@ -365,7 +366,7 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
   // A competência já terminou: novas trocas não podem ser abertas. Uma troca pendente lida aqui só pode caminhar
   // para um estado terminal, então uma leitura concorrente no máximo bloqueia conservadoramente esta tentativa.
   const swaps = await readShiftSwaps(deps.mainDb, context.workspace_id, input.competence);
-  const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, input.competence));
+  const ref = competenceRef(deps.hrDb, context.workspace_id, input.competence);
   const classificationPendingQuery = deps.hrDb.collection('ptrp_markingClassificationRequests')
     .where('workspaceId', '==', context.workspace_id).where('status', '==', 'in_review')
     .where('workDate', '>=', `${input.competence}-01`).where('workDate', '<=', `${input.competence}-31`).limit(1);
@@ -444,7 +445,7 @@ export async function reopenCompetence(context: ServerUserContext, competence: s
   assertClosureAccess(context, 'reopen');
   const deps = { ...defaults, ...injected };
   const { at, clockSource } = await actInstant(deps.clock);
-  const ref = deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, competence));
+  const ref = competenceRef(deps.hrDb, context.workspace_id, competence);
   const record = await deps.hrDb.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
     const stored = snapshot.data();

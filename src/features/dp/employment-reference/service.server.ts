@@ -58,7 +58,9 @@ function withOperationalTimeline(resolved: EmploymentResolution, value: unknown,
 }
 
 const HEADS = 'dp_employmentReferenceHeads';
+const employmentHeads = (database: typeof dbAdmin) => database.collection(HEADS);
 const HISTORIES = 'dp_employmentReferenceHistories';
+const employmentHistories = (database: typeof dbAdmin) => database.collection(HISTORIES);
 const REQUESTS = 'dp_employmentReferenceRequests';
 const MAX_HISTORY_BYTES = 450_000;
 
@@ -141,7 +143,7 @@ export async function publishEmploymentReference(context: ServerUserContext, raw
   const unitIds = allPeriodUnitIds(input.periods);
   if (unitIds.length > 100) throw fail('DP_EMPLOYMENT_UNIT_LIMIT', 'Há unidades demais para validar.', 'VALIDATION');
   assertUnitsScope(context, unitIds);
-  const headRef = dbAdmin.collection(HEADS).doc(head);
+  const headRef = employmentHeads(dbAdmin).doc(head);
   const requestRef = dbAdmin.collection(REQUESTS).doc(requestKey(head, input.requestId));
   const userRef = dbAdmin.collection('users').doc(input.userId);
   const userBefore = await userRef.get();
@@ -167,7 +169,7 @@ export async function publishEmploymentReference(context: ServerUserContext, raw
       if (!Number.isSafeInteger(replayRevision) || replayRevision < 1 || replayId !== historyId(head, replayRevision)) {
         throw fail('DP_EMPLOYMENT_REQUEST_STATE', 'Estado da solicitação inconsistente.', 'DATA_INTEGRITY');
       }
-      const replayDocument = await transaction.get(dbAdmin.collection(HISTORIES).doc(replayId));
+      const replayDocument = await transaction.get(employmentHistories(dbAdmin).doc(replayId));
       const replayHistory = replayDocument.data() as EmploymentHistory | undefined;
       if (!replayDocument.exists || !replayHistory || replayHistory.workspaceId !== workspaceId
         || replayHistory.userId !== input.userId || replayHistory.revision !== replayRevision
@@ -187,7 +189,7 @@ export async function publishEmploymentReference(context: ServerUserContext, raw
       if (revision < 1 || currentHead.get('historyId') !== previousId) {
         throw fail('DP_EMPLOYMENT_HEAD_INCONSISTENT', 'Cabeçalho do histórico inconsistente.', 'DATA_INTEGRITY');
       }
-      const previousDocument = await transaction.get(dbAdmin.collection(HISTORIES).doc(previousId));
+      const previousDocument = await transaction.get(employmentHistories(dbAdmin).doc(previousId));
       const previousHistory = previousDocument.data() as EmploymentHistory | undefined;
       if (!previousDocument.exists || !previousHistory || previousHistory.workspaceId !== workspaceId
         || previousHistory.userId !== input.userId || previousHistory.revision !== revision
@@ -223,7 +225,7 @@ export async function publishEmploymentReference(context: ServerUserContext, raw
       throw fail('DP_EMPLOYMENT_HISTORY_TOO_LARGE', 'Histórico excede o tamanho permitido.', 'VALIDATION');
     }
     const now = Timestamp.now();
-    transaction.create(dbAdmin.collection(HISTORIES).doc(id), {
+    transaction.create(employmentHistories(dbAdmin).doc(id), {
       ...payload, contentHash, requestId: input.requestId, actorId: context.decoded.uid,
       observedEmploymentCycleVersion: Number.isSafeInteger(user.get('employmentCycleVersion'))
         ? user.get('employmentCycleVersion') : null,
@@ -247,7 +249,7 @@ export async function readEmploymentHistory(context: ServerUserContext, params: 
   const head = headId(context.workspace_id, params.userId);
   return dbAdmin.runTransaction(async (transaction) => {
     const [user, currentHead] = await transaction.getAll(
-      dbAdmin.collection('users').doc(params.userId), dbAdmin.collection(HEADS).doc(head));
+      dbAdmin.collection('users').doc(params.userId), employmentHeads(dbAdmin).doc(head));
     if (!user.exists) throw fail('DP_EMPLOYMENT_PERSON_MISSING', 'Pessoa não encontrada.', 'NOT_FOUND');
     assertPersonScope(context, user.data() ?? {});
     if (!currentHead.exists) return { status: 'missing' as const };
@@ -258,7 +260,7 @@ export async function readEmploymentHistory(context: ServerUserContext, params: 
     if (revision > latestRevision) return { status: 'missing' as const };
     const id = historyId(head, revision);
     if (params.revision === undefined && currentHead.get('historyId') !== id) return { status: 'inconsistent' as const };
-    const document = await transaction.get(dbAdmin.collection(HISTORIES).doc(id));
+    const document = await transaction.get(employmentHistories(dbAdmin).doc(id));
     if (!document.exists || document.get('workspaceId') !== context.workspace_id
       || document.get('userId') !== params.userId || document.get('revision') !== revision
       || document.get('historyId') !== id) return { status: 'inconsistent' as const, historyId: id, revision };
@@ -293,7 +295,7 @@ export async function readEmploymentReference(context: ServerUserContext, params
 export async function readRosterHistories(database: FirebaseFirestore.Firestore, workspaceId: string, uids: string[]) {
   const histories = new Map<string, EmploymentHistory>();
   if (!uids.length) return histories;
-  const heads = await database.getAll(...uids.map((uid) => database.collection(HEADS).doc(headId(workspaceId, uid))));
+  const heads = await database.getAll(...uids.map((uid) => employmentHeads(database).doc(headId(workspaceId, uid))));
   const published = heads.flatMap((head, index) => {
     if (!head.exists) return [];
     const revision = head.get('revision');
@@ -304,7 +306,7 @@ export async function readRosterHistories(database: FirebaseFirestore.Firestore,
     return [{ uid: uids[index], revision, id }];
   });
   if (!published.length) return histories;
-  const docs = await database.getAll(...published.map(({ id }) => database.collection(HISTORIES).doc(id)));
+  const docs = await database.getAll(...published.map(({ id }) => employmentHistories(database).doc(id)));
   docs.forEach((doc, index) => {
     const history = doc.data() as EmploymentHistory | undefined;
     const { uid, id, revision } = published[index];
@@ -337,12 +339,12 @@ export async function resolveEmploymentReferenceForSystem(params: {
   const database = params.database ?? dbAdmin;
   const head = headId(params.workspaceId, params.userId);
   return database.runTransaction(async (transaction) => {
-    const [currentHead, person] = await transaction.getAll(database.collection(HEADS).doc(head), database.collection('users').doc(params.userId));
+    const [currentHead, person] = await transaction.getAll(employmentHeads(database).doc(head), database.collection('users').doc(params.userId));
     if (!currentHead.exists) return { status: 'missing' as const };
     const revision = currentHead.get('revision');
     const id = Number.isSafeInteger(revision) && revision >= 1 ? historyId(head, revision) : '';
     if (!id || currentHead.get('historyId') !== id) return { status: 'inconsistent' as const };
-    const document = await transaction.get(database.collection(HISTORIES).doc(id));
+    const document = await transaction.get(employmentHistories(database).doc(id));
     const history = document.data() as EmploymentHistory | undefined;
     if (!document.exists || !history || history.workspaceId !== params.workspaceId || history.userId !== params.userId
       || history.historyId !== id || history.revision !== revision || !validEmploymentHistory(history)) {
