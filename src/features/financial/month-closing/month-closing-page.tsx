@@ -27,7 +27,7 @@ function FlowCard({ flow, index, month }: { flow: ClosingFlow; index: number; mo
   const done = countable.filter((check) => check.state === "ok").length;
   const pct = flow.checks.length === 0 ? 0 : Math.round((done / flow.checks.length) * 100);
   const detailHref = flow.key === "expenses" ? `${FINANCIAL_ROUTES.monthClosingExpenses}?${new URLSearchParams({ month })}` : flow.originHref ?? null;
-  const detailLabel = flow.key === "expenses" ? `Ver fluxo de ${flow.name.toLowerCase()}` : `Abrir ${flow.key === "dre" ? "DRE" : flow.name.toLowerCase()} em ${monthLabel(month)}`;
+  const detailLabel = flow.key === "expenses" ? `Ver fluxo de ${flow.name.toLowerCase()}` : `Abrir ${flow.name} em ${monthLabel(month)}`;
   return (
     <article className="flex min-w-0 flex-col rounded-ds-card border border-ds-border bg-ds-surface transition-[transform,box-shadow] duration-200 ease-ds-lift hover:-translate-y-0.5 hover:shadow-ds-lift motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <header className="flex flex-col gap-2 p-4 pb-3">
