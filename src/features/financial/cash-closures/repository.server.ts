@@ -177,6 +177,8 @@ export async function listCashClosures(input: {
   month?: number;
   status?: CashClosureStatus;
   limit?: number;
+  /** `false` omite a ordenação por data: só filtros de igualdade, sem exigir índice composto. Padrão: mais recentes primeiro. */
+  ordered?: boolean;
 }) {
   let query: FirebaseFirestore.Query = financialDbAdmin
     .collection(CLOSURES)
@@ -185,7 +187,8 @@ export async function listCashClosures(input: {
   if (input.year !== undefined) query = query.where("year", "==", input.year);
   if (input.month !== undefined) query = query.where("month", "==", input.month);
   if (input.status) query = query.where("status", "==", input.status);
-  query = query.orderBy("date", "desc").limit(Math.min(Math.max(input.limit ?? 400, 1), 1000));
+  if (input.ordered !== false) query = query.orderBy("date", "desc");
+  query = query.limit(Math.min(Math.max(input.limit ?? 400, 1), 1000));
   const snapshot = await query.get();
   return snapshot.docs.map((document) => withPdvAutomaticClosureTotals(snapshotValue<CashClosure>(document)));
 }
