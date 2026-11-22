@@ -568,7 +568,7 @@ export function usualRate(rates: number[]) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
 }
 
-const PENDING: ReceiptParcelStatus[] = ["unpaid", "paid_late", "chargeback", "review", "missing_file"];
+export const PENDING_RECEIPT_STATUSES: ReceiptParcelStatus[] = ["unpaid", "paid_late", "chargeback", "review", "missing_file"];
 
 /** Vendas feitas no período por bandeira e modalidade; o parcelado também por número de parcelas. */
 export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, through: string, latestPublished: string): ReceiptGroup[] {
@@ -594,7 +594,7 @@ export function summarizeReceiptGroups(parcels: ReceiptParcel[], from: string, t
       paidCents: rows.reduce((sum, row) => sum + (row.paidDate !== null && row.paidDate <= latestPublished ? row.paidNetCents ?? 0 : 0), 0),
       toReceiveCents: rows.filter(row => row.status === "to_receive").reduce((sum, row) => sum + row.expectedNetCents, 0),
       onTimeRatio: due.length ? onTime / due.length : null,
-      pendingCount: rows.filter(row => PENDING.includes(row.status)).length,
+      pendingCount: rows.filter(row => PENDING_RECEIPT_STATUSES.includes(row.status)).length,
       feeToVerifyCount: rows.filter(row => row.feeSource === "derived").length,
       parcelIds: rows.map(row => row.id),
     };
