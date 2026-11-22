@@ -56,7 +56,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/%5Bday%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/page.tsx`](../../src/app/dashboard/financial/cash-closures/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/%5BsessionId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/new/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/new/page.tsx).
 
-Arquivos locais percorridos: 71.
+Arquivos locais percorridos: 74.
 
 Chamadas candidatas encontradas:
 
@@ -116,7 +116,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 70.
+Arquivos locais percorridos: 72.
 
 Chamadas candidatas encontradas:
 
@@ -534,7 +534,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 55.
+Arquivos locais percorridos: 57.
 
 Chamadas candidatas encontradas:
 
@@ -604,7 +604,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 115.
+Arquivos locais percorridos: 116.
 
 Chamadas candidatas encontradas:
 
@@ -1563,7 +1563,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 249.
+Arquivos locais percorridos: 251.
 
 Chamadas candidatas encontradas:
 

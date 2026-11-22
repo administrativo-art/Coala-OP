@@ -281,11 +281,6 @@ export function ExpenseExpandedDetails({
       : { text: "Origem do lançamento registrada", ok: true },
     { text: "Classificação no plano de contas", ok: planName !== "—" },
     { text: "Centro de referência definido", ok: referenceCenter !== "—" },
-    expense.linkedBankTransactionId
-      ? { text: "Conciliação no extrato", ok: true }
-      : dueDate && dueDate < startOfDay(new Date()) && !["paid", "reconciled", "cancelled"].includes(expense.status)
-        ? { text: "Liquidação em atraso", ok: false }
-        : { text: "Conciliação no extrato", ok: ["reconciled"].includes(expense.status) },
   ];
   const canFinalizeAudit = canEdit && expense.originModule === "purchasing" && expense.originStatus === "pending_audit";
   const canRegisterPayment = canPay && ["pending", "partially_paid"].includes(expense.status);
