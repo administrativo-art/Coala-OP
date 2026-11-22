@@ -9,7 +9,7 @@ export type ClosingTone = "ok" | "warn" | "danger" | "neutral" | "info";
 /** `unavailable`: a fonte ainda não está conectada ao fechamento. Nunca equivale a conferido. */
 export type ClosingCheckState = "ok" | "pending" | "unavailable";
 
-export type ClosingFlowKey = "expenses" | "sales" | "card_pix" | "cash" | "fees" | "dre";
+export type ClosingFlowKey = "expenses" | "sales" | "card_pix" | "card_installments" | "cash" | "fees" | "dre";
 
 /** `not_connected`: o fluxo inteiro ainda não foi construído (etapas seguintes do plano). */
 export type ClosingFlowState = "ok" | "pending" | "unavailable" | "not_connected";
