@@ -77,6 +77,14 @@ test("o fechamento lê só o mês da competência, sem setembro nem meses anteri
   assert.deepEqual(cardPixSourceMonths("2026-10", "2026-11-01", "2026-10-31"), []);
 });
 
+test("Pix sem arquivo processado da Stone não é dado como recebido nem como conferido", () => {
+  const result = flow([unit([parcel("a", "paid")], [{ ...source("2026-10"), pixUnavailableDays: 31 }])]);
+  assert.equal(check(result, "card_pix.pix").state, "unavailable");
+  assert.equal(check(result, "card_pix.card").state, "ok");
+  assert.notEqual(result.state, "ok");
+  assert.match(check(result, "card_pix.pix").note ?? "", /31 dias/);
+});
+
 test("sem permissão os itens ficam ocultos e sem vínculo o fluxo fica indisponível", () => {
   const hidden = flow([unit([parcel("a", "unpaid")])], false);
   assert.equal(hidden.items.length, 0);

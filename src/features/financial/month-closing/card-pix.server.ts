@@ -34,7 +34,7 @@ export async function readCardPixFlow(input: Input): Promise<ClosingFlow> {
         const saved = await readStoneReceiptSnapshot({ workspaceId: input.workspaceId, mappingId: binding.id, kioskId: binding.kioskId, stoneCode: binding.stoneCode, month });
         const ready = saved.status === "ready";
         const source: CardPixSourceInput = {
-          month, ready,
+          month, ready, pixUnavailableDays: saved.status === "ready" ? saved.result.coverage.pixUnavailableDates.length : 0,
           // Mês inteiro publicado e conferência salva depois do fim da competência; antes disso o dado pode estar incompleto.
           complete: ready && publishedThrough >= bounds.through && !!saved.savedAt && saved.savedAt.slice(0, 10) > bounds.through,
         };

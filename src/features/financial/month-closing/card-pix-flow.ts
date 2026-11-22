@@ -19,6 +19,8 @@ export type CardPixSourceInput = {
   ready: boolean;
   /** Salva depois do fim da competência, com o mês inteiro publicado pela Stone. */
   complete: boolean;
+  /** Dias do mês em que a Stone não trouxe o Pix processado: sem eles o recebimento do Pix não foi conferido. */
+  pixUnavailableDays?: number;
 };
 
 export type CardPixUnitInput = {
@@ -39,8 +41,8 @@ const CHECK_PIX = "card_pix.pix";
 const SOURCES: ParcelSource[] = ["card", "pix"];
 const SOURCE_NAME: Record<ParcelSource, string> = { card: "cartão", pix: "Pix" };
 const SOURCE_CHECK: Record<ParcelSource, { id: string; name: string }> = {
-  card: { id: CHECK_CARD, name: "Cartão previsto no mês" },
-  pix: { id: CHECK_PIX, name: "Pix previsto no mês" },
+  card: { id: CHECK_CARD, name: "Cartão recebido no mês" },
+  pix: { id: CHECK_PIX, name: "Pix recebido no mês" },
 };
 
 /** O que falta por situação: ordem de exibição, tipo do item e texto (singular e plural). */
@@ -74,7 +76,7 @@ function expectedRange(rows: CardPixParcelInput[]) {
 }
 
 /**
- * Cartão e Pix: parcelas das vendas da competência com data prevista dentro dela. Setembro e meses anteriores não
+ * Recebimento de cartão e Pix (não é o fluxo de Vendas): parcelas das vendas da competência com data prevista dentro dela. Setembro e meses anteriores não
  * entram. Sem a conferência salva do mês, as contagens são desconhecidas: contam como pendentes, nunca como zero.
  * O que falta aparece por unidade, por cartão ou Pix e por situação, com valor e datas.
  */
@@ -121,6 +123,10 @@ export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
   const bySource = (source: ParcelSource): ClosingCheck => {
     const { id, name } = SOURCE_CHECK[source];
     if (!allTrusted) return { id, name, state: "pending", done: null, total: null, note: "Aguarda as conferências Stone dos meses." };
+    if (source === "pix") {
+      const days = units.flatMap((unit) => unit.sources).reduce((total, entry) => total + (entry.pixUnavailableDays ?? 0), 0);
+      if (days > 0) return { id, name, state: "unavailable", done: null, total: null, note: `A Stone não trouxe o Pix processado em ${plural(days, "dia", "dias")}; o recebimento do Pix não foi conferido.` };
+    }
     const rows = units.flatMap((unit) => unit.parcels).filter((parcel) => parcel.source === source);
     const pending = rows.filter((parcel) => isPending(parcel.status));
     return {
@@ -138,7 +144,7 @@ export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
   const state = checks.some((check) => check.state === "pending") ? "pending"
     : checks.some((check) => check.state === "unavailable") ? "unavailable" : "ok";
   return {
-    key: "card_pix", name: "Cartão e Pix", state, checks,
+    key: "card_pix", name: "Recebimento de cartão e Pix", state, checks,
     items: input.canViewItems ? items : [], itemsHidden: !input.canViewItems && items.length > 0,
     readyFrom, originHref: input.originHref,
   };
@@ -146,7 +152,7 @@ export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
 
 export function cardPixFlowUnavailable(originHref: string): ClosingFlow {
   return {
-    key: "card_pix", name: "Cartão e Pix", state: "unavailable", itemsHidden: false, items: [], readyFrom: null, originHref,
+    key: "card_pix", name: "Recebimento de cartão e Pix", state: "unavailable", itemsHidden: false, items: [], readyFrom: null, originHref,
     checks: [{ id: CHECK_SOURCES, name: "Conferência Stone do mês", state: "unavailable", done: null, total: null, note: "Não foi possível ler o recebimento agora. Tente de novo." }],
   };
 }
