@@ -4,7 +4,7 @@ import type { ClosingCheck, ClosingFlow, ClosingItem, ClosingItemKind } from "./
 
 type ParcelSource = "card" | "pix";
 
-/** Parcela da conta Stone com data prevista dentro da competência, venha ela de qualquer mês de venda. */
+/** Parcela da conta Stone, de venda da competência, com data prevista dentro dela. */
 export type CardPixParcelInput = {
   id: string;
   source: ParcelSource;
@@ -13,7 +13,7 @@ export type CardPixParcelInput = {
   netCents: number;
 };
 
-/** Conferência Stone salva de um mês de venda que pode ter parcelas caindo na competência. */
+/** Conferência Stone salva do mês de venda considerado no fechamento (a própria competência). */
 export type CardPixSourceInput = {
   month: string;
   ready: boolean;
@@ -52,6 +52,9 @@ const PENDING_KINDS: Array<{ status: ReceiptParcelStatus; kind: ClosingItemKind;
   { status: "missing_file", kind: "card_pix_missing_file", one: "sem o arquivo da Stone do dia", many: "sem o arquivo da Stone do dia" },
 ];
 
+/** Meses de venda lidos no fechamento: só a própria competência, e só se o vínculo Stone já vigorava nela. */
+export const cardPixSourceMonths = (month: string, validFrom: string, monthThrough: string) => (monthThrough >= validFrom ? [month] : []);
+
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 const monthLabel = (month: string) => `${month.slice(5, 7)}/${month.slice(0, 4)}`;
 const dayLabel = (date: string) => formatDateBr(date).slice(0, 5);
@@ -71,10 +74,9 @@ function expectedRange(rows: CardPixParcelInput[]) {
 }
 
 /**
- * Cartão e Pix: tudo o que estava previsto para cair na conta Stone na competência entrou, sem importar em que mês
- * foi vendido. Parcela de venda antiga conta no mês em que vence; crédito à vista de 30 dias vendido no fim do mês
- * pertence ao mês seguinte. Sem a conferência salva dos meses de venda, as contagens são desconhecidas: contam como
- * pendentes, nunca como zero. O que falta aparece por unidade, por cartão ou Pix e por situação, com valor e datas.
+ * Cartão e Pix: parcelas das vendas da competência com data prevista dentro dela. Setembro e meses anteriores não
+ * entram. Sem a conferência salva do mês, as contagens são desconhecidas: contam como pendentes, nunca como zero.
+ * O que falta aparece por unidade, por cartão ou Pix e por situação, com valor e datas.
  */
 export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
   const units = input.units;
@@ -127,9 +129,9 @@ export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
     };
   };
   const checks: ClosingCheck[] = units.length === 0
-    ? [{ id: CHECK_SOURCES, name: "Conferências Stone dos meses", state: "unavailable", done: null, total: null, note: "Nenhum vínculo Stone vigente nesta competência." }]
+    ? [{ id: CHECK_SOURCES, name: "Conferência Stone do mês", state: "unavailable", done: null, total: null, note: "Nenhum vínculo Stone vigente nesta competência." }]
     : [
-      { id: CHECK_SOURCES, name: "Conferências Stone dos meses", state: allTrusted ? "ok" : "pending", done: sourceDone, total: units.length },
+      { id: CHECK_SOURCES, name: "Conferência Stone do mês", state: allTrusted ? "ok" : "pending", done: sourceDone, total: units.length },
       bySource("card"),
       bySource("pix"),
     ];
@@ -145,6 +147,6 @@ export function evaluateCardPixFlow(input: CardPixFlowInput): ClosingFlow {
 export function cardPixFlowUnavailable(originHref: string): ClosingFlow {
   return {
     key: "card_pix", name: "Cartão e Pix", state: "unavailable", itemsHidden: false, items: [], readyFrom: null, originHref,
-    checks: [{ id: CHECK_SOURCES, name: "Conferências Stone dos meses", state: "unavailable", done: null, total: null, note: "Não foi possível ler o recebimento agora. Tente de novo." }],
+    checks: [{ id: CHECK_SOURCES, name: "Conferência Stone do mês", state: "unavailable", done: null, total: null, note: "Não foi possível ler o recebimento agora. Tente de novo." }],
   };
 }
