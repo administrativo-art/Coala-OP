@@ -148,7 +148,7 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
   let forecastPending = 0;
   let paymentsTotal = 0;
   let paymentsDone = 0;
-  const totals: ExpensesTotals = { titleCount: 0, titlesCents: 0, settledCents: 0, openCents: 0, overdueCents: 0 };
+  const totals: ExpensesTotals = { titleCount: 0, titlesCents: 0, settledCents: 0, unconfirmedCents: 0, openCents: 0, overdueCents: 0 };
   let cardExpenseCount = 0;
 
   for (const expense of expensesForCompetence(input)) {
@@ -211,15 +211,19 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
       href: expenseHref(month, expense.id, part),
     };
 
+    // Cada título cai em uma só faixa (conferido, sem conferência, a vencer ou vencido): a soma sempre fecha com o total.
     if (reconciliation === "pending_document") {
+      totals.unconfirmedCents += total;
       items.push(item({ ...base, kind: "payment_without_document", detail: detailOf(expense, "Pagamento encontrado no extrato, falta o documento") }, "warn"));
       continue;
     }
     if (reconciliation === "reported" && (status === "paid" || display === "reported_paid")) {
+      totals.unconfirmedCents += total;
       items.push(item({ ...base, kind: "payment_reported_only", detail: detailOf(expense, "Pagamento informado, ainda sem confirmação no extrato") }, "warn"));
       continue;
     }
     if (reconciliation === "divergent") {
+      totals.unconfirmedCents += total;
       items.push(item({ ...base, kind: "payment_divergent", detail: detailOf(expense, "O pagamento no extrato diverge do valor do título") }, "danger"));
       continue;
     }
@@ -228,6 +232,7 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
         paymentsDone += 1;
         totals.settledCents += total;
       } else {
+        totals.unconfirmedCents += total;
         items.push(item({ ...base, kind: "paid_without_bank_link", detail: detailOf(expense, "Marcada como paga, sem pagamento vinculado no extrato") }, "warn"));
       }
       continue;
@@ -235,6 +240,7 @@ export function evaluateExpensesFlow(input: ExpensesFlowInput): { flow: ClosingF
 
     // Título em aberto: pendente ou parcialmente pago.
     const open = Math.round(expenseDisplayAmounts(state as never).open * 100);
+    totals.unconfirmedCents += total - open; // parte já paga de um título parcialmente pago
     if (expenseHasOverdueBalance(state as never, now)) {
       totals.overdueCents += open;
       items.push(item({ ...base, amountCents: open, kind: "overdue", detail: detailOf(expense, "Vencida e sem pagamento vinculado") }, "danger"));
