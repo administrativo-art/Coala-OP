@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { evaluateCardPixFlow, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "../../src/features/financial/month-closing/card-pix-flow";
+import { cardPixSourceMonths, evaluateCardPixFlow, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "../../src/features/financial/month-closing/card-pix-flow";
 import { dependsOnYou } from "../../src/features/financial/month-closing/presentation";
 
 const source = (month: string, ready = true, complete = true): CardPixSourceInput => ({ month, ready, complete });
 const parcel = (id: string, status: CardPixParcelInput["status"], expectedDate = "2026-10-15", netCents = 1000, kind: CardPixParcelInput["source"] = "card"): CardPixParcelInput => ({ id, source: kind, status, expectedDate, netCents });
-const unit = (parcels: CardPixParcelInput[], sources = [source("2026-10"), source("2026-09")]): CardPixUnitInput => ({ key: "u", label: "Tiririca", href: "/origem", sources, parcels });
+const unit = (parcels: CardPixParcelInput[], sources = [source("2026-10")]): CardPixUnitInput => ({ key: "u", label: "Tiririca", href: "/origem", sources, parcels });
 const flow = (units: CardPixUnitInput[], canViewItems = true) => evaluateCardPixFlow({ units, canViewItems, originHref: "/stone?month=2026-10" });
 const check = (result: ReturnType<typeof flow>, id: string) => result.checks.find((entry) => entry.id === id)!;
 
-test("Cartão e Pix fecham quando toda parcela prevista no mês foi paga, de qualquer mês de venda", () => {
+test("Cartão e Pix fecham quando toda parcela das vendas do mês prevista nele foi paga", () => {
   const result = flow([unit([parcel("a", "paid"), parcel("b", "paid_early", "2026-10-15", 1000, "pix"), parcel("c", "paid", "2026-10-31")])]);
   assert.equal(result.key, "card_pix");
   assert.equal(result.state, "ok");
@@ -65,11 +65,16 @@ test("conferência salva antes de o mês fechar não vale", () => {
   assert.match(result.items[0].detail, /antes de o mês fechar/);
 });
 
-test("com parcelado, cada parcela conta só no mês da sua data prevista e meses mais antigos também são exigidos", () => {
+test("toda conferência informada precisa ser válida para a unidade fechar", () => {
   const sources = [source("2026-10"), source("2026-09"), source("2026-08", false, false)];
   const result = flow([unit([parcel("12x-3", "paid", "2026-10-05")], sources)]);
   assert.equal(check(result, "card_pix.sources").state, "pending");
   assert.equal(result.state, "pending");
+});
+
+test("o fechamento lê só o mês da competência, sem setembro nem meses anteriores", () => {
+  assert.deepEqual(cardPixSourceMonths("2026-10", "2026-09-20", "2026-10-31"), ["2026-10"]);
+  assert.deepEqual(cardPixSourceMonths("2026-10", "2026-11-01", "2026-10-31"), []);
 });
 
 test("sem permissão os itens ficam ocultos e sem vínculo o fluxo fica indisponível", () => {

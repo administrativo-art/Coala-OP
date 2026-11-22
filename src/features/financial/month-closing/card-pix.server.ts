@@ -5,25 +5,19 @@ import { latestPublishedDate } from "@/features/financial/receivables/period-rev
 import { readStoneReceiptSnapshot } from "@/features/financial/receipts-reconciliation/stone-account-snapshot.server";
 import { reportSystemError } from "@/lib/observability";
 
-import { shiftMonth } from "./month";
-import { cardPixFlowUnavailable, evaluateCardPixFlow, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "./card-pix-flow";
+import { cardPixFlowUnavailable, cardPixSourceMonths, evaluateCardPixFlow, type CardPixParcelInput, type CardPixSourceInput, type CardPixUnitInput } from "./card-pix-flow";
 import { kioskNames, monthBounds, readMappings } from "./sales-fees.server";
 import { feeBindings } from "./stone-bindings";
 import type { ClosingFlow } from "./types";
 
 type Input = { workspaceId: string; month: string; canViewItems: boolean; now?: Date };
 
-/** Meses de venda sempre lidos: o crédito à vista vendido no mês anterior cai neste. */
-const BASE_LOOKBACK_MONTHS = 1;
-/** Se alguma conferência lida tiver parcelado, lê também os meses anteriores até a maior parcela prevista (12x). */
-const INSTALLMENT_LOOKBACK_MONTHS = 11;
-
 const query = (entries: Record<string, string>) => new URLSearchParams(entries).toString();
 
 /**
- * Cartão e Pix: parcelas com data prevista na competência, lidas das conferências Stone salvas dos
- * meses de venda que podem cair nela. Somente leitura. Custo por chamada, sem polling: por vínculo, 2 documentos de
- * conferência (até 12 quando há parcelado). Fonte ilegível deixa só este fluxo indisponível, com evento de erro.
+ * Cartão e Pix: parcelas das vendas da competência com data prevista dentro dela, lidas da conferência
+ * Stone salva do próprio mês. Somente leitura. Custo por chamada, sem polling: 1 documento de conferência por vínculo.
+ * Fonte ilegível deixa só este fluxo indisponível, com evento de erro.
  */
 export async function readCardPixFlow(input: Input): Promise<ClosingFlow> {
   const now = input.now ?? new Date();
@@ -46,13 +40,8 @@ export async function readCardPixFlow(input: Input): Promise<ClosingFlow> {
         };
         return { source, result: saved.status === "ready" ? saved.result : null };
       };
-      const relevant = (month: string) => monthBounds(month).through >= binding.validFrom;
-      const months = Array.from({ length: BASE_LOOKBACK_MONTHS + 1 }, (_, index) => shiftMonth(input.month, -index)).filter(relevant);
-      let reads = await Promise.all(months.map(sourceOf));
-      if (reads.some(({ result }) => result?.parcels.some((parcel) => parcel.installmentCount > 1))) {
-        const older = Array.from({ length: INSTALLMENT_LOOKBACK_MONTHS - BASE_LOOKBACK_MONTHS }, (_, index) => shiftMonth(input.month, -(BASE_LOOKBACK_MONTHS + 1 + index))).filter(relevant);
-        reads = [...reads, ...await Promise.all(older.map(sourceOf))];
-      }
+      // Só as vendas do próprio mês: a conferência de meses anteriores não entra no fechamento.
+      const reads = await Promise.all(cardPixSourceMonths(input.month, binding.validFrom, bounds.through).map(sourceOf));
       const parcels = new Map<string, CardPixParcelInput>();
       for (const { result } of reads) {
         for (const parcel of result?.parcels ?? []) {
