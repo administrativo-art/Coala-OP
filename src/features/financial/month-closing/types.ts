@@ -45,7 +45,12 @@ export type ClosingItemKind =
   | "card_pix_missing_file"
   | "card_pix_awaiting"
   | "cash_closing_open"
-  | "cash_deposit_unpaid";
+  | "cash_deposit_unpaid"
+  | "dre_cmv_open"
+  | "dre_cmv_incomplete"
+  | "dre_cmv_changed"
+  | "dre_sources_unproven"
+  | "dre_expense_integrity";
 
 export type ClosingCheck = {
   id: string;

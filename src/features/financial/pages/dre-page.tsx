@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { stoneReceiptFlowHref } from "../receipts-reconciliation/receipt-flow-navigation";
@@ -166,8 +167,12 @@ export function DrePage() {
   const api = useAuthenticatedApi();
   const { kiosks } = useKiosks();
 
+  const searchParams = useSearchParams();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const currentMonth = format(new Date(), "yyyy-MM");
+    // O Fechamento do mês abre a DRE já na competência que está sendo fechada.
+    const requested = searchParams.get("month");
+    if (requested && /^\d{4}-(0[1-9]|1[0-2])$/.test(requested) && requested >= FINANCIAL_DRE_START_MONTH_KEY && requested <= currentMonth) return requested;
     return currentMonth < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : currentMonth;
   });
   const [unitFilter, setUnitFilter] = useState("all");
