@@ -84,6 +84,8 @@ export type ExpensesTotals = {
   titlesCents: number;
   /** Pagos e conferidos (vinculados ao extrato ou pagos em dinheiro). */
   settledCents: number;
+  /** Pago ou parcialmente pago, mas ainda sem conferência no extrato (inclui a parte já paga de título em aberto). */
+  unconfirmedCents: number;
   /** Saldo em aberto que ainda não venceu. */
   openCents: number;
   /** Saldo em aberto já vencido. */
