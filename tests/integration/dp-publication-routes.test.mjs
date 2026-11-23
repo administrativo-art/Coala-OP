@@ -92,3 +92,47 @@ test('rotas de stage e publish exigem autenticação, permissão e mantêm draft
   assert.equal(response.status, 200, await response.text());
   assert.equal((await readOfficialScheduleShifts({ scheduleId })).shifts.length, 1);
 });
+
+test('publica escala legada sem workspaceId e recusa workspaceId de outro ambiente', async (t) => {
+  const legacyPrefix = `${prefix}-legacy`;
+  const uid = `${legacyPrefix}-allowed`;
+  const legacyUnit = `${legacyPrefix}-unit`;
+  const legacyPerson = `${legacyPrefix}-person`;
+  const schedules = { legacy: `${legacyPrefix}-schedule`, foreign: `${legacyPrefix}-foreign` };
+  t.after(() => authAdmin.deleteUser(uid).catch(() => undefined));
+  await authAdmin.createUser({ uid, email: `${uid}@example.test`, password });
+  await authAdmin.setCustomUserClaims(uid, { profileId: uid, sessionVersion: 0 });
+  await dbAdmin.collection('profiles').doc(uid).set({ permissions: { dp: { schedules: { view: true, edit: true, publish: true } } } });
+  await dbAdmin.collection('users').doc(uid).set({ username: 'legacy', email: `${uid}@example.test`, profileId: uid,
+    isActive: true, sessionVersion: 0, profileCompliance: { status: 'complete', policyVersion: 1 },
+    unitAccessScope: 'selected', unitAccessUnitIds: [legacyUnit] });
+  const base = { unitId: legacyUnit, year: 2027, month: 10, publicationStatus: 'draft', publicationVersion: 0, draftVersion: 0,
+    operationalVersion: 0, journeyValidationVersion: 0, shiftCount: 0, createdAt: new Date() };
+  await Promise.all([
+    dbAdmin.collection('dp_schedules').doc(schedules.legacy).set(base),
+    dbAdmin.collection('dp_schedules').doc(schedules.foreign).set({ ...base, workspaceId: 'outro-ambiente' }),
+    dbAdmin.collection('dp_units').doc(legacyUnit).set({ name: 'Unit', isArchived: false }),
+    dbAdmin.collection('users').doc(legacyPerson).set({ username: 'Person', isActive: true, unitId: legacyUnit, unitIds: [legacyUnit] }),
+  ]);
+  const bearer = await (async () => {
+    const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+    const response = await fetch(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `${uid}@example.test`, password, returnSecureToken: true }) });
+    return (await response.json()).idToken;
+  })();
+  const shiftBody = { userId: legacyPerson, unitId: legacyUnit, date: '2027-10-01', startTime: '08:00', endTime: '14:00' };
+  for (const id of Object.values(schedules)) {
+    const context = { params: Promise.resolve({ scheduleId: id, shiftId: 'shift-a' }) };
+    assert.equal((await shiftRoute.PUT(request(`/api/dp/schedules/${id}/shifts/shift-a`, 'PUT', bearer, shiftBody), context)).status, 201);
+  }
+  const publish = (id) => publishRoute.POST(request(`/api/dp/schedules/${id}/publish`, 'POST', bearer, { expectedDraftVersion: 1 }),
+    { params: Promise.resolve({ scheduleId: id }) });
+  const foreign = await publish(schedules.foreign);
+  assert.notEqual(foreign.status, 200);
+  assert.equal((await dbAdmin.collection('dp_schedules').doc(schedules.foreign).get()).get('activeRevisionId'), undefined);
+  assert.ok((await foreign.text()).includes('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID') || foreign.status >= 400);
+  const legacy = await publish(schedules.legacy);
+  assert.equal(legacy.status, 200, await legacy.text());
+  assert.equal((await readOfficialScheduleShifts({ scheduleId: schedules.legacy })).shifts.length, 1);
+});
