@@ -23,7 +23,8 @@
     "financial-cash-counting-session-openers",
     "financial-inter-charge-creators",
     "financial-card-statement-creators",
-    "financial-card-obligation-creators"
+    "financial-card-obligation-creators",
+    "schedule-draft-edit-subjects"
   ],
   "dynamicCollectionReaders": [
     {
