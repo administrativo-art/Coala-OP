@@ -2129,7 +2129,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/stone-anticipations/page.tsx`](../../src/app/dashboard/financial/stone-anticipations/page.tsx).
 
-Arquivos locais percorridos: 40.
+Arquivos locais percorridos: 41.
 
 Chamadas candidatas encontradas:
 
@@ -2145,7 +2145,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 80.
+Arquivos locais percorridos: 81.
 
 Chamadas candidatas encontradas:
 
