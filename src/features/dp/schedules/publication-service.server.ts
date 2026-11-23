@@ -43,6 +43,11 @@ function assertAccess(context: ServerUserContext, schedule: DocumentSnapshot, pe
   }
   return unitId as string;
 }
+/** Escalas anteriores ao campo workspaceId pertencem ao ambiente configurado do deploy; qualquer outro valor segue exigindo igualdade. */
+function publicationWorkspaceId(context: ServerUserContext, schedule: DocumentSnapshot) {
+  const workspaceId = schedule.get('workspaceId');
+  return workspaceId === undefined && context.workspace_id === WORKSPACE_ID ? WORKSPACE_ID : workspaceId;
+}
 /** Legacy schedules predate workspaceId; only the configured deployment workspace owns that fallback. */
 function assertDraftDayOffWorkspace(context: ServerUserContext, schedule: DocumentSnapshot) {
   const workspaceId = schedule.get('workspaceId');
@@ -452,7 +457,7 @@ async function prepareScheduleActivation(
   const unitId = String(state.schedule.get('unitId'));
   const year = Number(state.schedule.get('year'));
   const month = Number(state.schedule.get('month'));
-  const workspaceId = state.schedule.get('workspaceId');
+  const workspaceId = publicationWorkspaceId(context, state.schedule);
   if (typeof workspaceId !== 'string' || workspaceId !== context.workspace_id || !Number.isInteger(year) || !Number.isInteger(month)) {
     fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'DATA_INTEGRITY', 'O ambiente ou a competência da escala está inconsistente.');
   }
@@ -722,12 +727,12 @@ export async function publishPreparedSchedule(context: ServerUserContext, schedu
   }
   const year = Number(state.schedule.get('year'));
   const month = Number(state.schedule.get('month'));
-  const workspaceId = state.schedule.get('workspaceId');
+  const workspaceId = publicationWorkspaceId(context, state.schedule);
   if (typeof workspaceId !== 'string' || workspaceId !== context.workspace_id || !Number.isInteger(year) || !Number.isInteger(month)) {
     fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'DATA_INTEGRITY', 'O ambiente ou a competência da escala está inconsistente.');
   }
   for (const current of states.values()) {
-    if (current.schedule.get('workspaceId') !== workspaceId || Number(current.schedule.get('year')) !== year
+    if (publicationWorkspaceId(context, current.schedule) !== workspaceId || Number(current.schedule.get('year')) !== year
       || Number(current.schedule.get('month')) !== month) {
       fail('DP_SCHEDULE_PUBLICATION_SCOPE_INVALID', 'CONFLICT', 'As escalas vinculadas precisam pertencer à mesma competência.');
     }
