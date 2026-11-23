@@ -1,13 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CnpjValidator } from "@/lib/company/cnpj-validator";
+import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
+import { canAccessUnit } from "@/lib/unit-access";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { getInterPixStatus, mapInterPixStatus } from "@/lib/integrations/inter/pix-payments.server";
 import { findInterBarcodePaymentsByCode } from "@/lib/integrations/inter/barcode-payments.server";
 import { paymentBarcodeHash } from "../inbox/document-identity";
 import { financialExpenseCompetenceMonth } from "../lib/expense-accounting-contract";
 import { confirmSupplierPixSource, supplierPixConflict as conflict, type SupplierPixConfirmation } from "./supplier-pix-confirmation.server";
-import type { ResolvedPaymentBeneficiary } from "../beneficiaries/types";
-import { normalizeBrazilianDocument } from "../beneficiaries/normalization";
+import type { BeneficiarySnapshot, ResolvedPaymentBeneficiary } from "../beneficiaries/types";
+import { normalizeBrazilianDocument, normalizeValidatedPixKey, validBrazilianTaxId } from "../beneficiaries/normalization";
 import { createBeneficiarySnapshot, resolveValidatedEntityPixBeneficiary } from "../beneficiaries/resolver.server";
 import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { paymentRequestRef } from "./repository.server";
@@ -37,11 +38,22 @@ export async function assertArchivedBoletoUnused(data: FirebaseFirestore.Documen
 
 export function assertSupplierPixBeneficiary(beneficiary: ResolvedPaymentBeneficiary) {
   const document = normalizeBrazilianDocument(beneficiary.document);
-  if (!beneficiary.validated || beneficiary.paymentMethod !== "pix_key" || beneficiary.pixKeyType !== "cnpj"
-    || !CnpjValidator.validate(document).valid || normalizeBrazilianDocument(beneficiary.pixKey) !== document) {
-    conflict("O fornecedor precisa ter uma chave Pix CNPJ validada e igual ao documento do favorecido.");
+  if (!beneficiary.validated || beneficiary.paymentMethod !== "pix_key" || !beneficiary.pixKeyType
+    || !beneficiary.pixKey || !validBrazilianTaxId(document)
+    || !normalizeValidatedPixKey(beneficiary.pixKey, beneficiary.pixKeyType, document)) {
+    conflict("O fornecedor precisa ter CPF/CNPJ e chave Pix válida vinculados ao cadastro.");
   }
   return document;
+}
+
+export function supplierPixDestinationUnchanged(snapshot: BeneficiarySnapshot, beneficiary: ResolvedPaymentBeneficiary) {
+  const current = createBeneficiarySnapshot(beneficiary);
+  if (snapshot.documentHash !== current.documentHash || snapshot.sourceUpdatedAt !== current.sourceUpdatedAt) return false;
+  if (snapshot.destinationHash) return snapshot.destinationHash === current.destinationHash;
+  // Solicitações criadas antes do hash só podiam usar a chave CNPJ idêntica ao documento.
+  return snapshot.pixKeyType === "cnpj" && beneficiary.pixKeyType === "cnpj"
+    && snapshot.maskedPaymentDestination === current.maskedPaymentDestination
+    && normalizeBrazilianDocument(beneficiary.pixKey) === normalizeBrazilianDocument(beneficiary.document);
 }
 
 export function assertExpenseSupplierPixTarget(
@@ -54,6 +66,12 @@ export function assertExpenseSupplierPixTarget(
 ) {
   if (!data || data.workspaceId !== workspaceId) conflict("Despesa indisponível no ambiente financeiro.");
   assertExpenseAllowsNewPayment(data);
+  if (document.length === 11 && (data.provisionType === "forecast" || !data.supplierId
+    || !data.unitId || !data.dueDate || !financialExpenseCompetenceMonth(data)
+    || !(data.accountPlan || data.accountId)
+    || !(data.referenceResultCenterId || data.resultCenterId))) {
+    conflict("A despesa da pessoa física precisa ser efetiva, vinculada e ter vencimento e classificação contábil.");
+  }
   const installments = data.installments ?? [];
   const boletoCode = attachedBoletoCode(data);
   const boletoHash = boletoCode ? paymentBarcodeHash(boletoCode) : undefined;
@@ -66,7 +84,7 @@ export function assertExpenseSupplierPixTarget(
     const attachment = data.boletoAttachment ?? installment?.boletoAttachment;
     if (!attachment?.storagePath || normalizeBrazilianDocument(attachment.beneficiaryDocument) !== document
       || attachment.amountCents !== amountCents || attachment.competenceMonth !== confirmation?.competenceMonth) {
-      conflict("O arquivo do boleto preservado diverge do CNPJ, valor ou competência do Pix.");
+      conflict("O arquivo do boleto preservado diverge do CPF/CNPJ, valor ou competência do Pix.");
     }
   }
   if (data.provisionType === "forecast" || data.status !== "pending" || data.paymentMethod !== "single"
@@ -80,9 +98,14 @@ export function assertExpenseSupplierPixTarget(
     conflict("A despesa precisa estar em aberto e ter pagamento único disponível.");
   }
   const description = String(data.description ?? "").trim().slice(0, 140);
+  if (data.netPayableValue !== undefined && data.netPayableValue !== null
+    && (!Number.isFinite(Number(data.netPayableValue))
+      || Math.round(Number(data.netPayableValue) * 100) !== amountCents)) {
+    conflict("O valor líquido da despesa diverge do Pix. Confira descontos antes de preparar ou enviar.");
+  }
   if (!description || Math.round(Number(data.totalValue) * 100) !== amountCents
     || normalizeBrazilianDocument(data.billingIdentity?.supplierTaxId) !== document
-    || (data.supplierId && data.supplierId !== supplierEntityId)) {
+    || (document.length === 11 ? data.supplierId !== supplierEntityId : Boolean(data.supplierId && data.supplierId !== supplierEntityId))) {
     conflict("O valor ou a identidade do fornecedor diverge da despesa.");
   }
   return description;
@@ -140,10 +163,23 @@ export async function prepareExpenseSupplierPix(
   confirmation?: SupplierPixConfirmation,
   replacementOf?: string,
   readBank = getInterPixStatus,
+  onBeforeTransaction?: () => Promise<void>,
 ) {
   const sourceExpenseId = expenseId;
+  const user = await dbAdmin.collection("users").doc(actor.uid).get();
+  if (!user.exists || user.get("isActive") === false) conflict("Operador do Pix indisponível.");
+  const profileId = String(user.get("profileId") ?? "").trim();
+  const profile = profileId ? await dbAdmin.collection("profiles").doc(profileId).get() : null;
+  const claims = profileId ? null : (await authAdmin.getUser(actor.uid)).customClaims;
+  const isDefaultAdmin = profileId ? profile?.get("isDefaultAdmin") === true
+    : claims?.profileId ? false : claims?.isDefaultAdmin === true;
+  const assertUnitAccess = (data: FirebaseFirestore.DocumentData | undefined) => {
+    if (!data || !canAccessUnit(user.data()!, String(data.unitId ?? ""), { isDefaultAdmin })) {
+      conflict("Operador sem acesso à unidade da despesa Pix.");
+    }
+  };
   if (confirmation) {
-    expenseId = await confirmSupplierPixSource(expenseId, supplierEntityId, amountCents, workspaceId, actor, confirmation);
+    expenseId = await confirmSupplierPixSource(expenseId, supplierEntityId, amountCents, workspaceId, actor, confirmation, assertUnitAccess);
   }
   const beneficiaryReference = { sourceType: "entity", sourceId: supplierEntityId } as const;
   const beneficiary = await resolveValidatedEntityPixBeneficiary(supplierEntityId);
@@ -161,7 +197,8 @@ export async function prepareExpenseSupplierPix(
   if (replacementOf && (!previous || previous.workspaceId !== workspaceId || previous.expenseId !== expenseId
     || previous.sourceId !== expenseId || previous.beneficiaryReference?.sourceType !== "entity"
     || previous.beneficiaryReference.sourceId !== supplierEntityId
-    || previous.beneficiarySnapshot?.documentHash !== createBeneficiarySnapshot(beneficiary).documentHash
+    || !previous.beneficiarySnapshot
+    || previous.beneficiarySnapshot.documentHash !== createBeneficiarySnapshot(beneficiary).documentHash
     || Math.round(previous.amount * 100) !== amountCents
     || (previous.supersededByPaymentRequestId && previous.supersededByPaymentRequestId !== requestRef.id))) {
     conflict("A solicitação anterior diverge da despesa ou do favorecido.");
@@ -182,12 +219,14 @@ export async function prepareExpenseSupplierPix(
   await assertArchivedBoletoUnused(before, supplierPixConfirmation?.replacedBoletoHash);
   const now = new Date().toISOString();
   const idempotencyKey = randomUUID();
+  await onBeforeTransaction?.();
   return financialDbAdmin.runTransaction(async (transaction) => {
     const [expense, existing] = await Promise.all([transaction.get(expenseRef), transaction.get(requestRef)]);
     const data = expense.data();
+    assertUnitAccess(data);
     const expenseDocument = normalizeBrazilianDocument(data?.billingIdentity?.supplierTaxId);
     if (confirmation && (document !== confirmation.beneficiaryDocument || (expenseDocument && expenseDocument !== document))) {
-      conflict("O CNPJ fiscal da despesa mudou durante a confirmação.");
+      conflict("O CPF/CNPJ fiscal da despesa mudou durante a confirmação.");
     }
     const billingPatch = confirmation && !expenseDocument && data
       ? { billingIdentity: { ...data.billingIdentity, supplierTaxId: document }, supplierId: supplierEntityId }
@@ -200,7 +239,7 @@ export async function prepareExpenseSupplierPix(
         || prior.sourceType !== "expense_supplier_pix" || prior.expenseId !== expenseId
         || (prior.supersedesPaymentRequestId ?? undefined) !== replacementOf
         || prior.beneficiaryReference.sourceId !== supplierEntityId
-        || prior.beneficiarySnapshot.sourceUpdatedAt !== beneficiary.sourceUpdatedAt
+        || !supplierPixDestinationUnchanged(prior.beneficiarySnapshot, beneficiary)
         || Math.round(prior.amount * 100) !== amountCents || prior.description !== description
         || prior.supplierPixConfirmation?.competenceMonth !== supplierPixConfirmation?.competenceMonth
         || prior.supplierPixConfirmation?.previousPaidRequestId !== supplierPixConfirmation?.previousPaidRequestId

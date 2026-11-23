@@ -8,6 +8,7 @@
     "financialAcquirerFeeBatches",
     "kiosks",
     "pixRefundReviewDates",
+    "profiles",
     "resultCenters",
     "stonePixRefundBackfills",
     "stonePixRefundMonths",
@@ -29,19 +30,19 @@
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(source.collection)",
-      "functionSha256": "99ce97ccc05f192d78411cef80d5f4c4da2c1deb1fb1e119153bca6c56ee669a"
+      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
-      "functionSha256": "99ce97ccc05f192d78411cef80d5f4c4da2c1deb1fb1e119153bca6c56ee669a"
+      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collectionGroup(source.collection)",
-      "functionSha256": "99ce97ccc05f192d78411cef80d5f4c4da2c1deb1fb1e119153bca6c56ee669a"
+      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
     }
   ]
 }

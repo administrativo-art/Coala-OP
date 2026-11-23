@@ -132,7 +132,7 @@ export function PersonInventoryPanel({ open, onOpenChange, initialRef }: {
   return <SidePanel open={open} onOpenChange={(value) => { if (!value) invalidate(); onOpenChange(value); }} kicker="Privacidade · consulta por pessoa" title="Consultar dados" subtitle="Referências autorizadas por cadastro e origem.">
     <p className="text-xs leading-5 text-ds-ink-muted">Consulta de referências no escopo permitido de workspace e unidade. Titular, responsável pela guarda, autor e signatário são papéis diferentes. O inventário não comprova cobertura de todo o histórico. Alterar o identificador aqui não altera o vínculo de um pedido.</p>
     <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); submitLookup(); }}>
-      <PersonReferenceFields prefix="inventory" namespace={namespace} id={id} onChange={(nextNamespace, nextId) => { invalidate(); setNamespace(nextNamespace); setId(nextId); }} />
+      <PersonReferenceFields prefix="inventory" namespace={namespace} id={id} allowEntities onChange={(nextNamespace, nextId) => { invalidate(); setNamespace(nextNamespace); setId(nextId); }} />
       <Button type="submit" variant="primary-modal" size="md" loading={loading} loadingLabel="Consultando…">Consultar cadastro</Button>
     </form>
     {loading ? <p role="status" className="text-sm">Carregando catálogo de origens…</p> : null}

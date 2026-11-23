@@ -30,6 +30,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PaymentBeneficiaryReference } from "@/features/financial/beneficiaries/types";
+import { supplierPixPrepareInput, type SupplierPixExpense } from "@/features/financial/lib/expense-supplier-pix-ui";
+import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import Link from "next/link";
 
 const splitSchema = z.object({
   accountId: z.string().min(1, "Selecione uma conta."),
@@ -58,7 +61,7 @@ const paySchema = z.object({
 
 type PayFormValues = z.infer<typeof paySchema>;
 
-type ExpenseRecord = {
+type ExpenseRecord = SupplierPixExpense & {
   id: string;
   description: string;
   totalValue: number;
@@ -68,7 +71,7 @@ type ExpenseRecord = {
   resultCenter?: string;
   generatedReceiptId?: string;
   beneficiaryReference?: PaymentBeneficiaryReference;
-  paymentRequestId?: string;
+  paymentRequestId?: string | null;
   accountPlan?: string;
   competenceDate?: unknown;
   provisionCompetence?: string;
@@ -88,9 +91,10 @@ export function PayExpenseDialog({
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [pixError, setPixError] = useState<string | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
   const { data: accountsData } = useFinancialCollection<any>(financialCollection("bankAccounts"));
   const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accounts"));
@@ -128,6 +132,15 @@ export function PayExpenseDialog({
   const totalPaid = splits.reduce((sum, split) => sum + (Number(split.amount) || 0), 0);
   const remaining = totalDue - totalPaid;
   const isOver = remaining < -0.01;
+  const supplierPixInput = expense ? supplierPixPrepareInput(expense) : null;
+  const hasLinkedRequest = expense?.paymentRequestId != null;
+  const pixNetMismatch = expense?.netPayableValue != null
+    && Math.round(expense.netPayableValue * 100) !== Math.round(expense.totalValue * 100);
+  const canPreparePix = isDefaultAdmin || Boolean(permissions.financial?.view && permissions.financial?.expenses?.view
+    && permissions.financial?.expenses?.edit && permissions.financial?.paymentRequests?.view && permissions.financial?.paymentRequests?.create);
+  const canRequestLegacyPix = Boolean(expense?.generatedReceiptId && expense.beneficiaryReference
+    && permissions.financial?.paymentRequests?.create);
+  const hasManualAdjustment = interest > 0.009 || fine > 0.009 || totalPaid > 0.009;
   const provisionConsultation = useMemo(
     () => expense ? consultExpenseProvision(expense, expensesData || []) : { status: "not_applicable" as const },
     [expense, expensesData],
@@ -179,7 +192,11 @@ export function PayExpenseDialog({
   }
 
   async function onSubmit(values: PayFormValues) {
-    if (!expense || !firebaseUser) return;
+    if (!expense || !firebaseUser || (!isDefaultAdmin && !permissions.financial?.expenses?.pay)) return;
+    if (hasLinkedRequest) {
+      toast({ variant: "destructive", title: "Há uma solicitação bancária vinculada. Confira o painel de autorizações antes de registrar uma baixa manual." });
+      return;
+    }
     if (isOver) {
       toast({ variant: "destructive", title: "O valor total excede o valor a pagar." });
       return;
@@ -234,7 +251,8 @@ export function PayExpenseDialog({
 
   async function requestInterPayment() {
     const target = expense;
-    if (!target?.generatedReceiptId || !target.beneficiaryReference || !firebaseUser) return;
+    if (!target?.generatedReceiptId || !target.beneficiaryReference || !firebaseUser
+      || !canRequestLegacyPix || hasLinkedRequest || pixNetMismatch || hasManualAdjustment) return;
     setIsSaving(true);
     try {
       const token = await firebaseUser.getIdToken();
@@ -256,6 +274,28 @@ export function PayExpenseDialog({
     } finally { setIsSaving(false); }
   }
 
+  async function requestSupplierPix() {
+    if (!expense || !supplierPixInput || !firebaseUser || !canPreparePix || hasManualAdjustment) return;
+    setPixError(null);
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/financial/expenses/${encodeURIComponent(expense.id)}/supplier-pix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+        body: JSON.stringify(supplierPixInput),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Não foi possível preparar a solicitação Pix.");
+      toast({ title: "Pix solicitado para autorização", description: "Confira a solicitação no painel de autorizações. O envio e a confirmação no Inter são etapas separadas; a despesa permanece em aberto até o extrato." });
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      setPixError(error instanceof Error ? error.message : "Não foi possível preparar a solicitação Pix.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <Dialog
       open={open}
@@ -265,13 +305,13 @@ export function PayExpenseDialog({
       }}
     >
       <DialogContent
-        className="h-[80vh] max-h-[640px] overflow-hidden rounded-ds-modal border-0 bg-ds-input p-0 shadow-ds-modal"
+        className="flex h-[80vh] max-h-[640px] flex-col overflow-hidden rounded-ds-modal border-0 bg-ds-input p-0 shadow-ds-modal"
         style={{
           width: "min(820px, calc(100vw - 64px))",
           maxWidth: "calc(100vw - 64px)",
         }}
       >
-        <DialogHeader className="border-b border-ds-border-footer px-6 py-3 text-left">
+        <DialogHeader className="shrink-0 border-b border-ds-border-footer px-6 py-3 text-left">
           <div className="pr-10">
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">Registrar pagamento</p>
             <DialogTitle className="mt-1.5 text-[1.35rem] font-extrabold leading-tight tracking-[-0.02em] text-ds-ink sm:text-[1.65rem]">{
@@ -284,9 +324,9 @@ export function PayExpenseDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex h-[calc(80vh-74px)] max-h-[566px] flex-col">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="grid min-h-full gap-0 md:grid-cols-[minmax(0,1fr)_250px]">
+              <div className="grid min-h-full gap-0 md:grid-cols-[minmax(0,1fr)_270px]">
                 <div className="px-4 py-3">
                 <div className="space-y-3.5">
                   <div className="grid gap-3">
@@ -580,7 +620,7 @@ export function PayExpenseDialog({
 
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <span className="text-base font-semibold">Total a debitar</span>
-                    <span className="truncate font-mono text-[1.15rem] font-bold leading-none sm:text-[1.35rem]">
+                    <span className="shrink-0 font-mono text-[1.1rem] font-bold leading-none">
                       {formatCurrency(totalDue)}
                     </span>
                   </div>
@@ -595,12 +635,12 @@ export function PayExpenseDialog({
                         : "bg-ds-warn-bg text-ds-warn"
                     )}
                   >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center justify-between gap-2 text-xs">
                       <span className="flex min-w-0 items-center gap-2">
                         {isOver ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                        <span className="truncate">Saldo restante</span>
+                        <span className="whitespace-nowrap">Saldo restante</span>
                       </span>
-                      <span className="truncate font-mono">{formatCurrency(Math.abs(remaining))}</span>
+                      <span className="shrink-0 font-mono">{formatCurrency(Math.abs(remaining))}</span>
                     </div>
                   </div>
 
@@ -626,13 +666,21 @@ export function PayExpenseDialog({
             </div>
             </div>
 
+            {(supplierPixInput && canPreparePix) || pixError || hasLinkedRequest || ((canPreparePix || canRequestLegacyPix) && pixNetMismatch) || (canRequestLegacyPix && hasManualAdjustment) ? <div className="border-t border-ds-border-footer px-4 py-2 text-xs text-muted-foreground">
+              {pixError ? <p role="alert" className="text-ds-danger">{pixError}</p> : null}
+              {hasLinkedRequest ? <p>Esta despesa tem uma solicitação bancária vinculada. A baixa manual fica bloqueada enquanto o vínculo constar aqui. Consulte o pedido e a conciliação no <Link className="underline" href={FINANCIAL_ROUTES.paymentRequests}>painel de autorizações</Link>.</p> : null}
+              {(canPreparePix || canRequestLegacyPix) && pixNetMismatch ? <p>Pix indisponível: o valor líquido {formatCurrency(expense.netPayableValue!)} difere do total {formatCurrency(expense.totalValue)} da despesa. Revise o desconto antes de solicitar o valor integral.</p> : null}
+              {canRequestLegacyPix && hasManualAdjustment ? <p>Limpe juros, multa e valores de baixa manual antes de solicitar o Pix do recibo.</p> : null}
+              {supplierPixInput && canPreparePix ? <p>O Pix solicita exatamente {formatCurrency(expense.totalValue)} da despesa salva, sem juros, multa ou rateio manual. A data acima vale apenas para a baixa manual. {hasManualAdjustment ? "Limpe os valores manuais para solicitar Pix." : ""} <Link className="underline" href={FINANCIAL_ROUTES.paymentRequests}>Ver autorizações</Link></p> : null}
+            </div> : null}
             <DialogFooter className="border-t border-ds-border-footer bg-ds-input px-4 py-3 sm:justify-between">
               <Button type="button" variant="ds-ghost" size="md" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
               <div className="flex flex-wrap gap-2">
-                {expense.generatedReceiptId && expense.beneficiaryReference && permissions.financial?.paymentRequests?.create ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || !!expense.paymentRequestId} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
-                <Button type="submit" variant="primary-modal" size="md" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId} title={expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
+                {supplierPixInput && canPreparePix ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || hasManualAdjustment} onClick={() => void requestSupplierPix()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix de {formatCurrency(expense.totalValue)}</Button> : null}
+                {canRequestLegacyPix ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || hasLinkedRequest || pixNetMismatch || hasManualAdjustment} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
+                <Button type="submit" variant="primary-modal" size="md" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId || hasLinkedRequest || (!isDefaultAdmin && !permissions.financial?.expenses?.pay)} title={hasLinkedRequest ? 'Há uma solicitação bancária vinculada a esta despesa.' : expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
                   {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Confirmar pagamento manual
                 </Button>

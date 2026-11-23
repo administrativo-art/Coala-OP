@@ -2,12 +2,16 @@ import { createHash } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { WORKSPACE_ID } from "@/lib/workspace";
+import { matchesPersonWorkspace } from "@/features/privacy/person-workspace";
 import { decryptPaymentDestination } from "./security.server";
 import {
   inferPixKeyType,
   maskBrazilianDocument,
   maskPaymentDestination,
   normalizeBrazilianDocument,
+  normalizeValidatedPixKey,
+  validBrazilianTaxId,
   pixDocumentKeyMatchesHolder,
   resolvePixKeyType,
   toIsoString,
@@ -68,16 +72,28 @@ async function resolveEntity(sourceId: string, requireValidated = false): Promis
   if (entity.get("status") === "inactive") throw new Error("A pessoa ou empresa favorecida está inativa.");
   if (!profile.exists) throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
   const entityDocument = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
+  const isPerson = entityDocument.length === 11;
+  const isCompany = entityDocument.length === 14;
   if (requireValidated && (profile.get("active") !== true || !profile.get("validatedAt")
     || profile.get("paymentMethod") !== "pix_key"
+    || !validBrazilianTaxId(entityDocument)
+    || (isPerson && entity.get("type") !== "pessoa_fisica")
+    || (isCompany && entity.get("type") != null && entity.get("type") !== "pessoa_juridica")
+    || !matchesPersonWorkspace(entity.data(), WORKSPACE_ID, isCompany)
+    || !matchesPersonWorkspace(profile.data(), WORKSPACE_ID, true)
+    || (isPerson ? profile.get("entityId") !== sourceId : profile.get("entityId") != null && profile.get("entityId") !== sourceId)
     || normalizeBrazilianDocument(profile.get("holderDocument")) !== entityDocument)) {
-    throw new Error("O perfil de pagamento do fornecedor precisa estar ativo e validado para o CNPJ cadastrado.");
+    throw new Error("O perfil de pagamento precisa estar ativo e validado para o CPF/CNPJ cadastrado.");
   }
   const paymentData = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
   if (!paymentData.pixKey) {
     throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
   }
   const pixKeyType = profile.get("pixKeyType") ?? inferPixKeyType(paymentData.pixKey);
+  if (requireValidated && (!profile.get("pixKeyType")
+    || !normalizeValidatedPixKey(paymentData.pixKey, pixKeyType, entityDocument))) {
+    throw new Error("O tipo ou o valor da chave Pix validada é incompatível com o favorecido.");
+  }
   if (!pixDocumentKeyMatchesHolder({ pixKey: paymentData.pixKey, pixKeyType, holderDocument: entityDocument })) {
     throw new Error("A chave Pix documental não pertence ao CPF/CNPJ do favorecido.");
   }
@@ -124,6 +140,9 @@ export function createBeneficiarySnapshot(
     name: resolved.name,
     document: maskBrazilianDocument(resolved.document),
     documentHash: createHash("sha256").update(normalizeBrazilianDocument(resolved.document)).digest("hex"),
+    ...(resolved.paymentMethod === "pix_key" && resolved.pixKey && resolved.pixKeyType
+      ? { destinationHash: createHash("sha256").update(`${resolved.pixKeyType}:${normalizeValidatedPixKey(resolved.pixKey, resolved.pixKeyType, resolved.document) ?? resolved.pixKey}`).digest("hex") }
+      : {}),
     paymentMethod: resolved.paymentMethod,
     pixKeyType: resolved.pixKeyType,
     maskedPaymentDestination: destination,
