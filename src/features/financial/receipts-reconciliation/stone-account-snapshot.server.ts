@@ -6,6 +6,7 @@ import { z } from "zod";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { AppError } from "@/lib/observability/app-error";
 import type { StoneAccountMonthResult } from "./reconciliation.server";
+import { stoneSnapshotMissesPixSource } from "./snapshot-pix-guard";
 
 /**
  * Resultado salvo da conferência mensal "Recebido" (venda → conta Stone), produzido pela rotina
@@ -41,6 +42,10 @@ export async function saveStoneReceiptSnapshot(identity: StoneReceiptSnapshotIde
   if (result.scope.workspaceId !== identity.workspaceId || result.scope.mappingId !== identity.mappingId
     || result.scope.stoneCode !== identity.stoneCode || result.period.from.slice(0, 7) !== identity.month) {
     throw new AppError({ code: "STONE_RECEIPT_SNAPSHOT_SCOPE", kind: "DATA_INTEGRITY" });
+  }
+  if (stoneSnapshotMissesPixSource(result)) {
+    throw new AppError({ code: "STONE_RECEIPT_SNAPSHOT_PIX_MISSING", kind: "EXPECTED_BUSINESS",
+      safeMessage: "O Pix está indisponível em todos os dias do período: a conferência foi montada sem a fonte do Pix e não será salva." });
   }
   const fingerprint = stoneReceiptFingerprint(result);
   const ref = financialDbAdmin.collection("stoneReceiptMonthSnapshots").doc(snapshotId(identity));
