@@ -7,6 +7,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
+24/11/2026: [Escalas DP](flows/dp-schedules.md) permite exportar os turnos oficiais em XLSX com DSR ainda sem confirmação do Bizneo. O teste unitário cobre os estados de sincronização e mantém a recusa de turno e folga concorrentes. O grupo permanece Traçado.
+
 10/11/2026: guia interativo de metas (Entenda a meta) no dashboard web, com entrada em Acompanhamento e no painel do colaborador. O exemplo usa o motor de bonificação existente e não publica o PDF. Testes de cálculo e o E2E dirigido cobrem o guia; não há equivalente no aplicativo Android.
 
 10/11/2026: correção de `goals`/`dp-schedules` para grupo mensal sem horário e contagem de dias/turnos da escala oficial em meta ativa e no fechamento, promovida pelo PR #797. O App Hosting concluiu rollout do SHA `46e49dc6`, e a função de metas ficou ACTIVE; o evento real após a publicação não foi ensaiado. Metas fechadas não recebem alteração retroativa.

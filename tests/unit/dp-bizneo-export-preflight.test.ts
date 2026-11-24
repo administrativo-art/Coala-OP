@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildBizneoExportDayOffBlockers } from '../../src/lib/dp-bizneo-export-preflight';
+import { findBizneoExportDayOffConflicts } from '../../src/lib/dp-bizneo-export-preflight';
 import type { DPShift } from '../../src/types';
 
 function shift(params: Partial<DPShift> & Pick<DPShift, 'id' | 'userId' | 'date'>): DPShift {
@@ -17,30 +17,32 @@ function shift(params: Partial<DPShift> & Pick<DPShift, 'id' | 'userId' | 'date'
 }
 
 test('bloqueia exportação quando a mesma pessoa possui turno e folga', () => {
-  const blockers = buildBizneoExportDayOffBlockers([
-    shift({ id: 'work', userId: 'aliny', date: '2026-09-12', type: 'work', startTime: '14:45', endTime: '21:00' }),
-    shift({ id: 'day-off', userId: 'aliny', date: '2026-09-12', bizneoSyncStatus: 'removal_failed' }),
-  ]);
+  const dayOff = shift({ id: 'day-off', userId: 'aliny', date: '2026-09-12', bizneoSyncStatus: 'pending' });
+  const work = shift({
+    id: 'work', userId: 'aliny', date: '2026-09-12', type: 'work', startTime: '14:45', endTime: '21:00',
+    scheduleId: 'schedule-2', unitId: 'unit-2',
+  });
 
-  assert.deepEqual(blockers, [{
-    kind: 'work_day_off_conflict',
-    userId: 'aliny',
-    date: '2026-09-12',
-    shiftId: 'day-off',
-    syncStatus: 'removal_failed',
-  }]);
+  assert.deepEqual(findBizneoExportDayOffConflicts([work, dayOff]), [dayOff]);
 });
 
-test('bloqueia folga com sincronização ainda não confirmada', () => {
-  const blockers = buildBizneoExportDayOffBlockers([
-    shift({ id: 'day-off', userId: 'maria', date: '2026-09-10', bizneoSyncStatus: 'failed' }),
-  ]);
+test('permite exportar turnos com folgas sem confirmação do Bizneo', () => {
+  const statuses = ['pending', 'publishing', 'failed', 'removing', 'removal_failed', undefined] as const;
+  const shifts = [
+    shift({ id: 'work', userId: 'maria', date: '2026-09-09', type: 'work', startTime: '08:00', endTime: '16:00' }),
+    ...statuses.map((bizneoSyncStatus, index) => shift({
+      id: `day-off-${index}`,
+      userId: 'maria',
+      date: `2026-09-${10 + index}`,
+      bizneoSyncStatus,
+    })),
+  ];
 
-  assert.equal(blockers[0]?.kind, 'day_off_sync_unresolved');
+  assert.deepEqual(findBizneoExportDayOffConflicts(shifts), []);
 });
 
 test('permite folga publicada sem turno concorrente', () => {
-  const blockers = buildBizneoExportDayOffBlockers([
+  const blockers = findBizneoExportDayOffConflicts([
     shift({ id: 'day-off', userId: 'maria', date: '2026-09-10', bizneoSyncStatus: 'published' }),
   ]);
 

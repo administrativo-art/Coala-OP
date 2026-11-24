@@ -17,7 +17,7 @@ import {
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
-import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
+import { findBizneoExportDayOffConflicts } from '@/lib/dp-bizneo-export-preflight';
 import { resolveBizneoShiftId } from '@/lib/dp-shift-bizneo';
 import { activeOperationalUnits, canonicalOperationalUnitId, operationalUnitsExistingInPeriod } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
@@ -510,20 +510,17 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
 
       const exportableShifts = allShifts.filter(isWorkShift);
       const userMap = new Map(activeUsers.map(u => [u.id, u]));
-      const dayOffBlockers = buildBizneoExportDayOffBlockers(allShifts);
+      const dayOffConflicts = findBizneoExportDayOffConflicts(allShifts);
 
-      if (dayOffBlockers.length > 0) {
-        const details = dayOffBlockers.map((blocker) => {
-          const userName = userMap.get(blocker.userId)?.username ?? 'Colaborador não localizado';
-          const reason = blocker.kind === 'work_day_off_conflict'
-            ? 'possui turno e folga'
-            : `sincronização da folga: ${blocker.syncStatus ?? 'não confirmada'}`;
-          return `${formatShiftDate(blocker.date)} · ${userName} · ${reason}`;
+      if (dayOffConflicts.length > 0) {
+        const details = dayOffConflicts.map((shift) => {
+          const userName = userMap.get(shift.userId)?.username ?? 'Colaborador não localizado';
+          return `${formatShiftDate(shift.date)} · ${userName}`;
         });
         const preview = details.slice(0, 4).join('; ');
         const remainder = details.length > 4 ? `; +${details.length - 4} pendência(s)` : '';
         toast({
-          title: 'Reconcilie as folgas antes de exportar.',
+          title: 'Corrija os conflitos de turno e folga antes de exportar.',
           description: `${preview}${remainder}.`,
           variant: 'destructive',
         });
